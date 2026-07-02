@@ -96,7 +96,14 @@ and this document stay traceable to the same source of truth.
   routine. Any code that rounds a monetary value without consulting this field is a defect.
 - **Allocation across multiple installments (e.g. splitting a payment) must always sum exactly
   back to the original amount.** A largest-remainder-style allocation algorithm is required —
-  naive per-item rounding that can drift the total by a cent is not acceptable.
+  naive per-item rounding that can drift the total by a cent is not acceptable. **This applies
+  identically regardless of sign** — `Money.allocate()` must split a negative amount (e.g. a
+  reversal or refund) so the parts sum exactly back to the original negative amount, the same
+  guarantee as for a positive amount. (Milestone 7.1 remediation, audit finding C-1: the
+  original implementation distributed the remainder using the *signed* remainder directly, which
+  is silently negative for a negative dividend under truncating division — the fix allocates on
+  the absolute value and reapplies the sign, verified by tests covering positive, negative,
+  zero, single-recipient, uneven-remainder, very-small, and large-magnitude cases.)
 
 ## 6. Concurrency
 

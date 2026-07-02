@@ -69,8 +69,14 @@ export class LoanProduct {
     return this.props.updatedAt;
   }
 
+  /**
+   * Returns a shallow copy, not the internal array reference — defense in
+   * depth alongside H-1's immutability fix on `LoanProductVersion` itself:
+   * even a caller that bypasses TypeScript's `readonly` via a cast cannot
+   * splice/replace entries in the array this aggregate actually holds.
+   */
   get versions(): readonly LoanProductVersion[] {
-    return this.props.versions;
+    return [...this.props.versions];
   }
 
   getActiveVersion(): LoanProductVersion | undefined {
@@ -93,6 +99,15 @@ export class LoanProduct {
    * Activates `versionId`, deactivating whichever version is currently
    * active, as one operation — the only sanctioned path to change LPV-2's
    * "which version is Active" state (ADR-042 §4).
+   *
+   * Audit finding H-1 (Milestone 7.1 remediation): rather than mutating
+   * the existing `LoanProductVersion` instances in place (which is what
+   * made the previous `_setActive()` method exploitable from outside this
+   * class), this REPLACES `this.props.versions` with a new array built
+   * from `version.withActive(...)` — an immutable "with" operation that
+   * never touches the instance it's called on. This is the only place in
+   * the codebase that reassigns `this.props.versions`, which is what
+   * actually keeps LPV-2 enforceable in one place now.
    */
   activateVersion(versionId: string): void {
     const target = this.props.versions.find((version) => version.id === versionId);
@@ -103,12 +118,15 @@ export class LoanProduct {
       return; // Already active — activating it again is a no-op, not an error.
     }
 
-    for (const version of this.props.versions) {
-      if (version.isActive) {
-        version._setActive(false);
+    this.props.versions = this.props.versions.map((version) => {
+      if (version.id === versionId) {
+        return version.withActive(true);
       }
-    }
-    target._setActive(true);
+      if (version.isActive) {
+        return version.withActive(false);
+      }
+      return version;
+    });
     this.props.updatedAt = new Date();
   }
 }

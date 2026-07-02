@@ -23,7 +23,12 @@ describe('ActivateLoanProductVersionUseCase', () => {
 
     await useCase.execute(product.id, version.id);
 
-    expect(version.isActive).toBe(true);
+    // Read through the aggregate, not the original `version` reference —
+    // H-1's immutability fix means activateVersion() replaces the
+    // versions[] entry with a new instance rather than mutating `version`
+    // in place (see LoanProduct.test.ts's dedicated H-1 regression tests
+    // for why that's the point of the fix).
+    expect(product.getActiveVersion()?.id).toBe(version.id);
     expect(loanProductRepository.save).toHaveBeenCalledWith(product);
   });
 

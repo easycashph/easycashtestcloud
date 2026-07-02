@@ -54,13 +54,26 @@ export type CreateLoanProductVersionProps = Omit<
  * independently of its parent. `isActive` must only ever be flipped through
  * `LoanProduct.activateVersion()`, never directly, so LPV-2 stays
  * enforceable in exactly one place.
+ *
+ * Audit finding H-1 (Milestone 7.1 remediation): this class was
+ * previously mutable via a `_setActive()` method that, despite its
+ * leading-underscore naming convention, was fully public and callable
+ * from any layer holding a `LoanProductVersion` reference (e.g. one
+ * obtained via `LoanProduct.versions`) — nothing in the type system
+ * actually enforced "only LoanProduct may call this." That let LPV-2 be
+ * bypassed without going through `LoanProduct.activateVersion()` at all.
+ *
+ * The fix is to make `LoanProductVersion` fully immutable: `props` is
+ * `readonly`, there is no method anywhere on this class that mutates
+ * `this`. `withActive()` below returns a NEW, detached instance instead —
+ * so even though it remains a public method, calling it on a reference
+ * obtained from `LoanProduct.versions` can never change what
+ * `LoanProduct` actually holds internally. Only `LoanProduct.
+ * activateVersion()` ever installs a `withActive()` result back into its
+ * own `versions[]` array, which is the sole place LPV-2 can be affected.
  */
 export class LoanProductVersion {
-  private props: LoanProductVersionProps;
-
-  private constructor(props: LoanProductVersionProps) {
-    this.props = props;
-  }
+  private constructor(private readonly props: LoanProductVersionProps) {}
 
   static create(input: CreateLoanProductVersionProps): LoanProductVersion {
     const now = new Date();
@@ -189,9 +202,15 @@ export class LoanProductVersion {
     return this.props.feeRules;
   }
 
-  /** Package-internal — only LoanProduct.activateVersion()/deactivateAll() may call this, to keep LPV-2 enforceable in one place. */
-  _setActive(isActive: boolean): void {
-    this.props.isActive = isActive;
-    this.props.updatedAt = new Date();
+  /**
+   * Returns a NEW LoanProductVersion with `isActive` set to the given
+   * value — `this` instance is left completely unchanged (see the class
+   * doc comment / audit finding H-1). Only `LoanProduct.activateVersion()`
+   * installs the result back into the owning aggregate's `versions[]`;
+   * calling this directly on a version obtained any other way produces an
+   * inert, unpersisted copy with no effect on LPV-2.
+   */
+  withActive(isActive: boolean): LoanProductVersion {
+    return new LoanProductVersion({ ...this.props, isActive, updatedAt: new Date() });
   }
 }

@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
+import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { Money } from '@shared/domain/Money';
 import { RepaymentInstallment, type RepaymentInstallmentProps } from '../domain/RepaymentInstallment';
@@ -87,14 +87,24 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
     });
   }
 
+  /**
+   * Audit finding C-2 (Milestone 7.1 remediation): a full schedule batch
+   * must commit atomically — ADR-042 §7 relies on "a single batch write"
+   * as the reason RepaymentInstallment doesn't need a shared
+   * RepaymentSchedule aggregate to protect the sum-of-due-amounts
+   * invariant. `withTransaction` delivers that guarantee when no outer
+   * `ctx` is supplied, and joins the caller's transaction (rather than
+   * nesting one) when one is.
+   */
   async saveMany(installments: RepaymentInstallment[], ctx?: TransactionContext): Promise<void> {
-    const client = resolveClient(ctx);
-    for (const installment of installments) {
-      await client.repaymentSchedule.upsert({
-        where: { id: installment.id },
-        create: { id: installment.id, ...toUpsertData(installment) },
-        update: toUpsertData(installment),
-      });
-    }
+    await withTransaction(ctx, async (client) => {
+      for (const installment of installments) {
+        await client.repaymentSchedule.upsert({
+          where: { id: installment.id },
+          create: { id: installment.id, ...toUpsertData(installment) },
+          update: toUpsertData(installment),
+        });
+      }
+    });
   }
 }

@@ -1,4 +1,4 @@
-import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
+import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { CoBorrower, type CoBorrowerProps } from '../domain/CoBorrower';
 import { PersonName } from '../domain/valueObjects/PersonName';
@@ -42,47 +42,48 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
     return CoBorrower.reconstitute(props);
   }
 
+  /** Audit finding H-2 (Milestone 7.1 remediation) — see PrismaBorrowerRepository.save() for the full rationale; same self-wrapping pattern. */
   async save(coBorrower: CoBorrower, ctx?: TransactionContext): Promise<void> {
-    const client = resolveClient(ctx);
+    await withTransaction(ctx, async (client) => {
+      await client.coBorrower.upsert({
+        where: { id: coBorrower.id },
+        create: {
+          id: coBorrower.id,
+          firstName: coBorrower.name.firstName,
+          lastName: coBorrower.name.lastName,
+          gender: coBorrower.gender,
+          civilStatus: coBorrower.civilStatus,
+          birthDate: coBorrower.birthDate,
+          phoneNumber: coBorrower.phoneNumber,
+          emailAddress: coBorrower.emailAddress,
+          relationship: coBorrower.relationship,
+          legacyId: coBorrower.legacyId,
+        },
+        update: {
+          firstName: coBorrower.name.firstName,
+          lastName: coBorrower.name.lastName,
+          gender: coBorrower.gender,
+          civilStatus: coBorrower.civilStatus,
+          birthDate: coBorrower.birthDate,
+          phoneNumber: coBorrower.phoneNumber,
+          emailAddress: coBorrower.emailAddress,
+          relationship: coBorrower.relationship,
+        },
+      });
 
-    await client.coBorrower.upsert({
-      where: { id: coBorrower.id },
-      create: {
-        id: coBorrower.id,
-        firstName: coBorrower.name.firstName,
-        lastName: coBorrower.name.lastName,
-        gender: coBorrower.gender,
-        civilStatus: coBorrower.civilStatus,
-        birthDate: coBorrower.birthDate,
-        phoneNumber: coBorrower.phoneNumber,
-        emailAddress: coBorrower.emailAddress,
-        relationship: coBorrower.relationship,
-        legacyId: coBorrower.legacyId,
-      },
-      update: {
-        firstName: coBorrower.name.firstName,
-        lastName: coBorrower.name.lastName,
-        gender: coBorrower.gender,
-        civilStatus: coBorrower.civilStatus,
-        birthDate: coBorrower.birthDate,
-        phoneNumber: coBorrower.phoneNumber,
-        emailAddress: coBorrower.emailAddress,
-        relationship: coBorrower.relationship,
-      },
-    });
-
-    const existingCount = await client.address.count({ where: { ownerType: 'CO_BORROWER', ownerId: coBorrower.id } });
-    if (coBorrower.addresses.length > 0 || existingCount > 0) {
-      await client.address.deleteMany({ where: { ownerType: 'CO_BORROWER', ownerId: coBorrower.id } });
-      if (coBorrower.addresses.length > 0) {
-        await client.address.createMany({
-          data: coBorrower.addresses.map((address) => ({
-            ownerType: 'CO_BORROWER' as const,
-            ownerId: coBorrower.id,
-            ...address.toProps(),
-          })),
-        });
+      const existingCount = await client.address.count({ where: { ownerType: 'CO_BORROWER', ownerId: coBorrower.id } });
+      if (coBorrower.addresses.length > 0 || existingCount > 0) {
+        await client.address.deleteMany({ where: { ownerType: 'CO_BORROWER', ownerId: coBorrower.id } });
+        if (coBorrower.addresses.length > 0) {
+          await client.address.createMany({
+            data: coBorrower.addresses.map((address) => ({
+              ownerType: 'CO_BORROWER' as const,
+              ownerId: coBorrower.id,
+              ...address.toProps(),
+            })),
+          });
+        }
       }
-    }
+    });
   }
 }

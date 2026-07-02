@@ -85,6 +85,21 @@ export class Money {
    * rounding drift. Deterministic: the first `remainder` parts (in array
    * order) each receive one extra cent, so calling this twice with the
    * same inputs always produces the same split.
+   *
+   * Audit finding C-1 (Milestone 7.1 remediation): the remainder must be
+   * distributed by MAGNITUDE, then have the original sign reapplied —
+   * distributing directly on a signed `totalCents` breaks for negative
+   * amounts, because `dividedToIntegerBy` truncates toward zero, which
+   * makes the signed remainder negative too (e.g. -1000 ÷ 3 → base -333,
+   * remainder -1), and `index < remainderCents` can never be true for a
+   * negative remainder — every part silently lost the extra cent. Working
+   * on the absolute value first, then multiplying by `sign` at the end,
+   * makes the negative case an exact mirror of the positive case, which is
+   * what "sum exactly back to the original amount" requires regardless of
+   * sign. `remainderCents` is converted to a JS number only as a bounded
+   * loop-index comparator (always an integer in [0, parts-1]) — it is
+   * never a monetary value and is never used in further arithmetic; every
+   * actual money amount stays in `Prisma.Decimal` throughout.
    */
   allocate(parts: number): Money[] {
     if (!Number.isInteger(parts) || parts <= 0) {
@@ -92,12 +107,14 @@ export class Money {
     }
 
     const totalCents = this.decimal.times(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
-    const baseCents = totalCents.dividedToIntegerBy(parts);
-    const remainderCents = totalCents.minus(baseCents.times(parts)).toNumber();
+    const sign = totalCents.isNegative() ? -1 : 1;
+    const magnitudeCents = totalCents.abs();
+    const baseCents = magnitudeCents.dividedToIntegerBy(parts);
+    const remainderCents = magnitudeCents.minus(baseCents.times(parts)).toNumber();
 
     return Array.from({ length: parts }, (_, index) => {
       const cents = index < remainderCents ? baseCents.plus(1) : baseCents;
-      return Money.of(cents.dividedBy(100));
+      return Money.of(cents.times(sign).dividedBy(100));
     });
   }
 

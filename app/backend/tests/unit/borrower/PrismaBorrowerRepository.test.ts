@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const borrowerOps = { findUnique: vi.fn(), upsert: vi.fn() };
 const addressOps = { findMany: vi.fn(), count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() };
-const prismaMock = { borrower: borrowerOps, address: addressOps };
+const prismaMock = {
+  borrower: borrowerOps,
+  address: addressOps,
+  $transaction: vi.fn(async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock)),
+};
 
 vi.mock('@shared/database/prismaClient', () => ({ prisma: prismaMock }));
 
@@ -13,7 +17,12 @@ const { Address } = await import('@modules/borrower/domain/valueObjects/Address'
 
 describe('PrismaBorrowerRepository', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks (not clearAllMocks) so a mockRejectedValue set by one
+    // test (e.g. the rollback test below) can never leak its
+    // implementation into a later test — only call history was reset
+    // before, not per-mock return/implementation overrides.
+    vi.resetAllMocks();
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock));
   });
 
   describe('findById', () => {
@@ -87,6 +96,72 @@ describe('PrismaBorrowerRepository', () => {
       await repo.save(borrower);
 
       expect(addressOps.deleteMany).not.toHaveBeenCalled();
+    });
+
+    // Audit finding H-2 (Milestone 7.1 remediation): save() previously
+    // issued the borrower upsert and the address-collection replace as
+    // independent, unwrapped calls.
+    describe('atomicity', () => {
+      it('wraps the whole multi-statement write in a single prisma.$transaction when no outer ctx is supplied', async () => {
+        addressOps.count.mockResolvedValue(0);
+        const borrower = Borrower.create({
+          branchId: 'branch-1',
+          name: PersonName.of('Juan', 'Dela Cruz'),
+          addresses: [Address.of({ street: 'Rizal St.' })],
+        });
+
+        const repo = new PrismaBorrowerRepository();
+        await repo.save(borrower);
+
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      });
+
+      it('rolls back — propagates the error — if the address write fails after the borrower upsert succeeds', async () => {
+        addressOps.count.mockResolvedValue(0);
+        addressOps.createMany.mockRejectedValue(new Error('address write failed'));
+        const borrower = Borrower.create({
+          branchId: 'branch-1',
+          name: PersonName.of('Juan', 'Dela Cruz'),
+          addresses: [Address.of({ street: 'Rizal St.' })],
+        });
+
+        const repo = new PrismaBorrowerRepository();
+        await expect(repo.save(borrower)).rejects.toThrow('address write failed');
+      });
+
+      it('joins an outer TransactionContext instead of opening a nested transaction', async () => {
+        const { PrismaUnitOfWork } = await import('@shared/infrastructure/PrismaUnitOfWork');
+        addressOps.count.mockResolvedValue(0);
+        const unitOfWork = new PrismaUnitOfWork();
+        const borrower = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') });
+        const repo = new PrismaBorrowerRepository();
+
+        await unitOfWork.run(async (ctx) => {
+          vi.clearAllMocks(); // isolate from run()'s own $transaction call
+          addressOps.count.mockResolvedValue(0);
+          await repo.save(borrower, ctx);
+          expect(prismaMock.$transaction).not.toHaveBeenCalled();
+          expect(borrowerOps.upsert).toHaveBeenCalledTimes(1);
+        });
+      });
+
+      it('existing upsert/address-replace behavior is unchanged after the transaction wrap', async () => {
+        addressOps.count.mockResolvedValue(0);
+        const borrower = Borrower.create({
+          branchId: 'branch-1',
+          name: PersonName.of('Juan', 'Dela Cruz'),
+          addresses: [Address.of({ street: 'Rizal St.' })],
+        });
+
+        const repo = new PrismaBorrowerRepository();
+        await repo.save(borrower);
+
+        expect(borrowerOps.upsert).toHaveBeenCalledTimes(1);
+        expect(addressOps.deleteMany).toHaveBeenCalledWith({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
+        expect(addressOps.createMany).toHaveBeenCalledWith({
+          data: [{ ownerType: 'BORROWER', ownerId: borrower.id, street: 'Rizal St.' }],
+        });
+      });
     });
   });
 });

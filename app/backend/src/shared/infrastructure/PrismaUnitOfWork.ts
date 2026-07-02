@@ -57,3 +57,31 @@ export class PrismaUnitOfWork implements IUnitOfWork {
     });
   }
 }
+
+/**
+ * Milestone 7.1 remediation (audit findings C-2, H-2): a repository whose
+ * `save()`/`saveMany()` issues more than one write (e.g. an upsert plus a
+ * child-collection replace, or a batch of upserts) must be atomic even
+ * when called standalone, with no outer `IUnitOfWork` in play — otherwise
+ * a failure partway through the writes leaves the aggregate in a state
+ * that matches neither the old nor the new data. When a `ctx` IS supplied,
+ * the writes must join that outer transaction rather than nesting a new
+ * one (`Prisma.TransactionClient` has no `$transaction` method of its
+ * own).
+ *
+ * This is the single shared implementation of that "self-wrap unless
+ * already inside a transaction" pattern — previously duplicated ad hoc
+ * (and, in two repositories, simply missing) across
+ * `PrismaLoanProductRepository`, `PrismaLoanAccountRepository`,
+ * `PrismaBorrowerRepository`, `PrismaCoBorrowerRepository`, and
+ * `PrismaRepaymentInstallmentRepository`.
+ */
+export async function withTransaction<T>(
+  ctx: TransactionContext | undefined,
+  work: (client: PrismaClient | Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  if (ctx) {
+    return work(resolveClient(ctx));
+  }
+  return prisma.$transaction((tx) => work(tx));
+}

@@ -62,7 +62,7 @@ describe('Money', () => {
       expect(parts.map((p) => p.toString())).toEqual(['3.00', '3.00', '3.00']);
     });
 
-    it('distributes the remainder cent-by-cent to the first N parts, never losing a cent', () => {
+    it('distributes the remainder cent-by-cent to the first N parts, never losing a cent (positive)', () => {
       const parts = Money.of('10.00').allocate(3);
       expect(parts.map((p) => p.toString())).toEqual(['3.34', '3.33', '3.33']);
       const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
@@ -79,6 +79,118 @@ describe('Money', () => {
       expect(() => Money.of('10.00').allocate(0)).toThrow(InvalidMoneyError);
       expect(() => Money.of('10.00').allocate(-1)).toThrow(InvalidMoneyError);
       expect(() => Money.of('10.00').allocate(1.5)).toThrow(InvalidMoneyError);
+    });
+
+    // Audit finding C-1 (Milestone 7.1 remediation): the negative branch of
+    // allocate() previously lost the remainder cent entirely, because the
+    // signed remainder could never satisfy `index < remainderCents` once
+    // it went negative. Every case below asserts BOTH the exact split AND
+    // that the parts sum back to the original amount — the latter is the
+    // actual invariant FINANCIAL_INVARIANTS.md §5 requires, and is what
+    // the original bug violated silently.
+    describe('negative amounts — must mirror the positive algorithm exactly', () => {
+      it('distributes the remainder cent-by-cent to the first N parts (negative), never losing a cent', () => {
+        const parts = Money.of('-10.00').allocate(3);
+        expect(parts.map((p) => p.toString())).toEqual(['-3.34', '-3.33', '-3.33']);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('-10.00'))).toBe(true);
+      });
+
+      it('splits evenly when divisible (negative)', () => {
+        const parts = Money.of('-9.00').allocate(3);
+        expect(parts.map((p) => p.toString())).toEqual(['-3.00', '-3.00', '-3.00']);
+      });
+
+      it('is the exact negation of the positive split for the same magnitude', () => {
+        const positive = Money.of('10.00').allocate(3).map((p) => p.toString());
+        const negative = Money.of('-10.00').allocate(3).map((p) => p.toString());
+        expect(negative).toEqual(positive.map((p) => `-${p}`));
+      });
+
+      it('is deterministic across repeated calls (negative)', () => {
+        const first = Money.of('-10.00').allocate(3).map((p) => p.toString());
+        const second = Money.of('-10.00').allocate(3).map((p) => p.toString());
+        expect(first).toEqual(second);
+      });
+    });
+
+    describe('zero', () => {
+      it('splits zero into N zero parts', () => {
+        const parts = Money.ZERO.allocate(4);
+        expect(parts.map((p) => p.toString())).toEqual(['0.00', '0.00', '0.00', '0.00']);
+        expect(parts.every((p) => p.isZero())).toBe(true);
+      });
+    });
+
+    describe('one recipient', () => {
+      it('returns the whole amount unchanged for a positive amount', () => {
+        expect(Money.of('123.45').allocate(1).map((p) => p.toString())).toEqual(['123.45']);
+      });
+
+      it('returns the whole amount unchanged for a negative amount', () => {
+        expect(Money.of('-123.45').allocate(1).map((p) => p.toString())).toEqual(['-123.45']);
+      });
+    });
+
+    describe('uneven remainder', () => {
+      it('handles a remainder that is not evenly distributable (7 parts)', () => {
+        const parts = Money.of('10.00').allocate(7);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('10.00'))).toBe(true);
+        // 1000 cents / 7 = 142 base, remainder 6 -> first 6 parts get 143 cents, last gets 142.
+        expect(parts.map((p) => p.toString())).toEqual([
+          '1.43', '1.43', '1.43', '1.43', '1.43', '1.43', '1.42',
+        ]);
+      });
+
+      it('handles the same uneven remainder for a negative amount, mirrored', () => {
+        const parts = Money.of('-10.00').allocate(7);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('-10.00'))).toBe(true);
+        expect(parts.map((p) => p.toString())).toEqual([
+          '-1.43', '-1.43', '-1.43', '-1.43', '-1.43', '-1.43', '-1.42',
+        ]);
+      });
+    });
+
+    describe('very small values', () => {
+      it('allocates a single-cent positive amount without losing precision', () => {
+        const parts = Money.of('0.01').allocate(3);
+        expect(parts.map((p) => p.toString())).toEqual(['0.01', '0.00', '0.00']);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('0.01'))).toBe(true);
+      });
+
+      it('allocates a single-cent negative amount without losing precision', () => {
+        const parts = Money.of('-0.01').allocate(3);
+        expect(parts.map((p) => p.toString())).toEqual(['-0.01', '0.00', '0.00']);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('-0.01'))).toBe(true);
+      });
+    });
+
+    describe('mixed edge cases', () => {
+      it('allocates across a large number of parts (parts > cents) without losing precision', () => {
+        // 5 cents across 10 parts: 5 parts get 1 cent, 5 parts get 0.
+        const parts = Money.of('0.05').allocate(10);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('0.05'))).toBe(true);
+        expect(parts.filter((p) => p.equals(Money.of('0.01')))).toHaveLength(5);
+        expect(parts.filter((p) => p.isZero())).toHaveLength(5);
+      });
+
+      it('allocates a large positive amount across many parts and still sums exactly', () => {
+        const parts = Money.of('999999999999.99').allocate(11);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(Money.of('999999999999.99'))).toBe(true);
+      });
+
+      it('allocates a large negative amount across many parts and still sums exactly', () => {
+        const amount = Money.of('999999999999.99').negate();
+        const parts = amount.allocate(11);
+        const total = parts.reduce((sum, p) => sum.add(p), Money.ZERO);
+        expect(total.equals(amount)).toBe(true);
+      });
     });
   });
 

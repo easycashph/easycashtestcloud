@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
+import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { Borrower, type BorrowerProps } from '../domain/Borrower';
 import { PersonName } from '../domain/valueObjects/PersonName';
@@ -100,67 +100,77 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
     return toBorrower(row, addressRows.map(toAddress));
   }
 
+  /**
+   * Audit finding H-2 (Milestone 7.1 remediation): this method issues
+   * multiple statements (the borrower upsert, then a conditional
+   * address-collection replace) that must commit or roll back together.
+   * `withTransaction` self-wraps in `prisma.$transaction` when no outer
+   * `ctx` is supplied, and joins the caller's transaction (rather than
+   * nesting one) when one is — mirroring the pattern already used by
+   * `PrismaLoanProductRepository`/`PrismaLoanAccountRepository`.
+   */
   async save(borrower: Borrower, ctx?: TransactionContext): Promise<void> {
-    const client = resolveClient(ctx);
+    await withTransaction(ctx, async (client) => {
+      await client.borrower.upsert({
+        where: { id: borrower.id },
+        create: {
+          id: borrower.id,
+          branchId: borrower.branchId,
+          assignedLoanOfficerId: borrower.assignedLoanOfficerId,
+          firstName: borrower.name.firstName,
+          lastName: borrower.name.lastName,
+          middleName: borrower.name.middleName,
+          gender: borrower.gender,
+          birthDate: borrower.birthDate,
+          civilStatus: borrower.civilStatus,
+          mobilePhone1: borrower.mobilePhone1,
+          mobilePhone2: borrower.mobilePhone2,
+          email: borrower.email,
+          status: borrower.status,
+          loanCycle: borrower.loanCycle,
+          legacyId: borrower.legacyId,
+          createdAt: borrower.createdAt,
+          updatedAt: borrower.updatedAt,
+          incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,
+          governmentId: borrower.governmentId ? { create: borrower.governmentId } : undefined,
+        },
+        update: {
+          assignedLoanOfficerId: borrower.assignedLoanOfficerId,
+          firstName: borrower.name.firstName,
+          lastName: borrower.name.lastName,
+          middleName: borrower.name.middleName,
+          gender: borrower.gender,
+          birthDate: borrower.birthDate,
+          civilStatus: borrower.civilStatus,
+          mobilePhone1: borrower.mobilePhone1,
+          mobilePhone2: borrower.mobilePhone2,
+          email: borrower.email,
+          status: borrower.status,
+          loanCycle: borrower.loanCycle,
+          updatedAt: borrower.updatedAt,
+          incomeDetail: borrower.incomeDetail
+            ? { upsert: { create: borrower.incomeDetail, update: borrower.incomeDetail } }
+            : undefined,
+          governmentId: borrower.governmentId
+            ? { upsert: { create: borrower.governmentId, update: borrower.governmentId } }
+            : undefined,
+        },
+      });
 
-    await client.borrower.upsert({
-      where: { id: borrower.id },
-      create: {
-        id: borrower.id,
-        branchId: borrower.branchId,
-        assignedLoanOfficerId: borrower.assignedLoanOfficerId,
-        firstName: borrower.name.firstName,
-        lastName: borrower.name.lastName,
-        middleName: borrower.name.middleName,
-        gender: borrower.gender,
-        birthDate: borrower.birthDate,
-        civilStatus: borrower.civilStatus,
-        mobilePhone1: borrower.mobilePhone1,
-        mobilePhone2: borrower.mobilePhone2,
-        email: borrower.email,
-        status: borrower.status,
-        loanCycle: borrower.loanCycle,
-        legacyId: borrower.legacyId,
-        createdAt: borrower.createdAt,
-        updatedAt: borrower.updatedAt,
-        incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,
-        governmentId: borrower.governmentId ? { create: borrower.governmentId } : undefined,
-      },
-      update: {
-        assignedLoanOfficerId: borrower.assignedLoanOfficerId,
-        firstName: borrower.name.firstName,
-        lastName: borrower.name.lastName,
-        middleName: borrower.name.middleName,
-        gender: borrower.gender,
-        birthDate: borrower.birthDate,
-        civilStatus: borrower.civilStatus,
-        mobilePhone1: borrower.mobilePhone1,
-        mobilePhone2: borrower.mobilePhone2,
-        email: borrower.email,
-        status: borrower.status,
-        loanCycle: borrower.loanCycle,
-        updatedAt: borrower.updatedAt,
-        incomeDetail: borrower.incomeDetail
-          ? { upsert: { create: borrower.incomeDetail, update: borrower.incomeDetail } }
-          : undefined,
-        governmentId: borrower.governmentId
-          ? { upsert: { create: borrower.governmentId, update: borrower.governmentId } }
-          : undefined,
-      },
-    });
-
-    // Small, bounded collections (ADR-042 §5) — replaced wholesale on every
-    // save rather than diffed, which is correct (and simple) at the scale
-    // these collections actually reach per borrower. Revisit only if a
-    // future use case needs partial/incremental updates to one document
-    // among many without resending the full set.
-    if (borrower.addresses.length > 0 || (await client.address.count({ where: { ownerType: 'BORROWER', ownerId: borrower.id } })) > 0) {
-      await client.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
-      if (borrower.addresses.length > 0) {
-        await client.address.createMany({
-          data: borrower.addresses.map((address) => ({ ownerType: 'BORROWER' as const, ownerId: borrower.id, ...address.toProps() })),
-        });
+      // Small, bounded collections (ADR-042 §5) — replaced wholesale on
+      // every save rather than diffed, which is correct (and simple) at
+      // the scale these collections actually reach per borrower. Revisit
+      // only if a future use case needs partial/incremental updates to
+      // one document among many without resending the full set.
+      const existingCount = await client.address.count({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
+      if (borrower.addresses.length > 0 || existingCount > 0) {
+        await client.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
+        if (borrower.addresses.length > 0) {
+          await client.address.createMany({
+            data: borrower.addresses.map((address) => ({ ownerType: 'BORROWER' as const, ownerId: borrower.id, ...address.toProps() })),
+          });
+        }
       }
-    }
+    });
   }
 }
