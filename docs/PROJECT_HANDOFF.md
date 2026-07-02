@@ -62,8 +62,11 @@ application-layer use cases.
 
 Eight bounded-context modules are scaffolded (folder structure only, per Milestone 1-2):
 `identity`, `borrower`, `loan-product`, `loan-account`, `ledger`, `repayment`, `document`,
-`audit`. **Only `identity` has been built out** (Milestone 6). The other seven contain only
-`.gitkeep` placeholders marking the intended layer structure.
+`audit`. **Six are now built out**: `identity` (Milestone 6) and, as of Milestone 7,
+`borrower`, `loan-product`, `loan-account`, `ledger`, `repayment` — domain/application/
+infrastructure layers only, deliberately **no `interface/http/` layer** in any of the five new
+modules (Milestone 7 was explicitly scoped to Core Domain Models, not APIs — see §13).
+`document` and `audit` remain `.gitkeep` placeholders.
 
 ### Repository Structure (top level)
 ```
@@ -634,21 +637,41 @@ app/
           application/             ports/, use-cases/, dtos/, errors/
           infrastructure/          Bcrypt/Jwt/Prisma* adapters
           interface/http/          controller, router, schemas, cookies
-        borrower/                — scaffolded only (.gitkeep placeholders)
-        loan-product/             — scaffolded only
-        loan-account/             — scaffolded only
-        ledger/                   — scaffolded only
-        repayment/                — scaffolded only
-        document/                 — scaffolded only
+        borrower/                — Milestone 7: domain/application/infrastructure built, NO interface/http
+          domain/                  Borrower, CoBorrower (aggregates), PersonName/Address (VOs)
+          application/             ports/, use-cases/, dtos/
+          infrastructure/          PrismaBorrowerRepository, PrismaCoBorrowerRepository
+        loan-product/             — Milestone 7: domain/application/infrastructure built, NO interface/http
+          domain/                  LoanProduct (aggregate, owns versions), LoanProductVersion,
+                                    PenaltyRule, FeeRule
+          application/             ports/, use-cases/ (Create/Activate version — LPV-2), dtos/
+          infrastructure/          PrismaLoanProductRepository
+        loan-account/             — Milestone 7: domain/application/infrastructure built, NO interface/http
+          domain/                  LoanAccount (aggregate, owns AppliedFee[]), LoanBalances (VO)
+          application/             ports/, use-cases/ (Create/Approve/Reject — NOT Activate), dtos/
+          infrastructure/          PrismaLoanAccountRepository
+        ledger/                   — Milestone 7: domain/application/infrastructure built, NO interface/http
+          domain/                  LoanTransaction (independent aggregate, append-only),
+                                    TransactionComponents (VO)
+          application/             ports/ (create-only, no update/delete), use-cases/, dtos/
+          infrastructure/          PrismaLoanTransactionRepository (cursor-paginated reads)
+        repayment/                — Milestone 7: domain/application/infrastructure built, NO interface/http
+          domain/                  RepaymentInstallment (independent aggregate), InstallmentAmounts (VO)
+          application/             ports/, use-cases/, dtos/
+          infrastructure/          PrismaRepaymentInstallmentRepository
+        document/                 — scaffolded only (.gitkeep placeholders)
         audit/                    — scaffolded only
       shared/
         config/                  env.ts, duration.ts, trustProxy.ts
         database/                prismaClient.ts (singleton)
+        domain/                  Money.ts, Percentage.ts (Milestone 7), errors/FinancialDomainErrors.ts
+        application/             ports/IUnitOfWork.ts, TransactionContext.ts (Milestone 7)
+        infrastructure/          PrismaUnitOfWork.ts, resolveClient() (Milestone 7)
         errors/                  DomainError.ts
         logger/                  logger.ts (pino)
         middleware/              errorHandler.ts, requireAuth.ts, validate.ts
         types/                   express.d.ts
-        result.ts                Result<T,E> — defined, not yet used
+        result.ts                Result<T,E> — defined, not yet used (Money deliberately does NOT use it — see §13)
     tests/
       unit/                      mirrors src/, 59 tests, no DB required
       integration/               auth.test.ts, 6 tests, opt-in (RUN_INTEGRATION_TESTS=1)
@@ -786,3 +809,120 @@ empty folder scaffolds.
    instance running (`docker compose up postgres` — Docker has simply never been available in
    this dev environment) and run `prisma migrate dev` + the full test suite against it once, to
    close the verification gap noted in §11.
+
+---
+
+## 13. Milestone 7 — Core Domain Models (Complete)
+
+**Objective:** build the domain/application/infrastructure layers for the five remaining
+transactional bounded contexts (`borrower`, `loan-product`, `loan-account`, `ledger`,
+`repayment`), deliberately scoped to structural entities, value objects, repositories, and
+lifecycle use cases — **not** the interest/amortization calculation engine, payment allocation,
+or any HTTP-facing layer (all explicitly deferred to later milestones).
+
+### Pre-implementation deliverables (per the design review before any code was written)
+- **`docs/Architecture/FINANCIAL_INVARIANTS.md`** — the non-negotiable financial rules
+  (immutability/append-only rules, LPV-2, balance integrity, audit fail-closed for financial
+  writes vs. `identity`'s fail-open pattern, Money/rounding rules, the optimistic-concurrency
+  decision, and the full list of ADRs that still constrain future work).
+- **`docs/Architecture/ADR-042-aggregate-boundaries.md`** — the formal aggregate/transaction
+  boundary decisions and domain-level reasoning for every non-obvious call made in this
+  milestone (see §5 below for the short version).
+
+### Aggregate boundaries actually implemented (ADR-042)
+| Aggregate root | Module | Key design point |
+|---|---|---|
+| `Borrower` | `borrower` | Owns income detail/government ID/ID docs/character references/addresses (all `onDelete: Cascade` in the schema) |
+| `CoBorrower` | `borrower` | Independent of `Borrower` and `LoanAccount` — ADR-015 (per-borrower vs. per-loan scope) stays open either way |
+| `LoanProduct` | `loan-product` | Owns `LoanProductVersion[]` specifically so LPV-2 ("at most one Active version") is enforceable in exactly one method, `activateVersion()` |
+| `LoanAccount` | `loan-account` | Owns `AppliedFee[]` (small, bounded) and co-borrower attachments; does NOT own `LoanTransaction` or `RepaymentInstallment` |
+| `LoanTransaction` | `ledger` | Independent aggregate, immutable after creation (TXN-1) — the repository port has no `update()`/`delete()` method at all |
+| `RepaymentInstallment` | `repayment` | Independent aggregate, one instance per installment row — `status` is a derived getter (REPAY-3), never independently settable |
+
+`Address` is a **Value Object** (not an aggregate) owned wholesale by whichever aggregate holds
+it — see ADR-042 §8 for the domain-level reasoning, kept deliberately independent of the
+schema's lack of FK integrity for that table.
+
+### Shared kernel introduced this milestone
+- **`shared/domain/Money.ts` / `Percentage.ts`** — value objects wrapping Prisma's `Decimal`
+  (never native `number`) for every monetary/rate field in the five new modules. Per the design
+  review's **final** decision: construction throws a typed `DomainError` on invalid input, but
+  all arithmetic (`add`/`subtract`/`multiply`/`allocate`) is pure and deterministic —
+  **`Result<T,E>` was deliberately NOT introduced for `Money`**, to avoid a second competing
+  error-handling idiom alongside the existing throw-`DomainError` convention.
+- **`shared/application/ports/IUnitOfWork.ts` + `TransactionContext.ts`** — a framework-free,
+  cross-module transaction-boundary port. Lives in `shared/application/`, not any one module,
+  because a unit of work is needed by any use case coordinating repositories across module
+  boundaries (unlike a repository port, which is owned by exactly one module's aggregate).
+- **`shared/infrastructure/PrismaUnitOfWork.ts`** — wraps `prisma.$transaction`, generalizing
+  the pattern already proven by `PrismaRefreshTokenRepository.rotate()` (Milestone 6) into a
+  reusable cross-module primitive. Every new repository resolves its Prisma client via
+  `resolveClient(ctx)` so it can join a caller-supplied transaction or fall back to the
+  standalone singleton.
+- The `.eslintrc.json` domain/application layering rule was extended to also cover
+  `shared/domain/**` and `shared/application/**`.
+
+### Key scope decisions (all explicitly approved before implementation)
+- **`ApproveLoanUseCase` performs ONLY the `PENDING_APPROVAL -> APPROVED` transition** — no
+  `LoanTransaction`, no `RepaymentInstallment` generation, no balance change. This is
+  deliberately consistent with ADR-032 (loan approval and activation/disbursement are separate
+  business events, not one) — an earlier draft of this milestone's plan briefly conflated the
+  two before being corrected during design review. A future `ActivateLoanUseCase` (once the
+  calculation engine exists) owns disbursement.
+- **Domain Events were not introduced.** No real subscriber exists yet (Notifications is a
+  future module); introducing them now would need to be transaction-aware to satisfy the
+  fail-closed audit rule, which is complexity not currently justified. Documented as a
+  deliberate, easily-reversed deferral in `FINANCIAL_INVARIANTS.md §9`.
+- **Optimistic concurrency (a `version` column + conditional `UPDATE`) is the decided-but-not-
+  yet-implemented concurrency strategy** for future balance-mutating writes — no `version` column
+  exists yet because no balance-mutating logic is in scope this milestone, but the migration that
+  adds it must follow this design (`FINANCIAL_INVARIANTS.md §6`).
+- **`RecordLoanTransactionUseCase` and `RecordInstallmentPaymentUseCase` record ALREADY-COMPUTED
+  values** — neither derives amounts, component splits, or balances. They are the structural
+  recording primitives the (not-yet-built) calculation/payment-allocation engine will call.
+- One installment-status ambiguity is flagged inline as an explicit, unverified **ASSUMPTION**
+  (`RepaymentInstallment.status`'s LATE-vs-PARTIALLY_PAID precedence when an installment is both
+  overdue and partially paid) rather than silently resolved — flagged for confirmation before a
+  real collections/aging report relies on it.
+
+### What Milestone 7 deliberately did NOT build (all explicitly out of scope)
+Interest calculation engine, amortization schedule generation, payment allocation algorithm,
+any `interface/http/` controllers or routes for the five new modules, authorization middleware,
+Domain Events, notification infrastructure.
+
+### Verification
+Every module was built, then verified (`tsc --noEmit`, `eslint`, `vitest run`) before proceeding
+to the next, per the incremental-build requirement. Checkpoint commits exist per module (shared
+kernel; `borrower`; `loan-product`; `loan-account`; `ledger`; `repayment`).
+
+| Check | Result |
+|---|---|
+| Backend build (`tsc` + `tsc-alias`) | ✅ Clean, zero errors |
+| Backend ESLint (including the newly-extended layering rule) | ✅ Clean, zero errors/warnings |
+| Backend unit tests | ✅ 168 passing, 0 failing (up from 59 at the end of Milestone 6) |
+| Backend integration tests | ⏭️ 6 correctly skip (still no live Postgres in this environment) |
+
+**Same persistent limitation as every prior milestone:** no live PostgreSQL has been available
+in this development environment, so none of the new repositories' Prisma queries have been
+verified against a real database — only via `tsc`'s structural type-checking against the
+generated Prisma Client types and mocked-Prisma unit tests. This remains the single most
+important outstanding verification gap (§11) and now applies to five additional modules' worth
+of repository code, not just `identity`'s.
+
+### Recommended next step
+With Core Domain Models in place, the natural next milestones (in roughly this order) are:
+1. Resolve ADR-007 (outstanding balance formula) and ADR-009 (repayment allocation order) —
+   both are prerequisites for the interest/amortization calculation engine.
+2. Build the calculation engine (Flat Rate, Declining Balance, Declining Balance Discounted) and
+   the payment allocation algorithm, using the domain entities/repositories from this milestone.
+3. Build `ActivateLoanUseCase` (disbursement) once the calculation engine exists, wiring
+   `LoanAccount` + `LoanTransaction` + `RepaymentInstallment` together through `IUnitOfWork` —
+   this milestone's `ApproveLoanUseCase` deliberately left this as the first real multi-aggregate
+   use case for that later work to prove out.
+4. Formally create the `audit` module and wire the fail-closed, same-transaction audit-write
+   pattern (`FINANCIAL_INVARIANTS.md §4`) into any financial-write use case.
+5. Decide Authorization (ADR-038) before Milestone 8 exposes any HTTP endpoint for this
+   milestone's modules — still entirely unresolved, and still the single most important deferred
+   item before any of this code is reachable over the network.
+6. Get a real PostgreSQL instance running and close the verification gap in §11, now covering
+   six modules' worth of repository code instead of one.
