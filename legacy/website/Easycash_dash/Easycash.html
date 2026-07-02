@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<!-- saved from url=(0035)https://easycash.sdevtech.com.ph/#/ -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <link rel="icon" href="https://easycash.sdevtech.com.ph/favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Easycash</title>
+    <script type="module" crossorigin="" src="./Easycash_files/index-b4dbc01b.js.download"></script>
+    <link rel="stylesheet" href="./Easycash_files/index-a6e705c9.css">
+  <style type="text/css">
+.p-icon {
+    display: inline-block;
+}
+.p-icon-spin {
+    -webkit-animation: p-icon-spin 2s infinite linear;
+    animation: p-icon-spin 2s infinite linear;
+}
+@-webkit-keyframes p-icon-spin {
+0% {
+        -webkit-transform: rotate(0deg);
+        transform: rotate(0deg);
+}
+100% {
+        -webkit-transform: rotate(359deg);
+        transform: rotate(359deg);
+}
+}
+@keyframes p-icon-spin {
+0% {
+        -webkit-transform: rotate(0deg);
+        transform: rotate(0deg);
+}
+100% {
+        -webkit-transform: rotate(359deg);
+        transform: rotate(359deg);
+}
+}
+</style><style type="text/css" data-primevue-style-id="virtualscroller">
+.p-virtualscroller {
+    position: relative;
+    overflow: auto;
+    contain: strict;
+    transform: translateZ(0);
+    will-change: scroll-position;
+    outline: 0 none;
+}
+
+.p-virtualscroller-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* contain: content; */
+    min-height: 100%;
+    min-width: 100%;
+    will-change: transform;
+}
+
+.p-virtualscroller-spacer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 1px;
+    width: 1px;
+    transform-origin: 0 0;
+    pointer-events: none;
+}
+
+.p-virtualscroller .p-virtualscroller-loader {
+    position: sticky;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.p-virtualscroller-loader.p-component-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.p-virtualscroller-loading-icon {
+    font-size: 2rem;
+}
+
+.p-virtualscroller-loading-icon.p-icon {
+    width: 2rem;
+    height: 2rem;
+}
+
+.p-virtualscroller-horizontal > .p-virtualscroller-content {
+    display: flex;
+}
+
+/* Inline */
+.p-virtualscroller-inline .p-virtualscroller-content {
+    position: static;
+}
+</style><style type="text/css">
+.p-colorpicker {
+    display: inline-block;
+}
+.p-colorpicker-dragging {
+    cursor: pointer;
+}
+.p-colorpicker-overlay {
+    position: relative;
+}
+.p-colorpicker-panel {
+    position: relative;
+    width: 193px;
+    height: 166px;
+}
+.p-colorpicker-overlay-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+.p-colorpicker-preview {
+    cursor: pointer;
+}
+.p-colorpicker-panel .p-colorpicker-content {
+    position: relative;
+}
+.p-colorpicker-panel .p-colorpicker-color-selector {
+    width: 150px;
+    height: 150px;
+    top: 8px;
+    left: 8px;
+    position: absolute;
+}
+.p-colorpicker-panel .p-colorpicker-color {
+    width: 150px;
+    height: 150px;
+}
+.p-colorpicker-panel .p-colorpicker-color-handle {
+    position: absolute;
+    top: 0px;
+    left: 150px;
+    border-radius: 100%;
+    width: 10px;
+    height: 10px;
+    border-width: 1px;
+    border-style: solid;
+    margin: -5px 0 0 -5px;
+    cursor: pointer;
+    opacity: 0.85;
+}
+.p-colorpicker-panel .p-colorpicker-hue {
+    width: 17px;
+    height: 150px;
+    top: 8px;
+    left: 167px;
+    position: absolute;
+    opacity: 0.85;
+}
+.p-colorpicker-panel .p-colorpicker-hue-handle {
+    position: absolute;
+    top: 150px;
+    left: 0px;
+    width: 21px;
+    margin-left: -2px;
+    margin-top: -5px;
+    height: 10px;
+    border-width: 2px;
+    border-style: solid;
+    opacity: 0.85;
+    cursor: pointer;
+}
+</style><style type="text/css" data-primevue-style-id="common">
+.p-component, .p-component * {
+    box-sizing: border-box;
+}
+
+.p-hidden-space {
+    visibility: hidden;
+}
+
+.p-reset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    text-decoration: none;
+    font-size: 100%;
+    list-style: none;
+}
+
+.p-disabled, .p-disabled * {
+    cursor: default !important;
+    pointer-events: none;
+    user-select: none;
+}
+
+.p-component-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.p-unselectable-text {
+    user-select: none;
+}
+
+.p-sr-only {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    word-wrap: normal !important;
+}
+
+.p-link {
+	text-align: left;
+	background-color: transparent;
+	margin: 0;
+	padding: 0;
+	border: none;
+    cursor: pointer;
+    user-select: none;
+}
+
+.p-link:disabled {
+	cursor: default;
+}
+
+/* Non vue overlay animations */
+.p-connected-overlay {
+    opacity: 0;
+    transform: scaleY(0.8);
+    transition: transform .12s cubic-bezier(0, 0, 0.2, 1), opacity .12s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.p-connected-overlay-visible {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+.p-connected-overlay-hidden {
+    opacity: 0;
+    transform: scaleY(1);
+    transition: opacity .1s linear;
+}
+
+/* Vue based overlay animations */
+.p-connected-overlay-enter-from {
+    opacity: 0;
+    transform: scaleY(0.8);
+}
+
+.p-connected-overlay-leave-to {
+    opacity: 0;
+}
+
+.p-connected-overlay-enter-active {
+    transition: transform .12s cubic-bezier(0, 0, 0.2, 1), opacity .12s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.p-connected-overlay-leave-active {
+    transition: opacity .1s linear;
+}
+
+/* Toggleable Content */
+.p-toggleable-content-enter-from,
+.p-toggleable-content-leave-to {
+    max-height: 0;
+}
+
+.p-toggleable-content-enter-to,
+.p-toggleable-content-leave-from {
+    max-height: 1000px;
+}
+
+.p-toggleable-content-leave-active {
+    overflow: hidden;
+    transition: max-height 0.45s cubic-bezier(0, 1, 0, 1);
+}
+
+.p-toggleable-content-enter-active {
+    overflow: hidden;
+    transition: max-height 1s ease-in-out;
+}
+
+.p-button {
+    display: inline-flex;
+    cursor: pointer;
+    user-select: none;
+    align-items: center;
+    vertical-align: bottom;
+    text-align: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.p-button-label {
+    flex: 1 1 auto;
+}
+
+.p-button-icon-right {
+    order: 1;
+}
+
+.p-button:disabled {
+    cursor: default;
+}
+
+.p-button-icon-only {
+    justify-content: center;
+}
+
+.p-button-icon-only .p-button-label {
+    visibility: hidden;
+    width: 0;
+    flex: 0 0 auto;
+}
+
+.p-button-vertical {
+    flex-direction: column;
+}
+
+.p-button-icon-bottom {
+    order: 2;
+}
+
+.p-buttonset .p-button {
+    margin: 0;
+}
+
+.p-buttonset .p-button:not(:last-child) {
+    border-right: 0 none;
+}
+
+.p-buttonset .p-button:not(:first-of-type):not(:last-of-type) {
+    border-radius: 0;
+}
+
+.p-buttonset .p-button:first-of-type {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.p-buttonset .p-button:last-of-type {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.p-buttonset .p-button:focus {
+    position: relative;
+    z-index: 1;
+}
+
+
+.p-checkbox {
+    display: inline-flex;
+    cursor: pointer;
+    user-select: none;
+    vertical-align: bottom;
+    position: relative;
+}
+
+.p-checkbox.p-checkbox-disabled {
+    cursor: default;
+}
+
+.p-checkbox-box {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.p-fluid .p-inputtext {
+    width: 100%;
+}
+
+/* InputGroup */
+.p-inputgroup {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+}
+
+.p-inputgroup-addon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.p-inputgroup .p-float-label {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+}
+
+.p-inputgroup .p-inputtext,
+.p-fluid .p-inputgroup .p-inputtext,
+.p-inputgroup .p-inputwrapper,
+.p-fluid .p-inputgroup .p-input {
+    flex: 1 1 auto;
+    width: 1%;
+}
+
+/* Floating Label */
+.p-float-label {
+    display: block;
+    position: relative;
+}
+
+.p-float-label label {
+    position: absolute;
+    pointer-events: none;
+    top: 50%;
+    margin-top: -.5rem;
+    transition-property: all;
+    transition-timing-function: ease;
+    line-height: 1;
+}
+
+.p-float-label textarea ~ label {
+    top: 1rem;
+}
+
+.p-float-label input:focus ~ label,
+.p-float-label input.p-filled ~ label,
+.p-float-label textarea:focus ~ label,
+.p-float-label textarea.p-filled ~ label,
+.p-float-label .p-inputwrapper-focus ~ label,
+.p-float-label .p-inputwrapper-filled ~ label {
+    top: -.75rem;
+    font-size: 12px;
+}
+
+.p-float-label .input:-webkit-autofill ~ label {
+    top: -20px;
+    font-size: 12px;
+}
+
+.p-float-label .p-placeholder,
+.p-float-label input::placeholder,
+.p-float-label .p-inputtext::placeholder {
+    opacity: 0;
+    transition-property: all;
+    transition-timing-function: ease;
+}
+
+.p-float-label .p-focus .p-placeholder,
+.p-float-label input:focus::placeholder,
+.p-float-label .p-inputtext:focus::placeholder {
+    opacity: 1;
+    transition-property: all;
+    transition-timing-function: ease;
+}
+
+.p-input-icon-left,
+.p-input-icon-right {
+    position: relative;
+    display: inline-block;
+}
+
+.p-input-icon-left > i,
+.p-input-icon-left > svg,
+.p-input-icon-right > i,
+.p-input-icon-right > svg {
+    position: absolute;
+    top: 50%;
+    margin-top: -.5rem;
+}
+
+.p-fluid .p-input-icon-left,
+.p-fluid .p-input-icon-right {
+    display: block;
+    width: 100%;
+}
+
+
+.p-radiobutton {
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+    user-select: none;
+    vertical-align: bottom;
+}
+
+.p-radiobutton.p-radiobutton-disabled {
+    cursor: default;
+}
+
+.p-radiobutton-box {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.p-radiobutton-icon {
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0) scale(.1);
+    border-radius: 50%;
+    visibility: hidden;
+}
+
+.p-radiobutton-box.p-highlight .p-radiobutton-icon {
+    transform: translateZ(0) scale(1.0, 1.0);
+    visibility: visible;
+}
+
+</style><style type="text/css" data-primevue-style-id="toast">
+.p-toast {
+    width: 25rem;
+}
+
+.p-toast-message-content {
+    display: flex;
+    align-items: flex-start;
+}
+
+.p-toast-message-text {
+    flex: 1 1 auto;
+}
+
+.p-toast-top-center {
+    transform: translateX(-50%);
+}
+
+.p-toast-bottom-center {
+    transform: translateX(-50%);
+}
+
+.p-toast-center {
+    min-width: 20vw;
+    transform: translate(-50%, -50%);
+}
+
+.p-toast-icon-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.p-toast-icon-close.p-link {
+    cursor: pointer;
+}
+
+/* Animations */
+.p-toast-message-enter-from {
+    opacity: 0;
+    -webkit-transform: translateY(50%);
+    -ms-transform: translateY(50%);
+    transform: translateY(50%);
+}
+
+.p-toast-message-leave-from {
+    max-height: 1000px;
+}
+
+.p-toast .p-toast-message.p-toast-message-leave-to {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+}
+
+.p-toast-message-enter-active {
+    -webkit-transition: transform 0.3s, opacity 0.3s;
+    transition: transform 0.3s, opacity 0.3s;
+}
+
+.p-toast-message-leave-active {
+    -webkit-transition: max-height 0.45s cubic-bezier(0, 1, 0, 1), opacity 0.3s, margin-bottom 0.3s;
+    transition: max-height 0.45s cubic-bezier(0, 1, 0, 1), opacity 0.3s, margin-bottom 0.3s;
+}
+</style><style type="text/css" data-primevue-style-id="base">
+.p-hidden-accessible {
+    border: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+}
+
+.p-hidden-accessible input,
+.p-hidden-accessible select {
+    transform: scale(0);
+}
+
+.p-overflow-hidden {
+    overflow: hidden;
+}
+</style><link rel="modulepreload" as="script" crossorigin="" href="https://easycash.sdevtech.com.ph/assets/index-55e15a44.js"><link rel="modulepreload" as="script" crossorigin="" href="https://easycash.sdevtech.com.ph/assets/loan-accounts.api-7315e135.js"><link rel="modulepreload" as="script" crossorigin="" href="https://easycash.sdevtech.com.ph/assets/recent-activities.api-7b981e93.js"><link rel="modulepreload" as="script" crossorigin="" href="https://easycash.sdevtech.com.ph/assets/repayment.api-098f05be.js"><style type="text/css" data-primevue-style-id="ripple">
+.p-ripple {
+    overflow: hidden;
+    position: relative;
+}
+
+.p-ink {
+    display: block;
+    position: absolute;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 100%;
+    transform: scale(0);
+    pointer-events: none;
+}
+
+.p-ink-active {
+    animation: ripple 0.4s linear;
+}
+
+.p-ripple-disabled .p-ink {
+    display: none !important;
+}
+
+@keyframes ripple {
+    100% {
+        opacity: 0;
+        transform: scale(2.5);
+    }
+}
+</style><style type="text/css" data-primevue-style-id="dialog">
+.p-dialog-mask {
+    pointer-events: none;
+}
+
+.p-dialog-mask.p-component-overlay {
+    pointer-events: auto;
+}
+
+.p-dialog {
+    pointer-events: auto;
+    max-height: 90%;
+    transform: scale(1);
+}
+
+.p-dialog-content {
+    overflow-y: auto;
+}
+
+.p-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.p-dialog-footer {
+    flex-shrink: 0;
+}
+
+.p-dialog .p-dialog-header-icons {
+    display: flex;
+    align-items: center;
+}
+
+.p-dialog .p-dialog-header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Fluid */
+.p-fluid .p-dialog-footer .p-button {
+    width: auto;
+}
+
+/* Animation */
+/* Center */
+.p-dialog-enter-active {
+    transition: all 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+.p-dialog-leave-active {
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.p-dialog-enter-from,
+.p-dialog-leave-to {
+    opacity: 0;
+    transform: scale(0.7);
+}
+
+/* Top, Bottom, Left, Right, Top* and Bottom* */
+.p-dialog-top .p-dialog,
+.p-dialog-bottom .p-dialog,
+.p-dialog-left .p-dialog,
+.p-dialog-right .p-dialog,
+.p-dialog-topleft .p-dialog,
+.p-dialog-topright .p-dialog,
+.p-dialog-bottomleft .p-dialog,
+.p-dialog-bottomright .p-dialog {
+    margin: 0.75rem;
+    transform: translate3d(0px, 0px, 0px);
+}
+.p-dialog-top .p-dialog-enter-active,
+.p-dialog-top .p-dialog-leave-active,
+.p-dialog-bottom .p-dialog-enter-active,
+.p-dialog-bottom .p-dialog-leave-active,
+.p-dialog-left .p-dialog-enter-active,
+.p-dialog-left .p-dialog-leave-active,
+.p-dialog-right .p-dialog-enter-active,
+.p-dialog-right .p-dialog-leave-active,
+.p-dialog-topleft .p-dialog-enter-active,
+.p-dialog-topleft .p-dialog-leave-active,
+.p-dialog-topright .p-dialog-enter-active,
+.p-dialog-topright .p-dialog-leave-active,
+.p-dialog-bottomleft .p-dialog-enter-active,
+.p-dialog-bottomleft .p-dialog-leave-active,
+.p-dialog-bottomright .p-dialog-enter-active,
+.p-dialog-bottomright .p-dialog-leave-active {
+    transition: all 0.3s ease-out;
+}
+.p-dialog-top .p-dialog-enter-from,
+.p-dialog-top .p-dialog-leave-to {
+    transform: translate3d(0px, -100%, 0px);
+}
+.p-dialog-bottom .p-dialog-enter-from,
+.p-dialog-bottom .p-dialog-leave-to {
+    transform: translate3d(0px, 100%, 0px);
+}
+.p-dialog-left .p-dialog-enter-from,
+.p-dialog-left .p-dialog-leave-to,
+.p-dialog-topleft .p-dialog-enter-from,
+.p-dialog-topleft .p-dialog-leave-to,
+.p-dialog-bottomleft .p-dialog-enter-from,
+.p-dialog-bottomleft .p-dialog-leave-to {
+    transform: translate3d(-100%, 0px, 0px);
+}
+.p-dialog-right .p-dialog-enter-from,
+.p-dialog-right .p-dialog-leave-to,
+.p-dialog-topright .p-dialog-enter-from,
+.p-dialog-topright .p-dialog-leave-to,
+.p-dialog-bottomright .p-dialog-enter-from,
+.p-dialog-bottomright .p-dialog-leave-to {
+    transform: translate3d(100%, 0px, 0px);
+}
+
+/* Maximize */
+.p-dialog-maximized {
+    -webkit-transition: none;
+    transition: none;
+    transform: none;
+    width: 100vw !important;
+    height: 100vh !important;
+    top: 0px !important;
+    left: 0px !important;
+    max-height: 100%;
+    height: 100%;
+}
+.p-dialog-maximized .p-dialog-content {
+    flex-grow: 1;
+}
+
+.p-confirm-dialog .p-dialog-content {
+    display: flex;
+    align-items: center;
+}
+</style><style type="text/css" data-primevue-style-id="divider">
+.p-divider-horizontal {
+    display: flex;
+    width: 100%;
+    position: relative;
+    align-items: center;
+}
+
+.p-divider-horizontal:before {
+    position: absolute;
+    display: block;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    content: '';
+}
+
+.p-divider-horizontal.p-divider-left {
+    justify-content: flex-start;
+}
+
+.p-divider-horizontal.p-divider-right {
+    justify-content: flex-end;
+}
+
+.p-divider-horizontal.p-divider-center {
+    justify-content: center;
+}
+
+.p-divider-content {
+    z-index: 1;
+}
+
+.p-divider-vertical {
+    min-height: 100%;
+    margin: 0 1rem;
+    display: flex;
+    position: relative;
+    justify-content: center;
+}
+
+.p-divider-vertical:before {
+    position: absolute;
+    display: block;
+    top: 0;
+    left: 50%;
+    height: 100%;
+    content: '';
+}
+
+.p-divider-vertical.p-divider-top {
+    align-items: flex-start;
+}
+
+.p-divider-vertical.p-divider-center {
+    align-items: center;
+}
+
+.p-divider-vertical.p-divider-bottom {
+    align-items: flex-end;
+}
+
+.p-divider-solid.p-divider-horizontal:before {
+    border-top-style: solid;
+}
+
+.p-divider-solid.p-divider-vertical:before {
+    border-left-style: solid;
+}
+
+.p-divider-dashed.p-divider-horizontal:before {
+    border-top-style: dashed;
+}
+
+.p-divider-dashed.p-divider-vertical:before {
+    border-left-style: dashed;
+}
+
+.p-divider-dotted.p-divider-horizontal:before {
+    border-top-style: dotted;
+}
+
+.p-divider-dotted.p-divider-vertical:before {
+    border-left-style: dotted;
+}
+</style></head>
+  <body data-new-gr-c-s-check-loaded="14.1307.0" data-gr-ext-installed="" data-gr-aaa-loaded="14.1307.0" data-gr-aaa-notch-connection-id="1782915599513-0.058176987443678385">
+    <div id="app" data-v-app=""><div id="app"><div class="layout-wrapper layout-static p-ripple-disabled"><div data-v-1758e621=""><div data-v-1758e621="" class="header"><div data-v-1758e621="" class="flex flex-row align-items-center justify-content-between w-full"><div data-v-1758e621="" class="flex align-items-center gap-3"><div data-v-1758e621="" class="flex align-items-center gap-3 cursor-pointer"><img data-v-cf8a8c19="" data-v-1758e621="" src="data:image/webp;base64,UklGRsoDAABXRUJQVlA4TL4DAAAvO8AQEJfCoG0kR97Cn9LT6j80HLZtI0l09u/2+j8gdtA2kiS5aoktf0TvXTGIbFvEkcDR4EVQQQLZNdDAkeAHOH6nLmPkoPCFVG4ULiCEsv2QAgkYiKCLUoUajEJRDSpZFFkqXaKwoWpW+FUm8aOPLKWN0vfPHpkyP+BHhZACsUNogBqQioT4EUp7yE6LQgP4r3rcNpbgn8smc3R+F5Bg27baNi9k/Lq/lWy5ZAwz1wqjKZzMfzTSe5/aAUT034EkqXGzhGJ1GF0gO1+g/1bmBvuhMTqvSay3272wRMVAi5OtdrsdmNwA4OSz124PukGJAl4EWW23u3MLG4y8+yK9VzkaQLWUMvL6p7tARAurhZuBH7kF9LkaAddEJMj3GpGBrHx6IGaz1IDiI834cGHICEL0PZGF8Hm8DzhxtknKSWwi5nlsdzlxtEpOEvGt8iHrny72iU3yNOEV5z6kt2chSwCqYg6nqSA1JzK34RCkz0DDGJezF7HhViKO2kIiAA+WqD5NxDSVPxkBCVmldMmneS5J4kpS4NqSUuZpQpKM7eBF4dKUHor1dhPhulUT2QJMI5rb6+Ss++5QdnDNfL4ooRnRey9nnU0iMpa9kuTEoJ+Dgm3MGZ+uetwjGkDG9eWUdounBguGaR0D2jOtU6H1j779BhkDT163CRLFPR2si0GMaAJDv04lpo2dXq5rYpAQLSpmne6KXmvFU/NEZM8/Z/vMOj0A+DHgT1kxBBquuGOdjgH87BhP1drTZ6yHugZ+OdSaInJCzhPCteLaN9Q6POlRV4qB3+32hk/UjTw8Mu3PkzOEL6VcPF40C10j8kP9UgNo1W3RmOT6q/tOnriAkFtL/sS5Ls+RH8wyNOYPct0gT4nN0HPiDc7wtk2+aFrMyPAM8O2QvDGzYMIs10Xyx9AFKUMIpZIFD0VGi+MKgejFDCVtRmEkNSKTNqVAGBpVeklUwM8xNNgaSwYvRVaEK2ZRqRSZki+jcMgAbfviIT/43NBL4G+2oMWW+b6oBkWpmOc/KEcGE4vMDVk+NplMvlDxGOq/wYMxpsvsrMMFlUoNM3gRVTMAgexzZo4tXHDEYXCbKFsmngXEsSXk1Qv7DQOhrhOXu6c5AjAXQmHN778AoIPcVDXtkqQZxGe7r7kTL2wnWozpGU/A1DGhEv67UO65c6tz9ViN/OKPHJnnhfQ3gZBWdlQ3ttXu2HqSkt9GWl5QOm7l0ow1mLxkkXd6jRNYxY35fHInDjVXpYiCSeVknDZiFmfx5Xj0RQ5C"><span data-v-1758e621="" class="text-xl font-semibold text-white"> EASYCASH </span></div><button data-v-1758e621="" class="p-button p-component p-button-text p-button-sm ml-8" type="button" data-pc-name="button" data-pc-section="root" data-pd-ripple="true"><i data-v-1758e621="" class="pi pi-bars text-white" style="font-size: 1.5rem;"></i><span role="presentation" aria-hidden="true" data-p-ink="true" data-p-ink-active="false" class="p-ink" data-pc-name="ripple" data-pc-section="root"></span></button></div><div data-v-1758e621="" class="flex flex-row gap-3 align-items-center"><!----><button data-v-1758e621="" class="p-button p-component p-button-sm p-button-success p-button-disabled" type="button" aria-label="0" data-pc-name="button" data-pc-section="root" data-pd-ripple="true"><span class="p-button-icon p-button-icon-left pi pi-bell" data-pc-section="icon"></span><span class="p-button-label" data-pc-section="label">0</span><!----><span role="presentation" aria-hidden="true" data-p-ink="true" data-p-ink-active="false" class="p-ink" data-pc-name="ripple" data-pc-section="root"></span></button><span data-v-1758e621="" class="text-base text-white font-normal">Jomer</span><button data-v-1758e621="" class="p-button p-component p-button-icon-only p-button-text p-button-success" type="button" data-pc-name="button" data-pc-section="root" data-pd-ripple="true"><span class="p-button-icon pi pi-sign-out" data-pc-section="icon"></span><span class="p-button-label" data-pc-section="label">&nbsp;</span><!----><span role="presentation" aria-hidden="true" data-p-ink="true" data-p-ink-active="false" class="p-ink" data-pc-name="ripple" data-pc-section="root"></span></button></div></div></div></div><div class="layout-sidebar"><ul class="layout-menu"><div><li class="layout-root-menuitem"><div class="layout-menuitem-root-text">Home</div><a class="" tabindex="0"><i class="layout-menuitem-icon"></i><span class="layout-menuitem-text">Home</span><i class="pi pi-fw pi-angle-down layout-submenu-toggler"></i></a><!----><ul class="layout-submenu"><li class=""><!----><!----><a aria-current="page" href="https://easycash.sdevtech.com.ph/#/" class="router-link-active router-link-exact-active active-route" tabindex="0"><i class="pi pi-fw pi-home layout-menuitem-icon"></i><span class="layout-menuitem-text">Dashboard</span><!----></a><!----></li></ul></li><li class="menu-separator"></li></div><div><li class="layout-root-menuitem"><div class="layout-menuitem-root-text">Accounts</div><a class="" tabindex="0"><i class="layout-menuitem-icon"></i><span class="layout-menuitem-text">Accounts</span><i class="pi pi-fw pi-angle-down layout-submenu-toggler"></i></a><!----><ul class="layout-submenu"><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/accounts/list-of-active-accounts" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Loan Accounts</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/accounts/list-of-client-accounts" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Client Accounts</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/accounts/statement-of-accounts/view" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Statement of Accounts</span><!----></a><!----></li></ul></li><li class="menu-separator"></li></div><div><li class="layout-root-menuitem"><div class="layout-menuitem-root-text">Reports</div><a class="" tabindex="0"><i class="layout-menuitem-icon"></i><span class="layout-menuitem-text">Reports</span><i class="pi pi-fw pi-angle-down layout-submenu-toggler"></i></a><!----><ul class="layout-submenu"><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/report" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Custom Reports</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/loan-transactions" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Loan Transaction</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/collection/expected-collection" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Expected Collection</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/fully-paid-accounts" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Fully Paid Accounts</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/aging-accounts" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Aging Accounts</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/detailed-ending-current-balance" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Ending Current Balance</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/first-amortization" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">First Amortization Due</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/daily-collection" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Collection</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/account-past-due" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Accounts with Past Due</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/reporting/monthly-loan-releases" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Monthly Loan Release</span><!----></a><!----></li></ul></li><li class="menu-separator"></li></div><div><li class="layout-root-menuitem"><div class="layout-menuitem-root-text">General Setup</div><a class="" tabindex="0"><i class="layout-menuitem-icon"></i><span class="layout-menuitem-text">General Setup</span><i class="pi pi-fw pi-angle-down layout-submenu-toggler"></i></a><!----><ul class="layout-submenu"><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/products/loan-products" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">Product Features</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/general-setup/organization-details" class="" tabindex="0"><i class="pi pi-fw pi-sliders-h layout-menuitem-icon"></i><span class="layout-menuitem-text">Organizational Details</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/general-setup/sms-list" class="" tabindex="0"><i class="pi pi-fw pi-sliders-h layout-menuitem-icon"></i><span class="layout-menuitem-text">SMS Setup</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/accounts/user-accounts" class="" tabindex="0"><i class="pi pi-fw pi-list layout-menuitem-icon"></i><span class="layout-menuitem-text">User Accounts</span><!----></a><!----></li><li class=""><!----><!----><a href="https://easycash.sdevtech.com.ph/#/general-setup/user-access" class="" tabindex="0"><i class="pi pi-fw pi-sliders-h layout-menuitem-icon"></i><span class="layout-menuitem-text">Users Access</span><!----></a><!----></li></ul></li><li class="menu-separator"></li></div></ul></div><div class="layout-main-container"><div class="layout-main"><div class="flex flex-column"><span class="text-3xl font-semibold"> Dashboard </span><div class="grid mt-4"><div class="col-12 lg:col-6 xl:col-4"><div class="card card-ec-blue mb-0"><div class="flex justify-content-between"><div><span class="text-white block text-500 font-bold mb-3">Total Outstanding Balance</span><div class="text-white text-900 font-medium text-4xl">₱ 249,475,676.95</div></div><div class="flex align-items-center justify-content-center border-round bg-blue-100" style="width: 2.5rem; height: 2.5rem;"><i class="pi pi-money-bill text-xl text-blue-500"></i></div></div></div></div><div class="col-12 lg:col-6 xl:col-4"><div class="card card-ec-blue mb-0"><div class="flex justify-content-between"><div><span class="text-white block text-500 font-bold mb-3">Total Loan Accounts</span><div class="text-white text-900 font-medium text-4xl">1,801</div></div><div class="flex align-items-center justify-content-center border-round bg-blue-100" style="width: 2.5rem; height: 2.5rem;"><i class="pi pi-users text-xl text-blue-500"></i></div></div></div></div><div class="col-12 lg:col-6 xl:col-4"><div class="card card-ec-blue mb-0"><div class="flex justify-content-between"><div><span class="text-white block text-500 font-bold mb-3">Total Active Accounts</span><div class="text-white text-900 font-medium text-4xl">1,292</div></div><div class="flex align-items-center justify-content-center border-round bg-orange-100" style="width: 2.5rem; height: 2.5rem;"><i class="pi pi-users text-xl text-orange-500"></i></div></div></div></div><div class="col-12 lg:col-6 xl:col-4"><div class="card card-ec-blue mb-0"><div class="flex justify-content-between"><div><span class="text-white block text-500 font-bold mb-3">Total Closed Accounts</span><div class="text-white text-900 font-medium text-4xl">509</div></div><div class="flex align-items-center justify-content-center border-round bg-orange-100" style="width: 2.5rem; height: 2.5rem;"><i class="pi pi-users text-xl text-orange-500"></i></div></div></div></div><div class="col-12 lg:col-6 xl:col-3"><div class="card card-ec-blue mb-0"><div class="flex justify-content-between"><div><span class="text-white block text-500 font-bold mb-3">Total Loan Products</span><div class="text-white text-900 font-medium text-3xl">44</div></div><!----></div></div></div></div><span class="text-xl font-medium mt-5"> Recent Activities </span><div class="col-12 lg:col-12 xl:col-12 p-0 mt-4"><div class="card"><div class="flex flex-column gap-1"><span class="text-md font-semibold text-ec-color">Mariel Ramos De Guzman uploaded 1 attachment for loan account "SML-REG_00350" of ROLLY BAJADO</span><!----><span class="text-sm font-medium">Wed Jul 01 2026</span><div class="p-divider p-component p-divider-horizontal p-divider-solid p-divider-left" role="separator" aria-orientation="horizontal" data-pc-name="divider" data-pc-section="root"><div class="p-divider-content" data-pc-section="content"><b></b></div></div></div><div class="flex flex-column gap-1"><span class="text-md font-semibold text-ec-color">Nomer Dela Cruz Perez uploaded 1 attachment for loan account "SML-REG_00331" of RAMON UMALI</span><!----><span class="text-sm font-medium">Wed Jul 01 2026</span><div class="p-divider p-component p-divider-horizontal p-divider-solid p-divider-left" role="separator" aria-orientation="horizontal" data-pc-name="divider" data-pc-section="root"><div class="p-divider-content" data-pc-section="content"><b></b></div></div></div><div class="flex flex-column gap-1"><span class="text-md font-semibold text-ec-color">Jomer  Antoniego Biason uploaded 22 attachments for loan account "BL-REG_00061" of EDGARDO FLORES</span><!----><span class="text-sm font-medium">Tue Jun 30 2026</span><div class="p-divider p-component p-divider-horizontal p-divider-solid p-divider-left" role="separator" aria-orientation="horizontal" data-pc-name="divider" data-pc-section="root"><div class="p-divider-content" data-pc-section="content"><b></b></div></div></div><div class="flex flex-column gap-1"><span class="text-md font-semibold text-ec-color">Jomer  Antoniego Biason uploaded 26 attachments for loan account "BL-REG_00060" of ELIZABETH LIWANAG</span><!----><span class="text-sm font-medium">Tue Jun 30 2026</span><div class="p-divider p-component p-divider-horizontal p-divider-solid p-divider-left" role="separator" aria-orientation="horizontal" data-pc-name="divider" data-pc-section="root"><div class="p-divider-content" data-pc-section="content"><b></b></div></div></div><div class="flex flex-column gap-1"><span class="text-md font-semibold text-ec-color">Jomer  Antoniego Biason uploaded 16 attachments for loan account "SL-CORP_00116" of VIVER PACAN</span><!----><span class="text-sm font-medium">Tue Jun 30 2026</span><div class="p-divider p-component p-divider-horizontal p-divider-solid p-divider-left" role="separator" aria-orientation="horizontal" data-pc-name="divider" data-pc-section="root"><div class="p-divider-content" data-pc-section="content"><b></b></div></div></div><div class="flex justify-content-center"><a style="cursor: pointer;"><span>View all recent activities</span></a></div></div></div></div></div></div><div class="layout-mask"></div></div></div></div>
+    
+  
+
+<div class="p-toast p-component p-toast-bottom-right" data-pc-name="toast" data-pc-section="root" style="position: fixed; right: 20px; bottom: 20px;"><div data-pc-section="message"></div></div></body><grammarly-desktop-integration data-grammarly-shadow-root="true" style="visibility: visible !important;"><template shadowrootmode="open"><style>
+      div.grammarly-desktop-integration {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select:none;
+        user-select:none;
+      }
+
+      div.grammarly-desktop-integration:before {
+        content: attr(data-content);
+      }
+    </style><div aria-label="grammarly-integration" role="group" tabindex="-1" class="grammarly-desktop-integration" data-content="{&quot;mode&quot;:&quot;full&quot;,&quot;isActive&quot;:true,&quot;isUserDisabled&quot;:false}"></div></template></grammarly-desktop-integration><grammarly-assistant-notch-view role="presentation" data-grammarly-ignore-keyboard-events="true" data-grammarly-shadow-root="true" class="dnXmp" style="visibility: visible !important; --rem: 16;"><template shadowrootmode="open"><style>.ymqHP{visibility:hidden;position:fixed;}.ymqHP:after{content:'';position:absolute;visibility:visible;height:3px;bottom:0;border-radius:10px;background:#488cc8;animation:JQguZ 1.3s ease forwards}.ymqHP.ExcM8:after{animation:JQguZ .2s ease forwards}@keyframes JQguZ{0%{width:0%}100%{width:100%}}
+</style><link rel="stylesheet" type="text/css" href="chrome-extension://kbfnbcaeplbcioakkpcpgfkobkghlhen/src/css/designSystem.styles.css"><link rel="stylesheet" type="text/css" href="chrome-extension://kbfnbcaeplbcioakkpcpgfkobkghlhen/src/css/assistantUiKit.styles.css"><link rel="stylesheet" type="text/css" href="chrome-extension://kbfnbcaeplbcioakkpcpgfkobkghlhen/src/css/AAA-initAssistant.styles.css"><div aria-label="grammarly-global-assistant-notch" role="group" tabindex="-1"></div><div data-origin-theme="grammarly" data-origin-mode="dark"><div data-gds-theme="dark"><div class="_notchContainer_jPcgv_notchContainer _rightEdge_G9MBv_rightEdge" data-testid="assistant-notch-container" style="top: 395.5px;"><div data-testid="assistant-notch" class="_notch_jKYXX_notch _hidden_RGuj7_hidden  _rightEdge_G9MBv_rightEdge" style="--hidden-percent: 100%; top: 395.5px;"><button class="_notchButton_HXx5H_notchButton" data-testid="assistant-notch-button" aria-label="Start a chat with Grammarly AI"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="_heroIcon_-kKnp_heroIcon" data-testid="hero-icon"><path d="M18.4895 22.669L12.8177 19.563C12.5094 19.3927 12.1337 19.3927 11.8254 19.563L6.15358 22.669C5.24057 23.168 4.24536 22.1552 4.77085 21.2628L11.435 9.97192C11.8313 9.29964 12.8089 9.29964 13.2052 9.97192L19.8693 21.2628C20.3948 22.1552 19.4025 23.168 18.4866 22.669H18.4895ZM12.3216 7.71728C14.127 7.71728 15.589 6.25822 15.589 4.45862C15.589 2.65901 14.127 1.19995 12.3216 1.19995C10.5161 1.19995 9.05409 2.65901 9.05409 4.45862C9.05409 6.25822 10.5161 7.71728 12.3216 7.71728Z" class="_heroIconPath_g2gJS_heroIconPath"></path></svg><input aria-hidden="true" tabindex="-1" style="position: absolute; inset: 0px; opacity: 0; cursor: inherit;"></button></div></div></div></div></template></grammarly-assistant-notch-view></html>

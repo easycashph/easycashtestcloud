@@ -1,0 +1,927 @@
+/* General Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    background-color: #f5f7fa;
+    color: #333;
+}
+
+
+.site-content .ast-container {
+    display: block !important;
+}
+
+
+/* Navbar Styles */
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 50px;
+    background: white;
+    color: #2d5f2e;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.logo img {
+    height: 40px;
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+}
+
+.nav-links a {
+    color: #333;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.nav-links a:hover {
+    color: #2d5f2e;
+}
+
+/* Dropdown Styling */
+.dropdown {
+    position: relative;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background: white;
+    min-width: 200px;
+    border-radius: 8px;
+    box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.1);
+    padding: 10px 0;
+    transition: all 0.3s ease-in-out;
+    top: 100%;
+    left: 0;
+}
+
+.dropdown-content a {
+    color: #2d5f2e;
+    padding: 12px 16px;
+    display: block;
+    text-decoration: none;
+    transition: 0.3s;
+}
+
+.dropdown-content a:hover {
+    background: #f1f1f1;
+}
+
+.dropdown:hover .dropdown-content {
+    display: block;
+}
+
+/* Apply Now Button */
+.apply-btn {
+    background: #76b041;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: 0.3s;
+}
+
+.apply-btn:hover {
+    background: #5e8f32;
+}
+
+/* Complaint Form */
+.complaint-container {
+    width: 50%;
+    margin: 50px auto;
+    padding: 30px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.1);
+    animation: fadeIn 1s ease-in-out;
+}
+
+.complaint-container h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+    color: #2d5f2e;
+}
+
+.complaint-container label {
+    font-weight: bold;
+    display: block;
+    margin: 10px 0 5px;
+}
+
+.complaint-container input,
+.complaint-container textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    transition: 0.3s;
+}
+
+.complaint-container input:focus,
+.complaint-container textarea:focus {
+    border-color: #2d5f2e;
+    outline: none;
+}
+
+.complaint-container button {
+    width: 100%;
+    padding: 12px;
+    background: #2d5f2e;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.complaint-container button:hover {
+    background: #1a3b1d;
+}
+
+/* Live Chat */
+.chat-container {
+    width: 350px;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 0.5s ease-in-out;
+}
+
+.chat-header {
+    background: #2d5f2e;
+    color: white;
+    padding: 15px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.chat-body {
+    padding: 15px;
+    max-height: 250px;
+    overflow-y: auto;
+    font-size: 14px;
+}
+
+.user-message {
+    background: #c8f08f;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    align-self: flex-end;
+    text-align: right;
+    max-width: 80%;
+}
+
+.bot-message {
+    background: #f1f1f1;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    max-width: 80%;
+}
+
+.chat-footer {
+    display: flex;
+    padding: 10px;
+    border-top: 1px solid #ccc;
+}
+
+.chat-footer input {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 5px;
+    outline: none;
+}
+
+.chat-footer button {
+    background: #2d5f2e;
+    color: white;
+    padding: 10px;
+    border: none;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.chat-footer button:hover {
+    background: #1a3b1d;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+    .navbar {
+        padding: 15px 20px;
+    }
+
+    .nav-links {
+        gap: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .complaint-container {
+        width: 90%;
+    }
+
+    .chat-container {
+        width: 90%;
+        right: 5%;
+    }
+
+    .navbar {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .nav-links {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+/* Footer Styling */
+footer {
+    background-color: #23326a;
+    color: white;
+    padding: 40px 20px;
+    text-align: left;
+}
+
+.footer-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start; /* Ensures sections align at the top */
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.footer-section {
+    flex: 1;
+    min-width: 220px;
+    margin: 0 20px;
+}
+
+.footer-section h3 {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    color: #7aba1e;
+}
+
+.footer-section p,
+.footer-section ul {
+    font-size: 1rem; /* Increase font size */
+    line-height: 1.8; /* Improve readability */
+    font-weight: 400; /* Match original's text thickness */
+}
+
+
+.footer-section ul {
+    list-style: none;
+    padding: 0;
+}
+
+.footer-section ul li {
+    margin: 8px 0;
+}
+
+.footer-section ul li a {
+    text-decoration: none;
+    color: white;
+    transition: color 0.3s ease;
+}
+
+.footer-section ul li a:hover {
+    color: #7aba1e;
+}
+
+.social-icons {
+    display: flex;
+    gap: 15px; /* Adjust gap between icons */
+    align-items: center;
+    margin: 15px 0;
+}
+
+
+.social-icons img {
+    width: 24px;
+    height: 24px;
+    transition: transform 0.3s ease;
+}
+
+.social-icons img:hover {
+    transform: scale(1.1);
+}
+
+.certifications {
+    display: flex;
+    gap: 10px; /* Adds space between the logos */
+}
+
+.certification-link {
+    display: inline-block; /* Ensures the entire link wraps the image */
+    position: relative;    /* Needed for proper layout */
+}
+
+.certification-link img {
+    display: block; /* Removes any extra space around images */
+    width: 100px;   /* Adjust width as needed */
+    height: auto;   /* Maintains aspect ratio */
+    transition: transform 0.2s ease, box-shadow 0.2s ease; /* Adds hover effect */
+}
+
+.certification-link:hover img {
+    transform: scale(1.05); /* Slight zoom effect on hover */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Adds a shadow on hover */
+}
+
+.footer-credit {
+    text-align: center;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    width: 100%;
+    margin-top: 20px; /* Reduce gap */
+    padding-top: 10px; /* Adjust spacing */
+    border-top: 1px solid rgba(255, 255, 255, 0.2); /* Make line subtle */
+}
+
+
+.elementor-social-icon {
+    --icon-size: 32px; /* Adjusted to match original */
+    --icon-padding: 8px; /* Slightly reduced padding */
+    --e-social-icon-icon-color: #ffffff;
+    
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    
+    background-color: #ffffff1a; /* Light transparent white */
+    width: calc(var(--icon-size) + 2 * var(--icon-padding));
+    height: calc(var(--icon-size) + 2 * var(--icon-padding));
+    border-radius: 50%;
+    cursor: pointer;
+    margin: 8px; /* Increased spacing for better alignment */
+    
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.elementor-social-icon i {
+    font-size: var(--icon-size);
+    color: var(--e-social-icon-icon-color);
+}
+
+.elementor-social-icon:hover {
+    background-color: #ffffff33; /* Slightly brighter on hover */
+    transform: scale(1.1); /* Subtle scaling effect */
+    opacity: 0.9;
+}
+
+
+/* World-Class Client Manual Styles */
+.client-manual-container {
+    max-width: 900px;
+    margin: 50px auto;
+    padding: 30px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.15);
+    font-family: 'Bitter', serif;
+    transition: all 0.3s ease-in-out;
+}
+
+.client-manual-container:hover {
+    transform: scale(1.02);
+}
+
+.client-manual-container h2 {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: #222;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.manual-content {
+    margin-top: 25px;
+    padding: 20px;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+
+.manual-content:hover {
+    transform: translateY(-5px);
+    box-shadow: 0px 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.manual-content h3 {
+    font-size: 24px;
+    color: #23326a;
+    font-weight: 600;
+    border-left: 5px solid #23326a;
+    padding-left: 15px;
+    margin-bottom: 12px;
+}
+
+.manual-content ul {
+    padding-left: 20px;
+    list-style: none;
+}
+
+.manual-content ul li {
+    margin-bottom: 8px;
+    font-size: 18px;
+    color: #444;
+    position: relative;
+    padding-left: 25px;
+}
+
+.manual-content ul li::before {
+    content: "\f058"; /* FontAwesome check-circle */
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    color: #28a745;
+    position: absolute;
+    left: 0;
+    font-size: 18px;
+}
+
+.advisory {
+    background: #ffeaea;
+    border-left: 5px solid red;
+    padding: 20px;
+    font-weight: bold;
+    color: #c00;
+    font-size: 18px;
+}
+
+@media screen and (max-width: 768px) {
+    .client-manual-container {
+        padding: 20px;
+    }
+
+    .manual-content {
+        padding: 15px;
+    }
+
+    .manual-content h3 {
+        font-size: 22px;
+    }
+
+    .manual-content ul li {
+        font-size: 16px;
+    }
+}
+.complaint-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.complaint-container h2 {
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.complaint-container p {
+    color: #666;
+    font-size: 16px;
+    margin-bottom: 20px;
+}
+
+form {
+    text-align: left;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: bold;
+    color: #333;
+}
+
+.form-group input, 
+.form-group select, 
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 10px;
+    background: #23326a;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    background: #23326a;
+}
+
+.chat-main {
+    max-width: 800px;
+    margin: 120px auto 50px;
+    background: white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.chat-main h2 {
+    color: #002147;
+    font-size: 26px;
+    margin-bottom: 10px;
+}
+
+.chat-main p {
+    color: #666;
+    font-size: 16px;
+}
+
+/* Chat Box */
+.chat-box {
+    height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 15px;
+    background: #f9f9f9;
+    margin-top: 20px;
+    border-radius: 5px;
+}
+
+.chat-box p {
+    background: #002147;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    max-width: 70%;
+    margin: 8px 0;
+    display: inline-block;
+}
+
+/* Chat Input */
+.chat-input {
+    display: flex;
+    margin-top: 15px;
+}
+
+.chat-input input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+}
+
+.chat-input button {
+    background: #f8b400;
+    border: none;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-left: 10px;
+    color: white;
+    font-weight: bold;
+}
+
+.chat-input button:hover {
+    background: #002147;
+}
+
+/* Seafarer Loan Page Styling */
+.seafarer-loan-container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.seafarer-loan-container h1 {
+    color: #23326a;
+    font-size: 28px;
+    margin-bottom: 15px;
+}
+
+.seafarer-loan-container p {
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.loan-benefits, .loan-eligibility, .loan-application {
+    text-align: left;
+    background: white;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.loan-benefits h2, .loan-eligibility h2, .loan-application h2 {
+    color: #23326a;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.loan-benefits ul, .loan-eligibility ul, .loan-application ol {
+    padding-left: 20px;
+}
+
+.apply-now-section {
+    text-align: center;
+    margin-top: 30px;
+}
+
+/* Seafarer Loan Page Styling */
+.seafarer-loan-container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.seafarer-loan-container h1 {
+    color: #23326a;
+    font-size: 28px;
+    margin-bottom: 15px;
+}
+
+.seafarer-loan-container p {
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.loan-benefits, .loan-eligibility, .loan-application {
+    text-align: left;
+    background: white;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.loan-benefits h2, .loan-eligibility h2, .loan-application h2 {
+    color: #23326a;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.loan-benefits ul, .loan-eligibility ul, .loan-application ol {
+    padding-left: 20px;
+}
+
+.apply-now-section {
+    text-align: center;
+    margin-top: 30px;
+}
+
+/* Green Apply Now Button */
+.apply-btn {
+    display: inline-block;
+    background: #76b041; /* Custom Green */
+    color: white;
+    padding: 12px 25px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.apply-btn:hover {
+    background: #689a38; /* Slightly darker green on hover */
+}
+
+.header-image {
+    width: 100%;
+    height: 300px; /* Adjust height as needed */
+    overflow: hidden;
+}
+
+.seaman-banner {
+    width: 100%;
+    height: 200%;
+    object-fit: cover; /* Ensures the image covers the entire div */
+}
+.business-loan-banner {
+    width: 100%;
+    height: 200%;
+    object-fit: cover; /* Ensures the image covers the entire div */
+}
+
+
+.sl-loan-banner {
+    width: 100%;
+    height: 200%;
+    object-fit: cover; /* Ensures the image covers the entire div */
+}
+
+.loan-requirements {
+    text-align: center;
+    background-color: #f8f9fa;
+    padding: 30px;
+    border-radius: 10px;
+    margin: 20px auto;
+    width: 90%;
+    max-width: 800px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.loan-requirements h2 {
+    color: #23326a;
+    margin-bottom: 15px;
+}
+
+.loan-requirements h3 {
+    color: #333;
+    margin-top: 20px;
+}
+
+.loan-requirements ul {
+    list-style: none;
+    padding: 0;
+}
+
+.loan-requirements li {
+    font-size: 16px;
+    padding: 5px 0;
+    color: #555;
+}
+/* Personal Loan Content */
+.personal-loan-container {
+    width: 80%;
+    margin: auto;
+    padding: 50px 0;
+    text-align: center;
+}
+
+.personal-loan-container h1 {
+    font-size: 36px;
+    color: #222;
+}
+
+.personal-loan-container p {
+    font-size: 18px;
+    line-height: 1.6;
+    color: #555;
+}
+
+/* Benefits & Eligibility */
+.loan-benefits, .loan-eligibility, .loan-application, .loan-requirements {
+    background: white;
+    padding: 30px;
+    margin-top: 30px;
+    border-radius: 8px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+
+.business-loan-container {
+    max-width: 1200px;
+    margin: auto;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.business-loan-container h1 {
+    font-size: 36px;
+    color: #333;
+}
+
+.business-loan-container p {
+    font-size: 18px;
+    color: #666;
+}
+
+.apply-btn {
+    display: inline-block;
+    background-color: #76b041;
+    color: white;
+    padding: 12px 25px;
+    font-size: 20px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    /* Navbar Adjustments */
+    .navbar {
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+    }
+
+    .nav-links {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+        display: none; /* Hide by default */
+    }
+
+    .nav-links.active {
+        display: flex;
+    }
+
+    .hamburger {
+        display: block;
+        cursor: pointer;
+    }
+
+    /* Complaint Form & Chat Box */
+    .complaint-container, .chat-container {
+        width: 90%;
+        margin: 20px auto;
+    }
+
+    /* Adjust Footer */
+    .footer-container {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    /* Reduce font sizes */
+    body {
+        font-size: 14px;
+    }
+
+    .apply-btn {
+        font-size: 14px;
+        padding: 10px;
+    }
+}
