@@ -15,7 +15,7 @@ export function errorHandler(
 ): void {
   if (err instanceof DomainError) {
     logger.warn({ code: err.code, ruleId: err.ruleId, path: req.path }, err.message);
-    res.status(err.code === 'NOT_FOUND' ? 404 : 400).json({
+    res.status(err.httpStatus).json({
       error: { code: err.code, message: err.message, ruleId: err.ruleId },
     });
     return;

@@ -31,10 +31,23 @@ cp frontend/.env.example frontend/.env
 npm run prisma:migrate
 npm run prisma:seed
 
-# 5. Run backend and frontend (separate terminals)
+# 5. Create the first Administrator account (one-time; refuses to run twice —
+#    see backend/scripts/bootstrap-admin.ts). Prompts interactively, or set
+#    BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD / _FIRST_NAME / _LAST_NAME.
+npm run bootstrap:admin --workspace backend
+
+# 6. Run backend and frontend (separate terminals)
 npm run dev:backend
 npm run dev:frontend
 ```
+
+## First login
+
+`POST /api/v1/auth/login` with the email/password from step 5 returns a short-lived access
+token (JSON body) and sets an `HttpOnly` refresh-token cookie. See Milestone 6's plan
+(`docs/`) for the full endpoint list, token lifecycle, and security rationale. Authorization
+(permission-level enforcement beyond "is this token valid") is a later milestone — Milestone 6
+covers authentication only.
 
 ## Architecture
 
@@ -52,6 +65,8 @@ the Architecture Decision Register (ADR). Code comments reference specific rule/
 
 ## Status
 
-Milestones 1–5 (architecture, folder structure, project init, database schema, migrations)
-complete. See the ADR register for open decisions that provisional choices in this codebase
-are tracking.
+Milestones 1–5 (architecture, folder structure, project init, database schema, migrations) and
+a schema-review follow-up migration are complete. Milestone 6 (Authentication — login, refresh-
+token rotation with reuse detection, logout, get-current-user, first-admin bootstrap) is
+complete; authorization/RBAC enforcement is explicitly deferred to a later milestone. See the
+ADR register for open decisions that provisional choices in this codebase are tracking.
