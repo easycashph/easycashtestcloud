@@ -8,7 +8,7 @@ import { LoanProduct, type LoanProductProps } from '../domain/LoanProduct';
 import { LoanProductVersion } from '../domain/LoanProductVersion';
 import { PenaltyRule } from '../domain/PenaltyRule';
 import { FeeRule } from '../domain/FeeRule';
-import type { ILoanProductRepository } from '../application/ports/ILoanProductRepository';
+import type { FindManyLoanProductsOptions, ILoanProductRepository } from '../application/ports/ILoanProductRepository';
 
 const LOAN_PRODUCT_INCLUDE = {
   versions: { include: { penaltyRule: true, feeRules: true } },
@@ -187,6 +187,18 @@ export class PrismaLoanProductRepository implements ILoanProductRepository {
     const client = resolveClient(ctx);
     const row = await client.loanProduct.findUnique({ where: { code }, include: LOAN_PRODUCT_INCLUDE });
     return row ? toDomain(row) : null;
+  }
+
+  /** Milestone 8 / D-4: cursor pagination only, no search/filter/sort. */
+  async findMany(options: FindManyLoanProductsOptions, ctx?: TransactionContext): Promise<LoanProduct[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanProduct.findMany({
+      include: LOAN_PRODUCT_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+      take: options.limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    });
+    return rows.map(toDomain);
   }
 
   async save(loanProduct: LoanProduct, ctx?: TransactionContext): Promise<void> {

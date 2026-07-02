@@ -27,6 +27,13 @@ import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
 import { PrismaCoBorrowerRepository } from '@modules/borrower/infrastructure/PrismaCoBorrowerRepository';
+import { createLoanProductRouter } from '@modules/loan-product/interface/http/loanProductRouter';
+import { CreateLoanProductUseCase } from '@modules/loan-product/application/use-cases/CreateLoanProductUseCase';
+import { GetLoanProductUseCase } from '@modules/loan-product/application/use-cases/GetLoanProductUseCase';
+import { ListLoanProductsUseCase } from '@modules/loan-product/application/use-cases/ListLoanProductsUseCase';
+import { CreateLoanProductVersionUseCase } from '@modules/loan-product/application/use-cases/CreateLoanProductVersionUseCase';
+import { ActivateLoanProductVersionUseCase } from '@modules/loan-product/application/use-cases/ActivateLoanProductVersionUseCase';
+import { PrismaLoanProductRepository } from '@modules/loan-product/infrastructure/PrismaLoanProductRepository';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -109,6 +116,20 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', borrowerRouter);
+
+  // --- loan-product module wiring (Milestone 8: HTTP API layer) ---
+  const loanProductRepository = new PrismaLoanProductRepository();
+  const loanProductRouter = createLoanProductRouter(
+    {
+      createLoanProductUseCase: new CreateLoanProductUseCase({ loanProductRepository }),
+      getLoanProductUseCase: new GetLoanProductUseCase({ loanProductRepository }),
+      listLoanProductsUseCase: new ListLoanProductsUseCase({ loanProductRepository }),
+      createLoanProductVersionUseCase: new CreateLoanProductVersionUseCase({ loanProductRepository }),
+      activateLoanProductVersionUseCase: new ActivateLoanProductVersionUseCase({ loanProductRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanProductRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
