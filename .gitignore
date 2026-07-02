@@ -5,10 +5,18 @@ npm-debug.log
 # Environment
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # Logs
 logs/
 *.log
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Local document storage (app/backend — DOC-3 local storage adapter)
+app/backend/storage/
 
 # IDE
 .vscode/

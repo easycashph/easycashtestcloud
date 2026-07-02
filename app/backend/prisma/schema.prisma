@@ -1,0 +1,768 @@
+// ============================================================================
+// EasyCash Digital Lending Platform — Database Schema
+// ============================================================================
+// Authoritative source: repository-root `docs/` — Phase 0 Discovery, Phase 1
+// Core Domain Model, Domain Glossary, Phase 1.5 Domain Invariants, and the
+// Architecture Decision Register (ADR).
+//
+// Every model cites the rule ID(s) / ADR(s) it implements or provisionally
+// works around. Do not add a field, enum value, or table that is not
+// traceable to that specification (Phase 1.5 rules FIN-5 / MIG-5).
+//
+// Explicitly out of scope for this schema (tracked, not forgotten):
+// CustomField/CustomFieldValue, Guarantor (ADR-040), Restructuring/Renewal/
+// Write-off/Early-Settlement/Holiday-Rule structures (ADR-041), CIC
+// submission tables, full RBAC policy engine (ADR-038).
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Enums — every value is directly evidenced in Phase 0 legacy data or
+// explicitly named in PROJECT_RULES.md. None are invented. Adding a value
+// later is a normal migration, not a redesign.
+// ----------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum BorrowerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AddressOwnerType {
+  BORROWER
+  CO_BORROWER
+}
+
+enum AttachmentOwnerType {
+  BORROWER
+  LOAN_ACCOUNT
+}
+
+/// LP-1: a Loan Product Version has exactly one interest calculation method.
+enum InterestCalculationMethod {
+  FLAT
+  DECLINING_BALANCE
+  DECLINING_BALANCE_DISCOUNTED
+}
+
+enum InterestType {
+  SIMPLE_INTEREST
+}
+
+enum RepaymentScheduleMethod {
+  FIXED
+}
+
+enum RepaymentPeriodUnit {
+  MONTHS
+}
+
+enum SettlementOption {
+  FULL_DUE_AMOUNTS
+}
+
+/// FIN-4: rounding behavior is defined per product and applied consistently.
+enum RoundingMethod {
+  NO_ROUNDING
+  ROUND_REMAINDER_INTO_LAST_REPAYMENT
+}
+
+/// PEN-1: penalty calculation method is configurable per product.
+enum PenaltyCalculationMethod {
+  NONE
+  OVERDUE_BALANCE_AND_INTEREST
+  ON_REPAYMENT
+}
+
+/// FEE-2: a fee's amount is flat or a percentage — never hard-coded per loan.
+enum FeeCalculationMethod {
+  FLAT
+  PERCENTAGE_OF_LOAN_AMOUNT
+}
+
+/// FEE-3: a fee applies only at its configured trigger point.
+enum FeeTriggerEvent {
+  DISBURSEMENT
+  MANUAL
+  CAPITALIZED_DISBURSEMENT
+}
+
+enum FeeApplicationType {
+  REQUIRED
+  OPTIONAL
+}
+
+/// LA-2 / ADR-011: lean, legacy-observed lifecycle (recommended option) —
+/// the fuller PROJECT_RULES.md workflow (Draft/Submitted/Under
+/// Review/Released/Cancelled) is deferred per ADR-011 until confirmed.
+enum LoanAccountStatus {
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  ACTIVE_IN_ARREARS
+  CLOSED
+  CLOSED_WRITTEN_OFF
+  CLOSED_REJECTED
+}
+
+/// TXN-1..2: append-only ledger entry types. Note: "DISBURSEMENT" is
+/// spelled correctly here — the legacy `DISBURSMENT` typo is a
+/// migration-mapping concern only, never reproduced in this new schema.
+enum LoanTransactionType {
+  DISBURSEMENT
+  REPAYMENT
+  FEE_CHARGED
+  PENALTY_APPLIED
+  INTEREST_APPLIED
+  DEFERRED_INTEREST_APPLIED
+  DEFERRED_INTEREST_PAID
+  TRANSFER
+  ADJUSTMENT
+  REVERSAL
+}
+
+/// REPAY-3: status must be derivable from due/paid amounts and due date.
+enum RepaymentInstallmentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  LATE
+}
+
+// ----------------------------------------------------------------------------
+// Identity & Access — ADR-038 (RBAC minimal placeholder, full design
+// deferred), ADR-039 (no legacy password hash carry-over — this is a new
+// system; User.legacyId exists only for identity traceability), AUDIT-3
+// (configurable permissions, no hard-coded role checks), AUDIT-4 (minimum
+// role baseline)
+// ----------------------------------------------------------------------------
+
+/// ADR-005 (Critical/Blocking, resolved provisionally): no legacy branch
+/// list exists. Seeded with one placeholder "Head Office" branch. The
+/// schema will never need to change when the real branch list is supplied —
+/// only seed/admin data does.
+model Branch {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  borrowers    Borrower[]
+  loanAccounts LoanAccount[]
+  transactions LoanTransaction[]
+
+  @@map("branches")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  branchId     String
+  branch       Branch     @relation(fields: [branchId], references: [id])
+  email        String     @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  status       UserStatus @default(ACTIVE)
+
+  /// Identity traceability only (Mambu `mambu_users` / SDevTech `users`).
+  /// Credentials themselves are never migrated — ADR-039.
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roles                  UserRole[]
+  refreshTokens          RefreshToken[]
+  auditLogs              AuditLog[]
+  borrowersAsLoanOfficer Borrower[]        @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer  LoanAccount[]     @relation("LoanAccountOfficer")
+  loanAccountsApproved   LoanAccount[]     @relation("LoanAccountApprovedBy")
+  transactionsPosted     LoanTransaction[] @relation("LoanTransactionPostedBy")
+  attachmentsUploaded    Attachment[]      @relation("AttachmentUploadedBy")
+
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  /// AUDIT-4 baseline, seeded: Administrator, Manager, Loan Officer,
+  /// Cashier, Collection Officer, Viewer.
+  name        String  @unique
+  description String?
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+/// AUDIT-3: permissions must be role-based and configurable in the
+/// database, not hard-coded `if role === "Admin"` checks in application code.
+model Permission {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+/// Secure JWT refresh-token rotation store (Milestone 6).
+model RefreshToken {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdByIp String?
+  createdAt   DateTime  @default(now())
+
+  @@map("refresh_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// Loan Product — LP-1..5, LPV-1..4
+// ADR-002: no retroactive reconstruction of legacy product-version history
+// (recommended option adopted) — versioning is formal starting now.
+// ADR-003: full version lineage (recommended option adopted).
+// ADR-009: repayment allocation order — mechanism only, PENDING value.
+// ----------------------------------------------------------------------------
+
+/// Stable product identity only — see LoanProductVersion for the actual
+/// versioned, immutable rule set (LPV-1).
+model LoanProduct {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions              LoanProductVersion[]
+  documentTemplateLinks DocumentTemplateMapping[]
+
+  @@map("loan_products")
+}
+
+/// LPV-1: every approved LoanAccount references a specific, immutable
+/// version. Editing a product never affects loans already approved under
+/// a prior version (LPV-3).
+model LoanProductVersion {
+  id            String      @id @default(uuid())
+  loanProductId String
+  loanProduct   LoanProduct @relation(fields: [loanProductId], references: [id])
+  versionNumber Int
+
+  /// ADR-003: full lineage — self-referencing predecessor link.
+  previousVersionId String?             @unique
+  previousVersion   LoanProductVersion? @relation("LoanProductVersionLineage", fields: [previousVersionId], references: [id])
+  nextVersion       LoanProductVersion? @relation("LoanProductVersionLineage")
+
+  /// LPV-2: only one version of a product may be Active at a time —
+  /// enforced in the application layer (Milestone 7), not by a DB
+  /// constraint alone, since Postgres partial-unique-index enforcement
+  /// across nullable/soft states is handled at the use-case boundary.
+  isActive      Boolean   @default(false)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  interestCalculationMethod InterestCalculationMethod
+  interestType              InterestType              @default(SIMPLE_INTEREST)
+  /// Only one convention evidenced in legacy data (E30_360); kept as a
+  /// plain string rather than a single-value enum pending confirmation
+  /// that no other convention is ever used.
+  daysInYearConvention      String                    @default("E30_360")
+  repaymentScheduleMethod   RepaymentScheduleMethod   @default(FIXED)
+  repaymentPeriodUnit       RepaymentPeriodUnit       @default(MONTHS)
+  settlementOption          SettlementOption          @default(FULL_DUE_AMOUNTS)
+
+  loanAmountMin     Decimal  @db.Decimal(14, 2)
+  loanAmountMax     Decimal? @db.Decimal(14, 2)
+  loanAmountDefault Decimal? @db.Decimal(14, 2)
+
+  installmentCountMin     Int
+  installmentCountMax     Int?
+  installmentCountDefault Int?
+
+  /// Legacy data shows grace periods effectively unused (type NONE across
+  /// nearly all products) — kept configurable, not removed.
+  gracePeriodType        String @default("NONE")
+  gracePeriodDefaultDays Int    @default(0)
+
+  roundingMethod RoundingMethod @default(NO_ROUNDING)
+
+  /// ADR-009 PENDING: column exists so the mechanism is in place; no
+  /// default value or split-calculation logic is implemented until the
+  /// actual legacy allocation order is confirmed (Milestone 7 will stop
+  /// and ask before implementing this specific calculation).
+  repaymentAllocationOrder Json?
+
+  defaultInterestRate Decimal? @db.Decimal(6, 3)
+  minInterestRate     Decimal? @db.Decimal(6, 3)
+  maxInterestRate     Decimal? @db.Decimal(6, 3)
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  penaltyRule  PenaltyRule?
+  feeRules     FeeRule[]
+  loanAccounts LoanAccount[]
+
+  @@unique([loanProductId, versionNumber])
+  @@map("loan_product_versions")
+}
+
+/// PEN-1..4. ADR-008 PENDING: capPercent is a mechanism only (matches the
+/// legacy `penalty_rate.maximum` field, which existed but was unused in
+/// all 44 sampled products) — not enforced by default until the cap
+/// policy decision is made.
+model PenaltyRule {
+  id                   String                   @id @default(uuid())
+  loanProductVersionId String                   @unique
+  loanProductVersion   LoanProductVersion       @relation(fields: [loanProductVersionId], references: [id])
+  calculationMethod    PenaltyCalculationMethod @default(NONE)
+  ratePercent          Decimal?                 @db.Decimal(6, 3)
+  capPercent           Decimal?                 @db.Decimal(6, 3)
+  gracePeriodDays      Int                      @default(0)
+
+  @@map("penalty_rules")
+}
+
+/// FEE-1..4.
+model FeeRule {
+  id                   String               @id @default(uuid())
+  loanProductVersionId String
+  loanProductVersion   LoanProductVersion   @relation(fields: [loanProductVersionId], references: [id])
+  name                 String
+  calculationMethod    FeeCalculationMethod
+  triggerEvent         FeeTriggerEvent
+  applicationType      FeeApplicationType   @default(REQUIRED)
+  flatAmount           Decimal?             @db.Decimal(14, 2)
+  percentage           Decimal?             @db.Decimal(6, 3)
+  isActive             Boolean              @default(true)
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+
+  appliedFees AppliedFee[]
+
+  @@map("fee_rules")
+}
+
+// ----------------------------------------------------------------------------
+// Borrower — BOR-1..4
+// ADR-001: "Borrower" is the canonical term (recommended option adopted);
+// legacy "Client" naming is a migration-mapping concern only.
+// ADR-014: Address is polymorphic (Borrower or Co-Borrower) — documented,
+// not just assumed.
+// ADR-040: Guarantor is out of scope for this schema (deferred).
+// ----------------------------------------------------------------------------
+
+model Borrower {
+  id                    String  @id @default(uuid())
+  branchId              String
+  branch                Branch  @relation(fields: [branchId], references: [id])
+  assignedLoanOfficerId String?
+  assignedLoanOfficer   User?   @relation("BorrowerLoanOfficer", fields: [assignedLoanOfficerId], references: [id])
+
+  firstName    String
+  middleName   String?
+  lastName     String
+  gender       String?
+  birthDate    DateTime?
+  civilStatus  String?
+  mobilePhone1 String?
+  mobilePhone2 String?
+  email        String?
+  status       BorrowerStatus @default(ACTIVE)
+  loanCycle    Int            @default(0)
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  incomeDetail        BorrowerIncomeDetail?
+  governmentId        BorrowerGovernmentId?
+  identificationDocs  IdentificationDocument[]
+  characterReferences CharacterReference[]
+  loanAccounts        LoanAccount[]
+
+  @@map("borrowers")
+}
+
+model BorrowerIncomeDetail {
+  id               String   @id @default(uuid())
+  borrowerId       String   @unique
+  borrower         Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  employmentType   String?
+  employerName     String?
+  employerAddress  String?
+  natureOfBusiness String?
+  position         String?
+  yearsEmployed    Int?
+
+  @@map("borrower_income_details")
+}
+
+model BorrowerGovernmentId {
+  id         String   @id @default(uuid())
+  borrowerId String   @unique
+  borrower   Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  sssNumber  String?
+  tinNumber  String?
+
+  @@map("borrower_government_ids")
+}
+
+/// ADR-014: polymorphic owner (Borrower or Co-Borrower) — a direct sample
+/// cross-reference during Phase 0 exploration showed an address attached
+/// to a Co-Borrower's own ID, not only to a Borrower.
+model Address {
+  id                 String           @id @default(uuid())
+  ownerType          AddressOwnerType
+  ownerId            String
+  addressType        String?
+  houseUnitNumber    String?
+  street             String?
+  barangay           String?
+  cityMunicipality   String?
+  province           String?
+  zipCode            String?
+  lengthOfStayMonths Int?
+  ownershipStatus    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+  @@map("addresses")
+}
+
+model IdentificationDocument {
+  id               String    @id @default(uuid())
+  borrowerId       String
+  borrower         Borrower  @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  documentType     String
+  documentNumber   String
+  issuingAuthority String?
+  validUntil       DateTime?
+
+  @@map("identification_documents")
+}
+
+/// ADR-013: optional by default (only 54 of 4,629 legacy clients had one).
+model CharacterReference {
+  id           String   @id @default(uuid())
+  borrowerId   String
+  borrower     Borrower @relation(fields: [borrowerId], references: [id], onDelete: Cascade)
+  firstName    String
+  lastName     String
+  relationship String?
+  phoneNumber  String?
+  emailAddress String?
+
+  @@map("character_references")
+}
+
+/// ADR-015 PENDING (per-Borrower vs per-LoanAccount scope): modeled as its
+/// own person entity plus a many-to-many join table to LoanAccount. This
+/// is a safe extension point compatible with either resolution of the
+/// open ADR — a "per-loan" policy just means each CoBorrower row has
+/// exactly one join row; a "reusable across loans" policy means several.
+model CoBorrower {
+  id           String    @id @default(uuid())
+  firstName    String
+  lastName     String
+  gender       String?
+  civilStatus  String?
+  birthDate    DateTime?
+  phoneNumber  String?
+  emailAddress String?
+  relationship String?
+
+  legacyId String? @unique
+
+  loanAccounts LoanAccountCoBorrower[]
+
+  @@map("co_borrowers")
+}
+
+model LoanAccountCoBorrower {
+  loanAccountId String
+  coBorrowerId  String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id], onDelete: Cascade)
+  coBorrower    CoBorrower  @relation(fields: [coBorrowerId], references: [id], onDelete: Cascade)
+
+  @@id([loanAccountId, coBorrowerId])
+  @@map("loan_account_co_borrowers")
+}
+
+// ----------------------------------------------------------------------------
+// Loan Account & Ledger — LA-1..5, TXN-1..4, REPAY-1..4
+// ADR-007: no stored `outstandingBalance` column — computed in the domain
+// layer from components; single point of change once the formula is
+// confirmed.
+// ADR-010 (Critical/compliance): addOn/contractual interest columns exist,
+// no derivation or disclosure logic until resolved.
+// ----------------------------------------------------------------------------
+
+model LoanAccount {
+  id                   String             @id @default(uuid())
+  loanCode             String             @unique
+  borrowerId           String
+  borrower             Borrower           @relation(fields: [borrowerId], references: [id])
+  loanProductVersionId String
+  loanProductVersion   LoanProductVersion @relation(fields: [loanProductVersionId], references: [id])
+  branchId             String
+  branch               Branch             @relation(fields: [branchId], references: [id])
+  loanOfficerId        String?
+  loanOfficer          User?              @relation("LoanAccountOfficer", fields: [loanOfficerId], references: [id])
+
+  status LoanAccountStatus @default(PENDING_APPROVAL)
+
+  principalAmount  Decimal @db.Decimal(14, 2)
+  principalBalance Decimal @default(0) @db.Decimal(14, 2)
+  principalPaid    Decimal @default(0) @db.Decimal(14, 2)
+  principalDue     Decimal @default(0) @db.Decimal(14, 2)
+
+  /// Snapshot at approval — LA-4. Never recomputed from a later product edit.
+  interestRate            Decimal  @db.Decimal(6, 3)
+  addOnInterestRate       Decimal? @db.Decimal(6, 3)
+  contractualInterestRate Decimal? @db.Decimal(6, 3)
+  interestBalance         Decimal  @default(0) @db.Decimal(14, 2)
+  interestPaid            Decimal  @default(0) @db.Decimal(14, 2)
+  interestDue             Decimal  @default(0) @db.Decimal(14, 2)
+
+  feesBalance Decimal @default(0) @db.Decimal(14, 2)
+  feesPaid    Decimal @default(0) @db.Decimal(14, 2)
+  feesDue     Decimal @default(0) @db.Decimal(14, 2)
+
+  penaltyBalance Decimal @default(0) @db.Decimal(14, 2)
+  penaltyPaid    Decimal @default(0) @db.Decimal(14, 2)
+  penaltyDue     Decimal @default(0) @db.Decimal(14, 2)
+
+  installmentCount    Int
+  repaymentPeriodUnit RepaymentPeriodUnit @default(MONTHS)
+  gracePeriodDays     Int                 @default(0)
+
+  approvedAt       DateTime?
+  approvedByUserId String?
+  approvedBy       User?     @relation("LoanAccountApprovedBy", fields: [approvedByUserId], references: [id])
+  activatedAt      DateTime?
+  closedAt         DateTime?
+  closedReason     String?
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions      LoanTransaction[]
+  repaymentSchedule RepaymentSchedule[]
+  appliedFees       AppliedFee[]
+  coBorrowers       LoanAccountCoBorrower[]
+
+  @@index([borrowerId])
+  @@index([status])
+  @@map("loan_accounts")
+}
+
+/// TXN-1: append-only. Corrections are new, explicitly linked reversal
+/// transactions — never edits or deletes of an existing row.
+model LoanTransaction {
+  id            String              @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount         @relation(fields: [loanAccountId], references: [id])
+  type          LoanTransactionType
+
+  amount             Decimal @db.Decimal(14, 2)
+  principalComponent Decimal @default(0) @db.Decimal(14, 2)
+  interestComponent  Decimal @default(0) @db.Decimal(14, 2)
+  feesComponent      Decimal @default(0) @db.Decimal(14, 2)
+  penaltyComponent   Decimal @default(0) @db.Decimal(14, 2)
+  balanceAfter       Decimal @db.Decimal(14, 2)
+
+  postedByUserId String?
+  postedBy       User?    @relation("LoanTransactionPostedBy", fields: [postedByUserId], references: [id])
+  branchId       String
+  branch         Branch   @relation(fields: [branchId], references: [id])
+  entryDate      DateTime
+  comment        String?
+
+  /// Present on a transaction that IS a reversal — points to the original
+  /// transaction it corrects (TXN-1).
+  reversesTransactionId String?          @unique
+  reversesTransaction   LoanTransaction? @relation("LoanTransactionReversal", fields: [reversesTransactionId], references: [id])
+  reversedByTransaction LoanTransaction? @relation("LoanTransactionReversal")
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+
+  appliedFees AppliedFee[]
+
+  @@index([loanAccountId])
+  @@index([type])
+  @@map("loan_transactions")
+}
+
+/// REPAY-1..4. Note: legacy tax_*/organization-commission/funders-interest
+/// fields are intentionally dropped (ADR-028: consistently zero across all
+/// sampled legacy records — YAGNI; can be reintroduced if a genuine
+/// multi-funder/tax feature is confirmed later).
+model RepaymentSchedule {
+  id                String      @id @default(uuid())
+  loanAccountId     String
+  loanAccount       LoanAccount @relation(fields: [loanAccountId], references: [id])
+  installmentNumber Int
+  dueDate           DateTime
+
+  principalDue  Decimal @default(0) @db.Decimal(14, 2)
+  interestDue   Decimal @default(0) @db.Decimal(14, 2)
+  feesDue       Decimal @default(0) @db.Decimal(14, 2)
+  penaltyDue    Decimal @default(0) @db.Decimal(14, 2)
+  principalPaid Decimal @default(0) @db.Decimal(14, 2)
+  interestPaid  Decimal @default(0) @db.Decimal(14, 2)
+  feesPaid      Decimal @default(0) @db.Decimal(14, 2)
+  penaltyPaid   Decimal @default(0) @db.Decimal(14, 2)
+
+  status     RepaymentInstallmentStatus @default(PENDING)
+  lastPaidAt DateTime?
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([loanAccountId, installmentNumber])
+  @@map("repayment_schedules")
+}
+
+/// FEE-4: once applied to a specific loan, a fee amount is immutable even
+/// if the underlying FeeRule is later edited.
+model AppliedFee {
+  id            String           @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount      @relation(fields: [loanAccountId], references: [id])
+  feeRuleId     String
+  feeRule       FeeRule          @relation(fields: [feeRuleId], references: [id])
+  amount        Decimal          @db.Decimal(14, 2)
+  taxAmount     Decimal          @default(0) @db.Decimal(14, 2)
+  appliedAt     DateTime         @default(now())
+  transactionId String?
+  transaction   LoanTransaction? @relation(fields: [transactionId], references: [id])
+
+  legacyId String? @unique
+
+  @@map("applied_fees")
+}
+
+// ----------------------------------------------------------------------------
+// Documents — DOC-1..4
+// DOC-3: storage location is abstracted behind IStorageService; storageKey
+// is an opaque key resolved by whichever adapter (local disk now,
+// S3-compatible later) is configured. ADR-006 (physical legacy file blobs
+// unresolved) does not block this table — it only blocks migrating the
+// 21,104 legacy attachment records' actual files, which is out of scope
+// for this build per the agreed migration-scope decision.
+// ----------------------------------------------------------------------------
+
+model Attachment {
+  id               String              @id @default(uuid())
+  ownerType        AttachmentOwnerType
+  ownerId          String
+  fileName         String
+  fileType         String
+  storageKey       String
+  uploadedByUserId String?
+  uploadedBy       User?               @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+  uploadedAt       DateTime            @default(now())
+
+  legacyId String? @unique
+
+  @@index([ownerType, ownerId])
+  @@map("attachments")
+}
+
+model DocumentTemplate {
+  id          String  @id @default(uuid())
+  name        String
+  contentHtml String
+  isActive    Boolean @default(true)
+
+  legacyId  String?  @unique
+  createdAt DateTime @default(now())
+
+  productLinks DocumentTemplateMapping[]
+
+  @@map("document_templates")
+}
+
+model DocumentTemplateMapping {
+  loanProductId      String
+  documentTemplateId String
+  sortIndex          Int              @default(0)
+  loanProduct        LoanProduct      @relation(fields: [loanProductId], references: [id], onDelete: Cascade)
+  documentTemplate   DocumentTemplate @relation(fields: [documentTemplateId], references: [id], onDelete: Cascade)
+
+  @@id([loanProductId, documentTemplateId])
+  @@map("document_template_mappings")
+}
+
+// ----------------------------------------------------------------------------
+// Audit — AUDIT-1, AUDIT-2
+// Append-only. No update/delete path is exposed anywhere in the
+// application for this table.
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  action        String
+  entityType    String
+  entityId      String
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

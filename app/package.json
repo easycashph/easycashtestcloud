@@ -1,0 +1,23 @@
+{
+  "name": "easycash-lending-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EasyCash Lending Company Inc. — Enterprise Digital Lending Platform",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "lint": "npm run lint --workspace backend && npm run lint --workspace frontend",
+    "test": "npm run test --workspace backend && npm run test --workspace frontend",
+    "prisma:generate": "npm run prisma:generate --workspace backend",
+    "prisma:migrate": "npm run prisma:migrate --workspace backend",
+    "prisma:seed": "npm run prisma:seed --workspace backend"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

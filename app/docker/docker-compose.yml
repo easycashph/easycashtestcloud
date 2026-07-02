@@ -1,0 +1,50 @@
+name: easycash
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: easycash
+      POSTGRES_PASSWORD: easycash
+      POSTGRES_DB: easycash
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U easycash -d easycash']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql://easycash:easycash@postgres:5432/easycash?schema=public
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backend_storage:/app/storage
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - '5173:80'
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_storage:
