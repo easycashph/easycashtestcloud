@@ -1,0 +1,166 @@
+import type { Prisma } from '@prisma/client';
+import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
+import type { TransactionContext } from '@shared/application/TransactionContext';
+import { Borrower, type BorrowerProps } from '../domain/Borrower';
+import { PersonName } from '../domain/valueObjects/PersonName';
+import { Address } from '../domain/valueObjects/Address';
+import type { IBorrowerRepository } from '../application/ports/IBorrowerRepository';
+
+const BORROWER_INCLUDE = {
+  incomeDetail: true,
+  governmentId: true,
+  identificationDocs: true,
+  characterReferences: true,
+} satisfies Prisma.BorrowerInclude;
+
+type BorrowerRow = Prisma.BorrowerGetPayload<{ include: typeof BORROWER_INCLUDE }>;
+type AddressRow = { addressType: string | null; houseUnitNumber: string | null; street: string | null; barangay: string | null; cityMunicipality: string | null; province: string | null; zipCode: string | null; lengthOfStayMonths: number | null; ownershipStatus: string | null };
+
+function toAddress(row: AddressRow): Address {
+  return Address.of({
+    addressType: row.addressType ?? undefined,
+    houseUnitNumber: row.houseUnitNumber ?? undefined,
+    street: row.street ?? undefined,
+    barangay: row.barangay ?? undefined,
+    cityMunicipality: row.cityMunicipality ?? undefined,
+    province: row.province ?? undefined,
+    zipCode: row.zipCode ?? undefined,
+    lengthOfStayMonths: row.lengthOfStayMonths ?? undefined,
+    ownershipStatus: row.ownershipStatus ?? undefined,
+  });
+}
+
+function toBorrower(row: BorrowerRow, addresses: Address[]): Borrower {
+  const props: BorrowerProps = {
+    id: row.id,
+    branchId: row.branchId,
+    assignedLoanOfficerId: row.assignedLoanOfficerId ?? undefined,
+    name: PersonName.of(row.firstName, row.lastName, row.middleName ?? undefined),
+    gender: row.gender ?? undefined,
+    birthDate: row.birthDate ?? undefined,
+    civilStatus: row.civilStatus ?? undefined,
+    mobilePhone1: row.mobilePhone1 ?? undefined,
+    mobilePhone2: row.mobilePhone2 ?? undefined,
+    email: row.email ?? undefined,
+    status: row.status,
+    loanCycle: row.loanCycle,
+    legacyId: row.legacyId ?? undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    incomeDetail: row.incomeDetail
+      ? {
+          employmentType: row.incomeDetail.employmentType ?? undefined,
+          employerName: row.incomeDetail.employerName ?? undefined,
+          employerAddress: row.incomeDetail.employerAddress ?? undefined,
+          natureOfBusiness: row.incomeDetail.natureOfBusiness ?? undefined,
+          position: row.incomeDetail.position ?? undefined,
+          yearsEmployed: row.incomeDetail.yearsEmployed ?? undefined,
+        }
+      : undefined,
+    governmentId: row.governmentId
+      ? { sssNumber: row.governmentId.sssNumber ?? undefined, tinNumber: row.governmentId.tinNumber ?? undefined }
+      : undefined,
+    identificationDocuments: row.identificationDocs.map((doc) => ({
+      id: doc.id,
+      documentType: doc.documentType,
+      documentNumber: doc.documentNumber,
+      issuingAuthority: doc.issuingAuthority ?? undefined,
+      validUntil: doc.validUntil ?? undefined,
+    })),
+    characterReferences: row.characterReferences.map((ref) => ({
+      id: ref.id,
+      firstName: ref.firstName,
+      lastName: ref.lastName,
+      relationship: ref.relationship ?? undefined,
+      phoneNumber: ref.phoneNumber ?? undefined,
+      emailAddress: ref.emailAddress ?? undefined,
+    })),
+    addresses,
+  };
+  return Borrower.reconstitute(props);
+}
+
+/**
+ * `Address` has no FK relation to `Borrower` in the schema (ADR-014
+ * polymorphic ownerType/ownerId, ADR-042 §8) — it is queried and written as
+ * its own table, filtered by `ownerType: 'BORROWER'`, rather than via a
+ * Prisma relation include. This repository is the only place that
+ * "ownerType: 'BORROWER'" filtering knowledge lives — the domain layer
+ * never sees ownerType/ownerId at all.
+ */
+export class PrismaBorrowerRepository implements IBorrowerRepository {
+  async findById(id: string, ctx?: TransactionContext): Promise<Borrower | null> {
+    const client = resolveClient(ctx);
+    const row = await client.borrower.findUnique({ where: { id }, include: BORROWER_INCLUDE });
+    if (!row) {
+      return null;
+    }
+
+    const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: id } });
+    return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  async save(borrower: Borrower, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+
+    await client.borrower.upsert({
+      where: { id: borrower.id },
+      create: {
+        id: borrower.id,
+        branchId: borrower.branchId,
+        assignedLoanOfficerId: borrower.assignedLoanOfficerId,
+        firstName: borrower.name.firstName,
+        lastName: borrower.name.lastName,
+        middleName: borrower.name.middleName,
+        gender: borrower.gender,
+        birthDate: borrower.birthDate,
+        civilStatus: borrower.civilStatus,
+        mobilePhone1: borrower.mobilePhone1,
+        mobilePhone2: borrower.mobilePhone2,
+        email: borrower.email,
+        status: borrower.status,
+        loanCycle: borrower.loanCycle,
+        legacyId: borrower.legacyId,
+        createdAt: borrower.createdAt,
+        updatedAt: borrower.updatedAt,
+        incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,
+        governmentId: borrower.governmentId ? { create: borrower.governmentId } : undefined,
+      },
+      update: {
+        assignedLoanOfficerId: borrower.assignedLoanOfficerId,
+        firstName: borrower.name.firstName,
+        lastName: borrower.name.lastName,
+        middleName: borrower.name.middleName,
+        gender: borrower.gender,
+        birthDate: borrower.birthDate,
+        civilStatus: borrower.civilStatus,
+        mobilePhone1: borrower.mobilePhone1,
+        mobilePhone2: borrower.mobilePhone2,
+        email: borrower.email,
+        status: borrower.status,
+        loanCycle: borrower.loanCycle,
+        updatedAt: borrower.updatedAt,
+        incomeDetail: borrower.incomeDetail
+          ? { upsert: { create: borrower.incomeDetail, update: borrower.incomeDetail } }
+          : undefined,
+        governmentId: borrower.governmentId
+          ? { upsert: { create: borrower.governmentId, update: borrower.governmentId } }
+          : undefined,
+      },
+    });
+
+    // Small, bounded collections (ADR-042 §5) — replaced wholesale on every
+    // save rather than diffed, which is correct (and simple) at the scale
+    // these collections actually reach per borrower. Revisit only if a
+    // future use case needs partial/incremental updates to one document
+    // among many without resending the full set.
+    if (borrower.addresses.length > 0 || (await client.address.count({ where: { ownerType: 'BORROWER', ownerId: borrower.id } })) > 0) {
+      await client.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
+      if (borrower.addresses.length > 0) {
+        await client.address.createMany({
+          data: borrower.addresses.map((address) => ({ ownerType: 'BORROWER' as const, ownerId: borrower.id, ...address.toProps() })),
+        });
+      }
+    }
+  }
+}
