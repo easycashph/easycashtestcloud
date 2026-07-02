@@ -45,6 +45,10 @@ import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter'
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
+import { createRepaymentRouter } from '@modules/repayment/interface/http/repaymentRouter';
+import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
+import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
+import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrastructure/PrismaRepaymentInstallmentRepository';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -166,6 +170,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', ledgerRouter);
+
+  // --- repayment module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
+  const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
+  const repaymentRouter = createRepaymentRouter(
+    {
+      listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),
+      getRepaymentInstallmentUseCase: new GetRepaymentInstallmentUseCase({ repaymentInstallmentRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', repaymentRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
