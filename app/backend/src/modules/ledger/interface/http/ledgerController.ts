@@ -1,0 +1,42 @@
+import type { NextFunction, Request, Response } from 'express';
+import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import type { ListLoanTransactionsForAccountUseCase } from '../../application/use-cases/ListLoanTransactionsForAccountUseCase';
+import type { GetLoanTransactionUseCase } from '../../application/use-cases/GetLoanTransactionUseCase';
+import { presentLoanTransaction } from './presenters/LoanTransactionPresenter';
+
+export interface LedgerControllerDeps {
+  listLoanTransactionsForAccountUseCase: ListLoanTransactionsForAccountUseCase;
+  getLoanTransactionUseCase: GetLoanTransactionUseCase;
+}
+
+/**
+ * Thin, READ-ONLY controller (D-2, approved): no write endpoint is exposed
+ * for RecordLoanTransactionUseCase — it remains an internal application
+ * primitive until the calculation engine exists to be its real caller.
+ */
+export class LedgerController {
+  constructor(private readonly deps: LedgerControllerDeps) {}
+
+  listForAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { limit, cursor } = parsePaginationParams(req.query);
+      const transactions = await this.deps.listLoanTransactionsForAccountUseCase.execute(
+        req.params.loanAccountId as string,
+        limit,
+        cursor,
+      );
+      res.status(200).json(toPaginatedResponse(transactions.map(presentLoanTransaction), limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const transaction = await this.deps.getLoanTransactionUseCase.execute(req.params.id as string);
+      res.status(200).json(presentLoanTransaction(transaction));
+    } catch (error) {
+      next(error);
+    }
+  };
+}

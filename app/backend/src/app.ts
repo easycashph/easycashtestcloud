@@ -41,6 +41,10 @@ import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-c
 import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
+import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
+import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
+import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
+import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -151,6 +155,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanAccountRouter);
+
+  // --- ledger module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
+  const loanTransactionRepository = new PrismaLoanTransactionRepository();
+  const ledgerRouter = createLedgerRouter(
+    {
+      listLoanTransactionsForAccountUseCase: new ListLoanTransactionsForAccountUseCase({ loanTransactionRepository }),
+      getLoanTransactionUseCase: new GetLoanTransactionUseCase({ loanTransactionRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', ledgerRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
