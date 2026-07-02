@@ -12,14 +12,22 @@ update this document.
 ## 1. Current Project State
 
 - **Current milestone completed:** Milestone 8.1 (post-Milestone-8 architectural audit
-  remediation). Milestone 9 has **not** been started.
+  remediation). **Milestone 9 is in progress — its documentation/architecture phase is complete
+  as of 2026-07-03; implementation has NOT started.** See §10 for full detail.
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
   (Milestone 7.1). HTTP layer (Milestone 8) is complete and audited/remediated (Milestone 8.1).
-  No calculation engine, payment allocation, amortization, audit module, notifications, or
-  reporting exist yet — all explicitly out of scope through Milestone 8.1.
-- **Expected git status:** clean working tree, on `main`, nothing staged or uncommitted.
+  **No application code, schema, or test changes have been made since Milestone 8.1** — Milestone
+  9's work so far is entirely documentation (legacy-evidence analysis and six architecture
+  documents), per explicit instruction to keep this phase documentation-only. No calculation
+  engine, payment allocation, amortization, audit module, notifications, or reporting exist yet.
+- **Expected git status:** on `main`, **nine new, uncommitted files** (all under `docs/` — see
+  §10.1 for the full list), zero modifications to `src/`, `prisma/`, `tests/`,
+  `package.json`, or any configuration/migration file. `legacy/reports/201 Loan Docs Generator/`
+  is also present but untracked (added to the filesystem during this milestone's investigation,
+  not created or modified by any assistant action — it is read-only source evidence, not a
+  deliverable). Verify with `git status --short` before committing anything.
 - **Latest commits (newest first):**
   ```
   2f3ad3b Milestone 8.1 checkpoint 2: H-1 branch-scoped authorization + PROJECT_HANDOFF.md update
@@ -523,43 +531,123 @@ that computes or stores a monetary value.**
 
 ## 10. Milestone 9 Readiness
 
-### What Milestone 9 is expected to build
-Not yet scoped by the user as of this handoff. Based on the trajectory so far (M6 auth → M7
-domain → M7.1 remediation → M8 HTTP → M8.1 remediation), the natural next candidates, per
-§5/§12 of prior handoff sections and `FINANCIAL_INVARIANTS.md §9`, are — **in likely priority
-order, but await explicit user direction:**
-1. Resolve ADR-007 (outstanding balance formula) and ADR-009 (repayment allocation order) —
-   prerequisites for any calculation engine work.
-2. The interest/amortization calculation engine (Flat Rate, Declining Balance, Declining Balance
-   Discounted) and the payment allocation algorithm — both still explicitly out of scope through
-   Milestone 8.1.
-3. `ActivateLoanUseCase` (disbursement) once the calculation engine exists — the first real
-   multi-aggregate use case that should exercise `IUnitOfWork` for real (it's built but unused).
-4. The `audit` module + wiring the fail-closed, same-transaction audit-write pattern into every
-   mutating use case exposed since Milestone 8.
-5. ADR-038's full permission-matrix design, replacing `requireRole`'s hard-coded allow-lists and
-   `branchScope`'s `GLOBAL_ROLES` list.
-6. Closing the M-1/M-2/M-3/M-4/L-1–L-5 deferred findings from §5, if prioritized.
-7. Getting a real PostgreSQL instance running and closing the verification gap that has existed
-   since Milestone 4 (nothing has ever run against a live database).
+**Milestone 9 has been split into two phases, per explicit user direction: a documentation/
+architecture phase (complete) and an implementation phase (not started).** This section reflects
+that split — do not skip straight to implementation based on §3's "What Milestone 9 is expected
+to build" language from prior handoff versions; that framing is superseded by this section.
 
-### Prerequisites already completed
+### 10.1 New documentation created this phase
+
+**Legacy evidence analysis** (four investigation passes, all in one living document):
+- `docs/Legacy Analysis/2026-07-03-milestone9-financial-rules-verification.md` — ~1,340 lines.
+  Read this document in full before touching any financial calculation code; it is the evidence
+  base every ADR below cites. Its methodology: direct, read-only inspection of
+  `legacy/mongodb/07012026_103239/db-easycash/` (a real MongoDB dump — `loan_accounts`,
+  `loan_transactions` [524,463 records, full population scans performed multiple times],
+  `repayments`, `loan_products`, `disbursements`, and others), `legacy/reports/*.xlsx` (six Excel
+  exports), and `legacy/reports/201 Loan Docs Generator/` (a live Excel computation workbook with
+  ~200 named formula ranges, plus the company's actual legal document templates — Disclosure
+  Statement, Promissory Note, Loan Agreement — read via a throwaway Node.js BSON/XLSX-parsing
+  script kept in the session scratchpad, never committed to this repository).
+
+**Six new Architecture documents** (all under `docs/Architecture/`, all created this phase, all
+citing the Legacy Analysis document by section):
+1. `ADR-032-loan-release-vs-disbursement.md` — **Accepted.**
+2. `ADR-010-addon-vs-contractual-interest.md` — **Accepted**, with two named open sub-questions.
+3. `ADR-009-payment-allocation-order.md` — **Accepted**, with several named open sub-questions.
+4. `ADR-007-outstanding-balance-formula.md` — **PARTIALLY ACCEPTED** — the balance-tracking
+   *mechanism* is decided; two central design questions are explicitly left `UNRESOLVED`,
+   deliberately, per instruction not to invent a resolution to a genuine contradiction in the
+   evidence. **This ADR needs your decision before it can be marked fully Accepted.**
+5. `ADR-financial-audit-isolation.md` — **Accepted.** Formalizes a principle already agreed in
+   `FINANCIAL_INVARIANTS.md §4`; introduces no new decision.
+6. `ADR-optimistic-concurrency.md` — **Accepted.** Formalizes a principle already agreed in
+   `FINANCIAL_INVARIANTS.md §6`; introduces no new decision.
+
+**One new specification document:**
+7. `CALCULATION_ENGINE_SPEC.md` — the single source of truth for every financial calculation.
+   Covers 12 calculations; 7 are `CONFIRMED` or `CONFIRMED` with a narrow open sub-point (ready to
+   implement), 5 are explicitly `STATUS: UNRESOLVED` (Flat-Rate Interest, Overpayment Handling,
+   Penalty Calculation, the exact timing mechanics of Maturity Capitalization, and the
+   Reversal/Adjustment data-modeling question) — **do not implement these five from general
+   lending convention; each states exactly what evidence would resolve it.**
+
+**None of these seven documents have been committed to git as of this writing** — they exist as
+new, uncommitted files. Confirm with the user before committing, per this project's git workflow
+discipline.
+
+### 10.2 Evidence-gathering summary
+
+Four investigation passes, each documented as its own section of the Legacy Analysis document:
+1. **Initial pass** (§1–§6): baseline evidence for all four original open ADRs, using the MongoDB
+   dump and Excel reports already present in the repo.
+2. **Follow-up pass** (§7): full-population (not sampled) categorization of the 79 non-reconciling
+   `CLOSED` legacy loans, resolution of why two legacy reports define "total balance"
+   differently, and additional payment-allocation/reversal/overpayment evidence.
+3. **"201 Loan Docs Generator" pass** (§8): discovery and full formula-level analysis of a live
+   Excel computation workbook and the company's actual legal document templates — the single
+   richest evidence source found, substantially resolving ADR-010 and materially strengthening
+   ADR-009.
+4. **`DECLINING_BALANCE_DISCOUNTED` resolution pass** (§9): full-population (all 835 loans, not a
+   sample) classification resolving a discrepancy between the workbook's modeled behavior and
+   real transaction data — concluded it is a naming inconsistency (rate-origin vs. cash-flow-
+   timing), not a bug, and that both `DECLINING_BALANCE` and `DECLINING_BALANCE_DISCOUNTED`
+   require the identical calculation algorithm.
+
+### 10.3 ADR status (authoritative as of this handoff)
+
+| ADR | Status | What's left, if anything |
+|---|---|---|
+| ADR-032 (release vs. disbursement) | **Accepted** | Nothing — ready for `ActivateLoanUseCase` design to reference |
+| ADR-010 (Add-On vs. Contractual) | **Accepted**, with 2 open sub-questions | Whether an IRR/EIR concept is needed at all (no evidence of operational use); the 37.2% rate-tier residual not covered by the known lookup table |
+| ADR-009 (payment allocation order) | **Accepted**, with several open sub-questions | Fees-first tier is contractually confirmed but transactionally unverified; capitalization timing mechanics; reversal-convention unification; adjustment-type granularity; manual fee/penalty-only payment channel; whether allocation order is configurable per product |
+| ADR-007 (outstanding balance formula) | **PARTIALLY ACCEPTED — needs your decision** | Whether `outstandingBalance` includes penalty (two real, both-legitimate legacy concepts found) or needs two distinct fields; how to treat the 15.5% non-reconciling `CLOSED` legacy population during migration |
+| Financial Audit Isolation | **Accepted** | Nothing — implementation (Milestone 9.1) still pending |
+| Optimistic Concurrency | **Accepted** | Nothing — implementation (Milestone 9.1) still pending |
+
+### 10.4 Remaining unresolved items (do not resolve by inference)
+
+From `CALCULATION_ENGINE_SPEC.md`, explicitly blocked pending evidence or a business decision:
+- **Flat-Rate interest formula** — no legacy evidence found anywhere examined.
+- **Overpayment recording mechanism** — zero examples found across all 524,463 legacy
+  transactions searched.
+- **Penalty calculation formula** — the daily `PENALTY_APPLIED` cadence and `PERCENTAGE_PER_DAY`/
+  `penalty_rate` fields are observed, but no formula connecting them to real posted amounts was
+  verified; also gated by the still-open ADR-008 (penalty cap policy), not produced this
+  milestone.
+- **Maturity-capitalization timing** — contractually confirmed as a rule, but *when* exactly it
+  triggers (original scheduled maturity only? every subsequent arrears cycle?) has no evidence.
+- **Reversal/adjustment data modeling** — two non-uniform legacy conventions coexist; which (or
+  both) the new schema should support is a design question, not a data question.
+
+From ADR-007 specifically: the penalty-inclusion question and the 15.5%/79-loan legacy
+reconciliation-gap question are **explicit decisions for you**, not further data-mining targets —
+the Legacy Analysis document (§7.3, §7.4) and ADR-007 (§3, §4) lay out the evidence and options
+for each without selecting one.
+
+### 10.5 Prerequisites already completed (unchanged from before this phase)
 Full HTTP CRUD-ish surface for `borrower`/`loan-product`/`loan-account`; read-only surfaces for
 `ledger`/`repayment`; interim authorization (role + branch); `Money`/`Percentage` value objects
 ready for calculation-engine use; `IUnitOfWork` ready for the first real multi-aggregate
-transaction; `FINANCIAL_INVARIANTS.md` already specifies the concurrency strategy to use once
-balance-mutating writes exist.
+transaction. **New this phase:** the actual formulas, allocation order, and lifecycle model that
+calculation-engine code will implement are now documented and evidence-cited, not merely assumed.
 
-### Risks
-- The calculation engine is the highest-stakes remaining piece — `CLAUDE.md` explicitly demands
-  correctness over convenience here, and legacy data validation (per `PROJECT_RULES.md`'s
-  priority order) will matter more than usual.
-- ADR-007/ADR-009 must be resolved (or explicitly, narrowly re-deferred) before real amortization/
-  allocation logic is written — do not infer or invent these formulas.
-- No live Postgres remains a standing risk — any migration or query behavior claim is still only
-  as verified as `prisma validate`/mocked tests allow.
+### 10.6 Risks
 
-### Things that should NOT be changed without a specific reason
+- **ADR-007 is a hard blocker for any balance-mutating write** — `ActivateLoanUseCase` and any
+  payment-recording use case cannot be correctly designed until you decide ADR-007 §3/§4.
+  Proceeding without that decision would force a guess into the calculation engine, which is
+  exactly what this entire four-pass investigation was structured to avoid.
+- **Flat-Rate products cannot be serviced by the new system** until evidence for §4's formula is
+  found — if Flat-Rate loans are needed early in Milestone 9.1's scope, this is a real scheduling
+  risk, not just a documentation gap.
+- **No live Postgres remains a standing risk**, unchanged from prior milestones — nothing in this
+  documentation phase touched that gap.
+- **The seven new documents are uncommitted** — until committed, they exist only in the working
+  tree; do not treat them as durable until a commit (or explicit instruction otherwise) locks
+  them in.
+
+### 10.7 Things that should NOT be changed without a specific reason (unchanged, plus new items)
 - `Money`/`Percentage`'s deterministic, no-`Result<T,E>` design (final decision, Milestone 7).
 - `LoanTransaction`'s append-only guarantee (`ILoanTransactionRepository` has no `update`/
   `delete` method — do not add one).
@@ -571,11 +659,24 @@ balance-mutating writes exist.
   real, correctness-gated callers.
 - The `requireAuth` → `requireRole` → `branchScope` layering and ordering (§6) — keep these
   three concerns separate; do not merge branch checks into `requireRole`.
+- **New:** do not implement `CALCULATION_ENGINE_SPEC.md`'s five `UNRESOLVED` calculations from
+  general lending-industry convention, even under implementation time pressure — each names the
+  specific evidence that would resolve it.
+- **New:** `DECLINING_BALANCE` and `DECLINING_BALANCE_DISCOUNTED` are calculation-identical per
+  ADR-010 §5 — do not implement a separate upfront-interest-deduction code path for the latter;
+  no evidence supports it existing in any of the 835 real loans checked.
 
-### Recommended implementation order
-Follow the same discipline used throughout this project: analyze → design → propose a plan →
-**wait for explicit approval** → implement in small, verifiable, individually-committed
-checkpoints → verify (lint/typecheck/build/tests) after each → update this handoff at the end.
+### 10.8 Recommended path forward
+1. Review the six new ADRs and `CALCULATION_ENGINE_SPEC.md`.
+2. Decide ADR-007 §3 (does `outstandingBalance` include penalty?) and §4 (how to treat the 79
+   non-reconciling legacy `CLOSED` loans during migration) — this is the single highest-priority
+   open item blocking Milestone 9.1.
+3. Optionally, resolve the smaller open sub-questions in ADR-009/ADR-010 (or explicitly accept
+   carrying them forward as documented open items into implementation, as several already are).
+4. Only then: analyze → design → propose a Milestone 9.1 implementation plan → **wait for
+   explicit approval** → implement in small, verifiable, individually-committed checkpoints →
+   verify (lint/typecheck/build/tests) after each → update this handoff at the end. This is
+   unchanged from every prior milestone's discipline.
 Do not start implementing anything until the user has explicitly scoped and approved Milestone 9.
 
 ---
