@@ -21,7 +21,11 @@ const activeUser: UserRecord = {
   roles: ['Loan Officer'],
 };
 
-function buildDeps(record: RefreshTokenRecord | null, user: UserRecord | null = activeUser) {
+function buildDeps(
+  record: RefreshTokenRecord | null,
+  options: { user?: UserRecord | null; rotateResult?: { id: string; rawToken: string } | null } = {},
+) {
+  const user = options.user === undefined ? activeUser : options.user;
   const userRepository: IUserRepository = {
     findByEmail: vi.fn(),
     findById: vi.fn().mockResolvedValue(user),
@@ -33,10 +37,17 @@ function buildDeps(record: RefreshTokenRecord | null, user: UserRecord | null = 
     verifyAccessToken: vi.fn(),
   };
   const refreshTokenRepository: IRefreshTokenRepository = {
-    issue: vi.fn().mockResolvedValue({ id: 'rt-2', rawToken: 'new-raw-refresh-token' }),
+    issue: vi.fn(),
     findByRawToken: vi.fn().mockResolvedValue(record),
     revoke: vi.fn(),
     revokeAllForUser: vi.fn(),
+    // Default: "this call won the atomic claim and rotated successfully" —
+    // the common case in these unit tests, which exercise the use case's
+    // decision logic. The atomicity/rollback guarantee itself is the
+    // repository's responsibility — see PrismaRefreshTokenRepository.test.ts.
+    rotate: vi.fn().mockResolvedValue(
+      options.rotateResult === undefined ? { id: 'rt-2', rawToken: 'new-raw-refresh-token' } : options.rotateResult,
+    ),
   };
   return { userRepository, tokenService, refreshTokenRepository };
 }
@@ -48,20 +59,36 @@ describe('RefreshTokenUseCase', () => {
 
     expect(result.accessToken).toBe('new-access-token');
     expect(result.refreshToken).toBe('new-raw-refresh-token');
-    expect(deps.refreshTokenRepository.revoke).toHaveBeenCalledWith('rt-1');
+    expect(deps.refreshTokenRepository.rotate).toHaveBeenCalledWith(
+      'rt-1',
+      expect.objectContaining({ userId: activeUser.id }),
+    );
   });
 
   it('throws TokenNotFoundError when no matching token exists', async () => {
     const deps = buildDeps(null);
     await expect(new RefreshTokenUseCase(deps).execute({ rawRefreshToken: 'raw' })).rejects.toThrow(TokenNotFoundError);
+    expect(deps.refreshTokenRepository.rotate).not.toHaveBeenCalled();
   });
 
-  it('throws TokenExpiredError for an expired-but-not-revoked token', async () => {
+  it('throws TokenExpiredError for an expired-but-not-revoked token WITHOUT attempting to rotate it', async () => {
     const deps = buildDeps({ id: 'rt-1', userId: activeUser.id, expiresAt: new Date(Date.now() - 1000), revokedAt: null });
     await expect(new RefreshTokenUseCase(deps).execute({ rawRefreshToken: 'raw' })).rejects.toThrow(TokenExpiredError);
+    // Production-readiness revision: expiry is checked before any DB write
+    // is attempted — an expired token is simply rejected, not revoked.
+    expect(deps.refreshTokenRepository.rotate).not.toHaveBeenCalled();
   });
 
-  it('detects reuse of an already-revoked token and revokes the whole session family', async () => {
+  it('rejects a valid token whose user is no longer active WITHOUT attempting to rotate it', async () => {
+    const deps = buildDeps(
+      { id: 'rt-1', userId: activeUser.id, expiresAt: new Date(Date.now() + 60_000), revokedAt: null },
+      { user: { ...activeUser, status: 'INACTIVE' } },
+    );
+    await expect(new RefreshTokenUseCase(deps).execute({ rawRefreshToken: 'raw' })).rejects.toThrow(UserInactiveError);
+    expect(deps.refreshTokenRepository.rotate).not.toHaveBeenCalled();
+  });
+
+  it('detects reuse of an already-revoked token (fast path) and revokes the whole session family', async () => {
     const deps = buildDeps({
       id: 'rt-1',
       userId: activeUser.id,
@@ -73,13 +100,23 @@ describe('RefreshTokenUseCase', () => {
       TokenReuseDetectedError,
     );
     expect(deps.refreshTokenRepository.revokeAllForUser).toHaveBeenCalledWith(activeUser.id);
+    expect(deps.refreshTokenRepository.rotate).not.toHaveBeenCalled();
   });
 
-  it('rejects a valid token whose user is no longer active', async () => {
+  it('C-01: detects a concurrent-reuse race — rotate() returns null because another request won the atomic claim', async () => {
+    // Simulates two concurrent requests presenting the same valid token:
+    // both pass the expiry/user-status checks (neither writes to the DB),
+    // but only one wins IRefreshTokenRepository.rotate()'s atomic claim.
+    // This test represents the LOSING request.
     const deps = buildDeps(
       { id: 'rt-1', userId: activeUser.id, expiresAt: new Date(Date.now() + 60_000), revokedAt: null },
-      { ...activeUser, status: 'INACTIVE' },
+      { rotateResult: null },
     );
-    await expect(new RefreshTokenUseCase(deps).execute({ rawRefreshToken: 'raw' })).rejects.toThrow(UserInactiveError);
+
+    await expect(new RefreshTokenUseCase(deps).execute({ rawRefreshToken: 'raw' })).rejects.toThrow(
+      TokenReuseDetectedError,
+    );
+    expect(deps.refreshTokenRepository.rotate).toHaveBeenCalledWith('rt-1', expect.anything());
+    expect(deps.refreshTokenRepository.revokeAllForUser).toHaveBeenCalledWith(activeUser.id);
   });
 });

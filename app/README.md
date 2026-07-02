@@ -49,6 +49,29 @@ token (JSON body) and sets an `HttpOnly` refresh-token cookie. See Milestone 6's
 (permission-level enforcement beyond "is this token valid") is a later milestone — Milestone 6
 covers authentication only.
 
+## Deployment assumption: reverse proxy trust (`TRUST_PROXY`)
+
+The backend must be told whether it sits behind a reverse proxy, and if so, how many hops away
+the real client is — this directly affects login rate-limiting correctness and the accuracy of
+IP addresses recorded in `RefreshToken.createdByIp` / `AuditLog.ipAddress`.
+
+- **Local dev, or the backend directly exposed to the internet with no proxy:** leave
+  `TRUST_PROXY=false` (the default). Setting this to anything else with no real proxy in front
+  lets any client forge their apparent IP via the `X-Forwarded-For` header, defeating per-IP
+  rate limiting.
+- **Behind exactly one reverse proxy** (the expected self-hosted setup — e.g. nginx in front of
+  the backend on the same host or Docker network, per CLAUDE.md's deployment philosophy):
+  set `TRUST_PROXY=1`. Getting this wrong in the *other* direction (leaving it `false` behind a
+  real proxy) is just as dangerous: every request then appears to originate from the proxy's own
+  IP, collapsing the login rate limiter into a single shared bucket for every user on the
+  platform — one user's mistyped password repeatedly can lock out login for everyone.
+- **Multiple proxy hops, or you need to trust only specific proxy IP ranges:** set `TRUST_PROXY`
+  to a hop count (`"2"`, `"3"`, ...) or a specific subnet list (e.g.
+  `"127.0.0.1,10.0.0.0/8"`) — see `.env.example` for the full set of accepted formats.
+
+This must be revisited whenever the deployment topology changes (e.g. Milestone 12 introducing
+a load balancer in front of multiple backend instances).
+
 ## Architecture
 
 Clean Architecture, modular monolith. Each backend module under `backend/src/modules/<name>/` has:

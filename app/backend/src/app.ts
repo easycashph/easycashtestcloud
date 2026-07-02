@@ -7,6 +7,7 @@ import pinoHttp from 'pino-http';
 import { env } from '@shared/config/env';
 import { logger } from '@shared/logger/logger';
 import { errorHandler } from '@shared/middleware/errorHandler';
+import { parseTrustProxy } from '@shared/config/trustProxy';
 import { createAuthRouter } from '@modules/identity/interface/http/authRouter';
 import { LoginUseCase } from '@modules/identity/application/use-cases/LoginUseCase';
 import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/RefreshTokenUseCase';
@@ -27,6 +28,11 @@ import { PrismaAuditLogger } from '@modules/identity/infrastructure/PrismaAuditL
  */
 export function createApp(): Express {
   const app = express();
+
+  // Audit finding C-02: must be set correctly for the deployment topology
+  // BEFORE anything that reads req.ip (rate limiters, audit logging) is
+  // registered. See shared/config/trustProxy.ts and app/README.md.
+  app.set('trust proxy', parseTrustProxy(env.TRUST_PROXY));
 
   // Secure-by-default baseline (CLAUDE.md §Security).
   app.use(helmet());
@@ -54,10 +60,25 @@ export function createApp(): Express {
   const refreshTokenRepository = new PrismaRefreshTokenRepository();
   const auditLogger = new PrismaAuditLogger();
 
+  // Audit finding H-01: env.JWT_REFRESH_TTL_MS (pre-parsed, fail-fast in
+  // env.ts) is now actually threaded through, instead of the use cases'
+  // internal hardcoded fallback constants silently taking over.
   const authRouter = createAuthRouter(
     {
-      loginUseCase: new LoginUseCase({ userRepository, passwordHasher, tokenService, refreshTokenRepository, auditLogger }),
-      refreshTokenUseCase: new RefreshTokenUseCase({ userRepository, tokenService, refreshTokenRepository }),
+      loginUseCase: new LoginUseCase({
+        userRepository,
+        passwordHasher,
+        tokenService,
+        refreshTokenRepository,
+        auditLogger,
+        refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
+      }),
+      refreshTokenUseCase: new RefreshTokenUseCase({
+        userRepository,
+        tokenService,
+        refreshTokenRepository,
+        refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
+      }),
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
       getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),

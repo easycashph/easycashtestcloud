@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import { z } from 'zod';
+import { parseDurationMs } from './duration';
+import { validateTrustProxy } from './trustProxy';
 
 /**
  * All runtime configuration is validated at boot. The process must fail fast
@@ -18,11 +20,26 @@ const envSchema = z.object({
 
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 
+  // Audit finding C-02: must match actual deployment topology. Default
+  // "false" is the safe choice for local dev / direct exposure with no
+  // reverse proxy in front. See shared/config/trustProxy.ts and
+  // app/README.md for what to set behind nginx/a load balancer.
+  TRUST_PROXY: z.string().default('false'),
+
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./storage'),
 });
 
-export type Env = z.infer<typeof envSchema>;
+export type Env = z.infer<typeof envSchema> & {
+  /**
+   * Audit finding H-01: pre-parsed milliseconds form of JWT_REFRESH_TTL,
+   * computed once at boot (fail-fast on an invalid format, consistent with
+   * the rest of this file) so the composition root (app.ts) can wire a
+   * real value into the use cases instead of relying on their internal
+   * hardcoded fallback constants.
+   */
+  JWT_REFRESH_TTL_MS: number;
+};
 
 function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
@@ -34,7 +51,28 @@ function loadEnv(): Env {
     console.error(`Invalid environment configuration:\n${issues}`);
     process.exit(1);
   }
-  return parsed.data;
+
+  const refreshTtlMs = parseDurationMs(parsed.data.JWT_REFRESH_TTL);
+  if (refreshTtlMs === null) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `Invalid JWT_REFRESH_TTL format: "${parsed.data.JWT_REFRESH_TTL}". Expected e.g. "7d", "15m", "12h".`,
+    );
+    process.exit(1);
+  }
+
+  // Production-readiness review finding: validate with the SAME function
+  // Express itself uses internally (proxy-addr.compile), so a malformed
+  // value fails here with our own clear message instead of crashing later,
+  // mid-boot, inside app.set('trust proxy', ...) with an unrelated error.
+  const trustProxyError = validateTrustProxy(parsed.data.TRUST_PROXY);
+  if (trustProxyError) {
+    // eslint-disable-next-line no-console
+    console.error(trustProxyError);
+    process.exit(1);
+  }
+
+  return { ...parsed.data, JWT_REFRESH_TTL_MS: refreshTtlMs };
 }
 
 export const env = loadEnv();

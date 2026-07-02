@@ -94,6 +94,34 @@ describe.skipIf(!runIntegration)('Auth API (integration)', () => {
     expect(secondRefreshRes.status).toBe(401);
   });
 
+  it('C-01: concurrent refresh with the SAME token — exactly one request succeeds, the other is treated as reuse', async () => {
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'integration-test@easycash.ph', password: 'correct-horse-battery-staple-12' });
+    const cookie = loginRes.headers['set-cookie'][0];
+
+    // Fire two refresh requests presenting the identical cookie at the
+    // same time — this is the exact race C-01 fixes: without the atomic
+    // conditional UPDATE in PrismaRefreshTokenRepository.revoke, both
+    // could succeed and issue divergent token pairs with no reuse
+    // detected. With the fix, Postgres row-locking guarantees only one
+    // `UPDATE ... WHERE revoked_at IS NULL` affects a row.
+    const [first, second] = await Promise.all([
+      request(app).post('/api/v1/auth/refresh').set('Cookie', cookie),
+      request(app).post('/api/v1/auth/refresh').set('Cookie', cookie),
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 401]);
+
+    // Reuse detection must have revoked the whole session family — even
+    // the token issued to the winning request is now dead.
+    const winner = first.status === 200 ? first : second;
+    const winnerCookie = winner.headers['set-cookie'][0];
+    const followUp = await request(app).post('/api/v1/auth/refresh').set('Cookie', winnerCookie);
+    expect(followUp.status).toBe(401);
+  });
+
   it('GET /me requires a valid access token', async () => {
     const unauth = await request(app).get('/api/v1/auth/me');
     expect(unauth.status).toBe(401);

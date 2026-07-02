@@ -7,7 +7,11 @@ import type { LoginInput, LoginOutput } from '../dtos/AuthDtos';
 import { InvalidCredentialsError, AccountInactiveError } from '../errors/AuthErrors';
 import { randomUUID } from 'node:crypto';
 
-const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // overridden by caller-supplied TTL in production wiring
+// Fallback only — the real value is env.JWT_REFRESH_TTL_MS, wired in by the
+// composition root (app.ts). This constant exists purely so unit tests that
+// construct this use case directly (without full app wiring) still get a
+// sane default (Milestone 6 audit finding H-01).
+const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface LoginUseCaseDeps {
   userRepository: IUserRepository;

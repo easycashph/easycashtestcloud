@@ -17,5 +17,16 @@ export interface AuditLogEntry {
 }
 
 export interface IAuditLogger {
+  /**
+   * Audit finding H-04: implementations MUST NOT throw. Audit logging is
+   * observability for the primary operation it accompanies (e.g. login),
+   * not a dependency of it — a failure here must never mask the real
+   * result of that operation or leave it half-completed (e.g. a login
+   * that already issued and persisted a refresh token, but then fails the
+   * whole request because the audit write hiccuped). Implementations are
+   * responsible for catching their own failures and reporting them
+   * through their own means (structured logging, alerting, etc.) rather
+   * than propagating them to the caller.
+   */
   log(entry: AuditLogEntry): Promise<void>;
 }

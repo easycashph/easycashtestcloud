@@ -80,3 +80,24 @@ export class WeakPasswordError extends DomainError {
     this.name = 'WeakPasswordError';
   }
 }
+
+/**
+ * Audit finding H-03: thrown by PrismaUserRepository.create() when one or
+ * more requested role names don't resolve to an existing Role row — e.g.
+ * the seed hasn't run, or a name is misspelled. Previously this failed
+ * silently, creating a user with fewer (or zero) roles than requested,
+ * which is especially dangerous on the bootstrap-admin path. 500 because
+ * this reflects a server-side data/configuration problem (missing seed
+ * data), not a client input mistake.
+ */
+export class RoleNotFoundError extends DomainError {
+  constructor(missingRoleNames: string[]) {
+    super(
+      'ROLE_NOT_FOUND',
+      `The following roles do not exist and could not be assigned: ${missingRoleNames.join(', ')}. Has "prisma db seed" been run?`,
+      undefined,
+      500,
+    );
+    this.name = 'RoleNotFoundError';
+  }
+}
