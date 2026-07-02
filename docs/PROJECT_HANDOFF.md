@@ -63,10 +63,12 @@ application-layer use cases.
 Eight bounded-context modules are scaffolded (folder structure only, per Milestone 1-2):
 `identity`, `borrower`, `loan-product`, `loan-account`, `ledger`, `repayment`, `document`,
 `audit`. **Six are now built out**: `identity` (Milestone 6) and, as of Milestone 7,
-`borrower`, `loan-product`, `loan-account`, `ledger`, `repayment` — domain/application/
-infrastructure layers only, deliberately **no `interface/http/` layer** in any of the five new
-modules (Milestone 7 was explicitly scoped to Core Domain Models, not APIs — see §13).
-`document` and `audit` remain `.gitkeep` placeholders.
+`borrower`, `loan-product`, `loan-account`, `ledger`, `repayment`. As of Milestone 8 (see §14),
+all six now also have an `interface/http/` layer — `borrower`, `loan-product`, and `loan-account`
+expose full CRUD-ish HTTP surfaces; `ledger` and `repayment` are deliberately **read-only** over
+HTTP (their write use cases remain internal application primitives until the calculation engine
+and payment allocation algorithm exist — see §14 / ADR D-2). `document` and `audit` remain
+`.gitkeep` placeholders.
 
 ### Repository Structure (top level)
 ```
@@ -637,28 +639,34 @@ app/
           application/             ports/, use-cases/, dtos/, errors/
           infrastructure/          Bcrypt/Jwt/Prisma* adapters
           interface/http/          controller, router, schemas, cookies
-        borrower/                — Milestone 7: domain/application/infrastructure built, NO interface/http
+        borrower/                — FULLY BUILT incl. HTTP (Milestone 7 + 8)
           domain/                  Borrower, CoBorrower (aggregates), PersonName/Address (VOs)
-          application/             ports/, use-cases/, dtos/
+          application/             ports/, use-cases/ (incl. List/GetCoBorrower — M8), dtos/
           infrastructure/          PrismaBorrowerRepository, PrismaCoBorrowerRepository
-        loan-product/             — Milestone 7: domain/application/infrastructure built, NO interface/http
+          interface/http/          controller, router, schemas, presenters/ (M8)
+        loan-product/             — FULLY BUILT incl. HTTP (Milestone 7 + 8)
           domain/                  LoanProduct (aggregate, owns versions), LoanProductVersion,
                                     PenaltyRule, FeeRule
-          application/             ports/, use-cases/ (Create/Activate version — LPV-2), dtos/
+          application/             ports/, use-cases/ (Create/Activate version — LPV-2; +List — M8), dtos/
           infrastructure/          PrismaLoanProductRepository
-        loan-account/             — Milestone 7: domain/application/infrastructure built, NO interface/http
+          interface/http/          controller, router, schemas, presenters/ (M8)
+        loan-account/             — FULLY BUILT incl. HTTP (Milestone 7 + 8)
           domain/                  LoanAccount (aggregate, owns AppliedFee[]), LoanBalances (VO)
-          application/             ports/, use-cases/ (Create/Approve/Reject — NOT Activate), dtos/
+          application/             ports/, use-cases/ (Create — now range-validated (D-3) — /
+                                    Approve/Reject/List — NOT Activate), dtos/
           infrastructure/          PrismaLoanAccountRepository
-        ledger/                   — Milestone 7: domain/application/infrastructure built, NO interface/http
+          interface/http/          controller, router, schemas, presenters/ (M8)
+        ledger/                   — FULLY BUILT, HTTP is READ-ONLY (Milestone 7 + 8 / D-2)
           domain/                  LoanTransaction (independent aggregate, append-only),
                                     TransactionComponents (VO)
-          application/             ports/ (create-only, no update/delete), use-cases/, dtos/
+          application/             ports/ (create-only, no update/delete), use-cases/ (+Get — M8), dtos/
           infrastructure/          PrismaLoanTransactionRepository (cursor-paginated reads)
-        repayment/                — Milestone 7: domain/application/infrastructure built, NO interface/http
+          interface/http/          controller, router, presenters/ — GET only, no write route (M8)
+        repayment/                — FULLY BUILT, HTTP is READ-ONLY (Milestone 7 + 8 / D-2)
           domain/                  RepaymentInstallment (independent aggregate), InstallmentAmounts (VO)
-          application/             ports/, use-cases/, dtos/
+          application/             ports/, use-cases/ (+Get — M8), dtos/
           infrastructure/          PrismaRepaymentInstallmentRepository
+          interface/http/          controller, router, presenters/ — GET only, no write route (M8)
         document/                 — scaffolded only (.gitkeep placeholders)
         audit/                    — scaffolded only
       shared/
@@ -667,9 +675,10 @@ app/
         domain/                  Money.ts, Percentage.ts (Milestone 7), errors/FinancialDomainErrors.ts
         application/             ports/IUnitOfWork.ts, TransactionContext.ts (Milestone 7)
         infrastructure/          PrismaUnitOfWork.ts, resolveClient() (Milestone 7)
-        errors/                  DomainError.ts
+        errors/                  DomainError.ts (+ ForbiddenError — Milestone 8)
+        http/                    pagination.ts — parsePaginationParams()/toPaginatedResponse() (Milestone 8 / D-4)
         logger/                  logger.ts (pino)
-        middleware/              errorHandler.ts, requireAuth.ts, validate.ts
+        middleware/              errorHandler.ts, requireAuth.ts, requireRole.ts (Milestone 8 / ADR-043), validate.ts
         types/                   express.d.ts
         result.ts                Result<T,E> — defined, not yet used (Money deliberately does NOT use it — see §13)
     tests/
@@ -926,3 +935,112 @@ With Core Domain Models in place, the natural next milestones (in roughly this o
    item before any of this code is reachable over the network.
 6. Get a real PostgreSQL instance running and close the verification gap in §11, now covering
    six modules' worth of repository code instead of one.
+
+---
+
+## 14. Milestone 8 — HTTP API Layer (Complete)
+
+**Objective:** expose the Milestone 7 application layer through a Clean Architecture HTTP
+interface — `interface/http/` for `borrower`, `loan-product`, `loan-account`, `ledger`, and
+`repayment` — without doing any further domain/application redesign.
+
+### Authorization — ADR-043 (new)
+Milestone 7 left authorization entirely unresolved (§12 item 5 above). This milestone resolves
+the *timing* question with **`docs/Architecture/ADR-043-interim-role-based-authorization.md`**:
+a minimal `requireRole(...roleNames)` middleware (`shared/middleware/requireRole.ts`) checks the
+JWT `roles[]` claim (already present since Milestone 6) against a hard-coded, route-declared
+allow-list. Explicitly **not** a permission matrix, not a policy engine, not dynamic, and not a
+database lookup against the existing `Permission`/`RolePermission` tables — those remain unused,
+same as at the end of Milestone 6. ADR-038 (the full permission-matrix design) is still open;
+ADR-043 only unblocks Milestone 8 from shipping with zero authorization. Every mutating route
+uses `requireAuth` + `requireRole`; every read route uses `requireAuth` alone. Role allow-lists
+per route are documented interim assumptions (e.g. who may originate a borrower/loan, who may
+approve one), not verified against `PROJECT_RULES.md` — flagged inline in each router file.
+
+### What was exposed, module by module
+| Module | HTTP surface | Notes |
+|---|---|---|
+| `borrower` | Full: create/get/list borrower, create/get co-borrower | New `ListBorrowersUseCase`, `GetCoBorrowerUseCase`, `IBorrowerRepository.findMany()` |
+| `loan-product` | Full: create/get/list product, create/activate version | New `ListLoanProductsUseCase`, `ILoanProductRepository.findMany()` + `findVersionById()` |
+| `loan-account` | Full: create/get/list, approve/reject | New `ListLoanAccountsUseCase`, `ILoanAccountRepository.findMany()`; `CreateLoanAccountUseCase` now range-validates against the product version (D-3, see below) |
+| `ledger` | **Read-only** (D-2): list-for-account, get-by-id | `RecordLoanTransactionUseCase` intentionally has no route |
+| `repayment` | **Read-only** (D-2): list-for-loan, get-by-id | `CreateRepaymentInstallmentUseCase`/`RecordInstallmentPaymentUseCase` intentionally have no route |
+
+`ledger` and `repayment` staying read-only is deliberate, not an oversight: both modules' write
+use cases are documented "structural recording primitives" with no business-rule gate on the
+values they accept — exposing them over HTTP before the calculation/payment-allocation engines
+exist would let any authorized caller hand-author arbitrary ledger entries or installment
+payments, defeating the reason those engines were deferred in the first place.
+
+### D-3: range validation added to loan origination
+`CreateLoanAccountUseCase` now looks up the referenced `LoanProductVersion` and rejects a
+`principalAmount`/`installmentCount` outside its configured min/max (`LoanAmountOutOfRangeError`,
+`InstallmentCountOutOfRangeError`) before creating the loan. This is validation against
+already-stored configuration data, not interest/amortization calculation — closes a real gap
+that would otherwise exist the moment this use case became reachable over HTTP (a caller could
+previously originate a loan at any amount, regardless of the product's configured range).
+Required a small supporting addition to `loan-product`: `ILoanProductRepository.
+findVersionById()`, which looks up a single version without loading its parent product; the
+existing `toDomain()` row-mapping logic was extracted into a shared `toVersionDomain()` helper
+to avoid duplicating it.
+
+### Presenters (D-5)
+Every module gained `interface/http/presenters/*.ts` — pure functions converting domain entities
+to JSON-safe response shapes. This is the **only** place `Money`/`Percentage` become strings
+(`.toString()`) and `Date` becomes ISO strings (`.toISOString()`) — controllers never do this
+themselves, verified by controller-level unit tests asserting response fields are the correct
+primitive type, not by convention alone.
+
+### Pagination (D-4, reduced scope)
+`shared/http/pagination.ts` (`parsePaginationParams()`/`toPaginatedResponse()`) is cursor-based,
+limit + `nextCursor` only — no search, filtering, or sorting, per the approved reduced scope.
+Every new list endpoint (`borrower`, `loan-product`, `loan-account`) uses it; `ledger` already
+had its own equivalent cursor pattern from Milestone 7 (left as-is, not refactored to share code,
+per "do not perform opportunistic refactoring"); `repayment`'s list stays genuinely unpaginated
+(ADR-042 §7/§11: a schedule is bounded, low-hundreds-per-loan at most) but still returns
+`{ items, nextCursor: null }` for response-shape consistency with every other list endpoint.
+
+### What was deliberately NOT built (all explicitly out of scope, per approval)
+Payment allocation, amortization, interest calculation, the `audit` module, notifications,
+reporting, search/filtering, the full permission matrix, CQRS, caching, Domain Events, an event
+bus, WebSocket support. Also **not** built: several domain-method-backed endpoints that exist as
+entity capability but weren't strictly required to expose the approved HTTP surface —
+Borrower deactivate/reactivate/assign-loan-officer, LoanAccount attach/detach-co-borrower,
+add-applied-fee — per the explicit YAGNI instruction ("only implement additional use cases that
+are strictly required"). **OpenAPI/Swagger generation** (checkpoint 7) was evaluated and
+deliberately deferred rather than implemented — it was explicitly marked optional in the
+approved plan, and adding the generation dependency/infrastructure wasn't strictly required to
+meet Milestone 8's core objective; revisit once the API surface is more stable across future
+milestones.
+
+### Testing
+Controller tests are a new category this milestone: call controller methods directly with mock
+`req`/`res`/`next` and mocked use-case dependencies — no Express, no `supertest`, no DB, mirroring
+how use-case tests already mock repository ports. This is the primary, always-running layer in
+this DB-less dev environment. Every module also got Zod validation-schema tests and extended
+repository tests (`findMany`/`findVersionById` cursor-pagination behavior). Full-stack
+`supertest` integration tests remain the pattern established in Milestone 6 (`tests/integration/`,
+opt-in via `RUN_INTEGRATION_TESTS=1`) — none were added this milestone; the existing `auth.test.ts`
+pattern is ready to be replicated per module once a live Postgres is available.
+
+### Verification
+| Check | Result |
+|---|---|
+| Backend build (`tsc` + `tsc-alias`) | ✅ Clean |
+| Backend ESLint | ✅ Clean |
+| Backend unit tests (incl. new controller/schema tests) | ✅ 280 passing (up from 201 at the end of Milestone 7.1) |
+| Backend integration tests | ⏭️ 6 correctly skip (still no live Postgres) |
+
+### Recommended next step
+1. Get a real PostgreSQL instance running and add `supertest` integration tests per module
+   (auth-guard/role-guard/validation/golden-path), closing the verification gap that has existed
+   since Milestone 4.
+2. Design ADR-038 properly (the full permission matrix) — ADR-043's interim role gate should not
+   be treated as the final authorization design.
+3. Resolve ADR-007/ADR-009 and build the calculation engine + payment allocation algorithm, at
+   which point `ledger`/`repayment` can finally get write endpoints (`ActivateLoanUseCase` for
+   disbursement, a payment-recording flow).
+4. Formally create the `audit` module and wire the fail-closed, same-transaction audit-write
+   pattern into every mutating use case this milestone exposed.
+5. Consider OpenAPI generation once the route surface is expected to stay stable for a while —
+   deferred this milestone, not abandoned.
