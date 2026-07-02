@@ -9,7 +9,14 @@ import type { Borrower } from '../../domain/Borrower';
  * financial fields, so nothing here currently requires cross-aggregate
  * atomicity — but the port is transaction-ready from the start.
  */
+export interface FindManyBorrowersOptions {
+  /** Cursor-paginated (Milestone 8 / D-4: limit + cursor only, no search/filter/sort). */
+  limit: number;
+  cursor?: string;
+}
+
 export interface IBorrowerRepository {
   findById(id: string, ctx?: TransactionContext): Promise<Borrower | null>;
+  findMany(options: FindManyBorrowersOptions, ctx?: TransactionContext): Promise<Borrower[]>;
   save(borrower: Borrower, ctx?: TransactionContext): Promise<void>;
 }

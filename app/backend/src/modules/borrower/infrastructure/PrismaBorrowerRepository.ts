@@ -4,7 +4,7 @@ import type { TransactionContext } from '@shared/application/TransactionContext'
 import { Borrower, type BorrowerProps } from '../domain/Borrower';
 import { PersonName } from '../domain/valueObjects/PersonName';
 import { Address } from '../domain/valueObjects/Address';
-import type { IBorrowerRepository } from '../application/ports/IBorrowerRepository';
+import type { FindManyBorrowersOptions, IBorrowerRepository } from '../application/ports/IBorrowerRepository';
 
 const BORROWER_INCLUDE = {
   incomeDetail: true,
@@ -98,6 +98,38 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
 
     const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: id } });
     return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  /**
+   * Milestone 8 / D-4: cursor pagination only, no search/filter/sort.
+   * Batches the address lookup for the whole page in one query (`ownerId
+   * IN (...)`) rather than one query per borrower, since this method — new
+   * in Milestone 8 — can return up to `limit` (max 200) rows at once.
+   */
+  async findMany(options: FindManyBorrowersOptions, ctx?: TransactionContext): Promise<Borrower[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.borrower.findMany({
+      include: BORROWER_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+      take: options.limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    });
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const addressRows = await client.address.findMany({
+      where: { ownerType: 'BORROWER', ownerId: { in: rows.map((row) => row.id) } },
+    });
+    const addressesByOwnerId = new Map<string, Address[]>();
+    for (const addressRow of addressRows) {
+      const list = addressesByOwnerId.get(addressRow.ownerId) ?? [];
+      list.push(toAddress(addressRow));
+      addressesByOwnerId.set(addressRow.ownerId, list);
+    }
+
+    return rows.map((row) => toBorrower(row, addressesByOwnerId.get(row.id) ?? []));
   }
 
   /**

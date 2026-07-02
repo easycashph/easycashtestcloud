@@ -19,6 +19,14 @@ import { JwtTokenService } from '@modules/identity/infrastructure/JwtTokenServic
 import { PrismaUserRepository } from '@modules/identity/infrastructure/PrismaUserRepository';
 import { PrismaRefreshTokenRepository } from '@modules/identity/infrastructure/PrismaRefreshTokenRepository';
 import { PrismaAuditLogger } from '@modules/identity/infrastructure/PrismaAuditLogger';
+import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
+import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
+import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
+import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
+import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateCoBorrowerUseCase';
+import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
+import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
+import { PrismaCoBorrowerRepository } from '@modules/borrower/infrastructure/PrismaCoBorrowerRepository';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -87,8 +95,22 @@ export function createApp(): Express {
   );
   app.use('/api/v1/auth', authRouter);
 
-  // Further module routers are mounted under /api/v1/* starting in Milestone 8.
-  // e.g. app.use('/api/v1/borrowers', borrowerRouter);
+  // --- borrower module wiring (Milestone 8: HTTP API layer) ---
+  const borrowerRepository = new PrismaBorrowerRepository();
+  const coBorrowerRepository = new PrismaCoBorrowerRepository();
+  const borrowerRouter = createBorrowerRouter(
+    {
+      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
+      getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
+      listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
+      createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
+      getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', borrowerRouter);
+
+  // Further module routers are mounted under /api/v1/* as each is built out.
 
   app.use(errorHandler);
 
