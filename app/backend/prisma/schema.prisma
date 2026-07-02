@@ -10,9 +10,14 @@
 // traceable to that specification (Phase 1.5 rules FIN-5 / MIG-5).
 //
 // Explicitly out of scope for this schema (tracked, not forgotten):
-// CustomField/CustomFieldValue, Guarantor (ADR-040), Restructuring/Renewal/
-// Write-off/Early-Settlement/Holiday-Rule structures (ADR-041), CIC
-// submission tables, full RBAC policy engine (ADR-038).
+// CustomField/CustomFieldValue, Guarantor (ADR-040), Group-held loans
+// (ADR-004 — individual Borrower-held loans only, see LoanAccount below),
+// Restructuring/Renewal/Write-off/Early-Settlement/Holiday-Rule structures
+// (ADR-041), CIC submission tables, full RBAC policy engine (ADR-038).
+//
+// Working assumption pending resolution: ADR-032 (Loan Release vs.
+// Disbursement) — this schema treats them as two distinct moments; see
+// the comment on LoanAccount below.
 // ============================================================================
 
 generator client {
@@ -296,10 +301,19 @@ model LoanProductVersion {
   previousVersion   LoanProductVersion? @relation("LoanProductVersionLineage", fields: [previousVersionId], references: [id])
   nextVersion       LoanProductVersion? @relation("LoanProductVersionLineage")
 
-  /// LPV-2: only one version of a product may be Active at a time —
-  /// enforced in the application layer (Milestone 7), not by a DB
-  /// constraint alone, since Postgres partial-unique-index enforcement
-  /// across nullable/soft states is handled at the use-case boundary.
+  /// LPV-2 (Hard Rule): only one version of a product may be Active at a
+  /// time. Enforced at TWO layers, not one: the application layer
+  /// (Milestone 7 use cases), AND, as of the Schema Review follow-up
+  /// migration (Schema Review SR-30), a PostgreSQL partial unique index —
+  /// `CREATE UNIQUE INDEX ... ON loan_product_versions(loanProductId)
+  /// WHERE isActive = true` — added via raw SQL in
+  /// prisma/migrations/20260702010000_schema_review_indexes_and_lpv2_guard.
+  /// This lives in a hand-written SQL migration, NOT here as `@@unique`,
+  /// because Prisma's schema DSL has no way to express a *conditional*
+  /// (partial/filtered) unique constraint — `@@unique`/`@@index` in Prisma
+  /// always apply to every row; there is no `WHERE` clause equivalent in
+  /// the schema language itself, even though the underlying PostgreSQL
+  /// feature (partial indexes) is fully supported when written as raw SQL.
   isActive      Boolean   @default(false)
   effectiveFrom DateTime
   effectiveTo   DateTime?
@@ -426,6 +440,14 @@ model Borrower {
   characterReferences CharacterReference[]
   loanAccounts        LoanAccount[]
 
+  /// Schema Review SR-06/SR-07/SR-08: branch/officer/status filtering and
+  /// name/phone search (PROJECT_RULES.md §Search) were previously unindexed.
+  @@index([branchId])
+  @@index([assignedLoanOfficerId])
+  @@index([status])
+  @@index([lastName])
+  @@index([firstName])
+  @@index([mobilePhone1])
   @@map("borrowers")
 }
 
@@ -485,6 +507,8 @@ model IdentificationDocument {
   issuingAuthority String?
   validUntil       DateTime?
 
+  /// Schema Review SR-09: supports search by Government ID (PROJECT_RULES.md §Search).
+  @@index([documentNumber])
   @@map("identification_documents")
 }
 
@@ -542,6 +566,22 @@ model LoanAccountCoBorrower {
 // confirmed.
 // ADR-010 (Critical/compliance): addOn/contractual interest columns exist,
 // no derivation or disclosure logic until resolved.
+// ADR-004 (PENDING, intentionally deferred): legacy `loan_accounts` has an
+// `accountHolderType` that can be GROUP as well as CLIENT/individual. This
+// schema intentionally supports individual Borrower-held loans only —
+// `LoanAccount.borrowerId` is a required FK to `Borrower`, with no Group
+// entity or polymorphic account-holder concept. This is a deliberate,
+// tracked scope limit for Phase 1, not an oversight (see Schema Review
+// SR-01); introducing Group-held loans is out of scope for this migration
+// and requires ADR-004 to be resolved and a dedicated design pass first.
+// ADR-032 (PENDING, working assumption only): "Loan Release" vs.
+// "Disbursement" — whether these are one event or two — is unresolved.
+// This schema takes the position that they are two distinct moments:
+// `LoanAccount.activatedAt` represents the loan being released/booked,
+// while the `DISBURSEMENT`-typed `LoanTransaction.entryDate` represents
+// the actual funds-disbursement event. This is a working assumption, not
+// a resolution of ADR-032 — revisit both fields' semantics once ADR-032
+// is formally decided.
 // ----------------------------------------------------------------------------
 
 model LoanAccount {
@@ -599,8 +639,12 @@ model LoanAccount {
   appliedFees       AppliedFee[]
   coBorrowers       LoanAccountCoBorrower[]
 
+  /// Schema Review SR-10: branch dashboards and Loan Officer Performance
+  /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
   @@index([borrowerId])
   @@index([status])
+  @@index([branchId])
+  @@index([loanOfficerId])
   @@map("loan_accounts")
 }
 
@@ -637,12 +681,18 @@ model LoanTransaction {
 
   appliedFees AppliedFee[]
 
+  /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
+  /// volume table (legacy equivalent: 524k rows) — date-range and
+  /// officer/branch-filtered transaction reports were previously unindexed.
   @@index([loanAccountId])
   @@index([type])
+  @@index([entryDate])
+  @@index([postedByUserId])
+  @@index([branchId])
   @@map("loan_transactions")
 }
 
-/// REPAY-1..4. Note: legacy tax_*/organization-commission/funders-interest
+/// REPAY-1..4. Note: legacy tax_* / organization-commission / funders-interest
 /// fields are intentionally dropped (ADR-028: consistently zero across all
 /// sampled legacy records — YAGNI; can be reintroduced if a genuine
 /// multi-funder/tax feature is confirmed later).
@@ -669,7 +719,13 @@ model RepaymentSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
+  /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
+  /// all filter on due date and status — previously unindexed beyond
+  /// (loanAccountId, installmentNumber).
   @@unique([loanAccountId, installmentNumber])
+  @@index([dueDate])
+  @@index([status])
   @@map("repayment_schedules")
 }
 
@@ -763,6 +819,10 @@ model AuditLog {
   userAgent     String?
   createdAt     DateTime @default(now())
 
+  /// Schema Review SR-13: time-range audit browsing and per-user audit
+  /// queries were previously unsupported beyond (entityType, entityId).
   @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId])
   @@map("audit_logs")
 }
