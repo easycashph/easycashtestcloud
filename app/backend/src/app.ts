@@ -34,6 +34,13 @@ import { ListLoanProductsUseCase } from '@modules/loan-product/application/use-c
 import { CreateLoanProductVersionUseCase } from '@modules/loan-product/application/use-cases/CreateLoanProductVersionUseCase';
 import { ActivateLoanProductVersionUseCase } from '@modules/loan-product/application/use-cases/ActivateLoanProductVersionUseCase';
 import { PrismaLoanProductRepository } from '@modules/loan-product/infrastructure/PrismaLoanProductRepository';
+import { createLoanAccountRouter } from '@modules/loan-account/interface/http/loanAccountRouter';
+import { CreateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/CreateLoanAccountUseCase';
+import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
+import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
+import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
+import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
+import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -130,6 +137,20 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanProductRouter);
+
+  // --- loan-account module wiring (Milestone 8: HTTP API layer) ---
+  const loanAccountRepository = new PrismaLoanAccountRepository();
+  const loanAccountRouter = createLoanAccountRouter(
+    {
+      createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
+      getLoanAccountUseCase: new GetLoanAccountUseCase({ loanAccountRepository }),
+      listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
+      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository }),
+      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanAccountRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 

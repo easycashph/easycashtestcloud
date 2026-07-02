@@ -1,16 +1,46 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CreateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/CreateLoanAccountUseCase';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
+import { LoanProductVersion } from '@modules/loan-product/domain/LoanProductVersion';
+import { Money } from '@shared/domain/Money';
+import { NotFoundError } from '@shared/errors/DomainError';
+import { InstallmentCountOutOfRangeError, LoanAmountOutOfRangeError } from '@modules/loan-account/domain/errors/LoanAccountDomainErrors';
+
+function buildVersion(overrides: Partial<{ loanAmountMin: string; loanAmountMax?: string; installmentCountMin: number; installmentCountMax?: number }> = {}) {
+  return LoanProductVersion.create({
+    loanProductId: 'product-1',
+    versionNumber: 1,
+    effectiveFrom: new Date(),
+    interestCalculationMethod: 'FLAT',
+    loanAmountMin: Money.of(overrides.loanAmountMin ?? '1000.00'),
+    loanAmountMax: overrides.loanAmountMax ? Money.of(overrides.loanAmountMax) : undefined,
+    installmentCountMin: overrides.installmentCountMin ?? 6,
+    installmentCountMax: overrides.installmentCountMax,
+  });
+}
+
+function buildRepos(version: LoanProductVersion | null) {
+  const loanAccountRepository: ILoanAccountRepository = { findById: vi.fn(), findByLoanCode: vi.fn(), save: vi.fn() };
+  const loanProductRepository = {
+    findById: vi.fn(),
+    findByCode: vi.fn(),
+    findMany: vi.fn(),
+    findVersionById: vi.fn().mockResolvedValue(version),
+    save: vi.fn(),
+  };
+  return { loanAccountRepository, loanProductRepository };
+}
 
 describe('CreateLoanAccountUseCase', () => {
-  it('creates a PENDING_APPROVAL loan account with the given terms', async () => {
-    const loanAccountRepository: ILoanAccountRepository = { findById: vi.fn(), findByLoanCode: vi.fn(), save: vi.fn() };
-    const useCase = new CreateLoanAccountUseCase({ loanAccountRepository });
+  it('creates a PENDING_APPROVAL loan account when principal/installmentCount fall within the product version range', async () => {
+    const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+    const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+    const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
 
     const loan = await useCase.execute({
       loanCode: 'LN-0001',
       borrowerId: 'borrower-1',
-      loanProductVersionId: 'version-1',
+      loanProductVersionId: version.id,
       branchId: 'branch-1',
       principalAmount: '10000.00',
       interestRate: '2.5',
@@ -19,5 +49,134 @@ describe('CreateLoanAccountUseCase', () => {
 
     expect(loan.status).toBe('PENDING_APPROVAL');
     expect(loanAccountRepository.save).toHaveBeenCalledWith(loan);
+  });
+
+  it('throws NotFoundError when the referenced LoanProductVersion does not exist', async () => {
+    const { loanAccountRepository, loanProductRepository } = buildRepos(null);
+    const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+    await expect(
+      useCase.execute({
+        loanCode: 'LN-0001',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: 'missing-version',
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+      }),
+    ).rejects.toThrow(NotFoundError);
+    expect(loanAccountRepository.save).not.toHaveBeenCalled();
+  });
+
+  describe('D-3: range validation against the LoanProductVersion (configuration check, not calculation)', () => {
+    it('rejects a principal below loanAmountMin', async () => {
+      const version = buildVersion({ loanAmountMin: '5000.00' });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '1000.00',
+          interestRate: '2.5',
+          installmentCount: 6,
+        }),
+      ).rejects.toThrow(LoanAmountOutOfRangeError);
+      expect(loanAccountRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a principal above loanAmountMax', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '10000.00' });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '20000.00',
+          interestRate: '2.5',
+          installmentCount: 6,
+        }),
+      ).rejects.toThrow(LoanAmountOutOfRangeError);
+    });
+
+    it('accepts a principal at exactly loanAmountMin or loanAmountMax (boundary inclusive)', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '10000.00' });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '1000.00',
+          interestRate: '2.5',
+          installmentCount: 6,
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('allows any principal at or above loanAmountMin when loanAmountMax is not configured', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00' });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '999999.00',
+          interestRate: '2.5',
+          installmentCount: 6,
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('rejects an installmentCount below installmentCountMin', async () => {
+      const version = buildVersion({ installmentCountMin: 6 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '1000.00',
+          interestRate: '2.5',
+          installmentCount: 3,
+        }),
+      ).rejects.toThrow(InstallmentCountOutOfRangeError);
+    });
+
+    it('rejects an installmentCount above installmentCountMax', async () => {
+      const version = buildVersion({ installmentCountMin: 6, installmentCountMax: 12 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      await expect(
+        useCase.execute({
+          loanCode: 'LN-0001',
+          borrowerId: 'borrower-1',
+          loanProductVersionId: version.id,
+          branchId: 'branch-1',
+          principalAmount: '1000.00',
+          interestRate: '2.5',
+          installmentCount: 36,
+        }),
+      ).rejects.toThrow(InstallmentCountOutOfRangeError);
+    });
   });
 });

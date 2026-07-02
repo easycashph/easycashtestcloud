@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const loanProductOps = { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() };
-const loanProductVersionOps = { upsert: vi.fn() };
+const loanProductVersionOps = { upsert: vi.fn(), findUnique: vi.fn() };
 const penaltyRuleOps = { upsert: vi.fn() };
 const feeRuleOps = { upsert: vi.fn() };
 
@@ -101,6 +101,55 @@ describe('PrismaLoanProductRepository', () => {
       const callArgs = loanProductOps.findMany.mock.calls[0]?.[0];
       expect(callArgs.cursor).toBeUndefined();
       expect(callArgs.skip).toBeUndefined();
+    });
+  });
+
+  // Milestone 8 / D-3: single-version lookup for range validation.
+  describe('findVersionById', () => {
+    it('returns null when no row exists', async () => {
+      loanProductVersionOps.findUnique.mockResolvedValue(null);
+      const repo = new PrismaLoanProductRepository();
+      await expect(repo.findVersionById('missing')).resolves.toBeNull();
+    });
+
+    it('maps a found row without loading its parent product', async () => {
+      loanProductVersionOps.findUnique.mockResolvedValue({
+        id: 'v-1',
+        loanProductId: 'p-1',
+        versionNumber: 1,
+        previousVersionId: null,
+        isActive: true,
+        effectiveFrom: new Date(),
+        effectiveTo: null,
+        interestCalculationMethod: 'FLAT',
+        daysInYearConvention: 'E30_360',
+        repaymentPeriodUnit: 'MONTHS',
+        loanAmountMin: '1000.00',
+        loanAmountMax: '50000.00',
+        loanAmountDefault: null,
+        installmentCountMin: 6,
+        installmentCountMax: 24,
+        installmentCountDefault: null,
+        gracePeriodDefaultDays: 0,
+        roundingMethod: 'NO_ROUNDING',
+        repaymentAllocationOrder: null,
+        defaultInterestRate: null,
+        minInterestRate: null,
+        maxInterestRate: null,
+        legacyId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        penaltyRule: null,
+        feeRules: [],
+      });
+      const repo = new PrismaLoanProductRepository();
+
+      const version = await repo.findVersionById('v-1');
+
+      expect(loanProductOps.findUnique).not.toHaveBeenCalled();
+      expect(version?.loanAmountMin.toString()).toBe('1000.00');
+      expect(version?.loanAmountMax?.toString()).toBe('50000.00');
+      expect(version?.installmentCountMax).toBe(24);
     });
   });
 });

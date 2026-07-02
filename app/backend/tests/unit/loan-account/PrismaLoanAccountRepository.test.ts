@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const loanAccountOps = { findUnique: vi.fn(), upsert: vi.fn() };
+const loanAccountOps = { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() };
 const appliedFeeOps = { upsert: vi.fn() };
 const loanAccountCoBorrowerOps = { deleteMany: vi.fn(), createMany: vi.fn() };
 
@@ -74,6 +74,31 @@ describe('PrismaLoanAccountRepository', () => {
       loanAccountOps.findUnique.mockResolvedValue(null);
       const repo = new PrismaLoanAccountRepository();
       await expect(repo.findById('missing')).resolves.toBeNull();
+    });
+  });
+
+  // Milestone 8 / D-4: cursor pagination only, no search/filter/sort.
+  describe('findMany', () => {
+    it('passes limit/cursor through to Prisma and orders by createdAt desc', async () => {
+      loanAccountOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaLoanAccountRepository();
+
+      await repo.findMany({ limit: 25, cursor: 'la-1' });
+
+      expect(loanAccountOps.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 25, cursor: { id: 'la-1' }, skip: 1, orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
+    it('omits cursor/skip on the first page', async () => {
+      loanAccountOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaLoanAccountRepository();
+
+      await repo.findMany({ limit: 25 });
+
+      const callArgs = loanAccountOps.findMany.mock.calls[0]?.[0];
+      expect(callArgs.cursor).toBeUndefined();
+      expect(callArgs.skip).toBeUndefined();
     });
   });
 });

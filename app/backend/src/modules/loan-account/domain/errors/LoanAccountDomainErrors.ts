@@ -12,3 +12,36 @@ export class InvalidStatusTransitionError extends DomainError {
     this.name = 'InvalidStatusTransitionError';
   }
 }
+
+/**
+ * Milestone 8 / D-3: configuration validation, not financial calculation
+ * — the loan's requested principal must fall within its LoanProductVersion's
+ * configured `loanAmountMin`/`loanAmountMax`. No interest/amortization math
+ * is involved.
+ */
+export class LoanAmountOutOfRangeError extends DomainError {
+  constructor(requested: string, min: string, max?: string) {
+    const rangeDescription = max ? `between ${min} and ${max}` : `at least ${min}`;
+    super(
+      'LOAN_AMOUNT_OUT_OF_RANGE',
+      `Requested principal amount ${requested} is outside the product version's configured range (${rangeDescription}).`,
+      undefined,
+      400,
+    );
+    this.name = 'LoanAmountOutOfRangeError';
+  }
+}
+
+/** Milestone 8 / D-3: same as LoanAmountOutOfRangeError, for installmentCount. */
+export class InstallmentCountOutOfRangeError extends DomainError {
+  constructor(requested: number, min: number, max?: number) {
+    const rangeDescription = max ? `between ${min} and ${max}` : `at least ${min}`;
+    super(
+      'INSTALLMENT_COUNT_OUT_OF_RANGE',
+      `Requested installment count ${requested} is outside the product version's configured range (${rangeDescription}).`,
+      undefined,
+      400,
+    );
+    this.name = 'InstallmentCountOutOfRangeError';
+  }
+}

@@ -7,7 +7,7 @@ import { Percentage } from '@shared/domain/Percentage';
 import { LoanAccount, type LoanAccountProps } from '../domain/LoanAccount';
 import { LoanBalances } from '../domain/valueObjects/LoanBalances';
 import { AppliedFee } from '../domain/AppliedFee';
-import type { ILoanAccountRepository } from '../application/ports/ILoanAccountRepository';
+import type { FindManyLoanAccountsOptions, ILoanAccountRepository } from '../application/ports/ILoanAccountRepository';
 
 const LOAN_ACCOUNT_INCLUDE = {
   appliedFees: true,
@@ -175,6 +175,18 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     const client = resolveClient(ctx);
     const row = await client.loanAccount.findUnique({ where: { loanCode }, include: LOAN_ACCOUNT_INCLUDE });
     return row ? toDomain(row) : null;
+  }
+
+  /** Milestone 8 / D-4: cursor pagination only, no search/filter/sort. */
+  async findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanAccount.findMany({
+      include: LOAN_ACCOUNT_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+      take: options.limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    });
+    return rows.map(toDomain);
   }
 
   async save(loanAccount: LoanAccount, ctx?: TransactionContext): Promise<void> {
