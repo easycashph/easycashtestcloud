@@ -21,7 +21,12 @@
   },
   "overrides": [
     {
-      "files": ["src/modules/*/domain/**/*.ts", "src/modules/*/application/**/*.ts"],
+      "files": [
+        "src/modules/*/domain/**/*.ts",
+        "src/modules/*/application/**/*.ts",
+        "src/shared/domain/**/*.ts",
+        "src/shared/application/**/*.ts"
+      ],
       "rules": {
         "no-restricted-imports": [
           "error",
