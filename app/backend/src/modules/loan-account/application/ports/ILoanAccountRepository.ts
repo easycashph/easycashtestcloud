@@ -5,6 +5,8 @@ export interface FindManyLoanAccountsOptions {
   /** Cursor-paginated (Milestone 8 / D-4: limit + cursor only, no search/filter/sort). */
   limit: number;
   cursor?: string;
+  /** Milestone 8.1 / H-1: filters to one branch when supplied (a branch-scoped caller); omitted entirely for a global caller. */
+  branchId?: string;
 }
 
 export interface ILoanAccountRepository {

@@ -181,6 +181,7 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
   async findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]> {
     const client = resolveClient(ctx);
     const rows = await client.loanAccount.findMany({
+      where: options.branchId ? { branchId: options.branchId } : undefined,
       include: LOAN_ACCOUNT_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: options.limit,

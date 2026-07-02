@@ -55,4 +55,25 @@ describe('PrismaLoanTransactionRepository', () => {
     expect(callArgs.cursor).toBeUndefined();
     expect(callArgs.skip).toBeUndefined();
   });
+
+  // Milestone 8.1 remediation (audit finding H-1).
+  it('findByLoanAccountId filters by branchId when supplied (branch-scoped caller)', async () => {
+    loanTransactionOps.findMany.mockResolvedValue([]);
+    const repo = new PrismaLoanTransactionRepository();
+
+    await repo.findByLoanAccountId('loan-1', { limit: 20, branchId: 'branch-1' });
+
+    expect(loanTransactionOps.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { loanAccountId: 'loan-1', branchId: 'branch-1' } }),
+    );
+  });
+
+  it('findByLoanAccountId applies no branch filter when branchId is omitted (global caller)', async () => {
+    loanTransactionOps.findMany.mockResolvedValue([]);
+    const repo = new PrismaLoanTransactionRepository();
+
+    await repo.findByLoanAccountId('loan-1', { limit: 20 });
+
+    expect(loanTransactionOps.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { loanAccountId: 'loan-1' } }));
+  });
 });

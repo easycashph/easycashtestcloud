@@ -4,6 +4,7 @@ import { BorrowerController } from '@modules/borrower/interface/http/borrowerCon
 import { Borrower } from '@modules/borrower/domain/Borrower';
 import { CoBorrower } from '@modules/borrower/domain/CoBorrower';
 import { PersonName } from '@modules/borrower/domain/valueObjects/PersonName';
+import { ForbiddenError } from '@shared/errors/DomainError';
 
 /**
  * Controller unit tests (Milestone 8 testing strategy): call controller
@@ -27,13 +28,21 @@ function buildDeps() {
   } as never as ConstructorParameters<typeof BorrowerController>[0];
 }
 
+/** Milestone 8.1 / H-1: every request now needs req.authUser for branch-scope resolution. */
+function authUser(roles: string[], branchId = 'branch-1') {
+  return { sub: 'user-1', email: 'a@b.com', roles, branchId, jti: 'jti-1' };
+}
+
 describe('BorrowerController (thin — no business logic; presenters used, never manual serialization)', () => {
   it('create() returns 201 with the presented borrower', async () => {
     const deps = buildDeps();
     const borrower = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') });
     (deps.createBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
     const controller = new BorrowerController(deps);
-    const req = { body: { branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz' } } as Request;
+    const req = {
+      body: { branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz' },
+      authUser: authUser(['Loan Officer'], 'branch-1'),
+    } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -52,7 +61,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const error = new Error('boom');
     (deps.createBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockRejectedValue(error);
     const controller = new BorrowerController(deps);
-    const req = { body: {} } as Request;
+    const req = { body: { branchId: 'branch-1' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -67,7 +76,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const borrower = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') });
     (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
     const controller = new BorrowerController(deps);
-    const req = { params: { id: borrower.id } } as unknown as Request;
+    const req = { params: { id: borrower.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.get(req, res, vi.fn());
@@ -81,12 +90,12 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const borrowers = [Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') })];
     (deps.listBorrowersUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrowers);
     const controller = new BorrowerController(deps);
-    const req = { query: { limit: '1' } } as unknown as Request;
+    const req = { query: { limit: '1' }, authUser: authUser(['Administrator']) } as unknown as Request;
     const res = buildResponse();
 
     await controller.list(req, res, vi.fn());
 
-    expect(deps.listBorrowersUseCase.execute).toHaveBeenCalledWith({ limit: 1, cursor: undefined });
+    expect(deps.listBorrowersUseCase.execute).toHaveBeenCalledWith({ limit: 1, cursor: undefined, branchId: undefined });
     const body = res.json.mock.calls[0]?.[0];
     expect(body.items).toHaveLength(1);
     expect(body.nextCursor).toBe(borrowers[0]!.id); // full page (1 item, limit 1) -> nextCursor set
@@ -117,5 +126,84 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     await controller.getCoBorrower(req, res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  // Milestone 8.1 remediation (audit finding H-1): branch-scoped
+  // authorization, separate from role authorization. CoBorrower has no
+  // branchId field at all (not branch-owned, like LoanProduct) — no H-1
+  // changes apply to createCoBorrower()/getCoBorrower().
+  describe('branch scoping (H-1)', () => {
+    it('create() overrides a branch-scoped caller\'s requested branchId with their own', async () => {
+      const deps = buildDeps();
+      const borrower = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') });
+      (deps.createBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
+      const controller = new BorrowerController(deps);
+      const req = {
+        body: { branchId: 'attacker-branch', firstName: 'Juan', lastName: 'Dela Cruz' },
+        authUser: authUser(['Loan Officer'], 'branch-1'),
+      } as unknown as Request;
+
+      await controller.create(req, buildResponse(), vi.fn());
+
+      expect(deps.createBorrowerUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ branchId: 'branch-1' }),
+      );
+    });
+
+    it('create() trusts a global caller\'s requested branchId', async () => {
+      const deps = buildDeps();
+      const borrower = Borrower.create({ branchId: 'branch-2', name: PersonName.of('Juan', 'Dela Cruz') });
+      (deps.createBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
+      const controller = new BorrowerController(deps);
+      const req = {
+        body: { branchId: 'branch-2', firstName: 'Juan', lastName: 'Dela Cruz' },
+        authUser: authUser(['Administrator'], 'branch-1'),
+      } as unknown as Request;
+
+      await controller.create(req, buildResponse(), vi.fn());
+
+      expect(deps.createBorrowerUseCase.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ branchId: 'branch-2' }),
+      );
+    });
+
+    it('get() forwards a ForbiddenError to next() for a different branch, non-global caller', async () => {
+      const deps = buildDeps();
+      const borrower = Borrower.create({ branchId: 'branch-2', name: PersonName.of('Juan', 'Dela Cruz') });
+      (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
+      const controller = new BorrowerController(deps);
+      const req = { params: { id: borrower.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const res = buildResponse();
+      const next = vi.fn();
+
+      await controller.get(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('get() allows a global caller to read any branch\'s borrower', async () => {
+      const deps = buildDeps();
+      const borrower = Borrower.create({ branchId: 'branch-2', name: PersonName.of('Juan', 'Dela Cruz') });
+      (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
+      const controller = new BorrowerController(deps);
+      const req = { params: { id: borrower.id }, authUser: authUser(['Administrator'], 'branch-1') } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.get(req, res, vi.fn());
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('list() filters to the caller\'s own branch for a non-global role', async () => {
+      const deps = buildDeps();
+      (deps.listBorrowersUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+      const controller = new BorrowerController(deps);
+      const req = { query: {}, authUser: authUser(['Cashier'], 'branch-1') } as unknown as Request;
+
+      await controller.list(req, buildResponse(), vi.fn());
+
+      expect(deps.listBorrowersUseCase.execute).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'branch-1' }));
+    });
   });
 });

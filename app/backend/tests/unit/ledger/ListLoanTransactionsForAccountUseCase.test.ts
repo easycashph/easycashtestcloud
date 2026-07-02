@@ -23,4 +23,17 @@ describe('ListLoanTransactionsForAccountUseCase (ADR-042 §6/§11: always pagina
     const [, options] = loanTransactionRepository.findByLoanAccountId.mock.calls[0] as [string, { limit: number }];
     expect(options.limit).toBeLessThanOrEqual(200);
   });
+
+  // Milestone 8.1 remediation (audit finding H-1).
+  it('forwards an optional branchId filter through to the repository', async () => {
+    const loanTransactionRepository = { findById: vi.fn(), findByLoanAccountId: vi.fn().mockResolvedValue([]), create: vi.fn() };
+    const useCase = new ListLoanTransactionsForAccountUseCase({ loanTransactionRepository });
+
+    await useCase.execute('loan-1', 20, 'cursor-1', 'branch-1');
+
+    expect(loanTransactionRepository.findByLoanAccountId).toHaveBeenCalledWith(
+      'loan-1',
+      expect.objectContaining({ branchId: 'branch-1' }),
+    );
+  });
 });

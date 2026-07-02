@@ -103,6 +103,26 @@ describe('PrismaBorrowerRepository', () => {
       );
     });
 
+    // Milestone 8.1 remediation (audit finding H-1).
+    it('filters by branchId when supplied (branch-scoped caller)', async () => {
+      borrowerOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaBorrowerRepository();
+
+      await repo.findMany({ limit: 20, branchId: 'branch-1' });
+
+      expect(borrowerOps.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { branchId: 'branch-1' } }));
+    });
+
+    it('applies no branch filter when branchId is omitted (global caller)', async () => {
+      borrowerOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaBorrowerRepository();
+
+      await repo.findMany({ limit: 20 });
+
+      const callArgs = borrowerOps.findMany.mock.calls[0]?.[0];
+      expect(callArgs.where).toBeUndefined();
+    });
+
     it('omits cursor/skip on the first page', async () => {
       borrowerOps.findMany.mockResolvedValue([]);
       const repo = new PrismaBorrowerRepository();

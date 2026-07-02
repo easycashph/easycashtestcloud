@@ -11,4 +11,14 @@ describe('ListBorrowersUseCase', () => {
 
     expect(borrowerRepository.findMany).toHaveBeenCalledWith({ limit: 20, cursor: 'b-1' });
   });
+
+  // Milestone 8.1 remediation (audit finding H-1).
+  it('forwards an optional branchId filter through to the repository', async () => {
+    const borrowerRepository: IBorrowerRepository = { findById: vi.fn(), findMany: vi.fn().mockResolvedValue([]), save: vi.fn() };
+    const useCase = new ListBorrowersUseCase({ borrowerRepository });
+
+    await useCase.execute({ limit: 20, branchId: 'branch-1' });
+
+    expect(borrowerRepository.findMany).toHaveBeenCalledWith(expect.objectContaining({ branchId: 'branch-1' }));
+  });
 });

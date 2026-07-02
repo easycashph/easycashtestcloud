@@ -1044,3 +1044,128 @@ pattern is ready to be replicated per module once a live Postgres is available.
    pattern into every mutating use case this milestone exposed.
 5. Consider OpenAPI generation once the route surface is expected to stay stable for a while —
    deferred this milestone, not abandoned.
+
+---
+
+## 15. Milestone 8.1 — Post-Audit Remediation (Complete)
+
+Implements four approved findings from the Milestone 8 post-implementation architectural audit.
+No Milestone 9 work was started. Scope was deliberately restricted to these four findings —
+several other audit findings (M-1 mutate-then-refetch, M-2 Prisma exception translation, M-3
+field-level PII exposure, M-4 presenter tests, L-1 through L-5) were reviewed and explicitly
+**not** implemented this pass; they remain tracked, not forgotten.
+
+### H-2 — Decimal validation (High)
+**Root cause:** every Money/Percentage-bound request field validated only `z.string().min(1)`
+(non-empty), not well-formed. A malformed value (e.g. `"abc"`) reached `Money.of()`/
+`Percentage.of()`, whose first statement (`new Prisma.Decimal(value)`) throws decimal.js's own
+plain `Error` — not a `DomainError` — so `errorHandler.ts` fell through to its generic 500
+branch instead of a clean 400.
+**Fix:** `shared/http/decimalValidation.ts` — `decimalStringSchema`, a regex-validated
+(`^-?\d+(\.\d+)?$`) Zod string, shape/format only (scale/magnitude stays `Money`/`Percentage`'s
+job). Applied to every decimal field in `loanProductSchemas.ts` and `loanAccountSchemas.ts`.
+`Money`/`Percentage` themselves were not touched, per the approved scope restriction.
+**Files:** `shared/http/decimalValidation.ts` (new); `loan-product/interface/http/
+loanProductSchemas.ts`; `loan-account/interface/http/loanAccountSchemas.ts`.
+**Tests:** `tests/unit/shared/decimalValidation.test.ts` (13 cases) + malformed-input cases added
+to both modules' existing schema test files.
+
+### M-5 — LoanProductController test coverage (Medium)
+**Root cause:** `get()` was only ever exercised via an error-forwarding test with no success
+assertion; `list()` had no test at all.
+**Fix:** added both missing success-path tests, matching the style already used for the other
+four controllers.
+**Files:** `tests/unit/loan-product/LoanProductController.test.ts`.
+
+### H-3 — Router-level authorization regression tests (High)
+**Root cause:** `requireRole()` itself and each controller's business logic were tested in
+isolation, but nothing exercised an actual router — a future refactor silently dropping
+`requireRole(...)` from a sensitive route would not fail any test.
+**Fix:** `tests/unit/authorization.test.ts` — hits `createApp()` via `supertest` for the four
+highest-risk routes (create borrower, approve loan, reject loan, activate loan-product version),
+asserting unauthenticated → 401, wrong role → 403, correct role → passes the gate (not 401/403).
+Prisma is mocked so these run deterministically in under a second, without depending on a real
+network-timeout's environment-specific timing.
+**Files:** `tests/unit/authorization.test.ts` (new).
+
+### H-1 — Branch-scoped authorization (High)
+**Root cause:** no code anywhere read `req.authUser.branchId` — every list/get endpoint returned
+data across every branch regardless of the caller's own assignment, and `CreateBorrowerUseCase`/
+`CreateLoanAccountUseCase` trusted a client-supplied `branchId` outright, letting a branch-scoped
+user create records under any branch by simply changing the request body.
+
+**Design (kept deliberately separate from role authorization, per the approved requirement):**
+`shared/http/branchScope.ts` — `resolveBranchScope(req)` reads the JWT's `branchId` and checks
+`roles` against a hard-coded `GLOBAL_ROLES = ['Administrator']` list; `assertBranchAccess(scope,
+resourceBranchId)` throws the existing `ForbiddenError` (403) for a mismatched non-global caller;
+`resolveBranchFilter(scope)` returns `undefined` (no filter) for a global caller or the caller's
+own `branchId` otherwise, for use in list queries; `resolveWriteBranchId(scope, requested)`
+ignores the client-supplied value for a non-global caller (their own branch always wins) and
+trusts it for a global caller.
+
+**ASSUMPTION, not sourced from a documented PROJECT_RULES.md rule** (per the approved
+"implement the smallest consistent solution and document the assumption" instruction):
+`Administrator` is the only global role; `Manager`, `Loan Officer`, `Cashier`, `Collection
+Officer`, and `Viewer` are all assumed branch-scoped. This should be revisited if
+`PROJECT_RULES.md` or business stakeholders specify otherwise.
+
+**Applied per module:**
+- **borrower**: `findMany` gets a `branchId` filter (query-level, for correct pagination);
+  `get()` does a post-fetch `assertBranchAccess`; `create()` derives the final `branchId` via
+  `resolveWriteBranchId()`. `CoBorrower` has no `branchId` field (not branch-owned, like
+  `LoanProduct` below) — untouched.
+- **loan-account**: identical pattern to borrower for `create()`/`get()`/`list()`. `approve()`/
+  `reject()` additionally fetch the target loan account and `assertBranchAccess` **before**
+  calling the mutating use case — a branch-scoped Manager cannot approve/reject another branch's
+  loan, even though those routes were already role-gated to Manager/Administrator.
+- **loan-product**: **deliberately untouched** — `LoanProduct` has no `branchId` field in the
+  schema at all; products are company-wide configuration, not branch-owned. This is the "only
+  where branch ownership applies" carve-out named in the approval.
+- **ledger**: `LoanTransaction` has its own `branchId` (a transaction records which branch
+  posted it, not necessarily its loan's origination branch) — `findByLoanAccountId` gets a
+  `branchId` filter; `get()` does a direct post-fetch `assertBranchAccess` against the
+  transaction's own `branchId`.
+- **repayment**: `RepaymentInstallment` has **no** `branchId` field at all. Rather than changing
+  the repayment application/infrastructure layers, `RepaymentController` gained a
+  `getLoanAccountUseCase` dependency (a cross-module dependency at the interface layer, mirroring
+  the precedent D-3 already set at the application layer) — both `listForLoan()` and `get()`
+  fetch the parent `LoanAccount` and check its branch before returning schedule data. This is the
+  one module where the branch check costs an extra DB round trip, an accepted trade-off given
+  `RepaymentInstallment` has nothing to filter on directly.
+
+**Files:** `shared/http/branchScope.ts` (new); `borrower/application/ports/IBorrowerRepository.ts`
++ `infrastructure/PrismaBorrowerRepository.ts` + `application/use-cases/ListBorrowersUseCase.ts`
++ `interface/http/borrowerController.ts`; the equivalent five files in `loan-account`; `ledger/
+application/ports/ILoanTransactionRepository.ts` + `infrastructure/PrismaLoanTransactionRepository.ts`
++ `application/use-cases/ListLoanTransactionsForAccountUseCase.ts` + `interface/http/
+ledgerController.ts`; `repayment/interface/http/repaymentController.ts`; `app.ts` (wiring —
+`getLoanAccountUseCase` extracted to a shared local so `repayment`'s wiring can reuse it).
+
+**Tests:** `tests/unit/shared/branchScope.test.ts` (11 cases) + branch-scoping `describe` blocks
+added to every affected controller/use-case/repository test file (borrower, loan-account,
+ledger, repayment) — covering: filter applied for scoped callers, no filter for global callers,
+`ForbiddenError` on cross-branch reads, cross-branch writes rejected before mutating (approve/
+reject), and global-role bypass.
+
+### Verification
+| Check | Result |
+|---|---|
+| Backend build (`tsc` + `tsc-alias`) | ✅ Clean |
+| Backend ESLint | ✅ Clean |
+| Backend unit tests | ✅ 353 passing (up from 316 at the start of this remediation pass) |
+| Backend integration tests | ⏭️ 6 correctly skip (still no live Postgres) |
+
+### Deferred findings (explicitly not implemented this pass)
+M-1 (mutate-then-refetch race window in 4 controller methods), M-2 (Prisma/decimal.js exception
+translation to clean 4xx responses), M-3 (field-level PII exposure — full borrower PII visible
+to every authenticated role), M-4 (dedicated presenter unit tests), and all Low findings (L-1
+through L-5) from the Milestone 8 audit remain open, per the explicit scope restriction against
+implementing them this pass. None require immediate action to keep the system correct: H-2/H-3/
+H-1 addressed the findings assessed as carrying real security or correctness risk; the deferred
+items are either UX/robustness polish (M-1, M-2, L-1 through L-5) or require a design decision
+this milestone was told not to make (M-3, tied to the still-open ADR-038).
+
+### Recommended next step
+Same as §14's list, plus: formally resolve whether `GLOBAL_ROLES` should be configurable (still
+a hard-coded list, same "minimal, interim" status as `requireRole`'s own allow-lists) as part of
+whatever eventually replaces ADR-043 with the full ADR-038 permission design.

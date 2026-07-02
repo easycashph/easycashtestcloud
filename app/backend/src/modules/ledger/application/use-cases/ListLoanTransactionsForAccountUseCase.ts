@@ -12,8 +12,8 @@ const MAX_LIMIT = 200;
 export class ListLoanTransactionsForAccountUseCase {
   constructor(private readonly deps: ListLoanTransactionsForAccountUseCaseDeps) {}
 
-  async execute(loanAccountId: string, limit = DEFAULT_LIMIT, cursor?: string): Promise<LoanTransaction[]> {
+  async execute(loanAccountId: string, limit = DEFAULT_LIMIT, cursor?: string, branchId?: string): Promise<LoanTransaction[]> {
     const boundedLimit = Math.min(limit, MAX_LIMIT);
-    return this.deps.loanTransactionRepository.findByLoanAccountId(loanAccountId, { limit: boundedLimit, cursor });
+    return this.deps.loanTransactionRepository.findByLoanAccountId(loanAccountId, { limit: boundedLimit, cursor, branchId });
   }
 }

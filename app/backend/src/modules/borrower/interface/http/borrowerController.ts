@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
 import type { CreateBorrowerUseCase } from '../../application/use-cases/CreateBorrowerUseCase';
 import type { GetBorrowerUseCase } from '../../application/use-cases/GetBorrowerUseCase';
 import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorrowersUseCase';
@@ -23,7 +24,12 @@ export class BorrowerController {
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as CreateBorrowerRequestBody;
-      const borrower = await this.deps.createBorrowerUseCase.execute(body);
+      // Milestone 8.1 / H-1: never trust a client-supplied branchId for a
+      // branch-scoped user — their own branch always wins. A global user's
+      // requested branchId is trusted as-is.
+      const scope = resolveBranchScope(req);
+      const branchId = resolveWriteBranchId(scope, body.branchId);
+      const borrower = await this.deps.createBorrowerUseCase.execute({ ...body, branchId });
       res.status(201).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
@@ -32,7 +38,9 @@ export class BorrowerController {
 
   get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const scope = resolveBranchScope(req);
       const borrower = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, borrower.branchId); // H-1: reject cross-branch reads for non-global roles.
       res.status(200).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
@@ -41,8 +49,9 @@ export class BorrowerController {
 
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor });
+      const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope) });
       res.status(200).json(toPaginatedResponse(borrowers.map(presentBorrower), limit, (item) => item.id));
     } catch (error) {
       next(error);

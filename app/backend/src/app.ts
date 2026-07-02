@@ -148,10 +148,14 @@ export function createApp(): Express {
 
   // --- loan-account module wiring (Milestone 8: HTTP API layer) ---
   const loanAccountRepository = new PrismaLoanAccountRepository();
+  // Shared across loan-account's own router and repayment's H-1 branch
+  // check below (RepaymentInstallment has no branchId of its own — see
+  // repaymentController.ts).
+  const getLoanAccountUseCase = new GetLoanAccountUseCase({ loanAccountRepository });
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
-      getLoanAccountUseCase: new GetLoanAccountUseCase({ loanAccountRepository }),
+      getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
       approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository }),
       rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository }),
@@ -177,6 +181,7 @@ export function createApp(): Express {
     {
       listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),
       getRepaymentInstallmentUseCase: new GetRepaymentInstallmentUseCase({ repaymentInstallmentRepository }),
+      getLoanAccountUseCase, // H-1: branch check via the parent loan account.
     },
     tokenService,
   );

@@ -51,7 +51,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
   ): Promise<LoanTransaction[]> {
     const client = resolveClient(ctx);
     const rows = await client.loanTransaction.findMany({
-      where: { loanAccountId },
+      where: options.branchId ? { loanAccountId, branchId: options.branchId } : { loanAccountId },
       orderBy: { entryDate: 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),

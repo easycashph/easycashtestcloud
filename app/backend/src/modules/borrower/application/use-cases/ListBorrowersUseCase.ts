@@ -8,6 +8,8 @@ export interface ListBorrowersUseCaseDeps {
 export interface ListBorrowersInput {
   limit: number;
   cursor?: string;
+  /** Milestone 8.1 / H-1: set for a branch-scoped caller, omitted for a global caller. */
+  branchId?: string;
 }
 
 export class ListBorrowersUseCase {
