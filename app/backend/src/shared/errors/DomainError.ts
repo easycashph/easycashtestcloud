@@ -35,3 +35,17 @@ export class ValidationError extends DomainError {
     this.name = 'ValidationError';
   }
 }
+
+/**
+ * Milestone 8 / ADR-043: raised by `shared/middleware/requireRole.ts` when
+ * an authenticated user's JWT `roles` claim doesn't include any role in a
+ * route's allow-list. Distinct from `UnauthorizedError` (401, identity
+ * module) — this is "you ARE who you say you are, but that role can't do
+ * this," not "we don't know who you are."
+ */
+export class ForbiddenError extends DomainError {
+  constructor(message = 'You do not have permission to perform this action.') {
+    super('FORBIDDEN', message, undefined, 403);
+    this.name = 'ForbiddenError';
+  }
+}
