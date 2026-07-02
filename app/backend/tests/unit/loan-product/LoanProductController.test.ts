@@ -79,4 +79,40 @@ describe('LoanProductController (thin — presenters handle all Money/Percentage
 
     expect(next).toHaveBeenCalledWith(error);
   });
+
+  // Milestone 8.1 remediation (audit finding M-5): get() and list() had no
+  // success-path coverage — only exercised indirectly via the
+  // error-forwarding test above and never asserted on a 200/body shape.
+  it('get() returns 200 with the presented product for the requested id', async () => {
+    const deps = buildDeps();
+    const product = LoanProduct.create({ code: 'PL-01', name: 'Personal Loan' });
+    (deps.getLoanProductUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(product);
+    const controller = new LoanProductController(deps);
+    const req = { params: { id: product.id } } as unknown as Request;
+    const res = buildResponse();
+
+    await controller.get(req, res, vi.fn());
+
+    expect(deps.getLoanProductUseCase.execute).toHaveBeenCalledWith(product.id);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: product.id, code: 'PL-01' }));
+  });
+
+  it('list() returns the paginated envelope { items, nextCursor }', async () => {
+    const deps = buildDeps();
+    const products = [LoanProduct.create({ code: 'PL-01', name: 'Personal Loan' })];
+    (deps.listLoanProductsUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(products);
+    const controller = new LoanProductController(deps);
+    const req = { query: { limit: '1' } } as unknown as Request;
+    const res = buildResponse();
+
+    await controller.list(req, res, vi.fn());
+
+    expect(deps.listLoanProductsUseCase.execute).toHaveBeenCalledWith({ limit: 1, cursor: undefined });
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0]?.[0];
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].id).toBe(products[0]!.id);
+    expect(body.nextCursor).toBe(products[0]!.id); // full page (1 item, limit 1) -> nextCursor set
+  });
 });

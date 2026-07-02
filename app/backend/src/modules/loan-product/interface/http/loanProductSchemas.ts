@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { decimalStringSchema } from '@shared/http/decimalValidation';
 
 export const createLoanProductSchema = z.object({
   code: z.string().min(1),
@@ -8,7 +9,8 @@ export const createLoanProductSchema = z.object({
 
 export type CreateLoanProductRequestBody = z.infer<typeof createLoanProductSchema>;
 
-const decimalString = z.string().min(1);
+/** Milestone 8.1 remediation (H-2): format-validated, not just non-empty — see shared/http/decimalValidation.ts. */
+const decimalString = decimalStringSchema;
 
 const createPenaltyRuleSchema = z.object({
   calculationMethod: z.enum(['NONE', 'OVERDUE_BALANCE_AND_INTEREST', 'ON_REPAYMENT']),
