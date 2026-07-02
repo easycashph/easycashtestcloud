@@ -1,1 +1,28 @@
+# Node
+node_modules/
+npm-debug.log
+
+# Environment
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
 legacy/mongodb/
+
+# Build
+dist/
+build/
+.next/
+coverage/
