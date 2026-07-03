@@ -15,10 +15,9 @@ export interface RepaymentInstallmentProps {
   createdAt: Date;
   updatedAt: Date;
   /**
-   * Milestone 9.1 checkpoint 5 / `docs/Architecture/ADR-optimistic-
-   * concurrency.md`: read-only at this checkpoint — see the identical note
-   * on `LoanAccountProps.version` (`modules/loan-account/domain/
-   * LoanAccount.ts`) for the full rationale.
+   * Milestone 9.1 checkpoint 5/6 / `docs/Architecture/ADR-optimistic-
+   * concurrency.md` — see the identical note on `LoanAccountProps.version`
+   * (`modules/loan-account/domain/LoanAccount.ts`) for the full rationale.
    */
   version: number;
 }
@@ -47,29 +46,34 @@ export interface CreateRepaymentInstallmentProps {
  */
 export class RepaymentInstallment {
   private props: RepaymentInstallmentProps;
+  private readonly isNewRecord: boolean;
 
-  private constructor(props: RepaymentInstallmentProps) {
+  private constructor(props: RepaymentInstallmentProps, isNewRecord: boolean) {
     this.props = props;
+    this.isNewRecord = isNewRecord;
   }
 
   static create(input: CreateRepaymentInstallmentProps): RepaymentInstallment {
     const now = new Date();
-    return new RepaymentInstallment({
-      id: randomUUID(),
-      loanAccountId: input.loanAccountId,
-      installmentNumber: input.installmentNumber,
-      dueDate: input.dueDate,
-      due: input.due,
-      paid: InstallmentAmounts.of({}),
-      legacyId: input.legacyId,
-      createdAt: now,
-      updatedAt: now,
-      version: 0,
-    });
+    return new RepaymentInstallment(
+      {
+        id: randomUUID(),
+        loanAccountId: input.loanAccountId,
+        installmentNumber: input.installmentNumber,
+        dueDate: input.dueDate,
+        due: input.due,
+        paid: InstallmentAmounts.of({}),
+        legacyId: input.legacyId,
+        createdAt: now,
+        updatedAt: now,
+        version: 0,
+      },
+      true,
+    );
   }
 
   static reconstitute(props: RepaymentInstallmentProps): RepaymentInstallment {
-    return new RepaymentInstallment(props);
+    return new RepaymentInstallment(props, false);
   }
 
   get id(): string {
@@ -114,6 +118,16 @@ export class RepaymentInstallment {
 
   get version(): number {
     return this.props.version;
+  }
+
+  /**
+   * Milestone 9.1 checkpoint 6: true only for an aggregate built via
+   * `create()` and never yet persisted — see the identical note on
+   * `LoanAccount.isNew` (`modules/loan-account/domain/LoanAccount.ts`) for
+   * the full rationale.
+   */
+  get isNew(): boolean {
+    return this.isNewRecord;
   }
 
   /**

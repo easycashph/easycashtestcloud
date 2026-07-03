@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const repaymentScheduleOps = { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() };
+const repaymentScheduleOps = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn() };
 const prismaMock = {
   repaymentSchedule: repaymentScheduleOps,
   $transaction: vi.fn(async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock)),
@@ -14,13 +14,28 @@ const { PrismaRepaymentInstallmentRepository } = await import(
 const { RepaymentInstallment } = await import('@modules/repayment/domain/RepaymentInstallment');
 const { InstallmentAmounts } = await import('@modules/repayment/domain/valueObjects/InstallmentAmounts');
 const { Money } = await import('@shared/domain/Money');
+const { ConcurrencyConflictError } = await import('@shared/errors/DomainError');
+
+function buildExistingInstallment(version: number) {
+  return RepaymentInstallment.reconstitute({
+    id: 'installment-1',
+    loanAccountId: 'loan-1',
+    installmentNumber: 1,
+    dueDate: new Date(Date.now() + 86_400_000),
+    due: InstallmentAmounts.of({ principal: Money.of('800.00'), interest: Money.of('200.00') }),
+    paid: InstallmentAmounts.of({}),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    version,
+  });
+}
 
 describe('PrismaRepaymentInstallmentRepository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('save() writes the derived status into the persisted status column', async () => {
+  it('save() writes the derived status into the persisted status column (new installment)', async () => {
     const installment = RepaymentInstallment.create({
       loanAccountId: 'loan-1',
       installmentNumber: 1,
@@ -32,10 +47,39 @@ describe('PrismaRepaymentInstallmentRepository', () => {
     const repo = new PrismaRepaymentInstallmentRepository();
     await repo.save(installment);
 
-    expect(repaymentScheduleOps.upsert).toHaveBeenCalledTimes(1);
-    const call = repaymentScheduleOps.upsert.mock.calls[0]?.[0];
-    expect(call.create.status).toBe('PAID');
-    expect(call.update.status).toBe('PAID');
+    expect(repaymentScheduleOps.create).toHaveBeenCalledTimes(1);
+    const call = repaymentScheduleOps.create.mock.calls[0]?.[0];
+    expect(call.data.status).toBe('PAID');
+    expect(call.data.version).toBe(0);
+    expect(repaymentScheduleOps.updateMany).not.toHaveBeenCalled();
+  });
+
+  // Milestone 9.1 checkpoint 6 / ADR-optimistic-concurrency.
+  describe('conditional write (checkpoint 6)', () => {
+    it('an existing installment is updated via a conditional WHERE id = ? AND version = ? guard, incrementing version', async () => {
+      const installment = buildExistingInstallment(4);
+      installment.recordPayment(InstallmentAmounts.of({ principal: Money.of('800.00'), interest: Money.of('200.00') }));
+      repaymentScheduleOps.updateMany.mockResolvedValue({ count: 1 });
+      const repo = new PrismaRepaymentInstallmentRepository();
+
+      await repo.save(installment);
+
+      expect(repaymentScheduleOps.create).not.toHaveBeenCalled();
+      expect(repaymentScheduleOps.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: installment.id, version: 4 },
+          data: expect.objectContaining({ version: { increment: 1 } }),
+        }),
+      );
+    });
+
+    it('throws ConcurrencyConflictError when the conditional update affects zero rows', async () => {
+      const installment = buildExistingInstallment(4);
+      repaymentScheduleOps.updateMany.mockResolvedValue({ count: 0 });
+      const repo = new PrismaRepaymentInstallmentRepository();
+
+      await expect(repo.save(installment)).rejects.toThrow(ConcurrencyConflictError);
+    });
   });
 
   it('findByLoanAccountId orders by installmentNumber ascending', async () => {
@@ -94,6 +138,11 @@ describe('PrismaRepaymentInstallmentRepository', () => {
   // prove the fix and would have caught the original bug (the "no
   // $transaction mock defined" pattern used pre-remediation would have
   // made a real call throw instead of silently passing).
+  //
+  // Milestone 9.1 checkpoint 6: the per-row write is now an explicit
+  // create() (new installments) or a conditional updateMany() (existing
+  // installments), never an unconditional upsert() — see `persistInstallment`
+  // in PrismaRepaymentInstallmentRepository.ts.
   describe('saveMany (atomicity)', () => {
     function buildInstallment(installmentNumber: number) {
       return RepaymentInstallment.create({
@@ -111,32 +160,37 @@ describe('PrismaRepaymentInstallmentRepository', () => {
       await repo.saveMany(installments);
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-      expect(repaymentScheduleOps.upsert).toHaveBeenCalledTimes(3);
+      expect(repaymentScheduleOps.create).toHaveBeenCalledTimes(3);
     });
 
-    it('rolls back — propagates the error — if any upsert in the batch fails', async () => {
-      repaymentScheduleOps.upsert
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error('constraint violation'));
+    it('rolls back — propagates the error — if any create in the batch fails', async () => {
+      repaymentScheduleOps.create.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('constraint violation'));
       const installments = [buildInstallment(1), buildInstallment(2)];
       const repo = new PrismaRepaymentInstallmentRepository();
 
       await expect(repo.saveMany(installments)).rejects.toThrow('constraint violation');
     });
 
-    it('existing per-row upsert shape is unchanged — still upserts by id with create/update payloads', async () => {
+    it('a batch of new installments is INSERTed with version 0, not upserted', async () => {
       const installment = buildInstallment(1);
       const repo = new PrismaRepaymentInstallmentRepository();
 
       await repo.saveMany([installment]);
 
-      expect(repaymentScheduleOps.upsert).toHaveBeenCalledWith(
+      expect(repaymentScheduleOps.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: installment.id },
-          create: expect.objectContaining({ id: installment.id }),
-          update: expect.objectContaining({ installmentNumber: 1 }),
+          data: expect.objectContaining({ id: installment.id, installmentNumber: 1, version: 0 }),
         }),
       );
+      expect(repaymentScheduleOps.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rolls back — propagates ConcurrencyConflictError — if any row in the batch loses its version race', async () => {
+      const staleInstallment = buildExistingInstallment(1);
+      repaymentScheduleOps.updateMany.mockResolvedValue({ count: 0 });
+      const repo = new PrismaRepaymentInstallmentRepository();
+
+      await expect(repo.saveMany([staleInstallment])).rejects.toThrow(ConcurrencyConflictError);
     });
 
     it('joins an outer TransactionContext instead of opening a nested transaction', async () => {
@@ -149,7 +203,7 @@ describe('PrismaRepaymentInstallmentRepository', () => {
         vi.clearAllMocks(); // isolate from run()'s own $transaction call
         await repo.saveMany(installments, ctx);
         expect(prismaMock.$transaction).not.toHaveBeenCalled();
-        expect(repaymentScheduleOps.upsert).toHaveBeenCalledTimes(1);
+        expect(repaymentScheduleOps.create).toHaveBeenCalledTimes(1);
       });
     });
   });

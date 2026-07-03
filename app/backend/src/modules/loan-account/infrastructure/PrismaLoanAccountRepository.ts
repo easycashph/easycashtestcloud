@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
+import { ConcurrencyConflictError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { LoanAccount, type LoanAccountProps } from '../domain/LoanAccount';
@@ -71,70 +72,92 @@ function toDomain(row: LoanAccountRow): LoanAccount {
   return LoanAccount.reconstitute(props);
 }
 
+/**
+ * Milestone 9.1 checkpoint 6 / `docs/Architecture/ADR-optimistic-
+ * concurrency.md`: the aggregate's own `loanAccount` row is written via an
+ * explicit INSERT (never-yet-persisted aggregates, `loanAccount.isNew`)
+ * or a conditional `UPDATE ... WHERE id = ? AND version = ?` (existing
+ * aggregates) — no unconditional `upsert()` — so that a write against a
+ * stale in-memory version can never silently clobber a concurrent writer's
+ * changes. A zero-row conditional update means another writer already
+ * moved `version` forward since this aggregate was loaded; that raises
+ * `ConcurrencyConflictError` (409) rather than proceeding.
+ */
 async function writeGraph(client: PrismaWriteClient, loanAccount: LoanAccount): Promise<void> {
   const balances = loanAccount.balances.toProps();
 
-  await client.loanAccount.upsert({
-    where: { id: loanAccount.id },
-    create: {
-      id: loanAccount.id,
-      loanCode: loanAccount.loanCode,
-      borrowerId: loanAccount.borrowerId,
-      loanProductVersionId: loanAccount.loanProductVersionId,
-      branchId: loanAccount.branchId,
-      loanOfficerId: loanAccount.loanOfficerId,
-      status: loanAccount.status,
-      principalAmount: loanAccount.principalAmount.toDecimal(),
-      principalBalance: balances.principalBalance.toDecimal(),
-      principalPaid: balances.principalPaid.toDecimal(),
-      principalDue: balances.principalDue.toDecimal(),
-      interestRate: loanAccount.interestRate.toDecimal(),
-      addOnInterestRate: loanAccount.addOnInterestRate?.toDecimal(),
-      contractualInterestRate: loanAccount.contractualInterestRate?.toDecimal(),
-      interestBalance: balances.interestBalance.toDecimal(),
-      interestPaid: balances.interestPaid.toDecimal(),
-      interestDue: balances.interestDue.toDecimal(),
-      feesBalance: balances.feesBalance.toDecimal(),
-      feesPaid: balances.feesPaid.toDecimal(),
-      feesDue: balances.feesDue.toDecimal(),
-      penaltyBalance: balances.penaltyBalance.toDecimal(),
-      penaltyPaid: balances.penaltyPaid.toDecimal(),
-      penaltyDue: balances.penaltyDue.toDecimal(),
-      installmentCount: loanAccount.installmentCount,
-      repaymentPeriodUnit: loanAccount.repaymentPeriodUnit,
-      gracePeriodDays: loanAccount.gracePeriodDays,
-      approvedAt: loanAccount.approvedAt,
-      approvedByUserId: loanAccount.approvedByUserId,
-      activatedAt: loanAccount.activatedAt,
-      closedAt: loanAccount.closedAt,
-      closedReason: loanAccount.closedReason,
-      legacyId: loanAccount.legacyId,
-      createdAt: loanAccount.createdAt,
-      updatedAt: loanAccount.updatedAt,
-    },
-    update: {
-      loanOfficerId: loanAccount.loanOfficerId,
-      status: loanAccount.status,
-      principalBalance: balances.principalBalance.toDecimal(),
-      principalPaid: balances.principalPaid.toDecimal(),
-      principalDue: balances.principalDue.toDecimal(),
-      interestBalance: balances.interestBalance.toDecimal(),
-      interestPaid: balances.interestPaid.toDecimal(),
-      interestDue: balances.interestDue.toDecimal(),
-      feesBalance: balances.feesBalance.toDecimal(),
-      feesPaid: balances.feesPaid.toDecimal(),
-      feesDue: balances.feesDue.toDecimal(),
-      penaltyBalance: balances.penaltyBalance.toDecimal(),
-      penaltyPaid: balances.penaltyPaid.toDecimal(),
-      penaltyDue: balances.penaltyDue.toDecimal(),
-      approvedAt: loanAccount.approvedAt,
-      approvedByUserId: loanAccount.approvedByUserId,
-      activatedAt: loanAccount.activatedAt,
-      closedAt: loanAccount.closedAt,
-      closedReason: loanAccount.closedReason,
-      updatedAt: loanAccount.updatedAt,
-    },
-  });
+  if (loanAccount.isNew) {
+    await client.loanAccount.create({
+      data: {
+        id: loanAccount.id,
+        loanCode: loanAccount.loanCode,
+        borrowerId: loanAccount.borrowerId,
+        loanProductVersionId: loanAccount.loanProductVersionId,
+        branchId: loanAccount.branchId,
+        loanOfficerId: loanAccount.loanOfficerId,
+        status: loanAccount.status,
+        principalAmount: loanAccount.principalAmount.toDecimal(),
+        principalBalance: balances.principalBalance.toDecimal(),
+        principalPaid: balances.principalPaid.toDecimal(),
+        principalDue: balances.principalDue.toDecimal(),
+        interestRate: loanAccount.interestRate.toDecimal(),
+        addOnInterestRate: loanAccount.addOnInterestRate?.toDecimal(),
+        contractualInterestRate: loanAccount.contractualInterestRate?.toDecimal(),
+        interestBalance: balances.interestBalance.toDecimal(),
+        interestPaid: balances.interestPaid.toDecimal(),
+        interestDue: balances.interestDue.toDecimal(),
+        feesBalance: balances.feesBalance.toDecimal(),
+        feesPaid: balances.feesPaid.toDecimal(),
+        feesDue: balances.feesDue.toDecimal(),
+        penaltyBalance: balances.penaltyBalance.toDecimal(),
+        penaltyPaid: balances.penaltyPaid.toDecimal(),
+        penaltyDue: balances.penaltyDue.toDecimal(),
+        installmentCount: loanAccount.installmentCount,
+        repaymentPeriodUnit: loanAccount.repaymentPeriodUnit,
+        gracePeriodDays: loanAccount.gracePeriodDays,
+        approvedAt: loanAccount.approvedAt,
+        approvedByUserId: loanAccount.approvedByUserId,
+        activatedAt: loanAccount.activatedAt,
+        closedAt: loanAccount.closedAt,
+        closedReason: loanAccount.closedReason,
+        legacyId: loanAccount.legacyId,
+        createdAt: loanAccount.createdAt,
+        updatedAt: loanAccount.updatedAt,
+        version: 0,
+      },
+    });
+  } else {
+    const result = await client.loanAccount.updateMany({
+      where: { id: loanAccount.id, version: loanAccount.version },
+      data: {
+        loanOfficerId: loanAccount.loanOfficerId,
+        status: loanAccount.status,
+        principalBalance: balances.principalBalance.toDecimal(),
+        principalPaid: balances.principalPaid.toDecimal(),
+        principalDue: balances.principalDue.toDecimal(),
+        interestBalance: balances.interestBalance.toDecimal(),
+        interestPaid: balances.interestPaid.toDecimal(),
+        interestDue: balances.interestDue.toDecimal(),
+        feesBalance: balances.feesBalance.toDecimal(),
+        feesPaid: balances.feesPaid.toDecimal(),
+        feesDue: balances.feesDue.toDecimal(),
+        penaltyBalance: balances.penaltyBalance.toDecimal(),
+        penaltyPaid: balances.penaltyPaid.toDecimal(),
+        penaltyDue: balances.penaltyDue.toDecimal(),
+        approvedAt: loanAccount.approvedAt,
+        approvedByUserId: loanAccount.approvedByUserId,
+        activatedAt: loanAccount.activatedAt,
+        closedAt: loanAccount.closedAt,
+        closedReason: loanAccount.closedReason,
+        updatedAt: loanAccount.updatedAt,
+        version: { increment: 1 },
+      },
+    });
+
+    if (result.count === 0) {
+      throw new ConcurrencyConflictError('LoanAccount', loanAccount.id);
+    }
+  }
 
   // FEE-4: AppliedFee is immutable once applied — upsert-by-id, never
   // deleted (a small, bounded collection per ADR-042 §5).

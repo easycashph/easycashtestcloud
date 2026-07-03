@@ -1,6 +1,7 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
+import { ConcurrencyConflictError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
 import { RepaymentInstallment, type RepaymentInstallmentProps } from '../domain/RepaymentInstallment';
 import { InstallmentAmounts } from '../domain/valueObjects/InstallmentAmounts';
@@ -63,6 +64,34 @@ function toUpsertData(installment: RepaymentInstallment) {
   };
 }
 
+type PrismaWriteClient = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * Milestone 9.1 checkpoint 6 / `docs/Architecture/ADR-optimistic-
+ * concurrency.md`: shared by `save()` and `saveMany()` — an explicit
+ * INSERT for a never-yet-persisted installment (`installment.isNew`), or a
+ * conditional `UPDATE ... WHERE id = ? AND version = ?` for an existing
+ * one, never an unconditional `upsert()`. A zero-row conditional update
+ * means another writer already moved `version` forward since this
+ * installment was loaded; that raises `ConcurrencyConflictError` (409)
+ * rather than proceeding.
+ */
+async function persistInstallment(client: PrismaWriteClient, installment: RepaymentInstallment): Promise<void> {
+  if (installment.isNew) {
+    await client.repaymentSchedule.create({ data: { id: installment.id, ...toUpsertData(installment), version: 0 } });
+    return;
+  }
+
+  const result = await client.repaymentSchedule.updateMany({
+    where: { id: installment.id, version: installment.version },
+    data: { ...toUpsertData(installment), version: { increment: 1 } },
+  });
+
+  if (result.count === 0) {
+    throw new ConcurrencyConflictError('RepaymentInstallment', installment.id);
+  }
+}
+
 export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallmentRepository {
   async findById(id: string, ctx?: TransactionContext): Promise<RepaymentInstallment | null> {
     const client = resolveClient(ctx);
@@ -81,11 +110,7 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
 
   async save(installment: RepaymentInstallment, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
-    await client.repaymentSchedule.upsert({
-      where: { id: installment.id },
-      create: { id: installment.id, ...toUpsertData(installment) },
-      update: toUpsertData(installment),
-    });
+    await persistInstallment(client, installment);
   }
 
   /**
@@ -100,11 +125,7 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
   async saveMany(installments: RepaymentInstallment[], ctx?: TransactionContext): Promise<void> {
     await withTransaction(ctx, async (client) => {
       for (const installment of installments) {
-        await client.repaymentSchedule.upsert({
-          where: { id: installment.id },
-          create: { id: installment.id, ...toUpsertData(installment) },
-          update: toUpsertData(installment),
-        });
+        await persistInstallment(client, installment);
       }
     });
   }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const loanAccountOps = { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() };
+const loanAccountOps = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn() };
 const appliedFeeOps = { upsert: vi.fn() };
 const loanAccountCoBorrowerOps = { deleteMany: vi.fn(), createMany: vi.fn() };
 
@@ -17,6 +17,7 @@ const { PrismaLoanAccountRepository } = await import('@modules/loan-account/infr
 const { LoanAccount } = await import('@modules/loan-account/domain/LoanAccount');
 const { Money } = await import('@shared/domain/Money');
 const { Percentage } = await import('@shared/domain/Percentage');
+const { ConcurrencyConflictError } = await import('@shared/errors/DomainError');
 
 function buildLoan() {
   return LoanAccount.create({
@@ -27,6 +28,28 @@ function buildLoan() {
     principalAmount: Money.of('10000.00'),
     interestRate: Percentage.of('2.5'),
     installmentCount: 12,
+  });
+}
+
+function buildExistingLoan(version: number) {
+  return LoanAccount.reconstitute({
+    id: 'loan-1',
+    loanCode: 'LN-0001',
+    borrowerId: 'borrower-1',
+    loanProductVersionId: 'version-1',
+    branchId: 'branch-1',
+    status: 'PENDING_APPROVAL',
+    principalAmount: Money.of('10000.00'),
+    balances: buildLoan().balances,
+    interestRate: Percentage.of('2.5'),
+    installmentCount: 12,
+    repaymentPeriodUnit: 'MONTHS',
+    gracePeriodDays: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    appliedFees: [],
+    coBorrowerIds: [],
+    version,
   });
 }
 
@@ -43,7 +66,7 @@ describe('PrismaLoanAccountRepository', () => {
       await repo.save(loan);
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
-      expect(loanAccountOps.upsert).toHaveBeenCalledTimes(1);
+      expect(loanAccountOps.create).toHaveBeenCalledTimes(1);
     });
 
     it('always replaces the co-borrower join wholesale, even when empty', async () => {
@@ -65,6 +88,53 @@ describe('PrismaLoanAccountRepository', () => {
 
       expect(loanAccountCoBorrowerOps.createMany).toHaveBeenCalledWith({
         data: [{ loanAccountId: loan.id, coBorrowerId: 'cb-1' }],
+      });
+    });
+
+    // Milestone 9.1 checkpoint 6 / ADR-optimistic-concurrency.
+    describe('conditional write (checkpoint 6)', () => {
+      it('a new aggregate (isNew) is INSERTed with version 0, not upserted', async () => {
+        const loan = buildLoan();
+        const repo = new PrismaLoanAccountRepository();
+
+        await repo.save(loan);
+
+        expect(loanAccountOps.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: loan.id, version: 0 }) }));
+        expect(loanAccountOps.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('an existing aggregate is updated via a conditional WHERE id = ? AND version = ? guard, incrementing version', async () => {
+        const loan = buildExistingLoan(3);
+        loanAccountOps.updateMany.mockResolvedValue({ count: 1 });
+        const repo = new PrismaLoanAccountRepository();
+
+        await repo.save(loan);
+
+        expect(loanAccountOps.create).not.toHaveBeenCalled();
+        expect(loanAccountOps.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { id: loan.id, version: 3 },
+            data: expect.objectContaining({ version: { increment: 1 } }),
+          }),
+        );
+      });
+
+      it('throws ConcurrencyConflictError when the conditional update affects zero rows', async () => {
+        const loan = buildExistingLoan(3);
+        loanAccountOps.updateMany.mockResolvedValue({ count: 0 });
+        const repo = new PrismaLoanAccountRepository();
+
+        await expect(repo.save(loan)).rejects.toThrow(ConcurrencyConflictError);
+      });
+
+      it('does not touch AppliedFee/co-borrower writes when the conditional update loses the version race', async () => {
+        const loan = buildExistingLoan(3);
+        loanAccountOps.updateMany.mockResolvedValue({ count: 0 });
+        const repo = new PrismaLoanAccountRepository();
+
+        await expect(repo.save(loan)).rejects.toThrow(ConcurrencyConflictError);
+        expect(appliedFeeOps.upsert).not.toHaveBeenCalled();
+        expect(loanAccountCoBorrowerOps.deleteMany).not.toHaveBeenCalled();
       });
     });
   });

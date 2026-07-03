@@ -19,10 +19,40 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
   });
 
   // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version is
-  // read-only at this checkpoint — no write path increments it yet.
+  // hydrated from the persisted row on read; checkpoint 6 is what actually
+  // consults/increments it on write (see PrismaRepaymentInstallmentRepository).
   it('create() starts at version 0', () => {
     const installment = createInstallment(new Date(Date.now() + 86_400_000));
     expect(installment.version).toBe(0);
+  });
+
+  // Milestone 9.1 checkpoint 6: the repository's create-vs-conditional-
+  // update branch depends on this flag being correct for both factories.
+  describe('isNew (checkpoint 6: repository create-vs-update routing)', () => {
+    it('create() produces a new, never-yet-persisted aggregate', () => {
+      const installment = createInstallment(new Date(Date.now() + 86_400_000));
+      expect(installment.isNew).toBe(true);
+    });
+
+    it('reconstitute() produces an existing aggregate, not new', () => {
+      const created = createInstallment(new Date(Date.now() + 86_400_000));
+      const reconstituted = RepaymentInstallment.reconstitute({
+        id: created.id,
+        loanAccountId: created.loanAccountId,
+        installmentNumber: created.installmentNumber,
+        dueDate: created.dueDate,
+        due: created.due,
+        paid: created.paid,
+        lastPaidAt: created.lastPaidAt,
+        legacyId: created.legacyId,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+        version: 5,
+      });
+
+      expect(reconstituted.isNew).toBe(false);
+      expect(reconstituted.version).toBe(5);
+    });
   });
 
   describe('status (REPAY-3: always derived, never independently settable)', () => {

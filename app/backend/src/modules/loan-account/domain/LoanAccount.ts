@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { Money } from '@shared/domain/Money';
+import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
+import type { TransactionComponents } from '@modules/ledger/domain/valueObjects/TransactionComponents';
 import { LoanBalances } from './valueObjects/LoanBalances';
 import type { AppliedFee } from './AppliedFee';
 import { InvalidStatusTransitionError } from './errors/LoanAccountDomainErrors';
@@ -62,11 +63,11 @@ export interface LoanAccountProps {
   appliedFees: AppliedFee[];
   coBorrowerIds: string[];
   /**
-   * Milestone 9.1 checkpoint 5 / `docs/Architecture/ADR-optimistic-
-   * concurrency.md`: read-only at this checkpoint — hydrated from the
-   * persisted row, exposed via a getter, but not yet consulted or
-   * incremented by any write path. The conditional `WHERE version = ?`
-   * write and the increment-on-save behavior are checkpoint 6's scope.
+   * Milestone 9.1 checkpoint 5/6 / `docs/Architecture/ADR-optimistic-
+   * concurrency.md`: hydrated from the persisted row on read. As of
+   * checkpoint 6, `PrismaLoanAccountRepository.save()` uses this value as
+   * the `WHERE version = ?` guard on a conditional UPDATE, and increments
+   * it (`version + 1`) as part of that same write.
    */
   version: number;
 }
@@ -88,6 +89,24 @@ export interface CreateLoanAccountProps {
 }
 
 /**
+ * Milestone 9.1 checkpoint 7: the already-decided totals `activate()` needs
+ * to populate the twelve balance columns with. Deliberately does NOT
+ * compute these itself — running `AmortizationScheduleGenerator` (CP3) and
+ * deciding how `AppliedFee` rows contribute to `feesDue` are the
+ * (not-yet-built) `ActivateLoanUseCase`'s job (CP8), not this entity's.
+ * `penaltyDue`/`feesDue` default to zero: a loan has no penalty at the
+ * moment of activation by definition (penalty accrues from lateness, which
+ * cannot exist yet), and a loan may legitimately have no fees.
+ */
+export interface ActivateLoanAccountInput {
+  principalDue: Money;
+  interestDue: Money;
+  feesDue?: Money;
+  penaltyDue?: Money;
+  activatedAt?: Date;
+}
+
+/**
  * Aggregate root (ADR-042 §5). Owns AppliedFee[] (small, bounded) and its
  * co-borrower attachments, but NOT LoanTransaction or RepaymentInstallment
  * — those are independent aggregates referenced by loanAccountId only.
@@ -99,37 +118,43 @@ export interface CreateLoanAccountProps {
  * them (FINANCIAL_INVARIANTS.md §8).
  */
 export class LoanAccount {
-  private constructor(private props: LoanAccountProps) {}
+  private constructor(
+    private props: LoanAccountProps,
+    private readonly isNewRecord: boolean,
+  ) {}
 
   static create(input: CreateLoanAccountProps): LoanAccount {
     const now = new Date();
-    return new LoanAccount({
-      id: randomUUID(),
-      loanCode: input.loanCode,
-      borrowerId: input.borrowerId,
-      loanProductVersionId: input.loanProductVersionId,
-      branchId: input.branchId,
-      loanOfficerId: input.loanOfficerId,
-      status: 'PENDING_APPROVAL',
-      principalAmount: input.principalAmount,
-      balances: LoanBalances.zero(),
-      interestRate: input.interestRate,
-      addOnInterestRate: input.addOnInterestRate,
-      contractualInterestRate: input.contractualInterestRate,
-      installmentCount: input.installmentCount,
-      repaymentPeriodUnit: input.repaymentPeriodUnit ?? 'MONTHS',
-      gracePeriodDays: input.gracePeriodDays ?? 0,
-      legacyId: input.legacyId,
-      createdAt: now,
-      updatedAt: now,
-      appliedFees: [],
-      coBorrowerIds: [],
-      version: 0,
-    });
+    return new LoanAccount(
+      {
+        id: randomUUID(),
+        loanCode: input.loanCode,
+        borrowerId: input.borrowerId,
+        loanProductVersionId: input.loanProductVersionId,
+        branchId: input.branchId,
+        loanOfficerId: input.loanOfficerId,
+        status: 'PENDING_APPROVAL',
+        principalAmount: input.principalAmount,
+        balances: LoanBalances.zero(),
+        interestRate: input.interestRate,
+        addOnInterestRate: input.addOnInterestRate,
+        contractualInterestRate: input.contractualInterestRate,
+        installmentCount: input.installmentCount,
+        repaymentPeriodUnit: input.repaymentPeriodUnit ?? 'MONTHS',
+        gracePeriodDays: input.gracePeriodDays ?? 0,
+        legacyId: input.legacyId,
+        createdAt: now,
+        updatedAt: now,
+        appliedFees: [],
+        coBorrowerIds: [],
+        version: 0,
+      },
+      true,
+    );
   }
 
   static reconstitute(props: LoanAccountProps): LoanAccount {
-    return new LoanAccount(props);
+    return new LoanAccount(props, false);
   }
 
   get id(): string {
@@ -236,6 +261,17 @@ export class LoanAccount {
     return this.props.version;
   }
 
+  /**
+   * Milestone 9.1 checkpoint 6: true only for an aggregate built via
+   * `create()` and never yet persisted. Lets the repository choose an
+   * INSERT vs. a conditional `WHERE version = ?` UPDATE without an extra
+   * existence-checking read. Transient repository-routing state, not part
+   * of `LoanAccountProps` — it is never a persisted column.
+   */
+  get isNew(): boolean {
+    return this.isNewRecord;
+  }
+
   private transitionTo(next: LoanAccountStatus): void {
     const allowed = ALLOWED_TRANSITIONS[this.props.status];
     if (!allowed.includes(next)) {
@@ -261,6 +297,91 @@ export class LoanAccount {
     this.transitionTo('CLOSED_REJECTED');
     this.props.closedAt = new Date();
     this.props.closedReason = reason;
+  }
+
+  /**
+   * Milestone 9.1 checkpoint 7 / ADR-032: activation is disbursement — the
+   * calculation engine's already-computed schedule totals (`input`) become
+   * this loan's Due and Balance figures; nothing is paid yet. This method
+   * performs ONLY the mechanical status transition (reusing `transitionTo`,
+   * exactly as `approve()`/`reject()` already do — no separate Policy
+   * class, per Decision Log #14) plus the balance-field assignment. It does
+   * NOT decide what `input`'s totals should be — that decision (running
+   * `AmortizationScheduleGenerator`, summing `AppliedFee` rows) belongs to
+   * `ActivateLoanUseCase` (CP8), which has not been built yet.
+   *
+   * `FINANCIAL_INVARIANTS.md §3`: a `LoanAccount` balance field may only be
+   * written as the derived effect of a `LoanTransaction` insert, in the
+   * same database transaction. This entity has no ledger access and cannot
+   * enforce that itself — the caller (CP8's use case) is responsible for
+   * inserting the corresponding `DISBURSEMENT` `LoanTransaction` in the
+   * same `IUnitOfWork.run()` block as the `save()` that persists this
+   * call's effect.
+   */
+  activate(input: ActivateLoanAccountInput): void {
+    this.transitionTo('ACTIVE');
+    this.props.activatedAt = input.activatedAt ?? new Date();
+
+    const feesDue = input.feesDue ?? Money.ZERO;
+    const penaltyDue = input.penaltyDue ?? Money.ZERO;
+
+    this.props.balances = LoanBalances.of({
+      principalBalance: input.principalDue,
+      principalPaid: Money.ZERO,
+      principalDue: input.principalDue,
+      interestBalance: input.interestDue,
+      interestPaid: Money.ZERO,
+      interestDue: input.interestDue,
+      feesBalance: feesDue,
+      feesPaid: Money.ZERO,
+      feesDue,
+      penaltyBalance: penaltyDue,
+      penaltyPaid: Money.ZERO,
+      penaltyDue,
+    });
+  }
+
+  /**
+   * Milestone 9.1 checkpoint 7 / ADR-009: applies an already-decided
+   * principal/interest/fees/penalty split to this loan's balances. Reuses
+   * `TransactionComponents` — the `ledger` module's existing VO (Decision
+   * Log #13) — rather than inventing a new balance-effect shape. Deciding
+   * HOW a payment splits across those four components (and, when it spans
+   * multiple installments, across which ones) is the
+   * `PaymentAllocationService`'s job (CP4, already built) and
+   * `ProcessPaymentUseCase`'s job (CP9, not yet built) — this is the
+   * mechanical primitive CP9 will call once it has that split, mirroring
+   * `RepaymentInstallment.recordPayment()`'s identical precedent.
+   *
+   * `*Due` fields are untouched — they are fixed at activation and only
+   * `*Balance`/`*Paid` move here. A resulting negative balance (overpayment)
+   * is a valid state, not rejected — see `Money.ts`'s own documented
+   * semantics and `FINANCIAL_INVARIANTS.md §3`; CALC-SPEC's overpayment
+   * *mechanism* is explicitly `STATUS: UNRESOLVED`, so no disposition for
+   * it is invented here.
+   *
+   * Same `FINANCIAL_INVARIANTS.md §3` caller obligation as `activate()`:
+   * the corresponding `LoanTransaction` insert must happen in the same
+   * `IUnitOfWork.run()` block as the `save()` that persists this call's
+   * effect — this entity cannot enforce that itself.
+   */
+  applyPayment(components: TransactionComponents, paidAt: Date = new Date()): void {
+    const balances = this.props.balances;
+    this.props.balances = LoanBalances.of({
+      principalBalance: balances.principalBalance.subtract(components.principalComponent),
+      principalPaid: balances.principalPaid.add(components.principalComponent),
+      principalDue: balances.principalDue,
+      interestBalance: balances.interestBalance.subtract(components.interestComponent),
+      interestPaid: balances.interestPaid.add(components.interestComponent),
+      interestDue: balances.interestDue,
+      feesBalance: balances.feesBalance.subtract(components.feesComponent),
+      feesPaid: balances.feesPaid.add(components.feesComponent),
+      feesDue: balances.feesDue,
+      penaltyBalance: balances.penaltyBalance.subtract(components.penaltyComponent),
+      penaltyPaid: balances.penaltyPaid.add(components.penaltyComponent),
+      penaltyDue: balances.penaltyDue,
+    });
+    this.props.updatedAt = paidAt;
   }
 
   addAppliedFee(fee: AppliedFee): void {

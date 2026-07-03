@@ -13,5 +13,13 @@ export interface ILoanAccountRepository {
   findById(id: string, ctx?: TransactionContext): Promise<LoanAccount | null>;
   findByLoanCode(loanCode: string, ctx?: TransactionContext): Promise<LoanAccount | null>;
   findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]>;
+  /**
+   * Milestone 9.1 checkpoint 6 / `docs/Architecture/ADR-optimistic-
+   * concurrency.md`: for an existing aggregate, throws
+   * `ConcurrencyConflictError` if `loanAccount.version` no longer matches
+   * the persisted row (another writer moved it forward since this
+   * aggregate was loaded). The caller must not blindly retry with the
+   * same stale instance — re-fetch and re-apply the intended change.
+   */
   save(loanAccount: LoanAccount, ctx?: TransactionContext): Promise<void>;
 }
