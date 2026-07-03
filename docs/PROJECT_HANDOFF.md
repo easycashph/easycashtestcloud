@@ -531,6 +531,21 @@ that computes or stores a monetary value.**
 
 ## 10. Milestone 9 Readiness
 
+**Update (2026-07-03, after the documentation phase):** the implementation roadmap for Milestone
+9.1 has gone through an independent architecture review and a subsequent critical re-evaluation of
+that review's own findings. **The current, authoritative implementation plan is
+`docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md` — read that document, not any
+roadmap described in prior conversation history, before starting Milestone 9.1 implementation.**
+Its central correction: `ADR-007` §3 (penalty-inclusion in `outstandingBalance`) blocks a far
+narrower implementation surface than originally assumed — `LoanAccount` already has twelve
+separate balance component columns, so only one small, final "summary getter" checkpoint is
+actually gated on that decision. Ten of the twelve checkpoints in the v2 roadmap require no
+business decision and can start immediately on approval. No ADR was changed by this process — see
+the v2 roadmap's own "Preserved ADRs" section.
+
+**Still not started: any implementation.** No production code, schema, or test changes exist for
+Milestone 9.1 as of this handoff — everything through this point remains documentation only.
+
 **Milestone 9 has been split into two phases, per explicit user direction: a documentation/
 architecture phase (complete) and an implementation phase (not started).** This section reflects
 that split — do not skip straight to implementation based on §3's "What Milestone 9 is expected
