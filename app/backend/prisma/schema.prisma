@@ -634,6 +634,13 @@ model LoanAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ADR-optimistic-concurrency: optimistic concurrency control for every
+  /// balance-mutating write. Every conditional update increments this and
+  /// checks it in the same `WHERE` clause; a zero-row result means another
+  /// writer moved first, and the caller must receive a
+  /// `ConcurrencyConflictError`, never a silent overwrite.
+  version Int @default(0)
+
   transactions      LoanTransaction[]
   repaymentSchedule RepaymentSchedule[]
   appliedFees       AppliedFee[]
@@ -718,6 +725,12 @@ model RepaymentSchedule {
   legacyId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// ADR-optimistic-concurrency: same optimistic concurrency mechanism as
+  /// `LoanAccount.version` — see that field's comment for the full
+  /// rationale. Applied here too for consistency, per the ADR's decision
+  /// to scope this to every balance-mutating aggregate, not just one.
+  version Int @default(0)
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)

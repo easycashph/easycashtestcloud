@@ -49,3 +49,17 @@ export class ForbiddenError extends DomainError {
     this.name = 'ForbiddenError';
   }
 }
+
+/**
+ * Milestone 9.1 / ADR-optimistic-concurrency: raised when a conditional
+ * `UPDATE ... WHERE id = ? AND version = ?` affects zero rows, meaning
+ * another writer already moved the aggregate's `version` forward since the
+ * caller last read it. The caller must not silently retry with stale data;
+ * it must re-fetch and either retry deliberately or surface the conflict.
+ */
+export class ConcurrencyConflictError extends DomainError {
+  constructor(entity: string, id: string) {
+    super('CONCURRENCY_CONFLICT', `${entity} with id "${id}" was modified by another operation. Please retry.`, undefined, 409);
+    this.name = 'ConcurrencyConflictError';
+  }
+}
