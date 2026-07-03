@@ -75,6 +75,57 @@ describe('PrismaLoanAccountRepository', () => {
       const repo = new PrismaLoanAccountRepository();
       await expect(repo.findById('missing')).resolves.toBeNull();
     });
+
+    // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version must
+    // be hydrated from the persisted row into the domain object — this is
+    // the one new piece of read-mapping behavior this checkpoint adds.
+    it('hydrates version from the persisted row', async () => {
+      const now = new Date();
+      loanAccountOps.findUnique.mockResolvedValue({
+        id: 'loan-1',
+        loanCode: 'LN-0001',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: 'version-1',
+        branchId: 'branch-1',
+        loanOfficerId: null,
+        status: 'PENDING_APPROVAL',
+        principalAmount: '10000.00',
+        principalBalance: '0.00',
+        principalPaid: '0.00',
+        principalDue: '0.00',
+        interestRate: '2.5',
+        addOnInterestRate: null,
+        contractualInterestRate: null,
+        interestBalance: '0.00',
+        interestPaid: '0.00',
+        interestDue: '0.00',
+        feesBalance: '0.00',
+        feesPaid: '0.00',
+        feesDue: '0.00',
+        penaltyBalance: '0.00',
+        penaltyPaid: '0.00',
+        penaltyDue: '0.00',
+        installmentCount: 12,
+        repaymentPeriodUnit: 'MONTHS',
+        gracePeriodDays: 0,
+        approvedAt: null,
+        approvedByUserId: null,
+        activatedAt: null,
+        closedAt: null,
+        closedReason: null,
+        legacyId: null,
+        createdAt: now,
+        updatedAt: now,
+        appliedFees: [],
+        coBorrowers: [],
+        version: 3,
+      });
+      const repo = new PrismaLoanAccountRepository();
+
+      const loan = await repo.findById('loan-1');
+
+      expect(loan?.version).toBe(3);
+    });
   });
 
   // Milestone 8 / D-4: cursor pagination only, no search/filter/sort.

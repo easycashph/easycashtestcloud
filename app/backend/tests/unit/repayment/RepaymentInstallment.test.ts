@@ -18,6 +18,13 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
     expect(installment.paid.total().isZero()).toBe(true);
   });
 
+  // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version is
+  // read-only at this checkpoint — no write path increments it yet.
+  it('create() starts at version 0', () => {
+    const installment = createInstallment(new Date(Date.now() + 86_400_000));
+    expect(installment.version).toBe(0);
+  });
+
   describe('status (REPAY-3: always derived, never independently settable)', () => {
     it('is PENDING before the due date with no payment', () => {
       const installment = createInstallment(new Date(Date.now() + 86_400_000));

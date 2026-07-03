@@ -24,6 +24,13 @@ describe('LoanAccount', () => {
     expect(loan.balances.principalBalance.isZero()).toBe(true);
   });
 
+  // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version is
+  // read-only at this checkpoint — no write path increments it yet.
+  it('create() starts at version 0', () => {
+    const loan = createLoanAccount();
+    expect(loan.version).toBe(0);
+  });
+
   describe('approve (ADR-032: approval only, never disbursement/activation)', () => {
     it('transitions PENDING_APPROVAL -> APPROVED and records approver/timestamp', () => {
       const loan = createLoanAccount();

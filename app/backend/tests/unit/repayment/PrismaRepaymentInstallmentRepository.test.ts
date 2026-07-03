@@ -56,6 +56,38 @@ describe('PrismaRepaymentInstallmentRepository', () => {
     await expect(repo.findById('missing')).resolves.toBeNull();
   });
 
+  // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version must
+  // be hydrated from the persisted row into the domain object — this is
+  // the one new piece of read-mapping behavior this checkpoint adds.
+  it('findById hydrates version from the persisted row', async () => {
+    const now = new Date();
+    repaymentScheduleOps.findUnique.mockResolvedValue({
+      id: 'installment-1',
+      loanAccountId: 'loan-1',
+      installmentNumber: 1,
+      dueDate: now,
+      principalDue: '800.00',
+      interestDue: '200.00',
+      feesDue: '0.00',
+      penaltyDue: '0.00',
+      principalPaid: '0.00',
+      interestPaid: '0.00',
+      feesPaid: '0.00',
+      penaltyPaid: '0.00',
+      status: 'PENDING',
+      lastPaidAt: null,
+      legacyId: null,
+      createdAt: now,
+      updatedAt: now,
+      version: 2,
+    });
+    const repo = new PrismaRepaymentInstallmentRepository();
+
+    const installment = await repo.findById('installment-1');
+
+    expect(installment?.version).toBe(2);
+  });
+
   // Audit finding C-2 (Milestone 7.1 remediation): saveMany() previously
   // issued its upserts as independent, unwrapped calls — a partial
   // failure mid-batch could leave a schedule half-written. These tests

@@ -61,6 +61,14 @@ export interface LoanAccountProps {
   updatedAt: Date;
   appliedFees: AppliedFee[];
   coBorrowerIds: string[];
+  /**
+   * Milestone 9.1 checkpoint 5 / `docs/Architecture/ADR-optimistic-
+   * concurrency.md`: read-only at this checkpoint — hydrated from the
+   * persisted row, exposed via a getter, but not yet consulted or
+   * incremented by any write path. The conditional `WHERE version = ?`
+   * write and the increment-on-save behavior are checkpoint 6's scope.
+   */
+  version: number;
 }
 
 export interface CreateLoanAccountProps {
@@ -116,6 +124,7 @@ export class LoanAccount {
       updatedAt: now,
       appliedFees: [],
       coBorrowerIds: [],
+      version: 0,
     });
   }
 
@@ -221,6 +230,10 @@ export class LoanAccount {
 
   get coBorrowerIds(): readonly string[] {
     return this.props.coBorrowerIds;
+  }
+
+  get version(): number {
+    return this.props.version;
   }
 
   private transitionTo(next: LoanAccountStatus): void {

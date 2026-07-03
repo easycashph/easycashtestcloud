@@ -66,6 +66,7 @@ function toDomain(row: LoanAccountRow): LoanAccount {
       }),
     ),
     coBorrowerIds: row.coBorrowers.map((join) => join.coBorrowerId),
+    version: row.version,
   };
   return LoanAccount.reconstitute(props);
 }

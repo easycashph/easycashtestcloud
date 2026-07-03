@@ -30,6 +30,7 @@ function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
     legacyId: row.legacyId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    version: row.version,
   };
   return RepaymentInstallment.reconstitute(props);
 }

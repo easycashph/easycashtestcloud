@@ -14,6 +14,13 @@ export interface RepaymentInstallmentProps {
   legacyId?: string;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Milestone 9.1 checkpoint 5 / `docs/Architecture/ADR-optimistic-
+   * concurrency.md`: read-only at this checkpoint — see the identical note
+   * on `LoanAccountProps.version` (`modules/loan-account/domain/
+   * LoanAccount.ts`) for the full rationale.
+   */
+  version: number;
 }
 
 export interface CreateRepaymentInstallmentProps {
@@ -57,6 +64,7 @@ export class RepaymentInstallment {
       legacyId: input.legacyId,
       createdAt: now,
       updatedAt: now,
+      version: 0,
     });
   }
 
@@ -102,6 +110,10 @@ export class RepaymentInstallment {
 
   get updatedAt(): Date {
     return this.props.updatedAt;
+  }
+
+  get version(): number {
+    return this.props.version;
   }
 
   /**
