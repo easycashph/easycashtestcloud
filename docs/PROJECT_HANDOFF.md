@@ -1,35 +1,73 @@
 # EasyCash Digital Lending Platform — Project Handoff
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
-has never seen this project before. It reflects the repository state through the end of
-**Milestone 8.1** (post-Milestone-8 audit remediation), verified directly against the repository
-rather than reconstructed from memory. **Read this document in full before touching any code.**
-If anything here conflicts with what you observe in the repository, trust the repository and
-update this document.
+has never seen this project before. It reflects the repository state through **Milestone 9.1
+checkpoint 7** (`LoanAccount.activate()`/`applyPayment()` domain methods), verified directly
+against the repository rather than reconstructed from memory. **Read this document in full before
+touching any code.** If anything here conflicts with what you observe in the repository, trust the
+repository and update this document.
 
 ---
 
 ## 1. Current Project State
 
-- **Current milestone completed:** Milestone 8.1 (post-Milestone-8 architectural audit
-  remediation). **Milestone 9 is in progress — its documentation/architecture phase is complete
-  as of 2026-07-03; implementation has NOT started.** See §10 for full detail.
+- **Current branch:** `main`, up to date with `origin/main`.
+- **Latest committed commit:** `f57efc3` — "Milestone 9.1 checkpoint 5: version property on
+  LoanAccount/RepaymentInstallment domain model". **Working tree is NOT clean** — CP6, CP7, a
+  database-portability refactor, and ADR-044 are all implemented, verified, and sitting as
+  uncommitted changes, staged for four separate commits (not yet run — see the recommended commit
+  sequence in this session's report). Verify with `git status --short` before assuming anything
+  about what's actually persisted in history versus what's only in the working tree.
+- **Latest completed implementation:** Milestone 9.1 **CP7** (`LoanAccount.activate()`/
+  `applyPayment()` domain methods), per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP7 are
+  implemented and verified (CP1–CP5 committed; CP6/CP7 uncommitted, see above). **CP8
+  (`ActivateLoanUseCase`) has NOT started.**
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
   (Milestone 7.1). HTTP layer (Milestone 8) is complete and audited/remediated (Milestone 8.1).
-  **No application code, schema, or test changes have been made since Milestone 8.1** — Milestone
-  9's work so far is entirely documentation (legacy-evidence analysis and six architecture
-  documents), per explicit instruction to keep this phase documentation-only. No calculation
-  engine, payment allocation, amortization, audit module, notifications, or reporting exist yet.
-- **Expected git status:** on `main`, **nine new, uncommitted files** (all under `docs/` — see
-  §10.1 for the full list), zero modifications to `src/`, `prisma/`, `tests/`,
-  `package.json`, or any configuration/migration file. `legacy/reports/201 Loan Docs Generator/`
-  is also present but untracked (added to the filesystem during this milestone's investigation,
-  not created or modified by any assistant action — it is read-only source evidence, not a
-  deliverable). Verify with `git status --short` before committing anything.
-- **Latest commits (newest first):**
+  Milestone 9's documentation/architecture phase (legacy-evidence analysis, six ADRs, the
+  calculation engine spec, and the v2 implementation roadmap) is complete and committed.
+  **Milestone 9.1 implementation status:**
+  - **CP1 (concurrency infra), CP2 (financial audit infra), CP3 (declining-balance interest + PMT
+    amortization), CP4 (payment allocation calculator + service), CP5 (`version` property) —
+    Done, committed.**
+  - **CP6 (repository conditional-write refactor) — Done, implemented and verified, not yet
+    committed.** `PrismaLoanAccountRepository`/`PrismaRepaymentInstallmentRepository` no longer
+    call unconditional `upsert()` — every write is an explicit `create()` (new aggregates,
+    `LoanAccount.isNew`/`RepaymentInstallment.isNew`) or a conditional
+    `updateMany({ where: { id, version }, ... })` that throws `ConcurrencyConflictError` on a
+    zero-row result.
+  - **CP7 (`LoanAccount` balance-mutation domain methods) — Done, implemented and verified, not
+    yet committed.** `LoanAccount.activate(input)` and `LoanAccount.applyPayment(components,
+    paidAt?)` exist (`src/modules/loan-account/domain/LoanAccount.ts`), both accepting
+    already-decided totals/splits rather than computing them, reusing `transitionTo()` and the
+    ledger module's `TransactionComponents` VO per the roadmap's Decision Log.
+  - **CP8 (`ActivateLoanUseCase`) — Not started.** No such file exists; its checklist item
+    (verify `LoanProductVersion` exposes `roundingMethod`/`daysInYearConvention`/
+    `repaymentPeriodUnit`) has not been performed.
+  - A database-portability refactor (`Prisma.Decimal` → `decimal.js` in `Money`/`Percentage`/
+    `AmortizationScheduleGenerator`, plus an ESLint rule forbidding `@prisma/client` in
+    `domain/`/`application/`) and ADR-044 (future customer-identity separation, decision-only, no
+    code) are also implemented/written and uncommitted — see this session's file-classification
+    report for exactly which files belong to which of the four pending commits.
+  - None of CP1–CP7's calculation/repository pieces are wired into a use case or HTTP route yet —
+    they remain standalone, independently-tested building blocks. No audit logging is wired to any
+    real use case yet (`IFinancialAuditLogger` exists but has no caller). No notifications or
+    reporting modules exist yet (`document`/`audit` module folders remain `.gitkeep` scaffolds
+    under `src/modules/`).
+- **Latest commits (newest first, as of the last real commit — CP6/CP7/portability/ADR-044 are
+  NOT yet in this list, see above):**
   ```
+  f57efc3 Milestone 9.1 checkpoint 5: version property on LoanAccount/RepaymentInstallment domain model
+  ec681fe Milestone 9.1 checkpoint 4: payment allocation calculator and cross-installment service (CALC-SPEC §5, ADR-009)
+  f964a63 Milestone 9.1 checkpoint 3: declining-balance interest and PMT amortization calculators (CALC-SPEC §1, §2)
+  363ffde Milestone 9.1 checkpoint 2: financial audit infrastructure (IFinancialAuditLogger, fail-closed)
+  bdaa7b6 Milestone 9.1 checkpoint 1: optimistic concurrency infrastructure (version columns, ConcurrencyConflictError)
+  ece44ab docs: finalize Milestone 9 implementation roadmap v2
+  25f49b1 docs: complete Milestone 9 architecture phase with ADRs, calculation engine specification, legacy analysis, and decision brief
+  02325d1 docs: rewrite PROJECT_HANDOFF.md as a comprehensive session-to-session handoff
   2f3ad3b Milestone 8.1 checkpoint 2: H-1 branch-scoped authorization + PROJECT_HANDOFF.md update
   a0713c4 Milestone 8.1 checkpoint 1: H-2 decimal validation, M-5 test coverage, H-3 authorization regression tests
   ca6cd05 docs: update PROJECT_HANDOFF.md for Milestone 8 completion
@@ -40,27 +78,21 @@ update this document.
   97d3473 Milestone 8 checkpoint 2: borrower HTTP module
   6b596db Milestone 8 checkpoint 1: shared HTTP infrastructure
   c1c38bc Milestone 7.1: architectural audit remediation (C-1, C-2, H-1, H-2)
-  06d99d7 docs: update PROJECT_HANDOFF.md for Milestone 7 completion
-  3a7e15d Milestone 7 checkpoint 6: repayment module (Core Domain Models)
-  9d0e513 Milestone 7 checkpoint 5: ledger module (Core Domain Models)
-  28f2b70 Milestone 7 checkpoint 4: loan-account module (Core Domain Models)
-  73aced1 Milestone 7 checkpoint 3: loan-product module (Core Domain Models)
-  2690638 Milestone 7 checkpoint 2: borrower module (Core Domain Models)
-  0524f82 Milestone 7 checkpoint 1: ADR-042, financial invariants, shared kernel
-  57a8650 docs: add comprehensive project handoff for Milestone 6
-  e90cc88 Milestone 6 audit fixes + production-readiness review (C-01, C-02, H-01..H-04)
-  b16d9b9 Milestone 6: Authentication (login, refresh rotation, logout, get-current-user)
   ```
-- **Current test counts (verified fresh, not from memory):** **353 unit tests passing, 0
-  failing, 6 integration tests correctly skipped** (65 test files total; integration tests are
-  opt-in via `RUN_INTEGRATION_TESTS=1` and require a live Postgres, which this dev environment
-  has never had).
+- **Current test counts (verified fresh, not from memory, 2026-07-03, includes CP6/CP7's
+  uncommitted test changes):** **430 unit tests passing, 0 failing, 6 integration tests correctly
+  skipped** (71 test files total; up from 409/71 before CP6/CP7 — the +21 are CP6's conditional-
+  write/concurrency-conflict tests and CP7's `activate()`/`applyPayment()` tests. Integration
+  tests remain opt-in via `RUN_INTEGRATION_TESTS=1` and require a live Postgres, which this dev
+  environment has never had).
 - **Verification status (all re-run and confirmed clean immediately before writing this
-  document):**
+  document, 2026-07-03, against the working tree including CP6/CP7):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
+  - `npx prisma validate` — schema valid (CP6/CP7 made zero `schema.prisma` changes).
   - `npm run build` (`tsc` + `tsc-alias`) — clean.
-  - `npx vitest run` — 353 passed, 6 skipped, 0 failed.
+  - `npx vitest run` — **70 test files passed, 1 skipped (71 total); 430 tests passed, 6 skipped
+    (436 total); 0 failed.**
 
 ---
 
@@ -94,7 +126,7 @@ interface/http   →   application   →   domain
 ### Shared infrastructure (`app/backend/src/shared/`)
 | Path | Purpose |
 |---|---|
-| `domain/Money.ts`, `domain/Percentage.ts` | Value objects wrapping `Prisma.Decimal` — never native `number`. Deterministic, pure methods; construction throws `InvalidMoneyError`/`InvalidPercentageError`. **Final decision: no `Result<T,E>` for these.** |
+| `domain/Money.ts`, `domain/Percentage.ts` | Value objects wrapping `decimal.js`'s `Decimal` directly (imported from `decimal.js`, not `@prisma/client` — a database-portability refactor, uncommitted) — never native `number`. Deterministic, pure methods; construction throws `InvalidMoneyError`/`InvalidPercentageError`. **Final decision: no `Result<T,E>` for these.** |
 | `domain/errors/FinancialDomainErrors.ts` | `InvalidMoneyError`, `InvalidPercentageError`. |
 | `application/ports/IUnitOfWork.ts`, `application/TransactionContext.ts` | Framework-free cross-module transaction-boundary port. |
 | `infrastructure/PrismaUnitOfWork.ts` | Implements `IUnitOfWork` via `prisma.$transaction`; exports `resolveClient(ctx)` and `withTransaction(ctx, work)` — the standard self-wrapping pattern every multi-statement repository write now uses. |
@@ -114,9 +146,12 @@ interface/http   →   application   →   domain
 - ESLint `no-restricted-imports` rule blocks `domain/`, `application/` (in every module) **and**
   `shared/domain/`, `shared/application/` from importing anything under `**/infrastructure/*` or
   `**/interface/*`.
-- **Not** mechanically enforced: importing `@prisma/client` directly from `domain/`/`application/`.
-  `shared/domain/Money.ts`/`Percentage.ts` do this deliberately (for the `Decimal` type only, no
-  DB access) — a known, accepted trade-off, not a bug.
+- **As of a database-portability refactor (uncommitted), also mechanically enforced:** `domain/`
+  and `application/` (every module, plus `shared/domain/`/`shared/application/`) may not import
+  `@prisma/client` at all. `Money`/`Percentage`/`AmortizationScheduleGenerator` were the only
+  offenders (they used `Prisma.Decimal` for arithmetic only, no DB access) and now import
+  `decimal.js` directly instead — the domain layer has zero ORM dependency, not just zero
+  DB-access dependency.
 - Cross-module dependencies at the **application** layer are an established, accepted pattern
   (e.g. `loan-account`'s `CreateLoanAccountUseCase` depends on `loan-product`'s
   `ILoanProductRepository` for D-3's range validation).
@@ -134,6 +169,7 @@ interface/http   →   application   →   domain
 | `FINANCIAL_INVARIANTS.md` | Living document, non-negotiable financial rules | `docs/Architecture/FINANCIAL_INVARIANTS.md` |
 | ADR-038 — Full permission matrix | **Still open**, not resolved by ADR-043 | Not yet written as a file — tracked in this handoff only |
 | ADR-007, ADR-009, ADR-010, ADR-032 | **Still open** — see §5/§10 | Referenced in `FINANCIAL_INVARIANTS.md §8` |
+| ADR-044 — Separate Customer Identity for Future Public Portal | Accepted (decision-only; no code, schema, or route changes); uncommitted | `docs/Architecture/ADR-044-separate-customer-identity-for-public-portal.md`. Explicitly states it does not affect any Milestone 9.1 checkpoint (§5). |
 
 ### Architectural decisions made during Milestones 7, 7.1, 8, and 8.1
 - **M7:** Aggregate boundaries per ADR-042 (see §8 for the full list). `Money`/`Percentage` value
@@ -529,27 +565,69 @@ that computes or stores a monetary value.**
 
 ---
 
-## 10. Milestone 9 Readiness
+## 10. Milestone 9 Readiness and Implementation Progress
 
-**Update (2026-07-03, after the documentation phase):** the implementation roadmap for Milestone
-9.1 has gone through an independent architecture review and a subsequent critical re-evaluation of
-that review's own findings. **The current, authoritative implementation plan is
-`docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md` — read that document, not any
-roadmap described in prior conversation history, before starting Milestone 9.1 implementation.**
-Its central correction: `ADR-007` §3 (penalty-inclusion in `outstandingBalance`) blocks a far
-narrower implementation surface than originally assumed — `LoanAccount` already has twelve
-separate balance component columns, so only one small, final "summary getter" checkpoint is
-actually gated on that decision. Ten of the twelve checkpoints in the v2 roadmap require no
-business decision and can start immediately on approval. No ADR was changed by this process — see
-the v2 roadmap's own "Preserved ADRs" section.
+**Update (2026-07-03, mid-implementation, through CP7):** the authoritative implementation plan
+remains `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md` — read that document, not any
+roadmap described in prior conversation history, before continuing Milestone 9.1 implementation.
+Its central correction (still valid, unchanged by implementation so far): `ADR-007` §3
+(penalty-inclusion in `outstandingBalance`) blocks only the narrow CP11 "summary getter"
+checkpoint; CP1–CP10 require no business decision. No ADR has been changed by implementation work
+so far — see the v2 roadmap's own "Preserved ADRs" section. ADR-044 (new since CP5, decision-only)
+does not add, remove, or reorder any checkpoint either — confirmed by its own §5.
 
-**Still not started: any implementation.** No production code, schema, or test changes exist for
-Milestone 9.1 as of this handoff — everything through this point remains documentation only.
+### 10.0 Milestone 9.1 checkpoint status (verified directly against the repository, 2026-07-03)
 
-**Milestone 9 has been split into two phases, per explicit user direction: a documentation/
-architecture phase (complete) and an implementation phase (not started).** This section reflects
-that split — do not skip straight to implementation based on §3's "What Milestone 9 is expected
-to build" language from prior handoff versions; that framing is superseded by this section.
+| Checkpoint | Status | Evidence |
+|---|---|---|
+| CP1 — Concurrency infrastructure | **Done, committed** (`bdaa7b6`) | `version` columns added to `LoanAccount`/`RepaymentInstallment` in `schema.prisma`; `ConcurrencyConflictError` added to `shared/errors/DomainError.ts`. |
+| CP2 — Financial audit infrastructure | **Done, committed** (`363ffde`) | `shared/application/ports/IFinancialAuditLogger.ts` (port) + `shared/infrastructure/PrismaFinancialAuditLogger.ts` (fail-closed implementation, logs-but-never-throws on write failure per `ADR-financial-audit-isolation.md`). |
+| CP3 — Declining-balance interest + PMT amortization | **Done, committed** (`f964a63`) | `shared/domain/calculation/DecliningBalanceInterestCalculator.ts`, `AmortizationScheduleGenerator.ts` (CALC-SPEC §1/§2). Standalone, not yet called by any use case. |
+| CP4 — Payment allocation calculator + service | **Done, committed** (`ec681fe`) | `shared/domain/calculation/PaymentAllocationCalculator.ts`, `PaymentAllocationService.ts` (CALC-SPEC §5, ADR-009). Standalone, not yet called by any use case. |
+| CP5 — `version` property on domain model | **Done, committed** (`f57efc3`) | `LoanAccount`/`RepaymentInstallment` domain entities expose `version` via getter; `PrismaLoanAccountRepository`/`PrismaRepaymentInstallmentRepository` map the column through on read. |
+| CP6 — Repository conditional-write refactor | **Done, implemented and verified, not yet committed** | Verified by inspection: `PrismaLoanAccountRepository.ts`/`PrismaRepaymentInstallmentRepository.ts` no longer call unconditional `upsert()` — an explicit `create()` (new aggregates) or a conditional `updateMany({ where: { id, version }, data: { ..., version: { increment: 1 } } })` (existing aggregates), throwing `ConcurrencyConflictError` on a zero-row result. Preceded by regression coverage of the pre-existing `AppliedFee`/co-borrower/`saveMany` atomicity behavior, confirmed unchanged. |
+| CP7 — `LoanAccount` balance-mutation domain methods (`activate()`, `applyPayment()`) | **Done, implemented and verified, not yet committed** | Both methods exist on `LoanAccount` (`src/modules/loan-account/domain/LoanAccount.ts`), accepting already-decided totals/splits (no calculation performed inside the aggregate), reusing `transitionTo()` and the `ledger` module's `TransactionComponents` VO per Decision Log #13/#14. Neither writes to the ledger or any repository — per `FINANCIAL_INVARIANTS.md §3`, that obligation belongs to the not-yet-built CP8/CP9 use cases. |
+| CP8 — `ActivateLoanUseCase` | **Not started** | No such file exists. Its checklist item (verify `LoanProductVersion` exposes `roundingMethod`/`daysInYearConvention`/`repaymentPeriodUnit`) has not been performed. Depends on CP7 (done). |
+| CP9 — `ProcessPaymentUseCase` | **Not started** | Depends on CP4 (done)/CP7 (done). |
+| CP10 — Golden-master replay tests | **Not started** | Depends on CP8/CP9. |
+| CP11 (gated on ADR-007 §3) — `outstandingBalance` summary getter | **Not started, gated** | ADR-007 §3 remains UNRESOLVED (verified: `ADR-007-outstanding-balance-formula.md` §3 still reads "STATUS: UNRESOLVED — requires your decision"). |
+| CP12 (gated on ADR-007 §4) — Legacy migration treatment | **Not started, gated** | ADR-007 §4 remains UNRESOLVED (same file, §4). |
+| CP13 (deferred, future milestone) — HTTP exposure | **Not started, deliberately deferred** | Per D-2 precedent — no route until a real, correctness-gated caller (CP8/CP9) exists. |
+
+**Next authoritative checkpoint: CP8 (`ActivateLoanUseCase`).** It is next in the roadmap's
+recommended sequential order, and its only dependency (CP7) is now done. Per the roadmap's CP8
+description, implementation must begin with an explicit first step verifying the existing
+`LoanProductVersion` domain entity already exposes `roundingMethod`/`daysInYearConvention`/
+`repaymentPeriodUnit` (Decision Log #4), rather than discovering a gap mid-implementation. **Do
+not start CP8 without explicit approval; this handoff does not constitute that approval.**
+
+### 10.0.1 New/modified source files added by CP1–CP7 (for orientation, not exhaustive)
+- `app/backend/src/shared/errors/DomainError.ts` — `ConcurrencyConflictError` (CP1).
+- `app/backend/src/shared/application/ports/IFinancialAuditLogger.ts` — port (CP2).
+- `app/backend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts` — implementation (CP2).
+- `app/backend/src/shared/domain/calculation/DecliningBalanceInterestCalculator.ts` (CP3).
+- `app/backend/src/shared/domain/calculation/AmortizationScheduleGenerator.ts` (CP3).
+- `app/backend/src/shared/domain/calculation/PaymentAllocationCalculator.ts` (CP4).
+- `app/backend/src/shared/domain/calculation/PaymentAllocationService.ts` (CP4).
+- `app/backend/src/shared/domain/calculation/errors/CalculationDomainErrors.ts` (CP3/CP4).
+- `LoanAccount.version` / `RepaymentInstallment.version` getters (CP5), in
+  `src/modules/loan-account/domain/LoanAccount.ts` and
+  `src/modules/repayment/domain/RepaymentInstallment.ts`.
+- `LoanAccount.isNew` / `RepaymentInstallment.isNew` getters (CP6, same two files) — lets the
+  repository route between INSERT and conditional UPDATE without an extra read.
+- `PrismaLoanAccountRepository.ts`'s `writeGraph()` and `PrismaRepaymentInstallmentRepository.ts`'s
+  new `persistInstallment()` helper (CP6) — the conditional create/update split.
+- `LoanAccount.activate(input)` / `LoanAccount.applyPayment(components, paidAt?)` and the new
+  `ActivateLoanAccountInput` interface (CP7), all in
+  `src/modules/loan-account/domain/LoanAccount.ts`.
+- Corresponding test files under `tests/unit/shared/`, `tests/unit/shared/calculation/`,
+  `tests/unit/loan-account/`, `tests/unit/repayment/` (77 new tests total across CP1–CP7: 56 from
+  CP1–CP5, +11 from CP6, +10 from CP7).
+- **Not part of any checkpoint** but present in the same uncommitted working tree: a
+  database-portability refactor (`Money.ts`, `Percentage.ts`, `AmortizationScheduleGenerator.ts`,
+  `.eslintrc.json`, `package.json`/`package-lock.json`) and
+  `docs/Architecture/ADR-044-separate-customer-identity-for-public-portal.md` — see this session's
+  commit-classification report for the exact file-to-commit mapping.
 
 ### 10.1 New documentation created this phase
 
@@ -767,13 +845,18 @@ Do not start implementing anything until the user has explicitly scoped and appr
    npm run build
    npx vitest run
    ```
-   Expect: lint clean, typecheck clean, build clean, **353 passed / 6 skipped / 0 failed**. If
-   any of these differ, something changed since this document was written — investigate before
-   proceeding, and update this handoff once you understand why.
+   Expect: lint clean, typecheck clean, build clean, **430 passed / 6 skipped / 0 failed** (71
+   test files). If any of these differ, something changed since this document was written —
+   investigate before proceeding, and update this handoff once you understand why. Also run
+   `git status --short` — if CP6/CP7/the portability refactor/ADR-044 are no longer showing as
+   uncommitted, they were committed since this document was written; re-derive commit hashes from
+   `git log` and update §1/§10.0 accordingly rather than trusting the hashes recorded here.
 7. **Continue from the current repository state, not from any assumption about "what comes
-   next."** Milestone 9 has not been scoped or approved. Do not begin implementing anything
-   beyond what the user's next message explicitly requests. If the user asks to "continue" without
-   further detail, summarize the current state (per this document) and ask what they'd like next
+   next."** Milestone 9.1 CP1–CP7 are complete (CP1–CP5 committed; CP6/CP7 implemented, verified,
+   and awaiting commit); CP8 (`ActivateLoanUseCase`) is next per §10.0 but has **not been started
+   or approved**. Do not begin implementing CP8 or any later checkpoint beyond what the user's next
+   message explicitly requests. If the user asks to "continue" without further detail, summarize
+   the current state (per this document, §10.0 in particular) and ask whether to proceed with CP8
    — per `CLAUDE.md`'s "never guess, always ask when unclear" instruction.
 8. **Maintain the same discipline this entire project has used:** analyze → design → propose →
    wait for approval → implement in small committed checkpoints → verify after each → update
