@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { InvalidPercentageError } from './errors/FinancialDomainErrors';
 
 const MAX_DECIMAL_PLACES = 3;
@@ -14,8 +14,9 @@ const MAX_MAGNITUDE = 1000;
  * amount by an arithmetic mistake.
  *
  * Pure, deterministic, framework-free (Clean Architecture: domain layer has
- * no outward dependencies — Prisma is used here only for its bundled
- * `Decimal` arithmetic type, not for any database access).
+ * no outward dependencies — `decimal.js` is imported directly here for its
+ * `Decimal` arithmetic type, not `@prisma/client`, so this file has no
+ * dependency on the ORM at all).
  *
  * Construction throws InvalidPercentageError on malformed input (Milestone
  * 7 design review, final decision) — this is a type-invariant violation,
@@ -24,10 +25,10 @@ const MAX_MAGNITUDE = 1000;
  * Percentage, none of them can fail.
  */
 export class Percentage {
-  private constructor(private readonly decimal: Prisma.Decimal) {}
+  private constructor(private readonly decimal: Decimal) {}
 
-  static of(value: Prisma.Decimal.Value): Percentage {
-    const decimal = new Prisma.Decimal(value);
+  static of(value: Decimal.Value): Percentage {
+    const decimal = new Decimal(value);
 
     if (!decimal.isFinite()) {
       throw new InvalidPercentageError('value must be a finite number.');
@@ -47,7 +48,7 @@ export class Percentage {
   static readonly ZERO = Percentage.of(0);
 
   /** As a fraction (e.g. 12.5% -> 0.125) — the form needed for multiplying a Money amount. */
-  asFraction(): Prisma.Decimal {
+  asFraction(): Decimal {
     return this.decimal.dividedBy(100);
   }
 
@@ -64,7 +65,7 @@ export class Percentage {
   }
 
   /** Raw decimal value (e.g. 12.5 for "12.5%") — for persistence/display only, never re-parsed. */
-  toDecimal(): Prisma.Decimal {
+  toDecimal(): Decimal {
     return this.decimal;
   }
 

@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import { DecliningBalanceInterestCalculator } from './DecliningBalanceInterestCalculator';
@@ -37,8 +37,10 @@ export interface AmortizationScheduleResult {
  * per `ADR-010` §7 ("PMT... is not a simple multiply/allocate operation
  * like the value objects' existing methods... will need a new, dedicated
  * calculation service, not an addition to Money itself"), this generator
- * operates on the raw `Prisma.Decimal` beneath `Money`/`Percentage` only
- * for the operations they don't provide (division, `.pow()`), and
+ * operates on the raw `decimal.js` `Decimal` beneath `Money`/`Percentage`
+ * (imported directly, not via `@prisma/client`, so this file has no ORM
+ * dependency) only for the operations they don't provide (division,
+ * `.pow()`), and
  * otherwise reuses `Money`'s own arithmetic (`.subtract()`) and the
  * declining-balance interest calculator (§1) rather than duplicating any
  * of it. The monthly payment is rounded exactly once, at computation time,
@@ -100,7 +102,7 @@ export class AmortizationScheduleGenerator {
 function calculateMonthlyPayment(principal: Money, monthlyContractualRate: Percentage, installmentCount: number): Money {
   const rate = monthlyContractualRate.asFraction();
   const numerator = rate.times(principal.toDecimal());
-  const denominator = new Prisma.Decimal(1).minus(new Prisma.Decimal(1).plus(rate).pow(-installmentCount));
+  const denominator = new Decimal(1).minus(new Decimal(1).plus(rate).pow(-installmentCount));
   const rawPayment = numerator.dividedBy(denominator);
-  return Money.of(rawPayment.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP));
+  return Money.of(rawPayment.toDecimalPlaces(2, Decimal.ROUND_HALF_UP));
 }

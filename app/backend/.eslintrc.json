@@ -36,6 +36,12 @@
                 "group": ["**/infrastructure/*", "**/interface/*"],
                 "message": "domain/ and application/ layers must not import infrastructure or interface code (Clean Architecture dependency rule)."
               }
+            ],
+            "paths": [
+              {
+                "name": "@prisma/client",
+                "message": "domain/ and application/ layers must not import @prisma/client (database-portability rule). Use 'decimal.js' directly for Decimal arithmetic; Prisma-generated types belong only in infrastructure/."
+              }
             ]
           }
         ]

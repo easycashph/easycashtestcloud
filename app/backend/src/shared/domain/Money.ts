@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Decimal } from 'decimal.js';
 import { InvalidMoneyError } from './errors/FinancialDomainErrors';
 import type { Percentage } from './Percentage';
 
@@ -6,14 +6,16 @@ const SCALE = 2;
 // Mirrors the schema's `Decimal(14,2)` column precision used for every
 // money field (LoanAccount.principalBalance, LoanTransaction.amount,
 // etc.) — 12 integer digits + 2 decimal digits.
-const MAX_MAGNITUDE = new Prisma.Decimal('1e12');
+const MAX_MAGNITUDE = new Decimal('1e12');
 
 /**
  * Value object for a monetary amount (implicit single currency, PHP — this
  * platform has no multi-currency requirement; see FINANCIAL_INVARIANTS.md
- * §5). Wraps Prisma's bundled `Decimal` (decimal.js) rather than a native
- * JS `number`, so monetary values never pass through floating-point
- * arithmetic anywhere in the domain layer.
+ * §5). Wraps `decimal.js`'s `Decimal` (the same library Prisma's `Decimal`
+ * re-exports, imported directly so the domain layer never depends on
+ * `@prisma/client`) rather than a native JS `number`, so monetary values
+ * never pass through floating-point arithmetic anywhere in the domain
+ * layer.
  *
  * Milestone 7 design review, FINAL decisions:
  *   - Money is a Value Object.
@@ -31,10 +33,10 @@ const MAX_MAGNITUDE = new Prisma.Decimal('1e12');
  * operations, never by Money itself.
  */
 export class Money {
-  private constructor(private readonly decimal: Prisma.Decimal) {}
+  private constructor(private readonly decimal: Decimal) {}
 
-  static of(value: Prisma.Decimal.Value): Money {
-    const decimal = new Prisma.Decimal(value);
+  static of(value: Decimal.Value): Money {
+    const decimal = new Decimal(value);
 
     if (!decimal.isFinite()) {
       throw new InvalidMoneyError('value must be a finite number.');
@@ -75,7 +77,7 @@ export class Money {
    * (not-yet-built) calculation engine, not by Money itself.
    */
   multiply(rate: Percentage): Money {
-    const result = this.decimal.times(rate.asFraction()).toDecimalPlaces(SCALE, Prisma.Decimal.ROUND_HALF_UP);
+    const result = this.decimal.times(rate.asFraction()).toDecimalPlaces(SCALE, Decimal.ROUND_HALF_UP);
     return Money.of(result);
   }
 
@@ -99,14 +101,14 @@ export class Money {
    * sign. `remainderCents` is converted to a JS number only as a bounded
    * loop-index comparator (always an integer in [0, parts-1]) — it is
    * never a monetary value and is never used in further arithmetic; every
-   * actual money amount stays in `Prisma.Decimal` throughout.
+   * actual money amount stays in `Decimal` throughout.
    */
   allocate(parts: number): Money[] {
     if (!Number.isInteger(parts) || parts <= 0) {
       throw new InvalidMoneyError('allocate() requires a positive integer number of parts.');
     }
 
-    const totalCents = this.decimal.times(100).toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
+    const totalCents = this.decimal.times(100).toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
     const sign = totalCents.isNegative() ? -1 : 1;
     const magnitudeCents = totalCents.abs();
     const baseCents = magnitudeCents.dividedToIntegerBy(parts);
@@ -143,7 +145,7 @@ export class Money {
   }
 
   /** Raw decimal value — for persistence layer use only (writing a Prisma `Decimal` field). */
-  toDecimal(): Prisma.Decimal {
+  toDecimal(): Decimal {
     return this.decimal;
   }
 
