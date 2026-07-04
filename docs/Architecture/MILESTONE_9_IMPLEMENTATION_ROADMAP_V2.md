@@ -378,10 +378,12 @@ audit, all inside `IUnitOfWork`. **Change from original:** un-gated (Decision Lo
 checklist must include an explicit first step verifying the existing `LoanProductVersion` domain
 entity already exposes `roundingMethod`/`daysInYearConvention`/`repaymentPeriodUnit` before
 implementation begins (Decision Log #4), rather than discovering a gap mid-implementation.
-**Partially gated on `ADR-045` (new):** the schedule-generation portion specifically (persisting
-`RepaymentInstallment` rows with a real `dueDate`) is blocked — no due-date generation rule is
-recoverable from the repository or the legacy data (see `ADR-045`). CP8's other internal writes
-(status transition, `DISBURSEMENT` ledger entry, financial audit) are not blocked by this.
+**`ADR-045` resolved, fully unblocked:** the schedule-generation portion (persisting
+`RepaymentInstallment` rows) uses `LoanAccount.firstRepaymentDate` — an explicit field supplied at
+origination (Concept 1, `ADR-045` §5) — as the schedule's anchor date, spacing subsequent
+installments by `repaymentPeriodUnit`. This is now a checklist item for CP8's implementation
+(add `firstRepaymentDate` to `LoanAccount`/`CreateLoanAccountUseCase`), not a blocking business
+decision.
 
 ### CP9 — `ProcessPaymentUseCase`
 **Objective:** Orchestrates CP4's allocation service with the existing
@@ -485,10 +487,10 @@ Materially shorter than in the original roadmap, per this document's central cor
    CP1–CP10.
 2. **`ADR-007` §4** — how should the 79 non-reconciling legacy `CLOSED` loans be treated during
    migration? Blocks **only CP12** (a separate data-migration track). Does **not** block CP1–CP10.
-3. **`ADR-045`** (new) — how should a newly activated loan's `RepaymentInstallment.dueDate`s be
-   generated, given no recoverable rule exists in the repository or the legacy data? Blocks
-   **only** the schedule-generation (`RepaymentInstallment` persistence) portion of CP8. Does
-   **not** block CP8's status-transition/ledger/audit writes, or CP1–CP7/CP9–CP10.
+
+**Resolved since this list was last current:** `ADR-045` (repayment schedule due-date generation)
+— Accepted as Concept 1 (Exact First Repayment Date); no longer a blocker for CP8. See `ADR-045`
+§5–§6.
 
 Everything else identified as `STATUS: UNRESOLVED` in `CALCULATION_ENGINE_SPEC.md` (Flat-Rate
 interest, Overpayment mechanism, Penalty calculation, Maturity-capitalization timing, Reversal/
@@ -500,9 +502,8 @@ resolved before CP1–CP10 — those calculations simply aren't being built in t
 ## Final Recommended Implementation Order
 
 **Start immediately, no decision required:** CP1 → CP2 → CP3 → CP4 → CP5 → CP6 → CP7 → CP8 → CP9 →
-CP10 (or any parallel ordering respecting the dependency graph above). **Exception:** CP8's
-schedule-generation (`RepaymentInstallment` persistence) sub-step specifically requires `ADR-045`
-to be decided first — see the Explicit List above.
+CP10 (or any parallel ordering respecting the dependency graph above). CP8 is now fully unblocked —
+`ADR-045` (schedule due-date generation) has been resolved (Concept 1, Exact First Repayment Date).
 
 **Do not start until `ADR-007` §3 is decided:** CP11.
 

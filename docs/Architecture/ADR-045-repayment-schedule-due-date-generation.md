@@ -1,14 +1,14 @@
 # ADR-045 — Repayment Schedule Due-Date Generation
 
-**Status:** UNRESOLVED — a business decision is required before this ADR can be marked Accepted.
-Blocks the `RepaymentInstallment` schedule-generation portion of Milestone 9.1 Checkpoint 8
-(`ActivateLoanUseCase`); does not block CP8's activation/ledger/audit portions (see §5).
+**Status:** ACCEPTED — **Concept 1: Exact First Repayment Date**. Unblocks the `RepaymentInstallment`
+schedule-generation portion of Milestone 9.1 Checkpoint 8 (`ActivateLoanUseCase`); see §6.
 **Context documents:** `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md` (CP8);
 `docs/Architecture/CALCULATION_ENGINE_SPEC.md` §2 (Level Payment Amortization — confirms the
 schedule-generation formula's output has no date field); `docs/Legacy Analysis/2026-07-03-
 milestone9-financial-rules-verification.md` §1.1 (evidence-source inventory); this session's
 full-population empirical check of `legacy/mongodb/07012026_103239/db-easycash/disbursements.bson`
-(6,508 records).
+(6,508 records); `docs/Architecture/ADR-044-separate-customer-identity-for-public-portal.md`
+(future Public Portal compatibility, referenced in §6).
 
 ---
 
@@ -89,34 +89,84 @@ account of *why*.
 
 ---
 
-## 4. Decision required (not made by this ADR)
+## 4. Options considered (record of the decision analysis)
 
-This ADR does not select an answer — that is a business decision, not an engineering one. Options
-for a human decision, listed without preference:
+Four concepts were analyzed in full against business usability, operational workflow, restructuring
+impact, renewals, future Public Portal compatibility, implementation complexity, maintenance cost,
+long-term extensibility, and legacy-migration implications, before a decision was made:
 
-- **(A) Capture an explicit input at origination/approval time** — e.g., a "first repayment date"
-  or "preferred payment day" field collected from the borrower or loan officer, added to
-  `LoanAccount` (or a prior step). Matches the observed payday-linked clustering without inventing
-  a fixed rule the data doesn't support.
-- **(B) Adopt a fixed, product-configured offset for the new system going forward** — e.g., a new
-  `LoanProductVersion.firstInstallmentOffsetDays` (or similar) config field, chosen deliberately as
-  a *new* policy, with the explicit, documented acknowledgment that it will not match roughly 80%
-  of legacy loans' actual historical pattern.
-- **(C) Some other convention not yet considered**, to be proposed and evidenced separately.
+- **Concept 1 — Exact first repayment date**, captured explicitly at origination. *(Selected —
+  see §5.)*
+- **Concept 2 — Preferred repayment day-of-month.** Rejected: mathematically incapable of
+  reproducing the observed day-gaps beyond ~31 days (gaps up to 71+ days were recorded in the full
+  population), so it cannot represent a meaningful share of real historical loans even
+  approximately, independent of any UX consideration.
+- **Concept 3 — Preferred payday / repayment cycle.** Rejected: requires new borrower pay-frequency
+  data that does not exist anywhere in the current schema or the examined legacy exports (confirmed
+  directly against `BorrowerIncomeDetail`'s actual fields — `employmentType`, `employerName`,
+  `employerAddress`, `natureOfBusiness`, `position`, `yearsEmployed`; no pay-cycle field among
+  them), and shares Concept 2's mathematical incompatibility with the observed gap range.
+- **Concept 4 — Product-level default with a per-loan override (hybrid).** Rejected: the
+  "default" half of this concept was shown to fit the population no better than Concept 2 did (the
+  same >31-day gaps defeat it), so it adds a second data path and a precedence rule for a default
+  whose own justifying evidence doesn't hold up — the same category of premature-abstraction cost
+  this roadmap's Decision Log already rejected twice elsewhere (`LoanActivationPolicy`,
+  `PaymentAllocationOrder`).
 
 ---
 
-## 5. Disposition for Milestone 9.1 Checkpoint 8
+## 5. Decision
+
+**Concept 1 — Exact First Repayment Date is the accepted design.** `LoanAccount` will store an
+explicit `firstRepaymentDate`, supplied as an input at loan origination (alongside the loan's other
+already-captured origination fields, e.g. `gracePeriodDays`), and used directly as the schedule's
+anchor date when `ActivateLoanUseCase` (CP8) generates the `RepaymentInstallment` rows.
+Subsequent installments are spaced from that anchor by the loan's already-confirmed
+`repaymentPeriodUnit` (`MONTHS` — the only value the schema currently supports).
+
+**Rationale, based only on repository evidence and the legacy investigation (§1–§3 above), not on
+general lending convention:**
+
+- It is the only concept with **zero contradiction against the evidence**. The full-population
+  check of 6,004 `disbursements.bson` records found day-gaps ranging continuously from 1 to 71+
+  days across 169 distinct values — a range only an explicitly-captured, unconstrained date can
+  represent. Concepts 2 and 3 are not merely less-evidenced; they are mathematically incapable of
+  producing gaps beyond roughly a month, which the real population clearly contains.
+- It **fully resolves the legacy-migration question** for any future import of historical loans
+  (the separate CP12 migration track, gated on `ADR-007` §4): `disbursements.bson`'s
+  `first_repayment_date` maps onto this field directly, with no transformation and no formula to
+  validate against 6,004 historical records.
+- It requires **no new data model** beyond one field on `LoanAccount` — no new `Borrower`/
+  `BorrowerIncomeDetail` fields, no new enum, no cross-entity precedence logic.
+- It is the best fit for the future Public Portal (`ADR-044`): a self-service applicant flow can
+  ask for this date directly, consistent with `ADR-044`'s principle that customer-facing intake
+  should be additive rather than requiring rework of existing structures.
+- It matches this project's own repeatedly-applied engineering discipline, verified directly
+  against `MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s Decision Log: `LoanActivationPolicy` and
+  `PaymentAllocationOrder` were both rejected as premature abstractions built ahead of a
+  demonstrated need, per `CLAUDE.md`'s "don't design for hypothetical future requirements."
+  Concept 4's product-default mechanism would have repeated that same pattern, for a default whose
+  own fit against the evidence doesn't hold up any better than Concept 2's did.
+
+**What this decision does NOT resolve:** the exact validation bounds for a supplied
+`firstRepaymentDate` (e.g., how far in the future it may reasonably be) are not specified here —
+that is a schema/use-case implementation detail for CP8, not a business decision this ADR needs to
+settle. Restructuring's future due-date behavior (`ADR-041`, still out of scope per
+`FINANCIAL_INVARIANTS.md` §1) is unaffected by this decision — any future restructuring event
+supplies its own fresh anchor date at that time, the same way this one is supplied at origination.
+
+---
+
+## 6. Disposition for Milestone 9.1 Checkpoint 8
 
 Per `docs/Architecture/ADR-032-loan-release-vs-disbursement.md` §5, `ActivateLoanUseCase`
-represents one business event that may still perform several internal writes. This ADR blocks
-only the specific internal write that requires a due date: generating and persisting
-`RepaymentInstallment` schedule rows. It does **not** block CP8's other internal writes — the
-`APPROVED → ACTIVE` status transition (`LoanAccount.activate()`, already built in CP7), the
-`DISBURSEMENT`-typed `LoanTransaction` insert, and the financial audit log entry — none of which
-require a due date.
+represents one business event that may still perform several internal writes. This ADR previously
+blocked only the specific internal write that requires a due date: generating and persisting
+`RepaymentInstallment` schedule rows. **That block is now lifted** — CP8's schedule-generation
+portion may proceed using `LoanAccount.firstRepaymentDate` as the anchor, alongside CP8's other
+internal writes (the `APPROVED → ACTIVE` status transition via `LoanAccount.activate()`, already
+built in CP7; the `DISBURSEMENT`-typed `LoanTransaction` insert; and the financial audit log
+entry), all inside one `IUnitOfWork.run()` call as already planned.
 
-No change to `MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering is introduced by
-this ADR. CP8 remains a single checkpoint; this ADR is recorded there as its business blocker for
-the schedule-generation portion of its scope, the same way `ADR-007` §3/§4 are already recorded as
-blockers for CP11/CP12 without being modeled as separate checkpoints.
+No change to `MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering results from this
+ADR. CP8 remains a single checkpoint, now fully unblocked.

@@ -170,6 +170,7 @@ interface/http   →   application   →   domain
 | ADR-038 — Full permission matrix | **Still open**, not resolved by ADR-043 | Not yet written as a file — tracked in this handoff only |
 | ADR-007, ADR-009, ADR-010, ADR-032 | **Still open** — see §5/§10 | Referenced in `FINANCIAL_INVARIANTS.md §8` |
 | ADR-044 — Separate Customer Identity for Future Public Portal | Accepted (decision-only; no code, schema, or route changes); uncommitted | `docs/Architecture/ADR-044-separate-customer-identity-for-public-portal.md`. Explicitly states it does not affect any Milestone 9.1 checkpoint (§5). |
+| ADR-045 — Repayment Schedule Due-Date Generation | **Accepted — Concept 1 (Exact First Repayment Date)**; was CP8's last blocker, now resolved | `docs/Architecture/ADR-045-repayment-schedule-due-date-generation.md`. `LoanAccount` will gain an explicit `firstRepaymentDate` field, captured at origination, used as CP8's schedule-generation anchor — not yet implemented. |
 
 ### Architectural decisions made during Milestones 7, 7.1, 8, and 8.1
 - **M7:** Aggregate boundaries per ADR-042 (see §8 for the full list). `Money`/`Percentage` value
@@ -587,7 +588,7 @@ does not add, remove, or reorder any checkpoint either — confirmed by its own 
 | CP5 — `version` property on domain model | **Done, committed** (`f57efc3`) | `LoanAccount`/`RepaymentInstallment` domain entities expose `version` via getter; `PrismaLoanAccountRepository`/`PrismaRepaymentInstallmentRepository` map the column through on read. |
 | CP6 — Repository conditional-write refactor | **Done, implemented and verified, not yet committed** | Verified by inspection: `PrismaLoanAccountRepository.ts`/`PrismaRepaymentInstallmentRepository.ts` no longer call unconditional `upsert()` — an explicit `create()` (new aggregates) or a conditional `updateMany({ where: { id, version }, data: { ..., version: { increment: 1 } } })` (existing aggregates), throwing `ConcurrencyConflictError` on a zero-row result. Preceded by regression coverage of the pre-existing `AppliedFee`/co-borrower/`saveMany` atomicity behavior, confirmed unchanged. |
 | CP7 — `LoanAccount` balance-mutation domain methods (`activate()`, `applyPayment()`) | **Done, implemented and verified, not yet committed** | Both methods exist on `LoanAccount` (`src/modules/loan-account/domain/LoanAccount.ts`), accepting already-decided totals/splits (no calculation performed inside the aggregate), reusing `transitionTo()` and the `ledger` module's `TransactionComponents` VO per Decision Log #13/#14. Neither writes to the ledger or any repository — per `FINANCIAL_INVARIANTS.md §3`, that obligation belongs to the not-yet-built CP8/CP9 use cases. |
-| CP8 — `ActivateLoanUseCase` | **Not started** | No such file exists. Its checklist item (verify `LoanProductVersion` exposes `roundingMethod`/`daysInYearConvention`/`repaymentPeriodUnit`) has not been performed. Depends on CP7 (done). |
+| CP8 — `ActivateLoanUseCase` | **Not started, fully unblocked** | No such file exists yet. Depends on CP7 (done). Its checklist items: (1) verify `LoanProductVersion` exposes `roundingMethod`/`daysInYearConvention`/`repaymentPeriodUnit` (Decision Log #4) — not yet performed; (2) `ADR-045` (repayment schedule due-date generation) — **Accepted, Concept 1 (Exact First Repayment Date)** — schedule generation will use a new `LoanAccount.firstRepaymentDate` field, supplied at origination, as the schedule anchor. This was the last blocker; CP8 is no longer gated on any open business decision. |
 | CP9 — `ProcessPaymentUseCase` | **Not started** | Depends on CP4 (done)/CP7 (done). |
 | CP10 — Golden-master replay tests | **Not started** | Depends on CP8/CP9. |
 | CP11 (gated on ADR-007 §3) — `outstandingBalance` summary getter | **Not started, gated** | ADR-007 §3 remains UNRESOLVED (verified: `ADR-007-outstanding-balance-formula.md` §3 still reads "STATUS: UNRESOLVED — requires your decision"). |
@@ -595,11 +596,14 @@ does not add, remove, or reorder any checkpoint either — confirmed by its own 
 | CP13 (deferred, future milestone) — HTTP exposure | **Not started, deliberately deferred** | Per D-2 precedent — no route until a real, correctness-gated caller (CP8/CP9) exists. |
 
 **Next authoritative checkpoint: CP8 (`ActivateLoanUseCase`).** It is next in the roadmap's
-recommended sequential order, and its only dependency (CP7) is now done. Per the roadmap's CP8
-description, implementation must begin with an explicit first step verifying the existing
+recommended sequential order, its only dependency (CP7) is done, and its former business blocker
+(`ADR-045`) is now resolved (Accepted, Concept 1 — Exact First Repayment Date; see
+`docs/Architecture/ADR-045-repayment-schedule-due-date-generation.md` §5–§6). Per the roadmap's
+CP8 description, implementation must begin with an explicit first step verifying the existing
 `LoanProductVersion` domain entity already exposes `roundingMethod`/`daysInYearConvention`/
-`repaymentPeriodUnit` (Decision Log #4), rather than discovering a gap mid-implementation. **Do
-not start CP8 without explicit approval; this handoff does not constitute that approval.**
+`repaymentPeriodUnit` (Decision Log #4), and must add `LoanAccount.firstRepaymentDate` (captured at
+origination) as the schedule's anchor per `ADR-045`. **Do not start CP8 without explicit approval;
+this handoff does not constitute that approval.**
 
 ### 10.0.1 New/modified source files added by CP1–CP7 (for orientation, not exhaustive)
 - `app/backend/src/shared/errors/DomainError.ts` — `ConcurrencyConflictError` (CP1).
