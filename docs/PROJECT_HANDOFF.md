@@ -2,21 +2,22 @@
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
 has never seen this project before. It reflects the repository state through **Milestone 9.1
-checkpoint 9** (`ProcessPaymentUseCase`), verified directly against the repository rather than
-reconstructed from memory. **Read this document in full before touching any code.** If anything
-here conflicts with what you observe in the repository, trust the repository and update this
-document.
+checkpoint 10** (golden-master replay tests), verified directly against the repository rather
+than reconstructed from memory. **Read this document in full before touching any code.** If
+anything here conflicts with what you observe in the repository, trust the repository and update
+this document.
 
 ---
 
 ## 1. Current Project State
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
-- **Latest committed commit:** `08345f3` — "Milestone 9.1 checkpoint 9: ProcessPaymentUseCase
-  (cross-installment allocation, ledger, fail-closed audit)".
-- **Latest completed implementation:** Milestone 9.1 **CP9** (`ProcessPaymentUseCase`), per
-  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP9 are
-  implemented, verified, and committed. **CP10 (golden-master replay tests) has NOT started.**
+- **Latest committed commit:** `9b65624` — "Milestone 9.1 checkpoint 10: golden-master replay
+  tests".
+- **Latest completed implementation:** Milestone 9.1 **CP10** (golden-master replay tests), per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP10
+  are implemented, verified, and committed. **CP11 (`outstandingBalance` summary getter) remains
+  GATED on `ADR-007` §3 — not started, and should not be started until that ADR is decided.**
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
@@ -27,18 +28,25 @@ document.
   - **CP1 (concurrency infra), CP2 (financial audit infra), CP3 (declining-balance interest + PMT
     amortization), CP4 (payment allocation calculator + service), CP5 (`version` property), CP6
     (repository conditional-write refactor), CP7 (`LoanAccount` balance-mutation domain methods),
-    CP8 (`ActivateLoanUseCase`) — Done, committed.**
-  - **CP9 (`ProcessPaymentUseCase`) — Done, committed (`08345f3`).** One `IUnitOfWork.run()` call:
-    fetches the `LoanAccount` and its not-yet-fully-paid `RepaymentInstallment`s sorted
-    oldest-due-first (`ADR-009` §2); delegates the fees→penalty→interest→principal split across
-    them to `PaymentAllocationService.allocate()` (CP4); records each touched installment's
-    payment via the existing `RepaymentInstallment.recordPayment()`; sums the applied components
-    into `LoanAccount.applyPayment()` (CP7); inserts a `REPAYMENT`-typed `LoanTransaction` with
-    `amount` = applied (not raw payment — required by `LoanTransaction`'s own `TXN-2`
-    `ComponentSumMismatchError` check); writes a fail-closed financial audit log entry. The
-    overpayment `remainder` (`CALCULATION_ENGINE_SPEC.md` §11, still `UNRESOLVED`) is returned as
-    an explicit `ProcessPaymentResult.remainder` field, never absorbed or discarded.
-  - **CP10 (golden-master replay tests) — Not started.**
+    CP8 (`ActivateLoanUseCase`), CP9 (`ProcessPaymentUseCase`) — Done, committed.**
+  - **CP10 (golden-master replay tests) — Done, committed (`9b65624`).** Exercises the full
+    pipeline (`AmortizationScheduleGenerator` → `PaymentAllocationService` →
+    `LoanAccount`/`RepaymentInstallment` mutation) through the real `ActivateLoanUseCase`/
+    `ProcessPaymentUseCase` orchestrators against three real, hand-traced legacy loans
+    (`SL-REG_U1V1J`, `SL-LAZ_V5N0R`, `SL-LAZ_A6J8E` — figures transcribed once into
+    `tests/integration/loan-account/goldenMasterFixtures.ts`, cited to their exact Legacy Analysis
+    §3.1/§3.2/§8.3/§8.9 and `ADR-007` §1 evidence lines), asserting exact centavo matches. Uses
+    mocked repositories (in-memory), not a live database — closes the calculation-correctness gap
+    only; live-Postgres transaction-atomicity verification remains the project's already-
+    documented standing risk. `firstRepaymentDate` for the two single-installment loans (no
+    schedule due date recorded in evidence) uses a documented disbursement-date-or-placeholder
+    proxy, explicitly noted as having zero effect on any asserted figure. Deliberately excludes
+    `ADR-046` (not evidenced against these three loans) and `SL-LAZ_A6J8E`'s anomalous
+    post-reconciliation transactions (Legacy Analysis §3.1.1, `STATUS: UNRESOLVED`).
+  - **CP11 (`outstandingBalance` summary getter) — GATED, not started.** Per the roadmap, this is
+    the *only* remaining implementation surface blocked by `ADR-007` §3 (whether
+    `outstandingBalance` is penalty-inclusive, penalty-exclusive, or both as separate fields) —
+    everything through CP10 proceeds regardless of that open decision.
   - **A real bug was found and fixed in CP8's `ActivateLoanUseCase`** (commit `9476848`, before
     CP9 began): it computed `monthlyContractualRate` as `loanAccount.contractualInterestRate ??
     loanAccount.interestRate`, implicitly treating `contractualInterestRate` as
@@ -55,10 +63,10 @@ document.
     required a consequential update to the already-HTTP-exposed loan origination path:
     `CreateLoanAccountUseCase`, its DTOs, Zod schema, and presenter all now accept/validate/
     persist/present it.
-  - CP1–CP9's calculation/repository pieces are now wired into real use cases (CP8, CP9). No
-    HTTP route exists for either yet (CP13, future milestone — D-2 precedent). No notifications
-    or reporting modules exist yet (`document`/`audit` module folders remain `.gitkeep` scaffolds
-    under `src/modules/`).
+  - CP1–CP9's calculation/repository pieces are wired into real use cases (CP8, CP9) and now
+    verified end-to-end against real legacy data (CP10). No HTTP route exists for either use case
+    yet (CP13, future milestone — D-2 precedent). No notifications or reporting modules exist yet
+    (`document`/`audit` module folders remain `.gitkeep` scaffolds under `src/modules/`).
   - Two new ADRs since Milestone 9's original documentation phase: **`ADR-045`** (repayment
     schedule due-date generation — Concept 1, Exact First Repayment Date, **Accepted**) and
     **`ADR-046`** (Advance Interest Fee on Extended First-Repayment Gap — **Accepted**, rate
@@ -70,6 +78,7 @@ document.
     altered).
 - **Latest commits (newest first):**
   ```
+  9b65624 Milestone 9.1 checkpoint 10: golden-master replay tests
   08345f3 Milestone 9.1 checkpoint 9: ProcessPaymentUseCase (cross-installment allocation, ledger, fail-closed audit)
   9476848 fix: use LoanAccount.interestRate directly for amortization, not contractualInterestRate
   39fc312 docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP8 completion
@@ -83,25 +92,23 @@ document.
   4a9f540 docs: ADR-044 - separate customer identity model for future Public Portal
   36e7f3d Portability: replace Prisma.Decimal with decimal.js in domain/application layer
   f57efc3 Milestone 9.1 checkpoint 5: version property on LoanAccount/RepaymentInstallment domain model
-  ec681fe Milestone 9.1 checkpoint 4: payment allocation calculator and cross-installment service (CALC-SPEC §5, ADR-009)
   ```
-- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP9):** **456 unit
-  tests passing, 0 failing, 6 integration tests correctly skipped** (73 test files total; up from
-  446/72 before CP9 — the +10 are CP9's `ProcessPaymentUseCase` tests, covering oldest-first
-  ordering against shuffled input, remaining-due computation for partially-paid installments,
-  exact-match and overpayment remainder edge cases, `PAID`-installment exclusion, and the
-  rollback test asserting a failed audit-log write aborts the entire transaction. Integration
-  tests remain opt-in via `RUN_INTEGRATION_TESTS=1` and require a live Postgres, which this dev
-  environment has never had).
+- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP10):** **460
+  unit tests passing, 0 failing, 6 integration tests correctly skipped** (74 test files total; up
+  from 456/73 before CP10 — the +4 are CP10's golden-master replay tests
+  (`tests/integration/loan-account/GoldenMasterReplay.test.ts`). These 4 use mocked repositories,
+  not a live database, so they run unconditionally as part of the normal suite — they are
+  distinct from, and not gated by, the same `RUN_INTEGRATION_TESTS=1`/live-Postgres flag that
+  gates the other 6 skipped integration tests).
 - **Verification status (all re-run and confirmed clean immediately before writing this
-  document, 2026-07-05, against the working tree including CP9):**
+  document, 2026-07-05, against the working tree including CP10):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
   - `npx prisma validate` — schema valid (requires `DATABASE_URL` to be set in the environment;
     otherwise fails with `P1012`/"Environment variable not found" — an environment artifact, not
     a schema problem).
-  - `npx vitest run` — **72 test files passed, 1 skipped (73 total); 456 tests passed, 6 skipped
-    (462 total); 0 failed.**
+  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 460 tests passed, 6 skipped
+    (466 total); 0 failed.**
 
 ---
 
