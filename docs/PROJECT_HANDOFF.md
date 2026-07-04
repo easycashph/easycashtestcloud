@@ -2,7 +2,7 @@
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
 has never seen this project before. It reflects the repository state through **Milestone 9.1
-checkpoint 8** (`ActivateLoanUseCase`), verified directly against the repository rather than
+checkpoint 9** (`ProcessPaymentUseCase`), verified directly against the repository rather than
 reconstructed from memory. **Read this document in full before touching any code.** If anything
 here conflicts with what you observe in the repository, trust the repository and update this
 document.
@@ -12,11 +12,11 @@ document.
 ## 1. Current Project State
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
-- **Latest committed commit:** `ce21160` — "Milestone 9.1 checkpoint 8: ActivateLoanUseCase
-  (schedule generation, disbursement ledger, fail-closed audit)".
-- **Latest completed implementation:** Milestone 9.1 **CP8** (`ActivateLoanUseCase`), per
-  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP8 are
-  implemented, verified, and committed. **CP9 (`ProcessPaymentUseCase`) has NOT started.**
+- **Latest committed commit:** `08345f3` — "Milestone 9.1 checkpoint 9: ProcessPaymentUseCase
+  (cross-installment allocation, ledger, fail-closed audit)".
+- **Latest completed implementation:** Milestone 9.1 **CP9** (`ProcessPaymentUseCase`), per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP9 are
+  implemented, verified, and committed. **CP10 (golden-master replay tests) has NOT started.**
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
@@ -26,37 +26,53 @@ document.
   **Milestone 9.1 implementation status:**
   - **CP1 (concurrency infra), CP2 (financial audit infra), CP3 (declining-balance interest + PMT
     amortization), CP4 (payment allocation calculator + service), CP5 (`version` property), CP6
-    (repository conditional-write refactor), CP7 (`LoanAccount` balance-mutation domain methods) —
-    Done, committed.**
-  - **CP8 (`ActivateLoanUseCase`) — Done, committed (`ce21160`).** One `IUnitOfWork.run()` call
-    performing: `LoanAccount.activate()` (APPROVED → ACTIVE), `RepaymentInstallment` schedule
-    generation anchored on the newly-added `LoanAccount.firstRepaymentDate` (`ADR-045` Concept 1,
-    spaced by calendar month, clamped to end-of-month), a `DISBURSEMENT`-typed `LoanTransaction`
-    insert, and a fail-closed financial audit log entry. Guards against `FLAT`-rate products
-    (`CALCULATION_ENGINE_SPEC.md` §12, still `UNRESOLVED`) via a new
-    `UnsupportedInterestCalculationMethodError`. Deliberately excludes `ADR-046`'s Advance Interest
-    Fee (eligible-product list still undecided by the business), CP11's `outstandingBalance`
-    getter (gated on `ADR-007` §3), and any HTTP route (CP13, future milestone).
-  - **CP9 (`ProcessPaymentUseCase`) — Not started.** No such file exists.
-  - `firstRepaymentDate` is now a **required** field on `LoanAccount`, added via a hand-authored
-    migration (`20260704000000_add_first_repayment_date`, no default — per `ADR-045`, no rule
-    exists to fabricate one). This required a consequential update to the already-HTTP-exposed
-    loan origination path: `CreateLoanAccountUseCase`, its DTOs, Zod schema, and presenter all now
-    accept/validate/persist/present it.
-  - CP1–CP7's calculation/repository pieces are now wired into a real use case (CP8) for the first
-    time. `ProcessPaymentUseCase` (CP9) does not exist yet, so `PaymentAllocationService`/CP4
-    remain otherwise unwired. No notifications or reporting modules exist yet (`document`/`audit`
-    module folders remain `.gitkeep` scaffolds under `src/modules/`).
-  - Two new ADRs since the last handoff revision: **`ADR-045`** (repayment schedule due-date
-    generation — Concept 1, Exact First Repayment Date, **Accepted**) and **`ADR-046`** (Advance
-    Interest Fee on Extended First-Repayment Gap — **Accepted**, rate basis/trigger/rounding all
-    confirmed; which `LoanProductVersion`s should enable it is the one open item, not a blocker
-    for any implemented checkpoint). Two previously-unnumbered ADRs were also renamed for
-    consistency: `ADR-financial-audit-isolation.md` → `ADR-047-financial-audit-isolation.md`,
-    `ADR-optimistic-concurrency.md` → `ADR-048-optimistic-concurrency.md` (filename/reference-only
-    change, no decision content altered).
+    (repository conditional-write refactor), CP7 (`LoanAccount` balance-mutation domain methods),
+    CP8 (`ActivateLoanUseCase`) — Done, committed.**
+  - **CP9 (`ProcessPaymentUseCase`) — Done, committed (`08345f3`).** One `IUnitOfWork.run()` call:
+    fetches the `LoanAccount` and its not-yet-fully-paid `RepaymentInstallment`s sorted
+    oldest-due-first (`ADR-009` §2); delegates the fees→penalty→interest→principal split across
+    them to `PaymentAllocationService.allocate()` (CP4); records each touched installment's
+    payment via the existing `RepaymentInstallment.recordPayment()`; sums the applied components
+    into `LoanAccount.applyPayment()` (CP7); inserts a `REPAYMENT`-typed `LoanTransaction` with
+    `amount` = applied (not raw payment — required by `LoanTransaction`'s own `TXN-2`
+    `ComponentSumMismatchError` check); writes a fail-closed financial audit log entry. The
+    overpayment `remainder` (`CALCULATION_ENGINE_SPEC.md` §11, still `UNRESOLVED`) is returned as
+    an explicit `ProcessPaymentResult.remainder` field, never absorbed or discarded.
+  - **CP10 (golden-master replay tests) — Not started.**
+  - **A real bug was found and fixed in CP8's `ActivateLoanUseCase`** (commit `9476848`, before
+    CP9 began): it computed `monthlyContractualRate` as `loanAccount.contractualInterestRate ??
+    loanAccount.interestRate`, implicitly treating `contractualInterestRate` as
+    higher-precedence. No ADR supports this — `ADR-010` §1 names `LoanAccount.interestRate`
+    itself as the rate the amortization formula requires; `contractualInterestRate`/
+    `addOnInterestRate` are both optional, disclosure-oriented fields not guaranteed to be
+    populated or consistent with `interestRate` on every loan. A loan originated via the
+    Add-On-quoted path with a divergent `contractualInterestRate` would have silently computed
+    interest against the wrong rate — no existing test caught it, since every prior test left
+    `contractualInterestRate` undefined. **Fixed to use `interestRate` directly**, with a new
+    regression test constructing a loan where the two rates deliberately diverge.
+  - `firstRepaymentDate` is a **required** field on `LoanAccount` (added in CP8, via a
+    hand-authored migration, no default — per `ADR-045`, no rule exists to fabricate one). This
+    required a consequential update to the already-HTTP-exposed loan origination path:
+    `CreateLoanAccountUseCase`, its DTOs, Zod schema, and presenter all now accept/validate/
+    persist/present it.
+  - CP1–CP9's calculation/repository pieces are now wired into real use cases (CP8, CP9). No
+    HTTP route exists for either yet (CP13, future milestone — D-2 precedent). No notifications
+    or reporting modules exist yet (`document`/`audit` module folders remain `.gitkeep` scaffolds
+    under `src/modules/`).
+  - Two new ADRs since Milestone 9's original documentation phase: **`ADR-045`** (repayment
+    schedule due-date generation — Concept 1, Exact First Repayment Date, **Accepted**) and
+    **`ADR-046`** (Advance Interest Fee on Extended First-Repayment Gap — **Accepted**, rate
+    basis/trigger/rounding all confirmed; which `LoanProductVersion`s should enable it is the one
+    open item, not a blocker for any implemented checkpoint). Two previously-unnumbered ADRs were
+    also renamed for consistency: `ADR-financial-audit-isolation.md` →
+    `ADR-047-financial-audit-isolation.md`, `ADR-optimistic-concurrency.md` →
+    `ADR-048-optimistic-concurrency.md` (filename/reference-only change, no decision content
+    altered).
 - **Latest commits (newest first):**
   ```
+  08345f3 Milestone 9.1 checkpoint 9: ProcessPaymentUseCase (cross-installment allocation, ledger, fail-closed audit)
+  9476848 fix: use LoanAccount.interestRate directly for amortization, not contractualInterestRate
+  39fc312 docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP8 completion
   ce21160 Milestone 9.1 checkpoint 8: ActivateLoanUseCase (schedule generation, disbursement ledger, fail-closed audit)
   146d9f6 docs: replace README.txt with a professional README.md
   47c7404 docs: add ADR-046, renumber ADR-047/048, fix stale cross-references
@@ -68,26 +84,24 @@ document.
   36e7f3d Portability: replace Prisma.Decimal with decimal.js in domain/application layer
   f57efc3 Milestone 9.1 checkpoint 5: version property on LoanAccount/RepaymentInstallment domain model
   ec681fe Milestone 9.1 checkpoint 4: payment allocation calculator and cross-installment service (CALC-SPEC §5, ADR-009)
-  f964a63 Milestone 9.1 checkpoint 3: declining-balance interest and PMT amortization calculators (CALC-SPEC §1, §2)
-  363ffde Milestone 9.1 checkpoint 2: financial audit infrastructure (IFinancialAuditLogger, fail-closed)
-  bdaa7b6 Milestone 9.1 checkpoint 1: optimistic concurrency infrastructure (version columns, ConcurrencyConflictError)
   ```
-- **Current test counts (verified fresh, not from memory, 2026-07-04, includes CP8):** **445 unit
-  tests passing, 0 failing, 6 integration tests correctly skipped** (72 test files total; up from
-  430/71 before CP8 — the +15 are CP8's `ActivateLoanUseCase` tests, including the rollback test
-  asserting a failed audit-log write aborts the entire transaction. Integration tests remain
-  opt-in via `RUN_INTEGRATION_TESTS=1` and require a live Postgres, which this dev environment has
-  never had).
+- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP9):** **456 unit
+  tests passing, 0 failing, 6 integration tests correctly skipped** (73 test files total; up from
+  446/72 before CP9 — the +10 are CP9's `ProcessPaymentUseCase` tests, covering oldest-first
+  ordering against shuffled input, remaining-due computation for partially-paid installments,
+  exact-match and overpayment remainder edge cases, `PAID`-installment exclusion, and the
+  rollback test asserting a failed audit-log write aborts the entire transaction. Integration
+  tests remain opt-in via `RUN_INTEGRATION_TESTS=1` and require a live Postgres, which this dev
+  environment has never had).
 - **Verification status (all re-run and confirmed clean immediately before writing this
-  document, 2026-07-04, against the working tree including CP8):**
+  document, 2026-07-05, against the working tree including CP9):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
   - `npx prisma validate` — schema valid (requires `DATABASE_URL` to be set in the environment;
     otherwise fails with `P1012`/"Environment variable not found" — an environment artifact, not
     a schema problem).
-  - `npm run build` (`tsc` + `tsc-alias`) — clean.
-  - `npx vitest run` — **71 test files passed, 1 skipped (72 total); 445 tests passed, 6 skipped
-    (451 total); 0 failed.**
+  - `npx vitest run` — **72 test files passed, 1 skipped (73 total); 456 tests passed, 6 skipped
+    (462 total); 0 failed.**
 
 ---
 
