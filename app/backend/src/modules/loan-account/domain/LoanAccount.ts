@@ -52,6 +52,17 @@ export interface LoanAccountProps {
   installmentCount: number;
   repaymentPeriodUnit: RepaymentPeriodUnit;
   gracePeriodDays: number;
+  /**
+   * ADR-045 (Concept 1 — Exact First Repayment Date): an explicit input
+   * supplied at origination, never computed/derived from disbursement
+   * date or any other field — no recoverable generation rule exists in
+   * this system's evidence base. Used by `ActivateLoanUseCase` (CP8) as
+   * the anchor date for `RepaymentInstallment` schedule generation;
+   * subsequent installments are spaced from this date by
+   * `repaymentPeriodUnit`. This entity only stores the value — it does
+   * not generate the schedule itself.
+   */
+  firstRepaymentDate: Date;
   approvedAt?: Date;
   approvedByUserId?: string;
   activatedAt?: Date;
@@ -85,6 +96,7 @@ export interface CreateLoanAccountProps {
   installmentCount: number;
   repaymentPeriodUnit?: RepaymentPeriodUnit;
   gracePeriodDays?: number;
+  firstRepaymentDate: Date;
   legacyId?: string;
 }
 
@@ -142,6 +154,7 @@ export class LoanAccount {
         installmentCount: input.installmentCount,
         repaymentPeriodUnit: input.repaymentPeriodUnit ?? 'MONTHS',
         gracePeriodDays: input.gracePeriodDays ?? 0,
+        firstRepaymentDate: input.firstRepaymentDate,
         legacyId: input.legacyId,
         createdAt: now,
         updatedAt: now,
@@ -215,6 +228,10 @@ export class LoanAccount {
 
   get gracePeriodDays(): number {
     return this.props.gracePeriodDays;
+  }
+
+  get firstRepaymentDate(): Date {
+    return this.props.firstRepaymentDate;
   }
 
   get approvedAt(): Date | undefined {

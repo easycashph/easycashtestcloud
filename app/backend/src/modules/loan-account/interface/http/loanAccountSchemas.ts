@@ -21,6 +21,8 @@ export const createLoanAccountSchema = z.object({
   contractualInterestRate: decimalStringSchema.optional(),
   installmentCount: z.coerce.number().int().positive(),
   gracePeriodDays: z.coerce.number().int().min(0).optional(),
+  /** ADR-045 (Concept 1 — Exact First Repayment Date): required, explicit input, never derived. */
+  firstRepaymentDate: z.coerce.date(),
   legacyId: z.string().min(1).optional(),
 });
 

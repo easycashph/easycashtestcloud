@@ -14,6 +14,7 @@ function buildLoan() {
     principalAmount: Money.of('10000.00'),
     interestRate: Percentage.of('2.5'),
     installmentCount: 12,
+    firstRepaymentDate: new Date('2026-08-15'),
   });
 }
 

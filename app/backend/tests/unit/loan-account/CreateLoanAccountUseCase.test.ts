@@ -45,6 +45,7 @@ describe('CreateLoanAccountUseCase', () => {
       principalAmount: '10000.00',
       interestRate: '2.5',
       installmentCount: 12,
+      firstRepaymentDate: new Date('2026-08-15'),
     });
 
     expect(loan.status).toBe('PENDING_APPROVAL');
@@ -64,6 +65,7 @@ describe('CreateLoanAccountUseCase', () => {
         principalAmount: '10000.00',
         interestRate: '2.5',
         installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
       }),
     ).rejects.toThrow(NotFoundError);
     expect(loanAccountRepository.save).not.toHaveBeenCalled();
@@ -84,6 +86,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '1000.00',
           interestRate: '2.5',
           installmentCount: 6,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(LoanAmountOutOfRangeError);
       expect(loanAccountRepository.save).not.toHaveBeenCalled();
@@ -103,6 +106,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '20000.00',
           interestRate: '2.5',
           installmentCount: 6,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(LoanAmountOutOfRangeError);
     });
@@ -121,6 +125,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '1000.00',
           interestRate: '2.5',
           installmentCount: 6,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).resolves.toBeDefined();
     });
@@ -139,6 +144,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '999999.00',
           interestRate: '2.5',
           installmentCount: 6,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).resolves.toBeDefined();
     });
@@ -157,6 +163,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '1000.00',
           interestRate: '2.5',
           installmentCount: 3,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(InstallmentCountOutOfRangeError);
     });
@@ -175,6 +182,7 @@ describe('CreateLoanAccountUseCase', () => {
           principalAmount: '1000.00',
           interestRate: '2.5',
           installmentCount: 36,
+          firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(InstallmentCountOutOfRangeError);
     });

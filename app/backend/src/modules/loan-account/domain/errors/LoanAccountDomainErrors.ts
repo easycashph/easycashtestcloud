@@ -45,3 +45,25 @@ export class InstallmentCountOutOfRangeError extends DomainError {
     this.name = 'InstallmentCountOutOfRangeError';
   }
 }
+
+/**
+ * Milestone 9.1 checkpoint 8 / `CALCULATION_ENGINE_SPEC.md` §4: only
+ * `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` are `STATUS: CONFIRMED`
+ * and implemented (`AmortizationScheduleGenerator`, CP3) — both are
+ * calculation-identical per `ADR-010` §5. `FLAT` has no evidenced formula
+ * anywhere in this project's evidence base and is explicitly
+ * `STATUS: UNRESOLVED`; `ActivateLoanUseCase` must refuse to activate a
+ * loan whose `LoanProductVersion.interestCalculationMethod` is `FLAT`
+ * rather than silently applying the declining-balance formula to it.
+ */
+export class UnsupportedInterestCalculationMethodError extends DomainError {
+  constructor(method: string) {
+    super(
+      'UNSUPPORTED_INTEREST_CALCULATION_METHOD',
+      `Cannot activate a loan whose LoanProductVersion uses interestCalculationMethod "${method}" — only DECLINING_BALANCE/DECLINING_BALANCE_DISCOUNTED are implemented (CALCULATION_ENGINE_SPEC.md §4 UNRESOLVED for FLAT).`,
+      undefined,
+      400,
+    );
+    this.name = 'UnsupportedInterestCalculationMethodError';
+  }
+}

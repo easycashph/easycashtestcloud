@@ -623,6 +623,15 @@ model LoanAccount {
   repaymentPeriodUnit RepaymentPeriodUnit @default(MONTHS)
   gracePeriodDays     Int                 @default(0)
 
+  /// ADR-045 (Concept 1 — Exact First Repayment Date): an explicit input
+  /// supplied at origination, never computed/derived from disbursement
+  /// date or any other field — no recoverable generation rule exists in
+  /// this system's evidence base (see ADR-045 §1-§3). Used as the anchor
+  /// date for RepaymentInstallment schedule generation at activation
+  /// (Milestone 9.1 checkpoint 8); subsequent installments are spaced from
+  /// this date by repaymentPeriodUnit.
+  firstRepaymentDate DateTime
+
   approvedAt       DateTime?
   approvedByUserId String?
   approvedBy       User?     @relation("LoanAccountApprovedBy", fields: [approvedByUserId], references: [id])

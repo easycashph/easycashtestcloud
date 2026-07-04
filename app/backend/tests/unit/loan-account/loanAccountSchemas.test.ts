@@ -10,6 +10,7 @@ describe('createLoanAccountSchema', () => {
     principalAmount: '10000.00',
     interestRate: '2.5',
     installmentCount: 12,
+    firstRepaymentDate: '2026-08-15',
   };
 
   it('accepts a minimal valid payload', () => {
@@ -23,6 +24,12 @@ describe('createLoanAccountSchema', () => {
 
   it('rejects a non-positive installmentCount', () => {
     expect(createLoanAccountSchema.safeParse({ ...base, installmentCount: 0 }).success).toBe(false);
+  });
+
+  // ADR-045 (Concept 1 — Exact First Repayment Date): required, explicit input, never derived.
+  it('rejects a missing firstRepaymentDate', () => {
+    const { firstRepaymentDate: _firstRepaymentDate, ...withoutFirstRepaymentDate } = base;
+    expect(createLoanAccountSchema.safeParse(withoutFirstRepaymentDate).success).toBe(false);
   });
 
   // Milestone 8.1 remediation (audit finding H-2): previously only

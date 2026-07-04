@@ -28,6 +28,7 @@ function buildLoan() {
     principalAmount: Money.of('10000.00'),
     interestRate: Percentage.of('2.5'),
     installmentCount: 12,
+    firstRepaymentDate: new Date('2026-08-15'),
   });
 }
 
@@ -45,6 +46,7 @@ function buildExistingLoan(version: number) {
     installmentCount: 12,
     repaymentPeriodUnit: 'MONTHS',
     gracePeriodDays: 0,
+    firstRepaymentDate: new Date('2026-08-15'),
     createdAt: new Date(),
     updatedAt: new Date(),
     appliedFees: [],
@@ -178,6 +180,7 @@ describe('PrismaLoanAccountRepository', () => {
         installmentCount: 12,
         repaymentPeriodUnit: 'MONTHS',
         gracePeriodDays: 0,
+        firstRepaymentDate: now,
         approvedAt: null,
         approvedByUserId: null,
         activatedAt: null,

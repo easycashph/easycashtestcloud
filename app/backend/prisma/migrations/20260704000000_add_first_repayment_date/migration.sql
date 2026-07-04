@@ -1,0 +1,24 @@
+-- EasyCash Digital Lending Platform — Milestone 9.1 Checkpoint 8
+-- Source: docs/Architecture/ADR-045-repayment-schedule-due-date-generation.md
+-- (Concept 1 — Exact First Repayment Date, Accepted). Scope: add an
+-- explicit, required `firstRepaymentDate` column to `LoanAccount`, supplied
+-- at origination and used as the anchor date for RepaymentInstallment
+-- schedule generation at activation. No default value is supplied — per
+-- ADR-045 §1-§3, no generation rule is recoverable from this system's
+-- evidence base, so a fabricated default would invent the exact business
+-- rule this ADR concluded does not exist. NOT NULL is safe because no
+-- LoanAccount rows exist in this dev environment (no live Postgres has
+-- ever been available — see PROJECT_HANDOFF.md's standing risk note) and
+-- no seed data creates any.
+--
+-- Hand-authored, same basis as every prior migration in this project: no
+-- live PostgreSQL instance is available in this dev environment, so this
+-- could not be generated via a `prisma migrate dev` shadow-database diff.
+-- Column/table names verified directly against `20260702000000_init/
+-- migration.sql` and the current `schema.prisma`. Action item before first
+-- real deployment: run `npx prisma migrate dev` once against a live
+-- Postgres to have Prisma confirm this migration through its normal
+-- workflow — should be a no-op confirmation, not a functional change.
+
+-- AlterTable
+ALTER TABLE "loan_accounts" ADD COLUMN "firstRepaymentDate" TIMESTAMP(3) NOT NULL;

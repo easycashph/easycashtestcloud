@@ -10,5 +10,7 @@ export interface CreateLoanAccountInput {
   contractualInterestRate?: string;
   installmentCount: number;
   gracePeriodDays?: number;
+  /** ADR-045 (Concept 1 — Exact First Repayment Date): explicit input, never derived. */
+  firstRepaymentDate: Date;
   legacyId?: string;
 }

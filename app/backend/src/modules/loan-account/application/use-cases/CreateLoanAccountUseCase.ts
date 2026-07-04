@@ -71,6 +71,7 @@ export class CreateLoanAccountUseCase {
       contractualInterestRate: input.contractualInterestRate ? Percentage.of(input.contractualInterestRate) : undefined,
       installmentCount: input.installmentCount,
       gracePeriodDays: input.gracePeriodDays,
+      firstRepaymentDate: input.firstRepaymentDate,
       legacyId: input.legacyId,
     });
 

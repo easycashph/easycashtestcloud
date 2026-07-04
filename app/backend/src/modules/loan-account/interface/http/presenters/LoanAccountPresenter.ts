@@ -44,6 +44,7 @@ export function presentLoanAccount(loanAccount: LoanAccount) {
     installmentCount: loanAccount.installmentCount,
     repaymentPeriodUnit: loanAccount.repaymentPeriodUnit,
     gracePeriodDays: loanAccount.gracePeriodDays,
+    firstRepaymentDate: loanAccount.firstRepaymentDate.toISOString(),
     approvedAt: loanAccount.approvedAt?.toISOString() ?? null,
     approvedByUserId: loanAccount.approvedByUserId ?? null,
     activatedAt: loanAccount.activatedAt?.toISOString() ?? null,
