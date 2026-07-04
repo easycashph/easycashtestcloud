@@ -1,5 +1,5 @@
 -- EasyCash Digital Lending Platform — Milestone 9.1 Checkpoint 1
--- Source: docs/Architecture/ADR-optimistic-concurrency.md, decided in
+-- Source: docs/Architecture/ADR-048-optimistic-concurrency.md, decided in
 -- FINANCIAL_INVARIANTS.md §6 and formalized as a standalone ADR in
 -- Milestone 9. Scope: add a `version` column to every balance-mutating
 -- aggregate (LoanAccount, RepaymentSchedule) so future writes can use a
@@ -20,7 +20,7 @@
 -- statement — no separate UPDATE pass is needed.
 
 -- ----------------------------------------------------------------------------
--- ADR-optimistic-concurrency §3: LoanAccount is a balance-mutating
+-- ADR-048-optimistic-concurrency §3: LoanAccount is a balance-mutating
 -- aggregate (principal/interest/fees/penalty balance/paid/due) requiring
 -- optimistic concurrency for every future write that touches those fields.
 -- ----------------------------------------------------------------------------
@@ -29,7 +29,7 @@
 ALTER TABLE "loan_accounts" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 0;
 
 -- ----------------------------------------------------------------------------
--- ADR-optimistic-concurrency §3: RepaymentSchedule (the table backing the
+-- ADR-048-optimistic-concurrency §3: RepaymentSchedule (the table backing the
 -- `RepaymentInstallment` domain aggregate) is the second, and — per the
 -- ADR — currently last, balance-mutating aggregate in scope.
 -- ----------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import type { TransactionContext } from '../TransactionContext';
  * redeclared here rather than imported from it: `shared/` must not depend
  * on any one module (Clean Architecture dependency direction — modules
  * depend on `shared/`, never the reverse). Per
- * `docs/Architecture/ADR-financial-audit-isolation.md` §5, the exact shape
+ * `docs/Architecture/ADR-047-financial-audit-isolation.md` §5, the exact shape
  * is intentionally left open for future refinement; this is the minimal
  * shape `PROJECT_RULES.md §Audit Trail` requires (User, Timestamp, Action,
  * Previous Value, New Value, IP, Browser — `createdAt`/timestamp is
@@ -24,7 +24,7 @@ export interface AuditLogEntry {
 }
 
 /**
- * `docs/Architecture/ADR-financial-audit-isolation.md`: the financial-
+ * `docs/Architecture/ADR-047-financial-audit-isolation.md`: the financial-
  * module counterpart to identity's `IAuditLogger`, with the opposite
  * failure contract.
  *
@@ -35,7 +35,7 @@ export interface AuditLogEntry {
  */
 export interface IFinancialAuditLogger {
   /**
-   * ADR-financial-audit-isolation §1: implementations MUST throw/propagate
+   * ADR-047-financial-audit-isolation §1: implementations MUST throw/propagate
    * on failure — the exact opposite contract of identity's
    * `IAuditLogger.log()`. An unaudited financial state change is a worse
    * outcome than a failed write, so a failure here must abort whatever

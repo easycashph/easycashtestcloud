@@ -634,7 +634,7 @@ model LoanAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// ADR-optimistic-concurrency: optimistic concurrency control for every
+  /// ADR-048-optimistic-concurrency: optimistic concurrency control for every
   /// balance-mutating write. Every conditional update increments this and
   /// checks it in the same `WHERE` clause; a zero-row result means another
   /// writer moved first, and the caller must receive a
@@ -726,7 +726,7 @@ model RepaymentSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  /// ADR-optimistic-concurrency: same optimistic concurrency mechanism as
+  /// ADR-048-optimistic-concurrency: same optimistic concurrency mechanism as
   /// `LoanAccount.version` — see that field's comment for the full
   /// rationale. Applied here too for consistency, per the ADR's decision
   /// to scope this to every balance-mutating aggregate, not just one.

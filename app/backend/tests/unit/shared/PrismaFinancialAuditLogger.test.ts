@@ -11,7 +11,7 @@ vi.mock('@shared/database/prismaClient', () => ({ prisma: prismaMock }));
 const { PrismaFinancialAuditLogger } = await import('@shared/infrastructure/PrismaFinancialAuditLogger');
 const { PrismaUnitOfWork } = await import('@shared/infrastructure/PrismaUnitOfWork');
 
-describe('PrismaFinancialAuditLogger (ADR-financial-audit-isolation: must fail closed)', () => {
+describe('PrismaFinancialAuditLogger (ADR-047-financial-audit-isolation: must fail closed)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -67,7 +67,7 @@ describe('PrismaFinancialAuditLogger (ADR-financial-audit-isolation: must fail c
     const logger = new PrismaFinancialAuditLogger();
     const unitOfWork = new PrismaUnitOfWork();
 
-    // This is the fail-closed guarantee ADR-financial-audit-isolation §4
+    // This is the fail-closed guarantee ADR-047-financial-audit-isolation §4
     // requires: a failing audit write, when it's one call among several
     // inside a financial use case's IUnitOfWork.run() block, must cause
     // that whole block to reject — which is what triggers Prisma's

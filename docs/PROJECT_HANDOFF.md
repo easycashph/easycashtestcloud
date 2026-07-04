@@ -288,6 +288,71 @@ detail).
 **Explicitly deferred, not fixed this pass (approved deferral, not an oversight):** M-1, M-2,
 M-3, M-4, L-1 through L-5. See §5 for the full list with reasons.
 
+### 2026-07-04 — Repository housekeeping (no code/domain changes)
+Three cleanup actions, none affecting business logic, application code, or any ADR's decision
+content:
+- **New ADR added:** `docs/Architecture/ADR-046-advance-interest-fee-extended-first-repayment-gap.md`
+  — documents a previously-unmodeled origination-time fee discovered during legacy-data
+  investigation (triggered when `firstRepaymentDate − disbursementDate > 30 days`; rate basis is
+  Add-On Rate; rounding is ceiling-to-whole-peso). Does not block Milestone 9.1 CP8. See the ADR
+  itself for full evidence trail.
+- **Two previously-unnumbered ADRs renamed for consistency with the `ADR-[number]-[slug].md`
+  convention used by every other ADR in this repository:**
+  - `ADR-financial-audit-isolation.md` → `docs/Architecture/ADR-047-financial-audit-isolation.md`
+  - `ADR-optimistic-concurrency.md` → `docs/Architecture/ADR-048-optimistic-concurrency.md`
+
+  Renamed via `git mv` (history preserved). All cross-references updated in
+  `ADR-007_DECISION_BRIEF.md`, `CALCULATION_ENGINE_SPEC.md`,
+  `MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`, and this file. **No content, decision, or status
+  changed in either ADR — this was a filename/reference-only fix.** If any external notes, tickets,
+  or chat history reference the old filenames, update them to the new numbered names above.
+- **Removed 8 empty, untracked, top-level scaffold folders** left over from initial project setup
+  (`backend/`, `database/`, `deployments/`, `frontend/`, `scripts/`, `tests/`, `docs/Reports/`,
+  `docs/SRS/`) — all duplicated the already-in-use `app/backend`/`app/frontend` structure, were
+  never populated, and were not tracked by git. `legacy/sdevtech/` (referenced as evidence in
+  `ADR-045`) and `app/frontend/src/{components,features,hooks,lib,routes}` (intentional, not-yet-
+  populated frontend scaffolding) were deliberately left untouched.
+
+**Wording inconsistency surfaced and resolved:** while updating references, §8's Financial audit
+infrastructure entry was found to say "fail-closed implementation, logs-but-never-throws on write
+failure" — self-contradictory, since fail-closed requires throwing, not catching-and-logging.
+Checked directly against `app/backend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts`:
+the actual code is correct — it deliberately has no `try/catch`, so a failed `auditLog.create()`
+call propagates and rolls back the enclosing `IUnitOfWork` transaction, exactly as
+`ADR-047-financial-audit-isolation.md` §1/§3 requires. **Only the doc's wording was wrong; the
+implementation was never at fault.** §8's entry has been corrected accordingly. While fixing
+cross-references, 8 additional stale mentions of the pre-rename filenames were also found and
+fixed in code comments: `IFinancialAuditLogger.ts` (×3), `PrismaFinancialAuditLogger.ts` (×1),
+`DomainError.ts` (×1), and three unit test files (`LoanAccount.test.ts`,
+`PrismaLoanAccountRepository.test.ts`, `PrismaRepaymentInstallmentRepository.test.ts`,
+`RepaymentInstallment.test.ts`, `PrismaFinancialAuditLogger.test.ts`) — all comment-only changes,
+no test assertions or logic touched.
+
+**Additional consistency fixes found on a second, broader sweep** (grep restricted to `.ts`/`.md`
+initially missed non-`.ts` source files):
+- `app/backend/prisma/schema.prisma` — 2 stale `ADR-optimistic-concurrency` comment references
+  (on `LoanAccount.version` and `RepaymentInstallment.version`) updated to `ADR-048-...`.
+- `app/backend/prisma/migrations/20260703000000_add_optimistic_concurrency_version/migration.sql`
+  — 3 stale comment references updated to `ADR-048-...`. **Comments only, no DDL changed** — safe
+  because this migration has never been applied against a live database in this project (no live
+  Postgres has ever been available here, per this file's own header comment and the repeated note
+  elsewhere in this handoff), so there is no applied-migration checksum to conflict with. This is
+  a deliberate, confirmed exception to the general rule of never editing migrations after
+  authoring — do not treat this as precedent for editing a migration that has actually been run
+  against a real database.
+- `docs/Architecture/FINANCIAL_INVARIANTS.md` §1 — a forward-looking placeholder reference to a
+  not-yet-written `docs/Architecture/ADR-042-repayment-installment-aggregate.md` was stale: that
+  content was in fact folded into the already-existing `ADR-042-aggregate-boundaries.md` §7
+  ("Why `RepaymentInstallment` is an independent Aggregate Root") when it was written, but the
+  invariants doc was never updated to point to it. Fixed to reference the real file/section.
+- `app/backend/dist/**/*.js` (compiled build output) also matched the old filenames in a repo-wide
+  grep — **left untouched, correctly**: `dist/` is git-ignored, regenerated by `npm run build`, and
+  will pick up the corrected source comments on the next build. Never hand-edit generated output.
+- Verified as **not** issues, so left alone: `ADR-008`, `ADR-015`, `ADR-038`, `ADR-041` are
+  mentioned in several docs without a corresponding file, but every mention consistently and
+  correctly labels them "still open" / "not yet written" — these are legitimately reserved,
+  not-yet-decided ADR numbers, not broken links.
+
 ---
 
 ## 5. Remaining Deferred Items
@@ -582,7 +647,7 @@ does not add, remove, or reorder any checkpoint either — confirmed by its own 
 | Checkpoint | Status | Evidence |
 |---|---|---|
 | CP1 — Concurrency infrastructure | **Done, committed** (`bdaa7b6`) | `version` columns added to `LoanAccount`/`RepaymentInstallment` in `schema.prisma`; `ConcurrencyConflictError` added to `shared/errors/DomainError.ts`. |
-| CP2 — Financial audit infrastructure | **Done, committed** (`363ffde`) | `shared/application/ports/IFinancialAuditLogger.ts` (port) + `shared/infrastructure/PrismaFinancialAuditLogger.ts` (fail-closed implementation, logs-but-never-throws on write failure per `ADR-financial-audit-isolation.md`). |
+| CP2 — Financial audit infrastructure | **Done, committed** (`363ffde`) | `shared/application/ports/IFinancialAuditLogger.ts` (port) + `shared/infrastructure/PrismaFinancialAuditLogger.ts` (fail-closed implementation — deliberately does NOT catch its own errors, so a write failure throws/propagates and rolls back the enclosing transaction, per `ADR-047-financial-audit-isolation.md`). |
 | CP3 — Declining-balance interest + PMT amortization | **Done, committed** (`f964a63`) | `shared/domain/calculation/DecliningBalanceInterestCalculator.ts`, `AmortizationScheduleGenerator.ts` (CALC-SPEC §1/§2). Standalone, not yet called by any use case. |
 | CP4 — Payment allocation calculator + service | **Done, committed** (`ec681fe`) | `shared/domain/calculation/PaymentAllocationCalculator.ts`, `PaymentAllocationService.ts` (CALC-SPEC §5, ADR-009). Standalone, not yet called by any use case. |
 | CP5 — `version` property on domain model | **Done, committed** (`f57efc3`) | `LoanAccount`/`RepaymentInstallment` domain entities expose `version` via getter; `PrismaLoanAccountRepository`/`PrismaRepaymentInstallmentRepository` map the column through on read. |
@@ -656,9 +721,9 @@ citing the Legacy Analysis document by section):
    *mechanism* is decided; two central design questions are explicitly left `UNRESOLVED`,
    deliberately, per instruction not to invent a resolution to a genuine contradiction in the
    evidence. **This ADR needs your decision before it can be marked fully Accepted.**
-5. `ADR-financial-audit-isolation.md` — **Accepted.** Formalizes a principle already agreed in
+5. `ADR-047-financial-audit-isolation.md` — **Accepted.** Formalizes a principle already agreed in
    `FINANCIAL_INVARIANTS.md §4`; introduces no new decision.
-6. `ADR-optimistic-concurrency.md` — **Accepted.** Formalizes a principle already agreed in
+6. `ADR-048-optimistic-concurrency.md` — **Accepted.** Formalizes a principle already agreed in
    `FINANCIAL_INVARIANTS.md §6`; introduces no new decision.
 
 **One new specification document:**

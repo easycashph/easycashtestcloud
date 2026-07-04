@@ -7,8 +7,8 @@ per `CLAUDE.md`'s Decision Log requirement.
 **Evidence base:** `docs/Legacy Analysis/2026-07-03-milestone9-financial-rules-verification.md`
 (all sections); `docs/Architecture/ADR-007-outstanding-balance-formula.md`,
 `ADR-009-payment-allocation-order.md`, `ADR-010-addon-vs-contractual-interest.md`,
-`ADR-032-loan-release-vs-disbursement.md`, `ADR-financial-audit-isolation.md`,
-`ADR-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`.
+`ADR-032-loan-release-vs-disbursement.md`, `ADR-047-financial-audit-isolation.md`,
+`ADR-048-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`.
 **Rule:** every formula below is either cited to verified legacy evidence, a legal loan document,
 or explicitly marked `STATUS: UNRESOLVED`. No formula in this document was filled in from general
 lending-industry convention. Where a formula is `UNRESOLVED`, implementation must not proceed for

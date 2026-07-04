@@ -1,4 +1,4 @@
-# ADR — Optimistic Concurrency for Balance-Mutating Writes
+# ADR-048 — Optimistic Concurrency for Balance-Mutating Writes
 
 **Status:** Accepted (Milestone 9 design review, 2026-07-03)
 **Context documents:** `docs/Architecture/FINANCIAL_INVARIANTS.md` §6 (the principle this ADR

@@ -34,7 +34,7 @@ and this document stay traceable to the same source of truth.
   a formal restructuring event (ADR-041, currently out of scope). Only `*Paid` fields and
   derived `status` change during the life of an installment. This is what allows
   `RepaymentInstallment` to be modeled as its own small aggregate (see
-  `docs/Architecture/ADR-042-repayment-installment-aggregate.md` when formally written) — the
+  `docs/Architecture/ADR-042-aggregate-boundaries.md` §7 — formally written) — the
   one cross-row invariant below is guaranteed at batch-creation time and never needs runtime
   re-verification.
 - **AUDIT-1 / AUDIT-2 — `AuditLog` is append-only.** No update/delete path is ever exposed.

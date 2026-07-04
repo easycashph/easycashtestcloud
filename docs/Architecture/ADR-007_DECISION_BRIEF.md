@@ -11,7 +11,7 @@ could still add.
 **Sources drawn on:** `docs/Legacy Analysis/2026-07-03-milestone9-financial-rules-verification.md`
 (all sections); `docs/Architecture/ADR-007-outstanding-balance-formula.md`,
 `ADR-009-payment-allocation-order.md`, `ADR-010-addon-vs-contractual-interest.md`,
-`ADR-financial-audit-isolation.md`, `ADR-optimistic-concurrency.md`,
+`ADR-047-financial-audit-isolation.md`, `ADR-048-optimistic-concurrency.md`,
 `CALCULATION_ENGINE_SPEC.md`, `FINANCIAL_INVARIANTS.md`; `PROJECT_RULES.md`; `PROJECT_HANDOFF.md`;
 `app/backend/prisma/schema.prisma`. No new legacy data was examined to prepare this brief — it is
 a synthesis of evidence already gathered, not a new investigation.

@@ -4,7 +4,7 @@ import type { TransactionContext } from '../application/TransactionContext';
 import type { AuditLogEntry, IFinancialAuditLogger } from '../application/ports/IFinancialAuditLogger';
 
 /**
- * `docs/Architecture/ADR-financial-audit-isolation.md`: writes to the same
+ * `docs/Architecture/ADR-047-financial-audit-isolation.md`: writes to the same
  * `audit_logs` table identity's `PrismaAuditLogger` uses — no new table.
  *
  * Deliberately does NOT catch its own errors, unlike

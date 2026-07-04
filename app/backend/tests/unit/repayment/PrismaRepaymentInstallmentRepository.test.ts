@@ -54,7 +54,7 @@ describe('PrismaRepaymentInstallmentRepository', () => {
     expect(repaymentScheduleOps.updateMany).not.toHaveBeenCalled();
   });
 
-  // Milestone 9.1 checkpoint 6 / ADR-optimistic-concurrency.
+  // Milestone 9.1 checkpoint 6 / ADR-048-optimistic-concurrency.
   describe('conditional write (checkpoint 6)', () => {
     it('an existing installment is updated via a conditional WHERE id = ? AND version = ? guard, incrementing version', async () => {
       const installment = buildExistingInstallment(4);
@@ -100,7 +100,7 @@ describe('PrismaRepaymentInstallmentRepository', () => {
     await expect(repo.findById('missing')).resolves.toBeNull();
   });
 
-  // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version must
+  // Milestone 9.1 checkpoint 5 / ADR-048-optimistic-concurrency: version must
   // be hydrated from the persisted row into the domain object — this is
   // the one new piece of read-mapping behavior this checkpoint adds.
   it('findById hydrates version from the persisted row', async () => {

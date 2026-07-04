@@ -25,7 +25,7 @@ describe('LoanAccount', () => {
     expect(loan.balances.principalBalance.isZero()).toBe(true);
   });
 
-  // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version is
+  // Milestone 9.1 checkpoint 5 / ADR-048-optimistic-concurrency: version is
   // hydrated from the persisted row on read; checkpoint 6 is what actually
   // consults/increments it on write (see PrismaLoanAccountRepository).
   it('create() starts at version 0', () => {

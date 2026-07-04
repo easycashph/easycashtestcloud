@@ -51,7 +51,7 @@ export class ForbiddenError extends DomainError {
 }
 
 /**
- * Milestone 9.1 / ADR-optimistic-concurrency: raised when a conditional
+ * Milestone 9.1 / ADR-048-optimistic-concurrency: raised when a conditional
  * `UPDATE ... WHERE id = ? AND version = ?` affects zero rows, meaning
  * another writer already moved the aggregate's `version` forward since the
  * caller last read it. The caller must not silently retry with stale data;

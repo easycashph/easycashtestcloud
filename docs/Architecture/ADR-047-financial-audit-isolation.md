@@ -1,4 +1,4 @@
-# ADR — Financial Audit Logging Failure Isolation (Auth vs. Financial)
+# ADR-047 — Financial Audit Logging Failure Isolation (Auth vs. Financial)
 
 **Status:** Accepted (Milestone 9 design review, 2026-07-03)
 **Context documents:** `docs/Architecture/FINANCIAL_INVARIANTS.md` §4 (the principle this ADR

@@ -91,7 +91,7 @@ describe('PrismaLoanAccountRepository', () => {
       });
     });
 
-    // Milestone 9.1 checkpoint 6 / ADR-optimistic-concurrency.
+    // Milestone 9.1 checkpoint 6 / ADR-048-optimistic-concurrency.
     describe('conditional write (checkpoint 6)', () => {
       it('a new aggregate (isNew) is INSERTed with version 0, not upserted', async () => {
         const loan = buildLoan();
@@ -146,7 +146,7 @@ describe('PrismaLoanAccountRepository', () => {
       await expect(repo.findById('missing')).resolves.toBeNull();
     });
 
-    // Milestone 9.1 checkpoint 5 / ADR-optimistic-concurrency: version must
+    // Milestone 9.1 checkpoint 5 / ADR-048-optimistic-concurrency: version must
     // be hydrated from the persisted row into the domain object — this is
     // the one new piece of read-mapping behavior this checkpoint adds.
     it('hydrates version from the persisted row', async () => {

@@ -9,8 +9,8 @@ single current plan.
 dependencies, risk, DDD, Clean Architecture, financial engine, concurrency, testing, missing
 building blocks, technical debt, milestone assessment, final verdict); `docs/Architecture/ADR-007
 -outstanding-balance-formula.md`, `ADR-009-payment-allocation-order.md`, `ADR-010-addon-vs-
-contractual-interest.md`, `ADR-032-loan-release-vs-disbursement.md`, `ADR-financial-audit-
-isolation.md`, `ADR-optimistic-concurrency.md`, `ADR-007_DECISION_BRIEF.md`,
+contractual-interest.md`, `ADR-032-loan-release-vs-disbursement.md`, `ADR-047-financial-audit-
+isolation.md`, `ADR-048-optimistic-concurrency.md`, `ADR-007_DECISION_BRIEF.md`,
 `CALCULATION_ENGINE_SPEC.md`, `FINANCIAL_INVARIANTS.md`, `PROJECT_RULES.md`, `CLAUDE.md`,
 `app/backend/prisma/schema.prisma`.
 **Rule applied throughout:** the independent review is treated as an input, not an authority. Every
@@ -121,7 +121,7 @@ correct and already a documented, standing risk across this entire project (`PRO
 every milestone since Milestone 4). **But treating it as a hard, blocking requirement specifically
 for CP9/CP10, when it has never been a blocking requirement for any of the eight prior milestones
 that also touched the database** (including Milestone 6's `RefreshToken.revoke()`, which this
-project's own `ADR-optimistic-concurrency.md` cites as this exact pattern's precedent) **would be
+project's own `ADR-048-optimistic-concurrency.md` cites as this exact pattern's precedent) **would be
 an inconsistent, newly-invented bar** — not a correction grounded in this project's actual
 demonstrated environment constraints, which have never included live-Postgres access.
 
@@ -334,11 +334,11 @@ the recommended order is:
 
 ### CP1 — Concurrency Infrastructure
 **Objective:** `version` column (schema) + `ConcurrencyConflictError` (typed error), per
-`ADR-optimistic-concurrency.md`. Unchanged from the original roadmap's Checkpoint 1.
+`ADR-048-optimistic-concurrency.md`. Unchanged from the original roadmap's Checkpoint 1.
 
 ### CP2 — Financial Audit Infrastructure
 **Objective:** `IFinancialAuditLogger` port + `PrismaFinancialAuditLogger`, fail-closed, per
-`ADR-financial-audit-isolation.md`. Unchanged from the original roadmap's Checkpoint 2.
+`ADR-047-financial-audit-isolation.md`. Unchanged from the original roadmap's Checkpoint 2.
 
 ### CP3 — Declining-Balance Interest + PMT Amortization
 **Objective:** `CALCULATION_ENGINE_SPEC.md` §1/§2. **Change from original:** test precision
@@ -518,7 +518,7 @@ either is scoped.
 ## Preserved ADRs — No Contradictions Found
 
 Every ADR produced in the Milestone 9 documentation phase (`ADR-007`, `ADR-009`, `ADR-010`,
-`ADR-032`, `ADR-financial-audit-isolation`, `ADR-optimistic-concurrency`) remains unchanged by this
+`ADR-032`, `ADR-047-financial-audit-isolation`, `ADR-048-optimistic-concurrency`) remains unchanged by this
 document. Nothing in the independent review or this re-evaluation surfaced a contradiction with any
 ADR's content or status — only a clarification of how narrowly `ADR-007`'s open questions actually
 constrain the implementation surface, which is a planning-document correction, not an ADR
