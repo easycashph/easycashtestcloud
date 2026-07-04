@@ -105,6 +105,47 @@ describe('ActivateLoanUseCase', () => {
     expect(result.balances.interestDue.equals(expectedInterestDue)).toBe(true);
   });
 
+  it('uses LoanAccount.interestRate for amortization, not contractualInterestRate, even when they diverge (ADR-010 §1)', async () => {
+    // Regression test: ADR-010 §1 names `LoanAccount.interestRate` itself as
+    // the `MonthlyContractualRate` the amortization formula requires.
+    // `contractualInterestRate`/`addOnInterestRate` are optional,
+    // disclosure-oriented fields (ADR-010 §1 items 3-4) that may not be
+    // populated on every loan, or may be populated with a different tier
+    // than `interestRate` for a loan originated via the Add-On-quoted path.
+    // An earlier version of this use case incorrectly preferred
+    // `contractualInterestRate` over `interestRate` when both were present
+    // — this test constructs a loan where they deliberately diverge and
+    // asserts `interestRate` (RATE, 3.7%) is what's actually used, not the
+    // divergent `contractualInterestRate` (10%, which is not evidenced
+    // anywhere as this loan's real contractual rate).
+    const deps = buildDeps();
+    const loan = LoanAccount.create({
+      loanCode: 'LN-0002',
+      borrowerId: 'borrower-1',
+      loanProductVersionId: 'version-1',
+      branchId: 'branch-1',
+      principalAmount: PRINCIPAL,
+      interestRate: RATE,
+      contractualInterestRate: Percentage.of('10'),
+      installmentCount: INSTALLMENT_COUNT,
+      firstRepaymentDate: FIRST_REPAYMENT_DATE,
+    });
+    loan.approve('officer-1');
+    deps.loanAccountRepository.findById.mockResolvedValue(loan);
+    deps.loanProductRepository.findVersionById.mockResolvedValue(buildLoanProductVersion());
+
+    const { schedule: expectedSchedule } = AmortizationScheduleGenerator.generate(PRINCIPAL, RATE, INSTALLMENT_COUNT);
+    const expectedInterestDue = expectedSchedule.reduce((total, entry) => total.add(entry.interestPortion), Money.ZERO);
+    const { schedule: wrongRateSchedule } = AmortizationScheduleGenerator.generate(PRINCIPAL, Percentage.of('10'), INSTALLMENT_COUNT);
+    const wrongRateInterestDue = wrongRateSchedule.reduce((total, entry) => total.add(entry.interestPortion), Money.ZERO);
+
+    const useCase = new ActivateLoanUseCase(deps);
+    const result = await useCase.execute(loan.id, 'officer-1');
+
+    expect(result.balances.interestDue.equals(expectedInterestDue)).toBe(true);
+    expect(result.balances.interestDue.equals(wrongRateInterestDue)).toBe(false);
+  });
+
   it('leaves feesDue/penaltyDue at zero — no fee-application logic is invented (ADR-046 excluded)', async () => {
     const deps = buildDeps();
     const loan = buildApprovedLoan();

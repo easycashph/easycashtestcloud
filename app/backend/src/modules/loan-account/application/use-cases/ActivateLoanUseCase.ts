@@ -83,10 +83,18 @@ function addMonths(date: Date, months: number): Date {
  * disbursement (penalty is definitionally zero at this point regardless of
  * which formula eventually wins), so this does not pre-decide ADR-007.
  *
- * `monthlyContractualRate` uses `LoanAccount.contractualInterestRate` if
- * present, otherwise `interestRate` — no Add-On-to-Contractual conversion
- * is performed, per the roadmap's explicit deferral of that calculation
- * (no caller needs it yet).
+ * `monthlyContractualRate` is `LoanAccount.interestRate` directly — per
+ * `ADR-010` §1 ("`MonthlyContractualRate` is the loan's stored,
+ * snapshot-at-approval rate, `LoanAccount.interestRate`"), this field
+ * already IS the contractual rate the amortization formula requires; no
+ * ADR establishes `contractualInterestRate` as a higher-precedence source,
+ * and `addOnInterestRate`/`contractualInterestRate` are both optional
+ * disclosure-oriented fields (ADR-010 §1 item 3-4) that may not be
+ * populated on every loan. Using either as an override/fallback here would
+ * silently compute interest against the wrong rate for any loan
+ * originated via the Add-On-quoted path without a mirrored
+ * `contractualInterestRate` — no Add-On-to-Contractual conversion is
+ * performed by this use case in any case.
  */
 export class ActivateLoanUseCase {
   constructor(private readonly deps: ActivateLoanUseCaseDeps) {}
@@ -106,7 +114,7 @@ export class ActivateLoanUseCase {
       throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
     }
 
-    const monthlyContractualRate = loanAccount.contractualInterestRate ?? loanAccount.interestRate;
+    const monthlyContractualRate = loanAccount.interestRate;
     const { schedule } = AmortizationScheduleGenerator.generate(
       loanAccount.principalAmount,
       monthlyContractualRate,
