@@ -13,12 +13,15 @@ you observe in the repository, trust the repository and update this document.
 ## 1. Current Project State
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
-- **Latest committed commit:** `a85b815` — "Frontend: Milestone 9.1 UI preview - Loan
-  Applications, Payment Reminders, roles, Client workflow". **This is a separate, parallel track
-  from the `app/backend` Milestone 9.1 checkpoint track below — see the new "Frontend UI Preview
-  track" subsection at the end of this section before assuming it changes any backend checkpoint
-  status.** The last commit on the `app/backend` track itself is still `b4c00d1` — "Milestone 9.1
-  checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance)".
+- **Latest committed commit:** `ba774ed` — "feat: implement ADR-038 role rename (Administrator/
+  Manager/... -> MIS/Loan Operation Manager/...)". This is a real `app/backend` code change (not a
+  docs-only commit) — see §6 for the current, implemented authorization model.
+  **Note on commit hashes:** every commit hash in this repository was rewritten on 2026-07-06 by a
+  `git filter-branch` pass that stripped `legacy/reports/*.xlsx` (real client data) from history —
+  if you see a hash in an older conversation or note that doesn't match `git log` here, that's why;
+  trust `git log`, not a memorized hash. The frontend UI-preview commit referenced elsewhere in
+  this document as `a85b815` is now `3b9b950` under its new hash; Milestone 9.1 CP11's commit
+  (formerly `b4c00d1`) is now `e9448ed` — same content, new hash only.
 - **Latest completed backend implementation:** Milestone 9.1 **CP11**, per
   `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11
   are implemented, verified, and committed. **No further checkpoint is currently ungated:** CP12
@@ -127,24 +130,20 @@ resuming work correctly:
   categorization) are described as "confirmed by the business" and should carry forward into the
   real implementation rather than being re-derived or guessed at.
 
-- **Latest commits (newest first):**
+- **Latest commits (newest first, verified against `git log` post-rewrite, 2026-07-06):**
   ```
-  a85b815 Frontend: Milestone 9.1 UI preview - Loan Applications, Payment Reminders, roles, Client workflow
-  33080ba docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP11 completion
-  b4c00d1 Milestone 9.1 checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance)
-  9239219 docs: ADR-049 update - confirm named employee accounts, add rate discount finding, clear BL claim
-  10a84a9 docs: ADR-049 - Employee Loan Fee Waiver, explicitly rejects informal manager-favor exemptions
-  483b42b docs: resolve ADR-007 §3 (outstandingBalance penalty inclusion) - Option B, both fields
-  3521e3b docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP10 completion
-  9b65624 Milestone 9.1 checkpoint 10: golden-master replay tests
-  08345f3 Milestone 9.1 checkpoint 9: ProcessPaymentUseCase (cross-installment allocation, ledger, fail-closed audit)
-  9476848 fix: use LoanAccount.interestRate directly for amortization, not contractualInterestRate
-  39fc312 docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP8 completion
-  ce21160 Milestone 9.1 checkpoint 8: ActivateLoanUseCase (schedule generation, disbursement ledger, fail-closed audit)
-  146d9f6 docs: replace README.txt with a professional README.md
-  47c7404 docs: add ADR-046, renumber ADR-047/048, fix stale cross-references
-  3b46391 docs: accept ADR-045 (Concept 1 - Exact First Repayment Date)
+  ba774ed feat: implement ADR-038 role rename (Administrator/Manager/... -> MIS/Loan Operation Manager/...)
+  faa3470 docs: ADR-038 - confirm MIS-only for future User Management endpoint
+  7e530cb docs: accept ADR-038 - full permission matrix (roles, endpoints, branch scope, PII)
+  22ec21d docs: confirm User Roles taxonomy (MIS/Loan Operation Manager/CRM/Finance/Accounting/Collection Officer)
+  edc9cb1 docs: refresh handoff for frontend-preview commit; untrack legacy client-data xlsx reports
+  3b9b950 Frontend: Milestone 9.1 UI preview - Loan Applications, Payment Reminders, roles, Client workflow (formerly a85b815, pre-rewrite)
+  73bb818 docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP11 completion (formerly 33080ba)
+  e9448ed Milestone 9.1 checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance) (formerly b4c00d1)
   ```
+  Older history (ADR-049, CP8–CP10, etc.) is unchanged in content, only in hash, per the
+  `git filter-branch` rewrite noted above — see `git log --oneline` directly rather than trusting
+  any older hash recorded elsewhere in this document's history.
 - **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP11):** **464
   unit tests passing, 0 failing, 6 integration tests correctly skipped** (74 test files total; up
   from 460/74 before CP11 — the +4 are CP11's `collectionsBalance`/`accountingBalance` tests,
