@@ -1,9 +1,9 @@
-# ADR-049 — Employee Loan Fee Waiver
+# ADR-049 — Employee Loan Fee Waiver and Preferential Rate
 
-**Status:** ACCEPTED — existence and scope of the waiver confirmed by both legacy evidence and
-direct business testimony; exact implementation mechanism specified below. Does not block any
-implemented Milestone 9.1 checkpoint (CP1–CP10) — this is a new, standalone feature for a future
-checkpoint, not a correction to existing work.
+**Status:** ACCEPTED — existence and scope confirmed by both legacy evidence (including named,
+individually-verified loan accounts) and direct business testimony; exact implementation
+mechanism specified below. Does not block any implemented Milestone 9.1 checkpoint (CP1–CP10) —
+this is a new, standalone feature for a future checkpoint, not a correction to existing work.
 
 **Context documents:** `legacy/reports/Fields in Google Spreadsheet.xlsx` (`MLR Master List`
 sheet, `Agency / Company` and fee columns — the evidence source for this ADR);
@@ -43,23 +43,67 @@ Critically, the Easycash-employee loans don't merely show a zero `Processing Fee
 **every one of the 40 zero-processing-fee rows also shows zero `Documentation Fee`, zero
 `Account Management Fee`, zero `Notarial Fee`, and zero `Insurance Fee` simultaneously**, a
 combination far more specific than the general population's per-product fee-waiver patterns
-(which vary fee-by-fee, not as an all-or-nothing bundle). **Interest rates (Add-On) on these same
-loans are NOT zero** (observed values: 1.5%, 0%, 2.63%) — the waiver is confirmed to be scoped to
-ancillary fees only, never to interest itself.
+(which vary fee-by-fee, not as an all-or-nothing bundle).
 
-**Confidence:** this pattern — "Easycash-employee loans have all ancillary fees waived, interest
-unaffected" — is **CONFIRMED** by direct population-level evidence (40/41 vs. 67.6% baseline) and
-is consistent with the project owner's direct account of the practice.
+**Named individuals directly confirmed** (project owner named these as sample employee accounts;
+each was independently located and verified in `MLR Master List` with `Agency/Company` =
+`"Easycash"`/`"Easycash Lending Company Inc."` and zero on every ancillary fee column): Nomer
+Perez (`SL-REG_O8O8Y`), Rosan Cruz Cinco (`SL-REG_J3M6C`, `SL-REG_Y3J4R`, `SL-REG_00100`), Liezel
+Juban Pentecostes (`SL-REG_Y8Y7U`, `SL-REG_Y6W8Q`, `SL-REG_R2C8V`, `SL-REG_00101`, `SL-REG_00047`),
+Mariel Ramos De Guzman (`SL-REG_I4A8W`, `SL-REG_00043`), Joseph Dela Cruz De Galicia
+(`SL-REG_00104`), and Alfredo Desabille Ogana (`SL-REG_H0W4I`, `SL-REG_00021`, `SL-REG_R6K4E`,
+`SL-REG_00045`).
+
+**A second finding, beyond fee waiver: interest rate is also discounted, not left untouched.**
+Several of the accounts above appear twice in the export — once as an uncorrected/raw record with
+`Agency` = `N/A` and once as a corrected record with `Agency` = `"Easycash"`, for the same
+`account_id` and loan amount. In the general population, this same raw/corrected pairing pattern
+exists but the Add-On rate differs only by rounding noise (e.g. `25.0%` vs `24.99%` — same rate
+tier). **For the named employees, the corrected (`Easycash`-agency) record's rate is
+substantially lower than the raw record's** — a real tier change, not rounding:
+
+| Account | Raw record rate | Corrected (`Easycash`-agency) rate |
+|---|---|---|
+| `SL-REG_Y6W8Q` (Pentecostes) | 3.0% | **1.5%** |
+| `SL-REG_I4A8W` (De Guzman) | 3.0% | **1.5%** |
+| `SL-REG_P8V2B` (Ramil Torres) | 2.59% | **1.5%** |
+| `SL-REG_B6I7B` (Janine Mergal) | 3.0% | **1.5%** |
+
+**1.5% is the lowest Add-On rate tier in the company's own Interest Rate Chart** (per `ADR-010`
+§1 item 4's evidenced lookup table) — employee loans are consistently priced at the cheapest
+available tier, not merely "some lower number." This corrects the original version of this ADR's
+claim that "interest rates on these loans are NOT zero... the waiver is confirmed to be scoped to
+ancillary fees only, never to interest itself" — that remains true (rate is never literally zero,
+except for two `SL-Lazada-Promo` loans where 0% is that product's own baseline for everyone), but
+incomplete: interest is not exempted, but it is preferentially discounted, alongside the fee
+waiver.
+
+**BL products (a second, separately-alleged category — "friends of the loan manager or company
+CEO"): NO supporting evidence found.** 54 of 93 (58%) of all `BL-*` product loans in the
+population show zero `Processing Fee`, regardless of borrower — this is that product family's own
+common baseline, not a marker of favoritism. No `BL` row anywhere in the export carries `Easycash`
+(or any other identifiable staff/relationship marker) as its `Agency/Company`. There is no field
+in this or any other examined legacy source that records a borrower's personal relationship to
+the loan manager or CEO — this category remains **entirely unverifiable from available evidence**,
+distinct from the employee category above, which is fully confirmed.
+
+**Confidence:** "Easycash-employee loans have all ancillary fees waived AND receive the lowest
+Add-On rate tier" is **CONFIRMED** — population-level evidence (40/41 vs. 67.6% baseline) plus six
+individually-named, individually-verified accounts, plus the raw-vs-corrected rate-tier evidence
+above. The separately-alleged "friend of the manager/CEO" category for `BL` products remains
+**UNCONFIRMED, no evidence found** — see §5's unchanged decision not to model it.
 
 ---
 
 ## 3. Decision
 
-**A loan account may be flagged, at origination, as fee-exempt for a specific, named reason. When
-so flagged, none of the loan's applicable `FeeRule`s produce an `AppliedFee` at origination or
-disbursement — every fee amount is zero. Interest calculation is entirely unaffected; this
-mechanism never touches `interestRate`/`addOnInterestRate`/`contractualInterestRate` or the
-amortization schedule.**
+**A loan account may be flagged, at origination, as receiving employee-tier concessions for a
+specific, named reason. When so flagged: (a) none of the loan's applicable `FeeRule`s produce an
+`AppliedFee` at origination or disbursement — every fee amount is zero; (b) the loan is expected
+to be originated at the company's lowest evidenced Add-On rate tier (1.5%, per §2) — but this
+requires no new mechanism, since `interestRate` is already a free-form, explicit, human-supplied
+value at origination (`CreateLoanAccountUseCase`, unchanged by this ADR); the flag's role for
+rate is documentation/audit, not enforcement.**
 
 Concretely:
 
@@ -73,6 +117,13 @@ Concretely:
   zero amount — this keeps `AppliedFee`'s existing invariant (a row means a fee was actually
   charged) intact, rather than inventing a new "charged-but-zero" state that would need its own
   handling everywhere `AppliedFee` is read.
+- **No new mechanism is introduced for the rate discount.** The loan officer originating an
+  employee's loan simply supplies the discounted rate (1.5%, or whatever the currently-lowest
+  tier is) as `interestRate` at origination, exactly as for any other loan — `CreateLoanAccountUseCase`
+  does not need a special path. `feeWaiverReason = EMPLOYEE_LOAN` on the same loan documents *why*
+  that rate was chosen, for a future auditor/reviewer, without the system enforcing or validating
+  the rate value itself (no ADR establishes a hard validation rule tying rate to
+  `feeWaiverReason`, and none is invented here).
 - **This is an explicit, visible, per-loan decision made by the person originating the loan — not
   an automatic inference from the borrower's identity, employer, or any relationship.** The
   system does not detect "is this borrower an Easycash employee" or "is this borrower connected to
@@ -109,6 +160,11 @@ explicit business decision, for the following reasons:**
 - **No evidence supports it.** Unlike the employee case, there is no field in any legacy data
   source (`Agency/Company`, or any other) that records personal relationships to staff. This
   category cannot be verified, quantified, or scoped the way the employee case was.
+- **Specifically checked and not found for `BL` products** (§2): 58% of all `BL-*` loans already
+  show zero `Processing Fee` regardless of borrower — that is the product family's own normal
+  baseline, not a marker of favoritism — and no `BL` row anywhere in the export carries any
+  staff/relationship-identifying marker. The data neither confirms nor is even suggestive of this
+  category; it is silent on it entirely.
 - **Building an automatic "who is a friend of the manager" rule into the system would formalize
   a discretionary, unaccountable practice into permanent infrastructure** — the opposite of this
   project's audit and governance goals (`FINANCIAL_INVARIANTS.md` §4's fail-closed audit
