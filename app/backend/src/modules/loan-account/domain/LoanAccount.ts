@@ -206,6 +206,37 @@ export class LoanAccount {
     return this.props.balances;
   }
 
+  /**
+   * Milestone 9.1 checkpoint 11 / `ADR-007-outstanding-balance-formula.md`
+   * §3 (RESOLVED, Option B): penalty-inclusive summary total, matching the
+   * legacy ledger's `loan_transactions.balance` running total and the
+   * `Daily Collection Report.xlsx` "Total Balance" concept. Computed on
+   * demand from the twelve existing balance columns — no stored column, by
+   * design (§1: balance is a maintained running total per component, never
+   * independently re-derived by summing transaction history, but a
+   * *summary* of the current, already-maintained components is exactly
+   * that: a sum of already-correct numbers, not a re-derivation of them).
+   *
+   * Deliberately NOT named `outstandingBalance` — that generic name is the
+   * exact ambiguity `ADR-007` §3 resolved by requiring two distinctly-named
+   * fields instead.
+   */
+  get collectionsBalance(): Money {
+    const balances = this.props.balances;
+    return balances.principalBalance.add(balances.interestBalance).add(balances.feesBalance).add(balances.penaltyBalance);
+  }
+
+  /**
+   * `ADR-007-outstanding-balance-formula.md` §3 (RESOLVED, Option B):
+   * penalty-EXCLUSIVE summary total, matching the `Accounting-Detailed
+   * Ending Current Balance.xlsx` "Total Obligation" concept. Same
+   * computed-on-demand basis as `collectionsBalance` — no stored column.
+   */
+  get accountingBalance(): Money {
+    const balances = this.props.balances;
+    return balances.principalBalance.add(balances.interestBalance).add(balances.feesBalance);
+  }
+
   get interestRate(): Percentage {
     return this.props.interestRate;
   }

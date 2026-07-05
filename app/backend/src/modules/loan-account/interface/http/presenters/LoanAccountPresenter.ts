@@ -38,6 +38,10 @@ export function presentLoanAccount(loanAccount: LoanAccount) {
       penaltyPaid: balances.penaltyPaid.toString(),
       penaltyDue: balances.penaltyDue.toString(),
     },
+    // Milestone 9.1 checkpoint 11 / ADR-007 §3 (RESOLVED, Option B): both
+    // summary totals exposed, distinctly named — neither is "outstandingBalance".
+    collectionsBalance: loanAccount.collectionsBalance.toString(),
+    accountingBalance: loanAccount.accountingBalance.toString(),
     interestRate: loanAccount.interestRate.toString(),
     addOnInterestRate: loanAccount.addOnInterestRate?.toString() ?? null,
     contractualInterestRate: loanAccount.contractualInterestRate?.toString() ?? null,

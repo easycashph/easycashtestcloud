@@ -248,6 +248,80 @@ describe('LoanAccount', () => {
     });
   });
 
+  // Milestone 9.1 checkpoint 11 / ADR-007 §3 (RESOLVED, Option B): two
+  // distinctly-named computed summary getters, neither called
+  // `outstandingBalance`. No stored column, no schema change — pure
+  // sums of the twelve already-existing balance columns.
+  describe('collectionsBalance / accountingBalance (ADR-007 §3, Option B)', () => {
+    it('a newly-activated loan (no payments yet) has both getters equal the total due', () => {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({
+        principalDue: Money.of('10000.00'),
+        interestDue: Money.of('500.00'),
+        feesDue: Money.of('100.00'),
+        penaltyDue: Money.of('50.00'),
+      });
+
+      // No penalty exists yet in the ordinary lifecycle (activation always
+      // defaults penaltyDue to zero), but ADR-007 §3's formula must still
+      // hold if a penalty balance were ever present — asserted directly
+      // here rather than only in the "no penalty" default case.
+      expect(loan.accountingBalance.equals(Money.of('10600.00'))).toBe(true);
+      expect(loan.collectionsBalance.equals(Money.of('10650.00'))).toBe(true);
+    });
+
+    it('with no penalty due (the ordinary activation default), both getters are equal', () => {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({ principalDue: Money.of('10000.00'), interestDue: Money.of('500.00') });
+
+      expect(loan.accountingBalance.equals(Money.of('10500.00'))).toBe(true);
+      expect(loan.collectionsBalance.equals(Money.of('10500.00'))).toBe(true);
+      expect(loan.accountingBalance.equals(loan.collectionsBalance)).toBe(true);
+    });
+
+    it('reflects a partially-paid loan correctly (principal/interest/fees paid down, distinct from penalty)', () => {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({
+        principalDue: Money.of('10000.00'),
+        interestDue: Money.of('500.00'),
+        feesDue: Money.of('100.00'),
+        penaltyDue: Money.of('50.00'),
+      });
+      loan.applyPayment(
+        TransactionComponents.of({
+          principalComponent: Money.of('900.00'),
+          interestComponent: Money.of('50.00'),
+          feesComponent: Money.of('100.00'),
+        }),
+      );
+
+      // Remaining balances: principal 9100, interest 450, fees 0, penalty 50 (untouched).
+      expect(loan.accountingBalance.equals(Money.of('9550.00'))).toBe(true);
+      expect(loan.collectionsBalance.equals(Money.of('9600.00'))).toBe(true);
+    });
+
+    it('follows existing Money semantics under overpayment (negative balance) without any new validation', () => {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({ principalDue: Money.of('10000.00'), interestDue: Money.of('500.00') });
+      loan.applyPayment(TransactionComponents.of({ principalComponent: Money.of('10500.00') }));
+
+      // principalBalance is now -500.00; both summary getters must reflect
+      // that negative contribution exactly, not clamp or reject it.
+      expect(loan.accountingBalance.equals(Money.of('0.00'))).toBe(true);
+      expect(loan.collectionsBalance.equals(Money.of('0.00'))).toBe(true);
+      expect(loan.accountingBalance.isNegative()).toBe(false);
+
+      loan.applyPayment(TransactionComponents.of({ principalComponent: Money.of('100.00') }));
+      expect(loan.accountingBalance.equals(Money.of('-100.00'))).toBe(true);
+      expect(loan.accountingBalance.isNegative()).toBe(true);
+      expect(loan.collectionsBalance.equals(Money.of('-100.00'))).toBe(true);
+    });
+  });
+
   describe('appliedFees (FEE-4: immutable once applied, small bounded collection)', () => {
     it('addAppliedFee appends without replacing existing fees', () => {
       const loan = createLoanAccount();
