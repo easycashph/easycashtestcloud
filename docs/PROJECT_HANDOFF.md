@@ -436,11 +436,11 @@ initially missed non-`.ts` source files):
   Prisma `P2025` on a stale/bogus pagination cursor) still reach `errorHandler`'s generic 500
   branch instead of a clean 409/400. Deferred — explicitly excluded from M8.1 approved scope
   ("Prisma exception translation" was listed as not-to-implement).
-- **M-3 — Field-level PII exposure.** `GET /borrowers/:id` returns government ID numbers,
-  birthdate, full contact info to **any** authenticated role (Viewer, Cashier, etc.), not just
-  origination/compliance-relevant roles. Deferred — tied to the still-open ADR-038 permission
-  design; M8.1 was explicitly told not to implement "field-level authorization" or "PII
-  masking." Tracked as a required input to ADR-038, not a generic "someday" item.
+- **M-3 — Field-level PII exposure — RESOLVED, 2026-07-06, confirmed intended behavior, not a
+  gap.** `GET /borrowers/:id` returns government ID numbers, birthdate, full contact info to any
+  authenticated role. `ADR-038` §3.3 confirms this is correct: all six confirmed roles (MIS, Loan
+  Operation Manager, CRM, Finance, Accounting, Collection Officer) are internal company
+  staff/officers, and no role-based PII masking is required. No presenter change needed or made.
 - **M-4 — No dedicated presenter unit tests.** `presentBorrower`, `presentLoanAccount`, etc. are
   only exercised incidentally via controller tests with "happy path" fixtures — edge cases
   (all-null optional fields, empty collections) are unverified. Deferred — explicitly excluded
@@ -487,7 +487,8 @@ initially missed non-`.ts` source files):
   **ADR-010** (Add-On vs. Contractual interest disclosure), **ADR-032** (Loan Release vs.
   Disbursement — currently a *working assumption*, not resolved) — all still open, all block the
   future calculation engine.
-- **ADR-038** (full permission matrix) — still open; ADR-043 is explicitly interim.
+- **ADR-038** (full permission matrix) — Accepted and implemented 2026-07-06 (see §6, replaces
+  this line's prior "still open" status — `ADR-043`'s placeholder allow-lists are superseded).
 - No live PostgreSQL has ever been available in this dev environment — every DB-dependent claim
   is verified via `tsc`, mocked-Prisma unit tests, and (for the one new case in H-3) mocked
   `supertest` requests — never against a real database. This remains the single largest
@@ -501,31 +502,40 @@ initially missed non-`.ts` source files):
 ## 6. Current Authorization Model
 
 Two **deliberately separate** mechanisms — this separation is a explicit architectural decision
-(H-1's requirement was "treat branch authorization separately from role authorization").
+(H-1's requirement was "treat branch authorization separately from role authorization"). As of
+2026-07-06, both mechanisms use the confirmed six-role taxonomy per `ADR-038` (Accepted and
+implemented) — see `docs/Architecture/ADR-038-full-permission-matrix.md` for the full mapping and
+reasoning; this section states the current, implemented result, not the design discussion.
 
 ### `requireAuth` (`shared/middleware/requireAuth.ts`, Milestone 6)
 Verifies the JWT access token (HS256, algorithm pinned), attaches the decoded claims to
 `req.authUser: AccessTokenClaims` (`{ sub, email, roles: string[], branchId, jti }`). Rejects
 with `UnauthorizedError` (401) if missing/invalid/expired. Every protected route uses this.
+Unaffected by the ADR-038 rename.
 
-### `requireRole` (`shared/middleware/requireRole.ts`, Milestone 8 / ADR-043)
+### `requireRole` (`shared/middleware/requireRole.ts`, Milestone 8 / ADR-043 mechanism, ADR-038 mapping)
 Checks `req.authUser.roles` against a hard-coded, **route-declared** allow-list (e.g.
-`requireRole('Administrator', 'Manager')`). Must run **after** `requireAuth` in the middleware
-chain. Rejects with `ForbiddenError` (403) if the user has none of the allowed roles.
-**Explicitly NOT** a permission matrix: no database lookup against the existing
-`Permission`/`RolePermission` tables (which remain unused by application code), no dynamic
-configurability, no per-resource granularity. Per-module allow-lists (documented as unverified
-assumptions, not sourced from `PROJECT_RULES.md`):
-- `borrower`/`loan-account` origination: `['Administrator', 'Manager', 'Loan Officer']`.
-- `loan-product` configuration, `loan-account` approve/reject: `['Administrator', 'Manager']`
-  (Loan Officer excluded from approval — a separation-of-duties assumption).
-- All `GET` routes: `requireAuth` only, no role restriction.
+`requireRole('MIS', 'Loan Operation Manager')`). Must run **after** `requireAuth` in the
+middleware chain. Rejects with `ForbiddenError` (403) if the user has none of the allowed roles.
+Still **NOT** a permission matrix in the mechanism sense: no database lookup against the existing
+`Permission`/`RolePermission` tables (which remain unused by application code — a deliberate
+choice per `ADR-038` §2, not an oversight), no dynamic configurability, no per-resource
+granularity. Per-module allow-lists, **business-confirmed** per `ADR-038` §3.1 (no longer
+"documented as unverified assumptions"):
+- `borrower`/`loan-account` origination: `['MIS', 'Loan Operation Manager', 'CRM']`.
+- `loan-account` approve/reject: `['MIS', 'Loan Operation Manager', 'CRM']` — **the same tier as
+  origination**, not a stricter one; the old separation-of-duties assumption (approval excluding
+  an origination role) was never confirmed by the business and is now superseded.
+- `loan-product` configuration: `['MIS', 'Loan Operation Manager', 'Finance', 'Accounting']` — a
+  **wider** tier than origination (adds Finance/Accounting) but deliberately excludes CRM (product
+  pricing is a Finance/Accounting responsibility, not loan-processing).
+- All `GET` routes: `requireAuth` only, no role restriction (confirmed correct, per `ADR-038`
+  §3.1's last row).
 
-### `branchScope` (`shared/http/branchScope.ts`, Milestone 8.1 / H-1)
+### `branchScope` (`shared/http/branchScope.ts`, Milestone 8.1 / H-1 mechanism, ADR-038 mapping)
 - `resolveBranchScope(req)` → `{ branchId, isGlobal }`, reading `req.authUser`.
-- `GLOBAL_ROLES = ['Administrator']` — the **only** hard-coded assumption defining who sees
-  every branch versus just their own. **Not sourced from `PROJECT_RULES.md`** — flagged for
-  confirmation.
+- `GLOBAL_ROLES = ['MIS']` — business-confirmed per `ADR-038` §3.2 (supersedes the old
+  `['Administrator']`, a role that no longer exists).
 - `assertBranchAccess(scope, resourceBranchId)` — throws `ForbiddenError` (403) if a non-global
   caller's branch doesn't match the resource's branch. Used as a post-fetch check on every
   single-resource `GET`, and (for `loan-account`) **before** `approve()`/`reject()` mutate.
@@ -543,19 +553,21 @@ assumptions, not sourced from `PROJECT_RULES.md`):
   `getLoanAccountUseCase` dependency) and checks *its* branch instead — one extra DB round trip,
   an accepted trade-off.
 
-### Known limitations
-- `GLOBAL_ROLES` is a single hard-coded array, same "minimal/interim" status as `requireRole`'s
-  allow-lists — not configurable, not database-backed.
-- No field-level authorization exists (M-3, deferred) — a Viewer sees the exact same borrower
-  fields as an Administrator, just gated to their own branch now.
-- `Permission`/`RolePermission` tables remain completely unused by application code.
+### Known limitations (unchanged by the ADR-038 rename — mechanism, not mapping, decisions)
+- `GLOBAL_ROLES` is a single hard-coded array, same "minimal, code-not-database" status as
+  `requireRole`'s allow-lists — a deliberate `ADR-038` §2 choice, not a gap awaiting a future ADR.
+- No field-level authorization exists — **and per `ADR-038` §3.3 (M-3), none is needed**: all six
+  confirmed roles see identical borrower PII, confirmed correct by the business.
+- `Permission`/`RolePermission` tables remain completely unused by application code — deliberately
+  per `ADR-038` §2, kept in the schema (low cost) in case this decision is reversed later.
 
 ### Relationship to ADR-038 and ADR-043
-ADR-043 documents that `requireRole` is explicitly interim, pending ADR-038's full permission-
-matrix design (still unwritten as a file). `branchScope`'s `GLOBAL_ROLES` list is the same kind
-of interim mechanism, introduced in Milestone 8.1 without its own dedicated ADR (it's documented
-in this handoff and in commit `2f3ad3b`'s message, not in a standalone ADR file — worth
-formalizing into ADR-038's eventual scope, along with M-3's field-level redaction question).
+`ADR-038` is now **Accepted and implemented** (2026-07-06) — it is no longer an open design
+question. `ADR-043` remains historically accurate for *why* `requireRole` exists and how it's
+wired (mechanism), but its allow-list examples reference the old, superseded placeholder role
+names — treat `ADR-038` as authoritative for current role names, `ADR-043` for the mechanism's
+rationale. The forward-looking `ADR-038` §3.5 also pre-confirms that a future `identity` module
+User Management endpoint (not yet built) will be `requireRole('MIS')`-only, once it exists.
 
 ---
 

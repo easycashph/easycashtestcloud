@@ -9,18 +9,18 @@ function buildRequest(roles: string[], branchId = 'branch-1'): Request {
 }
 
 describe('resolveBranchScope (Milestone 8.1 remediation, H-1)', () => {
-  it('marks Administrator as global', () => {
-    expect(resolveBranchScope(buildRequest(['Administrator'], 'branch-1'))).toEqual({ branchId: 'branch-1', isGlobal: true });
+  it('marks MIS as global', () => {
+    expect(resolveBranchScope(buildRequest(['MIS'], 'branch-1'))).toEqual({ branchId: 'branch-1', isGlobal: true });
   });
 
-  it('marks every other seeded role as branch-scoped', () => {
-    for (const role of ['Manager', 'Loan Officer', 'Cashier', 'Collection Officer', 'Viewer']) {
+  it('marks every other confirmed role as branch-scoped', () => {
+    for (const role of ['Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer']) {
       expect(resolveBranchScope(buildRequest([role], 'branch-1')).isGlobal).toBe(false);
     }
   });
 
-  it('is global if ANY of the user\'s roles is Administrator', () => {
-    expect(resolveBranchScope(buildRequest(['Loan Officer', 'Administrator'])).isGlobal).toBe(true);
+  it('is global if ANY of the user\'s roles is MIS', () => {
+    expect(resolveBranchScope(buildRequest(['CRM', 'MIS'])).isGlobal).toBe(true);
   });
 
   it('throws UnauthorizedError when req.authUser is missing', () => {

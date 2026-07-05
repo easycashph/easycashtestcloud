@@ -25,7 +25,7 @@ const baseUserRow = {
   firstName: 'Ana',
   lastName: 'Reyes',
   status: 'ACTIVE' as const,
-  roles: [{ role: { name: 'Loan Officer' } }],
+  roles: [{ role: { name: 'CRM' } }],
 };
 
 describe('PrismaUserRepository', () => {
@@ -46,7 +46,7 @@ describe('PrismaUserRepository', () => {
     });
 
     it('create() normalizes the email before writing', async () => {
-      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'Loan Officer' }]);
+      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'CRM' }]);
       prismaMock.user.create.mockResolvedValue(baseUserRow);
       const repo = new PrismaUserRepository();
 
@@ -56,7 +56,7 @@ describe('PrismaUserRepository', () => {
         passwordHash: 'hash',
         firstName: 'Ana',
         lastName: 'Reyes',
-        roleNames: ['Loan Officer'],
+        roleNames: ['CRM'],
       });
 
       expect(prismaMock.user.create).toHaveBeenCalledWith(
@@ -69,8 +69,8 @@ describe('PrismaUserRepository', () => {
 
   describe('audit finding H-03: role resolution must not fail silently', () => {
     it('throws RoleNotFoundError when a requested role name does not resolve', async () => {
-      // Only "Loan Officer" resolves; "Administrator" does not (e.g. seed never ran).
-      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'Loan Officer' }]);
+      // Only "CRM" resolves; "MIS" does not (e.g. seed never ran).
+      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'CRM' }]);
       const repo = new PrismaUserRepository();
 
       await expect(
@@ -80,7 +80,7 @@ describe('PrismaUserRepository', () => {
           passwordHash: 'hash',
           firstName: 'Admin',
           lastName: 'Account',
-          roleNames: ['Administrator'],
+          roleNames: ['MIS'],
         }),
       ).rejects.toThrow(RoleNotFoundError);
 
@@ -89,10 +89,10 @@ describe('PrismaUserRepository', () => {
     });
 
     it('succeeds when every requested role resolves', async () => {
-      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'Administrator' }]);
+      prismaMock.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'MIS' }]);
       prismaMock.user.create.mockResolvedValue({
         ...baseUserRow,
-        roles: [{ role: { name: 'Administrator' } }],
+        roles: [{ role: { name: 'MIS' } }],
       });
       const repo = new PrismaUserRepository();
 
@@ -102,10 +102,10 @@ describe('PrismaUserRepository', () => {
         passwordHash: 'hash',
         firstName: 'Admin',
         lastName: 'Account',
-        roleNames: ['Administrator'],
+        roleNames: ['MIS'],
       });
 
-      expect(result.roles).toEqual(['Administrator']);
+      expect(result.roles).toEqual(['MIS']);
       expect(prismaMock.user.create).toHaveBeenCalled();
     });
   });

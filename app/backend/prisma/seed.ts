@@ -26,13 +26,16 @@ async function main() {
   });
 
   // AUDIT-4: minimum role baseline from PROJECT_RULES.md §User Roles.
+  // Renamed 2026-07-06 per ADR-038 §1/§4 (business-confirmed roster,
+  // replacing the old placeholder names Administrator/Manager/Loan
+  // Officer/Cashier/Collection Officer/Viewer).
   const roleNames = [
-    'Administrator',
-    'Manager',
-    'Loan Officer',
-    'Cashier',
+    'MIS',
+    'Loan Operation Manager',
+    'CRM',
+    'Finance',
+    'Accounting',
     'Collection Officer',
-    'Viewer',
   ] as const;
 
   const roles: Record<string, { id: string }> = {};
@@ -73,22 +76,24 @@ async function main() {
     });
   }
 
-  // Administrator gets every seeded permission by default — a standard,
-  // uncontroversial bootstrap convention, not a business-rule assumption.
-  // Every other role's permission set is a genuine policy decision left to
-  // Milestone 6 / an admin UI, per ADR-038.
-  const adminRole = roles['Administrator'];
+  // MIS (the confirmed super-user role, ADR-038 §1/§3.2) gets every seeded
+  // permission by default — a standard, uncontroversial bootstrap
+  // convention, not a business-rule assumption. Every other role's
+  // permission set is a genuine policy decision — see ADR-038 §3 for the
+  // confirmed per-endpoint mapping; these `RolePermission` rows remain
+  // unused by application code either way (ADR-038 §2).
+  const misRole = roles['MIS'];
   for (const code of permissionCodes) {
     await prisma.rolePermission.upsert({
       where: {
         roleId_permissionId: {
-          roleId: adminRole.id,
+          roleId: misRole.id,
           permissionId: permissions[code].id,
         },
       },
       update: {},
       create: {
-        roleId: adminRole.id,
+        roleId: misRole.id,
         permissionId: permissions[code].id,
       },
     });

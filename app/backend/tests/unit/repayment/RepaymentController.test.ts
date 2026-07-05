@@ -46,7 +46,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     (deps.listRepaymentInstallmentsForLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([installment]);
     (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-1' });
     const controller = new RepaymentController(deps);
-    const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.listForLoan(req, res, vi.fn());
@@ -64,7 +64,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     (deps.getRepaymentInstallmentUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(installment);
     (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-1' });
     const controller = new RepaymentController(deps);
-    const req = { params: { id: installment.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { params: { id: installment.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.get(req, res, vi.fn());
@@ -80,7 +80,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     const error = new Error('boom');
     (deps.getRepaymentInstallmentUseCase.execute as ReturnType<typeof vi.fn>).mockRejectedValue(error);
     const controller = new RepaymentController(deps);
-    const req = { params: { id: 'missing' }, authUser: authUser(['Administrator']) } as unknown as Request;
+    const req = { params: { id: 'missing' }, authUser: authUser(['MIS']) } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -97,7 +97,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
       const deps = buildDeps();
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-2' });
       const controller = new RepaymentController(deps);
-      const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.listForLoan(req, buildResponse(), next);
@@ -112,7 +112,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
       (deps.getRepaymentInstallmentUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(installment);
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-2' });
       const controller = new RepaymentController(deps);
-      const req = { params: { id: installment.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: installment.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.get(req, buildResponse(), next);
@@ -125,7 +125,7 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
       (deps.listRepaymentInstallmentsForLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-2' });
       const controller = new RepaymentController(deps);
-      const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Administrator'], 'branch-1') } as unknown as Request;
+      const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
       const res = buildResponse();
 
       await controller.listForLoan(req, res, vi.fn());

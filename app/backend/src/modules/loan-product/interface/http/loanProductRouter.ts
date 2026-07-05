@@ -7,13 +7,14 @@ import { LoanProductController, type LoanProductControllerDeps } from './loanPro
 import { createLoanProductSchema, createLoanProductVersionSchema } from './loanProductSchemas';
 
 /**
- * ADR-043 / D-1: interim role gate. Product configuration (create
- * product/version, activate a version) is more sensitive than borrower
- * origination — restricted to Administrator/Manager only, not Loan
- * Officer. Not sourced from a documented PROJECT_RULES.md rule; a
- * reasonable interim assumption.
+ * ADR-038 §3.1 (business-confirmed, 2026-07-06): product configuration
+ * (create product/version, activate a version) is a Finance/Accounting
+ * responsibility, not a loan-processing one — a wider tier than
+ * origination (adds Finance, Accounting) but deliberately excludes CRM
+ * (which IS included in origination). Supersedes ADR-043's interim
+ * placeholder allow-list.
  */
-const PRODUCT_CONFIG_ROLES = ['Administrator', 'Manager'];
+const PRODUCT_CONFIG_ROLES = ['MIS', 'Loan Operation Manager', 'Finance', 'Accounting'];
 
 export function createLoanProductRouter(deps: LoanProductControllerDeps, tokenService: ITokenService): Router {
   const router = Router();

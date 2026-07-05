@@ -41,7 +41,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const controller = new BorrowerController(deps);
     const req = {
       body: { branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz' },
-      authUser: authUser(['Loan Officer'], 'branch-1'),
+      authUser: authUser(['Loan Operation Manager'], 'branch-1'),
     } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
@@ -61,7 +61,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const error = new Error('boom');
     (deps.createBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockRejectedValue(error);
     const controller = new BorrowerController(deps);
-    const req = { body: { branchId: 'branch-1' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { body: { branchId: 'branch-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -76,7 +76,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const borrower = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') });
     (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
     const controller = new BorrowerController(deps);
-    const req = { params: { id: borrower.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { params: { id: borrower.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.get(req, res, vi.fn());
@@ -90,7 +90,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const borrowers = [Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz') })];
     (deps.listBorrowersUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrowers);
     const controller = new BorrowerController(deps);
-    const req = { query: { limit: '1' }, authUser: authUser(['Administrator']) } as unknown as Request;
+    const req = { query: { limit: '1' }, authUser: authUser(['MIS']) } as unknown as Request;
     const res = buildResponse();
 
     await controller.list(req, res, vi.fn());
@@ -140,7 +140,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
       const controller = new BorrowerController(deps);
       const req = {
         body: { branchId: 'attacker-branch', firstName: 'Juan', lastName: 'Dela Cruz' },
-        authUser: authUser(['Loan Officer'], 'branch-1'),
+        authUser: authUser(['Loan Operation Manager'], 'branch-1'),
       } as unknown as Request;
 
       await controller.create(req, buildResponse(), vi.fn());
@@ -157,7 +157,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
       const controller = new BorrowerController(deps);
       const req = {
         body: { branchId: 'branch-2', firstName: 'Juan', lastName: 'Dela Cruz' },
-        authUser: authUser(['Administrator'], 'branch-1'),
+        authUser: authUser(['MIS'], 'branch-1'),
       } as unknown as Request;
 
       await controller.create(req, buildResponse(), vi.fn());
@@ -172,7 +172,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
       const borrower = Borrower.create({ branchId: 'branch-2', name: PersonName.of('Juan', 'Dela Cruz') });
       (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
       const controller = new BorrowerController(deps);
-      const req = { params: { id: borrower.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: borrower.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const res = buildResponse();
       const next = vi.fn();
 
@@ -187,7 +187,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
       const borrower = Borrower.create({ branchId: 'branch-2', name: PersonName.of('Juan', 'Dela Cruz') });
       (deps.getBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(borrower);
       const controller = new BorrowerController(deps);
-      const req = { params: { id: borrower.id }, authUser: authUser(['Administrator'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: borrower.id }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
       const res = buildResponse();
 
       await controller.get(req, res, vi.fn());
@@ -199,7 +199,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
       const deps = buildDeps();
       (deps.listBorrowersUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       const controller = new BorrowerController(deps);
-      const req = { query: {}, authUser: authUser(['Cashier'], 'branch-1') } as unknown as Request;
+      const req = { query: {}, authUser: authUser(['Collection Officer'], 'branch-1') } as unknown as Request;
 
       await controller.list(req, buildResponse(), vi.fn());
 

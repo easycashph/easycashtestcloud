@@ -15,7 +15,7 @@ const activeUser: UserRecord = {
   firstName: 'Ana',
   lastName: 'Reyes',
   status: 'ACTIVE',
-  roles: ['Loan Officer'],
+  roles: ['CRM'],
 };
 
 function buildDeps(overrides: { user?: UserRecord | null; passwordMatches?: boolean } = {}) {

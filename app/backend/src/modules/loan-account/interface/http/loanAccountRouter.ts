@@ -7,16 +7,16 @@ import { LoanAccountController, type LoanAccountControllerDeps } from './loanAcc
 import { createLoanAccountSchema, rejectLoanSchema } from './loanAccountSchemas';
 
 /**
- * ADR-043 / D-1: interim role gates, not sourced from a documented
- * PROJECT_RULES.md rule. Origination (creating a loan account) uses the
- * same roles as borrower/co-borrower creation. Approval/rejection is
- * restricted more tightly (Administrator/Manager only, excluding Loan
- * Officer) — a common lending separation-of-duties assumption (the
- * originator typically shouldn't also approve), not a verified business
- * rule; flagged here for confirmation.
+ * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination and
+ * approval/rejection both use the same tier — MIS, Loan Operation Manager,
+ * CRM mirror the confirmed Loan-Application assign/approve/decline access,
+ * i.e. the same real-world job function does both. Supersedes ADR-043's
+ * interim placeholder allow-lists (which had origination and approval as
+ * different tiers under a separation-of-duties assumption never confirmed
+ * by the business).
  */
-const ORIGINATION_ROLES = ['Administrator', 'Manager', 'Loan Officer'];
-const APPROVAL_ROLES = ['Administrator', 'Manager'];
+const ORIGINATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+const APPROVAL_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 
 export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenService: ITokenService): Router {
   const router = Router();

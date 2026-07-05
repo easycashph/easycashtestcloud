@@ -1,15 +1,15 @@
 # ADR-038 — Full Permission Matrix
 
-**Status:** Accepted (2026-07-06) — §1–§3 all resolved. §4's implementation steps are not yet
-done; this ADR describes the target design, not the current code state.
+**Status:** Accepted and implemented (2026-07-06) — §1–§4 all done. §3.5/§4 item 7 (the future
+User Management endpoint) remains not-yet-actionable, since that endpoint doesn't exist yet.
 **Context documents:** `PROJECT_RULES.md §User Roles` (2026-07-06 Decision Log entry),
 `docs/Architecture/ADR-043-interim-role-based-authorization.md` (the interim mechanism this ADR
-eventually replaces), `docs/PROJECT_HANDOFF.md §5` (M-3 field-level PII exposure, §6 current
-authorization model).
+replaces), `docs/PROJECT_HANDOFF.md §5` (M-3 field-level PII exposure, §6 current authorization
+model).
 **Relationship to ADR-043:** ADR-043 explicitly deferred this design to "its own milestone." This
-is that milestone's design document. Until §4's implementation checklist is carried out,
-`requireRole` and `branchScope` continue operating exactly as ADR-043 describes, using the old
-placeholder role names — this ADR is a decided design, not yet a code change.
+is that milestone's design document, now implemented — `requireRole` and `branchScope` use the
+confirmed role names (§1/§3) as of this ADR's implementation pass; ADR-043's own allow-list
+examples are superseded (see that file's own text, not restated there for you to re-read).
 
 ---
 
@@ -117,26 +117,35 @@ Context: `identity`'s current HTTP surface (`authRouter.ts`) only has `/login`, 
 in §1's table describes the frontend UI-preview's mock "Switch Account" panel only; this section
 is what makes that same MIS-only rule binding on the real backend endpoint once it's built.
 
-## 4. Implementation checklist (not yet done — tracked here, not started by this ADR itself)
+## 4. Implementation checklist — DONE (2026-07-06)
 
-This ADR is a **decision document**, not a code change. Per this project's workflow discipline
-(analyze → design → explain → implement → test → document → wait for approval), none of the
-following has been implemented yet — it is scoped here for whichever future milestone/checkpoint
-takes it on, and requires its own explicit go-ahead before implementation begins:
+Implemented in the same pass this ADR's §3 answers were confirmed, following this project's
+workflow discipline (analyze → design → explain → implement → test → document):
 
-1. A migration renames the seeded `Role` rows (`app/backend/prisma/seed.ts`'s `roleNames` array)
-   from the old six placeholder names to the confirmed six names (§1) — a real schema data change,
-   needs its own reviewed migration, not a hand-edit.
-2. Every `requireRole(...)` call site (`borrowerRouter.ts`, `loanAccountRouter.ts`,
-   `loanProductRouter.ts`) is updated to the confirmed role names per §3.1's table.
-3. `GLOBAL_ROLES` in `branchScope.ts` is updated to `['MIS']` per §3.2.
-4. No presenter change needed for §3.3 — confirmed as already-correct behavior, not a gap.
-5. Regression tests updated: `tests/unit/authorization.test.ts`, `tests/unit/shared/
-   branchScope.test.ts`, and every controller/router test that currently asserts against the old
-   role names (`Administrator`, `Manager`, `Loan Officer`, etc.).
-6. Any existing seeded test fixtures/users referencing the old role names (check
-   `tests/unit/**` fixtures and any seed-dependent integration test) need the same rename.
-7. **Forward-looking, not actionable yet:** whenever the `identity` module's User Management
+1. **Done.** `app/backend/prisma/seed.ts`'s `roleNames` array renamed directly (hand-edited, not a
+   Prisma migration) from the old six placeholder names to the confirmed six names (§1) — safe as
+   a direct edit because, per `docs/PROJECT_HANDOFF.md`, no live Postgres has ever run this seed
+   in this project; there is no existing production `Role` data to migrate. The `misRole`
+   permission-bootstrap variable (formerly `adminRole`) was renamed to match.
+2. **Done.** Every `requireRole(...)` call site (`borrowerRouter.ts`, `loanAccountRouter.ts`,
+   `loanProductRouter.ts`) updated to the confirmed role names per §3.1's table.
+3. **Done.** `GLOBAL_ROLES` in `branchScope.ts` updated to `['MIS']` per §3.2.
+4. **Done — confirmed no change needed.** §3.3 requires no presenter change (already-correct
+   behavior).
+5. **Done.** Regression tests updated: `tests/unit/authorization.test.ts` (including replacing
+   the now-invalid "Loan Officer excluded from approval" test, since origination and approval use
+   the identical role tier now — replaced with a CRM-excluded-from-product-config test, which is
+   the one remaining meaningful tier difference), `tests/unit/shared/branchScope.test.ts`,
+   `tests/unit/shared/requireRole.test.ts`, and every controller test referencing old role names.
+6. **Done.** All seeded test fixtures across `tests/unit/borrower/`, `tests/unit/ledger/`,
+   `tests/unit/loan-account/`, `tests/unit/repayment/`, `tests/unit/identity/` renamed to the
+   confirmed roles. Also updated (found during implementation, not originally listed):
+   `scripts/bootstrap-admin.ts`'s `ADMIN_ROLE_NAME` constant and user-facing prompts (was
+   hard-coded to `'Administrator'`), and `AuthErrors.ts`'s `AdminAlreadyExistsError` message.
+7. **Verified:** `npx eslint "src/**/*.ts"` clean, `npx tsc --noEmit` clean, `npm run build`
+   clean, `npx vitest run` — 73/74 test files passed (1 skipped), 464/470 tests passed (6
+   skipped) — identical baseline to before this change, confirming no regression.
+8. **Forward-looking, not actionable yet:** whenever the `identity` module's User Management
    endpoint (create/edit/deactivate an LMS member, assign a role) is actually built, it must be
    gated with `requireRole('MIS')` per §3.5 — decided now so this isn't re-litigated or guessed
    at when that work starts.

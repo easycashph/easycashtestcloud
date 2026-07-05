@@ -7,13 +7,11 @@ import { BorrowerController, type BorrowerControllerDeps } from './borrowerContr
 import { createBorrowerSchema, createCoBorrowerSchema } from './borrowerSchemas';
 
 /**
- * ADR-043 / D-1: interim role gate — origination staff only for writes,
- * any authenticated role for reads (Viewer's whole purpose is read access).
- * No PROJECT_RULES.md rule specifies exactly which roles may create a
- * borrower; this is a reasonable, documented interim assumption, not a
- * verified business rule.
+ * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination staff only for
+ * writes, any authenticated role for reads. Supersedes ADR-043's interim
+ * placeholder allow-list.
  */
-const ORIGINATION_ROLES = ['Administrator', 'Manager', 'Loan Officer'];
+const ORIGINATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 
 export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService: ITokenService): Router {
   const router = Router();

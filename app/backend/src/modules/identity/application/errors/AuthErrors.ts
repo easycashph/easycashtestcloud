@@ -69,7 +69,7 @@ export class UserNotFoundError extends DomainError {
 /** Bootstrap-script-only errors — never flow through the HTTP errorHandler. */
 export class AdminAlreadyExistsError extends DomainError {
   constructor() {
-    super('ADMIN_ALREADY_EXISTS', 'An Administrator account already exists; refusing to bootstrap another.');
+    super('ADMIN_ALREADY_EXISTS', 'An MIS account already exists; refusing to bootstrap another.');
     this.name = 'AdminAlreadyExistsError';
   }
 }

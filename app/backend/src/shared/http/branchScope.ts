@@ -7,18 +7,17 @@ import { ForbiddenError } from '@shared/errors/DomainError';
  * authorization, deliberately kept SEPARATE from role authorization
  * (`requireRole`/ADR-043) — this is a data-scoping concern ("which rows
  * may this user see/write"), not a "may this user call this endpoint at
- * all" concern. Not the deferred ADR-038 permission matrix: one
- * hard-coded global-roles list, no database lookup, no per-branch
- * configurability — the same "minimal, interim" spirit ADR-043 already
- * established for roles.
+ * all" concern. Still one hard-coded global-roles list, no database
+ * lookup, no per-branch configurability (ADR-038 §2 kept this mechanism).
  *
- * ASSUMPTION, documented in PROJECT_HANDOFF.md: no PROJECT_RULES.md rule
- * specifies which roles see cross-branch data. `Administrator` is
- * assumed global (sees/writes every branch); every other seeded role
- * (Manager, Loan Officer, Cashier, Collection Officer, Viewer) is
- * assumed scoped to their own branch only.
+ * ADR-038 §3.2 (business-confirmed, 2026-07-06): MIS is the only global
+ * role (sees/writes every branch); every other confirmed role (Loan
+ * Operation Manager, CRM, Finance, Accounting, Collection Officer) is
+ * scoped to their own branch only. Supersedes the old, unverified
+ * assumption that `Administrator` (a role that no longer exists) was
+ * global.
  */
-const GLOBAL_ROLES = ['Administrator'];
+const GLOBAL_ROLES = ['MIS'];
 
 export interface BranchScope {
   /** The authenticated user's own branch. */

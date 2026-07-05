@@ -5,7 +5,7 @@ import type { AccessTokenClaims } from '@modules/identity/application/ports/ITok
 const claims: AccessTokenClaims = {
   sub: 'user-123',
   email: 'officer@easycash.ph',
-  roles: ['Loan Officer'],
+  roles: ['CRM'],
   branchId: 'branch-1',
   jti: 'jti-1',
 };

@@ -1,18 +1,18 @@
 /* eslint-disable no-console */
 /**
  * Milestone 6 plan §6.6: guarded, one-time CLI bootstrap for the first
- * Administrator account. Deliberately NOT an HTTP endpoint — an
+ * MIS (super-user) account. Deliberately NOT an HTTP endpoint — an
  * HTTP "create admin" route must never exist.
  *
- * Refuses to run if any user already holds the Administrator role,
- * preventing accidental creation of a second/rogue admin on re-run.
+ * Refuses to run if any user already holds the MIS role, preventing
+ * accidental creation of a second/rogue super-user on re-run.
  *
  * Usage:
  *   BOOTSTRAP_ADMIN_EMAIL=admin@easycash.ph BOOTSTRAP_ADMIN_PASSWORD='...' \
  *     npx tsx scripts/bootstrap-admin.ts
  *
  * Requires `npx prisma db seed` to have already run (needs the seeded
- * "HQ" Branch and "Administrator" Role — ADR-005, AUDIT-4).
+ * "HQ" Branch and "MIS" Role — ADR-005, AUDIT-4, renamed per ADR-038 §1).
  */
 import 'dotenv/config';
 import { createInterface } from 'node:readline/promises';
@@ -22,7 +22,7 @@ import { BcryptPasswordHasher } from '../src/modules/identity/infrastructure/Bcr
 import { PasswordPolicy } from '../src/modules/identity/domain/PasswordPolicy';
 import { Email } from '../src/modules/identity/domain/Email';
 
-const ADMIN_ROLE_NAME = 'Administrator';
+const ADMIN_ROLE_NAME = 'MIS';
 const PROVISIONAL_BRANCH_CODE = 'HQ';
 
 async function promptIfMissing(envVar: string, question: string, hidden = false): Promise<string> {
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const rawEmail = await promptIfMissing('BOOTSTRAP_ADMIN_EMAIL', 'Administrator email: ');
+  const rawEmail = await promptIfMissing('BOOTSTRAP_ADMIN_EMAIL', 'MIS account email: ');
   const email = Email.create(rawEmail);
   if (!email) {
     console.error('Invalid email address.');
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const password = await promptIfMissing('BOOTSTRAP_ADMIN_PASSWORD', 'Administrator password: ', true);
+  const password = await promptIfMissing('BOOTSTRAP_ADMIN_PASSWORD', 'MIS account password: ', true);
   const violations = PasswordPolicy.validate(password);
   if (violations.length > 0) {
     console.error(`Password does not meet policy requirements: ${violations.join(', ')}`);
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     roleNames: [ADMIN_ROLE_NAME],
   });
 
-  console.log(`Administrator account created: ${created.email} (id ${created.id}).`);
+  console.log(`MIS account created: ${created.email} (id ${created.id}).`);
 }
 
 main()

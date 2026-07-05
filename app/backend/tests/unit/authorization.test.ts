@@ -50,7 +50,10 @@ function signToken(roles: string[]): string {
   }).token;
 }
 
-const UNPRIVILEGED_ROLE = 'Viewer';
+// ADR-038 §3.1 (business-confirmed, 2026-07-06): Collection Officer has no
+// write access anywhere in the origination/approval/product-config surface —
+// the correct "definitely excluded from everything" role for negative tests.
+const UNPRIVILEGED_ROLE = 'Collection Officer';
 
 describe('Router-level authorization wiring (H-3)', () => {
   beforeEach(() => {
@@ -62,7 +65,7 @@ describe('Router-level authorization wiring (H-3)', () => {
     prismaMock.loanProduct.findUnique.mockResolvedValue(null);
   });
 
-  describe('POST /api/v1/borrowers (origination roles: Administrator, Manager, Loan Officer)', () => {
+  describe('POST /api/v1/borrowers (origination roles: MIS, Loan Operation Manager, CRM)', () => {
     const body = { branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz' };
 
     it('rejects with 401 when unauthenticated', async () => {
@@ -78,40 +81,40 @@ describe('Router-level authorization wiring (H-3)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('passes the authorization gate for an allowed role (Loan Officer)', async () => {
+    it('passes the authorization gate for an allowed role (CRM)', async () => {
       const res = await request(app)
         .post('/api/v1/borrowers')
-        .set('Authorization', `Bearer ${signToken(['Loan Officer'])}`)
+        .set('Authorization', `Bearer ${signToken(['CRM'])}`)
         .send(body);
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
     });
   });
 
-  describe('POST /api/v1/loan-accounts/:id/approve (approval roles: Administrator, Manager only)', () => {
+  describe('POST /api/v1/loan-accounts/:id/approve (approval roles: MIS, Loan Operation Manager, CRM)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-accounts/loan-1/approve');
       expect(res.status).toBe(401);
     });
 
-    it('rejects with 403 for an authenticated Loan Officer (excluded from approval — separation of duties)', async () => {
+    it('rejects with 403 for an authenticated user without an allowed role', async () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/approve')
-        .set('Authorization', `Bearer ${signToken(['Loan Officer'])}`);
+        .set('Authorization', `Bearer ${signToken([UNPRIVILEGED_ROLE])}`);
       expect(res.status).toBe(403);
     });
 
-    it('passes the authorization gate for Manager', async () => {
+    it('passes the authorization gate for Loan Operation Manager', async () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/approve')
-        .set('Authorization', `Bearer ${signToken(['Manager'])}`);
+        .set('Authorization', `Bearer ${signToken(['Loan Operation Manager'])}`);
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
       expect(prismaMock.loanAccount.findUnique).toHaveBeenCalled();
     });
   });
 
-  describe('POST /api/v1/loan-accounts/:id/reject (approval roles: Administrator, Manager only)', () => {
+  describe('POST /api/v1/loan-accounts/:id/reject (approval roles: MIS, Loan Operation Manager, CRM)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-accounts/loan-1/reject').send({});
       expect(res.status).toBe(401);
@@ -125,33 +128,33 @@ describe('Router-level authorization wiring (H-3)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('passes the authorization gate for Administrator', async () => {
+    it('passes the authorization gate for MIS', async () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/reject')
-        .set('Authorization', `Bearer ${signToken(['Administrator'])}`)
+        .set('Authorization', `Bearer ${signToken(['MIS'])}`)
         .send({ reason: 'Insufficient documents' });
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
     });
   });
 
-  describe('POST /api/v1/loan-products/:id/versions/:versionId/activate (product config roles: Administrator, Manager only)', () => {
+  describe('POST /api/v1/loan-products/:id/versions/:versionId/activate (product config roles: MIS, Loan Operation Manager, Finance, Accounting)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-products/product-1/versions/version-1/activate');
       expect(res.status).toBe(401);
     });
 
-    it('rejects with 403 for an authenticated Loan Officer (excluded — product config is more sensitive than origination)', async () => {
+    it('rejects with 403 for an authenticated CRM user (excluded — product config is Finance/Accounting responsibility, not loan-processing, per ADR-038 §3.1, even though CRM is included in origination)', async () => {
       const res = await request(app)
         .post('/api/v1/loan-products/product-1/versions/version-1/activate')
-        .set('Authorization', `Bearer ${signToken(['Loan Officer'])}`);
+        .set('Authorization', `Bearer ${signToken(['CRM'])}`);
       expect(res.status).toBe(403);
     });
 
-    it('passes the authorization gate for Administrator', async () => {
+    it('passes the authorization gate for MIS', async () => {
       const res = await request(app)
         .post('/api/v1/loan-products/product-1/versions/version-1/activate')
-        .set('Authorization', `Bearer ${signToken(['Administrator'])}`);
+        .set('Authorization', `Bearer ${signToken(['MIS'])}`);
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
       expect(prismaMock.loanProduct.findUnique).toHaveBeenCalled();

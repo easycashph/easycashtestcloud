@@ -18,7 +18,7 @@ import { UnauthorizedError } from '@modules/identity/application/errors/AuthErro
  * `next(error)` — correct for a controller's own try/catch, but not for a
  * standalone middleware, which must always signal failure via `next()`.
  *
- * Usage: `router.post('/x', requireAuth, requireRole('Administrator', 'Manager'), controller.x)`.
+ * Usage: `router.post('/x', requireAuth, requireRole('MIS', 'Loan Operation Manager'), controller.x)`.
  */
 export function requireRole(...allowedRoles: string[]): RequestHandler {
   return function roleGuard(req: Request, _res: Response, next: NextFunction): void {

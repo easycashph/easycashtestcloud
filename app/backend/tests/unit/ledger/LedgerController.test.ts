@@ -49,7 +49,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
     const req = {
       params: { loanAccountId: 'loan-1' },
       query: { limit: '1' },
-      authUser: authUser(['Administrator']),
+      authUser: authUser(['MIS']),
     } as unknown as Request;
     const res = buildResponse();
 
@@ -66,7 +66,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
     const txn = buildTransaction();
     (deps.getLoanTransactionUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(txn);
     const controller = new LedgerController(deps);
-    const req = { params: { id: txn.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { params: { id: txn.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.get(req, res, vi.fn());
@@ -79,7 +79,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
     const error = new Error('boom');
     (deps.getLoanTransactionUseCase.execute as ReturnType<typeof vi.fn>).mockRejectedValue(error);
     const controller = new LedgerController(deps);
-    const req = { params: { id: 'missing' }, authUser: authUser(['Administrator']) } as unknown as Request;
+    const req = { params: { id: 'missing' }, authUser: authUser(['MIS']) } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -94,7 +94,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
       const deps = buildDeps();
       (deps.listLoanTransactionsForAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       const controller = new LedgerController(deps);
-      const req = { params: { loanAccountId: 'loan-1' }, query: {}, authUser: authUser(['Cashier'], 'branch-1') } as unknown as Request;
+      const req = { params: { loanAccountId: 'loan-1' }, query: {}, authUser: authUser(['Collection Officer'], 'branch-1') } as unknown as Request;
 
       await controller.listForAccount(req, buildResponse(), vi.fn());
 
@@ -106,7 +106,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
       const txn = buildTransaction('branch-2');
       (deps.getLoanTransactionUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(txn);
       const controller = new LedgerController(deps);
-      const req = { params: { id: txn.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: txn.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.get(req, buildResponse(), next);
@@ -119,7 +119,7 @@ describe('LedgerController (read-only per D-2 — no write method exists on this
       const txn = buildTransaction('branch-2');
       (deps.getLoanTransactionUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(txn);
       const controller = new LedgerController(deps);
-      const req = { params: { id: txn.id }, authUser: authUser(['Administrator'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: txn.id }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
       const res = buildResponse();
 
       await controller.get(req, res, vi.fn());

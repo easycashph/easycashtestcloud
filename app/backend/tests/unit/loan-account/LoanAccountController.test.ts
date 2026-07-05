@@ -45,7 +45,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
     const loan = buildLoan();
     (deps.createLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
     const controller = new LoanAccountController(deps);
-    const req = { body: { branchId: 'branch-1' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+    const req = { body: { branchId: 'branch-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
 
     await controller.create(req, res, vi.fn());
@@ -64,7 +64,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
     const req = {
       params: { id: loan.id },
       body: { approvedByUserId: 'attacker-supplied-id' },
-      authUser: authUser(['Manager'], 'branch-1'),
+      authUser: authUser(['Loan Operation Manager'], 'branch-1'),
     } as unknown as Request;
     const res = buildResponse();
 
@@ -81,7 +81,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
     const req = {
       params: { id: loan.id },
       body: { reason: 'Insufficient documents' },
-      authUser: authUser(['Administrator'], 'branch-1'),
+      authUser: authUser(['MIS'], 'branch-1'),
     } as unknown as Request;
     const res = buildResponse();
 
@@ -95,7 +95,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
     const loans = [buildLoan()];
     (deps.listLoanAccountsUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loans);
     const controller = new LoanAccountController(deps);
-    const req = { query: { limit: '1' }, authUser: authUser(['Administrator']) } as unknown as Request;
+    const req = { query: { limit: '1' }, authUser: authUser(['MIS']) } as unknown as Request;
     const res = buildResponse();
 
     await controller.list(req, res, vi.fn());
@@ -110,7 +110,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
     const error = new Error('boom');
     (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockRejectedValue(error);
     const controller = new LoanAccountController(deps);
-    const req = { params: { id: 'missing' }, authUser: authUser(['Administrator']) } as unknown as Request;
+    const req = { params: { id: 'missing' }, authUser: authUser(['MIS']) } as unknown as Request;
     const res = buildResponse();
     const next = vi.fn();
 
@@ -126,7 +126,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan();
       (deps.createLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
       const controller = new LoanAccountController(deps);
-      const req = { body: { branchId: 'attacker-branch' }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { body: { branchId: 'attacker-branch' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
 
       await controller.create(req, buildResponse(), vi.fn());
 
@@ -138,7 +138,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan('branch-2');
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
       const controller = new LoanAccountController(deps);
-      const req = { params: { id: loan.id }, authUser: authUser(['Loan Officer'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: loan.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.get(req, buildResponse(), next);
@@ -150,7 +150,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const deps = buildDeps();
       (deps.listLoanAccountsUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       const controller = new LoanAccountController(deps);
-      const req = { query: {}, authUser: authUser(['Cashier'], 'branch-1') } as unknown as Request;
+      const req = { query: {}, authUser: authUser(['Collection Officer'], 'branch-1') } as unknown as Request;
 
       await controller.list(req, buildResponse(), vi.fn());
 
@@ -162,7 +162,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan('branch-2');
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
       const controller = new LoanAccountController(deps);
-      const req = { params: { id: loan.id }, authUser: authUser(['Manager'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: loan.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.approve(req, buildResponse(), next);
@@ -176,7 +176,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan('branch-2');
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
       const controller = new LoanAccountController(deps);
-      const req = { params: { id: loan.id }, body: {}, authUser: authUser(['Manager'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: loan.id }, body: {}, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
       const next = vi.fn();
 
       await controller.reject(req, buildResponse(), next);
@@ -190,7 +190,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan('branch-2');
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
       const controller = new LoanAccountController(deps);
-      const req = { params: { id: loan.id }, authUser: authUser(['Administrator'], 'branch-1') } as unknown as Request;
+      const req = { params: { id: loan.id }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
 
       await controller.approve(req, buildResponse(), vi.fn());
 
