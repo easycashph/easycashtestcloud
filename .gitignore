@@ -29,6 +29,11 @@ Thumbs.db
 # Database
 legacy/mongodb/
 
+# Real client case files (scanned IDs, credit bureau reports, selfies) — highly sensitive PII,
+# must never enter git history. Only the small curated subset copied into app/frontend/public/
+# for the UI preview is tracked.
+legacy/sdevtech/
+
 # Build
 dist/
 build/
