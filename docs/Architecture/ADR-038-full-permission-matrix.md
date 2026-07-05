@@ -104,6 +104,19 @@ to solve their permission model yet — only Activity Logs' MIS-only visibility 
 (§1's table) as a UI-level fact; whether that maps to an `audit` module endpoint restriction is a
 question for whenever that module is actually built, not now.
 
+### 3.5 User Management (identity module — not yet built) — RESOLVED, MIS only
+
+**Confirmed, 2026-07-06:** whenever a real User Management endpoint (create/edit/deactivate an
+LMS member account, assign a role) is added to the `identity` module, it is gated to **MIS only**.
+This decision is made **now, ahead of that endpoint existing**, precisely so the correct
+`requireRole('MIS')` allow-list is used from the endpoint's very first version — no separate
+decision needed when that work starts.
+
+Context: `identity`'s current HTTP surface (`authRouter.ts`) only has `/login`, `/refresh`,
+`/logout`, `/logout-all`, `/me` — no user-CRUD route exists yet. The "Manage LMS members" column
+in §1's table describes the frontend UI-preview's mock "Switch Account" panel only; this section
+is what makes that same MIS-only rule binding on the real backend endpoint once it's built.
+
 ## 4. Implementation checklist (not yet done — tracked here, not started by this ADR itself)
 
 This ADR is a **decision document**, not a code change. Per this project's workflow discipline
@@ -123,6 +136,10 @@ takes it on, and requires its own explicit go-ahead before implementation begins
    role names (`Administrator`, `Manager`, `Loan Officer`, etc.).
 6. Any existing seeded test fixtures/users referencing the old role names (check
    `tests/unit/**` fixtures and any seed-dependent integration test) need the same rename.
+7. **Forward-looking, not actionable yet:** whenever the `identity` module's User Management
+   endpoint (create/edit/deactivate an LMS member, assign a role) is actually built, it must be
+   gated with `requireRole('MIS')` per §3.5 — decided now so this isn't re-litigated or guessed
+   at when that work starts.
 
 ## 5. What this ADR deliberately does not do
 
