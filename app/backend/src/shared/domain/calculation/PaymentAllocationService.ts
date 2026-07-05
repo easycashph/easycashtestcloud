@@ -13,16 +13,20 @@ import { InvalidPaymentAllocationInputError } from './errors/CalculationDomainEr
  * dependency in either direction.
  *
  * The caller is responsible for supplying installments already sorted in
- * the order they should be paid — this service does not sort. Per
- * `ADR-009-payment-allocation-order.md` §2, the only evidence gathered is
- * "every sampled multi-installment loan's payments occur in the same
- * order as the schedule's due-date ordering" (`STATUS: PARTIALLY
- * CONFIRMED` — an observed pattern, not a proven rule) — this service
- * does not encode that ordering itself, since doing so would require a
- * `dueDate` field this checkpoint has no evidenced need to depend on.
+ * the order they should be paid; this service does not re-sort a
+ * caller-supplied order. Per `ADR-009-payment-allocation-order.md` §2,
+ * the only evidence gathered is "every sampled multi-installment loan's
+ * payments occur in the same order as the schedule's due-date ordering"
+ * (`STATUS: PARTIALLY CONFIRMED` — an observed pattern, not a proven
+ * rule). What this service DOES enforce (2026-07-06 verification-pass
+ * follow-up, M-6): `dueDate` is now part of this interface specifically
+ * so `allocate()` can verify the caller's ordering claim rather than
+ * trusting it silently — a wrong caller-supplied order would otherwise
+ * misallocate a real payment with no error raised.
  */
 export interface AllocatableInstallment {
   readonly id: string;
+  readonly dueDate: Date;
   readonly feesDue: Money;
   readonly penaltyDue: Money;
   readonly interestDue: Money;
@@ -68,6 +72,22 @@ export class PaymentAllocationService {
       // legitimately-zero remaining amount once the payment has already
       // been spent on earlier installments in this same loop).
       throw new InvalidPaymentAllocationInputError('paymentAmount must be greater than zero.');
+    }
+
+    for (let i = 1; i < installments.length; i++) {
+      // M-6 (2026-07-06): the caller claims to supply installments in
+      // due-date order (ADR-009 §2) — verify it rather than silently
+      // trusting it. A strictly-earlier dueDate at a later position means
+      // the caller's ordering is wrong, and continuing would misallocate
+      // this payment against the wrong installments with no error.
+      const previous = installments[i - 1] as AllocatableInstallment;
+      const current = installments[i] as AllocatableInstallment;
+      if (current.dueDate.getTime() < previous.dueDate.getTime()) {
+        throw new InvalidPaymentAllocationInputError(
+          `installments must be supplied in due-date order; installment "${current.id}" (due ${current.dueDate.toISOString()}) ` +
+            `comes after installment "${previous.id}" (due ${previous.dueDate.toISOString()}) but has an earlier due date.`,
+        );
+      }
     }
 
     const allocations: InstallmentAllocation[] = [];

@@ -45,6 +45,7 @@ export interface ProcessPaymentResult {
 function toRemainingDue(installment: RepaymentInstallment): AllocatableInstallment {
   return {
     id: installment.id,
+    dueDate: installment.dueDate,
     feesDue: installment.due.fees.subtract(installment.paid.fees),
     penaltyDue: installment.due.penalty.subtract(installment.paid.penalty),
     interestDue: installment.due.interest.subtract(installment.paid.interest),

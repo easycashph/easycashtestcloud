@@ -3,9 +3,17 @@ import { Money } from '@shared/domain/Money';
 import { PaymentAllocationService, type AllocatableInstallment } from '@shared/domain/calculation/PaymentAllocationService';
 import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/errors/CalculationDomainErrors';
 
-function installment(id: string, fees: string, penalty: string, interest: string, principal: string): AllocatableInstallment {
+function installment(
+  id: string,
+  fees: string,
+  penalty: string,
+  interest: string,
+  principal: string,
+  dueDate: string = '2026-01-01',
+): AllocatableInstallment {
   return {
     id,
+    dueDate: new Date(dueDate),
     feesDue: Money.of(fees),
     penaltyDue: Money.of(penalty),
     interestDue: Money.of(interest),
@@ -90,6 +98,44 @@ describe('PaymentAllocationService (cross-installment orchestration, CALC-SPEC Â
       expect(() =>
         PaymentAllocationService.allocate(Money.of('-50.00'), [installment('inst-1', '0', '0', '10.00', '0')]),
       ).toThrow(InvalidPaymentAllocationInputError);
+    });
+  });
+
+  describe('installment ordering guard (M-6, 2026-07-06 verification-pass follow-up)', () => {
+    it('rejects installments supplied out of due-date order', () => {
+      const installments = [
+        installment('inst-2', '0', '0', '50.00', '100.00', '2026-02-01'),
+        installment('inst-1', '0', '0', '50.00', '100.00', '2026-01-01'),
+      ];
+
+      expect(() => PaymentAllocationService.allocate(Money.of('200.00'), installments)).toThrow(
+        InvalidPaymentAllocationInputError,
+      );
+    });
+
+    it('accepts installments already in ascending due-date order', () => {
+      const installments = [
+        installment('inst-1', '0', '0', '50.00', '100.00', '2026-01-01'),
+        installment('inst-2', '0', '0', '50.00', '100.00', '2026-02-01'),
+      ];
+
+      expect(() => PaymentAllocationService.allocate(Money.of('200.00'), installments)).not.toThrow();
+    });
+
+    it('accepts installments sharing the exact same due date (not a violation â€” equal is not "out of order")', () => {
+      const installments = [
+        installment('inst-1', '0', '0', '50.00', '100.00', '2026-01-01'),
+        installment('inst-2', '0', '0', '50.00', '100.00', '2026-01-01'),
+      ];
+
+      expect(() => PaymentAllocationService.allocate(Money.of('200.00'), installments)).not.toThrow();
+    });
+
+    it('never checks order for a single-installment or empty list (nothing to be out of order with)', () => {
+      expect(() =>
+        PaymentAllocationService.allocate(Money.of('50.00'), [installment('inst-1', '0', '0', '50.00', '0')]),
+      ).not.toThrow();
+      expect(() => PaymentAllocationService.allocate(Money.of('50.00'), [])).not.toThrow();
     });
   });
 });

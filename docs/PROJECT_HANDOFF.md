@@ -144,17 +144,18 @@ resuming work correctly:
   Older history (ADR-049, CP8–CP10, etc.) is unchanged in content, only in hash, per the
   `git filter-branch` rewrite noted above — see `git log --oneline` directly rather than trusting
   any older hash recorded elsewhere in this document's history.
-- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP11):** **464
-  unit tests passing, 0 failing, 6 integration tests correctly skipped** (74 test files total; up
-  from 460/74 before CP11 — the +4 are CP11's `collectionsBalance`/`accountingBalance` tests,
-  covering a partially-paid loan with nonzero penalty, the newly-activated no-payment edge case,
-  the case where both getters coincide, and overpayment/negative-balance behavior).
-- **Verification status (all re-run and confirmed clean immediately before writing this
-  document, 2026-07-05, against the working tree including CP11):**
+- **Current test counts (verified fresh, not from memory, 2026-07-06, includes the ADR-038 role
+  rename and the M-6 installment-order guard):** **468 unit tests passing, 0 failing, 6
+  integration tests correctly skipped** (74 test files total; up from 464/74 before this pass —
+  the +4 are M-6's new `PaymentAllocationService` ordering-guard regression tests).
+- **Verification status (all re-run and confirmed clean immediately before writing this section,
+  2026-07-06, against the working tree including the M-6/M-7 fixes):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
-  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 464 tests passed, 6 skipped
-    (470 total); 0 failed.**
+  - `npm run build` — clean.
+  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 468 tests passed, 6 skipped
+    (474 total); 0 failed.**
+  - `npm audit --omit=dev` (from `app/backend/`) — **0 vulnerabilities** (was 4 before M-7).
 
 ---
 
@@ -446,27 +447,38 @@ initially missed non-`.ts` source files):
   from M8.1 approved scope ("presenter redesign" was listed as not-to-implement; adding tests
   without redesigning was still out of the approved finding list).
 - **M-5 (new, 2026-07-06 verification pass) — Amortization schedule doesn't reconcile principal
-  to exactly zero.** `AmortizationScheduleGenerator`'s per-period half-up rounding of
-  `interestPortion` leaves a small residual (e.g. -0.03) on the final installment's
-  `endingPrincipal` instead of landing on exactly 0.00. Already correctly flagged as
-  `STATUS: UNRESOLVED` in `CALCULATION_ENGINE_SPEC.md` §7 and characterized (not hidden) by its
-  own test suite — restating here only so it isn't lost before this generator is wired into any
-  loan-closure/write-off use case, where a nonzero residual on a loan reported "paid off" would be
-  a real, user-visible defect, not just a documentation footnote.
-- **M-6 (new, 2026-07-06 verification pass) — No runtime installment-order guard in
-  `PaymentAllocationService`.** The service trusts its caller to pass `installments` pre-sorted by
-  due date and does not verify this itself. Harmless today (no use case calls it yet — it remains
-  standalone per CP4's design), but needs a defensive check or explicit assertion added *before*
-  any future checkpoint wires it into `ProcessPaymentUseCase`'s cross-installment allocation path,
-  since a caller passing installments out of order would silently misallocate real payments with
-  no error raised.
-- **M-7 (new, 2026-07-06 verification pass) — `npm audit`: 4 vulnerabilities in `app/backend`
-  (1 moderate, 3 high), 0 in `app/frontend`.** All transitive: `bcrypt@5.x → @mapbox/node-pre-gyp →
-  tar` (several path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds check). Fix requires
-  upgrading to `bcrypt@6.0.0`, a breaking change — deferred deliberately rather than run via
-  `npm audit fix --force`, since `bcrypt` underlies password hashing and any upgrade needs its own
-  regression pass (round-trip hash/compare against both old- and new-format hashes) before
-  shipping, not a blind dependency bump.
+  to exactly zero. Still open — deliberately, per an explicit 2026-07-06 user decision, not an
+  oversight.** `AmortizationScheduleGenerator`'s per-period half-up rounding of `interestPortion`
+  leaves a small residual (e.g. -0.03) on the final installment's `endingPrincipal` instead of
+  landing on exactly 0.00. Investigated for a fix on 2026-07-06 and found to require resolving
+  `CALCULATION_ENGINE_SPEC.md` §7's genuinely `STATUS: UNRESOLVED` question first (does only
+  principal absorb the residual, or is the total payment amount adjusted? — no legacy evidence
+  traces the exact mechanics). Presented to the user as a business decision needed before any code
+  change; the user chose to leave it tracked-but-unresolved rather than decide now. **Do not
+  implement `ROUND_REMAINDER_INTO_LAST_REPAYMENT` from general amortization convention** — this
+  entry exists precisely to prevent that guess, per CALC-SPEC §7 and `CLAUDE.md`'s "never invent
+  business rules" rule. Revisit only when new evidence or an explicit decision resolves it.
+- **M-6 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: no runtime
+  installment-order guard in `PaymentAllocationService`. Fixed: `AllocatableInstallment` gained a
+  `dueDate: Date` field (previously deliberately omitted — the interface is now updated since a
+  real caller, `ProcessPaymentUseCase.toRemainingDue()`, already had a `dueDate` available and
+  already sorts by it before calling); `PaymentAllocationService.allocate()` now throws
+  `InvalidPaymentAllocationInputError` if installments are supplied out of ascending due-date
+  order (equal dates are not a violation). 4 new regression tests added
+  (`tests/unit/shared/calculation/PaymentAllocationService.test.ts`), full suite still green
+  (468/474, up from 464/470).
+- **M-7 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: `npm audit` — 4
+  vulnerabilities in `app/backend` (1 moderate, 3 high), all transitive via `bcrypt@5.x →
+  @mapbox/node-pre-gyp → tar` (path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds
+  check). Fixed: `bcrypt` upgraded to `^6.0.0` (verified via the existing `BcryptPasswordHasher`
+  test suite, including the regression test that a static, pre-computed `$2b$12$...` hash string
+  still round-trips correctly under the new version — real cross-version compatibility evidence,
+  not just a fresh hash/compare); `uuid`/`@types/uuid` removed entirely from `package.json`
+  (confirmed genuinely unused anywhere in `src`/`tests` — the codebase uses `node:crypto`'s
+  `randomUUID` instead). `npm audit --omit=dev` now reports 0 vulnerabilities. (A separate,
+  pre-existing `vite`/`vitest` devDependency advisory chain — dev-server-only, not
+  production-relevant — surfaces only under a full non-`--omit=dev` audit; out of this finding's
+  scope.)
 
 ### Low priority
 - **L-1** — `toPaginatedResponse`'s "full page ⇒ set nextCursor" heuristic always costs one
@@ -613,7 +625,10 @@ implementation overrides, which caused a real test-pollution bug once during Mil
 (see `PrismaBorrowerRepository.test.ts`'s `beforeEach` comment for the full explanation).
 
 ### Current passing test count
-**353 passing, 0 failing, 6 correctly skipped** (verified fresh at the start of this document).
+**468 passing, 0 failing, 6 correctly skipped** (74 test files, 73 passed/1 skipped — see §1 for
+the full verification status; this count was stale at 353 for several milestones' worth of
+handoff updates before this 2026-07-06 pass caught it — always prefer re-running `npx vitest run`
+over trusting any number recorded here).
 
 ---
 
