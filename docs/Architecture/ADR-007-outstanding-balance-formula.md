@@ -1,7 +1,9 @@
 # ADR-007 — Outstanding Balance Formula
 
-**Status:** PARTIALLY ACCEPTED — mechanism decided; two central design questions explicitly
-UNRESOLVED, pending a business decision (Milestone 9 design review, 2026-07-03).
+**Status:** PARTIALLY ACCEPTED — mechanism decided; §3 (penalty inclusion) **RESOLVED
+2026-07-05** (Option B, two fields); §4 (migration treatment of non-reconciling `CLOSED` loans)
+remains **UNRESOLVED**, pending a business decision (Milestone 9 design review, 2026-07-03; §3
+resolved 2026-07-05).
 **Context documents:** `docs/Legacy Analysis/2026-07-03-milestone9-financial-rules-verification.md`
 §3.1, §7.3–§7.5, §7.9–§7.10 (evidence); `docs/Architecture/FINANCIAL_INVARIANTS.md` §3, §8 (prior
 open-item listing and the balance-integrity invariants this ADR must operate within).
@@ -64,7 +66,7 @@ decision (no "negative is illegal" type constraint) — this ADR reaffirms it.
 
 ---
 
-## 3. UNRESOLVED — Decision Required: does "outstanding balance" include penalty, or not?
+## 3. RESOLVED — Decision: does "outstanding balance" include penalty, or not?
 
 **The evidence shows two differently-scoped balance concepts are both real, both internally
 consistent, and both currently in active use in the legacy system — this is not a data error to
@@ -76,24 +78,31 @@ be explained away, it is a genuine design fork:**
 | Collections-operational total | `Daily Collection Report.xlsx` "Total Balance" | **Yes** | Exact match to the ledger, 1 case (centavo-exact) |
 | Accounting/GL total | `Accounting-Detailed Ending Current Balance.xlsx` "Total Obligation" = `PRINCIPAL BALANCE + INTEREST BALANCE + FEES BALANCE` | **No** | Exact match, 1 case, formula independently re-derived and confirmed a second time via `Sample Computation Sheet updated.xlsx`'s `Get Gross (2)` sheet ("Total OB" = Principal + scheduled Add-On interest, no penalty term) |
 
-**Options, neither selected by this document:**
+**Decision (2026-07-05): Option B — two fields, both exposed.**
 
 - **Option A — single field.** `LoanAccount` exposes one `outstandingBalance` concept. Requires
   choosing penalty-inclusive or penalty-exclusive, discarding the other view (or computing it
-  on demand elsewhere, e.g. a report query).
-- **Option B — two fields.** `LoanAccount` (or a presenter/reporting layer) exposes both a
-  penalty-inclusive "collections balance" and a penalty-exclusive "accounting balance" as
-  distinct, separately-named values. This is the Legacy Analysis document's non-binding
+  on demand elsewhere, e.g. a report query). **Not selected.**
+- **Option B — two fields. SELECTED.** `LoanAccount` (or a presenter/reporting layer) exposes
+  both a penalty-inclusive "collections balance" and a penalty-exclusive "accounting balance" as
+  distinct, separately-named values. This is the Legacy Analysis document's own non-binding
   recommendation (§7.10), on the reasoning that both concepts are already real and in
   simultaneous use, and picking one would silently break whichever downstream report/process
-  relies on the other.
+  relies on the other. **Confirmed by direct business decision** (project owner, 2026-07-05):
+  both views are needed and neither should be discarded.
 
-**Why this isn't decided here:** the evidence confirms *that* the two totals differ by a fixed,
+**Rationale, for the record:** the evidence confirms *that* the two totals differ by a fixed,
 identifiable, formula-level distinction (penalty presence). It does not confirm *why* the
 business treats them differently (a plausible but unconfirmed hypothesis is cash-basis vs.
-accrual-basis recognition of penalty income — Legacy Analysis §7.4) or *which one, or both, the
-new system's core domain model should expose as its canonical `outstandingBalance`*. This is a
-product/accounting decision, not a data question. **STATUS: UNRESOLVED — requires your decision.**
+accrual-basis recognition of penalty income — Legacy Analysis §7.4) — that "why" remains
+unconfirmed, but is not required to implement Option B: both fields are computed directly from
+already-evidenced formulas regardless of the underlying accounting rationale.
+
+**Implementation note for CP11:** name the two getters distinctly and unambiguously — e.g.
+`collectionsBalance` (penalty-inclusive: principal + interest + fees + penalty) and
+`accountingBalance` (penalty-exclusive: principal + interest + fees). Do not name either one
+plain `outstandingBalance`, since that name is exactly the ambiguity this ADR resolves — a
+generic name would silently reintroduce the confusion for the next reader. **STATUS: RESOLVED.**
 
 ---
 
@@ -152,16 +161,26 @@ block a complete, confident migration plan.
 | Balance is a maintained running total, updated atomically per transaction | **CONFIRMED** — decided, §1 |
 | Component-field summing is NOT a reliable reconciliation method | **CONFIRMED** — decided, §1 |
 | Overpayments/reversals/negative balances are valid states | **CONFIRMED** — decided, §2 (reaffirms `FINANCIAL_INVARIANTS.md §3`) |
-| Whether `outstandingBalance` includes penalty | **UNRESOLVED — decision required, §3** |
+| Whether `outstandingBalance` includes penalty | **RESOLVED 2026-07-05 — Option B, both exposed, §3** |
 | Cause and migration treatment of the 15.5% non-reconciling `CLOSED` population | **PARTIALLY CONFIRMED (quantified by category); UNRESOLVED overall — decision required, §4** |
 
 ---
 
 ## 6. What this ADR unblocks and what it still blocks
 
-- **Does NOT yet fully unblock `ActivateLoanUseCase` or any balance-mutating write** — those
+**Correction (per `MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md` Decision Log #1):** the original
+claim below — that §3 blocks every balance-mutating write — was overly conservative and has
+since been superseded. §3 only ever blocked a single, narrow future getter (a computed
+`outstandingBalance`/`collectionsBalance`/`accountingBalance` summary), never the twelve
+individual balance columns (`principalBalance`, `interestBalance`, `feesBalance`,
+`penaltyBalance`, and their `Paid`/`Due` counterparts) that `ActivateLoanUseCase` (CP8) and
+`ProcessPaymentUseCase` (CP9) actually read and write. Both were implemented, tested, and
+committed without needing §3 resolved, exactly as the roadmap's Decision Log #1 concluded. The
+original text is preserved below for the historical record, not because it turned out correct:
+
+- ~~Does NOT yet fully unblock `ActivateLoanUseCase` or any balance-mutating write — those
   require §3's decision, since every balance-mutating use case must know which balance
-  concept(s) it's writing to.
+  concept(s) it's writing to.~~ **Superseded — see correction above.**
 - **Does unblock**: any calculation-engine work that only needs to know balances are
   transaction-driven, atomically maintained, and never independently re-derived from component
   sums (e.g. `PaymentAllocationService`'s internal design per ADR-009 can proceed knowing it will
@@ -171,5 +190,9 @@ block a complete, confident migration plan.
   and narrowed even before a final decision), but a concrete migration script should not be
   written against the 79-loan population until §4 is resolved.
 
-This ADR should be revisited and formally completed (its Status changed from "PARTIALLY ACCEPTED"
-to "Accepted") once you have decided §3 and §4.
+**Now that §3 is resolved (2026-07-05), CP11 (the `outstandingBalance` summary getter,
+`collectionsBalance`/`accountingBalance` per §3's implementation note) is fully unblocked and may
+proceed.** §4 remains open and continues to block only CP12 (the separate legacy-migration
+track for the 79 non-reconciling `CLOSED` loans) — it does not gate CP11.
+
+This ADR remains "PARTIALLY ACCEPTED" (not "Accepted") until §4 is also resolved.

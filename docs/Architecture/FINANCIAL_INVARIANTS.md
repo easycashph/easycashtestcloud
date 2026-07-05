@@ -60,8 +60,9 @@ and this document stay traceable to the same source of truth.
 - **A `LoanAccount`'s balances must always be reconstructible from its `LoanTransaction`
   history.** The stored balance fields are a performance/query-convenience cache of a value that
   is, in principle, derivable by replaying transactions — they must never diverge from what that
-  replay would produce. (ADR-007, outstanding-balance formula, is still open — this rule
-  constrains *how* balances may be written, independent of the still-undecided formula itself.)
+  replay would produce. (ADR-007 §3, the outstanding-balance formula, was resolved 2026-07-05
+  — both a penalty-inclusive and penalty-exclusive figure are exposed, per Option B; ADR-007 §4,
+  the separate migration-treatment question, remains open and does not affect this rule.)
 - **Overpayments, advance payments, and reversals are valid states, not error conditions**
   (`PROJECT_RULES.md §Payments`). "Balance went negative" is not inherently invalid — only
   specific, named business rules (to be defined when the calculation engine is built) may
@@ -141,7 +142,7 @@ or invent the missing behavior.
 
 | ADR | Constrains |
 |---|---|
-| ADR-007 | The formula for deriving/verifying `outstandingBalance` — no stored column exists by design |
+| ADR-007 §4 only | Migration treatment of the 79 non-reconciling legacy `CLOSED` loans (§3, the `outstandingBalance` formula itself, was resolved 2026-07-05 — see ADR-007 §3/§6) |
 | ADR-009 | Payment allocation order across principal/interest/fees/penalty and across installments |
 | ADR-010 | Add-On vs. Contractual interest rate derivation and disclosure |
 | ADR-032 | Whether "Loan Release" and "Disbursement" are one event or two — schema currently takes the two-event position as a *working assumption only* (`LoanAccount.activatedAt` vs. `DISBURSEMENT`-typed `LoanTransaction`); do not build a use case that conflates them |
@@ -157,4 +158,9 @@ or invent the missing behavior.
   Balance Discounted) is out of scope for Milestone 7. Structural entities, repositories, and
   lifecycle use cases (e.g. `ApproveLoanUseCase`) may be built against the existing schema;
   nothing that computes a schedule or derives a balance from a formula may be built until
-  ADR-007 and ADR-009 are resolved.
+  ADR-007 and ADR-009 are resolved. **Superseded as of Milestone 9.1:** ADR-009's core allocation
+  order was confirmed, ADR-007 §3 was resolved 2026-07-05, and the calculation engine
+  (`AmortizationScheduleGenerator`, `PaymentAllocationService`, `ActivateLoanUseCase`,
+  `ProcessPaymentUseCase`) has since been built, tested, and golden-master-verified (CP1–CP10).
+  Only ADR-007 §4 (legacy migration treatment, gating CP12 only) and CP11's summary getter remain
+  open. This bullet is left for historical context, not as a current constraint.

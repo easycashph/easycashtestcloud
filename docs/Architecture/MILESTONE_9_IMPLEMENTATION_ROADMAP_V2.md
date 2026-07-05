@@ -402,12 +402,14 @@ create:** a dedicated fixture file sourcing these numbers once, directly from th
 document, to avoid transcription drift across multiple test files. This is an integration-style
 test exercising the full pipeline together, distinct from CP3/CP4's isolated unit tests.
 
-### CP11 (GATED on ADR-007 §3) — `outstandingBalance` Summary Getter
-**New, narrow checkpoint (Decision Log #1).** **Objective:** a single computed getter (and its
-presenter wiring) on `LoanAccount` exposing whichever summary figure ADR-007 §3 selects
-(penalty-inclusive, penalty-exclusive, or both as separately-named values). This is the *entire*
-remaining implementation surface actually blocked by that decision — everything else in CP7–CP10
-proceeds regardless.
+### CP11 (UNGATED — ADR-007 §3 resolved 2026-07-05) — `outstandingBalance` Summary Getters
+**New, narrow checkpoint (Decision Log #1).** **Objective:** two computed getters (and their
+presenter wiring) on `LoanAccount` — `collectionsBalance` (penalty-inclusive: principal +
+interest + fees + penalty) and `accountingBalance` (penalty-exclusive: principal + interest +
+fees) — per ADR-007 §3's resolved Option B. Do not name either one plain `outstandingBalance`
+(ADR-007 §3's own implementation note). This was the *entire* implementation surface blocked by
+that decision — everything else in CP7–CP10 already proceeded regardless, and this checkpoint may
+now start.
 
 ### CP12 (GATED on ADR-007 §4, separate track) — Legacy Migration Treatment
 Unchanged in substance from the original roadmap's Checkpoint 11 — a data-migration script/plan for
