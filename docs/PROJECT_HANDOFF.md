@@ -2,19 +2,24 @@
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
 has never seen this project before. It reflects the repository state through **Milestone 9.1
-checkpoint 11** (`collectionsBalance`/`accountingBalance` summary getters), verified directly
-against the repository rather than reconstructed from memory. **Read this document in full before
-touching any code.** If anything here conflicts with what you observe in the repository, trust
-the repository and update this document.
+checkpoint 11** (`collectionsBalance`/`accountingBalance` summary getters) on the `app/backend`
+track, **plus** the separate, mock-data-only `app/frontend` CEO-facing UI preview committed on
+2026-07-06, verified directly against the repository rather than reconstructed from memory.
+**Read this document in full before touching any code.** If anything here conflicts with what
+you observe in the repository, trust the repository and update this document.
 
 ---
 
 ## 1. Current Project State
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
-- **Latest committed commit:** `b4c00d1` — "Milestone 9.1 checkpoint 11: outstandingBalance
-  summary getters (collectionsBalance/accountingBalance)".
-- **Latest completed implementation:** Milestone 9.1 **CP11**, per
+- **Latest committed commit:** `a85b815` — "Frontend: Milestone 9.1 UI preview - Loan
+  Applications, Payment Reminders, roles, Client workflow". **This is a separate, parallel track
+  from the `app/backend` Milestone 9.1 checkpoint track below — see the new "Frontend UI Preview
+  track" subsection at the end of this section before assuming it changes any backend checkpoint
+  status.** The last commit on the `app/backend` track itself is still `b4c00d1` — "Milestone 9.1
+  checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance)".
+- **Latest completed backend implementation:** Milestone 9.1 **CP11**, per
   `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11
   are implemented, verified, and committed. **No further checkpoint is currently ungated:** CP12
   remains blocked on `ADR-007` §4 (separate legacy-migration track); CP13 (HTTP exposure for
@@ -40,10 +45,13 @@ the repository and update this document.
     `LoanAccountPresenter`.
   - **CP12 (legacy migration treatment) — GATED on `ADR-007` §4, separate track, not started.**
   - **CP13 (HTTP exposure for `ActivateLoanUseCase`/`ProcessPaymentUseCase`) — future milestone,
-    not started, not currently gated by any open ADR.** No frontend work should begin before this
-    exists — the frontend (`app/frontend/`) is presently scaffold-only (no populated
-    `components`/`features`/`hooks`/`pages`), and has no API surface to build against until CP13
-    ships.
+    not started, not currently gated by any open ADR.** No **real, backend-wired** frontend work
+    should begin before this exists — CP13 is still the prerequisite for any frontend feature that
+    reads/writes real data. **This is no longer "no frontend work at all," though:** as of
+    2026-07-06 the frontend gained a populated, mock-data-only UI preview (`components`/`layouts`/
+    `pages`/`lib` are no longer empty scaffolds) — see the new "Frontend UI Preview track"
+    subsection below. It has **zero API calls into `app/backend`** and does not reduce or replace
+    any CP13 work; treat CP13 as still fully unstarted.
   - **Two new ADRs resolved/added since the CP10 handoff, both from a single business
     conversation (2026-07-05):**
     - **`ADR-007` §3 (outstanding balance penalty inclusion) — RESOLVED, Option B** (both
@@ -86,8 +94,43 @@ the repository and update this document.
     `ADR-financial-audit-isolation.md` → `ADR-047-financial-audit-isolation.md`,
     `ADR-optimistic-concurrency.md` → `ADR-048-optimistic-concurrency.md` (filename/reference-only
     change, no decision content altered).
+
+### 1.1 Frontend UI Preview track (new, 2026-07-06, `a85b815`)
+
+A **separate, parallel track from every Milestone 9.1 backend checkpoint above.** Builds out a
+CEO-facing UI preview against hand-authored mock data in `app/frontend/src/lib/mockData.ts` — no
+`app/backend` files, schema, or API surface touched. Full itemized history is in
+`app/frontend/CHANGELOG.md`; do not duplicate that detail here, just the facts relevant to
+resuming work correctly:
+- **Purpose:** demonstrate layout, navigation, and interaction flow to the CEO before the real
+  backend HTTP API (CP13) is wired up. A "Preview Mode" banner renders in the app itself, and
+  `mockData.ts`'s top-of-file comment repeats the same disclosure — this is intentional,
+  visible-to-the-user labeling, not a gap that needs hiding.
+- **Modules added:** Loan Applications (list/detail, static AI risk-assessment mock, staff-assigned
+  product sub-type, confirmation-gated approve/decline, MIS-only revert, repeat-client detection,
+  Loan Application → Create Client → Create Loan Account workflow), Payment Reminders
+  (5/3/1-day/due-date/weekly schedule, SMS/Email/Dashboard channels), a real staff roster/role set
+  with a live "Switch Account" panel, restructured Loan Products (real category/sub-type/account-
+  code convention), and broadened MIS-only Activity Logs.
+- **Does not change, gate, or unblock any backend checkpoint.** CP12 is still gated on `ADR-007`
+  §4; CP13 is still fully unstarted with no ADR gating it. Do not treat any UI-preview screen as
+  evidence that its underlying use case is implemented server-side — check the `app/backend`
+  module table in §2 for that, not this section.
+- **Legacy data note:** `legacy/sdevtech/` (real client case files) was used as a photo/document
+  source for this preview but is **excluded from the commit and added to `.gitignore`** — only a
+  small curated photo subset (12 files) was copied into `app/frontend/public/applicants/`, with
+  explicit user confirmation. Never commit the rest of `legacy/sdevtech/`'s contents.
+- **New root-level files this commit added:** `Run LMS Preview.bat` / `Run LMS  Preview.md` — a
+  standalone (non-Claude-Code) local preview launcher for non-technical stakeholders.
+- **Before doing any real CP13 frontend wiring later:** read `app/frontend/CHANGELOG.md` in full
+  first — several UI decisions here (role/access matrix, account-code convention, document
+  categorization) are described as "confirmed by the business" and should carry forward into the
+  real implementation rather than being re-derived or guessed at.
+
 - **Latest commits (newest first):**
   ```
+  a85b815 Frontend: Milestone 9.1 UI preview - Loan Applications, Payment Reminders, roles, Client workflow
+  33080ba docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP11 completion
   b4c00d1 Milestone 9.1 checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance)
   9239219 docs: ADR-049 update - confirm named employee accounts, add rate discount finding, clear BL claim
   10a84a9 docs: ADR-049 - Employee Loan Fee Waiver, explicitly rejects informal manager-favor exemptions
@@ -403,6 +446,28 @@ initially missed non-`.ts` source files):
   (all-null optional fields, empty collections) are unverified. Deferred — explicitly excluded
   from M8.1 approved scope ("presenter redesign" was listed as not-to-implement; adding tests
   without redesigning was still out of the approved finding list).
+- **M-5 (new, 2026-07-06 verification pass) — Amortization schedule doesn't reconcile principal
+  to exactly zero.** `AmortizationScheduleGenerator`'s per-period half-up rounding of
+  `interestPortion` leaves a small residual (e.g. -0.03) on the final installment's
+  `endingPrincipal` instead of landing on exactly 0.00. Already correctly flagged as
+  `STATUS: UNRESOLVED` in `CALCULATION_ENGINE_SPEC.md` §7 and characterized (not hidden) by its
+  own test suite — restating here only so it isn't lost before this generator is wired into any
+  loan-closure/write-off use case, where a nonzero residual on a loan reported "paid off" would be
+  a real, user-visible defect, not just a documentation footnote.
+- **M-6 (new, 2026-07-06 verification pass) — No runtime installment-order guard in
+  `PaymentAllocationService`.** The service trusts its caller to pass `installments` pre-sorted by
+  due date and does not verify this itself. Harmless today (no use case calls it yet — it remains
+  standalone per CP4's design), but needs a defensive check or explicit assertion added *before*
+  any future checkpoint wires it into `ProcessPaymentUseCase`'s cross-installment allocation path,
+  since a caller passing installments out of order would silently misallocate real payments with
+  no error raised.
+- **M-7 (new, 2026-07-06 verification pass) — `npm audit`: 4 vulnerabilities in `app/backend`
+  (1 moderate, 3 high), 0 in `app/frontend`.** All transitive: `bcrypt@5.x → @mapbox/node-pre-gyp →
+  tar` (several path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds check). Fix requires
+  upgrading to `bcrypt@6.0.0`, a breaking change — deferred deliberately rather than run via
+  `npm audit fix --force`, since `bcrypt` underlies password hashing and any upgrade needs its own
+  regression pass (round-trip hash/compare against both old- and new-format hashes) before
+  shipping, not a blind dependency bump.
 
 ### Low priority
 - **L-1** — `toPaginatedResponse`'s "full page ⇒ set nextCursor" heuristic always costs one

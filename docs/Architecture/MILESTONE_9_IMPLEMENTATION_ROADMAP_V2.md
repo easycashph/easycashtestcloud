@@ -324,7 +324,7 @@ the recommended order is:
 8. CP8 — `ActivateLoanUseCase`
 9. CP9 — `ProcessPaymentUseCase`
 10. CP10 — Golden-master replay tests
-11. *(gate)* CP11 — `outstandingBalance` summary getter, once ADR-007 §3 is decided
+11. *(done, committed `b4c00d1`)* CP11 — `collectionsBalance`/`accountingBalance` summary getters — ADR-007 §3 resolved 2026-07-05, no longer gated
 12. *(separate track, gate)* CP12 — legacy migration treatment, once ADR-007 §4 is decided
 13. *(future milestone)* CP13 — HTTP exposure, including idempotency-key design
 
@@ -507,7 +507,7 @@ resolved before CP1–CP10 — those calculations simply aren't being built in t
 CP10 (or any parallel ordering respecting the dependency graph above). CP8 is now fully unblocked —
 `ADR-045` (schedule due-date generation) has been resolved (Concept 1, Exact First Repayment Date).
 
-**Do not start until `ADR-007` §3 is decided:** CP11.
+**Done, committed (`b4c00d1`):** CP11 — `ADR-007` §3 was resolved 2026-07-05 (Option B), no longer a gate.
 
 **Do not start until `ADR-007` §4 is decided (separate track, does not block the above):** CP12.
 

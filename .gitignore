@@ -34,6 +34,12 @@ legacy/mongodb/
 # for the UI preview is tracked.
 legacy/sdevtech/
 
+# Legacy Excel exports (real client names/balances: Clients.xlsx, Loan Accounts Details.xlsx,
+# Daily Collection Report.xlsx, etc.) — untracked going forward, 2026-07-06 verification pass.
+# Deliberately does NOT cover legacy/reports/201 Loan Docs Generator/ — that subfolder is the
+# cited ADR-009/ADR-010 evidence base (templates + formula workbook) and stays tracked.
+legacy/reports/*.xlsx
+
 # Build
 dist/
 build/
