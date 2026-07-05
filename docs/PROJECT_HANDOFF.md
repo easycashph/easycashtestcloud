@@ -2,22 +2,24 @@
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
 has never seen this project before. It reflects the repository state through **Milestone 9.1
-checkpoint 10** (golden-master replay tests), verified directly against the repository rather
-than reconstructed from memory. **Read this document in full before touching any code.** If
-anything here conflicts with what you observe in the repository, trust the repository and update
-this document.
+checkpoint 11** (`collectionsBalance`/`accountingBalance` summary getters), verified directly
+against the repository rather than reconstructed from memory. **Read this document in full before
+touching any code.** If anything here conflicts with what you observe in the repository, trust
+the repository and update this document.
 
 ---
 
 ## 1. Current Project State
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
-- **Latest committed commit:** `9b65624` — "Milestone 9.1 checkpoint 10: golden-master replay
-  tests".
-- **Latest completed implementation:** Milestone 9.1 **CP10** (golden-master replay tests), per
-  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP10
-  are implemented, verified, and committed. **CP11 (`outstandingBalance` summary getter) remains
-  GATED on `ADR-007` §3 — not started, and should not be started until that ADR is decided.**
+- **Latest committed commit:** `b4c00d1` — "Milestone 9.1 checkpoint 11: outstandingBalance
+  summary getters (collectionsBalance/accountingBalance)".
+- **Latest completed implementation:** Milestone 9.1 **CP11**, per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11
+  are implemented, verified, and committed. **No further checkpoint is currently ungated:** CP12
+  remains blocked on `ADR-007` §4 (separate legacy-migration track); CP13 (HTTP exposure for
+  `ActivateLoanUseCase`/`ProcessPaymentUseCase`) is a deliberately-deferred future milestone, not
+  gated by any open ADR.
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
@@ -28,56 +30,69 @@ this document.
   - **CP1 (concurrency infra), CP2 (financial audit infra), CP3 (declining-balance interest + PMT
     amortization), CP4 (payment allocation calculator + service), CP5 (`version` property), CP6
     (repository conditional-write refactor), CP7 (`LoanAccount` balance-mutation domain methods),
-    CP8 (`ActivateLoanUseCase`), CP9 (`ProcessPaymentUseCase`) — Done, committed.**
-  - **CP10 (golden-master replay tests) — Done, committed (`9b65624`).** Exercises the full
-    pipeline (`AmortizationScheduleGenerator` → `PaymentAllocationService` →
-    `LoanAccount`/`RepaymentInstallment` mutation) through the real `ActivateLoanUseCase`/
-    `ProcessPaymentUseCase` orchestrators against three real, hand-traced legacy loans
-    (`SL-REG_U1V1J`, `SL-LAZ_V5N0R`, `SL-LAZ_A6J8E` — figures transcribed once into
-    `tests/integration/loan-account/goldenMasterFixtures.ts`, cited to their exact Legacy Analysis
-    §3.1/§3.2/§8.3/§8.9 and `ADR-007` §1 evidence lines), asserting exact centavo matches. Uses
-    mocked repositories (in-memory), not a live database — closes the calculation-correctness gap
-    only; live-Postgres transaction-atomicity verification remains the project's already-
-    documented standing risk. `firstRepaymentDate` for the two single-installment loans (no
-    schedule due date recorded in evidence) uses a documented disbursement-date-or-placeholder
-    proxy, explicitly noted as having zero effect on any asserted figure. Deliberately excludes
-    `ADR-046` (not evidenced against these three loans) and `SL-LAZ_A6J8E`'s anomalous
-    post-reconciliation transactions (Legacy Analysis §3.1.1, `STATUS: UNRESOLVED`).
-  - **CP11 (`outstandingBalance` summary getter) — GATED, not started.** Per the roadmap, this is
-    the *only* remaining implementation surface blocked by `ADR-007` §3 (whether
-    `outstandingBalance` is penalty-inclusive, penalty-exclusive, or both as separate fields) —
-    everything through CP10 proceeds regardless of that open decision.
+    CP8 (`ActivateLoanUseCase`), CP9 (`ProcessPaymentUseCase`), CP10 (golden-master replay tests)
+    — Done, committed.**
+  - **CP11 (summary balance getters) — Done, committed (`b4c00d1`).** Two computed getters on
+    `LoanAccount`, no new stored column: `collectionsBalance` (penalty-inclusive: principal +
+    interest + fees + penalty) and `accountingBalance` (penalty-exclusive: principal + interest +
+    fees), per `ADR-007` §3's resolved Option B. Deliberately never named `outstandingBalance` —
+    that generic name is the exact ambiguity the ADR resolved. Both wired into
+    `LoanAccountPresenter`.
+  - **CP12 (legacy migration treatment) — GATED on `ADR-007` §4, separate track, not started.**
+  - **CP13 (HTTP exposure for `ActivateLoanUseCase`/`ProcessPaymentUseCase`) — future milestone,
+    not started, not currently gated by any open ADR.** No frontend work should begin before this
+    exists — the frontend (`app/frontend/`) is presently scaffold-only (no populated
+    `components`/`features`/`hooks`/`pages`), and has no API surface to build against until CP13
+    ships.
+  - **Two new ADRs resolved/added since the CP10 handoff, both from a single business
+    conversation (2026-07-05):**
+    - **`ADR-007` §3 (outstanding balance penalty inclusion) — RESOLVED, Option B** (both
+      `collectionsBalance` and `accountingBalance` exposed). Un-gated CP11. `ADR-007` §4
+      (migration treatment) remains open and continues to gate only CP12; the ADR stays
+      "PARTIALLY ACCEPTED" until §4 is also resolved. A stale §6 claim (that §3 blocked
+      `ActivateLoanUseCase`/`ProcessPaymentUseCase`) was corrected — per the roadmap's own
+      Decision Log #1, §3 only ever blocked this one summary-getter checkpoint; CP8/CP9 already
+      shipped without needing it resolved.
+    - **`ADR-049` (new) — Employee Loan Fee Waiver and Preferential Rate.** Confirmed via legacy
+      `MLR Master List` evidence (40/41 `SL-Regular` loans with `Agency/Company` =
+      `"Easycash"`/`"Easycash Lending Company Inc."` have zero on every ancillary fee column, vs.
+      67.6% baseline) and six individually-named, individually-verified employee accounts (Nomer
+      Perez, Rosan Cruz Cinco, Liezel Juban Pentecostes, Mariel Ramos De Guzman, Joseph Dela Cruz
+      De Galicia, Alfredo Desabille Ogana). Also found: employee loans receive the company's
+      lowest Add-On rate tier (1.5%), not just a fee waiver — confirmed via raw-vs-corrected
+      record pairs showing a real tier change (e.g. 3.0% → 1.5%), not rounding noise. Decision:
+      `LoanAccount` will gain an optional `feeWaiverReason` field (e.g. `EMPLOYEE_LOAN`), set
+      explicitly and audibly at origination — never inferred automatically from borrower
+      identity. **Explicitly and deliberately does NOT model** a second, separately-alleged
+      category ("friends of the loan manager/CEO" on `BL` products) — investigated and found
+      **unsupported by any evidence** (58% of all `BL-*` loans already have zero processing fee
+      regardless of borrower — that's the product family's normal baseline, and no `BL` row
+      carries any staff/relationship marker). Any such individual exception must go through the
+      same explicit, audited `feeWaiverReason` path as any other reason, never an automatic or
+      identity-based rule. **Not yet implemented** — sequenced for whichever future checkpoint
+      first introduces real `FeeRule`-driven fee application to `ActivateLoanUseCase` (CP8/CP9 as
+      built apply no fees at all, per `ADR-046`'s exclusion and CP7's `feesDue`-stays-zero
+      design).
   - **A real bug was found and fixed in CP8's `ActivateLoanUseCase`** (commit `9476848`, before
     CP9 began): it computed `monthlyContractualRate` as `loanAccount.contractualInterestRate ??
     loanAccount.interestRate`, implicitly treating `contractualInterestRate` as
     higher-precedence. No ADR supports this — `ADR-010` §1 names `LoanAccount.interestRate`
-    itself as the rate the amortization formula requires; `contractualInterestRate`/
-    `addOnInterestRate` are both optional, disclosure-oriented fields not guaranteed to be
-    populated or consistent with `interestRate` on every loan. A loan originated via the
-    Add-On-quoted path with a divergent `contractualInterestRate` would have silently computed
-    interest against the wrong rate — no existing test caught it, since every prior test left
-    `contractualInterestRate` undefined. **Fixed to use `interestRate` directly**, with a new
-    regression test constructing a loan where the two rates deliberately diverge.
+    itself as the rate the amortization formula requires. **Fixed to use `interestRate`
+    directly**, with a regression test constructing a loan where the two rates deliberately
+    diverge.
   - `firstRepaymentDate` is a **required** field on `LoanAccount` (added in CP8, via a
-    hand-authored migration, no default — per `ADR-045`, no rule exists to fabricate one). This
-    required a consequential update to the already-HTTP-exposed loan origination path:
-    `CreateLoanAccountUseCase`, its DTOs, Zod schema, and presenter all now accept/validate/
-    persist/present it.
-  - CP1–CP9's calculation/repository pieces are wired into real use cases (CP8, CP9) and now
-    verified end-to-end against real legacy data (CP10). No HTTP route exists for either use case
-    yet (CP13, future milestone — D-2 precedent). No notifications or reporting modules exist yet
-    (`document`/`audit` module folders remain `.gitkeep` scaffolds under `src/modules/`).
-  - Two new ADRs since Milestone 9's original documentation phase: **`ADR-045`** (repayment
-    schedule due-date generation — Concept 1, Exact First Repayment Date, **Accepted**) and
-    **`ADR-046`** (Advance Interest Fee on Extended First-Repayment Gap — **Accepted**, rate
-    basis/trigger/rounding all confirmed; which `LoanProductVersion`s should enable it is the one
-    open item, not a blocker for any implemented checkpoint). Two previously-unnumbered ADRs were
-    also renamed for consistency: `ADR-financial-audit-isolation.md` →
-    `ADR-047-financial-audit-isolation.md`, `ADR-optimistic-concurrency.md` →
-    `ADR-048-optimistic-concurrency.md` (filename/reference-only change, no decision content
-    altered).
+    hand-authored migration, no default — per `ADR-045`, no rule exists to fabricate one).
+  - Two previously-unnumbered ADRs were renamed for consistency:
+    `ADR-financial-audit-isolation.md` → `ADR-047-financial-audit-isolation.md`,
+    `ADR-optimistic-concurrency.md` → `ADR-048-optimistic-concurrency.md` (filename/reference-only
+    change, no decision content altered).
 - **Latest commits (newest first):**
   ```
+  b4c00d1 Milestone 9.1 checkpoint 11: outstandingBalance summary getters (collectionsBalance/accountingBalance)
+  9239219 docs: ADR-049 update - confirm named employee accounts, add rate discount finding, clear BL claim
+  10a84a9 docs: ADR-049 - Employee Loan Fee Waiver, explicitly rejects informal manager-favor exemptions
+  483b42b docs: resolve ADR-007 §3 (outstandingBalance penalty inclusion) - Option B, both fields
+  3521e3b docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP10 completion
   9b65624 Milestone 9.1 checkpoint 10: golden-master replay tests
   08345f3 Milestone 9.1 checkpoint 9: ProcessPaymentUseCase (cross-installment allocation, ledger, fail-closed audit)
   9476848 fix: use LoanAccount.interestRate directly for amortization, not contractualInterestRate
@@ -86,29 +101,18 @@ this document.
   146d9f6 docs: replace README.txt with a professional README.md
   47c7404 docs: add ADR-046, renumber ADR-047/048, fix stale cross-references
   3b46391 docs: accept ADR-045 (Concept 1 - Exact First Repayment Date)
-  ef94d6d docs: document unresolved repayment due-date generation decision
-  618b210 docs: update PROJECT_HANDOFF.md for Milestone 9.1 CP6-CP7 completion
-  3b5c502 Milestone 9.1 checkpoint 6-7: repository conditional-write refactor + LoanAccount balance-mutation domain methods
-  4a9f540 docs: ADR-044 - separate customer identity model for future Public Portal
-  36e7f3d Portability: replace Prisma.Decimal with decimal.js in domain/application layer
-  f57efc3 Milestone 9.1 checkpoint 5: version property on LoanAccount/RepaymentInstallment domain model
   ```
-- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP10):** **460
+- **Current test counts (verified fresh, not from memory, 2026-07-05, includes CP11):** **464
   unit tests passing, 0 failing, 6 integration tests correctly skipped** (74 test files total; up
-  from 456/73 before CP10 — the +4 are CP10's golden-master replay tests
-  (`tests/integration/loan-account/GoldenMasterReplay.test.ts`). These 4 use mocked repositories,
-  not a live database, so they run unconditionally as part of the normal suite — they are
-  distinct from, and not gated by, the same `RUN_INTEGRATION_TESTS=1`/live-Postgres flag that
-  gates the other 6 skipped integration tests).
+  from 460/74 before CP11 — the +4 are CP11's `collectionsBalance`/`accountingBalance` tests,
+  covering a partially-paid loan with nonzero penalty, the newly-activated no-payment edge case,
+  the case where both getters coincide, and overpayment/negative-balance behavior).
 - **Verification status (all re-run and confirmed clean immediately before writing this
-  document, 2026-07-05, against the working tree including CP10):**
+  document, 2026-07-05, against the working tree including CP11):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
-  - `npx prisma validate` — schema valid (requires `DATABASE_URL` to be set in the environment;
-    otherwise fails with `P1012`/"Environment variable not found" — an environment artifact, not
-    a schema problem).
-  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 460 tests passed, 6 skipped
-    (466 total); 0 failed.**
+  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 464 tests passed, 6 skipped
+    (470 total); 0 failed.**
 
 ---
 
