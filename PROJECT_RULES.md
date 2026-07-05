@@ -327,14 +327,31 @@ Future support should allow branch comparison dashboards.
 
 # User Roles
 
-Minimum roles:
+**Confirmed roles (2026-07-06, business-confirmed via the LMS UI preview roster — see Decision
+Log below):**
 
-* Administrator
-* Manager
-* Loan Officer
-* Cashier
-* Collection Officer
-* Viewer
+* **MIS** — super user. All access, including: manage LMS member accounts, view Activity Logs
+  (the only role that can), and revert a decided Loan Application back to Pending Review.
+* **Loan Operation Manager** — base access (see below) plus Loan Application access: assign
+  product sub-type, approve, decline. Cannot revert a decision once made.
+* **CRM** — same access as Loan Operation Manager (base access plus Loan Application access,
+  cannot revert).
+* **Finance** — base access only.
+* **Accounting** — base access only.
+* **Collection Officer** — base access only.
+
+**Base access** (Finance/Accounting/Collection Officer, and also included in Loan Operation
+Manager/CRM): Dashboard, Loan Accounts, Client Data, Payment Recording, Loan Products, Reports,
+Payment Reminders, Member Details — view-level; excludes Loan Applications, Activity Logs, and
+managing LMS member accounts.
+
+This list **replaces** the previous placeholder list (Administrator, Manager, Loan Officer,
+Cashier, Collection Officer, Viewer), which was never verified against production data or
+confirmed company policy — see Decision Log.
+
+Exact per-endpoint/per-field permissions (e.g. which roles see full borrower PII, which roles
+have cross-branch access) are **not yet defined here** — tracked as the required input to the
+still-open `ADR-038` (full permission matrix), not invented in this document.
 
 Permissions must be configurable.
 
@@ -416,6 +433,29 @@ Record:
 * Migration Impact
 
 Maintain a complete history of business decisions.
+
+---
+
+### 2026-07-06 — User Roles taxonomy confirmed
+
+* **Date:** 2026-07-06
+* **Reason:** The original §User Roles list (Administrator/Manager/Loan Officer/Cashier/
+  Collection Officer/Viewer) was an unverified placeholder, never sourced from confirmed company
+  policy. A separate LMS UI preview build (`app/frontend`, mock-data-only) had already introduced
+  a real, business-confirmed staff roster and access policy (MIS/Loan Operation
+  Manager/CRM/Finance/Accounting/Collection Officer) for demo purposes. A verification pass found
+  the two lists never matched, and the business confirmed the frontend roster is the correct one
+  going forward.
+* **Approved by:** Nomer Perez (nomer.perez@easycash.ph)
+* **Affected modules:** `PROJECT_RULES.md` §User Roles (this document); informs the still-open
+  `ADR-038` (full permission matrix) and the interim `requireRole`/`GLOBAL_ROLES` allow-lists in
+  `app/backend/src/shared/middleware/requireRole.ts` / `shared/http/branchScope.ts` (not yet
+  updated to match — those remain the old placeholder role strings until `ADR-038` is drafted and
+  approved).
+* **Migration impact:** None yet — no seed data, migration, or backend code changed by this
+  decision alone. `app/backend/prisma/schema.prisma`'s seeded `Role` records (per
+  `docs/PROJECT_HANDOFF.md` Milestone 5) still reflect the old placeholder names and will need a
+  follow-up migration once `ADR-038` is implemented.
 
 ---
 
