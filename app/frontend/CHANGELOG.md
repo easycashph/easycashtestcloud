@@ -8,6 +8,20 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-07
 
+### Loan Portfolio Health — per-segment income/loss figures + shorter overlap label
+- Each summary card now shows a labeled financial figure computed live from the sample portfolio,
+  giving a collected → accrued → at-risk revenue narrative:
+  - **Good → Interest Income** (realized interest revenue already collected from performing
+    accounts) = sum of interest paid.
+  - **In Arrears → Accrued Revenue** (interest earned but not yet remitted; penalty/late-fee
+    income is still called out separately in the card text) = sum of interest balance.
+  - **Matured → Credit Loss** (unpaid principal at risk of loss now that the loan is past its full
+    term) = sum of principal balance.
+- The Venn overlap label was shortened from the two-line "Active Accounts / in Arrears" to a
+  single **"In Arrears"** so it fits inside the lens; the In-Arrears summary card title was
+  shortened to match. (`PORTFOLIO_HEALTH` gained `interestIncome` / `accruedRevenue` /
+  `creditLoss` in `src/lib/mockData.ts`.)
+
 ### Venn diagram — third segment is now "Matured" (distinct from Closed), green/yellow/red color code
 - Per business clarification, the Venn's third circle is now **Matured Loan Accounts** (red), a
   new distinct loan status `MATURED`: an **active** loan that has passed its full maturity date

@@ -1091,17 +1091,27 @@ export const PORTFOLIO_HEALTH = {
   good: {
     count: PORTFOLIO_HEALTH_GOOD_LOANS.length,
     collectionsBalance: sumLoans(PORTFOLIO_HEALTH_GOOD_LOANS, (l) => l.collectionsBalance),
+    // Interest Income — the realized interest revenue already collected from these performing
+    // accounts. The primary revenue source of the lending business.
+    interestIncome: sumLoans(PORTFOLIO_HEALTH_GOOD_LOANS, (l) => l.balances.interestPaid),
     loans: PORTFOLIO_HEALTH_GOOD_LOANS,
   },
   activeInArrears: {
     count: PORTFOLIO_HEALTH_ARREARS_LOANS.length,
     collectionsBalance: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.collectionsBalance),
     penaltyIncome: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.balances.penaltyPaid + l.balances.penaltyBalance),
+    // Accrued Revenue — interest the loan has earned that the client should have paid but has not
+    // yet remitted (accrued interest income, still expected to come in). Penalty/late-fee income
+    // is tracked separately as `penaltyIncome`.
+    accruedRevenue: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.balances.interestBalance),
     loans: PORTFOLIO_HEALTH_ARREARS_LOANS,
   },
   matured: {
     count: PORTFOLIO_HEALTH_MATURED_LOANS.length,
     collectionsBalance: sumLoans(PORTFOLIO_HEALTH_MATURED_LOANS, (l) => l.collectionsBalance),
+    // Credit Loss — the unpaid principal at risk of never being recovered now that the loan has
+    // run past its full maturity date (Loan Loss exposure, one step short of a formal write-off).
+    creditLoss: sumLoans(PORTFOLIO_HEALTH_MATURED_LOANS, (l) => l.balances.principalBalance),
     loans: PORTFOLIO_HEALTH_MATURED_LOANS,
   },
   writtenOff: {

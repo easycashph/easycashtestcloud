@@ -12,9 +12,9 @@ interface VennBucket {
 }
 
 interface LoanPortfolioVennDiagramProps {
-  good: VennBucket;
-  activeInArrears: VennBucket & { penaltyIncome: number };
-  matured: VennBucket;
+  good: VennBucket & { interestIncome: number };
+  activeInArrears: VennBucket & { penaltyIncome: number; accruedRevenue: number };
+  matured: VennBucket & { creditLoss: number };
   /** When provided, every diagram region and summary card becomes clickable, drilling down to that segment's loan accounts. */
   onSegmentClick?: (segment: PortfolioHealthSegment) => void;
 }
@@ -32,6 +32,8 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
     labelClass,
     label,
     bucket,
+    metricLabel,
+    metricValue,
     detail,
   }: {
     segment: PortfolioHealthSegment;
@@ -39,6 +41,8 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
     labelClass: string;
     label: string;
     bucket: VennBucket;
+    metricLabel: string;
+    metricValue: number;
     detail: string;
   }) {
     const body = (
@@ -46,6 +50,9 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
         <p className={`text-xs font-medium ${labelClass}`}>{label}</p>
         <p className="mt-1 text-sm text-muted-foreground">
           {accountLabel(bucket.count)} · {formatPeso(bucket.collectionsBalance)}
+        </p>
+        <p className={`mt-1 text-sm font-semibold ${labelClass}`}>
+          {metricLabel}: {formatPeso(metricValue)}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
       </>
@@ -134,14 +141,11 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
             Matured
           </text>
 
-          <text x={240} y={92} textAnchor="middle" className="fill-foreground text-2xl font-bold">
+          <text x={240} y={128} textAnchor="middle" className="fill-foreground text-2xl font-bold">
             {activeInArrears.count}
           </text>
-          <text x={240} y={110} textAnchor="middle" className="fill-foreground text-[10px] font-semibold">
-            Active Accounts
-          </text>
-          <text x={240} y={122} textAnchor="middle" className="fill-foreground text-[10px] font-semibold">
-            in Arrears
+          <text x={240} y={146} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
+            In Arrears
           </text>
 
           <text x={170} y={40} textAnchor="middle" className="fill-success text-sm font-semibold">
@@ -160,15 +164,19 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           labelClass="text-success"
           label="Good"
           bucket={good}
-          detail="Paying on schedule, no penalty fees."
+          metricLabel="Interest Income"
+          metricValue={good.interestIncome}
+          detail="Interest revenue collected from performing accounts — paying on schedule, no penalty fees."
         />
         <SummaryCard
           segment="activeInArrears"
           toneClasses="border-warning/30 bg-warning/5"
           labelClass="text-warning"
-          label="Active Accounts in Arrears"
+          label="In Arrears"
           bucket={activeInArrears}
-          detail={`Still active and paying, sometimes late — ${formatPeso(activeInArrears.penaltyIncome)} in penalty/late-fee income on top of amortization.`}
+          metricLabel="Accrued Revenue"
+          metricValue={activeInArrears.accruedRevenue}
+          detail={`Accrued interest earned but not yet remitted. Still active and paying, sometimes late — plus ${formatPeso(activeInArrears.penaltyIncome)} in penalty/late-fee income on top of amortization.`}
         />
         <SummaryCard
           segment="matured"
@@ -176,7 +184,9 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           labelClass="text-destructive"
           label="Matured"
           bucket={matured}
-          detail="Reached the end of the full term but still unpaid — an outstanding balance past maturity. The highest-risk active segment (not the same as a settled Closed loan)."
+          metricLabel="Credit Loss"
+          metricValue={matured.creditLoss}
+          detail="Unpaid principal at risk of loss — reached the end of the full term but still unpaid. The highest-risk active segment (not the same as a settled Closed loan)."
         />
       </div>
     </div>
