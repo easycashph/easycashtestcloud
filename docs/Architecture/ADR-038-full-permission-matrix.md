@@ -117,6 +117,28 @@ Context: `identity`'s current HTTP surface (`authRouter.ts`) only has `/login`, 
 in §1's table describes the frontend UI-preview's mock "Switch Account" panel only; this section
 is what makes that same MIS-only rule binding on the real backend endpoint once it's built.
 
+### 3.6 CP13 — `activate`/`payments` endpoints (2026-07-06, business-confirmed, ahead of implementation)
+
+Neither action was covered by §3.1 — that table only scoped origination, approval/rejection, and
+product configuration. Confirmed now, ahead of CP13's implementation, so the correct
+`requireRole(...)` allow-list is used from the endpoint's first version:
+
+| Action | Confirmed allow-list |
+|---|---|
+| `POST /loan-accounts/:id/activate` | **MIS, Loan Operation Manager, CRM** |
+| `POST /loan-accounts/:id/payments` | **MIS, Loan Operation Manager, Accounting, Collection Officer** |
+
+Confirmed reasoning: activation is the step immediately after approval in the same loan-processing
+lifecycle, so it uses the identical tier as §3.1's approve/reject row (MIS, Loan Operation Manager,
+CRM) — CRM is included here for the same reason it's included in origination/approval. Payment
+recording is a **different** tier, not a subset or superset of §3.1's origination/approval tier:
+it drops CRM (payment collection is not a loan-processing/application-review function) and adds
+Accounting and Collection Officer (payment recording is a financial-recording/collections
+function). Finance is deliberately excluded from payment recording (unlike product configuration,
+§3.1, where Finance is included) — explicitly noted by the business as "configurable depending on
+MIS policy," meaning this specific role list may be revisited by MIS later without needing a new
+ADR, but the current, binding allow-list is exactly the four roles above.
+
 ## 4. Implementation checklist — DONE (2026-07-06)
 
 Implemented in the same pass this ADR's §3 answers were confirmed, following this project's
