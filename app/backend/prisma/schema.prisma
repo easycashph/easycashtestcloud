@@ -199,14 +199,17 @@ model User {
   loanAccountsApproved   LoanAccount[]     @relation("LoanAccountApprovedBy")
   transactionsPosted     LoanTransaction[] @relation("LoanTransactionPostedBy")
   attachmentsUploaded    Attachment[]      @relation("AttachmentUploadedBy")
+  idempotencyKeys        IdempotencyKey[]
 
   @@map("users")
 }
 
 model Role {
   id          String  @id @default(uuid())
-  /// AUDIT-4 baseline, seeded: Administrator, Manager, Loan Officer,
-  /// Cashier, Collection Officer, Viewer.
+  /// AUDIT-4 baseline, seeded: MIS, Loan Operation Manager, CRM, Finance,
+  /// Accounting, Collection Officer (ADR-038 §1, renamed 2026-07-06 from
+  /// the original placeholder list — Administrator, Manager, Loan Officer,
+  /// Cashier, Collection Officer, Viewer).
   name        String  @unique
   description String?
 
@@ -847,4 +850,33 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@map("audit_logs")
+}
+
+// ----------------------------------------------------------------------------
+// Idempotency — Milestone 9.1/9.2 CP13
+// (docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md, Decision Log
+// #9): a client-supplied Idempotency-Key header, checked via this small,
+// purpose-built lookup (deliberately separate from AuditLog, which records
+// history, not replay state), rejecting a duplicate resubmission before it
+// reaches the use case layer. Append-only, same convention as AuditLog — no
+// update/delete path exposed anywhere in the application for this table.
+// ----------------------------------------------------------------------------
+
+model IdempotencyKey {
+  id           String   @id @default(uuid())
+  /// Client-supplied key. Scoped per `endpoint` (below) via the compound
+  /// unique constraint, so the same key value reused against two different
+  /// endpoints is not treated as a collision.
+  key          String
+  /// e.g. "POST /loan-accounts/:id/activate" — identifies which action this
+  /// key was recorded against; not a free-floating global namespace.
+  endpoint     String
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statusCode   Int
+  responseBody Json
+  createdAt    DateTime @default(now())
+
+  @@unique([key, endpoint])
+  @@map("idempotency_keys")
 }

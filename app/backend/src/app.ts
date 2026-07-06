@@ -40,6 +40,8 @@ import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cas
 import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
 import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
+import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
+import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
@@ -49,6 +51,9 @@ import { createRepaymentRouter } from '@modules/repayment/interface/http/repayme
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
 import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrastructure/PrismaRepaymentInstallmentRepository';
+import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
+import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
+import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -146,12 +151,23 @@ export function createApp(): Express {
   );
   app.use('/api/v1', loanProductRouter);
 
+  // --- shared cross-module infrastructure (Milestone 9.1 CP1/CP2, wired to
+  // a real HTTP caller for the first time by CP13 below) ---
+  const unitOfWork = new PrismaUnitOfWork();
+  const financialAuditLogger = new PrismaFinancialAuditLogger();
+  const idempotencyKeyStore = new PrismaIdempotencyKeyStore();
+
   // --- loan-account module wiring (Milestone 8: HTTP API layer) ---
   const loanAccountRepository = new PrismaLoanAccountRepository();
   // Shared across loan-account's own router and repayment's H-1 branch
   // check below (RepaymentInstallment has no branchId of its own — see
-  // repaymentController.ts).
+  // repaymentController.ts). Also needed by CP8/CP9's use cases below.
   const getLoanAccountUseCase = new GetLoanAccountUseCase({ loanAccountRepository });
+  // Declared here (rather than at the ledger/repayment sections below,
+  // where they were previously first introduced) because CP8/CP9's use
+  // cases need them too — same repository instances, not duplicated ones.
+  const loanTransactionRepository = new PrismaLoanTransactionRepository();
+  const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -159,13 +175,31 @@ export function createApp(): Express {
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
       approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository }),
       rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository }),
+      // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
+      // cases (previously built with zero routes, per the D-2 precedent —
+      // see ActivateLoanUseCase's/ProcessPaymentUseCase's own doc comments).
+      activateLoanUseCase: new ActivateLoanUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      processPaymentUseCase: new ProcessPaymentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      idempotencyKeyStore,
     },
     tokenService,
   );
   app.use('/api/v1', loanAccountRouter);
 
   // --- ledger module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
-  const loanTransactionRepository = new PrismaLoanTransactionRepository();
   const ledgerRouter = createLedgerRouter(
     {
       listLoanTransactionsForAccountUseCase: new ListLoanTransactionsForAccountUseCase({ loanTransactionRepository }),
@@ -176,7 +210,6 @@ export function createApp(): Express {
   app.use('/api/v1', ledgerRouter);
 
   // --- repayment module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
-  const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
   const repaymentRouter = createRepaymentRouter(
     {
       listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),

@@ -22,12 +22,10 @@ you observe in the repository, trust the repository and update this document.
   trust `git log`, not a memorized hash. The frontend UI-preview commit referenced elsewhere in
   this document as `a85b815` is now `3b9b950` under its new hash; Milestone 9.1 CP11's commit
   (formerly `b4c00d1`) is now `e9448ed` — same content, new hash only.
-- **Latest completed backend implementation:** Milestone 9.1 **CP11**, per
-  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11
-  are implemented, verified, and committed. **No further checkpoint is currently ungated:** CP12
-  remains blocked on `ADR-007` §4 (separate legacy-migration track); CP13 (HTTP exposure for
-  `ActivateLoanUseCase`/`ProcessPaymentUseCase`) is a deliberately-deferred future milestone, not
-  gated by any open ADR.
+- **Latest completed backend implementation:** Milestone 9.2 **CP13** (2026-07-06), per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11 and
+  CP13 are implemented, verified, and committed. **Only CP12 remains gated** — blocked on `ADR-007`
+  §4 (separate legacy-migration track, does not affect anything else).
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
@@ -47,14 +45,20 @@ you observe in the repository, trust the repository and update this document.
     that generic name is the exact ambiguity the ADR resolved. Both wired into
     `LoanAccountPresenter`.
   - **CP12 (legacy migration treatment) — GATED on `ADR-007` §4, separate track, not started.**
-  - **CP13 (HTTP exposure for `ActivateLoanUseCase`/`ProcessPaymentUseCase`) — future milestone,
-    not started, not currently gated by any open ADR.** No **real, backend-wired** frontend work
-    should begin before this exists — CP13 is still the prerequisite for any frontend feature that
-    reads/writes real data. **This is no longer "no frontend work at all," though:** as of
-    2026-07-06 the frontend gained a populated, mock-data-only UI preview (`components`/`layouts`/
-    `pages`/`lib` are no longer empty scaffolds) — see the new "Frontend UI Preview track"
-    subsection below. It has **zero API calls into `app/backend`** and does not reduce or replace
-    any CP13 work; treat CP13 as still fully unstarted.
+  - **CP13 (HTTP exposure for `ActivateLoanUseCase`/`ProcessPaymentUseCase`) — Done, committed,
+    2026-07-06.** `POST /loan-accounts/:id/activate` and `POST /loan-accounts/:id/payments`, both
+    gated per `ADR-038` §3.6 (business-confirmed ahead of this implementation):
+    `requireRole('MIS', 'Loan Operation Manager', 'CRM')` for activate, `requireRole('MIS', 'Loan
+    Operation Manager', 'Accounting', 'Collection Officer')` for payments. Includes the
+    roadmap-mandated idempotency-key handling (Decision Log #9) — a new `IdempotencyKey` Prisma
+    model + `IIdempotencyKeyStore` port + `withIdempotency()` HTTP helper
+    (`shared/http/idempotency.ts`), checked via the client-supplied `Idempotency-Key` header before
+    either use case runs; a repeated key replays the stored response instead of re-executing.
+    Both new controller methods use `ActivateLoanUseCase`/`ProcessPaymentUseCase`'s own returned
+    aggregate directly (no second `getLoanAccountUseCase` re-fetch) — does not repeat `approve`/
+    `reject`'s known M-1 "mutate then re-fetch" pattern in this new code. The `app/frontend` UI
+    preview still has **zero API calls into `app/backend`** — CP13 shipping does not itself wire
+    the frontend to anything; that remains separate, not-yet-scoped work.
   - **Two new ADRs resolved/added since the CP10 handoff, both from a single business
     conversation (2026-07-05):**
     - **`ADR-007` §3 (outstanding balance penalty inclusion) — RESOLVED, Option B** (both
@@ -116,9 +120,11 @@ resuming work correctly:
   with a live "Switch Account" panel, restructured Loan Products (real category/sub-type/account-
   code convention), and broadened MIS-only Activity Logs.
 - **Does not change, gate, or unblock any backend checkpoint.** CP12 is still gated on `ADR-007`
-  §4; CP13 is still fully unstarted with no ADR gating it. Do not treat any UI-preview screen as
-  evidence that its underlying use case is implemented server-side — check the `app/backend`
-  module table in §2 for that, not this section.
+  §4. **CP13 (HTTP exposure) was completed 2026-07-06, independently of this frontend preview** —
+  the two tracks remain unconnected: this UI preview has zero API calls into `app/backend`, even
+  though `app/backend` now has real `/loan-accounts/:id/activate` and `/loan-accounts/:id/payments`
+  routes. Do not treat any UI-preview screen as evidence that its underlying use case is exposed
+  over HTTP — check the `app/backend` module table in §2 for that, not this section.
 - **Legacy data note:** `legacy/sdevtech/` (real client case files) was used as a photo/document
   source for this preview but is **excluded from the commit and added to `.gitignore`** — only a
   small curated photo subset (12 files) was copied into `app/frontend/public/applicants/`, with
@@ -144,18 +150,19 @@ resuming work correctly:
   Older history (ADR-049, CP8–CP10, etc.) is unchanged in content, only in hash, per the
   `git filter-branch` rewrite noted above — see `git log --oneline` directly rather than trusting
   any older hash recorded elsewhere in this document's history.
-- **Current test counts (verified fresh, not from memory, 2026-07-06, includes the ADR-038 role
-  rename and the M-6 installment-order guard):** **468 unit tests passing, 0 failing, 6
-  integration tests correctly skipped** (74 test files total; up from 464/74 before this pass —
-  the +4 are M-6's new `PaymentAllocationService` ordering-guard regression tests).
+- **Current test counts (verified fresh, not from memory, 2026-07-06, includes CP13):** **488
+  unit tests passing, 0 failing, 6 integration tests correctly skipped** (76 test files total; up
+  from 468/74 before this pass — the +20 are CP13's new coverage: `LoanAccountController`'s
+  `activate()`/`processPayment()` tests, the two new router-authorization describe blocks,
+  `PrismaIdempotencyKeyStore.test.ts`, and `idempotency.test.ts`).
 - **Verification status (all re-run and confirmed clean immediately before writing this section,
-  2026-07-06, against the working tree including the M-6/M-7 fixes):**
+  2026-07-06, against the working tree including CP13):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
   - `npm run build` — clean.
-  - `npx vitest run` — **73 test files passed, 1 skipped (74 total); 468 tests passed, 6 skipped
-    (474 total); 0 failed.**
-  - `npm audit --omit=dev` (from `app/backend/`) — **0 vulnerabilities** (was 4 before M-7).
+  - `npx vitest run` — **75 test files passed, 1 skipped (76 total); 488 tests passed, 6 skipped
+    (494 total); 0 failed.**
+  - `npm audit --omit=dev` (from `app/backend/`) — **0 vulnerabilities**.
 
 ---
 
@@ -625,9 +632,9 @@ implementation overrides, which caused a real test-pollution bug once during Mil
 (see `PrismaBorrowerRepository.test.ts`'s `beforeEach` comment for the full explanation).
 
 ### Current passing test count
-**468 passing, 0 failing, 6 correctly skipped** (74 test files, 73 passed/1 skipped — see §1 for
+**488 passing, 0 failing, 6 correctly skipped** (76 test files, 75 passed/1 skipped — see §1 for
 the full verification status; this count was stale at 353 for several milestones' worth of
-handoff updates before this 2026-07-06 pass caught it — always prefer re-running `npx vitest run`
+handoff updates before a 2026-07-06 pass caught it — always prefer re-running `npx vitest run`
 over trusting any number recorded here).
 
 ---

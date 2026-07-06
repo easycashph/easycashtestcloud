@@ -2,12 +2,17 @@ import type { NextFunction, Request, Response } from 'express';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
 import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
+import { withIdempotency } from '@shared/http/idempotency';
+import { Money } from '@shared/domain/Money';
+import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotencyKeyStore';
 import type { CreateLoanAccountUseCase } from '../../application/use-cases/CreateLoanAccountUseCase';
 import type { GetLoanAccountUseCase } from '../../application/use-cases/GetLoanAccountUseCase';
 import type { ListLoanAccountsUseCase } from '../../application/use-cases/ListLoanAccountsUseCase';
 import type { ApproveLoanUseCase } from '../../application/use-cases/ApproveLoanUseCase';
 import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUseCase';
-import type { CreateLoanAccountRequestBody, RejectLoanRequestBody } from './loanAccountSchemas';
+import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
+import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
+import type { CreateLoanAccountRequestBody, ProcessPaymentRequestBody, RejectLoanRequestBody } from './loanAccountSchemas';
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 
 export interface LoanAccountControllerDeps {
@@ -16,6 +21,9 @@ export interface LoanAccountControllerDeps {
   listLoanAccountsUseCase: ListLoanAccountsUseCase;
   approveLoanUseCase: ApproveLoanUseCase;
   rejectLoanUseCase: RejectLoanUseCase;
+  activateLoanUseCase: ActivateLoanUseCase;
+  processPaymentUseCase: ProcessPaymentUseCase;
+  idempotencyKeyStore: IIdempotencyKeyStore;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture), matching AuthController's shape. */
@@ -83,6 +91,60 @@ export class LoanAccountController {
       await this.deps.rejectLoanUseCase.execute(req.params.id as string, body.reason);
       const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       res.status(200).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * Milestone 9.1/9.2 CP13, ADR-038 §3.6. Unlike `approve`/`reject` above
+   * (M-1, a known-deferred "mutate then re-fetch" pattern), this uses
+   * `ActivateLoanUseCase.execute()`'s own returned aggregate directly — no
+   * second `getLoanAccountUseCase` call needed, since that use case already
+   * returns the mutated `LoanAccount`. Not a regression of `approve`/
+   * `reject`'s pattern; simply doesn't repeat it in new code.
+   */
+  activate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/:id/activate';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      // H-1: verify branch access BEFORE mutating, same as approve()/reject().
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const loanAccount = await this.deps.activateLoanUseCase.execute(req.params.id as string, currentUser.sub);
+        return { statusCode: 200, body: presentLoanAccount(loanAccount) };
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Milestone 9.1/9.2 CP13, ADR-038 §3.6. Same shape as `activate` above. */
+  processPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/:id/payments';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as ProcessPaymentRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const paymentAmount = Money.of(body.paymentAmount);
+        const { loanAccount, remainder } = await this.deps.processPaymentUseCase.execute(
+          req.params.id as string,
+          paymentAmount,
+          currentUser.sub,
+          body.paidAt,
+        );
+        return {
+          statusCode: 200,
+          body: { loanAccount: presentLoanAccount(loanAccount), remainder: remainder.toString() },
+        };
+      });
     } catch (error) {
       next(error);
     }

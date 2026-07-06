@@ -4,7 +4,7 @@ import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { LoanAccountController, type LoanAccountControllerDeps } from './loanAccountController';
-import { createLoanAccountSchema, rejectLoanSchema } from './loanAccountSchemas';
+import { createLoanAccountSchema, processPaymentSchema, rejectLoanSchema } from './loanAccountSchemas';
 
 /**
  * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination and
@@ -17,6 +17,23 @@ import { createLoanAccountSchema, rejectLoanSchema } from './loanAccountSchemas'
  */
 const ORIGINATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 const APPROVAL_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+
+/**
+ * ADR-038 §3.6 (business-confirmed, 2026-07-06, ahead of CP13
+ * implementation): activation uses the identical tier as approval — the
+ * same real-world job function does both, immediately in sequence.
+ */
+const ACTIVATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+
+/**
+ * ADR-038 §3.6: payment recording is a different tier from origination/
+ * approval/activation — a financial-recording/collections function, not a
+ * loan-processing one. Drops CRM, adds Accounting and Collection Officer.
+ * Deliberately excludes Finance — noted by the business as "configurable
+ * depending on MIS policy," not a permanent exclusion, but the current
+ * binding allow-list per that ADR section.
+ */
+const PAYMENT_RECORDING_ROLES = ['MIS', 'Loan Operation Manager', 'Accounting', 'Collection Officer'];
 
 export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -40,6 +57,15 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     requireRole(...APPROVAL_ROLES),
     validateBody(rejectLoanSchema),
     controller.reject,
+  );
+
+  router.post('/loan-accounts/:id/activate', requireAuth, requireRole(...ACTIVATION_ROLES), controller.activate);
+  router.post(
+    '/loan-accounts/:id/payments',
+    requireAuth,
+    requireRole(...PAYMENT_RECORDING_ROLES),
+    validateBody(processPaymentSchema),
+    controller.processPayment,
   );
 
   return router;

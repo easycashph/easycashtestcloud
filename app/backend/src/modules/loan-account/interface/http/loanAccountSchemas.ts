@@ -33,3 +33,12 @@ export const rejectLoanSchema = z.object({
 });
 
 export type RejectLoanRequestBody = z.infer<typeof rejectLoanSchema>;
+
+/** Milestone 9.1/9.2 CP13: POST /loan-accounts/:id/payments request body. */
+export const processPaymentSchema = z.object({
+  paymentAmount: decimalStringSchema,
+  /** Defaults to "now" in the use case if omitted — see ProcessPaymentUseCase's own default parameter. */
+  paidAt: z.coerce.date().optional(),
+});
+
+export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;

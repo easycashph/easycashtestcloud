@@ -160,4 +160,54 @@ describe('Router-level authorization wiring (H-3)', () => {
       expect(prismaMock.loanProduct.findUnique).toHaveBeenCalled();
     });
   });
+
+  // Milestone 9.1/9.2 CP13, ADR-038 §3.6.
+  describe('POST /api/v1/loan-accounts/:id/activate (activation roles: MIS, Loan Operation Manager, CRM)', () => {
+    it('rejects with 401 when unauthenticated', async () => {
+      const res = await request(app).post('/api/v1/loan-accounts/loan-1/activate');
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects with 403 for an authenticated user without an allowed role', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/activate')
+        .set('Authorization', `Bearer ${signToken([UNPRIVILEGED_ROLE])}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('passes the authorization gate for CRM', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/activate')
+        .set('Authorization', `Bearer ${signToken(['CRM'])}`);
+      expect(res.status).not.toBe(401);
+      expect(res.status).not.toBe(403);
+      expect(prismaMock.loanAccount.findUnique).toHaveBeenCalled();
+    });
+  });
+
+  // Milestone 9.1/9.2 CP13, ADR-038 §3.6.
+  describe('POST /api/v1/loan-accounts/:id/payments (payment recording roles: MIS, Loan Operation Manager, Accounting, Collection Officer)', () => {
+    it('rejects with 401 when unauthenticated', async () => {
+      const res = await request(app).post('/api/v1/loan-accounts/loan-1/payments').send({ paymentAmount: '500.00' });
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects with 403 for an authenticated CRM user (excluded — payment recording is a financial-recording/collections function, not loan-processing, per ADR-038 §3.6, even though CRM is included in origination/approval/activation)', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/payments')
+        .set('Authorization', `Bearer ${signToken(['CRM'])}`)
+        .send({ paymentAmount: '500.00' });
+      expect(res.status).toBe(403);
+    });
+
+    it('passes the authorization gate for Collection Officer', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/payments')
+        .set('Authorization', `Bearer ${signToken(['Collection Officer'])}`)
+        .send({ paymentAmount: '500.00' });
+      expect(res.status).not.toBe(401);
+      expect(res.status).not.toBe(403);
+      expect(prismaMock.loanAccount.findUnique).toHaveBeenCalled();
+    });
+  });
 });

@@ -18,6 +18,10 @@ function buildDeps() {
     listLoanAccountsUseCase: { execute: vi.fn() },
     approveLoanUseCase: { execute: vi.fn() },
     rejectLoanUseCase: { execute: vi.fn() },
+    // Milestone 9.1/9.2 CP13.
+    activateLoanUseCase: { execute: vi.fn() },
+    processPaymentUseCase: { execute: vi.fn() },
+    idempotencyKeyStore: { find: vi.fn().mockResolvedValue(null), save: vi.fn() },
   } as never as ConstructorParameters<typeof LoanAccountController>[0];
 }
 
@@ -195,6 +199,166 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       await controller.approve(req, buildResponse(), vi.fn());
 
       expect(deps.approveLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'authenticated-user-1');
+    });
+  });
+
+  // Milestone 9.1/9.2 CP13.
+  describe('activate()', () => {
+    it('uses ActivateLoanUseCase\'s own returned aggregate directly — no second getLoanAccountUseCase call after mutating', async () => {
+      const deps = buildDeps();
+      const existing = buildLoan();
+      const activated = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(existing);
+      (deps.activateLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(activated);
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: existing.id },
+        authUser: authUser(['Loan Operation Manager'], 'branch-1'),
+        header: vi.fn().mockReturnValue(undefined),
+      } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.activate(req, res, vi.fn());
+
+      // getLoanAccountUseCase is called exactly once — for the pre-mutation
+      // branch check — not a second time to re-fetch after activating.
+      expect(deps.getLoanAccountUseCase.execute).toHaveBeenCalledTimes(1);
+      expect(deps.activateLoanUseCase.execute).toHaveBeenCalledWith(existing.id, 'authenticated-user-1');
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('checks branch access BEFORE mutating — a cross-branch attempt never reaches activateLoanUseCase', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan('branch-2');
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        authUser: authUser(['Loan Operation Manager'], 'branch-1'),
+        header: vi.fn().mockReturnValue(undefined),
+      } as unknown as Request;
+      const next = vi.fn();
+
+      await controller.activate(req, buildResponse(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(deps.activateLoanUseCase.execute).not.toHaveBeenCalled();
+    });
+
+    it('replays a stored response for a repeated Idempotency-Key instead of calling activateLoanUseCase again', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      const storedBody = { id: loan.id, status: 'ACTIVE' };
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      (deps.idempotencyKeyStore.find as ReturnType<typeof vi.fn>).mockResolvedValue({ statusCode: 200, responseBody: storedBody });
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        authUser: authUser(['Loan Operation Manager'], 'branch-1'),
+        header: vi.fn().mockReturnValue('client-key-1'),
+      } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.activate(req, res, vi.fn());
+
+      expect(deps.activateLoanUseCase.execute).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(storedBody);
+    });
+
+    it('stores the response after a successful activation under the supplied Idempotency-Key', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      (deps.activateLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        authUser: authUser(['Loan Operation Manager'], 'branch-1'),
+        header: vi.fn().mockReturnValue('client-key-1'),
+      } as unknown as Request;
+
+      await controller.activate(req, buildResponse(), vi.fn());
+
+      expect(deps.idempotencyKeyStore.save).toHaveBeenCalledWith(
+        'client-key-1',
+        'POST /loan-accounts/:id/activate',
+        'authenticated-user-1',
+        expect.objectContaining({ statusCode: 200 }),
+      );
+    });
+  });
+
+  // Milestone 9.1/9.2 CP13.
+  describe('processPayment()', () => {
+    it('forwards paymentAmount as Money and returns { loanAccount, remainder }', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      (deps.processPaymentUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
+        loanAccount: loan,
+        remainder: Money.of('25.00'),
+      });
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        body: { paymentAmount: '500.00' },
+        authUser: authUser(['Collection Officer'], 'branch-1'),
+        header: vi.fn().mockReturnValue(undefined),
+      } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.processPayment(req, res, vi.fn());
+
+      expect(deps.processPaymentUseCase.execute).toHaveBeenCalledWith(
+        loan.id,
+        expect.objectContaining({}),
+        'authenticated-user-1',
+        undefined,
+      );
+      const body = res.json.mock.calls[0]?.[0];
+      expect(body.remainder).toBe('25.00');
+      expect(typeof body.remainder).toBe('string');
+    });
+
+    it('checks branch access BEFORE mutating — a cross-branch attempt never reaches processPaymentUseCase', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan('branch-2');
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        body: { paymentAmount: '500.00' },
+        authUser: authUser(['Collection Officer'], 'branch-1'),
+        header: vi.fn().mockReturnValue(undefined),
+      } as unknown as Request;
+      const next = vi.fn();
+
+      await controller.processPayment(req, buildResponse(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(deps.processPaymentUseCase.execute).not.toHaveBeenCalled();
+    });
+
+    it('replays a stored response for a repeated Idempotency-Key instead of processing the payment again', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      const storedBody = { loanAccount: { id: loan.id }, remainder: '0.00' };
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      (deps.idempotencyKeyStore.find as ReturnType<typeof vi.fn>).mockResolvedValue({ statusCode: 200, responseBody: storedBody });
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        body: { paymentAmount: '500.00' },
+        authUser: authUser(['Collection Officer'], 'branch-1'),
+        header: vi.fn().mockReturnValue('client-key-2'),
+      } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.processPayment(req, res, vi.fn());
+
+      expect(deps.processPaymentUseCase.execute).not.toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith(storedBody);
     });
   });
 });
