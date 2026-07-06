@@ -8,6 +8,20 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-06
 
+### Payment Recording — manual allocation mode
+- Added an **Allocation** toggle (Automatic / Manual) to the Payment Recording screen.
+  **Automatic** is the existing behavior (fees → penalty → interest → principal, oldest
+  installment first, per ADR-009). **Manual** lets staff type in exactly how much of the payment
+  applies to Principal, Interest, Penalty, and Fees, instead of relying on the automatic engine.
+- Manual mode includes a "Copy automatic split" shortcut (prefills the four fields from what the
+  automatic engine would have applied, still editable) and a live mismatch check comparing the
+  four manually-entered amounts against the total payment amount, flagging any unallocated or
+  over-allocated difference.
+- The Allocation Preview panel switches accordingly: per-installment table for Automatic, a
+  simple component-totals summary for Manual (explicitly noted as not yet mapped to specific
+  installments — that decision is deferred to whenever CP13 wiring reaches this screen).
+- Mock/preview only, same as the rest of this screen — no `app/backend` change, no real posting.
+
 ### Loan Applications — attachments, AI summary, repeat-client detection
 - Restricted Loan Application attachment file names to documents an applicant would actually
   submit at intake (photo, valid IDs, Employee ID, Corporate Payslip, Latest Proof of Billing,
