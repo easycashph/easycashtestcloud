@@ -45,3 +45,5 @@ dist/
 build/
 .next/
 coverage/
+# Claude Code — per-developer local settings (permissions/env). launch.json IS tracked (shared preview config).
+.claude/settings.local.json

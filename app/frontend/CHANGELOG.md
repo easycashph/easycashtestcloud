@@ -6,7 +6,116 @@ interaction flow before the real backend HTTP API (`app/backend` CP13) is wired 
 below touches `app/backend` or any real database.** See the "Preview Mode" banner rendered in the
 app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same disclosure.
 
+## 2026-07-07
+
+### Venn diagram — third segment is now "Matured" (distinct from Closed), green/yellow/red color code
+- Per business clarification, the Venn's third circle is now **Matured Loan Accounts** (red), a
+  new distinct loan status `MATURED`: an **active** loan that has passed its full maturity date
+  but is still unpaid, carrying an outstanding balance — the highest-risk active segment. This
+  is deliberately **different from a Closed account**: `CLOSED` = reached maturity AND settled
+  successfully (a separate, healthy outcome, not shown as a Venn circle). Written-off loans
+  (`CLOSED_WRITTEN_OFF`) are likewise no longer a Venn segment — they remain behind the Write-off
+  exposure quality metric and its drill-down.
+- Venn color code is now: **Green = Good, Yellow = Active Accounts in Arrears (overlap), Red =
+  Matured**. The `LoanStatusBadge` was aligned to match — In Arrears is now `warning` (yellow)
+  and the new Matured status is `destructive` (red).
+- `MATURED` is a first-class status across the mock model: two sample accounts (origination
+  pushed past their full term), timeline event, High-Risk assessment, included in Total Active
+  Loans / Portfolio Breakdown / the Delinquency Rate & Portfolio-at-Risk metrics (matured loans
+  count as delinquent/at-risk). The AI Portfolio Assist plan for this segment is now **Resolve**
+  (escalate to intensive collection / restructuring before the loss is realized).
+
+### Venn diagram — "Sweet Spot" renamed to "Active Accounts in Arrears"
+- The Loan Portfolio Health overlap segment is now labeled **Active Accounts in Arrears**
+  (per business instruction) everywhere: the SVG overlap, the summary card, the AI Portfolio
+  Assist badge, and `PORTFOLIO_HEALTH`'s internal key (`sweetSpot` → `activeInArrears`).
+  The business meaning is unchanged — still active and paying, just sometimes late, generating
+  penalty/late-fee income on top of amortization — and the new name is also the
+  industry-standard term (an account "in arrears" is overdue but not in default).
+
+### Dashboard — 3 loan categories only; SML rolls up under Seafarer Loan
+- Portfolio Breakdown now groups by the 3 active loan CATEGORIES (Salary Loan, Seafarer Loan,
+  Business Loan) instead of per sub-type product names. Every SML-* product — active or
+  discontinued (SML-Regular, SML-Max, …) — is a sub-class of **Seafarer Loan** (a.k.a. Seaman
+  Loan) and rolls up under it (`getDashboardLoanCategory` in `src/lib/mockData.ts`); a
+  defensive "Other (Legacy)" bucket exists so no non-SL/BL/SML legacy loan could ever silently
+  vanish from a chart total.
+
+### Clickable charts — drill down to the accounts behind every figure
+- New shared `LoanDrillDownDialog`: clicking a Venn region/summary card, a Portfolio Breakdown
+  pie slice or legend entry, a Loan Disbursement Trend bar, the Total Active Loans / Overdue
+  Accounts summary cards, or a Portfolio Quality Metric value opens a dialog listing exactly
+  which loan accounts make up that analytics figure — each row links to the full Loan Account
+  detail page. Charts with no account-level mapping (Collections vs. Target, Collections
+  Forecast — target/projection lines over sample aggregates) deliberately stay non-clickable
+  rather than pretending to drill down.
+- Mock-data note: loan origination dates are now spread from ~3 weeks to ~23 months ago
+  (previously 200+ days minimum) so the "last 6 months" disbursement bars have real accounts
+  behind them instead of a permanently empty drill-down.
+
+### Sidebar — new section order, theme-aware colors
+- Sections/tabs reordered per business instruction: **Home** (Dashboard, Loan Report,
+  Collection Report, Transaction Report), **Loan** (Loan Applications, Client Data, Loan
+  Accounts), **Collection** (Payment Recording, Payment Reminders), **Administration**
+  (LMS Configuration, Member Details, Generated Documents, Loan Products, Activity Logs).
+- The sidebar (section tab area) is now theme-aware: light surface in light mode, dark in dark
+  mode (previously a fixed dark blue in both), and the active-tab highlight follows the
+  selected theme color.
+
+### LMS Configuration (new page, MIS-only)
+- `/admin/configuration` — MIS-only settings page: **Theme Color** (5 presets — **Easycash
+  Emerald (default)**, Easycash Blue, Violet, Amber, Rose — applied instantly across buttons,
+  active section tabs, links, and the primary chart series in both light and dark mode) and
+  **Appearance** (light/dark switch). Preferences persist locally (preview build; a real
+  implementation would persist per-user via the backend). Theme-color changes are written to
+  the Activity Log (`CHANGE_THEME_COLOR`). Non-MIS accounts get the standard restricted-access
+  card.
+
+### Default theme color set to Easycash Emerald; company-name casing fixed
+- The platform's default theme color is now **Easycash Emerald** (business-confirmed), not the
+  legacy Easycash Blue — first load applies emerald out of the box (`DEFAULT_ACCENT` in
+  `theme-provider.tsx`); Easycash Blue remains selectable as a preset.
+- Corrected all user-facing casing of the company name to the official **Easycash** (was
+  "EasyCash") — logo alt text, AI-summary copy, and theme-preset labels. Official business name
+  is "Easycash Lending Company Inc." (`COMPANY_INFO.name`, already correct).
+
+### Generated Documents (new page, under Administration)
+- `/admin/documents` — mock registry of the official documents produced when a loan account is
+  activated (Promissory Note, Disclosure Statement, Loan Agreement, Amortization Schedule —
+  matching the company's real legal templates). Sortable/filterable table (default
+  recent-to-oldest), rows link to the loan account; metadata only, downloads disabled in this
+  preview.
+
+### Investopedia-informed portfolio analytics
+- New **Portfolio Quality Metrics** dashboard card applying industry-standard lending
+  indicators (as taught on Investopedia — the site itself blocks automated access, so the
+  standard definitions were corroborated via other industry sources): **Delinquency Rate**
+  (count-based, in-arrears ÷ active accounts), **Portfolio at Risk** (balance-weighted,
+  arrears outstanding ÷ total outstanding), **Average Loan Size**, and **Write-off exposure**
+  — all computed live from the sample portfolio, all clickable through to the accounts behind
+  them.
+- New `TermTip` component + `src/lib/financialGlossary.ts`: every metric carries an ⓘ hover
+  tooltip with the plain-language definition of the term (Delinquency Rate, PAR, In Arrears,
+  Write-off, Amortization, Penalty/Late Fee), explicitly noted as standard industry
+  definitions computed against sample data.
+
 ## 2026-07-06
+
+### Dashboard — Loan Portfolio Health (Venn diagram + mock AI Assist)
+- Added a "Loan Portfolio Health" card to the Dashboard: a two-circle Venn diagram plotting
+  **Good Loan Accounts** (`ACTIVE`, paying on schedule, no penalty fees) against **Bad Loan
+  Accounts** (`CLOSED_WRITTEN_OFF`, defaulted/unrecoverable), with the overlap explicitly labeled
+  **Sweet Spot** — accounts that are `ACTIVE_IN_ARREARS`: still active and still paying, just
+  sometimes late, so the company earns real penalty/late-fee income on top of amortization
+  (confirmed business intent, not a data-quality problem to fix away). All counts/₱ values are
+  computed from the existing `MOCK_LOANS` array (`PORTFOLIO_HEALTH` in `src/lib/mockData.ts`) —
+  no new mock loan records were added.
+- Added a companion **"AI Portfolio Assist"** card below it: three static, hand-authored
+  recommendation blocks (Maintain / Protect the margin / Resolve, one per segment), carrying the
+  same "AI-Assisted — draft discussion points for management, not automated actions... static
+  mock... not yet connected to an API for a real AI Assist engine" disclosure already used by the
+  Loan Applications AI Risk Assessment panel.
+- New reusable component: `src/components/LoanPortfolioVennDiagram.tsx`.
 
 ### Sortable column headers across every table
 - Added click-to-sort column headers (with an ascending/descending indicator icon) to every
@@ -56,7 +165,7 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   hand-authored mock — explicitly labeled "not yet connected to an API for a real AI Assist
   engine").
 - Added **Repeat Client detection**: the applicant detail page now shows a "Repeat Client" / "New
-  Applicant" badge, and for repeat clients, lists their previous EasyCash loan account(s) —
+  Applicant" badge, and for repeat clients, lists their previous Easycash loan account(s) —
   clicking one opens its full repayment schedule (the "monthly payment report"). Added two
   demonstration scenarios: a good payer (loan paid in full, no late installments) and a delinquent
   one (loan written off, partial payment history, with a recorded reason). The AI summary

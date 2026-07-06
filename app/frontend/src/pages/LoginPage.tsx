@@ -19,7 +19,7 @@ export function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <img src="/logo-easycash.png" alt="EasyCash logo" className="mb-2 h-16 w-16 object-contain" />
+          <img src="/logo-easycash.png" alt="Easycash logo" className="mb-2 h-16 w-16 object-contain" />
           <CardTitle className="text-lg">{COMPANY_INFO.name}</CardTitle>
           <CardDescription>Enterprise Digital Lending Platform</CardDescription>
           <p className="text-xs text-muted-foreground">{COMPANY_INFO.address}</p>

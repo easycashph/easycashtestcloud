@@ -28,6 +28,14 @@ export type LoanAccountStatus =
   | 'APPROVED'
   | 'ACTIVE'
   | 'ACTIVE_IN_ARREARS'
+  /**
+   * Active Matured — the loan has passed its full maturity date (end of the entire term) but is
+   * still unpaid, carrying an outstanding balance; still active, not yet written off. The
+   * highest-risk ACTIVE category. Deliberately distinct from `CLOSED` (which reached maturity AND
+   * settled successfully) and from `ACTIVE_IN_ARREARS` (overdue on installments but still within
+   * the term).
+   */
+  | 'MATURED'
   | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED';
@@ -604,8 +612,17 @@ function generateLoan(
   const loanCode = nextLoanCode(catalogEntry.codePrefix);
 
   const principal = round2(15000 + rng() * 85000);
-  const installmentCount = pick([6, 9, 12, 18, 24]);
-  const createdAt = new Date(Date.now() - (200 + Math.floor(rng() * 500)) * 86_400_000);
+  const installmentCount = status === 'MATURED' ? pick([6, 9, 12]) : pick([6, 9, 12, 18, 24]);
+  // Spread originations from ~3 weeks to ~23 months ago so recent months are
+  // populated too — the Dashboard's "last 6 months" disbursement bars drill
+  // down to accounts activated in the clicked month, which must not be
+  // permanently empty (originally 200+ days minimum, i.e. nothing recent).
+  // MATURED loans are the exception: they must sit past their full maturity
+  // date, so their origination is pushed back the whole term plus a buffer.
+  const createdAt =
+    status === 'MATURED'
+      ? new Date(Date.now() - (installmentCount + 3) * 30 * 86_400_000)
+      : new Date(Date.now() - (21 + Math.floor(rng() * 680)) * 86_400_000);
   const approvedAt = new Date(createdAt.getTime() + 2 * 86_400_000);
   const firstRepaymentDate = addMonths(approvedAt, 1);
 
@@ -617,10 +634,13 @@ function generateLoan(
       ? installmentCount
       : status === 'ACTIVE_IN_ARREARS'
         ? Math.max(0, Math.floor(installmentCount * 0.2))
-        : status === 'ACTIVE'
-          ? Math.max(0, Math.floor(installmentCount * (0.3 + rng() * 0.4)))
-          : 0;
-  const partialFraction = status === 'ACTIVE' || status === 'ACTIVE_IN_ARREARS' ? round2(0.2 + rng() * 0.5) : 0;
+        : status === 'MATURED'
+          ? Math.max(1, Math.floor(installmentCount * 0.6))
+          : status === 'ACTIVE'
+            ? Math.max(0, Math.floor(installmentCount * (0.3 + rng() * 0.4)))
+            : 0;
+  const partialFraction =
+    status === 'ACTIVE' || status === 'ACTIVE_IN_ARREARS' || status === 'MATURED' ? round2(0.2 + rng() * 0.5) : 0;
 
   const installments = isActivated
     ? buildSchedule(id, principal, product.defaultInterestRate, installmentCount, firstRepaymentDate, paidThrough, partialFraction)
@@ -676,6 +696,14 @@ function generateLoan(
       actor: 'System (overdue installment)',
     });
   }
+  if (status === 'MATURED') {
+    timeline.push({
+      status: 'MATURED',
+      label: 'Reached maturity date — balance still outstanding',
+      at: new Date().toISOString(),
+      actor: 'System (past maturity)',
+    });
+  }
   if (closedAt) {
     timeline.push({ status, label: status === 'CLOSED' ? 'Fully settled' : 'Closed', at: closedAt.toISOString(), actor: officer });
   }
@@ -721,8 +749,11 @@ const STATUS_PLAN: {
 }[] = [
   { status: 'ACTIVE', hasPenalty: false },
   { status: 'ACTIVE', hasPenalty: false },
-  { status: 'ACTIVE', hasPenalty: false },
-  { status: 'ACTIVE', hasPenalty: false },
+  // Two Active-Matured accounts (red Venn segment): reached the end of their
+  // full term but still carry an outstanding balance — the highest-risk active
+  // category, distinct from a successfully-settled CLOSED loan.
+  { status: 'MATURED', hasPenalty: true },
+  { status: 'MATURED', hasPenalty: true, forcedDiscontinuedProductCode: 'SML-Max' },
   // Forced onto AUTO_DEBIT so the "ATM Card on File" indicator is always
   // visible in this preview, not left to chance.
   { status: 'ACTIVE', hasPenalty: false, forcedPaymentMethodCode: 'AUTO_DEBIT' },
@@ -772,13 +803,13 @@ export function getMockLoan(id: string): MockLoanAccount | undefined {
 // Dashboard aggregates — all derived from MOCK_LOANS above, all sample data.
 // ---------------------------------------------------------------------------
 
+/** All still-active (not closed/rejected/written-off) loan statuses — ACTIVE, in arrears, and past-maturity-but-unpaid. */
+const ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS', 'MATURED'];
+
 export const DASHBOARD_SUMMARY = {
-  totalActiveLoans: MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS').length,
+  totalActiveLoans: MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status)).length,
   totalPortfolioValue: round2(
-    MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS').reduce(
-      (sum, l) => sum + l.balances.principalBalance,
-      0,
-    ),
+    MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status)).reduce((sum, l) => sum + l.balances.principalBalance, 0),
   ),
   totalCollectionsThisMonth: round2(1_245_320 + rng() * 50_000),
   overdueAccounts: MOCK_LOANS.filter((l) => l.status === 'ACTIVE_IN_ARREARS').length,
@@ -798,16 +829,22 @@ export const COLLECTIONS_VS_TARGET = MONTH_LABELS.map((month) => ({
   actual: round2(950_000 + rng() * 250_000),
 }));
 
-function buildPortfolioByProduct(): { product: string; value: number }[] {
-  const byProduct = new Map<string, number>();
-  for (const loan of MOCK_LOANS) {
-    if (loan.status !== 'ACTIVE' && loan.status !== 'ACTIVE_IN_ARREARS') continue;
-    byProduct.set(loan.productType, round2((byProduct.get(loan.productType) ?? 0) + loan.balances.principalBalance));
-  }
-  return [...byProduct.entries()].map(([product, value]) => ({ product, value }));
+/**
+ * Groups a loan into one of the 3 ACTIVE loan product categories for dashboard
+ * analytics: Salary Loan, Seafarer Loan, Business Loan. Every SML-* product
+ * (active or discontinued — SML-Regular, SML-Max, etc.) is a sub-class of
+ * Seafarer Loan (a.k.a. Seaman Loan), confirmed business detail — the dashboard
+ * must never present SML as its own top-level category. Anything outside the
+ * three families (legacy PFL/REL/CL/... products) falls into "Other (Legacy)"
+ * so no loan silently disappears from a chart total.
+ */
+export function getDashboardLoanCategory(loan: MockLoanAccount): string {
+  const name = loan.productType;
+  if (name.startsWith('Seafarer Loan') || name.startsWith('SML')) return 'Seafarer Loan';
+  if (name.startsWith('Salary Loan') || /^SL[-_ ]/.test(name)) return 'Salary Loan';
+  if (name.startsWith('Business Loan') || /^BL[-_ ]/.test(name)) return 'Business Loan';
+  return 'Other (Legacy)';
 }
-
-export const PORTFOLIO_BY_PRODUCT = buildPortfolioByProduct();
 
 /** Clearly labeled as a sample projection in the UI — not a real forecasting model. */
 export const SAMPLE_COLLECTIONS_PROJECTION = ['Aug', 'Sep', 'Oct', 'Nov'].map((month, i) => ({
@@ -909,7 +946,7 @@ export function getMockBorrower(id: string): MockBorrowerProfile | undefined {
 // ---------------------------------------------------------------------------
 // Repeat-client historical loans — confirmed per this checkpoint: the Loan
 // Application detail page must flag when an applicant is already an
-// existing client, list their previous EasyCash loan account(s), and let
+// existing client, list their previous Easycash loan account(s), and let
 // the AI Risk Assessment summary reference whether that history shows a
 // good payer or a delinquent one (with pattern + reason when delinquent).
 // These two records exist purely to demonstrate both outcomes live —
@@ -1021,6 +1058,155 @@ for (const { loan, installments } of [REPEAT_CLIENT_LOAN_1, REPEAT_CLIENT_LOAN_2
     { status: loan.status, label: loan.status === 'CLOSED' ? 'Fully settled' : 'Written off', at: loan.closedAt!, actor: loan.loanOfficerName },
   ];
 }
+
+/**
+ * Loan Portfolio Health (Dashboard Venn diagram) — three business-defined segments, all
+ * derived from MOCK_LOANS's existing `status`/`balances` fields, no new mock records. Computed
+ * here, after every loan has been pushed onto `MOCK_LOANS`, so no bucket is computed against a
+ * stale, incomplete array.
+ * - Good: `ACTIVE`, paying on schedule, no penalty fees.
+ * - Active in Arrears (the Venn overlap): `ACTIVE_IN_ARREARS` — still active and still paying,
+ *   just sometimes late, so the company earns penalty/late-fee income on top of amortization
+ *   (confirmed business intent — not a data-quality problem to "fix away"). "In arrears" is the
+ *   industry-standard term: overdue on one or more installments, but not in default.
+ * - Matured (red circle): `MATURED` — reached the end of the full term but still unpaid, carrying
+ *   an outstanding balance; still active, not written off. The highest-risk active segment.
+ *   Deliberately NOT the same as `CLOSED` (which reached maturity AND settled successfully — a
+ *   separate, healthy outcome that is not shown as a Venn circle).
+ * Written-off loans (`CLOSED_WRITTEN_OFF`) are not a Venn segment either, but are carried here as
+ * `writtenOff` for the Write-off exposure quality metric and its drill-down.
+ * Each bucket carries its `loans` array so charts can drill down to the exact accounts behind
+ * every figure.
+ */
+function sumLoans(loans: MockLoanAccount[], pick: (l: MockLoanAccount) => number): number {
+  return round2(loans.reduce((total, l) => total + pick(l), 0));
+}
+
+const PORTFOLIO_HEALTH_GOOD_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE');
+const PORTFOLIO_HEALTH_ARREARS_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
+const PORTFOLIO_HEALTH_MATURED_LOANS = MOCK_LOANS.filter((l) => l.status === 'MATURED');
+const PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS = MOCK_LOANS.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
+
+export const PORTFOLIO_HEALTH = {
+  good: {
+    count: PORTFOLIO_HEALTH_GOOD_LOANS.length,
+    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_GOOD_LOANS, (l) => l.collectionsBalance),
+    loans: PORTFOLIO_HEALTH_GOOD_LOANS,
+  },
+  activeInArrears: {
+    count: PORTFOLIO_HEALTH_ARREARS_LOANS.length,
+    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.collectionsBalance),
+    penaltyIncome: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.balances.penaltyPaid + l.balances.penaltyBalance),
+    loans: PORTFOLIO_HEALTH_ARREARS_LOANS,
+  },
+  matured: {
+    count: PORTFOLIO_HEALTH_MATURED_LOANS.length,
+    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_MATURED_LOANS, (l) => l.collectionsBalance),
+    loans: PORTFOLIO_HEALTH_MATURED_LOANS,
+  },
+  writtenOff: {
+    count: PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS.length,
+    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS, (l) => l.collectionsBalance),
+    loans: PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS,
+  },
+};
+
+/**
+ * Portfolio Breakdown by Category — outstanding principal of ACTIVE/ACTIVE_IN_ARREARS loans
+ * grouped into the 3 active loan product categories (SML rolls up under Seafarer Loan — see
+ * `getDashboardLoanCategory`). Carries the loans behind each slice for chart drill-down.
+ * Computed here (not next to the other dashboard aggregates) so every pushed loan is included.
+ */
+export interface PortfolioCategorySlice {
+  category: string;
+  value: number;
+  loans: MockLoanAccount[];
+}
+
+function buildPortfolioByCategory(): PortfolioCategorySlice[] {
+  const byCategory = new Map<string, PortfolioCategorySlice>();
+  for (const loan of MOCK_LOANS) {
+    if (!ACTIVE_LOAN_STATUSES.includes(loan.status)) continue;
+    const category = getDashboardLoanCategory(loan);
+    const slice = byCategory.get(category) ?? { category, value: 0, loans: [] };
+    slice.value = round2(slice.value + loan.balances.principalBalance);
+    slice.loans.push(loan);
+    byCategory.set(category, slice);
+  }
+  return [...byCategory.values()];
+}
+
+export const PORTFOLIO_BY_CATEGORY = buildPortfolioByCategory();
+
+/**
+ * Industry-standard portfolio quality metrics (per the standard definitions popularized on
+ * Investopedia), computed live from the sample portfolio. "Delinquent/at-risk" here means
+ * overdue but still active — both `ACTIVE_IN_ARREARS` (overdue within term) and `MATURED`
+ * (past the full term, still unpaid):
+ * - Delinquency Rate — % of active loan accounts that are overdue (count-based).
+ * - Portfolio at Risk (PAR) — outstanding balance of overdue loans ÷ total outstanding balance
+ *   of the active portfolio (balance-weighted, the more telling of the two).
+ * - Average Loan Size — mean original principal across active accounts.
+ */
+export const PORTFOLIO_QUALITY_METRICS = (() => {
+  const delinquentLoans = [...PORTFOLIO_HEALTH_ARREARS_LOANS, ...PORTFOLIO_HEALTH_MATURED_LOANS];
+  const activePortfolio = [...PORTFOLIO_HEALTH_GOOD_LOANS, ...delinquentLoans];
+  const totalOutstanding = sumLoans(activePortfolio, (l) => l.collectionsBalance);
+  const delinquentOutstanding = sumLoans(delinquentLoans, (l) => l.collectionsBalance);
+  return {
+    delinquencyRatePercent:
+      activePortfolio.length === 0 ? 0 : round2((delinquentLoans.length / activePortfolio.length) * 100),
+    portfolioAtRiskPercent: totalOutstanding === 0 ? 0 : round2((delinquentOutstanding / totalOutstanding) * 100),
+    averageLoanSize:
+      activePortfolio.length === 0 ? 0 : round2(activePortfolio.reduce((sum, l) => sum + l.principalAmount, 0) / activePortfolio.length),
+    writtenOffExposure: sumLoans(PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS, (l) => l.collectionsBalance),
+  };
+})();
+
+// ---------------------------------------------------------------------------
+// Generated Documents — mock registry for the Administration section. The
+// document set matches the company's real legal templates (Promissory Note,
+// Disclosure Statement, Loan Agreement — see the 201 Loan Docs Generator
+// evidence in docs/Legacy Analysis) plus the Amortization Schedule; these only
+// ever exist for an officially activated loan account, never for a mere
+// application (same rule as the Loan Application attachments cleanup).
+// File contents are NOT included in this preview — names/metadata only.
+// ---------------------------------------------------------------------------
+
+export interface MockGeneratedDocument {
+  id: string;
+  documentName: string;
+  documentType: 'Promissory Note' | 'Disclosure Statement' | 'Loan Agreement' | 'Amortization Schedule';
+  loanId: string;
+  loanCode: string;
+  borrowerName: string;
+  generatedBy: string;
+  generatedAt: string;
+}
+
+const GENERATED_DOCUMENT_TYPES = ['Promissory Note', 'Disclosure Statement', 'Loan Agreement', 'Amortization Schedule'] as const;
+
+function buildGeneratedDocuments(): MockGeneratedDocument[] {
+  const docs: MockGeneratedDocument[] = [];
+  for (const loan of MOCK_LOANS) {
+    if (!loan.activatedAt) continue;
+    for (const documentType of GENERATED_DOCUMENT_TYPES) {
+      docs.push({
+        id: `doc-${loan.id}-${slugify(documentType)}`,
+        documentName: `${documentType} — ${loan.loanCode}`,
+        documentType,
+        loanId: loan.id,
+        loanCode: loan.loanCode,
+        borrowerName: loan.borrowerName,
+        generatedBy: loan.loanOfficerName,
+        generatedAt: loan.activatedAt,
+      });
+    }
+  }
+  return docs;
+}
+
+export const MOCK_GENERATED_DOCUMENTS = buildGeneratedDocuments();
 
 MOCK_BORROWERS.push(
   {
@@ -1430,7 +1616,7 @@ const RISK_EXPLANATIONS: Record<MockRiskLevel, string> = {
 
 function buildRiskAssessment(loan: MockLoanAccount): MockRiskAssessment {
   let level: MockRiskLevel;
-  if (loan.status === 'ACTIVE_IN_ARREARS' || loan.status === 'CLOSED_WRITTEN_OFF') {
+  if (loan.status === 'ACTIVE_IN_ARREARS' || loan.status === 'MATURED' || loan.status === 'CLOSED_WRITTEN_OFF') {
     level = 'High Risk';
   } else if (loan.status === 'CLOSED') {
     level = 'Low Risk';
@@ -1727,7 +1913,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     reviewState: 'UNREVIEWED',
     aiRisk: 'Low Risk',
     aiRecommendation:
-      'Qualified — all factors within acceptable range, and repeat-client history supports approval: her previous EasyCash loan (SL-Reg_0900) was paid in full with no late installments, indicating a good payer. Recommended for approval.',
+      'Qualified — all factors within acceptable range, and repeat-client history supports approval: her previous Easycash loan (SL-Reg_0900) was paid in full with no late installments, indicating a good payer. Recommended for approval.',
     aiFactors: [
       { label: 'Age (18–55)', value: '52 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
@@ -1759,7 +1945,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     reviewState: 'UNREVIEWED',
     aiRisk: 'High Risk',
     aiRecommendation:
-      'Does not meet minimum qualification criteria — self-employed income is harder to verify and credit score is near the minimum threshold. Repeat-client history further weighs against approval: her previous EasyCash loan (BL-Reg_0900) was written off delinquent, paid on-time for only 7 of 18 installments before falling behind; reported reason on file was a business slowdown that disrupted her sari-sari store income. Recommended for decline pending manual review.',
+      'Does not meet minimum qualification criteria — self-employed income is harder to verify and credit score is near the minimum threshold. Repeat-client history further weighs against approval: her previous Easycash loan (BL-Reg_0900) was written off delinquent, paid on-time for only 7 of 18 installments before falling behind; reported reason on file was a business slowdown that disrupted her sari-sari store income. Recommended for decline pending manual review.',
     aiFactors: [
       { label: 'Age (18–55)', value: '38 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },

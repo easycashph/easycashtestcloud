@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "app/frontend", "--", "--port", "5199"],
+      "port": 5199,
+      "autoPort": true
+    }
+  ]
+}

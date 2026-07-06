@@ -13,7 +13,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* EasyCash brand blue, sampled from the real logo */
+    /* Easycash brand blue, sampled from the real logo */
     --primary: 213 74% 26%;
     --primary-foreground: 210 40% 98%;
 
@@ -39,10 +39,13 @@
     --input: 214 32% 91%;
     --ring: 213 74% 26%;
 
-    --sidebar-background: 213 74% 15%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-border: 213 50% 24%;
-    --sidebar-accent: 213 60% 22%;
+    /* Sidebar is theme-aware: light surface in light mode, dark in dark mode
+       (previously a fixed dark blue in both themes). */
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-accent: 213 74% 26%;
+    --sidebar-accent-foreground: 210 40% 98%;
 
     --chart-1: 213 74% 40%;
     --chart-2: 43 89% 50%;
@@ -91,13 +94,71 @@
     --sidebar-background: 222 47% 6%;
     --sidebar-foreground: 210 40% 90%;
     --sidebar-border: 217 33% 16%;
-    --sidebar-accent: 217 33% 15%;
+    --sidebar-accent: 213 74% 45%;
+    --sidebar-accent-foreground: 210 40% 98%;
 
     --chart-1: 213 74% 60%;
     --chart-2: 43 89% 60%;
     --chart-3: 142 61% 50%;
     --chart-4: 262 60% 65%;
     --chart-5: 0 72% 65%;
+  }
+
+  /* Theme color presets (LMS Configuration → Theme Color, MIS-only).
+     The base :root/.dark values above are "Easycash Blue" — the fallback if
+     no data-accent is set — but the platform DEFAULT is Easycash Emerald:
+     ThemeProvider sets data-accent='emerald' on first load (see DEFAULT_ACCENT
+     in theme-provider.tsx), so the emerald block below applies out of the box.
+     Each preset overrides the primary/ring/sidebar-accent/chart-1 family in
+     both light and dark modes; everything else (status colors, gold accent,
+     surfaces) stays untouched. */
+  [data-accent='emerald'] {
+    --primary: 158 64% 26%;
+    --ring: 158 64% 26%;
+    --sidebar-accent: 158 64% 26%;
+    --chart-1: 158 64% 36%;
+  }
+  .dark[data-accent='emerald'] {
+    --primary: 158 55% 45%;
+    --ring: 158 55% 45%;
+    --sidebar-accent: 158 55% 38%;
+    --chart-1: 158 55% 50%;
+  }
+  [data-accent='violet'] {
+    --primary: 262 60% 42%;
+    --ring: 262 60% 42%;
+    --sidebar-accent: 262 60% 42%;
+    --chart-1: 262 60% 52%;
+  }
+  .dark[data-accent='violet'] {
+    --primary: 262 60% 62%;
+    --ring: 262 60% 62%;
+    --sidebar-accent: 262 55% 52%;
+    --chart-1: 262 60% 65%;
+  }
+  [data-accent='amber'] {
+    --primary: 30 90% 34%;
+    --ring: 30 90% 34%;
+    --sidebar-accent: 30 90% 34%;
+    --chart-1: 32 92% 44%;
+  }
+  .dark[data-accent='amber'] {
+    --primary: 32 90% 52%;
+    --ring: 32 90% 52%;
+    --sidebar-accent: 32 85% 44%;
+    --chart-1: 32 90% 58%;
+  }
+  [data-accent='rose'] {
+    --primary: 348 70% 38%;
+    --ring: 348 70% 38%;
+    --sidebar-accent: 348 70% 38%;
+    --chart-1: 348 70% 48%;
+  }
+  .dark[data-accent='rose'] {
+    --primary: 348 65% 58%;
+    --ring: 348 65% 58%;
+    --sidebar-accent: 348 65% 48%;
+    --chart-1: 348 65% 62%;
   }
 }
 

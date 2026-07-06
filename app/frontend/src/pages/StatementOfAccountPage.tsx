@@ -75,7 +75,7 @@ export function StatementOfAccountPage() {
 
       <Card className="print:border-none print:shadow-none">
         <CardHeader className="items-center border-b text-center">
-          <img src="/logo-easycash.png" alt="EasyCash logo" className="h-14 w-14 object-contain" />
+          <img src="/logo-easycash.png" alt="Easycash logo" className="h-14 w-14 object-contain" />
           <CardTitle>Easycash Lending Company Inc.</CardTitle>
           <p className="text-sm text-muted-foreground">Statement of Account</p>
           <Badge variant="warning">Preview Mode — Sample Data</Badge>

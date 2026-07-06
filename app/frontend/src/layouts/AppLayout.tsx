@@ -14,7 +14,9 @@ import {
   ShieldCheck,
   ScrollText,
   FileCheck2,
+  FileText,
   BellRing,
+  Settings,
 } from 'lucide-react';
 import * as React from 'react';
 import { AccountSwitcher } from '@/components/AccountSwitcher';
@@ -24,31 +26,39 @@ import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
+/** Section/tab order confirmed by the business (2026-07-06): Home → Loan → Collection → Administration. */
 const NAV_GROUPS = [
   {
-    label: 'Loan Management',
+    label: 'Home',
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/loans', label: 'Loan Accounts', icon: Landmark, end: false },
-      { to: '/applications', label: 'Loan Applications', icon: FileCheck2, end: false },
-      { to: '/clients', label: 'Client Data', icon: Users, end: false },
-      { to: '/products', label: 'Loan Products', icon: Package, end: false },
-      { to: '/payments', label: 'Payment Recording', icon: Wallet, end: false },
-      { to: '/reminders', label: 'Payment Reminders', icon: BellRing, end: false },
-    ],
-  },
-  {
-    label: 'Reports',
-    items: [
       { to: '/reports/loans', label: 'Loan Report', icon: CalendarClock, end: false },
       { to: '/reports/collections', label: 'Collection Report', icon: PiggyBank, end: false },
       { to: '/reports/transactions', label: 'Transaction Report', icon: Receipt, end: false },
     ],
   },
   {
-    label: 'LMS Administration',
+    label: 'Loan',
     items: [
+      { to: '/applications', label: 'Loan Applications', icon: FileCheck2, end: false },
+      { to: '/clients', label: 'Client Data', icon: Users, end: false },
+      { to: '/loans', label: 'Loan Accounts', icon: Landmark, end: false },
+    ],
+  },
+  {
+    label: 'Collection',
+    items: [
+      { to: '/payments', label: 'Payment Recording', icon: Wallet, end: false },
+      { to: '/reminders', label: 'Payment Reminders', icon: BellRing, end: false },
+    ],
+  },
+  {
+    label: 'Administration',
+    items: [
+      { to: '/admin/configuration', label: 'LMS Configuration', icon: Settings, end: false },
       { to: '/admin/members', label: 'Member Details', icon: ShieldCheck, end: false },
+      { to: '/admin/documents', label: 'Generated Documents', icon: FileText, end: false },
+      { to: '/products', label: 'Loan Products', icon: Package, end: false },
       { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
     ],
   },
@@ -63,7 +73,7 @@ function Sidebar({ open }: { open: boolean }) {
       )}
     >
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
-        <img src="/logo-easycash.png" alt="EasyCash logo" className="h-9 w-9 rounded bg-white object-contain p-0.5" />
+        <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 rounded bg-white object-contain p-0.5" />
         <div className="leading-tight">
           <p className="text-sm font-semibold">{COMPANY_INFO.name}</p>
           <p className="text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
@@ -83,8 +93,8 @@ function Sidebar({ open }: { open: boolean }) {
                     cn(
                       'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       isActive
-                        ? 'bg-sidebar-accent text-white'
-                        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-white',
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/15 hover:text-sidebar-foreground',
                     )
                   }
                 >
@@ -97,7 +107,7 @@ function Sidebar({ open }: { open: boolean }) {
         ))}
       </nav>
       <div className="shrink-0 p-3">
-        <p className="rounded-md border border-sidebar-border bg-sidebar-accent/40 px-3 py-2 text-[11px] leading-snug text-sidebar-foreground/70">
+        <p className="rounded-md border border-sidebar-border bg-sidebar-accent/10 px-3 py-2 text-[11px] leading-snug text-sidebar-foreground/70">
           UI Preview build — Milestone 9.1. Sample data only.
         </p>
       </div>

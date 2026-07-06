@@ -56,7 +56,10 @@ export default {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
           border: 'hsl(var(--sidebar-border))',
-          accent: 'hsl(var(--sidebar-accent))',
+          accent: {
+            DEFAULT: 'hsl(var(--sidebar-accent))',
+            foreground: 'hsl(var(--sidebar-accent-foreground))',
+          },
         },
         chart: {
           1: 'hsl(var(--chart-1))',

@@ -18,6 +18,8 @@ interface RoleContextValue {
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
   canCreateLoanAccount: boolean;
+  /** Only MIS may change LMS Configuration (theme color, appearance). */
+  canManageLmsConfiguration: boolean;
 }
 
 const RoleContext = React.createContext<RoleContextValue | undefined>(undefined);
@@ -58,6 +60,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       canViewActivityLogs: currentAccount.role === 'MIS',
       canCreateLoanAccount:
         currentAccount.role === 'MIS' || currentAccount.role === 'Loan Operation Manager' || currentAccount.role === 'CRM',
+      canManageLmsConfiguration: currentAccount.role === 'MIS',
     }),
     [currentAccount],
   );
