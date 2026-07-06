@@ -4,10 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { PaymentMethodBadge } from '@/components/PaymentMethodBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useSortableTable } from '@/lib/useSortableTable';
 import {
   MOCK_ACTIVITY_LOGS,
   MOCK_TRANSACTIONS,
@@ -15,10 +17,32 @@ import {
   REPORT_PAYMENT_METHODS,
   REPORT_TRANSACTION_TYPES,
   type LoanTransactionType,
+  type MockLoanTransaction,
 } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+
+function getSortValue(txn: MockLoanTransaction, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'entryDate':
+      return new Date(txn.entryDate);
+    case 'loanCode':
+      return txn.loanCode;
+    case 'borrowerName':
+      return txn.borrowerName;
+    case 'type':
+      return txn.type;
+    case 'branchName':
+      return txn.branchName;
+    case 'paymentMethod':
+      return txn.paymentMethod ?? '';
+    case 'amount':
+      return txn.amount;
+    default:
+      return undefined;
+  }
+}
 
 const TYPE_BADGE_VARIANT: Record<LoanTransactionType, 'default' | 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'> = {
   DISBURSEMENT: 'default',
@@ -59,6 +83,7 @@ export function TransactionReportPage() {
     const matchesPaymentMethod = paymentMethod === 'ALL' || txn.paymentMethod === paymentMethod;
     return matchesRange && matchesType && matchesBranch && matchesPaymentMethod;
   });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'entryDate', direction: 'desc' });
 
   const total = filtered.reduce((sum, t) => sum + t.amount, 0);
 
@@ -125,17 +150,31 @@ export function TransactionReportPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>Date</TableHead>
-                <TableHead>Loan Code</TableHead>
-                <TableHead>Borrower</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead>Mode of Payment</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
+                <SortableTableHead sortKey="entryDate" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Date
+                </SortableTableHead>
+                <SortableTableHead sortKey="loanCode" currentSort={sort} onSort={toggleSort}>
+                  Loan Code
+                </SortableTableHead>
+                <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
+                  Borrower
+                </SortableTableHead>
+                <SortableTableHead sortKey="type" currentSort={sort} onSort={toggleSort}>
+                  Type
+                </SortableTableHead>
+                <SortableTableHead sortKey="branchName" currentSort={sort} onSort={toggleSort}>
+                  Branch
+                </SortableTableHead>
+                <SortableTableHead sortKey="paymentMethod" currentSort={sort} onSort={toggleSort}>
+                  Mode of Payment
+                </SortableTableHead>
+                <SortableTableHead sortKey="amount" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Amount
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((txn) => {
+              {sorted.map((txn) => {
                 const isOpen = expanded.has(txn.id);
                 return (
                   <React.Fragment key={txn.id}>

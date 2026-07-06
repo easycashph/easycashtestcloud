@@ -8,11 +8,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useSortableTable, type SortState } from '@/lib/useSortableTable';
 import { MOCK_ACTIVITY_LOGS, MOCK_LOAN_PRODUCTS, type MockLoanProduct } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
+
+function getProductSortValue(p: MockLoanProduct, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'productName':
+      return p.productName;
+    case 'interestCalculationMethod':
+      return p.interestCalculationMethod;
+    case 'loanAmountMin':
+      return p.loanAmountMin;
+    case 'installmentCountMin':
+      return p.installmentCountMin;
+    case 'minInterestRate':
+      return p.minInterestRate;
+    case 'isActive':
+      return p.isActive ? 1 : 0;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * All product edits/creates below are held in local React state only — they
@@ -184,6 +205,8 @@ export function LoanProductsPage() {
 
   const activeProducts = products.filter((p) => p.isActive);
   const discontinuedProducts = products.filter((p) => !p.isActive);
+  const activeSortState = useSortableTable(activeProducts, getProductSortValue, { key: null, direction: 'asc' });
+  const discontinuedSortState = useSortableTable(discontinuedProducts, getProductSortValue, { key: null, direction: 'asc' });
 
   const openAddDialog = () => {
     setDraft(emptyDraftProduct());
@@ -291,18 +314,30 @@ export function LoanProductsPage() {
     );
   }
 
-  function renderDiscontinuedTable(rows: MockLoanProduct[]) {
+  function renderDiscontinuedTable(rows: MockLoanProduct[], sort: SortState, onSort: (key: string, isDateColumn?: boolean) => void) {
     return (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-8" />
-            <TableHead>Product</TableHead>
-            <TableHead>Interest Method</TableHead>
-            <TableHead className="text-right">Amount Range</TableHead>
-            <TableHead className="text-right">Installments</TableHead>
-            <TableHead className="text-right">Rate Range</TableHead>
-            <TableHead>Status</TableHead>
+            <SortableTableHead sortKey="productName" currentSort={sort} onSort={onSort}>
+              Product
+            </SortableTableHead>
+            <SortableTableHead sortKey="interestCalculationMethod" currentSort={sort} onSort={onSort}>
+              Interest Method
+            </SortableTableHead>
+            <SortableTableHead sortKey="loanAmountMin" currentSort={sort} onSort={onSort} className="text-right">
+              Amount Range
+            </SortableTableHead>
+            <SortableTableHead sortKey="installmentCountMin" currentSort={sort} onSort={onSort} className="text-right">
+              Installments
+            </SortableTableHead>
+            <SortableTableHead sortKey="minInterestRate" currentSort={sort} onSort={onSort} className="text-right">
+              Rate Range
+            </SortableTableHead>
+            <SortableTableHead sortKey="isActive" currentSort={sort} onSort={onSort}>
+              Status
+            </SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>{rows.map((p) => renderProductRow(p, 'discontinued', false))}</TableBody>
@@ -310,8 +345,15 @@ export function LoanProductsPage() {
     );
   }
 
-  /** Groups active products by `category` so each Category shows its sub-types nested underneath (e.g. Salary Loan → Corporate/Regular/Special). */
-  function renderActiveTable(rows: MockLoanProduct[]) {
+  /**
+   * Groups active products by `category` so each Category shows its
+   * sub-types nested underneath (e.g. Salary Loan → Corporate/Regular/
+   * Special). `rows` is expected to already be sorted (per the active
+   * column sort) before grouping — `Map` preserves insertion order, so
+   * pre-sorting the flat list means each category's sub-types land in
+   * sorted order too, without disturbing the grouping itself.
+   */
+  function renderActiveTable(rows: MockLoanProduct[], sort: SortState, onSort: (key: string, isDateColumn?: boolean) => void) {
     const categories = new Map<string, MockLoanProduct[]>();
     for (const p of rows) {
       const key = p.category ?? p.productName;
@@ -322,12 +364,24 @@ export function LoanProductsPage() {
         <TableHeader>
           <TableRow>
             <TableHead className="w-8" />
-            <TableHead>Product</TableHead>
-            <TableHead>Interest Method</TableHead>
-            <TableHead className="text-right">Amount Range</TableHead>
-            <TableHead className="text-right">Installments</TableHead>
-            <TableHead className="text-right">Rate Range</TableHead>
-            <TableHead>Status</TableHead>
+            <SortableTableHead sortKey="productName" currentSort={sort} onSort={onSort}>
+              Product
+            </SortableTableHead>
+            <SortableTableHead sortKey="interestCalculationMethod" currentSort={sort} onSort={onSort}>
+              Interest Method
+            </SortableTableHead>
+            <SortableTableHead sortKey="loanAmountMin" currentSort={sort} onSort={onSort} className="text-right">
+              Amount Range
+            </SortableTableHead>
+            <SortableTableHead sortKey="installmentCountMin" currentSort={sort} onSort={onSort} className="text-right">
+              Installments
+            </SortableTableHead>
+            <SortableTableHead sortKey="minInterestRate" currentSort={sort} onSort={onSort} className="text-right">
+              Rate Range
+            </SortableTableHead>
+            <SortableTableHead sortKey="isActive" currentSort={sort} onSort={onSort}>
+              Status
+            </SortableTableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -395,12 +449,14 @@ export function LoanProductsPage() {
               <TabsTrigger value="active">Active ({activeProducts.length})</TabsTrigger>
               <TabsTrigger value="discontinued">Discontinued ({discontinuedProducts.length})</TabsTrigger>
             </TabsList>
-            <TabsContent value="active">{renderActiveTable(activeProducts)}</TabsContent>
+            <TabsContent value="active">
+              {renderActiveTable(activeSortState.sorted, activeSortState.sort, activeSortState.toggleSort)}
+            </TabsContent>
             <TabsContent value="discontinued">
               <p className="mb-3 text-xs text-muted-foreground">
                 These products are no longer offered for new loans but remain visible because real client loans still reference them.
               </p>
-              {renderDiscontinuedTable(discontinuedProducts)}
+              {renderDiscontinuedTable(discontinuedSortState.sorted, discontinuedSortState.sort, discontinuedSortState.toggleSort)}
             </TabsContent>
           </Tabs>
         </CardContent>

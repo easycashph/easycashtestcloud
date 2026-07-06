@@ -5,12 +5,37 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
-import { MOCK_ACTIVITY_LOGS, MOCK_LOANS, REPORT_BRANCHES, type LoanAccountStatus } from '@/lib/mockData';
+import { useSortableTable } from '@/lib/useSortableTable';
+import { MOCK_ACTIVITY_LOGS, MOCK_LOANS, REPORT_BRANCHES, type LoanAccountStatus, type MockLoanAccount } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+function getSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'loanCode':
+      return loan.loanCode;
+    case 'borrowerName':
+      return loan.borrowerName;
+    case 'productType':
+      return loan.productType;
+    case 'status':
+      return loan.status;
+    case 'principalAmount':
+      return loan.principalAmount;
+    case 'collectionsBalance':
+      return loan.collectionsBalance;
+    case 'branchName':
+      return loan.branchName;
+    case 'createdAt':
+      return new Date(loan.createdAt);
+    default:
+      return undefined;
+  }
+}
 
 const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
@@ -40,6 +65,7 @@ export function LoanListPage() {
       query.length === 0 || loan.borrowerName.toLowerCase().includes(query) || loan.loanCode.toLowerCase().includes(query);
     return matchesStatus && matchesProduct && matchesBranch && matchesSearch;
   });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   return (
     <div className="space-y-6">
@@ -104,18 +130,34 @@ export function LoanListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Loan Code</TableHead>
-                <TableHead>Borrower</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Principal</TableHead>
-                <TableHead className="text-right">Collections Balance</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead>Created</TableHead>
+                <SortableTableHead sortKey="loanCode" currentSort={sort} onSort={toggleSort}>
+                  Loan Code
+                </SortableTableHead>
+                <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
+                  Borrower
+                </SortableTableHead>
+                <SortableTableHead sortKey="productType" currentSort={sort} onSort={toggleSort}>
+                  Product
+                </SortableTableHead>
+                <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
+                  Status
+                </SortableTableHead>
+                <SortableTableHead sortKey="principalAmount" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Principal
+                </SortableTableHead>
+                <SortableTableHead sortKey="collectionsBalance" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Collections Balance
+                </SortableTableHead>
+                <SortableTableHead sortKey="branchName" currentSort={sort} onSort={toggleSort}>
+                  Branch
+                </SortableTableHead>
+                <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Created
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((loan) => (
+              {sorted.map((loan) => (
                 <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                   <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
                   <TableCell className="font-medium">{loan.borrowerName}</TableCell>

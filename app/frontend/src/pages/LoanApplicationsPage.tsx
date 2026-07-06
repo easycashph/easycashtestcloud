@@ -8,21 +8,45 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useSortableTable } from '@/lib/useSortableTable';
 import {
   logActivity,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOAN_APPLICATIONS,
   type LoanApplicationReviewState,
   type LoanApplicationStatus,
+  type MockLoanApplication,
   type MockRiskLevel,
 } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+}
+
+function getSortValue(app: MockLoanApplication, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'applicantName':
+      return app.applicantName;
+    case 'requestedCategory':
+      return app.requestedCategory;
+    case 'requestedAmount':
+      return app.requestedAmount;
+    case 'aiRisk':
+      return app.aiRisk;
+    case 'status':
+      return app.status;
+    case 'reviewState':
+      return app.reviewState;
+    case 'submittedAt':
+      return new Date(app.submittedAt);
+    default:
+      return undefined;
+  }
 }
 
 const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] = [
@@ -70,6 +94,17 @@ export function LoanApplicationsPage() {
 
   useLogPageView('Loan Applications');
 
+  // Computed unconditionally, before the early return below, so
+  // useSortableTable's hook call is never skipped on some renders.
+  const filtered = applications.filter((app) => {
+    const matchesStatus = status === 'ALL' || app.status === status;
+    const matchesCategory = category === 'ALL' || app.requestedCategory === category;
+    const query = search.trim().toLowerCase();
+    const matchesSearch = query.length === 0 || app.applicantName.toLowerCase().includes(query);
+    return matchesStatus && matchesCategory && matchesSearch;
+  });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'submittedAt', direction: 'desc' });
+
   if (!canAccessLoanApplications) {
     return (
       <div className="space-y-6">
@@ -89,14 +124,6 @@ export function LoanApplicationsPage() {
       </div>
     );
   }
-
-  const filtered = applications.filter((app) => {
-    const matchesStatus = status === 'ALL' || app.status === status;
-    const matchesCategory = category === 'ALL' || app.requestedCategory === category;
-    const query = search.trim().toLowerCase();
-    const matchesSearch = query.length === 0 || app.applicantName.toLowerCase().includes(query);
-    return matchesStatus && matchesCategory && matchesSearch;
-  });
 
   const pendingCount = applications.filter((a) => a.status === 'PENDING_REVIEW').length;
   const allFilteredSelected = filtered.length > 0 && filtered.every((a) => selected.has(a.id));
@@ -211,17 +238,31 @@ export function LoanApplicationsPage() {
                     aria-label="Select all rows"
                   />
                 </TableHead>
-                <TableHead>Applicant</TableHead>
-                <TableHead>Requested Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>AI Risk</TableHead>
-                <TableHead>Decision Status</TableHead>
-                <TableHead>Review</TableHead>
-                <TableHead>Submitted</TableHead>
+                <SortableTableHead sortKey="applicantName" currentSort={sort} onSort={toggleSort}>
+                  Applicant
+                </SortableTableHead>
+                <SortableTableHead sortKey="requestedCategory" currentSort={sort} onSort={toggleSort}>
+                  Requested Category
+                </SortableTableHead>
+                <SortableTableHead sortKey="requestedAmount" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Amount
+                </SortableTableHead>
+                <SortableTableHead sortKey="aiRisk" currentSort={sort} onSort={toggleSort}>
+                  AI Risk
+                </SortableTableHead>
+                <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
+                  Decision Status
+                </SortableTableHead>
+                <SortableTableHead sortKey="reviewState" currentSort={sort} onSort={toggleSort}>
+                  Review
+                </SortableTableHead>
+                <SortableTableHead sortKey="submittedAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Submitted
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((app) => (
+              {sorted.map((app) => (
                 <TableRow key={app.id} className={app.reviewState === 'UNREVIEWED' ? 'font-medium' : undefined}>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <input

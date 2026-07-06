@@ -9,11 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useSortableTable } from '@/lib/useSortableTable';
 import {
   clientHasActiveLoan,
   createLoanAccountForClient,
@@ -23,8 +25,26 @@ import {
   MOCK_ACTIVITY_LOGS,
   MOCK_LOAN_PRODUCTS,
   type MockBorrowerProfile,
+  type MockLoanAccount,
 } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+function getLoanSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'loanCode':
+      return loan.loanCode;
+    case 'productType':
+      return loan.productType;
+    case 'status':
+      return loan.status;
+    case 'principalAmount':
+      return loan.principalAmount;
+    case 'collectionsBalance':
+      return loan.collectionsBalance;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Edits are held in local component state only, seeded from
@@ -235,6 +255,14 @@ export function ClientProfilePage() {
     setBorrower(seedBorrower);
   }, [seedBorrower]);
 
+  // Computed before the early return below (unconditionally, for every
+  // render) so useSortableTable's own hook call never becomes conditional.
+  const loans = (borrower?.loanIds ?? []).map((id) => getMockLoan(id)).filter((l): l is NonNullable<typeof l> => Boolean(l));
+  const { sorted: sortedLoans, sort: loanSort, toggleSort: toggleLoanSort } = useSortableTable(loans, getLoanSortValue, {
+    key: null,
+    direction: 'asc',
+  });
+
   if (!borrower) {
     return (
       <div className="space-y-4">
@@ -246,7 +274,6 @@ export function ClientProfilePage() {
     );
   }
 
-  const loans = borrower.loanIds.map((id) => getMockLoan(id)).filter((l): l is NonNullable<typeof l> => Boolean(l));
   const hasActiveLoan = clientHasActiveLoan(borrower.id);
   const initials = borrower.name
     .split(' ')
@@ -340,15 +367,30 @@ export function ClientProfilePage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Loan Code</TableHead>
-                    <TableHead>Product</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Principal</TableHead>
-                    <TableHead className="text-right">Collections Balance</TableHead>
+                    <SortableTableHead sortKey="loanCode" currentSort={loanSort} onSort={toggleLoanSort}>
+                      Loan Code
+                    </SortableTableHead>
+                    <SortableTableHead sortKey="productType" currentSort={loanSort} onSort={toggleLoanSort}>
+                      Product
+                    </SortableTableHead>
+                    <SortableTableHead sortKey="status" currentSort={loanSort} onSort={toggleLoanSort}>
+                      Status
+                    </SortableTableHead>
+                    <SortableTableHead sortKey="principalAmount" currentSort={loanSort} onSort={toggleLoanSort} className="text-right">
+                      Principal
+                    </SortableTableHead>
+                    <SortableTableHead
+                      sortKey="collectionsBalance"
+                      currentSort={loanSort}
+                      onSort={toggleLoanSort}
+                      className="text-right"
+                    >
+                      Collections Balance
+                    </SortableTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loans.map((loan) => (
+                  {sortedLoans.map((loan) => (
                     <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                       <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
                       <TableCell>{loan.productType}</TableCell>

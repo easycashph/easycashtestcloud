@@ -13,8 +13,10 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useSortableTable } from '@/lib/useSortableTable';
 import {
   buildReminderMessage,
   MOCK_ACTIVITY_LOGS,
@@ -24,6 +26,25 @@ import {
   type PaymentReminderType,
 } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+function getSortValue(r: MockPaymentReminder, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'loanCode':
+      return r.loanCode;
+    case 'borrowerName':
+      return r.borrowerName;
+    case 'reminderType':
+      return r.reminderType;
+    case 'dueDate':
+      return new Date(r.dueDate);
+    case 'amountDue':
+      return r.installmentAmountDue + r.penaltyDue;
+    case 'status':
+      return r.status;
+    default:
+      return undefined;
+  }
+}
 
 const TYPE_OPTIONS: { value: PaymentReminderType | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All reminder types' },
@@ -108,6 +129,7 @@ export function PaymentRemindersPage() {
     const matchesType = type === 'ALL' || r.reminderType === type;
     return matchesStatus && matchesType;
   });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'desc' });
 
   const sentCount = MOCK_PAYMENT_REMINDERS.filter((r) => r.status === 'SENT').length;
 
@@ -156,18 +178,30 @@ export function PaymentRemindersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Loan Account</TableHead>
-                <TableHead>Borrower</TableHead>
-                <TableHead>Reminder</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead className="text-right">Amount Due</TableHead>
+                <SortableTableHead sortKey="loanCode" currentSort={sort} onSort={toggleSort}>
+                  Loan Account
+                </SortableTableHead>
+                <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
+                  Borrower
+                </SortableTableHead>
+                <SortableTableHead sortKey="reminderType" currentSort={sort} onSort={toggleSort}>
+                  Reminder
+                </SortableTableHead>
+                <SortableTableHead sortKey="dueDate" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Due Date
+                </SortableTableHead>
+                <SortableTableHead sortKey="amountDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Amount Due
+                </SortableTableHead>
                 <TableHead>Channels</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
+                  Status
+                </SortableTableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((r) => (
+              {sorted.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="cursor-pointer font-mono text-xs" onClick={() => navigate(`/loans/${r.loanId}`)}>
                     {r.loanCode}

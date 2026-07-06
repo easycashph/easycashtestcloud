@@ -9,11 +9,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useSortableTable } from '@/lib/useSortableTable';
 import { emptyDraftMember, logActivity, MOCK_ACTIVITY_LOGS, MOCK_LMS_MEMBERS, type LmsRole, type MockLmsMember } from '@/lib/mockData';
 import { formatDate } from '@/lib/utils';
+
+function getSortValue(member: MockLmsMember, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'name':
+      return member.name;
+    case 'role':
+      return member.role;
+    case 'branchName':
+      return member.branchName;
+    case 'email':
+      return member.email;
+    case 'status':
+      return member.status;
+    case 'lastLoginAt':
+      return member.lastLoginAt ? new Date(member.lastLoginAt) : null;
+    default:
+      return undefined;
+  }
+}
 
 function MemberForm({ value, onChange }: { value: MockLmsMember; onChange: (next: MockLmsMember) => void }) {
   return (
@@ -65,6 +86,7 @@ export function MemberListPage() {
   const [addOpen, setAddOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<MockLmsMember>(emptyDraftMember());
   const [editingMember, setEditingMember] = React.useState<MockLmsMember | null>(null);
+  const { sorted, sort, toggleSort } = useSortableTable(members, getSortValue, { key: 'lastLoginAt', direction: 'desc' });
 
   const openAdd = () => {
     setDraft(emptyDraftMember());
@@ -130,17 +152,29 @@ export function MemberListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Login</TableHead>
+                <SortableTableHead sortKey="name" currentSort={sort} onSort={toggleSort}>
+                  Name
+                </SortableTableHead>
+                <SortableTableHead sortKey="role" currentSort={sort} onSort={toggleSort}>
+                  Role
+                </SortableTableHead>
+                <SortableTableHead sortKey="branchName" currentSort={sort} onSort={toggleSort}>
+                  Branch
+                </SortableTableHead>
+                <SortableTableHead sortKey="email" currentSort={sort} onSort={toggleSort}>
+                  Email
+                </SortableTableHead>
+                <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
+                  Status
+                </SortableTableHead>
+                <SortableTableHead sortKey="lastLoginAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Last Login
+                </SortableTableHead>
                 {canManageMembers && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {members.map((member) => (
+              {sorted.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">

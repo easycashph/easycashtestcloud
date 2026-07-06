@@ -4,16 +4,35 @@ import { Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
-import { MOCK_ACTIVITY_LOGS, MOCK_BORROWERS } from '@/lib/mockData';
+import { useSortableTable } from '@/lib/useSortableTable';
+import { MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, type MockBorrowerProfile } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
 
 function initials(name: string): string {
   const parts = name.split(' ').filter(Boolean);
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
+}
+
+function getSortValue(b: MockBorrowerProfile, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'name':
+      return b.name;
+    case 'contactNumber':
+      return b.contactNumber;
+    case 'employer':
+      return b.employer;
+    case 'homeBranchName':
+      return b.homeBranchName;
+    case 'loans':
+      return b.loanIds.length;
+    default:
+      return undefined;
+  }
 }
 
 export function ClientListPage() {
@@ -30,6 +49,7 @@ export function ClientListPage() {
       b.homeBranchName.toLowerCase().includes(query)
     );
   });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: null, direction: 'asc' });
 
   return (
     <div className="space-y-6">
@@ -55,15 +75,25 @@ export function ClientListPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Client</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Employer</TableHead>
-                <TableHead>Home Branch</TableHead>
-                <TableHead className="text-right">Loans</TableHead>
+                <SortableTableHead sortKey="name" currentSort={sort} onSort={toggleSort}>
+                  Client
+                </SortableTableHead>
+                <SortableTableHead sortKey="contactNumber" currentSort={sort} onSort={toggleSort}>
+                  Contact
+                </SortableTableHead>
+                <SortableTableHead sortKey="employer" currentSort={sort} onSort={toggleSort}>
+                  Employer
+                </SortableTableHead>
+                <SortableTableHead sortKey="homeBranchName" currentSort={sort} onSort={toggleSort}>
+                  Home Branch
+                </SortableTableHead>
+                <SortableTableHead sortKey="loans" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Loans
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((b) => (
+              {sorted.map((b) => (
                 <TableRow key={b.id} className="cursor-pointer" onClick={() => navigate(`/clients/${b.id}`)}>
                   <TableCell>
                     <div className="flex items-center gap-2">

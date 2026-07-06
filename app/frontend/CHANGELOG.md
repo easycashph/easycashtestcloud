@@ -8,6 +8,29 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-06
 
+### Sortable column headers across every table
+- Added click-to-sort column headers (with an ascending/descending indicator icon) to every
+  `<Table>` across the LMS preview: Activity Logs, Client Data, Client Profile (Loan History),
+  Collection Report (daily/monthly/yearly), Loan Applications, Loan Account Detail (Repayment
+  Schedule + Payment History), Loan Accounts list, Loan Products (active + discontinued, grouped
+  by category), Loan Report (daily/monthly/yearly), Member Details, Payment Recording (Automatic
+  allocation preview), Payment Reminders, Statement of Account, and Transaction Report.
+- **Any Date/timestamp column always opens sorted recent-to-oldest (descending)** by default —
+  Date & Time, Created, Due Date, Submitted, Last Login, Date, etc. — per the standing requirement
+  that date columns default to showing the newest entries first. Clicking a column header again
+  toggles between ascending/descending; clicking a different column switches the active sort to
+  that column instead (non-date columns default to ascending on first click).
+- New shared building blocks: `useSortableTable` (`src/lib/useSortableTable.ts`) and
+  `SortableTableHead` (`src/components/ui/sortable-table-head.tsx`) — one hook + one header
+  component reused by every page, instead of duplicating sort logic per table.
+- Payment Recording's Automatic allocation table is sorted for **display only** — the underlying
+  fees → penalty → interest → principal calculation (ADR-009) still always runs against
+  installments in oldest-due-first order regardless of how the table is currently sorted, since
+  changing the calculation's input order would change the actual allocation, not just how it's
+  shown.
+- Loan Products' grouped/expandable tables (Active, Discontinued) sort within their existing
+  category grouping rather than flattening it.
+
 ### Payment Recording — manual allocation mode
 - Added an **Allocation** toggle (Automatic / Manual) to the Payment Recording screen.
   **Automatic** is the existing behavior (fees → penalty → interest → principal, oldest

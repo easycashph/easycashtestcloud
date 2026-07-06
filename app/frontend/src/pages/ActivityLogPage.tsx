@@ -3,10 +3,29 @@ import { Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { useSortableTable } from '@/lib/useSortableTable';
 import { useRole } from '@/lib/roleContext';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
+import { MOCK_ACTIVITY_LOGS, type MockActivityLogEntry } from '@/lib/mockData';
 import { formatDateTime } from '@/lib/utils';
+
+function getSortValue(log: MockActivityLogEntry, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'at':
+      return new Date(log.at);
+    case 'userName':
+      return log.userName;
+    case 'action':
+      return log.action;
+    case 'entityType':
+      return log.entityType;
+    case 'entityId':
+      return log.entityId;
+    default:
+      return undefined;
+  }
+}
 
 const ACTION_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'secondary' | 'outline' | 'destructive'> = {
   LOGIN: 'outline',
@@ -33,6 +52,10 @@ export function ActivityLogPage() {
   const { canViewActivityLogs, currentAccount } = useRole();
   const [action, setAction] = React.useState<string>('ALL');
   const actionOptions = ['ALL', ...[...new Set(MOCK_ACTIVITY_LOGS.map((l) => l.action))].sort()];
+  const filtered = MOCK_ACTIVITY_LOGS.filter((log) => action === 'ALL' || log.action === action);
+  // Hooks must run unconditionally on every render — computed before the
+  // early return below, even though its output is unused on that path.
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'at', direction: 'desc' });
 
   if (!canViewActivityLogs) {
     return (
@@ -52,8 +75,6 @@ export function ActivityLogPage() {
       </div>
     );
   }
-
-  const filtered = MOCK_ACTIVITY_LOGS.filter((log) => action === 'ALL' || log.action === action);
 
   return (
     <div className="space-y-6">
@@ -88,15 +109,25 @@ export function ActivityLogPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date &amp; Time</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Entity Type</TableHead>
-                <TableHead>Affected Entity</TableHead>
+                <SortableTableHead sortKey="at" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Date &amp; Time
+                </SortableTableHead>
+                <SortableTableHead sortKey="userName" currentSort={sort} onSort={toggleSort}>
+                  User
+                </SortableTableHead>
+                <SortableTableHead sortKey="action" currentSort={sort} onSort={toggleSort}>
+                  Action
+                </SortableTableHead>
+                <SortableTableHead sortKey="entityType" currentSort={sort} onSort={toggleSort}>
+                  Entity Type
+                </SortableTableHead>
+                <SortableTableHead sortKey="entityId" currentSort={sort} onSort={toggleSort}>
+                  Affected Entity
+                </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((log) => (
+              {sorted.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(log.at)}</TableCell>
                   <TableCell className="font-medium">{log.userName}</TableCell>

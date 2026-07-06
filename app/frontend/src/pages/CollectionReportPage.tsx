@@ -2,13 +2,57 @@ import * as React from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useSortableTable } from '@/lib/useSortableTable';
 import { DAILY_REPORT_ROWS, MOCK_ACTIVITY_LOGS, MONTHLY_REPORT_ROWS, REPORT_BRANCHES, YEARLY_REPORT_ROWS } from '@/lib/mockData';
 import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+
+interface DailyRow {
+  date: string;
+  amountCollected: number;
+  collectionTarget: number;
+}
+
+function getDailyRowSortValue(row: DailyRow, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'date':
+      return new Date(row.date);
+    case 'amountCollected':
+      return row.amountCollected;
+    case 'collectionTarget':
+      return row.collectionTarget;
+    case 'percentOfTarget':
+      return row.collectionTarget === 0 ? 0 : row.amountCollected / row.collectionTarget;
+    default:
+      return undefined;
+  }
+}
+
+interface PeriodRow {
+  label: string;
+  amountCollected: number;
+  collectionTarget: number;
+}
+
+function getPeriodRowSortValue(row: PeriodRow, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'label':
+      return row.label;
+    case 'amountCollected':
+      return row.amountCollected;
+    case 'collectionTarget':
+      return row.collectionTarget;
+    case 'percentOfTarget':
+      return row.collectionTarget === 0 ? 0 : row.amountCollected / row.collectionTarget;
+    default:
+      return undefined;
+  }
+}
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -61,6 +105,10 @@ function DailyCollectionReport() {
   const rows = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
   const totalCollected = rows.reduce((sum, r) => sum + r.amountCollected, 0);
   const totalTarget = rows.reduce((sum, r) => sum + r.collectionTarget, 0);
+  // The chart above always stays chronological (a trend line reversed
+  // would be confusing); only the table below is independently sortable —
+  // Date defaults to recent-to-oldest per the standing requirement.
+  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getDailyRowSortValue, { key: 'date', direction: 'desc' });
 
   return (
     <div className="space-y-4">
@@ -83,14 +131,22 @@ function DailyCollectionReport() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead className="text-right">Collected</TableHead>
-            <TableHead className="text-right">Target</TableHead>
-            <TableHead className="text-right">% of Target</TableHead>
+            <SortableTableHead sortKey="date" currentSort={sort} onSort={toggleSort} isDateColumn>
+              Date
+            </SortableTableHead>
+            <SortableTableHead sortKey="amountCollected" currentSort={sort} onSort={toggleSort} className="text-right">
+              Collected
+            </SortableTableHead>
+            <SortableTableHead sortKey="collectionTarget" currentSort={sort} onSort={toggleSort} className="text-right">
+              Target
+            </SortableTableHead>
+            <SortableTableHead sortKey="percentOfTarget" currentSort={sort} onSort={toggleSort} className="text-right">
+              % of Target
+            </SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <TableRow key={row.date}>
               <TableCell>{formatDate(row.date)}</TableCell>
               <TableCell className="text-right">{formatPeso(row.amountCollected)}</TableCell>
@@ -133,6 +189,7 @@ function PeriodCollectionReport({ rows: allRows }: { rows: typeof MONTHLY_REPORT
   const rows = [...byLabel.values()];
   const totalCollected = rows.reduce((sum, r) => sum + r.amountCollected, 0);
   const totalTarget = rows.reduce((sum, r) => sum + r.collectionTarget, 0);
+  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getPeriodRowSortValue, { key: null, direction: 'asc' });
 
   return (
     <div className="space-y-4">
@@ -154,14 +211,22 @@ function PeriodCollectionReport({ rows: allRows }: { rows: typeof MONTHLY_REPORT
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Period</TableHead>
-            <TableHead className="text-right">Collected</TableHead>
-            <TableHead className="text-right">Target</TableHead>
-            <TableHead className="text-right">% of Target</TableHead>
+            <SortableTableHead sortKey="label" currentSort={sort} onSort={toggleSort}>
+              Period
+            </SortableTableHead>
+            <SortableTableHead sortKey="amountCollected" currentSort={sort} onSort={toggleSort} className="text-right">
+              Collected
+            </SortableTableHead>
+            <SortableTableHead sortKey="collectionTarget" currentSort={sort} onSort={toggleSort} className="text-right">
+              Target
+            </SortableTableHead>
+            <SortableTableHead sortKey="percentOfTarget" currentSort={sort} onSort={toggleSort} className="text-right">
+              % of Target
+            </SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <TableRow key={row.label}>
               <TableCell>{row.label}</TableCell>
               <TableCell className="text-right">{formatPeso(row.amountCollected)}</TableCell>

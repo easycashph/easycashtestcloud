@@ -4,14 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useSortableTable } from '@/lib/useSortableTable';
 import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS, MOCK_INSTALLMENTS, MOCK_LOANS } from '@/lib/mockData';
-import { previewCrossInstallmentAllocation } from '@/lib/paymentAllocationPreview';
+import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 type AllocationMode = 'AUTOMATIC' | 'MANUAL';
@@ -19,6 +21,37 @@ type AllocationMode = 'AUTOMATIC' | 'MANUAL';
 function parseAmount(value: string): number {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+/**
+ * Column sort here is DISPLAY-ONLY — it never changes which installments
+ * were actually offered a share of the payment. `previewCrossInstallmentAllocation`
+ * must keep computing over `unpaidInstallments` in oldest-due-first order
+ * (ADR-009 §2); re-sorting the underlying installments to match a column
+ * click would silently change the allocation itself, not just how it's
+ * displayed. So the sort here only reorders the already-computed
+ * `preview.rows` for browsing, via a `dueDate` looked up per row.
+ */
+function getPreviewRowSortValue(
+  row: InstallmentAllocationPreviewRow & { dueDate: string },
+  key: string,
+): string | number | Date | null | undefined {
+  switch (key) {
+    case 'installmentNumber':
+      return row.installmentNumber;
+    case 'dueDate':
+      return new Date(row.dueDate);
+    case 'feesApplied':
+      return row.feesApplied;
+    case 'penaltyApplied':
+      return row.penaltyApplied;
+    case 'interestApplied':
+      return row.interestApplied;
+    case 'principalApplied':
+      return row.principalApplied;
+    default:
+      return undefined;
+  }
 }
 
 const PAYABLE_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS');
@@ -58,6 +91,16 @@ export function PaymentRecordingPage() {
         principalDue: Math.max(0, i.due.principal - i.paid.principal),
       },
     })),
+  );
+  // Display-only sort — see getPreviewRowSortValue's own doc comment.
+  const previewRowsWithDueDate = preview.rows.map((row) => ({
+    ...row,
+    dueDate: unpaidInstallments.find((i) => i.id === row.installmentId)?.dueDate ?? '',
+  }));
+  const { sorted: sortedPreviewRows, sort: previewSort, toggleSort: togglePreviewSort } = useSortableTable(
+    previewRowsWithDueDate,
+    getPreviewRowSortValue,
+    { key: 'dueDate', direction: 'desc' },
   );
 
   const totals = preview.rows.reduce(
@@ -315,35 +358,59 @@ export function PaymentRecordingPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead className="text-right">Fees</TableHead>
-                      <TableHead className="text-right">Penalty</TableHead>
-                      <TableHead className="text-right">Interest</TableHead>
-                      <TableHead className="text-right">Principal</TableHead>
+                      <SortableTableHead sortKey="installmentNumber" currentSort={previewSort} onSort={togglePreviewSort}>
+                        #
+                      </SortableTableHead>
+                      <SortableTableHead sortKey="dueDate" currentSort={previewSort} onSort={togglePreviewSort} isDateColumn>
+                        Due Date
+                      </SortableTableHead>
+                      <SortableTableHead sortKey="feesApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
+                        Fees
+                      </SortableTableHead>
+                      <SortableTableHead
+                        sortKey="penaltyApplied"
+                        currentSort={previewSort}
+                        onSort={togglePreviewSort}
+                        className="text-right"
+                      >
+                        Penalty
+                      </SortableTableHead>
+                      <SortableTableHead
+                        sortKey="interestApplied"
+                        currentSort={previewSort}
+                        onSort={togglePreviewSort}
+                        className="text-right"
+                      >
+                        Interest
+                      </SortableTableHead>
+                      <SortableTableHead
+                        sortKey="principalApplied"
+                        currentSort={previewSort}
+                        onSort={togglePreviewSort}
+                        className="text-right"
+                      >
+                        Principal
+                      </SortableTableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {preview.rows.length === 0 ? (
+                    {sortedPreviewRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
                           Enter a payment amount above ₱0.00 to see the allocation.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      preview.rows.map((row) => {
-                        const installment = unpaidInstallments.find((i) => i.id === row.installmentId)!;
-                        return (
-                          <TableRow key={row.installmentId}>
-                            <TableCell>{row.installmentNumber}</TableCell>
-                            <TableCell>{formatDate(installment.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(row.feesApplied)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(row.penaltyApplied)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(row.interestApplied)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(row.principalApplied)}</TableCell>
-                          </TableRow>
-                        );
-                      })
+                      sortedPreviewRows.map((row) => (
+                        <TableRow key={row.installmentId}>
+                          <TableCell>{row.installmentNumber}</TableCell>
+                          <TableCell>{formatDate(row.dueDate)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.feesApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.penaltyApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.interestApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.principalApplied)}</TableCell>
+                        </TableRow>
+                      ))
                     )}
                   </TableBody>
                 </Table>

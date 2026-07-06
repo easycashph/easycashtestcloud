@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/StatusBadge';
@@ -15,6 +16,7 @@ import { PaymentMethodBadge } from '@/components/PaymentMethodBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useSortableTable } from '@/lib/useSortableTable';
 import {
   buildReminderMessage,
   getMockLoan,
@@ -26,9 +28,43 @@ import {
   MOCK_TIMELINES,
   MOCK_TRANSACTIONS,
   REMINDER_TYPE_LABELS,
+  type MockLoanTransaction,
+  type MockRepaymentInstallment,
   type MockRiskLevel,
 } from '@/lib/mockData';
 import { cn, formatDate, formatPeso } from '@/lib/utils';
+
+function getInstallmentSortValue(inst: MockRepaymentInstallment, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'installmentNumber':
+      return inst.installmentNumber;
+    case 'dueDate':
+      return new Date(inst.dueDate);
+    case 'principalDue':
+      return inst.due.principal;
+    case 'interestDue':
+      return inst.due.interest;
+    case 'paid':
+      return inst.paid.principal + inst.paid.interest;
+    case 'status':
+      return inst.status;
+    default:
+      return undefined;
+  }
+}
+
+function getPaymentHistorySortValue(txn: MockLoanTransaction, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'entryDate':
+      return new Date(txn.entryDate);
+    case 'amount':
+      return txn.amount;
+    case 'paymentMethod':
+      return txn.paymentMethod ?? '';
+    default:
+      return undefined;
+  }
+}
 
 const RISK_BADGE_VARIANT: Record<MockRiskLevel, 'success' | 'warning' | 'destructive'> = {
   'Low Risk': 'success',
@@ -282,6 +318,21 @@ export function LoanDetailPage() {
   useLogPageView('Loan Account Detail', loanId);
   const loan = loanId ? getMockLoan(loanId) : undefined;
 
+  // Computed unconditionally, before the early return below, so both
+  // useSortableTable hook calls are never skipped on some renders.
+  const installments = MOCK_INSTALLMENTS[loan?.id ?? ''] ?? [];
+  const paymentHistory = MOCK_TRANSACTIONS.filter((t) => t.loanAccountId === loan?.id && t.type === 'REPAYMENT');
+  const { sorted: sortedInstallments, sort: scheduleSort, toggleSort: toggleScheduleSort } = useSortableTable(
+    installments,
+    getInstallmentSortValue,
+    { key: 'dueDate', direction: 'desc' },
+  );
+  const { sorted: sortedPaymentHistory, sort: paymentsSort, toggleSort: togglePaymentsSort } = useSortableTable(
+    paymentHistory,
+    getPaymentHistorySortValue,
+    { key: 'entryDate', direction: 'desc' },
+  );
+
   if (!loan) {
     return (
       <div className="space-y-4">
@@ -293,7 +344,6 @@ export function LoanDetailPage() {
     );
   }
 
-  const installments = MOCK_INSTALLMENTS[loan.id] ?? [];
   const timeline = MOCK_TIMELINES[loan.id] ?? [];
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
 
@@ -385,16 +435,38 @@ export function LoanDetailPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>#</TableHead>
-                        <TableHead>Due Date</TableHead>
-                        <TableHead className="text-right">Principal Due</TableHead>
-                        <TableHead className="text-right">Interest Due</TableHead>
-                        <TableHead className="text-right">Paid</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead sortKey="installmentNumber" currentSort={scheduleSort} onSort={toggleScheduleSort}>
+                          #
+                        </SortableTableHead>
+                        <SortableTableHead sortKey="dueDate" currentSort={scheduleSort} onSort={toggleScheduleSort} isDateColumn>
+                          Due Date
+                        </SortableTableHead>
+                        <SortableTableHead
+                          sortKey="principalDue"
+                          currentSort={scheduleSort}
+                          onSort={toggleScheduleSort}
+                          className="text-right"
+                        >
+                          Principal Due
+                        </SortableTableHead>
+                        <SortableTableHead
+                          sortKey="interestDue"
+                          currentSort={scheduleSort}
+                          onSort={toggleScheduleSort}
+                          className="text-right"
+                        >
+                          Interest Due
+                        </SortableTableHead>
+                        <SortableTableHead sortKey="paid" currentSort={scheduleSort} onSort={toggleScheduleSort} className="text-right">
+                          Paid
+                        </SortableTableHead>
+                        <SortableTableHead sortKey="status" currentSort={scheduleSort} onSort={toggleScheduleSort}>
+                          Status
+                        </SortableTableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {installments.map((inst) => (
+                      {sortedInstallments.map((inst) => (
                         <TableRow key={inst.id}>
                           <TableCell>{inst.installmentNumber}</TableCell>
                           <TableCell>{formatDate(inst.dueDate)}</TableCell>
@@ -472,33 +544,36 @@ export function LoanDetailPage() {
               </TabsContent>
 
               <TabsContent value="payments">
-                {(() => {
-                  const paymentHistory = MOCK_TRANSACTIONS.filter((t) => t.loanAccountId === loan.id && t.type === 'REPAYMENT');
-                  return paymentHistory.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Mode of Payment</TableHead>
+                {paymentHistory.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTableHead sortKey="entryDate" currentSort={paymentsSort} onSort={togglePaymentsSort} isDateColumn>
+                          Date
+                        </SortableTableHead>
+                        <SortableTableHead sortKey="amount" currentSort={paymentsSort} onSort={togglePaymentsSort} className="text-right">
+                          Amount
+                        </SortableTableHead>
+                        <SortableTableHead sortKey="paymentMethod" currentSort={paymentsSort} onSort={togglePaymentsSort}>
+                          Mode of Payment
+                        </SortableTableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedPaymentHistory.map((txn) => (
+                        <TableRow key={txn.id}>
+                          <TableCell>{formatDate(txn.entryDate)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(txn.amount)}</TableCell>
+                          <TableCell>
+                            <PaymentMethodBadge code={txn.paymentMethod ?? loan.paymentMethod} />
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paymentHistory.map((txn) => (
-                          <TableRow key={txn.id}>
-                            <TableCell>{formatDate(txn.entryDate)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(txn.amount)}</TableCell>
-                            <TableCell>
-                              <PaymentMethodBadge code={txn.paymentMethod ?? loan.paymentMethod} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  );
-                })()}
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
                 <p className="mt-2 text-xs text-muted-foreground">
                   Discontinued channels (e.g. DragonPay, ECPay) may still appear here as historical reference even though they are no
                   longer offered for new payments.

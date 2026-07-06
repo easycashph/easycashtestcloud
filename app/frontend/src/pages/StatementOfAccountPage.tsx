@@ -4,11 +4,32 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { InstallmentStatusBadge } from '@/components/StatusBadge';
-import { getMockLoan, MOCK_INSTALLMENTS } from '@/lib/mockData';
+import { useSortableTable } from '@/lib/useSortableTable';
+import { getMockLoan, MOCK_INSTALLMENTS, type MockRepaymentInstallment } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+function getSortValue(inst: MockRepaymentInstallment, key: string): string | number | Date | null | undefined {
+  switch (key) {
+    case 'installmentNumber':
+      return inst.installmentNumber;
+    case 'dueDate':
+      return new Date(inst.dueDate);
+    case 'principalDue':
+      return inst.due.principal;
+    case 'interestDue':
+      return inst.due.interest;
+    case 'totalPaid':
+      return inst.paid.principal + inst.paid.interest;
+    case 'status':
+      return inst.status;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * `window.print()` is a genuine, working browser feature — no backend
@@ -22,6 +43,11 @@ export function StatementOfAccountPage() {
   const navigate = useNavigate();
   const loan = loanId ? getMockLoan(loanId) : undefined;
 
+  // Computed unconditionally, before the early return below, so
+  // useSortableTable's hook call is never skipped on some renders.
+  const installments = MOCK_INSTALLMENTS[loan?.id ?? ''] ?? [];
+  const { sorted, sort, toggleSort } = useSortableTable(installments, getSortValue, { key: 'dueDate', direction: 'desc' });
+
   if (!loan) {
     return (
       <div className="space-y-4">
@@ -32,8 +58,6 @@ export function StatementOfAccountPage() {
       </div>
     );
   }
-
-  const installments = MOCK_INSTALLMENTS[loan.id] ?? [];
 
   return (
     <div className="space-y-6">
@@ -104,16 +128,28 @@ export function StatementOfAccountPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead className="text-right">Principal Due</TableHead>
-                  <TableHead className="text-right">Interest Due</TableHead>
-                  <TableHead className="text-right">Total Paid</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTableHead sortKey="installmentNumber" currentSort={sort} onSort={toggleSort}>
+                    #
+                  </SortableTableHead>
+                  <SortableTableHead sortKey="dueDate" currentSort={sort} onSort={toggleSort} isDateColumn>
+                    Due Date
+                  </SortableTableHead>
+                  <SortableTableHead sortKey="principalDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                    Principal Due
+                  </SortableTableHead>
+                  <SortableTableHead sortKey="interestDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                    Interest Due
+                  </SortableTableHead>
+                  <SortableTableHead sortKey="totalPaid" currentSort={sort} onSort={toggleSort} className="text-right">
+                    Total Paid
+                  </SortableTableHead>
+                  <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
+                    Status
+                  </SortableTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {installments.map((inst) => (
+                {sorted.map((inst) => (
                   <TableRow key={inst.id}>
                     <TableCell>{inst.installmentNumber}</TableCell>
                     <TableCell>{formatDate(inst.dueDate)}</TableCell>
