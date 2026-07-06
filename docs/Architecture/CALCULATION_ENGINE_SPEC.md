@@ -503,17 +503,27 @@ negative amounts (the Milestone 7.1 C-1 fix). This is `STATUS: CONFIRMED` — al
 and unit-tested, not new to this milestone.
 
 **For `ROUND_REMAINDER_INTO_LAST_REPAYMENT` specifically** (a per-schedule-generation-time
-concern, not a per-payment concern): `STATUS: UNRESOLVED`. No legacy amortization schedule was
-traced installment-by-installment against a candidate "does the last installment absorb the
-cumulative rounding residual" rule with enough precision to confirm the exact mechanics (e.g.
-whether only principal absorbs the residual, or the total payment amount is adjusted). The
-`Sample Computation Sheet` worked example (§2) terminates at a balance of `9.09e-12`, which is a
-floating-point display artifact of Excel's own arithmetic, not evidence of a deliberate
-remainder-allocation rule being exercised.
+concern, not a per-payment concern): `STATUS: RESOLVED (business decision, 2026-07-06)`. No
+legacy amortization schedule was traced installment-by-installment against a candidate "does the
+last installment absorb the cumulative rounding residual" rule with enough precision to confirm
+the exact mechanics from evidence alone (the `Sample Computation Sheet` worked example (§2)
+terminates at a balance of `9.09e-12`, which is a floating-point display artifact of Excel's own
+arithmetic, not evidence of a deliberate remainder-allocation rule being exercised) — so, absent
+evidence, this was resolved as an explicit business decision rather than left unimplemented:
+**only `principalPortion` absorbs the residual on the final installment; `interestPortion` is
+never adjusted.** Rationale: interest is a contractual rate applied to a balance and must not be
+inflated/deflated to force a reconciliation; principal is "whatever balance remains," which can
+legitimately absorb a few centavos. Mechanically: the final installment's `principalPortion` is
+overridden to the exact remaining beginning balance (guaranteeing `endingPrincipal` lands on
+precisely `0.00`), and that installment's `payment` is recomputed as
+`interestPortion + principalPortion` — which may therefore differ by a few centavos from every
+other installment's `payment` (all still equal to the regular, formula-computed `monthlyPayment`).
+Implemented in `shared/domain/calculation/AmortizationScheduleGenerator.ts`.
 
 ### Rounding
-See above — `Money.allocate()` for exact-sum splitting; the schedule-generation-time rule is
-unresolved.
+See above — `Money.allocate()` for exact-sum splitting; the schedule-generation-time rule now
+resolves the final installment's principal/`endingPrincipal` to exactly zero, per the decision
+above.
 
 ### Precision
 `Decimal(14,2)`.
@@ -796,7 +806,7 @@ investigation of the daily `PENALTY_APPLIED` amount sequence.
 | §4 Flat-Rate Interest | UNRESOLVED | **No** — blocked, needs evidence |
 | §5 Payment Allocation Order | CONFIRMED (contractual) | Yes, with cross-installment looping and remainder handling flagged as open sub-designs |
 | §6 Outstanding Balance / Running Total | CONFIRMED (mechanism); UNRESOLVED (scope) | Partially — the running-total mechanism can be built; which balance concept(s) it tracks needs ADR-007 §3 decided first |
-| §7 Rounding / Remainder Allocation | CONFIRMED (`Money.allocate()`, exists); UNRESOLVED (`ROUND_REMAINDER_INTO_LAST_REPAYMENT` schedule-generation mechanics) | Partially |
+| §7 Rounding / Remainder Allocation | CONFIRMED (`Money.allocate()`, exists); RESOLVED, business decision 2026-07-06 (`ROUND_REMAINDER_INTO_LAST_REPAYMENT`: principal-only absorbs the residual) | Yes — implemented in `AmortizationScheduleGenerator.ts` |
 | §8 Day-Count / Partial-Period Interest | CONFIRMED | Yes |
 | §9 Capitalization at Maturity | CONFIRMED (contractual); UNRESOLVED (timing mechanics) | Partially — the arithmetic is simple, but "when" is undetermined |
 | §10 Reversals and Adjustments | PARTIALLY CONFIRMED / UNRESOLVED (data modeling, not a formula) | N/A — design question |
@@ -805,5 +815,5 @@ investigation of the daily `PENALTY_APPLIED` amount sequence.
 
 **Correctness over completeness, as instructed**: this document ends with five genuinely
 unresolved calculations (§4, §9's timing, §10's data model, §11, §12) rather than inventing
-formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (partially), and §8 are
-ready to guide real implementation.
+formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business
+decision), and §8 are ready to guide real implementation.

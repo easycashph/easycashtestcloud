@@ -150,18 +150,20 @@ resuming work correctly:
   Older history (ADR-049, CP8–CP10, etc.) is unchanged in content, only in hash, per the
   `git filter-branch` rewrite noted above — see `git log --oneline` directly rather than trusting
   any older hash recorded elsewhere in this document's history.
-- **Current test counts (verified fresh, not from memory, 2026-07-06, includes CP13):** **488
-  unit tests passing, 0 failing, 6 integration tests correctly skipped** (76 test files total; up
-  from 468/74 before this pass — the +20 are CP13's new coverage: `LoanAccountController`'s
-  `activate()`/`processPayment()` tests, the two new router-authorization describe blocks,
-  `PrismaIdempotencyKeyStore.test.ts`, and `idempotency.test.ts`).
+- **Current test counts (verified fresh, not from memory, 2026-07-06, includes CP13 and M-5's
+  resolution):** **493 unit tests passing, 0 failing, 6 integration tests correctly skipped** (76
+  test files total; up from 468/74 before CP13 — +20 from CP13, then net +5 more from M-5's
+  `AmortizationScheduleGenerator.test.ts` updates: two tests rewritten to expect exact
+  reconciliation instead of a residual, plus new tests for the final installment's adjusted
+  payment and a parametrized zero-reconciliation check across principal/rate/installment-count
+  combinations).
 - **Verification status (all re-run and confirmed clean immediately before writing this section,
-  2026-07-06, against the working tree including CP13):**
+  2026-07-06, against the working tree including CP13 and M-5):**
   - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
   - `npm run build` — clean.
-  - `npx vitest run` — **75 test files passed, 1 skipped (76 total); 488 tests passed, 6 skipped
-    (494 total); 0 failed.**
+  - `npx vitest run` — **75 test files passed, 1 skipped (76 total); 493 tests passed, 6 skipped
+    (499 total); 0 failed.**
   - `npm audit --omit=dev` (from `app/backend/`) — **0 vulnerabilities**.
 
 ---
@@ -453,18 +455,22 @@ initially missed non-`.ts` source files):
   (all-null optional fields, empty collections) are unverified. Deferred — explicitly excluded
   from M8.1 approved scope ("presenter redesign" was listed as not-to-implement; adding tests
   without redesigning was still out of the approved finding list).
-- **M-5 (new, 2026-07-06 verification pass) — Amortization schedule doesn't reconcile principal
-  to exactly zero. Still open — deliberately, per an explicit 2026-07-06 user decision, not an
-  oversight.** `AmortizationScheduleGenerator`'s per-period half-up rounding of `interestPortion`
-  leaves a small residual (e.g. -0.03) on the final installment's `endingPrincipal` instead of
-  landing on exactly 0.00. Investigated for a fix on 2026-07-06 and found to require resolving
-  `CALCULATION_ENGINE_SPEC.md` §7's genuinely `STATUS: UNRESOLVED` question first (does only
-  principal absorb the residual, or is the total payment amount adjusted? — no legacy evidence
-  traces the exact mechanics). Presented to the user as a business decision needed before any code
-  change; the user chose to leave it tracked-but-unresolved rather than decide now. **Do not
-  implement `ROUND_REMAINDER_INTO_LAST_REPAYMENT` from general amortization convention** — this
-  entry exists precisely to prevent that guess, per CALC-SPEC §7 and `CLAUDE.md`'s "never invent
-  business rules" rule. Revisit only when new evidence or an explicit decision resolves it.
+- **M-5 (2026-07-06 verification pass) — RESOLVED, 2026-07-06 (business decision).** Was:
+  `AmortizationScheduleGenerator`'s per-period half-up rounding of `interestPortion` left a small
+  residual (e.g. -0.03) on the final installment's `endingPrincipal` instead of landing on exactly
+  0.00 — required resolving `CALCULATION_ENGINE_SPEC.md` §7's genuinely `STATUS: UNRESOLVED`
+  question first (no legacy evidence traced the exact mechanics), so it was first left
+  tracked-but-unresolved (see git history for that earlier entry) rather than guessed at. Later
+  the same day, presented to the user as an explicit decision with two options; **decided:
+  principal-only absorbs the residual, interest is never adjusted** (interest is a contractual
+  rate applied to a balance and must not be inflated/deflated for a rounding reconciliation;
+  principal is "whatever balance remains," which can legitimately absorb a few centavos). Fixed in
+  `AmortizationScheduleGenerator.ts`: the final installment's `principalPortion` is overridden to
+  the exact remaining beginning balance (`endingPrincipal` now always lands on exactly `0.00`),
+  and that installment's `payment` is recomputed as `interestPortion + principalPortion` — may
+  differ by a few centavos from every other installment's `payment`. `CALCULATION_ENGINE_SPEC.md`
+  §7 updated to `STATUS: RESOLVED`. 5 new/updated regression tests in
+  `AmortizationScheduleGenerator.test.ts`.
 - **M-6 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: no runtime
   installment-order guard in `PaymentAllocationService`. Fixed: `AllocatableInstallment` gained a
   `dueDate: Date` field (previously deliberately omitted — the interface is now updated since a
@@ -632,7 +638,7 @@ implementation overrides, which caused a real test-pollution bug once during Mil
 (see `PrismaBorrowerRepository.test.ts`'s `beforeEach` comment for the full explanation).
 
 ### Current passing test count
-**488 passing, 0 failing, 6 correctly skipped** (76 test files, 75 passed/1 skipped — see §1 for
+**493 passing, 0 failing, 6 correctly skipped** (76 test files, 75 passed/1 skipped — see §1 for
 the full verification status; this count was stale at 353 for several milestones' worth of
 handoff updates before a 2026-07-06 pass caught it — always prefer re-running `npx vitest run`
 over trusting any number recorded here).

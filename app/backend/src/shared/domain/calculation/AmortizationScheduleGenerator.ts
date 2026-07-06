@@ -49,16 +49,23 @@ export interface AmortizationScheduleResult {
  * arithmetic step (per the spec's "Rounding" section) — not a new
  * rounding rule.
  *
- * Known, spec-acknowledged limitation, deliberately NOT addressed here:
- * per-period half-up rounding of `Interest_n` can leave the final period's
+ * `ROUND_REMAINDER_INTO_LAST_REPAYMENT` (`CALCULATION_ENGINE_SPEC.md` §7,
+ * business-decided 2026-07-06 — no legacy evidence existed to confirm this,
+ * so it is a deliberate decision, not a discovered rule): per-period
+ * half-up rounding of `Interest_n` can leave the final period's naive
  * `endingPrincipal` a few centavos away from exactly zero (verified
  * empirically: the spec's own 80,953.71 / 3.7% / 8-installment worked
- * example ends at −0.03, not 0.00, under this exact formula). Absorbing
- * that residual into the final installment is
- * `LoanProductVersion.roundingMethod = ROUND_REMAINDER_INTO_LAST_REPAYMENT`
- * — `CALCULATION_ENGINE_SPEC.md` §7, explicitly `STATUS: UNRESOLVED` and
- * out of scope for this checkpoint. This generator implements only the
- * confirmed §2 formula; it does not invent a remainder-allocation rule.
+ * example would end at −0.03, not 0.00, without this reconciliation).
+ * **Only `principalPortion` absorbs this residual, never `interestPortion`**
+ * — interest is a contractual rate applied to a balance and must not be
+ * inflated/deflated to force a rounding reconciliation; principal is "the
+ * remainder of the balance," which can legitimately absorb a few centavos.
+ * Implemented by overriding the *final* installment's `principalPortion` to
+ * the exact remaining `beginningPrincipal` (guaranteeing `endingPrincipal`
+ * lands on precisely `0.00`) and recomputing that installment's own
+ * `payment` as `interestPortion + principalPortion` — which may therefore
+ * differ by a few centavos from every other installment's `payment` (all
+ * still equal to the regular, formula-computed `monthlyPayment`).
  */
 export class AmortizationScheduleGenerator {
   static generate(principal: Money, monthlyContractualRate: Percentage, installmentCount: number): AmortizationScheduleResult {
@@ -80,7 +87,15 @@ export class AmortizationScheduleGenerator {
     let beginningPrincipal = principal;
     for (let installmentNumber = 1; installmentNumber <= installmentCount; installmentNumber++) {
       const interestPortion = DecliningBalanceInterestCalculator.calculate(beginningPrincipal, monthlyContractualRate);
-      const principalPortion = monthlyPayment.subtract(interestPortion);
+      const isFinalInstallment = installmentNumber === installmentCount;
+
+      // ROUND_REMAINDER_INTO_LAST_REPAYMENT (CALC-SPEC §7): the final
+      // installment's principal is the exact remaining balance, not the
+      // formula's naive `monthlyPayment - interestPortion` — guarantees
+      // `endingPrincipal` lands on exactly 0.00. Every other installment is
+      // unaffected.
+      const principalPortion = isFinalInstallment ? beginningPrincipal : monthlyPayment.subtract(interestPortion);
+      const payment = isFinalInstallment ? interestPortion.add(principalPortion) : monthlyPayment;
       const endingPrincipal = beginningPrincipal.subtract(principalPortion);
 
       schedule.push({
@@ -88,7 +103,7 @@ export class AmortizationScheduleGenerator {
         beginningPrincipal,
         interestPortion,
         principalPortion,
-        payment: monthlyPayment,
+        payment,
         endingPrincipal,
       });
 
