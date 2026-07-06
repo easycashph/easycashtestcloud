@@ -1,11 +1,16 @@
 # ADR-043 — Interim Role-Based Authorization for Milestone 8
 
-**Status:** Accepted (Milestone 8 design review, 2026-07-02)
+**Status:** Accepted (Milestone 8 design review, 2026-07-02). **Superseded for role names as of
+2026-07-06** — see the note below.
 **Context documents:** `docs/PROJECT_HANDOFF.md §7` (ADR-038 status), `PROJECT_RULES.md §User Roles`
-**Relationship to ADR-038:** ADR-038 ("RBAC / permission matrix design timing") is not resolved by
-this ADR — it remains open. This ADR resolves only the narrower question of what gates
-Milestone 8's HTTP endpoints *right now*, so that Milestone 8 does not ship unprotected business
-endpoints while waiting for ADR-038's full design to be settled.
+**Relationship to ADR-038:** at the time this ADR was written, ADR-038 ("RBAC / permission matrix
+design timing") was not resolved by this ADR — it remained open. **`ADR-038` is now Accepted and
+implemented (2026-07-06)** — the *mechanism* this ADR describes (`requireRole`, hard-coded
+route-declared allow-lists, no `Permission`/`RolePermission` database lookup) is still current and
+correct; only the specific role-name examples below (`Administrator`, `Manager`, `Loan Officer`,
+etc.) are stale, superseded by `ADR-038` §1/§3's confirmed roster (MIS, Loan Operation Manager,
+CRM, Finance, Accounting, Collection Officer). Read this ADR for *why* the mechanism exists and
+how it's wired; read `ADR-038` for *which roles* are actually allowed on each route today.
 
 ## 1. Decision
 

@@ -42,10 +42,13 @@ construction, not by convention that could be quietly stretched later:
   represent a principal who does not belong to an internal `Branch`.
 - `shared/http/branchScope.ts`'s entire model (`GLOBAL_ROLES`, `resolveBranchScope`,
   `assertBranchAccess`, `resolveWriteBranchId`) assumes every authenticated caller is staff scoped
-  to exactly one branch, or globally scoped staff (`Administrator`).
-- The seeded `Role` rows (Administrator, Manager, Loan Officer, Cashier, Collection Officer,
-  Viewer — per `docs/PROJECT_HANDOFF.md`) are all internal job titles. No customer/applicant role
-  exists, and none of these roles is a sensible fit for a customer principal.
+  to exactly one branch, or globally scoped staff (`MIS` — renamed 2026-07-06 from `Administrator`
+  per `ADR-038` §1/§3.2; this ADR's underlying point is unaffected by the rename).
+- The seeded `Role` rows (MIS, Loan Operation Manager, CRM, Finance, Accounting, Collection
+  Officer, per `ADR-038` §1 — renamed 2026-07-06 from the original Administrator/Manager/Loan
+  Officer/Cashier/Collection Officer/Viewer list `docs/PROJECT_HANDOFF.md` describes) are all
+  internal job titles. No customer/applicant role exists, and none of these roles is a sensible
+  fit for a customer principal.
 - `Borrower` — the closest existing concept to "a customer" — is created **by staff**
   (`ORIGINATION_ROLES` gate on `POST /borrowers`) and has no linked login credential of any kind.
   A `Borrower` row today has no way to authenticate as itself.
@@ -70,8 +73,7 @@ A unified table (e.g. `User.userType: 'STAFF' | 'CUSTOMER'`) was considered and 
   accounts, whenever they exist, will be self-registered or created from a `Borrower`/application
   record, carry no branch or internal role, and must never be reachable by the internal
   `requireRole`/`branchScope` machinery — a bug that let a customer session pass through
-  `requireRole('Administrator', ...)` by accident would be a severe security failure, not a
-  cosmetic one.
+  `requireRole('MIS', ...)` by accident would be a severe security failure, not a cosmetic one.
 - **Different growth trajectory.** Internal staff count is small and stable (bounded by branch
   headcount). Customer/applicant count is the platform's actual scale target (10,000+ borrowers
   per `CLAUDE.md`) and will eventually need its own independent concerns (self-service password

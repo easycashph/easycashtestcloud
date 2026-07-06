@@ -31,7 +31,7 @@ cp frontend/.env.example frontend/.env
 npm run prisma:migrate
 npm run prisma:seed
 
-# 5. Create the first Administrator account (one-time; refuses to run twice —
+# 5. Create the first MIS account (one-time; refuses to run twice —
 #    see backend/scripts/bootstrap-admin.ts). Prompts interactively, or set
 #    BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD / _FIRST_NAME / _LAST_NAME.
 npm run bootstrap:admin --workspace backend

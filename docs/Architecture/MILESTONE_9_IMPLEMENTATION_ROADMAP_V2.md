@@ -298,7 +298,7 @@ the review's findings adequately, which the rest of this document addresses dire
    • Partial-period / day-count interest (CALC-SPEC §8 has zero real test
      vectors and no caller in this plan)
 
- OPTIONAL, DEFERRED (own future milestone):
+ DONE, COMMITTED (2026-07-06, commit `eaee6c0`):
    • CP13: HTTP exposure (activate/payment routes, controllers, presenters)
      — includes idempotency-key design (relocated here per Decision Log #9)
 ```
@@ -326,7 +326,7 @@ the recommended order is:
 10. CP10 — Golden-master replay tests
 11. *(done, committed `b4c00d1`)* CP11 — `collectionsBalance`/`accountingBalance` summary getters — ADR-007 §3 resolved 2026-07-05, no longer gated
 12. *(separate track, gate)* CP12 — legacy migration treatment, once ADR-007 §4 is decided
-13. *(future milestone)* CP13 — HTTP exposure, including idempotency-key design
+13. *(done, committed `eaee6c0`)* CP13 — HTTP exposure, including idempotency-key design — see `docs/Architecture/ADR-038-full-permission-matrix.md` §3.6 for the role mapping this shipped with
 
 ---
 
@@ -416,13 +416,17 @@ Unchanged in substance from the original roadmap's Checkpoint 11 — a data-migr
 the 79 non-reconciling `CLOSED` loans, per whichever option (A/B/C/D) is selected from
 `ADR-007_DECISION_BRIEF.md`. Does not block CP7–CP10 (per `ADR-007` §6).
 
-### CP13 (OPTIONAL, future milestone) — HTTP Exposure
-`POST /loan-accounts/:id/activate`, `POST /loan-accounts/:id/payments` (or similar), routes, Zod
-schemas, controllers, `requireRole`/`branchScope` wiring, presenter updates. **Change from
-original:** now explicitly includes idempotency-key handling in its scope (Decision Log #9) — a
-client-supplied key, checked via a small, purpose-built lookup (not the audit logger), rejecting a
-duplicate resubmission before it reaches the use case layer. Not detailed further here — a Milestone
-9.2 candidate.
+### CP13 (Milestone 9.2) — HTTP Exposure — **Done, committed 2026-07-06 (`eaee6c0`)**
+`POST /loan-accounts/:id/activate`, `POST /loan-accounts/:id/payments`, routes, Zod schemas,
+controllers, `requireRole`/`branchScope` wiring, presenter reuse (no changes needed to
+`LoanAccountPresenter`). Includes idempotency-key handling per Decision Log #9 — a client-supplied
+`Idempotency-Key` header, checked via a new `IIdempotencyKeyStore` port +
+`PrismaIdempotencyKeyStore` implementation (not the audit logger), rejecting a duplicate
+resubmission before it reaches the use case layer via the `withIdempotency()` HTTP helper
+(`shared/http/idempotency.ts`). Role mapping (`ADR-038` §3.6, confirmed ahead of this
+implementation): `activate` uses the same tier as approve/reject; `payments` uses a different,
+business-confirmed tier (MIS, Loan Operation Manager, Accounting, Collection Officer). See
+`docs/PROJECT_HANDOFF.md` §1 for the full implementation summary and test counts.
 
 ---
 
@@ -434,7 +438,7 @@ duplicate resubmission before it reaches the use case layer. Not detailed furthe
 | PMT/Decimal precision drift masked by centavo-rounded assertions | Medium | High | Higher-precision intermediate assertions + new invariant tests (CP10-adjacent) | Strengthened |
 | Overpayment remainder given an invented disposition instead of being surfaced | Low-Medium (newly named) | Medium | Explicit output field in `ProcessPaymentUseCase`, tested | **New**, named explicitly this pass |
 | Multi-module `IUnitOfWork` orchestration bug undetectable by mocked tests | Medium | High | Golden-master tests (CP10) substantially reduce this risk even without live Postgres; live-Postgres access remains strongly encouraged, not blocking | Downgraded from "requirement" to "strongly encouraged," per Decision Log #10 |
-| Idempotency gap allowing duplicate activation/payment on client retry | Medium (once CP13 exists) | Very High | Deferred to CP13's explicit scope, not left unaddressed | Relocated, not dropped |
+| Idempotency gap allowing duplicate activation/payment on client retry | **Resolved, CP13 (2026-07-06)** | Very High | `withIdempotency()` + `IdempotencyKey` table, implemented in CP13's own scope, not left unaddressed | Relocated, then closed |
 | CP7 aggregate methods accumulate untested branching logic over time | Low currently, revisit if it grows | Medium | No new abstraction added pre-emptively (Decision Log #14); revisit if a second complex use case demonstrates real shared-policy need | New framing, replaces the rejected `LoanActivationPolicy` |
 
 ---
@@ -469,9 +473,10 @@ duplicate resubmission before it reaches the use case layer. Not detailed furthe
   once that decision is made, does not require revisiting 9.1a's work.
 - **Migration track** (CP12): gated on ADR-007 §4 — a genuinely separate workstream (data migration,
   not live calculation-engine code), can proceed on its own schedule once decided.
-- **Milestone 9.2** (CP13, optional/future): HTTP exposure, only appropriate once 9.1a/9.1b's use
-  cases exist as real, correctness-gated callers — matches this project's own established D-2
-  precedent (`ledger`/`repayment` stayed read-only until their real callers existed).
+- **Milestone 9.2** (CP13) — **Done, committed 2026-07-06 (`eaee6c0`)**: HTTP exposure, started
+  once 9.1a/9.1b's use cases existed as real, correctness-gated callers — matched this project's
+  own established D-2 precedent (`ledger`/`repayment` stayed read-only until their real callers
+  existed; `loan-account`'s activate/payment use cases followed the same discipline until CP13).
 - **Explicit placeholder recommended** (Decision Log #22): add a line to `PROJECT_HANDOFF.md`'s
   Milestone 9 section noting that Flat-Rate interest, Penalty calculation, Overpayment-mechanism
   design, Maturity-capitalization timing, and Reversal/Adjustment data-modeling remain the five
@@ -507,11 +512,13 @@ resolved before CP1–CP10 — those calculations simply aren't being built in t
 CP10 (or any parallel ordering respecting the dependency graph above). CP8 is now fully unblocked —
 `ADR-045` (schedule due-date generation) has been resolved (Concept 1, Exact First Repayment Date).
 
-**Done, committed (`b4c00d1`):** CP11 — `ADR-007` §3 was resolved 2026-07-05 (Option B), no longer a gate.
+**Done, committed (`e9448ed`, hash current as of the 2026-07-06 history rewrite — see
+`docs/PROJECT_HANDOFF.md` §1's note on that rewrite):** CP11 — `ADR-007` §3 was resolved
+2026-07-05 (Option B), no longer a gate.
 
 **Do not start until `ADR-007` §4 is decided (separate track, does not block the above):** CP12.
 
-**Defer to a future milestone:** CP13 (HTTP exposure), and the two deferred/not-scheduled
+**Done, committed (`eaee6c0`):** CP13 (HTTP exposure). Still deferred: the two deferred/not-scheduled
 calculations (Add-On/Contractual conversion, partial-period interest) until a real caller for
 either is scoped.
 
