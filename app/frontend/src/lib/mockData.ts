@@ -817,11 +817,42 @@ export const DASHBOARD_SUMMARY = {
 };
 
 const MONTH_LABELS = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
+const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export const DISBURSEMENT_TREND = MONTH_LABELS.map((month, i) => ({
-  month,
-  disbursed: round2(900_000 + i * 60_000 + rng() * 120_000),
-}));
+/**
+ * Loan Disbursement Trend — a real bottom-up sum of `principalAmount` for every loan whose
+ * `activatedAt` falls in each of the last `monthsBack` calendar months, not a fabricated series.
+ * Exported as a reusable builder so the Dashboard can recompute it against a filtered loan subset
+ * (by category and/or origination date range), same as the other portfolio widgets.
+ */
+export function buildDisbursementTrend(
+  loans: MockLoanAccount[],
+  monthsBack = 6,
+): { month: string; year: number; monthIndex: number; disbursed: number }[] {
+  const now = new Date();
+  const buckets: { month: string; year: number; monthIndex: number; disbursed: number }[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    let disbursed = 0;
+    for (const loan of loans) {
+      if (!loan.activatedAt) continue;
+      const activated = new Date(loan.activatedAt);
+      if (activated.getFullYear() === target.getFullYear() && activated.getMonth() === target.getMonth()) {
+        disbursed += loan.principalAmount;
+      }
+    }
+    buckets.push({
+      month: MONTH_SHORT_NAMES[target.getMonth()]!,
+      year: target.getFullYear(),
+      monthIndex: target.getMonth(),
+      disbursed: round2(disbursed),
+    });
+  }
+  return buckets;
+}
+
+/** Portfolio-wide baseline (no filter applied). */
+export const DISBURSEMENT_TREND = buildDisbursementTrend(MOCK_LOANS);
 
 export const COLLECTIONS_VS_TARGET = MONTH_LABELS.map((month) => ({
   month,
@@ -846,11 +877,49 @@ export function getDashboardLoanCategory(loan: MockLoanAccount): string {
   return 'Other (Legacy)';
 }
 
-/** Clearly labeled as a sample projection in the UI — not a real forecasting model. */
-export const SAMPLE_COLLECTIONS_PROJECTION = ['Aug', 'Sep', 'Oct', 'Nov'].map((month, i) => ({
-  month,
-  projected: round2(1_050_000 + i * 35_000),
-}));
+/**
+ * Collections Forecast — a bottom-up cash-flow projection, not a top-down statistical model.
+ * Rather than extrapolating a trend line from past collections (which has no idea what's
+ * actually contractually due), this sums the real scheduled installment amounts (principal +
+ * interest + fees + penalty, from each active loan's own `MOCK_INSTALLMENTS` schedule) falling
+ * due in each of the next 4 months — a number the business can already know exactly, since every
+ * active loan's repayment schedule is fixed at origination — then applies the portfolio's own
+ * recent collection-realization rate (average actual/target from `COLLECTIONS_VS_TARGET`) to
+ * account for the reality that not everything scheduled is actually collected on time. This is
+ * the standard approach for a loan portfolio (known future amortization × a realistic collection
+ * rate) and is far more defensible than fitting a curve to historical totals alone. Still
+ * labeled "Sample Projection" in the UI — real historical collection-rate data, not a fitted
+ * statistical model, and the realization rate here is a simple average, not a trend/seasonality-
+ * aware estimate (see the in-app note for what a further-improved version would add).
+ */
+function buildCollectionsForecast(monthsAhead = 4): { month: string; projected: number; scheduledDue: number }[] {
+  const activeLoans = MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status));
+  const realizationRate =
+    COLLECTIONS_VS_TARGET.reduce((sum, m) => sum + (m.target > 0 ? m.actual / m.target : 1), 0) / COLLECTIONS_VS_TARGET.length;
+  const now = new Date();
+  const forecast: { month: string; projected: number; scheduledDue: number }[] = [];
+  for (let i = 1; i <= monthsAhead; i++) {
+    const target = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    let scheduledDue = 0;
+    for (const loan of activeLoans) {
+      for (const inst of MOCK_INSTALLMENTS[loan.id] ?? []) {
+        const due = new Date(inst.dueDate);
+        if (due.getFullYear() === target.getFullYear() && due.getMonth() === target.getMonth()) {
+          scheduledDue += inst.due.principal + inst.due.interest + inst.due.fees + inst.due.penalty;
+        }
+      }
+    }
+    forecast.push({
+      month: MONTH_SHORT_NAMES[target.getMonth()]!,
+      scheduledDue: round2(scheduledDue),
+      projected: round2(scheduledDue * realizationRate),
+    });
+  }
+  return forecast;
+}
+
+/** Clearly labeled as a sample projection in the UI — see `buildCollectionsForecast`'s doc comment for the methodology. */
+export const SAMPLE_COLLECTIONS_PROJECTION = buildCollectionsForecast();
 
 // ---------------------------------------------------------------------------
 // Client Data — borrower profiles. Same 18 real names as MOCK_LOANS, plus
@@ -1134,12 +1203,8 @@ export function buildPortfolioHealth(loans: MockLoanAccount[]) {
   };
 }
 
-/** Portfolio-wide baseline (no filter applied) — used by the Quality Metrics and Recommendation cards. */
+/** Portfolio-wide baseline (no filter applied) — used by the Recommendation card. */
 export const PORTFOLIO_HEALTH = buildPortfolioHealth(MOCK_LOANS);
-const PORTFOLIO_HEALTH_ARREARS_LOANS = PORTFOLIO_HEALTH.activeInArrears.loans;
-const PORTFOLIO_HEALTH_MATURED_LOANS = PORTFOLIO_HEALTH.matured.loans;
-const PORTFOLIO_HEALTH_GOOD_LOANS = PORTFOLIO_HEALTH.good.loans;
-const PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS = PORTFOLIO_HEALTH.writtenOff.loans;
 
 /**
  * Portfolio Breakdown by Category — outstanding principal of ACTIVE/ACTIVE_IN_ARREARS loans
@@ -1177,17 +1242,20 @@ export const LOAN_CATEGORY_OPTIONS: string[] = PORTFOLIO_BY_CATEGORY.map((slice)
 
 /**
  * Industry-standard portfolio quality metrics (per the standard definitions popularized on
- * Investopedia), computed live from the sample portfolio. "Delinquent/at-risk" here means
- * overdue but still active — both `ACTIVE_IN_ARREARS` (overdue within term) and `MATURED`
- * (past the full term, still unpaid):
+ * Investopedia). "Delinquent/at-risk" here means overdue but still active — both
+ * `ACTIVE_IN_ARREARS` (overdue within term) and `MATURED` (past the full term, still unpaid):
  * - Delinquency Rate — % of active loan accounts that are overdue (count-based).
  * - Portfolio at Risk (PAR) — outstanding balance of overdue loans ÷ total outstanding balance
  *   of the active portfolio (balance-weighted, the more telling of the two).
  * - Average Loan Size — mean original principal across active accounts.
+ * Exported as a reusable builder (not just a fixed constant) so the Dashboard can recompute it
+ * against a filtered loan subset — every quality metric is meant to move with the Portfolio
+ * Filter, not just Portfolio Breakdown / Loan Portfolio Health.
  */
-export const PORTFOLIO_QUALITY_METRICS = (() => {
-  const delinquentLoans = [...PORTFOLIO_HEALTH_ARREARS_LOANS, ...PORTFOLIO_HEALTH_MATURED_LOANS];
-  const activePortfolio = [...PORTFOLIO_HEALTH_GOOD_LOANS, ...delinquentLoans];
+export function buildPortfolioQualityMetrics(loans: MockLoanAccount[]) {
+  const health = buildPortfolioHealth(loans);
+  const delinquentLoans = [...health.activeInArrears.loans, ...health.matured.loans];
+  const activePortfolio = [...health.good.loans, ...delinquentLoans];
   const totalOutstanding = sumLoans(activePortfolio, (l) => l.collectionsBalance);
   const delinquentOutstanding = sumLoans(delinquentLoans, (l) => l.collectionsBalance);
   return {
@@ -1196,9 +1264,12 @@ export const PORTFOLIO_QUALITY_METRICS = (() => {
     portfolioAtRiskPercent: totalOutstanding === 0 ? 0 : round2((delinquentOutstanding / totalOutstanding) * 100),
     averageLoanSize:
       activePortfolio.length === 0 ? 0 : round2(activePortfolio.reduce((sum, l) => sum + l.principalAmount, 0) / activePortfolio.length),
-    writtenOffExposure: sumLoans(PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS, (l) => l.collectionsBalance),
+    writtenOffExposure: sumLoans(health.writtenOff.loans, (l) => l.collectionsBalance),
   };
-})();
+}
+
+/** Portfolio-wide baseline (no filter applied). */
+export const PORTFOLIO_QUALITY_METRICS = buildPortfolioQualityMetrics(MOCK_LOANS);
 
 // ---------------------------------------------------------------------------
 // Generated Documents — mock registry for the Administration section. The

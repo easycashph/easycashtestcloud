@@ -29,17 +29,16 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import {
+  buildDisbursementTrend,
   buildPortfolioByCategory,
   buildPortfolioHealth,
+  buildPortfolioQualityMetrics,
   COLLECTIONS_VS_TARGET,
   DASHBOARD_SUMMARY,
-  DISBURSEMENT_TREND,
   getDashboardLoanCategory,
   LOAN_CATEGORY_OPTIONS,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOANS,
-  PORTFOLIO_HEALTH,
-  PORTFOLIO_QUALITY_METRICS,
   SAMPLE_COLLECTIONS_PROJECTION,
   type PortfolioCategorySlice,
 } from '@/lib/mockData';
@@ -47,7 +46,7 @@ import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const round2Peso = (value: number) => Math.round(value * 100) / 100;
 
 const VENN_SEGMENT_META: Record<PortfolioHealthSegment, { title: string; description: string }> = {
   good: {
@@ -192,10 +191,14 @@ export function DashboardPage() {
   useLogPageView('Dashboard');
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
-  // Shared filter state for the two portfolio widgets below (Portfolio Breakdown by Loan Category
-  // and Loan Portfolio Health) — filters by loan category and by origination date range. Every
-  // other dashboard card (Quality Metrics, Recommendation, the other charts) intentionally stays
-  // portfolio-wide, unaffected by this filter.
+  // Portfolio Filter — the master filter for the whole Dashboard (loan category + origination
+  // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
+  // Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health) reacts
+  // to it. Two cards are deliberately exempt, by design, not oversight: Collections Forecast
+  // (a bottom-up projection from each active loan's own fixed repayment schedule — filtering it
+  // by category/date would just be a different, narrower forecast, not a clearer one, and the
+  // point of a portfolio-wide cash-flow forecast is to answer "how much is coming in overall") and
+  // Recommendation (portfolio-wide strategic guidance, not a report figure).
   const [categoryFilter, setCategoryFilter] = React.useState<string>(ALL_CATEGORIES);
   const [dateRange, setDateRange] = React.useState<DateRange>(EMPTY_DATE_RANGE);
   const isFiltered = categoryFilter !== ALL_CATEGORIES || dateRange.from !== '' || dateRange.to !== '';
@@ -221,6 +224,14 @@ export function DashboardPage() {
     () => buildPortfolioByCategory(portfolioFilteredLoans),
     [portfolioFilteredLoans],
   );
+  const filteredQualityMetrics = React.useMemo(
+    () => buildPortfolioQualityMetrics(portfolioFilteredLoans),
+    [portfolioFilteredLoans],
+  );
+  const filteredDisbursementTrend = React.useMemo(
+    () => buildDisbursementTrend(portfolioFilteredLoans, 6),
+    [portfolioFilteredLoans],
+  );
   const filteredActiveCount =
     filteredPortfolioHealth.good.count + filteredPortfolioHealth.activeInArrears.count + filteredPortfolioHealth.matured.count;
   const filteredOutstandingTotal =
@@ -229,28 +240,46 @@ export function DashboardPage() {
       filteredPortfolioHealth.activeInArrears.collectionsBalance +
       filteredPortfolioHealth.matured.collectionsBalance;
 
-  // The active portfolio is every still-active account: performing (good), in arrears, AND
-  // past-maturity-but-unpaid (matured). Must match DASHBOARD_SUMMARY.totalActiveLoans and the
-  // PORTFOLIO_QUALITY_METRICS denominators, which all include MATURED — otherwise a figure and
-  // its drill-down list disagree. (Portfolio-wide, not affected by the category/date filter above.)
-  const activePortfolioLoans = React.useMemo(
-    () => [...PORTFOLIO_HEALTH.good.loans, ...PORTFOLIO_HEALTH.activeInArrears.loans, ...PORTFOLIO_HEALTH.matured.loans],
-    [],
+  // Every active loan under the current filter (performing, in arrears, and past-maturity-but-
+  // unpaid) — the denominator/drill-down set behind the filtered Total Active Loans and Average
+  // Loan Size figures.
+  const filteredActivePortfolioLoans = React.useMemo(
+    () => [...filteredPortfolioHealth.good.loans, ...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    [filteredPortfolioHealth],
   );
 
   // Delinquent = overdue but still active: in arrears (overdue within term) + matured (past the
   // full term, still unpaid). This is the numerator behind the Delinquency Rate and PAR metrics.
-  const delinquentLoans = React.useMemo(
-    () => [...PORTFOLIO_HEALTH.activeInArrears.loans, ...PORTFOLIO_HEALTH.matured.loans],
-    [],
+  const filteredDelinquentLoans = React.useMemo(
+    () => [...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    [filteredPortfolioHealth],
+  );
+
+  // Collections This Month and Collections vs. Target have no per-loan, per-calendar-month payment
+  // date in the mock data model to sum bottom-up (see the Collections Forecast doc comment in
+  // mockData.ts for why the Forecast card *can* do this and these two can't). Scaled proportionally
+  // to how much of the whole portfolio's outstanding principal the current filter selects, so the
+  // figures still move honestly with the filter instead of staying frozen — clearly disclosed as
+  // an estimate, not implied precision.
+  const filterRatio = DASHBOARD_SUMMARY.totalPortfolioValue > 0 ? filteredOutstandingTotal / DASHBOARD_SUMMARY.totalPortfolioValue : 1;
+  const scaledCollectionsThisMonth = round2Peso(DASHBOARD_SUMMARY.totalCollectionsThisMonth * filterRatio);
+  const scaledCollectionsVsTarget = React.useMemo(
+    () =>
+      COLLECTIONS_VS_TARGET.map((m) => ({
+        month: m.month,
+        target: round2Peso(m.target * filterRatio),
+        actual: round2Peso(m.actual * filterRatio),
+      })),
+    [filterRatio],
   );
 
   const openDelinquentAccounts = () =>
     setDrillDown({
       title: 'Delinquent Accounts',
       description:
-        'Overdue but still active — accounts in arrears (overdue within term) plus matured accounts (past the full term, still unpaid). This is the set behind the Delinquency Rate and Portfolio-at-Risk figures.',
-      loans: delinquentLoans,
+        'Overdue but still active — accounts in arrears (overdue within term) plus matured accounts (past the full term, still unpaid). This is the set behind the Delinquency Rate and Portfolio-at-Risk figures.' +
+        (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
+      loans: filteredDelinquentLoans,
     });
 
   const openVennSegment = (segment: PortfolioHealthSegment) =>
@@ -259,202 +288,37 @@ export function DashboardPage() {
   const openCategorySlice = (slice: PortfolioCategorySlice) =>
     setDrillDown({
       title: `${slice.category} — Active Portfolio`,
-      description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.${isFiltered ? ' Reflects the filter currently applied above.' : ''}`,
+      description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.${isFiltered ? ' Reflects the Portfolio Filter above.' : ''}`,
       loans: slice.loans,
     });
 
-  const openDisbursementMonth = (month: string) => {
-    const year = new Date().getFullYear();
-    const monthIdx = MONTH_NAMES.indexOf(month);
-    const loans = MOCK_LOANS.filter((l) => {
+  const openDisbursementMonth = (bucket: { month: string; year: number; monthIndex: number }) => {
+    const loans = portfolioFilteredLoans.filter((l) => {
       if (!l.activatedAt) return false;
       const activated = new Date(l.activatedAt);
-      return activated.getMonth() === monthIdx && activated.getFullYear() === year;
+      return activated.getMonth() === bucket.monthIndex && activated.getFullYear() === bucket.year;
     });
     setDrillDown({
-      title: `Loans activated in ${month} ${year}`,
+      title: `Loans activated in ${bucket.month} ${bucket.year}`,
       description:
-        'Bar heights are sample aggregate figures; this list shows the mock loan accounts whose activation date falls in the selected month.',
+        'The mock loan accounts whose activation date falls in the selected month.' +
+        (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
       loans,
     });
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
-        <p className="text-sm text-muted-foreground">
-          Portfolio summary across all branches — sample data. Click a chart segment, bar, or figure to see the loan accounts behind
-          it.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          title="Total Active Loans"
-          value={DASHBOARD_SUMMARY.totalActiveLoans.toString()}
-          hint={`${formatPeso(DASHBOARD_SUMMARY.totalPortfolioValue)} outstanding principal`}
-          icon={Landmark}
-          onClick={() =>
-            setDrillDown({
-              title: 'Total Active Loans',
-              description: 'All still-active loan accounts across all branches — ACTIVE, ACTIVE_IN_ARREARS, and MATURED.',
-              loans: activePortfolioLoans,
-            })
-          }
-        />
-        <SummaryCard
-          title="Collections This Month"
-          value={formatPeso(DASHBOARD_SUMMARY.totalCollectionsThisMonth)}
-          hint="Across all branches"
-          icon={Banknote}
-        />
-        <SummaryCard
-          title="Overdue Accounts"
-          value={DASHBOARD_SUMMARY.overdueAccounts.toString()}
-          hint={`${formatPeso(DASHBOARD_SUMMARY.overdueAmount)} at risk (collections balance)`}
-          icon={AlertOctagon}
-          tone="destructive"
-          onClick={() => openVennSegment('activeInArrears')}
-        />
-        <SummaryCard
-          title="Portfolio Growth"
-          value="+4.8%"
-          hint="Month-over-month disbursement"
-          icon={TrendingUp}
-        />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Portfolio Quality Metrics</CardTitle>
-          <CardDescription>
-            Industry-standard portfolio quality indicators, computed live from the sample portfolio. Hover the ⓘ for each term's
-            definition; click a value to see the accounts behind it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricItem
-            term={FINANCIAL_GLOSSARY.delinquencyRate.term}
-            definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
-            value={`${PORTFOLIO_QUALITY_METRICS.delinquencyRatePercent.toFixed(1)}%`}
-            onClick={openDelinquentAccounts}
-          />
-          <MetricItem
-            term={FINANCIAL_GLOSSARY.portfolioAtRisk.term}
-            definition={FINANCIAL_GLOSSARY.portfolioAtRisk.definition}
-            value={`${PORTFOLIO_QUALITY_METRICS.portfolioAtRiskPercent.toFixed(1)}%`}
-            onClick={openDelinquentAccounts}
-          />
-          <MetricItem
-            term={FINANCIAL_GLOSSARY.averageLoanSize.term}
-            definition={FINANCIAL_GLOSSARY.averageLoanSize.definition}
-            value={formatPeso(PORTFOLIO_QUALITY_METRICS.averageLoanSize)}
-            onClick={() =>
-              setDrillDown({
-                title: 'Active Portfolio',
-                description:
-                  'All still-active loan accounts (ACTIVE, ACTIVE_IN_ARREARS, MATURED) used to compute the average loan size.',
-                loans: activePortfolioLoans,
-              })
-            }
-          />
-          <MetricItem
-            term={FINANCIAL_GLOSSARY.writeOff.term}
-            definition={FINANCIAL_GLOSSARY.writeOff.definition}
-            value={formatPeso(PORTFOLIO_QUALITY_METRICS.writtenOffExposure)}
-            onClick={() =>
-              setDrillDown({
-                title: 'Written-off Loan Accounts',
-                description: 'CLOSED_WRITTEN_OFF accounts — the realized-loss segment behind the Write-off exposure metric.',
-                loans: PORTFOLIO_HEALTH.writtenOff.loans,
-              })
-            }
-          />
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loan Disbursement Trend</CardTitle>
-            <CardDescription>Monthly gross disbursement, last 6 months — click a bar for that month's activated accounts</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={DISBURSEMENT_TREND}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
-                <Bar
-                  dataKey="disbursed"
-                  fill="hsl(var(--chart-1))"
-                  radius={[4, 4, 0, 0]}
-                  cursor="pointer"
-                  onClick={(data) => {
-                    const month = (data as { payload?: { month?: string } }).payload?.month;
-                    if (month) openDisbursementMonth(month);
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Collections vs. Target</CardTitle>
-            <CardDescription>Monthly actual collections against target</CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={COLLECTIONS_VS_TARGET}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
-                <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
-                <Line type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>Collections Forecast</CardTitle>
-              <CardDescription>Simple projected trend, next 4 months</CardDescription>
-            </div>
-            <Badge variant="warning">Sample Projection</Badge>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={SAMPLE_COLLECTIONS_PROJECTION}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
-                <Line type="monotone" dataKey="projected" stroke="hsl(var(--chart-4))" strokeWidth={2} strokeDasharray="6 3" />
-              </LineChart>
-            </ResponsiveContainer>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Illustrative only — a simple linear projection over sample data, not a statistical forecasting model. No real forecasting
-              engine exists yet.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card>
         <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-primary" />
             <div>
-              <CardTitle className="text-base">Portfolio Filters</CardTitle>
+              <CardTitle className="text-base">Portfolio Filter</CardTitle>
               <CardDescription>
-                Applies to Portfolio Breakdown by Loan Category and Loan Portfolio Health below — totals recompute live.
+                Drives every portfolio card below — Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target,
+                Portfolio Breakdown, and Loan Portfolio Health all recompute live. Collections Forecast and Recommendation are
+                portfolio-wide by design and stay unaffected.
               </CardDescription>
             </div>
           </div>
@@ -494,6 +358,185 @@ export function DashboardPage() {
           </p>
         </CardContent>
       </Card>
+
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
+        <p className="text-sm text-muted-foreground">
+          Portfolio summary across all branches — sample data{isFiltered ? ', reflecting the Portfolio Filter above' : ''}. Click a
+          chart segment, bar, or figure to see the loan accounts behind it.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard
+          title="Total Active Loans"
+          value={filteredActiveCount.toString()}
+          hint={`${formatPeso(filteredOutstandingTotal)} outstanding principal`}
+          icon={Landmark}
+          onClick={() =>
+            setDrillDown({
+              title: 'Total Active Loans',
+              description:
+                'All still-active loan accounts — ACTIVE, ACTIVE_IN_ARREARS, and MATURED.' +
+                (isFiltered ? ' Reflects the Portfolio Filter above.' : ' Across all branches.'),
+              loans: filteredActivePortfolioLoans,
+            })
+          }
+        />
+        <SummaryCard
+          title="Collections This Month"
+          value={formatPeso(scaledCollectionsThisMonth)}
+          hint={isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
+          icon={Banknote}
+        />
+        <SummaryCard
+          title="Overdue Accounts"
+          value={filteredPortfolioHealth.activeInArrears.count.toString()}
+          hint={`${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`}
+          icon={AlertOctagon}
+          tone="destructive"
+          onClick={() => openVennSegment('activeInArrears')}
+        />
+        <SummaryCard
+          title="Portfolio Growth"
+          value="+4.8%"
+          hint="Month-over-month disbursement (portfolio-wide)"
+          icon={TrendingUp}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio Quality Metrics</CardTitle>
+          <CardDescription>
+            Industry-standard portfolio quality indicators, computed live{isFiltered ? ' against the Portfolio Filter above' : ''}.
+            Hover the ⓘ for each term's definition; click a value to see the accounts behind it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricItem
+            term={FINANCIAL_GLOSSARY.delinquencyRate.term}
+            definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
+            value={`${filteredQualityMetrics.delinquencyRatePercent.toFixed(1)}%`}
+            onClick={openDelinquentAccounts}
+          />
+          <MetricItem
+            term={FINANCIAL_GLOSSARY.portfolioAtRisk.term}
+            definition={FINANCIAL_GLOSSARY.portfolioAtRisk.definition}
+            value={`${filteredQualityMetrics.portfolioAtRiskPercent.toFixed(1)}%`}
+            onClick={openDelinquentAccounts}
+          />
+          <MetricItem
+            term={FINANCIAL_GLOSSARY.averageLoanSize.term}
+            definition={FINANCIAL_GLOSSARY.averageLoanSize.definition}
+            value={formatPeso(filteredQualityMetrics.averageLoanSize)}
+            onClick={() =>
+              setDrillDown({
+                title: 'Active Portfolio',
+                description:
+                  'All still-active loan accounts (ACTIVE, ACTIVE_IN_ARREARS, MATURED) used to compute the average loan size.' +
+                  (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
+                loans: filteredActivePortfolioLoans,
+              })
+            }
+          />
+          <MetricItem
+            term={FINANCIAL_GLOSSARY.writeOff.term}
+            definition={FINANCIAL_GLOSSARY.writeOff.definition}
+            value={formatPeso(filteredQualityMetrics.writtenOffExposure)}
+            onClick={() =>
+              setDrillDown({
+                title: 'Written-off Loan Accounts',
+                description:
+                  'CLOSED_WRITTEN_OFF accounts — the realized-loss segment behind the Write-off exposure metric.' +
+                  (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
+                loans: filteredPortfolioHealth.writtenOff.loans,
+              })
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loan Disbursement Trend</CardTitle>
+            <CardDescription>
+              Monthly gross disbursement, last 6 months — click a bar for that month's activated accounts
+              {isFiltered ? ' · reflects the Portfolio Filter above' : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={filteredDisbursementTrend}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={pesoTooltipFormatter} />
+                <Bar
+                  dataKey="disbursed"
+                  fill="hsl(var(--chart-1))"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data) => {
+                    const bucket = (data as { payload?: { month: string; year: number; monthIndex: number } }).payload;
+                    if (bucket) openDisbursementMonth(bucket);
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Collections vs. Target</CardTitle>
+            <CardDescription>
+              Monthly actual collections against target
+              {isFiltered ? ' · estimated for the selected filter, scaled proportionally to outstanding principal' : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={scaledCollectionsVsTarget}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={pesoTooltipFormatter} />
+                <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
+                <Line type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Collections Forecast</CardTitle>
+              <CardDescription>Next 4 months, from each active loan's own repayment schedule — portfolio-wide, not affected by the Portfolio Filter</CardDescription>
+            </div>
+            <Badge variant="warning">Sample Projection</Badge>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={SAMPLE_COLLECTIONS_PROJECTION}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={pesoTooltipFormatter} />
+                <Line type="monotone" dataKey="projected" stroke="hsl(var(--chart-4))" strokeWidth={2} strokeDasharray="6 3" />
+              </LineChart>
+            </ResponsiveContainer>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bottom-up, not a fitted trend line: sums each active loan's actual scheduled installments due per month, then applies
+              the portfolio's own recent collection-realization rate (average actual ÷ target). Stays portfolio-wide by design — a
+              cash-flow forecast is most useful as a whole-company number. Still a sample-data illustration, not a production
+              forecasting engine.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -573,7 +616,10 @@ export function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Sparkles className="h-4 w-4 text-primary" />
-          <CardTitle>Recommendation</CardTitle>
+          <div>
+            <CardTitle>Recommendation</CardTitle>
+            <CardDescription>Portfolio-wide strategic guidance — not affected by the Portfolio Filter above.</CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-3">

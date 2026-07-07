@@ -8,6 +8,35 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-07
 
+### Dashboard — reordered; Portfolio Filter is now the master filter for the whole page
+- Section order changed to: **Portfolio Filter → Overview → Portfolio Quality Metrics → Loan
+  Disbursement Trend → Collections vs. Target → Collections Forecast → Portfolio Breakdown by Loan
+  Category → Loan Portfolio Health → Recommendation.** Portfolio Filter now sits at the very top.
+- The Portfolio Filter (loan category + date range) now drives every portfolio card, not just
+  Portfolio Breakdown and Loan Portfolio Health: **Overview**'s Total Active Loans, Collections
+  This Month, and Overdue Accounts; **Portfolio Quality Metrics**' Delinquency Rate, PAR, Average
+  Loan Size, and Write-off exposure (verified live: filtering to "Business Loan" correctly shows
+  the one written-off loan's ₱105,783.33 exposure, while "Salary Loan" correctly shows ₱0.00 —
+  the write-off bucket now respects category too); and **Loan Disbursement Trend**, rebuilt as a
+  real bottom-up sum of `principalAmount` by `activatedAt` month (`buildDisbursementTrend` in
+  `mockData.ts`) instead of a fabricated series, so it can be filtered meaningfully.
+- **Collections vs. Target** and **Collections This Month** have no per-loan, per-calendar-month
+  payment-date field to sum bottom-up, so they're scaled proportionally to how much of the
+  portfolio's outstanding principal the current filter selects — clearly disclosed in each card
+  ("Estimated for the selected filter" / "scaled proportionally to outstanding principal"), not
+  presented as more precise than they are.
+- **Collections Forecast** and **Recommendation** are deliberately exempt, by design (each card
+  now says so explicitly): a cash-flow forecast is most useful as a whole-company number, and
+  Recommendation is portfolio-wide strategic guidance, not a report figure.
+- **Collections Forecast methodology improved**: previously a fabricated linear series
+  (`1_050_000 + i*35_000`); now a real bottom-up projection (`buildCollectionsForecast` in
+  `mockData.ts`) that sums each active loan's own scheduled installments (principal + interest +
+  fees + penalty, from `MOCK_INSTALLMENTS`) due in each of the next 4 months, then applies the
+  portfolio's own recent collection-realization rate (average actual ÷ target from
+  `COLLECTIONS_VS_TARGET`). This is the standard approach for a loan portfolio — known future
+  amortization × a realistic collection rate — rather than fitting a trend line to past totals
+  alone.
+
 ### Dashboard — filters + dynamic totals on Portfolio Breakdown and Loan Portfolio Health
 - New shared **Portfolio Filters** card (Loan Category + date-range) sits above both widgets and
   drives them together: **Portfolio Breakdown by Loan Category** (pie) and **Loan Portfolio

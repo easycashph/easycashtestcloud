@@ -40,6 +40,14 @@ legacy/sdevtech/
 # cited ADR-009/ADR-010 evidence base (templates + formula workbook) and stays tracked.
 legacy/reports/*.xlsx
 
+# The live, macro-enabled "OFFICIAL CALCULATOR OF EASYCASH" workbook (.xlsm) — this is not a
+# template, it's the company's actual current production ledger: real client names, birthdates,
+# SSS/TIN numbers, addresses, co-borrower/character-reference PII, and a full edit-history audit
+# trail, with entries as recent as this analysis. Same sensitivity class as legacy/sdevtech/ and
+# legacy/reports/*.xlsx above — must never enter git history. Added 2026-07-07 after this file was
+# found sitting untracked but NOT gitignored (the *.xlsx rule above doesn't match .xlsm).
+legacy/reports/*.xlsm
+
 # Build
 dist/
 build/
