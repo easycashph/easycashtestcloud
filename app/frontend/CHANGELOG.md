@@ -8,6 +8,26 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-07
 
+### Dashboard — Portfolio Filter layout fixed
+- The Filter icon no longer floats mid-paragraph next to the (multi-line) description — it's now
+  top-aligned with the card title (`items-start` + `mt-0.5`, was `items-center` against the whole
+  title+description block).
+- Loan Category, From, and To now sit in a single row together at any width that has room for
+  them (previously waited for a `lg:` 1024px breakpoint, so most normal-width windows showed them
+  needlessly stacked one per line). Verified at mobile (375px, stacks full-width cleanly), a
+  ~624px window (single row), and 1280px desktop.
+- `DateRangeFilter` (shared component) inputs are now `w-full sm:w-40` instead of a fixed `w-40`,
+  so they don't force horizontal scrolling on very narrow screens.
+
+### Loan Accounts — client name links to the client's profile
+- On the Loan Accounts list (`/loans`) and the Loan Account Detail page (`/loans/:id`), the
+  borrower's name is now a link straight to their Client Data profile (`/clients/:borrowerId`).
+  On the list, clicking the name opens the client profile without also triggering the row's own
+  click-through to the loan detail page (`stopPropagation`). New `getMockBorrowerForLoan` helper
+  in `mockData.ts` looks up the matching `MockBorrowerProfile` by `loanIds`; falls back to plain
+  (non-linked) text for the rare loan with no matching client record, so no dead links are ever
+  rendered.
+
 ### Dashboard — reordered; Portfolio Filter is now the master filter for the whole page
 - Section order changed to: **Portfolio Filter → Overview → Portfolio Quality Metrics → Loan
   Disbursement Trend → Collections vs. Target → Collections Forecast → Portfolio Breakdown by Loan

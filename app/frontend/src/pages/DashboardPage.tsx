@@ -310,9 +310,9 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-primary" />
+        <CardHeader className="space-y-4">
+          <div className="flex items-start gap-2">
+            <Filter className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div>
               <CardTitle className="text-base">Portfolio Filter</CardTitle>
               <CardDescription>
@@ -328,7 +328,7 @@ export function DashboardPage() {
                 Loan Category
               </Label>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger id="dashboard-category-filter" className="w-48">
+                <SelectTrigger id="dashboard-category-filter" className="w-full sm:w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

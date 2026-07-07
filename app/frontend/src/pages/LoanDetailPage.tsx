@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Bell, CheckCircle2, Circle, Clock, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import {
   buildReminderMessage,
+  getMockBorrowerForLoan,
   getMockLoan,
   getMockRiskAssessment,
   logActivity,
@@ -346,6 +347,7 @@ export function LoanDetailPage() {
 
   const timeline = MOCK_TIMELINES[loan.id] ?? [];
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const borrower = getMockBorrowerForLoan(loan);
 
   return (
     <div className="space-y-6">
@@ -355,7 +357,15 @@ export function LoanDetailPage() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Button>
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-semibold tracking-tight">{loan.borrowerName}</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {borrower ? (
+                <Link to={`/clients/${borrower.id}`} className="text-primary underline-offset-2 hover:underline">
+                  {loan.borrowerName}
+                </Link>
+              ) : (
+                loan.borrowerName
+              )}
+            </h2>
             <LoanStatusBadge status={loan.status} />
             {loan.isDiscontinuedProduct && <Badge variant="secondary">Discontinued Product</Badge>}
           </div>

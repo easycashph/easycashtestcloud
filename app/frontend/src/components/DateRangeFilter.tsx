@@ -19,13 +19,25 @@ export function DateRangeFilter({ value, onChange }: { value: DateRange; onChang
         <Label htmlFor="date-from" className="text-xs">
           From
         </Label>
-        <Input id="date-from" type="date" value={value.from} onChange={(e) => onChange({ ...value, from: e.target.value })} className="w-40" />
+        <Input
+          id="date-from"
+          type="date"
+          value={value.from}
+          onChange={(e) => onChange({ ...value, from: e.target.value })}
+          className="w-full sm:w-40"
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="date-to" className="text-xs">
           To
         </Label>
-        <Input id="date-to" type="date" value={value.to} onChange={(e) => onChange({ ...value, to: e.target.value })} className="w-40" />
+        <Input
+          id="date-to"
+          type="date"
+          value={value.to}
+          onChange={(e) => onChange({ ...value, to: e.target.value })}
+          className="w-full sm:w-40"
+        />
       </div>
     </div>
   );

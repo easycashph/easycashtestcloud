@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,14 @@ import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { MOCK_ACTIVITY_LOGS, MOCK_LOANS, REPORT_BRANCHES, type LoanAccountStatus, type MockLoanAccount } from '@/lib/mockData';
+import {
+  getMockBorrowerForLoan,
+  MOCK_ACTIVITY_LOGS,
+  MOCK_LOANS,
+  REPORT_BRANCHES,
+  type LoanAccountStatus,
+  type MockLoanAccount,
+} from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function getSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
@@ -160,7 +167,22 @@ export function LoanListPage() {
               {sorted.map((loan) => (
                 <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                   <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
-                  <TableCell className="font-medium">{loan.borrowerName}</TableCell>
+                  <TableCell className="font-medium">
+                    {(() => {
+                      const borrower = getMockBorrowerForLoan(loan);
+                      return borrower ? (
+                        <Link
+                          to={`/clients/${borrower.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {loan.borrowerName}
+                        </Link>
+                      ) : (
+                        loan.borrowerName
+                      );
+                    })()}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{loan.productType}</span>

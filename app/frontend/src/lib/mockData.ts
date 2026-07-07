@@ -1012,6 +1012,11 @@ export function getMockBorrower(id: string): MockBorrowerProfile | undefined {
   return MOCK_BORROWERS.find((b) => b.id === id);
 }
 
+/** Finds the Client Data profile a loan account belongs to, so its borrower name can link there. */
+export function getMockBorrowerForLoan(loan: MockLoanAccount): MockBorrowerProfile | undefined {
+  return MOCK_BORROWERS.find((b) => b.loanIds.includes(loan.id));
+}
+
 // ---------------------------------------------------------------------------
 // Repeat-client historical loans — confirmed per this checkpoint: the Loan
 // Application detail page must flag when an applicant is already an
