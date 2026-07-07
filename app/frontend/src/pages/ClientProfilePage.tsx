@@ -18,6 +18,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import {
+  ACTIVE_PAYMENT_METHODS,
   ADD_ON_RATE_TIERS,
   clientHasActiveLoan,
   computeLoanOriginationSummary,
@@ -171,7 +172,12 @@ export interface CreateLoanAccountParams {
   interestRate: number;
   coBorrowerName: string;
   anticipatedDisbursementDate: string;
+  paymentMethod: string;
+  disbursementBank?: MockLoanAccount['disbursementBank'];
 }
+
+/** Matches `Loans_details`'s Bank Name/ATM Card Number/Bank Account Number/Name on Card fields — only collected for bank-based payment methods. */
+const BANK_BASED_PAYMENT_METHODS = new Set(['BANK_TRANSFER', 'AUTO_DEBIT']);
 
 const FEE_WAIVER_LABELS: { key: keyof LoanFeeWaivers; label: string }[] = [
   { key: 'accountManagementFee', label: 'Account Management Fee (1% of principal)' },
@@ -209,10 +215,16 @@ function CreateLoanAccountDialog({
   const [disbursementDate, setDisbursementDate] = React.useState(todayIsoDate());
   const [previousLoanOutstandingBalance, setPreviousLoanOutstandingBalance] = React.useState(0);
   const [waive, setWaive] = React.useState<LoanFeeWaivers>(NO_FEES_WAIVED);
+  const [paymentMethod, setPaymentMethod] = React.useState('GCASH');
+  const [bankName, setBankName] = React.useState('');
+  const [atmCardNumber, setAtmCardNumber] = React.useState('');
+  const [bankAccountNumber, setBankAccountNumber] = React.useState('');
+  const [nameOnCardOrAccount, setNameOnCardOrAccount] = React.useState('');
   const [confirming, setConfirming] = React.useState(false);
 
   const product = ACTIVE_PRODUCTS_FOR_NEW_LOAN.find((p) => p.productCode === productCode);
   const firstRepaymentDate = addOneMonthIso(disbursementDate);
+  const needsBankDetails = BANK_BASED_PAYMENT_METHODS.has(paymentMethod);
 
   const summary =
     product && principalAmount > 0 && installmentCount > 0
@@ -239,6 +251,11 @@ function CreateLoanAccountDialog({
     setDisbursementDate(todayIsoDate());
     setPreviousLoanOutstandingBalance(0);
     setWaive(NO_FEES_WAIVED);
+    setPaymentMethod('GCASH');
+    setBankName('');
+    setAtmCardNumber('');
+    setBankAccountNumber('');
+    setNameOnCardOrAccount('');
   };
 
   return (
@@ -337,6 +354,47 @@ function CreateLoanAccountDialog({
                   <Switch checked={waive[key]} onCheckedChange={() => toggleWaive(key)} />
                 </label>
               ))}
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disbursement</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Payment Method</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTIVE_PAYMENT_METHODS.map((m) => (
+                      <SelectItem key={m.code} value={m.code}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {needsBankDetails && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Bank Name</Label>
+                    <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. BDO Unibank" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Bank Account Number</Label>
+                    <Input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>ATM Card Number</Label>
+                    <Input value={atmCardNumber} onChange={(e) => setAtmCardNumber(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Name on Card/Account</Label>
+                    <Input value={nameOnCardOrAccount} onChange={(e) => setNameOnCardOrAccount(e.target.value)} />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -450,6 +508,8 @@ function CreateLoanAccountDialog({
                   interestRate: summary?.contractualRatePercent ?? 0,
                   coBorrowerName,
                   anticipatedDisbursementDate: disbursementDate,
+                  paymentMethod,
+                  disbursementBank: needsBankDetails ? { bankName, atmCardNumber, bankAccountNumber, nameOnCardOrAccount } : undefined,
                 });
                 setConfirming(false);
                 onOpenChange(false);
@@ -531,6 +591,8 @@ export function ClientProfilePage() {
         interestRate: params.interestRate,
         coBorrowerName: params.coBorrowerName,
         anticipatedDisbursementDate: params.anticipatedDisbursementDate,
+        paymentMethod: params.paymentMethod,
+        disbursementBank: params.disbursementBank,
       },
       currentAccount.name,
     );

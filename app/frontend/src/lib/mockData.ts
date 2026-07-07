@@ -106,6 +106,17 @@ export interface MockLoanAccount {
   atmCardOnFile?: boolean;
   /** Optional — matches the legacy calculator's "Co-Borrower" field (`Loans_details` sheet). */
   coBorrowerName?: string;
+  /**
+   * Disbursement bank details — populated for `BANK_TRANSFER`/`AUTO_DEBIT` loans, matching
+   * `Loans_details` columns `AD`–`AG` (`Bank Name`, `ATM Card Number`, `Bank Account Number`,
+   * `Name on Card/Account`) in `OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`.
+   */
+  disbursementBank?: {
+    bankName: string;
+    atmCardNumber: string;
+    bankAccountNumber: string;
+    nameOnCardOrAccount: string;
+  };
 }
 
 export interface MockRepaymentInstallment {
@@ -679,16 +690,24 @@ export interface InterestRateChartEntry {
 /**
  * The official calculator's Add-On → Contractual rate lookup table — evidence:
  * `legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, sheet `Interest Rate Chart`
- * (135 rows, `A2:C136`), read by the `Fill up form`/`manual input for LOAN AMOUNT` sheet's
- * `Contractual Interest Rate` cell via
+ * (`A2:C136`), read by the `Fill up form`/`manual input for LOAN AMOUNT` sheet's `Contractual
+ * Interest Rate` cell via
  * `INDEX(C2:C136, MATCH(1, (A2:A136=Term)*(B2:B136=AddOnRate), 0))` — an exact 2D lookup, not a
  * formula-derived conversion. This resolves `CALCULATION_ENGINE_SPEC.md` §3's "reverse direction
  * (Add-On → Contractual)... uses a precomputed lookup table" note with the real table contents.
  *
- * Excludes one 3-row group in the source (`Add-On 10.0%` → contractual `0.1`/`0.1307`/`0.1436`)
- * — internally inconsistent with every other tier (contractual rate lower than the add-on rate,
- * and only 3 of 24 terms populated) and almost certainly stray test data, not a real product
- * tier. Never fabricated a replacement value for it, per this project's evidence-only rule.
+ * Cross-validated against a second, independent copy of the same table:
+ * `legacy/reports/OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`, sheet `Rate_details`
+ * (139 rows). The two copies agree on every tier except two corrections this second copy
+ * resolved:
+ * - The `Add-On 10.0%` tier (terms 1–3) is real, not stray test data as first assumed from the
+ *   Encode.xlsx copy alone — that copy stored it as raw fractions (`0.1`/`0.1307`/`0.1436`)
+ *   instead of whole percent like every other row, a unit inconsistency `Rate_details` doesn't
+ *   share (`10`/`13.07`/`14.36`). Corrected below to the `Rate_details` values.
+ * - `Rate_details` additionally has an `Add-On 5.0%` tier (terms 1–4: `5`/`6.6`/`7.33`/`7.72`,
+ *   not present in the Encode.xlsx copy) — added below.
+ * Every other value matched exactly between both independent sources, which is why they're
+ * trusted as correct rather than further second-guessed.
  */
 export const INTEREST_RATE_CHART: InterestRateChartEntry[] = [
   { term: 1, addOnRate: 1.5, contractualRate: 1.5 },
@@ -823,6 +842,14 @@ export const INTEREST_RATE_CHART: InterestRateChartEntry[] = [
   { term: 10, addOnRate: 3.5, contractualRate: 5.86 },
   { term: 11, addOnRate: 3.5, contractualRate: 5.86 },
   { term: 12, addOnRate: 3.5, contractualRate: 5.86 },
+  // Add-On 5.0% and 10.0% tiers — from `Rate_details` only, see the doc comment above.
+  { term: 1, addOnRate: 5.0, contractualRate: 5.0 },
+  { term: 2, addOnRate: 5.0, contractualRate: 6.6 },
+  { term: 3, addOnRate: 5.0, contractualRate: 7.33 },
+  { term: 4, addOnRate: 5.0, contractualRate: 7.72 },
+  { term: 1, addOnRate: 10.0, contractualRate: 10.0 },
+  { term: 2, addOnRate: 10.0, contractualRate: 13.07 },
+  { term: 3, addOnRate: 10.0, contractualRate: 14.36 },
 ];
 
 /** Every distinct Add-On Rate tier on file, for the Create Loan Account form's rate dropdown. */
@@ -910,7 +937,11 @@ function daysBetweenIso(fromIso: string, toIso: string): number {
  * - Monthly Amortization: `PMT` — `CALCULATION_ENGINE_SPEC.md` §2 (CONFIRMED).
  * - Account Management Fee = Principal × 1% (cell `G3`, fixed rate, not product-configurable).
  * - Processing Fee = the product's own `Processing Fee` rule (flat or % of principal — `G5`).
- * - Digital Signature Fee / Notarial Fee = flat ₱500 each (cells `G6`/`G7`).
+ * - Digital Signature Fee / Notarial Fee = flat ₱500 each (cells `G6`/`G7`). The `Loans_details`
+ *   master ledger in `OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm` records the same ₱500
+ *   Notarial Fee but under an older name for the Digital Signature Fee — `Web fee` — real
+ *   disbursed loans there show both flat ₱500 charges simultaneously on the same account,
+ *   confirming these are two distinct fees, not the same fee double-counted.
  * - Advance Interest Fee (cell `G4`) — a partial-period interest charge, `0` unless the gap
  *   between disbursement and the first repayment date exceeds 30 days:
  *   `Principal × (AddOnRate/100) × ((DaysBetween − 30) / 30)`. Same shape as
@@ -2826,6 +2857,10 @@ export function createLoanAccountForClient(
     coBorrowerName?: string;
     /** Matches the legacy calculator's "Anticipated Disbursement Date" field — first repayment is derived as one month after this date. Defaults to today. */
     anticipatedDisbursementDate?: string;
+    /** Code into `MOCK_PAYMENT_METHODS` — defaults to `GCASH` when omitted. */
+    paymentMethod?: string;
+    /** Required (by the UI) only when `paymentMethod` is `BANK_TRANSFER` or `AUTO_DEBIT` — see `MockLoanAccount.disbursementBank`. */
+    disbursementBank?: MockLoanAccount['disbursementBank'];
   },
   actorName: string,
 ): MockLoanAccount {
@@ -2851,6 +2886,7 @@ export function createLoanAccountForClient(
     installmentCount: params.installmentCount,
     firstRepaymentDate: addMonths(disbursementDate, 1).toISOString(),
     coBorrowerName: params.coBorrowerName?.trim() || undefined,
+    disbursementBank: params.disbursementBank,
     balances: {
       principalBalance: 0,
       principalPaid: 0,
@@ -2871,7 +2907,7 @@ export function createLoanAccountForClient(
     activatedAt: null,
     closedAt: null,
     createdAt: new Date().toISOString(),
-    paymentMethod: 'GCASH',
+    paymentMethod: params.paymentMethod ?? 'GCASH',
   };
   MOCK_LOANS.push(loan);
   MOCK_INSTALLMENTS[loan.id] = [];

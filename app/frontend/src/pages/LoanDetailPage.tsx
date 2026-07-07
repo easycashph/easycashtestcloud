@@ -568,6 +568,18 @@ export function LoanDetailPage() {
                       <dd className="text-right font-medium">{loan.coBorrowerName}</dd>
                     </>
                   )}
+                  {loan.disbursementBank && (
+                    <>
+                      <dt className="text-muted-foreground">Bank Name</dt>
+                      <dd className="text-right font-medium">{loan.disbursementBank.bankName}</dd>
+                      <dt className="text-muted-foreground">Bank Account Number</dt>
+                      <dd className="text-right font-medium">{loan.disbursementBank.bankAccountNumber}</dd>
+                      <dt className="text-muted-foreground">ATM Card Number</dt>
+                      <dd className="text-right font-medium">{loan.disbursementBank.atmCardNumber}</dd>
+                      <dt className="text-muted-foreground">Name on Card/Account</dt>
+                      <dd className="text-right font-medium">{loan.disbursementBank.nameOnCardOrAccount}</dd>
+                    </>
+                  )}
                   <dt className="text-muted-foreground">Loan officer</dt>
                   <dd className="text-right font-medium">{loan.loanOfficerName}</dd>
                   <dt className="text-muted-foreground">Approved at</dt>

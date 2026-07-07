@@ -97,6 +97,32 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   `contractualRateFromChart` (false when no chart entry exists for the term/add-on combination,
   surfaced in the UI rather than silently guessed).
 
+### Interest Rate Chart corrected; Create Loan Account gained a Disbursement section
+- Cross-validated `INTEREST_RATE_CHART` against a second, independent copy of the same table:
+  `legacy/reports/OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`, sheet `Rate_details` (also
+  studied that workbook's `Schedule` and `Loans_details` sheets — the latter is the real
+  production ledger of disbursed loans, useful for validating every fee formula against actual
+  historical figures, not just worked examples). Two corrections resulted:
+  - The `Add-On 10.0%` tier (terms 1–3), previously excluded as suspected stray test data (its
+    values in the Encode.xlsx copy were fractions like `0.1` instead of whole percent), is real —
+    `Rate_details` stores it correctly as `10`/`13.07`/`14.36`. No longer excluded.
+  - Added a previously-missing `Add-On 5.0%` tier (terms 1–4: `5`/`6.6`/`7.33`/`7.72`), present in
+    `Rate_details` but absent from the Encode.xlsx copy.
+  - Every other value matched exactly between both independent sources.
+- Cross-referencing `Loans_details`'s real disbursed-loan rows also confirmed the Account
+  Management Fee's 1% rate, the ₱500 Notarial Fee, and the Advance Interest/Insurance Fee
+  formulas against real production figures (not just the one worked example previously
+  available) — documented in `computeLoanOriginationSummary()`'s doc comment, including a note
+  that `Loans_details` records the same ₱500 flat fee as "Web fee" under an older name than the
+  Encode.xlsx sheet's "Digital Signature Fee" (confirmed distinct from Notarial Fee — real loans
+  show both charged simultaneously).
+- New **Disbursement** section on the Create Loan Account form: Payment Method (reuses
+  `ACTIVE_PAYMENT_METHODS`), plus Bank Name/Bank Account Number/ATM Card Number/Name on
+  Card-or-Account fields shown only for `BANK_TRANSFER`/`AUTO_DEBIT` — matches `Loans_details`
+  columns `AD`–`AG`. `MockLoanAccount` gained an optional `disbursementBank` field, surfaced on
+  `LoanDetailPage`'s Loan Terms tab; `createLoanAccountForClient()` now accepts `paymentMethod`
+  and `disbursementBank` overrides (previously hardcoded to `GCASH`).
+
 ## 2026-07-07
 
 ### About page — version/changelog now derive automatically, no more dual maintenance
