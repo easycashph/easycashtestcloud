@@ -256,7 +256,11 @@ export function LoanApplicationDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Applicant Details</CardTitle>
-            <CardDescription>Submitted via the (not yet built) public loan application website</CardDescription>
+            <CardDescription>
+              {application.encodedBy
+                ? `Walk-in applicant — encoded at the branch by ${application.encodedBy} from the paper form (ECLC-LOFN01)`
+                : 'Submitted via the (not yet built) public loan application website'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-y-3 text-sm">
@@ -344,6 +348,24 @@ export function LoanApplicationDetailPage() {
               <dd className="text-right font-medium">{formatPeso(application.requestedAmount)}</dd>
               <dt className="text-muted-foreground">Requested term</dt>
               <dd className="text-right font-medium">{application.requestedTermMonths} months</dd>
+              {application.accountType && (
+                <>
+                  <dt className="text-muted-foreground">Type of account</dt>
+                  <dd className="text-right font-medium">{application.accountType === 'NEW' ? 'New' : 'Renewal'}</dd>
+                </>
+              )}
+              {application.loanPurpose && (
+                <>
+                  <dt className="text-muted-foreground">Loan purpose</dt>
+                  <dd className="text-right font-medium">{application.loanPurpose}</dd>
+                </>
+              )}
+              {application.referralSource && (
+                <>
+                  <dt className="text-muted-foreground">Found Easycash via</dt>
+                  <dd className="text-right font-medium">{application.referralSource}</dd>
+                </>
+              )}
             </dl>
 
             <Separator className="my-4" />

@@ -8,6 +8,31 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-07
 
+### Loan Applications — Create Application (officer-encoded walk-in intake)
+- New **Create Application** button on `/applications` → `/applications/new`: a loan officer can
+  now encode a walk-in applicant's application on their behalf, since the public application
+  website does not exist yet. Same role gate as the rest of Loan Applications (MIS / Loan
+  Operation Manager / CRM).
+- The form mirrors the company's **real paper form (Form No. ECLC-LOFN01, Rev 02,
+  `legacy/reports/Loan Application Form -general.pdf`) section for section**: §1 How did you find
+  out about Easycash, §2 Loan Information (New/Renewal, type of loan, amount, term, purpose),
+  §3 Personal Information (name/nickname/gender/civil status/DOB with live age/address/home
+  ownership/contacts), §4 Employment (employer, occupation, TIN, SSS), §5 Dependants (dynamic
+  rows), §6 Spouse (auto-shown only when civil status is Married, per the form's own skip rule),
+  §7–8 Co-Borrower (toggle), §9 Character References ×2 — plus two LMS-only cards clearly labeled
+  as not on the paper form: Verification Inputs (monthly income, credit score from the CB report,
+  properties owned — the qualification-factor inputs) and a Documents Submitted checklist
+  (intake-stage document names only, metadata only, no real upload).
+- Paper form's loan types OFW / Car / Real Estate are shown as a note but not offered — only the
+  3 active categories are selectable, matching the product catalog.
+- Submitting (confirmation-gated, like Approve/Decline) builds the same rule-based qualification
+  factors/risk level the sample applications carry, prepends the application to the list as
+  PENDING REVIEW, logs `CREATE_LOAN_APPLICATION`, and opens its detail page — which now shows
+  "Walk-in applicant — encoded at the branch by {officer} from the paper form (ECLC-LOFN01)"
+  instead of the public-website caption, plus new Type of account / Loan purpose / "Found
+  Easycash via" rows. Only LMS-modeled fields persist onto the sample record; the form says so
+  explicitly (dependants/spouse/TIN/SSS/references stay on the paper form for now).
+
 ### Dashboard — Portfolio Filter layout fixed
 - The Filter icon no longer floats mid-paragraph next to the (multi-line) description — it's now
   top-aligned with the card title (`items-start` + `mt-0.5`, was `items-center` against the whole

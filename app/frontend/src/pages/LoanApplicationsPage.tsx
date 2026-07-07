@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, MailOpen, Search } from 'lucide-react';
+import { FilePlus2, Lock, Mail, MailOpen, Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -159,12 +159,17 @@ export function LoanApplicationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
-        <p className="text-sm text-muted-foreground">
-          {applications.length} sample applications ({pendingCount} pending decision) — represents intake from the future public loan
-          application website (not built yet). Not connected to any live system.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
+          <p className="text-sm text-muted-foreground">
+            {applications.length} sample applications ({pendingCount} pending decision) — represents intake from the future public
+            loan application website (not built yet). Not connected to any live system.
+          </p>
+        </div>
+        <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
+          <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
+        </Button>
       </div>
 
       <Card>

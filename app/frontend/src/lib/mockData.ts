@@ -1841,6 +1841,18 @@ export interface MockLoanApplication {
   propertiesOwned: string[];
   creditScore: number;
   coBorrowerName?: string;
+  /**
+   * Set only for applications encoded at the branch by a loan officer (walk-in applicant filling
+   * out the paper form ECLC-LOFN01) — the officer's name. Absent on applications that "arrived"
+   * via the future public website intake.
+   */
+  encodedBy?: string;
+  /** Paper form §1 — "How did you find out about Easycash?" (officer-encoded applications only). */
+  referralSource?: string;
+  /** Paper form §2 — Type of Account. */
+  accountType?: 'NEW' | 'RENEWAL';
+  /** Paper form §2 — "What is your loan purpose?" */
+  loanPurpose?: string;
   requestedCategory: string;
   /** Set by staff during review — never by the client. Undefined until an assigned Loan Officer/Manager picks the sub-type. */
   assignedSubType?: string;
@@ -1871,6 +1883,121 @@ function buildApplicationAttachments(id: string, fileNames: string[], submittedA
     sizeKb: Math.round(80 + rng() * 2400),
     uploadedAt: new Date(submitted.getTime() - (fileNames.length - i) * 3_600_000).toISOString(),
   }));
+}
+
+/**
+ * Standard intake-stage documents a walk-in applicant can submit with the paper form
+ * (ECLC-LOFN01) — the checklist shown on the officer-encoded Create Application form. Matches
+ * the same intake-only document set used by the sample applications above (never
+ * approved-loan-stage documents like the Promissory Note — those only exist on a Loan Account).
+ */
+export const INTAKE_DOCUMENT_OPTIONS: string[] = [
+  'Selfie Photo.jpg',
+  '2x2 ID Picture.jpg',
+  'Valid ID (Borrower).jpg',
+  'Valid ID (Co-Borrower).jpg',
+  'Employee ID.jpg',
+  'Corporate Payslip.pdf',
+  'Latest Proof of Billing.jpg',
+  "Driver's License.jpg",
+  'Passport.jpg',
+  "Seaman's Book.jpg",
+  'Overseas Employment Certificate (OEC).pdf',
+  'CB Credit Bureau Report.pdf',
+];
+
+export interface CreateLoanApplicationInput {
+  applicantName: string;
+  age: number;
+  address: string;
+  monthlyIncome: number;
+  employer: string;
+  propertiesOwned: string[];
+  creditScore: number;
+  coBorrowerName?: string;
+  requestedCategory: string;
+  requestedAmount: number;
+  requestedTermMonths: number;
+  referralSource?: string;
+  accountType?: 'NEW' | 'RENEWAL';
+  loanPurpose?: string;
+  submittedDocuments: string[];
+  /** The loan officer encoding this walk-in application (paper form ECLC-LOFN01). */
+  encodedBy: string;
+}
+
+/**
+ * Officer-encoded application intake (Create Application form): builds the same qualification
+ * factors / risk level the sample applications carry (age 18–55, verifiable address, income vs.
+ * amortization, credit score ≥ 600, properties on record), prepends the new application to
+ * `MOCK_LOAN_APPLICATIONS` (newest first), and returns it. In-memory only, same as every other
+ * mutation in this preview build — the AI summary is a rule-based mock, not a real engine, per
+ * the disclosure already shown on the application detail page.
+ */
+export function createLoanApplication(input: CreateLoanApplicationInput): MockLoanApplication {
+  const id = `application-${MOCK_LOAN_APPLICATIONS.length + 1}-${Date.now().toString(36)}`;
+  const submittedAt = new Date().toISOString();
+  const estimatedMonthlyAmortization = input.requestedTermMonths > 0 ? input.requestedAmount / input.requestedTermMonths : Infinity;
+
+  const agePassed = input.age >= 18 && input.age <= 55;
+  const addressPassed = input.address.trim().length > 0;
+  const incomePassed = input.monthlyIncome >= estimatedMonthlyAmortization * 2;
+  const creditPassed = input.creditScore >= 600;
+  const aiFactors: MockQualificationFactor[] = [
+    { label: 'Age (18–55)', value: `${input.age} years old`, passed: agePassed },
+    {
+      label: 'Verifiable Address',
+      value: addressPassed ? 'Provided — verify against valid ID' : 'Missing',
+      passed: addressPassed,
+    },
+    {
+      label: 'Monthly Income vs. Requested Term',
+      value: `${formatPeso(input.monthlyIncome)}/mo vs. ~${formatPeso(Math.round(estimatedMonthlyAmortization))}/mo amortization`,
+      passed: incomePassed,
+    },
+    { label: 'Credit Score (≥ 600)', value: String(input.creditScore), passed: creditPassed },
+    {
+      label: 'Properties Owned',
+      value: input.propertiesOwned.length > 0 ? input.propertiesOwned.join('; ') : 'None on record',
+      passed: true,
+    },
+  ];
+  const failedCount = aiFactors.filter((f) => !f.passed).length;
+  const aiRisk: MockRiskLevel = failedCount === 0 ? 'Low Risk' : failedCount === 1 ? 'Medium Risk' : 'High Risk';
+  const aiRecommendation =
+    failedCount === 0
+      ? 'Qualified — all factors within acceptable range. Recommended for approval.'
+      : failedCount === 1
+        ? 'One qualification factor is outside the acceptable range — recommended for manual review before a decision.'
+        : 'Multiple qualification factors are outside the acceptable range — recommended for decline pending manual review.';
+
+  const application: MockLoanApplication = {
+    id,
+    applicantName: input.applicantName,
+    age: input.age,
+    address: input.address,
+    monthlyIncome: input.monthlyIncome,
+    employer: input.employer,
+    propertiesOwned: input.propertiesOwned,
+    creditScore: input.creditScore,
+    coBorrowerName: input.coBorrowerName,
+    encodedBy: input.encodedBy,
+    referralSource: input.referralSource,
+    accountType: input.accountType,
+    loanPurpose: input.loanPurpose,
+    requestedCategory: input.requestedCategory,
+    requestedAmount: input.requestedAmount,
+    requestedTermMonths: input.requestedTermMonths,
+    submittedAt,
+    status: 'PENDING_REVIEW',
+    reviewState: 'UNREVIEWED',
+    aiRisk,
+    aiRecommendation,
+    aiFactors,
+    attachments: buildApplicationAttachments(id, input.submittedDocuments, submittedAt),
+  };
+  MOCK_LOAN_APPLICATIONS.unshift(application);
+  return application;
 }
 
 export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [

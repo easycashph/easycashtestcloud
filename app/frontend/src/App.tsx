@@ -6,6 +6,7 @@ import { LoanListPage } from '@/pages/LoanListPage';
 import { LoanDetailPage } from '@/pages/LoanDetailPage';
 import { LoanApplicationsPage } from '@/pages/LoanApplicationsPage';
 import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
+import { LoanApplicationCreatePage } from '@/pages/LoanApplicationCreatePage';
 import { PaymentRemindersPage } from '@/pages/PaymentRemindersPage';
 import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
 import { ClientListPage } from '@/pages/ClientListPage';
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="loans" element={<LoanListPage />} />
         <Route path="loans/:loanId" element={<LoanDetailPage />} />
         <Route path="applications" element={<LoanApplicationsPage />} />
+        <Route path="applications/new" element={<LoanApplicationCreatePage />} />
         <Route path="applications/:applicationId" element={<LoanApplicationDetailPage />} />
         <Route path="reminders" element={<PaymentRemindersPage />} />
         <Route path="loans/:loanId/soa" element={<StatementOfAccountPage />} />
