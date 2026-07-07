@@ -182,10 +182,29 @@ export function DashboardPage() {
   useLogPageView('Dashboard');
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
+  // The active portfolio is every still-active account: performing (good), in arrears, AND
+  // past-maturity-but-unpaid (matured). Must match DASHBOARD_SUMMARY.totalActiveLoans and the
+  // PORTFOLIO_QUALITY_METRICS denominators, which all include MATURED — otherwise a figure and
+  // its drill-down list disagree.
   const activePortfolioLoans = React.useMemo(
-    () => [...PORTFOLIO_HEALTH.good.loans, ...PORTFOLIO_HEALTH.activeInArrears.loans],
+    () => [...PORTFOLIO_HEALTH.good.loans, ...PORTFOLIO_HEALTH.activeInArrears.loans, ...PORTFOLIO_HEALTH.matured.loans],
     [],
   );
+
+  // Delinquent = overdue but still active: in arrears (overdue within term) + matured (past the
+  // full term, still unpaid). This is the numerator behind the Delinquency Rate and PAR metrics.
+  const delinquentLoans = React.useMemo(
+    () => [...PORTFOLIO_HEALTH.activeInArrears.loans, ...PORTFOLIO_HEALTH.matured.loans],
+    [],
+  );
+
+  const openDelinquentAccounts = () =>
+    setDrillDown({
+      title: 'Delinquent Accounts',
+      description:
+        'Overdue but still active — accounts in arrears (overdue within term) plus matured accounts (past the full term, still unpaid). This is the set behind the Delinquency Rate and Portfolio-at-Risk figures.',
+      loans: delinquentLoans,
+    });
 
   const openVennSegment = (segment: PortfolioHealthSegment) =>
     setDrillDown({ ...VENN_SEGMENT_META[segment], loans: PORTFOLIO_HEALTH[segment].loans });
@@ -193,7 +212,7 @@ export function DashboardPage() {
   const openCategorySlice = (slice: PortfolioCategorySlice) =>
     setDrillDown({
       title: `${slice.category} — Active Portfolio`,
-      description: `Active and in-arrears loan accounts under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.`,
+      description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.`,
       loans: slice.loans,
     });
 
@@ -232,7 +251,7 @@ export function DashboardPage() {
           onClick={() =>
             setDrillDown({
               title: 'Total Active Loans',
-              description: 'All ACTIVE and ACTIVE_IN_ARREARS loan accounts across all branches.',
+              description: 'All still-active loan accounts across all branches — ACTIVE, ACTIVE_IN_ARREARS, and MATURED.',
               loans: activePortfolioLoans,
             })
           }
@@ -272,13 +291,13 @@ export function DashboardPage() {
             term={FINANCIAL_GLOSSARY.delinquencyRate.term}
             definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
             value={`${PORTFOLIO_QUALITY_METRICS.delinquencyRatePercent.toFixed(1)}%`}
-            onClick={() => openVennSegment('activeInArrears')}
+            onClick={openDelinquentAccounts}
           />
           <MetricItem
             term={FINANCIAL_GLOSSARY.portfolioAtRisk.term}
             definition={FINANCIAL_GLOSSARY.portfolioAtRisk.definition}
             value={`${PORTFOLIO_QUALITY_METRICS.portfolioAtRiskPercent.toFixed(1)}%`}
-            onClick={() => openVennSegment('activeInArrears')}
+            onClick={openDelinquentAccounts}
           />
           <MetricItem
             term={FINANCIAL_GLOSSARY.averageLoanSize.term}
@@ -287,7 +306,8 @@ export function DashboardPage() {
             onClick={() =>
               setDrillDown({
                 title: 'Active Portfolio',
-                description: 'All ACTIVE and ACTIVE_IN_ARREARS loan accounts used to compute the average loan size.',
+                description:
+                  'All still-active loan accounts (ACTIVE, ACTIVE_IN_ARREARS, MATURED) used to compute the average loan size.',
                 loans: activePortfolioLoans,
               })
             }
