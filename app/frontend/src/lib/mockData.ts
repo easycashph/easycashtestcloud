@@ -196,6 +196,119 @@ export interface MockFeeRule {
   value: number;
 }
 
+/**
+ * A loan document template attached to a product — the merge-field body used to generate that
+ * product's official loan documents (Promissory Note, Disclosure Statement, etc.) once a loan
+ * account under it is activated. Evidence: `legacy/reports/201 Loan Docs Generator/*.docx`, the
+ * company's real MS Word mail-merge templates (`{{BorrowerName}}`-style fields). Editable per
+ * product in the Loan Products page — preview-only, held in component state, never persisted.
+ */
+export interface MockDocumentTemplate {
+  /** Short code matching the legacy template file naming (PN, DS, LA, DOA, DPCF, SPA). */
+  code: string;
+  name: string;
+  /** Legacy source file this was adapted from, shown for traceability only. */
+  sourceFileName: string;
+  /** Mail-merge template body. Editable in the Loan Products UI; `{{Field}}` tokens are filled in per loan account when generated. */
+  content: string;
+}
+
+// Two document sets found in `legacy/reports/201 Loan Docs Generator/`: a standard set (DOA/LA)
+// and a "-SL" suffixed set (DOA-SL/LA-SL) used only for seafarer allotment loans — confirmed by
+// the SPA template's own text ("restructure the existing allotment loan"), which is seafarer-
+// specific and has no standard-set equivalent.
+const STANDARD_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
+  {
+    code: 'PN',
+    name: 'Promissory Note',
+    sourceFileName: '201 Loan Docs PN Template.docx',
+    content:
+      'PROMISSORY NOTE\n\nPromissory Note Number: {{LoanAccount}}\nMaturity Date: {{MaturityDate}}\nLoan Amount: {{Obligation}}\n\n' +
+      'For value received, I/We, {{BorrowerName}}, residing at {{BorrowerAddress}}{{CoBorrowerNameSection}}, jointly and severally, ' +
+      'promise to pay to the order of Easycash Lending Company Inc. the sum of {{ObligationWords}}, Philippine Currency, with interest ' +
+      'at the rate of {{InterestRateWords}} per month, in {{InstallmentCount}} installments beginning {{FirstDueDate}}.',
+  },
+  {
+    code: 'DS',
+    name: 'Disclosure Statement',
+    sourceFileName: '201 Loan Docs DS Template.docx',
+    content:
+      'DISCLOSURE STATEMENT ON LOAN/CREDIT TRANSACTION\n(As Required under R.A. 3765, Truth In Lending Act)\n\n' +
+      "Borrower's Name: {{BorrowerName}}\nLoan Account ID: {{LoanAccount}}\nAddress: {{BorrowerAddress}}\n\n" +
+      '1. LOAN AMOUNT: {{LoanAmount}}\n2. OTHER BANK CHARGES/DEDUCTIONS COLLECTED: {{OtherCharges}}\n' +
+      '3. NET PROCEEDS: {{NetProceeds}}\n4. FINANCE CHARGES: {{FinanceCharges}}\n5. EFFECTIVE INTEREST RATE: {{EffectiveRate}}',
+  },
+  {
+    code: 'LA',
+    name: 'Loan Agreement',
+    sourceFileName: '201 Loan Docs LA Template.docx',
+    content:
+      'LOAN AGREEMENT\n\nEasycash Lending Company, Inc. ("Easycash"), with principal office at Unit 9, Ground Floor, The Midland Plaza, ' +
+      'M. Adriatico, Barangay 669, Ermita, Manila, and the Borrower, {{BorrowerName}}, and Co-Borrower, {{CoBorName}}, with address at ' +
+      '{{BorrowerAddress}} and {{CoBorAddress}} respectively, hereby agree to enter into this Loan Agreement this {{DisbursementDate}} ' +
+      'for the principal sum of {{LoanAmount}}, payable in {{InstallmentCount}} monthly installments.',
+  },
+  {
+    code: 'DOA',
+    name: 'Deed of Assignment',
+    sourceFileName: '201 Loan Docs DOA Template.docx',
+    content:
+      'DEED OF ASSIGNMENT\nWith Authority to Deduct and Irrevocable Special Power of Attorney\n\nKNOW ALL MEN BY THESE PRESENTS:\n\n' +
+      'That I/We {{BorrowerName}} / {{CoBorName}}, of legal age, Filipino citizen/s, resident/s of {{BorrowerAddress}}, hereinafter ' +
+      'referred to as the "ASSIGNOR"; and EASYCASH LENDING COMPANY, INC., a corporation duly registered and organized under the laws ' +
+      'of the Philippines, hereby agree that the Assignor irrevocably assigns {{ObligationWords}} out of any and all monies due.',
+  },
+  {
+    code: 'DPCF',
+    name: 'Data Privacy and Consent Form',
+    sourceFileName: '201 Loan Docs DPCF Template.docx',
+    content:
+      'DATA PRIVACY AND CONSENT FORM\n\n' +
+      'I/We, {{BorrowerName}}, know and understand that Easycash Lending Company, Inc. ("Easycash") is a Filipino corporation ' +
+      'organized and existing under the laws of the Philippines and registered with the Securities and Exchange Commission, with the ' +
+      'primary objective of providing loans, credit, or other financial accommodation to deserving individuals and businesses. ' +
+      'I/We consent to the collection, processing, and storage of my/our personal data for {{LoanAccount}} in accordance with the ' +
+      'Data Privacy Act of 2012.',
+  },
+];
+
+const SEAFARER_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
+  STANDARD_DOCUMENT_TEMPLATES[0]!, // PN — same across categories
+  STANDARD_DOCUMENT_TEMPLATES[1]!, // DS — same across categories
+  {
+    code: 'LA-SL',
+    name: 'Loan Agreement (Seafarer)',
+    sourceFileName: '201 Loan Docs LA-SL Template.docx',
+    content:
+      'LOAN AGREEMENT (SEAFARER ALLOTMENT)\n\nEasycash Lending Company, Inc. ("Easycash"), with principal office at Unit 9, Ground ' +
+      'Floor, The Midland Plaza, M. Adriatico, Barangay 669, Ermita, Manila, and the Borrower, {{BorrowerName}}, and Co-Borrower, ' +
+      '{{CoBorName}}, with address at {{BorrowerAddress}} and {{CoBorAddress}} respectively, hereby agree to enter into this Loan ' +
+      'Agreement this {{DisbursementDate}} for the principal sum of {{LoanAmount}}, secured against the Borrower\'s seafarer allotment.',
+  },
+  {
+    code: 'DOA-SL',
+    name: 'Deed of Assignment (Seafarer)',
+    sourceFileName: '201 Loan Docs DOA-SL Template.docx',
+    content:
+      'DEED OF ASSIGNMENT (SEAFARER ALLOTMENT)\nWith Authority to Deduct and Irrevocable Special Power of Attorney\n\n' +
+      'KNOW ALL MEN BY THESE PRESENTS: That I/We {{BorrowerName}}, {{CoBorName}}, of legal age, Filipino citizen/s, resident/s of ' +
+      '{{BorrowerAddress}}, hereinafter referred to as the "ASSIGNOR"; and EASYCASH LENDING COMPANY, INC. hereby agree that the ' +
+      "Assignor irrevocably assigns {{ObligationWords}} out of the Assignor's monthly seafarer allotment.",
+  },
+  STANDARD_DOCUMENT_TEMPLATES[4]!, // DPCF — same across categories
+  {
+    code: 'SPA',
+    name: 'Special Power of Attorney',
+    sourceFileName: '201 Loan Docs SPA Template.docx',
+    content:
+      'SPECIAL POWER OF ATTORNEY\n\n' +
+      'I, {{BorrowerName}}, of legal age, Filipino, and a resident of {{BorrowerAddress}}, hereby NAME, APPOINT, and CONSTITUTE ' +
+      '{{CoBorName}}, with address at {{CoBorAddress}}, to be my true and lawful Attorney-in-Fact, to do and perform the following ' +
+      'acts in my name, place, and stead: To restructure the existing allotment loan with Easycash Lending Company Inc., only if ' +
+      'the Principal is unable to do so personally due to being at sea.',
+  },
+];
+
 export interface MockLoanProduct {
   id: string;
   productCode: string;
@@ -220,6 +333,13 @@ export interface MockLoanProduct {
   feeRules: MockFeeRule[];
   /** Set only for discontinued/legacy products — shown as a note in the UI. */
   legacyNote?: string;
+  /** Loan document templates generated when a loan account under this product is activated — editable per product in the Loan Products page. */
+  documentTemplates: MockDocumentTemplate[];
+}
+
+/** Clones a template set so editing one product's templates never mutates another's. */
+function cloneTemplates(templates: MockDocumentTemplate[]): MockDocumentTemplate[] {
+  return templates.map((t) => ({ ...t }));
 }
 
 const ACTIVE_PRODUCTS: MockLoanProduct[] = [
@@ -248,6 +368,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
       { name: 'Documentary Stamp Tax', computation: 'FLAT', value: 150 },
     ],
     legacyNote: 'For clients employed by an Easycash tied-up agency/employer partner.',
+    documentTemplates: cloneTemplates(STANDARD_DOCUMENT_TEMPLATES),
   },
   {
     id: 'product-sl-regular',
@@ -274,6 +395,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
       { name: 'Documentary Stamp Tax', computation: 'FLAT', value: 150 },
     ],
     legacyNote: 'For standalone clients with no tied-up agency/employer partnership.',
+    documentTemplates: cloneTemplates(STANDARD_DOCUMENT_TEMPLATES),
   },
   {
     id: 'product-sl-spec',
@@ -300,6 +422,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
       { name: 'Documentary Stamp Tax', computation: 'FLAT', value: 150 },
     ],
     legacyNote: 'Discounted rate for repeat clients in good standing.',
+    documentTemplates: cloneTemplates(STANDARD_DOCUMENT_TEMPLATES),
   },
   {
     id: 'product-bl-regular',
@@ -325,6 +448,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
       { name: 'Processing Fee', computation: 'PERCENT_OF_PRINCIPAL', value: 2.5 },
       { name: 'Credit Investigation Fee', computation: 'FLAT', value: 1000 },
     ],
+    documentTemplates: cloneTemplates(STANDARD_DOCUMENT_TEMPLATES),
   },
   {
     id: 'product-sml-regular',
@@ -347,6 +471,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
     maxInterestRate: 3.47,
     penaltyRule: { ratePercent: 3, gracePeriodDays: 15 },
     feeRules: [{ name: 'Processing Fee', computation: 'FLAT', value: 2500 }],
+    documentTemplates: cloneTemplates(SEAFARER_DOCUMENT_TEMPLATES),
   },
 ];
 
@@ -431,6 +556,10 @@ function buildDiscontinuedProduct(name: string): MockLoanProduct {
     feeRules: [],
     legacyNote:
       'Historical product from the legacy system — retained because existing loan accounts still reference it; not available for new originations.',
+    // "SML" (Seafarer Loan) legacy codes get the seafarer document set (matches the -SL legacy
+    // templates); everything else gets the standard set. Existing loans on these discontinued
+    // products still need a document set for their own Attachments tab.
+    documentTemplates: cloneTemplates(name.startsWith('SML') ? SEAFARER_DOCUMENT_TEMPLATES : STANDARD_DOCUMENT_TEMPLATES),
   };
 }
 
@@ -1277,19 +1406,24 @@ export function buildPortfolioQualityMetrics(loans: MockLoanAccount[]) {
 export const PORTFOLIO_QUALITY_METRICS = buildPortfolioQualityMetrics(MOCK_LOANS);
 
 // ---------------------------------------------------------------------------
-// Generated Documents — mock registry for the Administration section. The
-// document set matches the company's real legal templates (Promissory Note,
-// Disclosure Statement, Loan Agreement — see the 201 Loan Docs Generator
-// evidence in docs/Legacy Analysis) plus the Amortization Schedule; these only
-// ever exist for an officially activated loan account, never for a mere
-// application (same rule as the Loan Application attachments cleanup).
-// File contents are NOT included in this preview — names/metadata only.
+// Generated Documents — no longer a standalone Administration registry.
+// Distributed onto each client's own Loan Account instead (see
+// `LoanDetailPage`'s Attachments tab), since that's where a loan officer
+// actually needs them. The document set comes from the loan's own product's
+// `documentTemplates` (see `MockDocumentTemplate` above, editable per product
+// in the Loan Products page) plus the Amortization Schedule, which every
+// product gets automatically since it's generated from the repayment
+// schedule, not a legal template. These only ever exist for an officially
+// activated loan account, never for a mere application (same rule as the
+// Loan Application attachments cleanup). File contents are NOT included in
+// this preview — names/metadata only.
 // ---------------------------------------------------------------------------
 
 export interface MockGeneratedDocument {
   id: string;
   documentName: string;
-  documentType: 'Promissory Note' | 'Disclosure Statement' | 'Loan Agreement' | 'Amortization Schedule';
+  /** The template code this came from (PN, DS, LA, DOA, DPCF, SPA, or LA-SL/DOA-SL for seafarer loans), or AS for the Amortization Schedule. */
+  documentType: string;
   loanId: string;
   loanCode: string;
   borrowerName: string;
@@ -1297,17 +1431,17 @@ export interface MockGeneratedDocument {
   generatedAt: string;
 }
 
-const GENERATED_DOCUMENT_TYPES = ['Promissory Note', 'Disclosure Statement', 'Loan Agreement', 'Amortization Schedule'] as const;
-
 function buildGeneratedDocuments(): MockGeneratedDocument[] {
   const docs: MockGeneratedDocument[] = [];
   for (const loan of MOCK_LOANS) {
     if (!loan.activatedAt) continue;
-    for (const documentType of GENERATED_DOCUMENT_TYPES) {
+    const product = getMockLoanProduct(loan.productId);
+    const templates = product?.documentTemplates ?? STANDARD_DOCUMENT_TEMPLATES;
+    for (const template of templates) {
       docs.push({
-        id: `doc-${loan.id}-${slugify(documentType)}`,
-        documentName: `${documentType} — ${loan.loanCode}`,
-        documentType,
+        id: `doc-${loan.id}-${slugify(template.code)}`,
+        documentName: `${template.name} — ${loan.loanCode}`,
+        documentType: template.code,
         loanId: loan.id,
         loanCode: loan.loanCode,
         borrowerName: loan.borrowerName,
@@ -1315,11 +1449,26 @@ function buildGeneratedDocuments(): MockGeneratedDocument[] {
         generatedAt: loan.activatedAt,
       });
     }
+    docs.push({
+      id: `doc-${loan.id}-as`,
+      documentName: `Amortization Schedule — ${loan.loanCode}`,
+      documentType: 'AS',
+      loanId: loan.id,
+      loanCode: loan.loanCode,
+      borrowerName: loan.borrowerName,
+      generatedBy: loan.loanOfficerName,
+      generatedAt: loan.activatedAt,
+    });
   }
   return docs;
 }
 
 export const MOCK_GENERATED_DOCUMENTS = buildGeneratedDocuments();
+
+/** The generated loan documents for one loan account — used by `LoanDetailPage`'s Attachments tab. */
+export function getGeneratedDocumentsForLoan(loanId: string): MockGeneratedDocument[] {
+  return MOCK_GENERATED_DOCUMENTS.filter((d) => d.loanId === loanId);
+}
 
 MOCK_BORROWERS.push(
   {

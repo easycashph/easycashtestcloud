@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDown, ChevronRight, Plus, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Pencil, Plus, Settings2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable, type SortState } from '@/lib/useSortableTable';
-import { MOCK_ACTIVITY_LOGS, MOCK_LOAN_PRODUCTS, type MockLoanProduct } from '@/lib/mockData';
+import { MOCK_ACTIVITY_LOGS, MOCK_LOAN_PRODUCTS, type MockDocumentTemplate, type MockLoanProduct } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
 
 function getProductSortValue(p: MockLoanProduct, key: string): string | number | Date | null | undefined {
@@ -62,6 +63,7 @@ function emptyDraftProduct(): MockLoanProduct {
     maxInterestRate: 5,
     penaltyRule: { ratePercent: 5, gracePeriodDays: 5 },
     feeRules: [{ name: 'Processing Fee', computation: 'PERCENT_OF_PRINCIPAL', value: 2 }],
+    documentTemplates: [],
   };
 }
 
@@ -193,6 +195,19 @@ export function LoanProductsPage() {
   const [addOpen, setAddOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<MockLoanProduct>(emptyDraftProduct());
   const [editingProduct, setEditingProduct] = React.useState<MockLoanProduct | null>(null);
+  const [editingTemplate, setEditingTemplate] = React.useState<{ productId: string; template: MockDocumentTemplate } | null>(null);
+
+  const saveEditedTemplate = (next: MockDocumentTemplate) => {
+    if (!editingTemplate) return;
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === editingTemplate.productId
+          ? { ...p, documentTemplates: p.documentTemplates.map((t) => (t.code === next.code ? next : t)) }
+          : p,
+      ),
+    );
+    setEditingTemplate(null);
+  };
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -300,6 +315,42 @@ export function LoanProductsPage() {
                       ))}
                     </ul>
                   )}
+                </div>
+                <div className="sm:col-span-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Loan Document Templates</p>
+                  {p.documentTemplates.length === 0 ? (
+                    <p className="mt-1 text-sm text-muted-foreground">No document templates configured.</p>
+                  ) : (
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {p.documentTemplates.map((template) => (
+                        <li key={template.code} className="flex items-center justify-between gap-2 rounded-md border bg-background p-2">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{template.name}</p>
+                              <p className="font-mono text-xs text-muted-foreground">{template.code}</p>
+                            </div>
+                          </div>
+                          {variant === 'active' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTemplate({ productId: p.id, template });
+                              }}
+                            >
+                              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                            </Button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Generated automatically for every activated loan account under this product — see the loan account's Attachments
+                    tab. Adapted from the company's real legacy Word templates.
+                  </p>
                 </div>
                 {p.legacyNote && (
                   <div className="sm:col-span-3 rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">
@@ -481,6 +532,56 @@ export function LoanProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditTemplateDialog editingTemplate={editingTemplate} onClose={() => setEditingTemplate(null)} onSave={saveEditedTemplate} />
     </div>
+  );
+}
+
+function EditTemplateDialog({
+  editingTemplate,
+  onClose,
+  onSave,
+}: {
+  editingTemplate: { productId: string; template: MockDocumentTemplate } | null;
+  onClose: () => void;
+  onSave: (next: MockDocumentTemplate) => void;
+}) {
+  const [draft, setDraft] = React.useState<MockDocumentTemplate | null>(editingTemplate?.template ?? null);
+
+  React.useEffect(() => {
+    setDraft(editingTemplate?.template ?? null);
+  }, [editingTemplate]);
+
+  return (
+    <Dialog open={editingTemplate !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit Document Template</DialogTitle>
+          <DialogDescription>
+            Preview only — changes update this browser tab's in-memory copy and are not saved anywhere. Use <code>{'{{FieldName}}'}</code>{' '}
+            tokens for merge fields filled in per loan account.
+          </DialogDescription>
+        </DialogHeader>
+        {draft && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Template Name</Label>
+              <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Template Body</Label>
+              <Textarea value={draft.content} onChange={(e) => setDraft({ ...draft, content: e.target.value })} rows={12} className="font-mono text-xs" />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => draft && onSave(draft)}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

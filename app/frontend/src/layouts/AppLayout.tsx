@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   ScrollText,
   FileCheck2,
-  FileText,
   BellRing,
   Settings,
   Info,
@@ -59,7 +58,6 @@ const NAV_GROUPS = [
     items: [
       { to: '/admin/configuration', label: 'LMS Configuration', icon: Settings, end: false },
       { to: '/admin/members', label: 'Member Details', icon: ShieldCheck, end: false },
-      { to: '/admin/documents', label: 'Generated Documents', icon: FileText, end: false },
       { to: '/products', label: 'Loan Products', icon: Package, end: false },
       { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
       { to: '/admin/about', label: 'About', icon: Info, end: false },

@@ -1,9 +1,10 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, MessageSquareText, MonitorSmartphone, CheckCircle2, Clock } from 'lucide-react';
+import { Mail, MessageSquareText, MonitorSmartphone, CheckCircle2, Clock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -120,14 +121,18 @@ function MessagePreviewDialog({ reminder, onClose }: { reminder: MockPaymentRemi
 export function PaymentRemindersPage() {
   useLogPageView('Payment Reminders');
   const navigate = useNavigate();
+  const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<(typeof STATUS_OPTIONS)[number]>('ALL');
   const [type, setType] = React.useState<PaymentReminderType | 'ALL'>('ALL');
   const [previewing, setPreviewing] = React.useState<MockPaymentReminder | null>(null);
 
   const filtered = MOCK_PAYMENT_REMINDERS.filter((r) => {
+    const query = search.trim().toLowerCase();
+    const matchesSearch =
+      query.length === 0 || r.borrowerName.toLowerCase().includes(query) || r.loanCode.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || r.status === status;
     const matchesType = type === 'ALL' || r.reminderType === type;
-    return matchesStatus && matchesType;
+    return matchesSearch && matchesStatus && matchesType;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'desc' });
 
@@ -145,9 +150,18 @@ export function PaymentRemindersPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">Reminder Schedule</CardTitle>
-          <div className="flex flex-col gap-2 sm:flex-row">
+        <CardHeader className="flex flex-col gap-3">
+          <CardTitle className="text-base">Reminder Schedule — Search &amp; Filter</CardTitle>
+          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search borrower or loan account..."
+                className="w-full pl-8 sm:w-64"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
             <Select value={status} onValueChange={(v) => setStatus(v as (typeof STATUS_OPTIONS)[number])}>
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue />

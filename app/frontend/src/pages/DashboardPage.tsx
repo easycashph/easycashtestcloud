@@ -44,7 +44,25 @@ import {
 } from '@/lib/mockData';
 import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
-const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
+// Deliberately excludes --chart-1: that variable is re-themed per the LMS Configuration
+// accent color (emerald/violet/amber/rose) and can collide with one of the other fixed
+// chart hues (e.g. the default emerald accent looks identical to --chart-3's green). These
+// four stay fixed across every accent theme, so categories are always visually distinct.
+const CHART_COLORS = ['hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+
+// Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too — reads
+// as a jarring, low-contrast flash against the rest of the (theme-aware) dashboard. Pulling from
+// the same CSS variables as the surrounding cards keeps it in sync with light/dark mode and the
+// active accent theme.
+const TOOLTIP_CONTENT_STYLE: React.CSSProperties = {
+  background: 'hsl(var(--popover))',
+  color: 'hsl(var(--popover-foreground))',
+  border: '1px solid hsl(var(--border))',
+  borderRadius: 'var(--radius)',
+  fontSize: 12,
+  boxShadow: '0 4px 12px rgb(0 0 0 / 0.15)',
+};
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = { color: 'hsl(var(--popover-foreground))', fontWeight: 600, marginBottom: 4 };
 
 const round2Peso = (value: number) => Math.round(value * 100) / 100;
 
@@ -472,7 +490,7 @@ export function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
+                <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
                 <Bar
                   dataKey="disbursed"
                   fill="hsl(var(--chart-1))"
@@ -502,7 +520,7 @@ export function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
+                <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
                 <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
                 <Line type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" strokeWidth={2} />
               </LineChart>
@@ -518,17 +536,19 @@ export function DashboardPage() {
             </div>
             <Badge variant="warning">Sample Projection</Badge>
           </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={SAMPLE_COLLECTIONS_PROJECTION}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={pesoTooltipFormatter} />
-                <Line type="monotone" dataKey="projected" stroke="hsl(var(--chart-4))" strokeWidth={2} strokeDasharray="6 3" />
-              </LineChart>
-            </ResponsiveContainer>
-            <p className="mt-1 text-xs text-muted-foreground">
+          <CardContent>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={SAMPLE_COLLECTIONS_PROJECTION}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
+                  <Line type="monotone" dataKey="projected" stroke="hsl(var(--chart-4))" strokeWidth={2} strokeDasharray="6 3" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
               Bottom-up, not a fitted trend line: sums each active loan's actual scheduled installments due per month, then applies
               the portfolio's own recent collection-realization rate (average actual ÷ target). Stays portfolio-wide by design — a
               cash-flow forecast is most useful as a whole-company number. Still a sample-data illustration, not a production
@@ -546,50 +566,53 @@ export function DashboardPage() {
             {isFiltered ? ' · reflects the filter above' : ''}
           </CardDescription>
         </CardHeader>
-        <CardContent className="h-72">
+        <CardContent>
           {filteredPortfolioByCategory.length === 0 ? (
-            <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            <p className="flex h-40 items-center justify-center text-sm text-muted-foreground">
               No active loan accounts match the selected filter.
             </p>
           ) : (
-            <>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={filteredPortfolioByCategory}
-                    dataKey="value"
-                    nameKey="category"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    cursor="pointer"
-                    onClick={(data) => {
-                      const slice = (data as { payload?: PortfolioCategorySlice }).payload;
-                      if (slice?.category) openCategorySlice(slice);
-                    }}
-                  >
-                    {filteredPortfolioByCategory.map((entry, index) => (
-                      <Cell key={entry.category} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={pesoTooltipFormatter} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="mt-2 flex flex-wrap justify-center gap-3">
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+              <div className="h-40 w-40 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={filteredPortfolioByCategory}
+                      dataKey="value"
+                      nameKey="category"
+                      innerRadius={45}
+                      outerRadius={68}
+                      paddingAngle={2}
+                      cursor="pointer"
+                      onClick={(data) => {
+                        const slice = (data as { payload?: PortfolioCategorySlice }).payload;
+                        if (slice?.category) openCategorySlice(slice);
+                      }}
+                    >
+                      {filteredPortfolioByCategory.map((entry, index) => (
+                        <Cell key={entry.category} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-col gap-2">
                 {filteredPortfolioByCategory.map((entry, index) => (
                   <button
                     key={entry.category}
                     type="button"
                     onClick={() => openCategorySlice(entry)}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus:outline-none"
                     title="View the loan accounts in this category"
                   >
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-                    {entry.category} · {formatPeso(entry.value)}
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
+                    <span className="font-medium text-foreground">{entry.category}</span>
+                    <span>· {formatPeso(entry.value)}</span>
                   </button>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>

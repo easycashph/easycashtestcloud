@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, History, Lock, Paperclip, RotateCcw, Sparkles, UserPlus, XCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ import { useRole } from '@/lib/roleContext';
 import {
   createClientFromApplication,
   findRepeatClientBorrower,
+  getMockBorrower,
   getMockLoan,
   getMockLoanApplication,
   logActivity,
@@ -111,6 +112,11 @@ export function LoanApplicationDetailPage() {
 
   const availableSubTypes = MOCK_LOAN_PRODUCTS.filter((p) => p.isActive && p.category === application.requestedCategory);
   const repeatClientBorrower = findRepeatClientBorrower(application.applicantName);
+  // The applicant's official Client Data record, when one exists: the record "Create Client"
+  // produced from this application, or a same-name existing client (repeat applicant). Makes the
+  // applicant name a link to the Client Profile; stays plain text for brand-new applicants.
+  const officialClient =
+    (application.createdClientId ? getMockBorrower(application.createdClientId) : undefined) ?? repeatClientBorrower;
   const previousLoans = repeatClientBorrower?.loanIds.map((id) => getMockLoan(id)).filter((l): l is NonNullable<typeof l> => Boolean(l)) ?? [];
   const initials = application.applicantName
     .split(' ')
@@ -180,7 +186,19 @@ export function LoanApplicationDetailPage() {
           </Avatar>
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                {officialClient ? (
+                  <Link
+                    to={`/clients/${officialClient.id}`}
+                    className="text-primary underline-offset-2 hover:underline"
+                    title="Official Easycash client — view Client Profile"
+                  >
+                    {application.applicantName}
+                  </Link>
+                ) : (
+                  application.applicantName
+                )}
+              </h2>
               <Badge
                 variant={application.status === 'PENDING_REVIEW' ? 'warning' : application.status === 'APPROVED' ? 'success' : 'destructive'}
               >

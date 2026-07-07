@@ -19,8 +19,8 @@ interface LoanPortfolioVennDiagramProps {
   onSegmentClick?: (segment: PortfolioHealthSegment) => void;
 }
 
-const CIRCLE_A = { cx: 170, cy: 130, r: 95 };
-const CIRCLE_B = { cx: 310, cy: 130, r: 95 };
+const CIRCLE_A = { cx: 170, cy: 150, r: 95 };
+const CIRCLE_B = { cx: 310, cy: 150, r: 95 };
 
 export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSegmentClick }: LoanPortfolioVennDiagramProps) {
   const clickable = Boolean(onSegmentClick);
@@ -73,7 +73,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
   return (
     <div className="space-y-4">
       <svg
-        viewBox="0 0 480 260"
+        viewBox="0 0 480 280"
         className="mx-auto w-full max-w-md"
         role="img"
         aria-label="Venn diagram of Good loan accounts, Active accounts in Arrears (overlap), and Matured loan accounts"
@@ -127,32 +127,41 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
         </circle>
 
         <g className="pointer-events-none select-none">
-          <text x={118} y={122} textAnchor="middle" className="fill-foreground text-2xl font-bold">
+          <text x={118} y={142} textAnchor="middle" className="fill-foreground text-2xl font-bold">
             {good.count}
           </text>
-          <text x={118} y={142} textAnchor="middle" className="fill-muted-foreground text-[11px]">
+          <text x={118} y={162} textAnchor="middle" className="fill-muted-foreground text-[11px]">
             Good
           </text>
 
-          <text x={362} y={122} textAnchor="middle" className="fill-foreground text-2xl font-bold">
+          <text x={362} y={142} textAnchor="middle" className="fill-foreground text-2xl font-bold">
             {matured.count}
           </text>
-          <text x={362} y={142} textAnchor="middle" className="fill-muted-foreground text-[11px]">
+          <text x={362} y={162} textAnchor="middle" className="fill-muted-foreground text-[11px]">
             Matured
           </text>
 
-          <text x={240} y={128} textAnchor="middle" className="fill-foreground text-2xl font-bold">
+          <text x={240} y={148} textAnchor="middle" className="fill-foreground text-2xl font-bold">
             {activeInArrears.count}
           </text>
-          <text x={240} y={146} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
+          <text x={240} y={166} textAnchor="middle" className="fill-foreground text-[11px] font-semibold">
             In Arrears
           </text>
 
-          <text x={170} y={40} textAnchor="middle" className="fill-success text-sm font-semibold">
-            Good Loan Accounts
+          {/* Two-line titles, each centered over its own circle — kept short per line so the
+              longer "Matured Loan Accounts" label can't collide with "Good Loan Accounts" the
+              way a single wide line did. */}
+          <text x={170} y={18} textAnchor="middle" className="fill-success text-sm font-semibold">
+            Good Loan
           </text>
-          <text x={310} y={40} textAnchor="middle" className="fill-destructive text-sm font-semibold">
-            Matured Loan Accounts
+          <text x={170} y={34} textAnchor="middle" className="fill-success text-sm font-semibold">
+            Accounts
+          </text>
+          <text x={310} y={18} textAnchor="middle" className="fill-destructive text-sm font-semibold">
+            Matured Loan
+          </text>
+          <text x={310} y={34} textAnchor="middle" className="fill-destructive text-sm font-semibold">
+            Accounts
           </text>
         </g>
       </svg>

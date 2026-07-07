@@ -6,7 +6,76 @@ interaction flow before the real backend HTTP API (`app/backend` CP13) is wired 
 below touches `app/backend` or any real database.** See the "Preview Mode" banner rendered in the
 app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same disclosure.
 
+## 2026-07-08
+
+### Generated Documents distributed onto Loan Accounts; Loan Products get editable document templates
+- Removed the standalone `/admin/documents` Generated Documents page/route/nav link
+  (`GeneratedDocumentsPage.tsx` deleted). Its content now lives on `LoanDetailPage`'s Attachments
+  tab, under a new "Generated Loan Documents" section — filtered to that loan account
+  (`getGeneratedDocumentsForLoan()`), sitting above the existing manual-upload "Other Attachments"
+  section.
+- `MockLoanProduct` gained a `documentTemplates: MockDocumentTemplate[]` field — the loan document
+  templates (Promissory Note, Disclosure Statement, Loan Agreement, Deed of Assignment, Data
+  Privacy and Consent Form) generated when a loan account under that product is activated, adapted
+  from the real legacy Word templates in `legacy/reports/201 Loan Docs Generator/`. Seafarer Loan
+  products get the seafarer-specific variant set instead (Loan Agreement/Deed of Assignment
+  "-SL" suffix, plus Special Power of Attorney) — matching the legacy `-SL` template naming and the
+  seafarer-allotment-specific SPA content.
+- `buildGeneratedDocuments()` in `mockData.ts` now derives each loan's document set from its own
+  product's `documentTemplates` (via `getMockLoanProduct(loan.productId)`) instead of a fixed
+  4-type list, plus an Amortization Schedule generated automatically for every product.
+- `LoanProductsPage` shows each product's "Loan Document Templates" in its expanded row, with an
+  Edit button (active products only) opening a dialog to edit the template name and mail-merge
+  body — in-memory only, same preview-only convention as the rest of the page.
+
+### Dashboard layout/bug fixes
+- Chart tooltips (Loan Disbursement Trend, Collections vs. Target, Collections Forecast, Portfolio
+  Breakdown) now use `TOOLTIP_CONTENT_STYLE`/`TOOLTIP_LABEL_STYLE` pulling from the app's
+  `--popover`/`--popover-foreground`/`--border` CSS variables, instead of Recharts' default plain
+  white box that stayed white in dark mode.
+- `CHART_COLORS` (Portfolio Breakdown pie) no longer includes `--chart-1`, which is re-themed per
+  the LMS Configuration accent color and could render identically to `--chart-3`'s green under the
+  default emerald accent (Business Loan and Seafarer Loan were indistinguishable).
+- Fixed the Collections Forecast and Portfolio Breakdown cards: a fixed-height `CardContent`
+  wrapped both the chart and trailing content (disclaimer paragraph / category legend), so the
+  card's border box stopped short and that trailing content visually overflowed into the next
+  card. The fixed height now applies to a wrapper `div` around just the chart.
+- Portfolio Breakdown by Loan Category reworked from a tall stacked layout (chart, then a
+  full-width wrapping legend row) to a compact side-by-side donut + legend layout — cuts the
+  card's vertical footprint roughly in half on desktop/tablet, stacks vertically on mobile.
+- `LoanPortfolioVennDiagram`'s "Good Loan Accounts"/"Matured Loan Accounts" titles were colliding
+  into unreadable run-on text at the diagram's width; now wrapped onto two lines each with more
+  vertical clearance (viewBox height increased, circles shifted down).
+
 ## 2026-07-07
+
+### About page — version/changelog now derive automatically, no more dual maintenance
+- `LMS_VERSION` and `LMS_UPDATED_ON` are no longer independent constants — both are now derived
+  from `LMS_CHANGELOG[0]` (`src/lib/lmsVersion.ts`), and the "Current" badge on the About page's
+  changelog is computed from array position (`index === 0`) instead of a manually-set `stage`
+  field. Previously these could (and did) drift out of sync with the actual changelog content —
+  the changelog itself is now the only thing to update when a release ships. Version bumped to
+  **0.9.2** with a new entry summarizing everything shipped today after 0.9.1 (Create Application,
+  search/filter across three pages, clickable client names, Portfolio Filter promoted to master
+  filter, real bottom-up forecast/disbursement figures) — this session's own hardcoded changelog
+  had gone stale before this fix, which is what prompted it.
+
+### Search & filter — Client Data, Payment Recording, Payment Reminders; applicant name links to Client Profile
+- **Client Data (`/clients`)**: search now also covers contact number, email, and position (was
+  name/employer/branch only), plus two new filter dropdowns — Home Branch, and loan presence
+  (All / With active loan / With loan history / No loans yet — "active" includes ACTIVE,
+  ACTIVE_IN_ARREARS, and MATURED). A "N of M clients shown" count line reports the filtered size.
+- **Payment Recording (`/payments`)**: new "Find loan account" search (borrower name or loan
+  code) and a payable-status filter (All / Active only / In Arrears only) that narrow the
+  loan-account dropdown, with a "N of M payable loan accounts match" line. Narrows the picker
+  only — never the allocation math; the currently selected loan stays pinned in the options so
+  the picker never goes blank because of a filter.
+- **Payment Reminders (`/reminders`)**: new search box (borrower name or loan account code)
+  alongside the existing status and reminder-type filters.
+- **Loan Application detail (`/applications/:id`)**: the applicant's name is now a link to their
+  Client Profile when the applicant is an official Easycash client — either the client record
+  that "Create Client" produced from this application, or a same-name existing client (repeat
+  applicant). Stays plain text for brand-new applicants, so no dead links.
 
 ### Loan Applications — Create Application (officer-encoded walk-in intake)
 - New **Create Application** button on `/applications` → `/applications/new`: a loan officer can

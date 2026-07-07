@@ -4,14 +4,32 @@ import { Search } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, type MockBorrowerProfile } from '@/lib/mockData';
+import { MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, MOCK_LOANS, type MockBorrowerProfile } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
+
+const BRANCH_OPTIONS = ['ALL', ...[...new Set(MOCK_BORROWERS.map((b) => b.homeBranchName))].sort()];
+
+type LoanPresenceFilter = 'ALL' | 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
+
+const LOAN_PRESENCE_OPTIONS: { value: LoanPresenceFilter; label: string }[] = [
+  { value: 'ALL', label: 'All clients' },
+  { value: 'WITH_ACTIVE', label: 'With active loan' },
+  { value: 'WITH_HISTORY', label: 'With loan history' },
+  { value: 'NONE', label: 'No loans yet' },
+];
+
+function hasActiveLoan(b: MockBorrowerProfile): boolean {
+  return MOCK_LOANS.some(
+    (l) => b.loanIds.includes(l.id) && (l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS' || l.status === 'MATURED'),
+  );
+}
 
 function initials(name: string): string {
   const parts = name.split(' ').filter(Boolean);
@@ -39,15 +57,26 @@ export function ClientListPage() {
   const navigate = useNavigate();
   useLogPageView('Client Data');
   const [search, setSearch] = React.useState('');
+  const [branch, setBranch] = React.useState('ALL');
+  const [loanPresence, setLoanPresence] = React.useState<LoanPresenceFilter>('ALL');
 
   const filtered = MOCK_BORROWERS.filter((b) => {
     const query = search.trim().toLowerCase();
-    return (
+    const matchesSearch =
       query.length === 0 ||
       b.name.toLowerCase().includes(query) ||
       b.employer.toLowerCase().includes(query) ||
-      b.homeBranchName.toLowerCase().includes(query)
-    );
+      b.homeBranchName.toLowerCase().includes(query) ||
+      b.contactNumber.toLowerCase().includes(query) ||
+      b.email.toLowerCase().includes(query) ||
+      b.position.toLowerCase().includes(query);
+    const matchesBranch = branch === 'ALL' || b.homeBranchName === branch;
+    const matchesLoanPresence =
+      loanPresence === 'ALL' ||
+      (loanPresence === 'WITH_ACTIVE' && hasActiveLoan(b)) ||
+      (loanPresence === 'WITH_HISTORY' && b.loanIds.length > 0) ||
+      (loanPresence === 'NONE' && b.loanIds.length === 0);
+    return matchesSearch && matchesBranch && matchesLoanPresence;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: null, direction: 'asc' });
 
@@ -59,17 +88,46 @@ export function ClientListPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="text-base">Search Clients</CardTitle>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search name, employer, or branch..."
-              className="w-full pl-8 sm:w-72"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <CardHeader className="flex flex-col gap-3">
+          <CardTitle className="text-base">Search &amp; Filter</CardTitle>
+          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search name, contact, email, employer..."
+                className="w-full pl-8 sm:w-72"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={branch} onValueChange={setBranch}>
+              <SelectTrigger className="w-full sm:w-44" aria-label="Filter by home branch">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BRANCH_OPTIONS.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b === 'ALL' ? 'All branches' : b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={loanPresence} onValueChange={(v) => setLoanPresence(v as LoanPresenceFilter)}>
+              <SelectTrigger className="w-full sm:w-48" aria-label="Filter by loan presence">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LOAN_PRESENCE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {filtered.length} of {MOCK_BORROWERS.length} clients shown.
+          </p>
         </CardHeader>
         <CardContent>
           <Table>

@@ -38,27 +38,49 @@ export const LMS_CLIENT_PORTAL = {
     'A future client-facing web/Android app where borrowers can submit a loan application online, check loan status, view transaction history, make payments, track their repayment schedule, and contact customer service — separate from this internal, staff-only LMS.',
 };
 
-/** Semantic-ish version. Pre-1.0 while the platform is in its Milestone 9.1 UI-preview stage. */
-export const LMS_VERSION = '0.9.1';
 export const LMS_BUILD_STAGE = 'Preview';
-export const LMS_UPDATED_ON = 'July 7, 2026';
 export const LMS_RELEASED_ON = 'June 2026';
 export const LMS_ENVIRONMENT = 'Milestone 9.1 — internal UI preview (sample data, not connected to live systems)';
 
 export interface LmsChangelogEntry {
   version: string;
   date: string;
-  /** Optional stage label, e.g. "Preview" / "Current". */
-  stage?: string;
   highlights: string[];
 }
 
-/** Newest first. Keep entries concise and plain-language — this is stakeholder-facing. */
+/**
+ * Newest first — this array is the single source of truth for the platform's version number and
+ * release date. `LMS_VERSION`, `LMS_UPDATED_ON`, and the About page's "Current" badge are all
+ * *derived* from `LMS_CHANGELOG[0]` below, not maintained separately — so there is only one place
+ * to update when a user-visible release ships: prepend a new entry here. (The developer-facing,
+ * file-and-function-level history lives in `app/frontend/CHANGELOG.md`; keep these entries
+ * concise and plain-language, translated for a non-technical reader — this is stakeholder-facing.)
+ */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.9.3',
+    date: 'July 8, 2026',
+    highlights: [
+      'Removed the standalone Generated Documents page — a loan account\'s generated documents (Promissory Note, Disclosure Statement, Loan Agreement, Deed of Assignment, Data Privacy Consent Form, Amortization Schedule, and more) now live on that loan account\'s own Attachments tab, alongside manually-uploaded files.',
+      'Loan Products now show each product\'s loan document templates (matching the company\'s real legal templates), editable per product — including a seafarer-specific set (Loan Agreement, Deed of Assignment, Special Power of Attorney) for Seafarer Loan products.',
+      'Dashboard bug fixes: chart tooltips now match the app\'s dark theme instead of flashing white; Collections Forecast and Portfolio Breakdown by Loan Category no longer overflow their card boundaries; Portfolio Breakdown\'s chart is now a compact side-by-side layout instead of a tall stacked one; Business Loan and Seafarer Loan no longer share the same chart color.',
+    ],
+  },
+  {
+    version: '0.9.2',
+    date: 'July 7, 2026',
+    highlights: [
+      'New "Create Application" button on Loan Applications: a loan officer can now encode a walk-in applicant\'s application, following the company\'s official paper form (ECLC-LOFN01) section for section.',
+      'Search and filter added to Client Data (by branch and loan status), Payment Recording (find a loan account by borrower or code), and Payment Reminders (search by borrower or loan account).',
+      'Client names are now clickable throughout — on Loan Accounts and on a Loan Application (when the applicant is already an official client) — linking straight to their Client Profile.',
+      'Portfolio Filter moved to the top of the Dashboard and now drives every portfolio card (Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health), not just two of them.',
+      'Collections Forecast and Loan Disbursement Trend now compute from each loan\'s own real repayment schedule instead of an illustrative random trend.',
+      'This About page\'s version and "Updated on" date now update automatically from the changelog below, instead of being maintained separately.',
+    ],
+  },
   {
     version: '0.9.1',
     date: 'July 7, 2026',
-    stage: 'Current',
     highlights: [
       'New Loan Portfolio Health panel on the Dashboard: a Good / In Arrears / Matured breakdown with per-segment income and loss figures (Interest Income, Accrued Revenue, Credit Loss).',
       'Portfolio Quality Metrics using standard lending indicators — Delinquency Rate, Portfolio at Risk (PAR), and Average Loan Size — each with an in-app definition.',
@@ -93,6 +115,10 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
 ];
+
+/** Derived from the changelog above — see its doc comment. Never set these independently. */
+export const LMS_VERSION = LMS_CHANGELOG[0]!.version;
+export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.date;
 
 /** Structured "app store"-style facts shown on the About page. */
 export const LMS_ABOUT_FACTS: { label: string; value: string }[] = [

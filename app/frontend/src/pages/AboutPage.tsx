@@ -153,11 +153,11 @@ export function AboutPage() {
           <CardTitle>What&apos;s New — Changelog</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {LMS_CHANGELOG.map((entry) => (
+          {LMS_CHANGELOG.map((entry, index) => (
             <div key={entry.version} className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">Version {entry.version}</span>
-                {entry.stage && <Badge variant={entry.stage === 'Current' ? 'success' : 'outline'}>{entry.stage}</Badge>}
+                {index === 0 && <Badge variant="success">Current</Badge>}
                 <span className="text-xs text-muted-foreground">{entry.date}</span>
               </div>
               <ul className="space-y-1.5 border-l-2 border-border pl-4">

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +62,22 @@ export function PaymentRecordingPage() {
   const [searchParams] = useSearchParams();
   const preselected = searchParams.get('loanId');
   const [loanId, setLoanId] = React.useState(preselected && PAYABLE_LOANS.some((l) => l.id === preselected) ? preselected : PAYABLE_LOANS[0]?.id ?? '');
+  const [loanSearch, setLoanSearch] = React.useState('');
+  const [loanStatusFilter, setLoanStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS'>('ALL');
+
+  // Narrows the loan-account dropdown only — never the allocation math below. The currently
+  // selected loan is always kept in the options (pinned on top) so the Select never shows an
+  // empty value just because the search/filter excluded it.
+  const searchedLoans = PAYABLE_LOANS.filter((l) => {
+    const query = loanSearch.trim().toLowerCase();
+    const matchesSearch =
+      query.length === 0 || l.borrowerName.toLowerCase().includes(query) || l.loanCode.toLowerCase().includes(query);
+    const matchesStatus = loanStatusFilter === 'ALL' || l.status === loanStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  const selectedLoan = PAYABLE_LOANS.find((l) => l.id === loanId);
+  const loanOptions =
+    selectedLoan && !searchedLoans.some((l) => l.id === selectedLoan.id) ? [selectedLoan, ...searchedLoans] : searchedLoans;
   const [amount, setAmount] = React.useState('1000.00');
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
   const [manualPrincipal, setManualPrincipal] = React.useState('0.00');
@@ -151,19 +168,49 @@ export function PaymentRecordingPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
+              <Label htmlFor="loan-search">Find loan account</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="loan-search"
+                  placeholder="Search borrower or loan code..."
+                  className="pl-8"
+                  value={loanSearch}
+                  onChange={(e) => setLoanSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                value={loanStatusFilter}
+                onValueChange={(v) => setLoanStatusFilter(v as 'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS')}
+              >
+                <SelectTrigger aria-label="Filter loan accounts by status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All payable statuses</SelectItem>
+                  <SelectItem value="ACTIVE">Active only</SelectItem>
+                  <SelectItem value="ACTIVE_IN_ARREARS">In Arrears only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="loan-select">Loan account</Label>
               <Select value={loanId} onValueChange={setLoanId}>
                 <SelectTrigger id="loan-select">
                   <SelectValue placeholder="Select a loan" />
                 </SelectTrigger>
                 <SelectContent>
-                  {PAYABLE_LOANS.map((l) => (
+                  {loanOptions.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
                       {l.borrowerName} — {l.loanCode}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {searchedLoans.length} of {PAYABLE_LOANS.length} payable loan accounts match.
+              </p>
             </div>
 
             <div className="space-y-1.5">
