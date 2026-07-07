@@ -336,8 +336,8 @@ export function LoanDetailPage() {
   if (!loan) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/loans')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Loan Accounts
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <p className="text-sm text-muted-foreground">Sample loan not found: {loanId}</p>
       </div>
@@ -351,8 +351,8 @@ export function LoanDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <Button variant="ghost" size="sm" className="mb-1 -ml-2" onClick={() => navigate('/loans')}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Loan Accounts
+          <Button variant="ghost" size="sm" className="mb-1 -ml-2" onClick={() => navigate(-1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
           </Button>
           <div className="flex items-center gap-3">
             <h2 className="text-2xl font-semibold tracking-tight">{loan.borrowerName}</h2>

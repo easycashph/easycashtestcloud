@@ -19,6 +19,7 @@ import { MemberListPage } from '@/pages/MemberListPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { LmsConfigurationPage } from '@/pages/LmsConfigurationPage';
 import { GeneratedDocumentsPage } from '@/pages/GeneratedDocumentsPage';
+import { AboutPage } from '@/pages/AboutPage';
 
 /**
  * Milestone 9.1 UI preview build (pre-CP13): every route below renders
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />
         <Route path="admin/configuration" element={<LmsConfigurationPage />} />
         <Route path="admin/documents" element={<GeneratedDocumentsPage />} />
+        <Route path="admin/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

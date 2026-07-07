@@ -82,8 +82,8 @@ export function LoanApplicationDetailPage() {
   if (!canAccessLoanApplications) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/applications')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Loan Applications
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
@@ -101,8 +101,8 @@ export function LoanApplicationDetailPage() {
   if (!application) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/applications')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Loan Applications
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <p className="text-sm text-muted-foreground">Sample application not found: {applicationId}</p>
       </div>
@@ -170,8 +170,8 @@ export function LoanApplicationDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button variant="ghost" size="sm" className="mb-1 -ml-2" onClick={() => navigate('/applications')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Loan Applications
+        <Button variant="ghost" size="sm" className="mb-1 -ml-2" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <div className="flex items-center gap-3">
           <Avatar className="h-10 w-10">

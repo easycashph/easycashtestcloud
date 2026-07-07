@@ -14,10 +14,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertOctagon, AlertTriangle, Banknote, Landmark, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Banknote, Filter, Landmark, RotateCcw, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { LoanPortfolioVennDiagram, type PortfolioHealthSegment } from '@/components/LoanPortfolioVennDiagram';
 import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillDownDialog';
@@ -25,12 +29,15 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import {
+  buildPortfolioByCategory,
+  buildPortfolioHealth,
   COLLECTIONS_VS_TARGET,
   DASHBOARD_SUMMARY,
   DISBURSEMENT_TREND,
+  getDashboardLoanCategory,
+  LOAN_CATEGORY_OPTIONS,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOANS,
-  PORTFOLIO_BY_CATEGORY,
   PORTFOLIO_HEALTH,
   PORTFOLIO_QUALITY_METRICS,
   SAMPLE_COLLECTIONS_PROJECTION,
@@ -178,14 +185,54 @@ function MetricItem({
   );
 }
 
+const ALL_CATEGORIES = 'ALL';
+const EMPTY_DATE_RANGE: DateRange = { from: '', to: '' };
+
 export function DashboardPage() {
   useLogPageView('Dashboard');
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
+  // Shared filter state for the two portfolio widgets below (Portfolio Breakdown by Loan Category
+  // and Loan Portfolio Health) — filters by loan category and by origination date range. Every
+  // other dashboard card (Quality Metrics, Recommendation, the other charts) intentionally stays
+  // portfolio-wide, unaffected by this filter.
+  const [categoryFilter, setCategoryFilter] = React.useState<string>(ALL_CATEGORIES);
+  const [dateRange, setDateRange] = React.useState<DateRange>(EMPTY_DATE_RANGE);
+  const isFiltered = categoryFilter !== ALL_CATEGORIES || dateRange.from !== '' || dateRange.to !== '';
+  const resetFilters = () => {
+    setCategoryFilter(ALL_CATEGORIES);
+    setDateRange(EMPTY_DATE_RANGE);
+  };
+
+  const portfolioFilteredLoans = React.useMemo(() => {
+    const fromTime = dateRange.from ? new Date(dateRange.from).getTime() : null;
+    const toTime = dateRange.to ? new Date(`${dateRange.to}T23:59:59.999`).getTime() : null;
+    return MOCK_LOANS.filter((loan) => {
+      if (categoryFilter !== ALL_CATEGORIES && getDashboardLoanCategory(loan) !== categoryFilter) return false;
+      const originated = new Date(loan.createdAt).getTime();
+      if (fromTime !== null && originated < fromTime) return false;
+      if (toTime !== null && originated > toTime) return false;
+      return true;
+    });
+  }, [categoryFilter, dateRange]);
+
+  const filteredPortfolioHealth = React.useMemo(() => buildPortfolioHealth(portfolioFilteredLoans), [portfolioFilteredLoans]);
+  const filteredPortfolioByCategory = React.useMemo(
+    () => buildPortfolioByCategory(portfolioFilteredLoans),
+    [portfolioFilteredLoans],
+  );
+  const filteredActiveCount =
+    filteredPortfolioHealth.good.count + filteredPortfolioHealth.activeInArrears.count + filteredPortfolioHealth.matured.count;
+  const filteredOutstandingTotal =
+    filteredPortfolioByCategory.reduce((sum, slice) => sum + slice.value, 0) ||
+    filteredPortfolioHealth.good.collectionsBalance +
+      filteredPortfolioHealth.activeInArrears.collectionsBalance +
+      filteredPortfolioHealth.matured.collectionsBalance;
+
   // The active portfolio is every still-active account: performing (good), in arrears, AND
   // past-maturity-but-unpaid (matured). Must match DASHBOARD_SUMMARY.totalActiveLoans and the
   // PORTFOLIO_QUALITY_METRICS denominators, which all include MATURED — otherwise a figure and
-  // its drill-down list disagree.
+  // its drill-down list disagree. (Portfolio-wide, not affected by the category/date filter above.)
   const activePortfolioLoans = React.useMemo(
     () => [...PORTFOLIO_HEALTH.good.loans, ...PORTFOLIO_HEALTH.activeInArrears.loans, ...PORTFOLIO_HEALTH.matured.loans],
     [],
@@ -207,12 +254,12 @@ export function DashboardPage() {
     });
 
   const openVennSegment = (segment: PortfolioHealthSegment) =>
-    setDrillDown({ ...VENN_SEGMENT_META[segment], loans: PORTFOLIO_HEALTH[segment].loans });
+    setDrillDown({ ...VENN_SEGMENT_META[segment], loans: filteredPortfolioHealth[segment].loans });
 
   const openCategorySlice = (slice: PortfolioCategorySlice) =>
     setDrillDown({
       title: `${slice.category} — Active Portfolio`,
-      description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.`,
+      description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.${isFiltered ? ' Reflects the filter currently applied above.' : ''}`,
       loans: slice.loans,
     });
 
@@ -375,53 +422,6 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Portfolio Breakdown by Loan Category</CardTitle>
-            <CardDescription>
-              Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) — click a slice for its accounts
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={PORTFOLIO_BY_CATEGORY}
-                  dataKey="value"
-                  nameKey="category"
-                  innerRadius={60}
-                  outerRadius={90}
-                  paddingAngle={2}
-                  cursor="pointer"
-                  onClick={(data) => {
-                    const slice = (data as { payload?: PortfolioCategorySlice }).payload;
-                    if (slice?.category) openCategorySlice(slice);
-                  }}
-                >
-                  {PORTFOLIO_BY_CATEGORY.map((entry, index) => (
-                    <Cell key={entry.category} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={pesoTooltipFormatter} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-2 flex flex-wrap justify-center gap-3">
-              {PORTFOLIO_BY_CATEGORY.map((entry, index) => (
-                <button
-                  key={entry.category}
-                  type="button"
-                  onClick={() => openCategorySlice(entry)}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none"
-                  title="View the loan accounts in this category"
-                >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-                  {entry.category}
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Collections Forecast</CardTitle>
@@ -448,18 +448,123 @@ export function DashboardPage() {
       </div>
 
       <Card>
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-primary" />
+            <div>
+              <CardTitle className="text-base">Portfolio Filters</CardTitle>
+              <CardDescription>
+                Applies to Portfolio Breakdown by Loan Category and Loan Portfolio Health below — totals recompute live.
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="dashboard-category-filter" className="text-xs">
+                Loan Category
+              </Label>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger id="dashboard-category-filter" className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_CATEGORIES}>All Categories</SelectItem>
+                  {LOAN_CATEGORY_OPTIONS.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            {isFiltered && (
+              <Button variant="ghost" size="sm" onClick={resetFilters}>
+                <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reset
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Showing <span className="font-medium text-foreground">{filteredActiveCount}</span> active loan account
+            {filteredActiveCount === 1 ? '' : 's'} · <span className="font-medium text-foreground">{formatPeso(filteredOutstandingTotal)}</span>{' '}
+            total outstanding principal
+            {isFiltered ? ' matching the selected filter' : ' across the whole portfolio'}.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio Breakdown by Loan Category</CardTitle>
+          <CardDescription>
+            Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) — click a slice for its accounts
+            {isFiltered ? ' · reflects the filter above' : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="h-72">
+          {filteredPortfolioByCategory.length === 0 ? (
+            <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              No active loan accounts match the selected filter.
+            </p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={filteredPortfolioByCategory}
+                    dataKey="value"
+                    nameKey="category"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    cursor="pointer"
+                    onClick={(data) => {
+                      const slice = (data as { payload?: PortfolioCategorySlice }).payload;
+                      if (slice?.category) openCategorySlice(slice);
+                    }}
+                  >
+                    {filteredPortfolioByCategory.map((entry, index) => (
+                      <Cell key={entry.category} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={pesoTooltipFormatter} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-2 flex flex-wrap justify-center gap-3">
+                {filteredPortfolioByCategory.map((entry, index) => (
+                  <button
+                    key={entry.category}
+                    type="button"
+                    onClick={() => openCategorySlice(entry)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none"
+                    title="View the loan accounts in this category"
+                  >
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
+                    {entry.category} · {formatPeso(entry.value)}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <CardTitle>Loan Portfolio Health</CardTitle>
           <CardDescription>
             Good vs. Matured loan accounts, with the overlap — Active Accounts in Arrears: still active and paying, just sometimes
             late, where Easycash earns penalty/late-fee income on top of amortization. Click any region for the accounts behind it.
+            {isFiltered ? ' Reflects the filter above.' : ''}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <LoanPortfolioVennDiagram
-            good={PORTFOLIO_HEALTH.good}
-            activeInArrears={PORTFOLIO_HEALTH.activeInArrears}
-            matured={PORTFOLIO_HEALTH.matured}
+            good={filteredPortfolioHealth.good}
+            activeInArrears={filteredPortfolioHealth.activeInArrears}
+            matured={filteredPortfolioHealth.matured}
             onSegmentClick={openVennSegment}
           />
         </CardContent>
@@ -468,7 +573,7 @@ export function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Sparkles className="h-4 w-4 text-primary" />
-          <CardTitle>AI Portfolio Assist</CardTitle>
+          <CardTitle>Recommendation</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-3">

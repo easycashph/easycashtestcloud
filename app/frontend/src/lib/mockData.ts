@@ -1082,44 +1082,64 @@ function sumLoans(loans: MockLoanAccount[], pick: (l: MockLoanAccount) => number
   return round2(loans.reduce((total, l) => total + pick(l), 0));
 }
 
-const PORTFOLIO_HEALTH_GOOD_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE');
-const PORTFOLIO_HEALTH_ARREARS_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
-const PORTFOLIO_HEALTH_MATURED_LOANS = MOCK_LOANS.filter((l) => l.status === 'MATURED');
-const PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS = MOCK_LOANS.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
+export interface PortfolioHealthBucket {
+  count: number;
+  collectionsBalance: number;
+  loans: MockLoanAccount[];
+}
 
-export const PORTFOLIO_HEALTH = {
-  good: {
-    count: PORTFOLIO_HEALTH_GOOD_LOANS.length,
-    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_GOOD_LOANS, (l) => l.collectionsBalance),
-    // Interest Income — the realized interest revenue already collected from these performing
-    // accounts. The primary revenue source of the lending business.
-    interestIncome: sumLoans(PORTFOLIO_HEALTH_GOOD_LOANS, (l) => l.balances.interestPaid),
-    loans: PORTFOLIO_HEALTH_GOOD_LOANS,
-  },
-  activeInArrears: {
-    count: PORTFOLIO_HEALTH_ARREARS_LOANS.length,
-    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.collectionsBalance),
-    penaltyIncome: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.balances.penaltyPaid + l.balances.penaltyBalance),
-    // Accrued Revenue — interest the loan has earned that the client should have paid but has not
-    // yet remitted (accrued interest income, still expected to come in). Penalty/late-fee income
-    // is tracked separately as `penaltyIncome`.
-    accruedRevenue: sumLoans(PORTFOLIO_HEALTH_ARREARS_LOANS, (l) => l.balances.interestBalance),
-    loans: PORTFOLIO_HEALTH_ARREARS_LOANS,
-  },
-  matured: {
-    count: PORTFOLIO_HEALTH_MATURED_LOANS.length,
-    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_MATURED_LOANS, (l) => l.collectionsBalance),
-    // Credit Loss — the unpaid principal at risk of never being recovered now that the loan has
-    // run past its full maturity date (Loan Loss exposure, one step short of a formal write-off).
-    creditLoss: sumLoans(PORTFOLIO_HEALTH_MATURED_LOANS, (l) => l.balances.principalBalance),
-    loans: PORTFOLIO_HEALTH_MATURED_LOANS,
-  },
-  writtenOff: {
-    count: PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS.length,
-    collectionsBalance: sumLoans(PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS, (l) => l.collectionsBalance),
-    loans: PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS,
-  },
-};
+/**
+ * Builds the Loan Portfolio Health buckets from any given loan array — used both for the
+ * portfolio-wide baseline (`PORTFOLIO_HEALTH` below) and for the Dashboard's filtered view
+ * (by category/date range), so the Venn diagram's totals stay accurate under any filter.
+ */
+export function buildPortfolioHealth(loans: MockLoanAccount[]) {
+  const good = loans.filter((l) => l.status === 'ACTIVE');
+  const arrears = loans.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
+  const matured = loans.filter((l) => l.status === 'MATURED');
+  const writtenOff = loans.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
+  return {
+    good: {
+      count: good.length,
+      collectionsBalance: sumLoans(good, (l) => l.collectionsBalance),
+      // Interest Income — the realized interest revenue already collected from these performing
+      // accounts. The primary revenue source of the lending business.
+      interestIncome: sumLoans(good, (l) => l.balances.interestPaid),
+      loans: good,
+    },
+    activeInArrears: {
+      count: arrears.length,
+      collectionsBalance: sumLoans(arrears, (l) => l.collectionsBalance),
+      penaltyIncome: sumLoans(arrears, (l) => l.balances.penaltyPaid + l.balances.penaltyBalance),
+      // Accrued Revenue — interest the loan has earned that the client should have paid but has
+      // not yet remitted (accrued interest income, still expected to come in). Penalty/late-fee
+      // income is tracked separately as `penaltyIncome`.
+      accruedRevenue: sumLoans(arrears, (l) => l.balances.interestBalance),
+      loans: arrears,
+    },
+    matured: {
+      count: matured.length,
+      collectionsBalance: sumLoans(matured, (l) => l.collectionsBalance),
+      // Credit Loss — the unpaid principal at risk of never being recovered now that the loan
+      // has run past its full maturity date (Loan Loss exposure, one step short of a formal
+      // write-off).
+      creditLoss: sumLoans(matured, (l) => l.balances.principalBalance),
+      loans: matured,
+    },
+    writtenOff: {
+      count: writtenOff.length,
+      collectionsBalance: sumLoans(writtenOff, (l) => l.collectionsBalance),
+      loans: writtenOff,
+    },
+  };
+}
+
+/** Portfolio-wide baseline (no filter applied) — used by the Quality Metrics and Recommendation cards. */
+export const PORTFOLIO_HEALTH = buildPortfolioHealth(MOCK_LOANS);
+const PORTFOLIO_HEALTH_ARREARS_LOANS = PORTFOLIO_HEALTH.activeInArrears.loans;
+const PORTFOLIO_HEALTH_MATURED_LOANS = PORTFOLIO_HEALTH.matured.loans;
+const PORTFOLIO_HEALTH_GOOD_LOANS = PORTFOLIO_HEALTH.good.loans;
+const PORTFOLIO_HEALTH_WRITTEN_OFF_LOANS = PORTFOLIO_HEALTH.writtenOff.loans;
 
 /**
  * Portfolio Breakdown by Category — outstanding principal of ACTIVE/ACTIVE_IN_ARREARS loans
@@ -1133,9 +1153,13 @@ export interface PortfolioCategorySlice {
   loans: MockLoanAccount[];
 }
 
-function buildPortfolioByCategory(): PortfolioCategorySlice[] {
+/**
+ * Groups any given loan array's still-active accounts by loan category. Used both for the
+ * portfolio-wide baseline (`PORTFOLIO_BY_CATEGORY` below) and for the Dashboard's filtered view.
+ */
+export function buildPortfolioByCategory(loans: MockLoanAccount[]): PortfolioCategorySlice[] {
   const byCategory = new Map<string, PortfolioCategorySlice>();
-  for (const loan of MOCK_LOANS) {
+  for (const loan of loans) {
     if (!ACTIVE_LOAN_STATUSES.includes(loan.status)) continue;
     const category = getDashboardLoanCategory(loan);
     const slice = byCategory.get(category) ?? { category, value: 0, loans: [] };
@@ -1146,7 +1170,10 @@ function buildPortfolioByCategory(): PortfolioCategorySlice[] {
   return [...byCategory.values()];
 }
 
-export const PORTFOLIO_BY_CATEGORY = buildPortfolioByCategory();
+export const PORTFOLIO_BY_CATEGORY = buildPortfolioByCategory(MOCK_LOANS);
+
+/** Distinct loan categories present in the portfolio, for the Dashboard's category filter dropdown. */
+export const LOAN_CATEGORY_OPTIONS: string[] = PORTFOLIO_BY_CATEGORY.map((slice) => slice.category);
 
 /**
  * Industry-standard portfolio quality metrics (per the standard definitions popularized on

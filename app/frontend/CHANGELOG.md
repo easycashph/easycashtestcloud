@@ -8,6 +8,55 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-07
 
+### Dashboard — filters + dynamic totals on Portfolio Breakdown and Loan Portfolio Health
+- New shared **Portfolio Filters** card (Loan Category + date-range) sits above both widgets and
+  drives them together: **Portfolio Breakdown by Loan Category** (pie) and **Loan Portfolio
+  Health** (Venn diagram) now recompute their loans, counts, and every ₱ total live against the
+  active filter — including the per-segment Interest Income / Accrued Revenue / Credit Loss
+  figures. A summary line reports "Showing N active loan accounts · ₱X total outstanding
+  principal" for whatever is currently in scope, and each card's drill-down dialog reflects the
+  filtered set too. Reset button clears back to the whole portfolio.
+- `src/lib/mockData.ts`: `buildPortfolioHealth()` and `buildPortfolioByCategory()` are now
+  exported, reusable builder functions (previously private, MOCK_LOANS-only) so the Dashboard can
+  call them against any filtered loan subset; `PORTFOLIO_HEALTH`/`PORTFOLIO_BY_CATEGORY` remain as
+  the portfolio-wide baseline used by the (unfiltered) Quality Metrics and Recommendation cards.
+  New `LOAN_CATEGORY_OPTIONS` export for the filter dropdown.
+
+### Dashboard — "AI Portfolio Assist" renamed to "Recommendation"
+- Same three per-segment plans (Maintain / Protect the margin / Resolve), same disclosure text —
+  only the card title changed, per business instruction.
+
+### Back buttons now use browser history instead of a hard-coded destination
+- Every "Back to X" button (Loan Account Detail, Loan Application Detail, Client Profile,
+  Statement of Account) now calls `navigate(-1)` instead of a hard-coded route, so it returns to
+  wherever the user actually came from — list, search result, or another detail page — instead of
+  always resetting to a blank list. Label shortened to "Back" since the destination is no longer
+  a fixed, nameable page.
+
+### About page — company/product info update
+- LMS name corrected to **Easycash Loan Management System Platform** (`LMS_APP_NAME`).
+- New **Developer Team — Easycash Dev** card: Jomer Biason (MIS Assistant — Vibe Coder and
+  Programmer) and Nomer Perez (MIS Manager — Reviewer).
+- New **Easycash Portal** card — informational disclosure of the planned future client-facing
+  app/website (`easycashportal.ph`): online loan application, status, transaction history,
+  payments, tracker, and customer service contact. Explicitly labeled "Planned — not yet built";
+  nothing in this LMS links to it.
+- Details grid gained a "Developed by" fact.
+
+### About page (new, under Administration) — LMS version number + changelog
+- Added `/admin/about`: an app-store-style About page — logo, app name, version badge, an "About
+  this app" description of the platform's modules, a Details grid (version, updated/released
+  dates, offered-by, environment), and a **What's New — Changelog** section listing prior releases
+  newest-first.
+- New single source of truth for the version/changelog: `src/lib/lmsVersion.ts`
+  (`LMS_VERSION`, `LMS_CHANGELOG`, `LMS_ABOUT_SECTIONS`, `LMS_ABOUT_FACTS`). Bump the version and
+  prepend a changelog entry here whenever a user-visible release ships — this is the
+  stakeholder-facing history, separate from this developer-facing `CHANGELOG.md`.
+- Current version: **0.9.1** (pre-1.0, reflecting the Milestone 9.1 UI-preview stage). The sidebar
+  footer now reads the same version (`v0.9.1`) instead of a hard-coded "Milestone 9.1" string, so
+  the two can never drift out of sync.
+- "About" added as the last item under the Administration sidebar group.
+
 ### Loan Portfolio Health — per-segment income/loss figures + shorter overlap label
 - Each summary card now shows a labeled financial figure computed live from the sample portfolio,
   giving a collected → accrued → at-risk revenue narrative:

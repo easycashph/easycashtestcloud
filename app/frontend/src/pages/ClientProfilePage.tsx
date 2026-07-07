@@ -266,8 +266,8 @@ export function ClientProfilePage() {
   if (!borrower) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/clients')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Client Data
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <p className="text-sm text-muted-foreground">Sample client not found: {borrowerId}</p>
       </div>
@@ -303,8 +303,8 @@ export function ClientProfilePage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate('/clients')}>
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Client Data
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 
       <div className="grid gap-4 lg:grid-cols-3">
