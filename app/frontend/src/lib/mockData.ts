@@ -868,8 +868,11 @@ export interface LoanFeeWaivers {
   notarialFee: boolean;
   insuranceFee: boolean;
   advanceInterestFee: boolean;
+  /** Not part of the official calculator's own toggle set (that fee is product-configured, always-applied there) — added per MIS request, defaulted to waived (see `DEFAULT_FEE_WAIVERS`). */
+  documentaryStampTax: boolean;
 }
 
+/** "Waive nothing" baseline — every fee charged. */
 export const NO_FEES_WAIVED: LoanFeeWaivers = {
   accountManagementFee: false,
   processingFee: false,
@@ -877,7 +880,11 @@ export const NO_FEES_WAIVED: LoanFeeWaivers = {
   notarialFee: false,
   insuranceFee: false,
   advanceInterestFee: false,
+  documentaryStampTax: false,
 };
+
+/** The Create Loan Account form's actual starting toggle state — Documentary Stamp Tax defaults to waived; every other fee defaults to charged. */
+export const DEFAULT_FEE_WAIVERS: LoanFeeWaivers = { ...NO_FEES_WAIVED, documentaryStampTax: true };
 
 export interface LoanOriginationParams {
   principal: number;
@@ -994,7 +1001,15 @@ export function computeLoanOriginationSummary(params: LoanOriginationParams): Lo
 
   const otherProductFees = productFeeRules
     .filter((f) => f.name !== 'Processing Fee')
-    .map((f) => ({ name: f.name, amount: f.computation === 'FLAT' ? f.value : round2(principal * (f.value / 100)) }));
+    .map((f) => ({
+      name: f.name,
+      amount:
+        f.name === 'Documentary Stamp Tax' && waive.documentaryStampTax
+          ? 0
+          : f.computation === 'FLAT'
+            ? f.value
+            : round2(principal * (f.value / 100)),
+    }));
   const otherProductFeesTotal = round2(otherProductFees.reduce((sum, f) => sum + f.amount, 0));
 
   const fees = { accountManagementFee, processingFee, digitalSignatureFee, notarialFee, insuranceFee, advanceInterestFee };

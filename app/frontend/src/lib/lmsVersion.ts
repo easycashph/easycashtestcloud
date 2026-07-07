@@ -67,6 +67,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Create Loan Account form (Client Profile) expanded to match the official calculator\'s loan encoding fields — Contractual Rate, Anticipated Disbursement Date, Co-Borrower Name — plus a live Computation Summary (Monthly Amortization, Total Interest, fees, Net Proceeds, EIR Monthly/Annual) computed with the same confirmed formulas as the rest of the platform.',
       'Create Loan Account form now uses the official Interest Rate Chart (Add-On Rate → Contractual Rate lookup) and reproduces every fee\'s own Waive toggle from the real loan-encoding sheet — Account Management, Processing, Digital Signature, Notarial, Insurance, and Advance Interest fees can each be individually waived, with a running Computation Summary and support for deducting a previous loan\'s outstanding balance on renewal.',
       'Interest Rate Chart corrected and completed by cross-checking a second copy of the same official table — added a missing Add-On 5% tier and fixed the Add-On 10% tier\'s rates, which a unit error in the first copy had made look like unusable test data. Create Loan Account also gained a Disbursement section (Payment Method, and Bank Name/Account/ATM Card details for bank-based methods), matching the official records\' own field set.',
+      'Documentary Stamp Tax now has its own Waive toggle on Create Loan Account, defaulted to waived (every other fee still defaults to charged).',
     ],
   },
   {

@@ -23,12 +23,12 @@ import {
   clientHasActiveLoan,
   computeLoanOriginationSummary,
   createLoanAccountForClient,
+  DEFAULT_FEE_WAIVERS,
   getMockBorrower,
   getMockLoan,
   logActivity,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOAN_PRODUCTS,
-  NO_FEES_WAIVED,
   type LoanFeeWaivers,
   type MockBorrowerProfile,
   type MockLoanAccount,
@@ -186,6 +186,7 @@ const FEE_WAIVER_LABELS: { key: keyof LoanFeeWaivers; label: string }[] = [
   { key: 'notarialFee', label: 'Notarial Fee (₱500)' },
   { key: 'insuranceFee', label: 'Insurance Fee' },
   { key: 'advanceInterestFee', label: 'Advance Interest Fee (if disbursed >30 days before first repayment)' },
+  { key: 'documentaryStampTax', label: 'Documentary Stamp Tax (₱150) — waived by default' },
 ];
 
 /**
@@ -214,7 +215,7 @@ function CreateLoanAccountDialog({
   const [coBorrowerName, setCoBorrowerName] = React.useState('');
   const [disbursementDate, setDisbursementDate] = React.useState(todayIsoDate());
   const [previousLoanOutstandingBalance, setPreviousLoanOutstandingBalance] = React.useState(0);
-  const [waive, setWaive] = React.useState<LoanFeeWaivers>(NO_FEES_WAIVED);
+  const [waive, setWaive] = React.useState<LoanFeeWaivers>(DEFAULT_FEE_WAIVERS);
   const [paymentMethod, setPaymentMethod] = React.useState('GCASH');
   const [bankName, setBankName] = React.useState('');
   const [atmCardNumber, setAtmCardNumber] = React.useState('');
@@ -250,7 +251,7 @@ function CreateLoanAccountDialog({
     setCoBorrowerName('');
     setDisbursementDate(todayIsoDate());
     setPreviousLoanOutstandingBalance(0);
-    setWaive(NO_FEES_WAIVED);
+    setWaive(DEFAULT_FEE_WAIVERS);
     setPaymentMethod('GCASH');
     setBankName('');
     setAtmCardNumber('');
@@ -454,7 +455,10 @@ function CreateLoanAccountDialog({
                 </li>
                 {summary.otherProductFees.map((fee) => (
                   <li key={fee.name} className="flex justify-between">
-                    <span>{fee.name}</span>
+                    <span>
+                      {fee.name}
+                      {fee.name === 'Documentary Stamp Tax' && waive.documentaryStampTax && ' (waived)'}
+                    </span>
                     <span>{formatPeso(fee.amount)}</span>
                   </li>
                 ))}

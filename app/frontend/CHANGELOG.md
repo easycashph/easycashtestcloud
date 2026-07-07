@@ -123,6 +123,17 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   `LoanDetailPage`'s Loan Terms tab; `createLoanAccountForClient()` now accepts `paymentMethod`
   and `disbursementBank` overrides (previously hardcoded to `GCASH`).
 
+### Documentary Stamp Tax gets its own Waive toggle, defaulted to waived
+- `LoanFeeWaivers` gained a `documentaryStampTax` flag — unlike the other six toggles, this one
+  isn't part of the official calculator's own per-fee mechanism (there, Documentary Stamp Tax is
+  just a fixed, always-applied product fee); added per MIS request as an explicit exception.
+- New `DEFAULT_FEE_WAIVERS` export (`{ ...NO_FEES_WAIVED, documentaryStampTax: true }`) is now the
+  Create Loan Account form's actual starting state — Documentary Stamp Tax starts waived, every
+  other fee still starts charged, matching `NO_FEES_WAIVED`'s baseline.
+- `computeLoanOriginationSummary()`'s `otherProductFees` mapping now special-cases the
+  `Documentary Stamp Tax` line to respect this toggle; every other `productFeeRules` entry (e.g.
+  Credit Investigation Fee) remains always-applied, unchanged.
+
 ## 2026-07-07
 
 ### About page — version/changelog now derive automatically, no more dual maintenance
