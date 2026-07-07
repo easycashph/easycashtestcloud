@@ -562,6 +562,12 @@ export function LoanDetailPage() {
                   <dd className="text-right font-medium">{loan.installmentCount}</dd>
                   <dt className="text-muted-foreground">First repayment date</dt>
                   <dd className="text-right font-medium">{formatDate(loan.firstRepaymentDate)}</dd>
+                  {loan.coBorrowerName && (
+                    <>
+                      <dt className="text-muted-foreground">Co-Borrower</dt>
+                      <dd className="text-right font-medium">{loan.coBorrowerName}</dd>
+                    </>
+                  )}
                   <dt className="text-muted-foreground">Loan officer</dt>
                   <dd className="text-right font-medium">{loan.loanOfficerName}</dd>
                   <dt className="text-muted-foreground">Approved at</dt>

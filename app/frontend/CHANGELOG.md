@@ -47,6 +47,24 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   into unreadable run-on text at the diagram's width; now wrapped onto two lines each with more
   vertical clearance (viewBox height increased, circles shifted down).
 
+### Create Loan Account form expanded to match the official calculator
+- Evidence: `legacy/reports/OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`, `Loans_details`
+  sheet's field set (Term, Contractual Rate, Anticipated Disbursement Date, Co-Borrower, Net
+  Proceeds, Processing Fee/Doc Stamp, EIR Monthly/Annual), plus the CONFIRMED formulas already
+  documented in `docs/Architecture/CALCULATION_ENGINE_SPEC.md` §2 (PMT / Monthly Amortization) and
+  §3 (Add-On/EIR rate conversion — `AddOnMonthlyRate = (TotalInterest / Principal) / n`).
+- `ClientProfilePage`'s `CreateLoanAccountDialog` gained: an editable Contractual Rate (defaults
+  to the product's rate, validated against `minInterestRate`/`maxInterestRate`), Anticipated
+  Disbursement Date (drives `firstRepaymentDate`, one month after), and an optional Co-Borrower
+  Name — plus a live "Computation Summary" panel (Monthly Amortization, Total Interest, Net
+  Proceeds, EIR Monthly/Annual, and a per-fee breakdown from the product's `feeRules`).
+- New `computeLoanOriginationSummary()` in `mockData.ts` — reuses the same PMT shape as
+  `buildSchedule()`'s amortization generator, so the preview figure and the eventual generated
+  schedule agree.
+- `MockLoanAccount` gained an optional `coBorrowerName` field, surfaced on `LoanDetailPage`'s Loan
+  Terms tab. `createLoanAccountForClient()` now accepts `interestRate`, `coBorrowerName`, and
+  `anticipatedDisbursementDate` overrides (previously only product/principal/installment count).
+
 ## 2026-07-07
 
 ### About page — version/changelog now derive automatically, no more dual maintenance

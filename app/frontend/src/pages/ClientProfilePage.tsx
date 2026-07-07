@@ -18,6 +18,7 @@ import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import {
   clientHasActiveLoan,
+  computeLoanOriginationSummary,
   createLoanAccountForClient,
   getMockBorrower,
   getMockLoan,
@@ -148,6 +149,27 @@ const ACTIVE_PRODUCTS_FOR_NEW_LOAN = MOCK_LOAN_PRODUCTS.filter((p) => p.isActive
  * ACTIVE/ACTIVE_IN_ARREARS loan (business rule: never 2 at once). Confirmed
  * via a second safety-net dialog before the account is actually created.
  */
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export interface CreateLoanAccountParams {
+  productCode: string;
+  principalAmount: number;
+  installmentCount: number;
+  interestRate: number;
+  coBorrowerName: string;
+  anticipatedDisbursementDate: string;
+}
+
+/**
+ * Fields and layout follow the real official calculator
+ * (`legacy/reports/OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`, `Loans_details` sheet):
+ * Principal Amount, Term, Contractual Rate, Co-Borrower, Anticipated Disbursement Date — plus a
+ * live-computed summary (Monthly Amortization, Total Interest, Processing Fee/Doc Stamp/other
+ * product fees, Net Proceeds, EIR Monthly/Annual) using the CONFIRMED formulas in
+ * `docs/Architecture/CALCULATION_ENGINE_SPEC.md` §2 (PMT) and §3 (Add-On/EIR conversion).
+ */
 function CreateLoanAccountDialog({
   open,
   onOpenChange,
@@ -155,27 +177,58 @@ function CreateLoanAccountDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (productCode: string, principalAmount: number, installmentCount: number) => void;
+  onCreate: (params: CreateLoanAccountParams) => void;
 }) {
   const [productCode, setProductCode] = React.useState('');
   const [principalAmount, setPrincipalAmount] = React.useState(50000);
   const [installmentCount, setInstallmentCount] = React.useState(12);
+  const [interestRate, setInterestRate] = React.useState(0);
+  const [coBorrowerName, setCoBorrowerName] = React.useState('');
+  const [disbursementDate, setDisbursementDate] = React.useState(todayIsoDate());
   const [confirming, setConfirming] = React.useState(false);
 
   const product = ACTIVE_PRODUCTS_FOR_NEW_LOAN.find((p) => p.productCode === productCode);
 
+  const selectProduct = (code: string) => {
+    setProductCode(code);
+    const p = ACTIVE_PRODUCTS_FOR_NEW_LOAN.find((x) => x.productCode === code);
+    if (p) setInterestRate(p.defaultInterestRate);
+  };
+
+  const summary =
+    product && principalAmount > 0 && installmentCount > 0
+      ? computeLoanOriginationSummary(principalAmount, interestRate, installmentCount, product.feeRules)
+      : null;
+
+  const rateOutOfRange = product ? interestRate < product.minInterestRate || interestRate > product.maxInterestRate : false;
+
+  const reset = () => {
+    setProductCode('');
+    setPrincipalAmount(50000);
+    setInstallmentCount(12);
+    setInterestRate(0);
+    setCoBorrowerName('');
+    setDisbursementDate(todayIsoDate());
+  };
+
   return (
     <>
-      <Dialog open={open && !confirming} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={open && !confirming}
+        onOpenChange={(o) => {
+          onOpenChange(o);
+          if (!o) reset();
+        }}
+      >
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create Loan Account</DialogTitle>
             <DialogDescription>Preview only — creates a PENDING_APPROVAL loan account for this client.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label>Product Sub-type</Label>
-              <Select value={productCode} onValueChange={setProductCode}>
+              <Select value={productCode} onValueChange={selectProduct}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a product..." />
                 </SelectTrigger>
@@ -191,17 +244,91 @@ function CreateLoanAccountDialog({
             <div className="space-y-1.5">
               <Label>Principal Amount</Label>
               <Input type="number" value={principalAmount} onChange={(e) => setPrincipalAmount(Number(e.target.value))} />
+              {product && (
+                <p className="text-xs text-muted-foreground">
+                  Range: {formatPeso(product.loanAmountMin)} – {formatPeso(product.loanAmountMax)}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <Label>Installment Count (months)</Label>
+              <Label>Term (installments, months)</Label>
               <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(Number(e.target.value))} />
+              {product && (
+                <p className="text-xs text-muted-foreground">
+                  Range: {product.installmentCountMin}–{product.installmentCountMax} mos
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Contractual Rate (% monthly)</Label>
+              <Input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(Number(e.target.value))} />
+              {product && (
+                <p className={rateOutOfRange ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+                  Range: {product.minInterestRate}% – {product.maxInterestRate}%
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Anticipated Disbursement Date</Label>
+              <Input type="date" value={disbursementDate} onChange={(e) => setDisbursementDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Co-Borrower Name (optional)</Label>
+              <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} placeholder="e.g. Juan Dela Cruz" />
             </div>
           </div>
+
+          {summary && (
+            <div className="rounded-md border bg-secondary/30 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Computation Summary</p>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Monthly Amortization</dt>
+                  <dd className="font-semibold">{formatPeso(summary.monthlyPayment)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Total Interest</dt>
+                  <dd className="font-semibold">{formatPeso(summary.totalInterest)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Net Proceeds</dt>
+                  <dd className="font-semibold text-success">{formatPeso(summary.netProceeds)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">EIR Monthly</dt>
+                  <dd className="font-semibold">{summary.addOnMonthlyRatePercent}%</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">EIR Annual</dt>
+                  <dd className="font-semibold">{summary.addOnAnnualRatePercent}%</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Total Fees</dt>
+                  <dd className="font-semibold">{formatPeso(summary.totalFees)}</dd>
+                </div>
+              </dl>
+              {summary.feeBreakdown.length > 0 && (
+                <ul className="mt-2 space-y-0.5 border-t pt-2 text-xs text-muted-foreground">
+                  {summary.feeBreakdown.map((fee) => (
+                    <li key={fee.name} className="flex justify-between">
+                      <span>{fee.name}</span>
+                      <span>{formatPeso(fee.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                Monthly Amortization uses the level-payment (<code>PMT</code>) formula; Net Proceeds deducts upfront fees from the
+                principal, matching the official calculator's <code>Loans_details</code> field set.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button disabled={!product} onClick={() => setConfirming(true)}>
+            <Button disabled={!product || rateOutOfRange} onClick={() => setConfirming(true)}>
               Continue
             </Button>
           </DialogFooter>
@@ -215,8 +342,8 @@ function CreateLoanAccountDialog({
               <AlertTriangle className="h-4 w-4 text-warning" /> Confirm loan account creation
             </DialogTitle>
             <DialogDescription>
-              Create a {product?.productName} loan account for {formatPeso(principalAmount)} over {installmentCount} months? This is a
-              safety-net confirmation to prevent an accidental click.
+              Create a {product?.productName} loan account for {formatPeso(principalAmount)} over {installmentCount} months at{' '}
+              {interestRate}% monthly? This is a safety-net confirmation to prevent an accidental click.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -225,9 +352,10 @@ function CreateLoanAccountDialog({
             </Button>
             <Button
               onClick={() => {
-                onCreate(productCode, principalAmount, installmentCount);
+                onCreate({ productCode, principalAmount, installmentCount, interestRate, coBorrowerName, anticipatedDisbursementDate: disbursementDate });
                 setConfirming(false);
                 onOpenChange(false);
+                reset();
               }}
             >
               Yes, create
@@ -295,8 +423,19 @@ export function ClientProfilePage() {
     });
   };
 
-  const createLoan = (productCode: string, principalAmount: number, installmentCount: number) => {
-    const loan = createLoanAccountForClient(borrower, { productCode, principalAmount, installmentCount }, currentAccount.name);
+  const createLoan = (params: CreateLoanAccountParams) => {
+    const loan = createLoanAccountForClient(
+      borrower,
+      {
+        productCode: params.productCode,
+        principalAmount: params.principalAmount,
+        installmentCount: params.installmentCount,
+        interestRate: params.interestRate,
+        coBorrowerName: params.coBorrowerName,
+        anticipatedDisbursementDate: params.anticipatedDisbursementDate,
+      },
+      currentAccount.name,
+    );
     forceRerender((n) => n + 1);
     navigate(`/loans/${loan.id}`);
   };

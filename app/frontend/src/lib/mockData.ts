@@ -104,6 +104,8 @@ export interface MockLoanAccount {
   collectionAgentName?: string;
   /** Populated only when `paymentMethod === 'AUTO_DEBIT'` — client-consent-based ATM debit authorization on file. */
   atmCardOnFile?: boolean;
+  /** Optional — matches the legacy calculator's "Co-Borrower" field (`Loans_details` sheet). */
+  coBorrowerName?: string;
 }
 
 export interface MockRepaymentInstallment {
@@ -666,6 +668,54 @@ function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
   d.setUTCMonth(d.getUTCMonth() + months);
   return d;
+}
+
+export interface LoanOriginationSummary {
+  monthlyPayment: number;
+  totalInterest: number;
+  totalFees: number;
+  feeBreakdown: { name: string; amount: number }[];
+  netProceeds: number;
+  addOnMonthlyRatePercent: number;
+  addOnAnnualRatePercent: number;
+}
+
+/**
+ * Live "how much will this loan actually cost/disburse" preview for the Create Loan Account form
+ * — the same figures the real official calculator (`legacy/reports/OFFICIAL CALCULATOR OF
+ * EASYCASH 1.5.83 LMSv3.xlsm`, `Loans_details` sheet) surfaces when encoding a new loan: Monthly
+ * Amortization, Net Proceeds, Processing Fee, Doc Stamp, and EIR Monthly/Annual.
+ *
+ * Formulas per `docs/Architecture/CALCULATION_ENGINE_SPEC.md` (both CONFIRMED against real
+ * legacy data):
+ * - Monthly Amortization: §2 Level Payment Amortization (`PMT`).
+ * - Total Interest / Add-On (EIR) rate: §3 Add-On ↔ Contractual Rate Conversion —
+ *   `AddOnMonthlyRate = (TotalInterest / Principal) / NumberOfInstallments`.
+ * Net Proceeds = Principal − upfront fees, per the legacy field set itself (`Loans_details`:
+ * "Net Proceeds", "Processing Fee Amount", "Doc Stamp" are all deducted from the released
+ * principal, not added on top of it).
+ */
+export function computeLoanOriginationSummary(
+  principal: number,
+  monthlyContractualRatePercent: number,
+  installmentCount: number,
+  feeRules: MockFeeRule[],
+): LoanOriginationSummary {
+  const r = monthlyContractualRatePercent / 100;
+  const monthlyPayment =
+    installmentCount > 0 && r > 0
+      ? round2((r * principal) / (1 - Math.pow(1 + r, -installmentCount)))
+      : round2(principal / Math.max(installmentCount, 1));
+  const totalInterest = round2(monthlyPayment * installmentCount - principal);
+  const feeBreakdown = feeRules.map((f) => ({
+    name: f.name,
+    amount: f.computation === 'FLAT' ? f.value : round2(principal * (f.value / 100)),
+  }));
+  const totalFees = round2(feeBreakdown.reduce((sum, f) => sum + f.amount, 0));
+  const netProceeds = round2(principal - totalFees);
+  const addOnMonthlyRatePercent = principal > 0 && installmentCount > 0 ? round2((totalInterest / principal / installmentCount) * 100) : 0;
+  const addOnAnnualRatePercent = round2(addOnMonthlyRatePercent * 12);
+  return { monthlyPayment, totalInterest, totalFees, feeBreakdown, netProceeds, addOnMonthlyRatePercent, addOnAnnualRatePercent };
 }
 
 function buildSchedule(
@@ -2493,7 +2543,17 @@ export function clientHasActiveLoan(borrowerId: string): boolean {
  */
 export function createLoanAccountForClient(
   client: MockBorrowerProfile,
-  params: { productCode: string; principalAmount: number; installmentCount: number },
+  params: {
+    productCode: string;
+    principalAmount: number;
+    installmentCount: number;
+    /** Contractual monthly rate override — defaults to the product's `defaultInterestRate` when omitted. */
+    interestRate?: number;
+    /** Matches the legacy calculator's "Co-Borrower" field — optional. */
+    coBorrowerName?: string;
+    /** Matches the legacy calculator's "Anticipated Disbursement Date" field — first repayment is derived as one month after this date. Defaults to today. */
+    anticipatedDisbursementDate?: string;
+  },
   actorName: string,
 ): MockLoanAccount {
   const product = MOCK_LOAN_PRODUCTS.find((p) => p.productCode === params.productCode);
@@ -2501,6 +2561,7 @@ export function createLoanAccountForClient(
   const loanCode = nextLoanCode(prefix);
   const id = `loan-client-${Date.now()}`;
   const branch = pick(BRANCHES);
+  const disbursementDate = params.anticipatedDisbursementDate ? new Date(params.anticipatedDisbursementDate) : new Date();
   const loan: MockLoanAccount = {
     id,
     loanCode,
@@ -2513,9 +2574,10 @@ export function createLoanAccountForClient(
     isDiscontinuedProduct: product ? !product.isActive : false,
     status: 'PENDING_APPROVAL',
     principalAmount: params.principalAmount,
-    interestRate: product?.defaultInterestRate ?? 0,
+    interestRate: params.interestRate ?? product?.defaultInterestRate ?? 0,
     installmentCount: params.installmentCount,
-    firstRepaymentDate: addMonths(new Date(), 1).toISOString(),
+    firstRepaymentDate: addMonths(disbursementDate, 1).toISOString(),
+    coBorrowerName: params.coBorrowerName?.trim() || undefined,
     balances: {
       principalBalance: 0,
       principalPaid: 0,
