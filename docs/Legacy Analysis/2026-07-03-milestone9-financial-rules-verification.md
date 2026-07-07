@@ -1333,3 +1333,177 @@ investigation passes (§1–§9) is sufficient to draft each of the four ADRs.
 
 **No ADRs, no `CALCULATION_ENGINE_SPEC.md`, and no code have been written in this phase**, per
 your instruction. Awaiting your review of the evidence above before proceeding to ADR drafting.
+
+---
+
+## 11. Follow-Up Investigation (2026-07-07) — "OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm"
+
+**Authorized by:** MIS Manager and CEO (2026-07-07 session). This workbook (`legacy/reports/`,
+gitignored — see §11.0) is **not a template like the "201 Loan Docs Generator" workbook (§8)** —
+it is Easycash's actual, currently-in-use production ledger: a macro-enabled (`.xlsm`) live
+database with real client records, real loan accounts, and an edit-history audit trail with
+entries as recent as 2026-06-03. It had never previously been examined by any ADR, the
+`CALCULATION_ENGINE_SPEC.md`, or this Legacy Analysis document — confirmed by a repo-wide search
+for the filename and its internal sheet names before this investigation began.
+
+### 11.0 Handling note — real, current client PII
+
+Unlike every other legacy source cited in this document, this workbook contains **current, live**
+client PII (full names, birthdates, SSS/TIN numbers, addresses, phone numbers, emails, employer
+information, co-borrower/character-reference PII) and a `Change_Log` sheet recording edits to that
+PII. This document deliberately cites **only loan account codes and aggregate/statistical
+findings** below — never a client name, SSS/TIN, address, or other PII field — same discipline as
+this document's other client PII handling. Separately, this file was found sitting **untracked but
+not gitignored** (the existing `legacy/reports/*.xlsx` rule doesn't match `.xlsm`) and has been
+added to `.gitignore` as a corrective action (2026-07-07, prior session) — it must never enter git
+history.
+
+### 11.1 Structure
+
+18 sheets. The ones with real financial content: `Rate_details` (140 rows — Add-On→Contractual
+rate lookup table), `Product_details` (9 rows — the product catalog), `Requirements_Setup` (154
+rows — per-product document checklist), `Loans_details` (261 rows — the loan origination ledger,
+one row per loan, including every fee/rate field), `Master_Schedules` (6,826 rows — full
+expected/paid amortization schedule per installment per loan), `Payment_History` (3,097 rows),
+`Activity_Logs` (33 rows — e.g. penalty waivers), and `Change_Log` (176 rows — PII edit audit
+trail, not financial). All formula/schedule computation appears to happen in VBA macros (the file
+has a VBA project); the worksheet cells themselves mostly hold **pasted, cached results**, not live
+formulas — only two live formulas were found in `Loans_details` (`Processing Fee % = ProcessingFeeAmount / Principal`,
+`Account Management Fee % = same pattern` — both reverse ratios, not forward formulas) and one in
+`Master_Schedules` (`Inst# = COUNTIF(...)`, a running counter, not a financial formula).
+
+### 11.2 Add-On → Contractual rate table — confirms and *expands* ADR-010's finding
+
+`Rate_details` is the same construct as ADR-010 §1's already-`CONFIRMED` "`parameter` sheet"
+lookup table (`(Add-On tier, Term) → Contractual Rate`) — and where they overlap, **the values are
+identical**. Spot-check: ADR-010 §2 cites "Add-On 3.5%/Term 6 → table value 5.73%"; this workbook's
+`Rate_details` shows the identical `3.5% / term=6 → 5.73%`. This is independent corroboration, not
+a new formula.
+
+**What is new:** ADR-010 §1 describes "at least six Add-On tiers (1.5%, 2%, 2.5%, 2.75%, 3%,
+3.5%)". This workbook's `Rate_details` contains **ten** distinct tiers across terms 1–24 (not just
+1–12): the same six, plus **2.25%, 5%, 10%, and 1.75%**, each following the same
+formula-3-derived-in-reverse relationship ADR-010 §2 already establishes. This doesn't change
+ADR-010's conclusion — it's the same mechanism — but confirms the real tier set is larger than
+previously documented. **Recommend**: fold the four additional tiers into ADR-010 as a minor
+factual update (not a new decision).
+
+**Data-quality flag, not a new rule**: the `1.75%` tier's rows appear **row-shifted by one** in the
+source file — `term=1` shows `4.16%` (should equal `1.75%`, as every other tier's `term=1` row
+trivially does) and `term=3` shows a literal `242%` (almost certainly a missing decimal point,
+`2.42%`). This looks like a copy/paste artifact in the live spreadsheet itself, not a real business
+rule — flagging so it is never copied into the calculation engine as-is.
+
+### 11.3 Insurance Fee — new formula evidence, not previously documented anywhere
+
+No ADR, and no line of `CALCULATION_ENGINE_SPEC.md`, has ever proposed a formula for the
+`Insurance Fee` (it is named once, only as one of the fields zeroed by `ADR-049`'s employee
+waiver). This workbook's `Loans_details` provides the first evidence of one. Across every product
+except `SL-Corporate`/`BL-*` (see below), `InsuranceFee ÷ (Principal × Term)` clusters in a tight
+band:
+
+| Product | n (nonzero rows) | avg ratio | min | max |
+|---|---|---|---|---|
+| `SML-Regular` | 71 | 0.001183 | 0.001031 | 0.001575 |
+| `SL-Regular` | 32 | 0.001275 | 0.001150 | 0.001481 |
+| `SML-Co-Borrower` | 34 | 0.001145 | 0.001032 | 0.001530 |
+| `SML-Self Allotment` | 30 | 0.001129 | 0.001032 | 0.001210 |
+| `SML-PDC` | 7 | 0.001185 | 0.001090 | 0.001342 |
+| `SL-Corporate` | 22 (of 48) | 0.001181 | 0.000500 | 0.001305 |
+| `BL-Regular` | 10 (of 13) | 0.001688 | 0.001083 | 0.006429 (wide — see below) |
+
+**Reading this**: a candidate formula is `InsuranceFee ≈ Principal × Term(months) × ~0.115%–0.13%`
+— i.e., a small monthly premium proportional to both loan size and term, consistent with a
+per-month credit-life/loan-insurance premium rate. This is close enough across five products
+(`SML-Regular`, `SL-Regular`, `SML-Co-Borrower`, `SML-Self Allotment`, `SML-PDC`) to be a real,
+shared rate — **but not exact enough (min/max spread) to declare a single precise percentage
+without the exact rate table**, which was not found in this workbook (may exist in an insurance
+provider's own rate sheet, external to Easycash's records).
+
+**Two real exceptions worth a business decision, not a guess:**
+- **`SML-Quick Cash`: 6 of 6 rows have exactly zero Insurance Fee.** This looks like a genuine
+  product-level rule (this product never charges insurance), the same pattern already established
+  for other fees in `ADR-046` §3.1 (e.g. that ADR's own finding that `SML-Quick Cash` almost never
+  charges Advance Interest either).
+- **`SL-Corporate`: 26 of 48 rows (54%) have zero Insurance Fee**, and `BL-Regular`'s ratio is both
+  wider and higher than the other products' tight band. Whether this is a real product/segment
+  rule (e.g. corporate-tied loans opt out of insurance) or an origination-time discretionary field
+  was not determined from this data alone.
+
+**Recommend**: a new ADR (e.g. `ADR-050`) if the business confirms Insurance Fee should be
+formula-driven going forward — this workbook is evidence a rate-based rule exists, not confirmation
+of its exact value.
+
+### 11.4 Documentary Stamp Tax — real data contradicts the current mock/product assumption
+
+**Every single row in `Loans_details` (all 261 loans, every product) shows `Doc Stamp = 0`.** No
+exception found. This directly contradicts `app/frontend`'s mock data, which currently models a
+flat ₱150 "Documentary Stamp Tax" fee on the `Salary Loan — Corporate Tie-up`/`Regular` products
+(`src/lib/mockData.ts`, `ACTIVE_PRODUCTS`). Two explanations are equally plausible from this data
+alone and require a business answer, not an inference:
+1. Easycash does not actually collect DST as a separate line-item fee (it may be absorbed
+   elsewhere, paid separately outside the loan ledger, or simply not applicable to this loan type
+   under current BIR rules), or
+2. The `Doc Stamp` column in this workbook is unused/not populated by the loan officers even when
+   DST is in fact charged elsewhere in the process.
+**Recommend**: confirm directly with Accounting/MIS whether DST is charged at all today; if not,
+the mock frontend's DST fee should be corrected or removed rather than left as an unconfirmed
+assumption presented as fact.
+
+### 11.5 Notarial Fee / Web Fee — flat, tiered by product family, not by formula
+
+Across every row examined, `Notarial Fee` and `Web Fee` take only three values: `500` (retail
+products — `SML-*`, `SL-Regular`), `300`/`0` (`SL-Corporate`, mixed), and `0` (waived loans, and
+`BL-Special`'s single row). This is consistent with a **flat, product-tier fee schedule**, not a
+percentage formula — no new formula to derive, but confirms these are safe to model as flat fees
+keyed by product category, which is already `app/frontend`'s current mock-data approach for some
+of these fields.
+
+### 11.6 Advance Interest — corroborates `ADR-046`, does not supersede it
+
+A quick, independent check (25 sampled rows, this workbook only) against `ADR-046`'s own formula
+(`Principal × AddOnRate × max(gapDays−30,0)/30`) reproduces the same pattern `ADR-046` §3–3.4
+already documents at population scale (2,327 rows, `MLR Master List`): a majority of rows
+approximately track the formula, a meaningful minority don't, and **application is product-
+dependent, not universal** — e.g. this workbook's `SML-Quick Cash` rows show zero Advance Interest
+despite a >30-day gap, matching `ADR-046` §3.1's own finding that this product "almost never"
+charges it. **This sample does not overturn or refine `ADR-046`'s already-more-rigorous
+population-level analysis** — it is corroborating evidence from an independent file, nothing more.
+One row in this sample (`SL-REG_00114`) shows **zero on every fee simultaneously** (Processing Fee,
+Advance Interest, Account Management Fee, Notarial, Web, Insurance) — an exact match to `ADR-049`'s
+documented employee-loan fee-waiver signature, live-confirmed in current 2026 data.
+
+### 11.7 Processing Fee % — confirmed to vary per loan, not fixed per product
+
+`Loans_details`' `Processing Fee %` is **not constant within a product** — e.g. `SL-Corporate` rows
+show both `3%` and `5%`; `SL-Regular` rows show `0%`, `8%` on different loans. This means Processing
+Fee is either a per-loan discretionary/negotiated input, or depends on a variable not captured in
+the columns inspected (loan officer, promotion period, risk tier, etc.). **Recommend**: do not model
+Processing Fee as a fixed percentage per product in the calculation engine without confirming which
+of these it actually is — this workbook shows the real value varies, but not why.
+
+### 11.8 Product catalog — for reference, not yet reconciled against the schema
+
+`Product_details` lists 9 real product codes currently in use for origination:
+`SML`/`SML-SPEC`/`SML-QCL` (Seaman's Loan family), `SL`/`SL-CORP` (Salary Loan family), `BL`/`BL-SPEC`
+(Business Loan family), `RECML` (Real Estate and Chattel Mortgage Loan), `PFL` (Purchase Financing
+Loan). This has not been cross-checked in this pass against `app/backend`'s `LoanProduct` seed data
+or `app/frontend`'s mock product catalog — flagged as a follow-up, not done here, since it's a
+product-catalog question rather than a calculation-formula one.
+
+### 11.9 Summary — what this investigation changes and what it doesn't
+
+| Item | Status after this pass |
+|---|---|
+| Add-On→Contractual rate table | **Corroborated** (exact match on spot-check); tier count should be updated in `ADR-010` from 6 to 10 confirmed tiers |
+| Insurance Fee formula | **New evidence, not yet a confirmed rule** — candidate rate ~0.115–0.13%/month × principal × term, two unexplained product exceptions |
+| Documentary Stamp Tax | **New contradiction found** — real data shows ₱0 always; the mock frontend's ₱150 DST assumption needs business confirmation, not further inference |
+| Notarial/Web Fee | Confirmed flat, tiered-by-product — no formula needed |
+| Advance Interest (`ADR-046`) | **Corroborated**, not changed — this file's evidence is consistent with the existing, more rigorous population-level finding |
+| Employee fee waiver (`ADR-049`) | **Corroborated**, live in current 2026 data |
+| Processing Fee % | **New finding** — varies per loan even within one product; not safe to hard-code per-product without a business answer on why |
+| Product catalog (9 codes) | Recorded for reference; not yet reconciled against schema/mock data |
+
+**No ADR has been changed, and no code has been written, in this pass** — per this project's
+standing discipline, findings are presented for your review before any ADR update or
+implementation proceeds.
