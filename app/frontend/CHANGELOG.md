@@ -65,6 +65,38 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   Terms tab. `createLoanAccountForClient()` now accepts `interestRate`, `coBorrowerName`, and
   `anticipatedDisbursementDate` overrides (previously only product/principal/installment count).
 
+### Create Loan Account form rebuilt around the real loan-encoding sheet (Interest Rate Chart + per-fee Waive toggles)
+- New evidence base: `legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx` — the
+  actual loan-encoding workbook (`Fill up form`, `manual input for LOAN AMOUNT`, `Interest Rate
+  Chart` sheets), a level up in fidelity from the read-only `OFFICIAL CALCULATOR` workbook used
+  for the first pass of this form. Superseded the manually-typed Contractual Rate and the flat,
+  non-waivable `feeRules`-only fee model with this sheet's actual mechanics.
+- **Interest Rate Chart** (`INTEREST_RATE_CHART`, `src/lib/mockData.ts`): the real 135-row Add-On
+  Rate → Contractual Rate lookup table (`Interest Rate Chart` sheet, `A2:C136`), read exactly as
+  the source sheet does — `INDEX/MATCH` by `(Term, Add-On Rate)`, no interpolation. This resolves
+  `CALCULATION_ENGINE_SPEC.md` §3's note that the Add-On→Contractual reverse direction "uses a
+  precomputed lookup table" — that table's actual contents were previously unknown. One 3-row
+  group in the source (`Add-On 10.0%`) was excluded as internally-inconsistent stray test data,
+  not a real tier — never fabricated a replacement.
+- **Per-fee Waive toggles** (`LoanFeeWaivers`): Account Management Fee (1% of principal),
+  Processing Fee (product's own rate), Digital Signature Fee (₱500 flat), Notarial Fee (₱500
+  flat), Insurance Fee, and Advance Interest Fee — each independently waivable, mirroring the
+  source sheet's column `H` (`"NO"` zeroes that fee out entirely, never redistributed).
+- **Advance Interest Fee** and **Insurance Fee** formulas newly documented (previously
+  undocumented anywhere in this codebase) — see `computeLoanOriginationSummary()`'s doc comment
+  for the exact cell-sourced formulas, including the Advance Interest Fee's >30-day partial-period
+  condition (independently confirms the shape of `CALCULATION_ENGINE_SPEC.md` §8's day-count
+  formula from a second legacy source) and the Insurance Fee's `Obligation`-tiered calculation.
+- Added an **Outstanding Balance from Previous Loan** field for renewals — deducted from Net
+  Proceeds alongside fees, matching the source sheet's `Other Bank Charges/Deductions Collected`
+  field (`H9`, the previous loan's balance being paid off from the new loan's proceeds).
+- `computeLoanOriginationSummary()` signature changed to a single params object
+  (`LoanOriginationParams`) given the larger field count; `LoanOriginationSummary` now reports a
+  `fees` breakdown object, `otherProductFees` (the product's non-Processing-Fee `feeRules`,
+  e.g. Documentary Stamp Tax — always applied, no waive evidenced for these), `obligation`, and
+  `contractualRateFromChart` (false when no chart entry exists for the term/add-on combination,
+  surfaced in the UI rather than silently guessed).
+
 ## 2026-07-07
 
 ### About page — version/changelog now derive automatically, no more dual maintenance

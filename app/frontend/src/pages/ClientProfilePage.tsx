@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
@@ -17,6 +18,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import {
+  ADD_ON_RATE_TIERS,
   clientHasActiveLoan,
   computeLoanOriginationSummary,
   createLoanAccountForClient,
@@ -25,6 +27,8 @@ import {
   logActivity,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOAN_PRODUCTS,
+  NO_FEES_WAIVED,
+  type LoanFeeWaivers,
   type MockBorrowerProfile,
   type MockLoanAccount,
 } from '@/lib/mockData';
@@ -153,6 +157,13 @@ function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Matches `createLoanAccountForClient`'s own `firstRepaymentDate` derivation — one month after disbursement. */
+function addOneMonthIso(isoDate: string): string {
+  const d = new Date(isoDate);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export interface CreateLoanAccountParams {
   productCode: string;
   principalAmount: number;
@@ -162,13 +173,24 @@ export interface CreateLoanAccountParams {
   anticipatedDisbursementDate: string;
 }
 
+const FEE_WAIVER_LABELS: { key: keyof LoanFeeWaivers; label: string }[] = [
+  { key: 'accountManagementFee', label: 'Account Management Fee (1% of principal)' },
+  { key: 'processingFee', label: "Processing Fee (product's rate)" },
+  { key: 'digitalSignatureFee', label: 'Digital Signature Fee (₱500)' },
+  { key: 'notarialFee', label: 'Notarial Fee (₱500)' },
+  { key: 'insuranceFee', label: 'Insurance Fee' },
+  { key: 'advanceInterestFee', label: 'Advance Interest Fee (if disbursed >30 days before first repayment)' },
+];
+
 /**
  * Fields and layout follow the real official calculator
- * (`legacy/reports/OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`, `Loans_details` sheet):
- * Principal Amount, Term, Contractual Rate, Co-Borrower, Anticipated Disbursement Date — plus a
- * live-computed summary (Monthly Amortization, Total Interest, Processing Fee/Doc Stamp/other
- * product fees, Net Proceeds, EIR Monthly/Annual) using the CONFIRMED formulas in
- * `docs/Architecture/CALCULATION_ENGINE_SPEC.md` §2 (PMT) and §3 (Add-On/EIR conversion).
+ * (`legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, `Fill up form` /
+ * `manual input for LOAN AMOUNT` sheets): Principal Amount, Term, Add-On Rate (looked up against
+ * the `Interest Rate Chart` sheet for the Contractual Rate), Anticipated Disbursement Date,
+ * Co-Borrower, Outstanding Balance from a previous loan (renewals) — plus each fee's own Waive
+ * toggle (the real form's column `H`: typing `"NO"` zeroes that fee out) and a live Computation
+ * Summary (Monthly Amortization, Obligation, Net Proceeds, EIR Monthly/Annual) using
+ * `computeLoanOriginationSummary()`.
  */
 function CreateLoanAccountDialog({
   open,
@@ -182,33 +204,41 @@ function CreateLoanAccountDialog({
   const [productCode, setProductCode] = React.useState('');
   const [principalAmount, setPrincipalAmount] = React.useState(50000);
   const [installmentCount, setInstallmentCount] = React.useState(12);
-  const [interestRate, setInterestRate] = React.useState(0);
+  const [addOnRatePercent, setAddOnRatePercent] = React.useState<number>(ADD_ON_RATE_TIERS[0] ?? 2);
   const [coBorrowerName, setCoBorrowerName] = React.useState('');
   const [disbursementDate, setDisbursementDate] = React.useState(todayIsoDate());
+  const [previousLoanOutstandingBalance, setPreviousLoanOutstandingBalance] = React.useState(0);
+  const [waive, setWaive] = React.useState<LoanFeeWaivers>(NO_FEES_WAIVED);
   const [confirming, setConfirming] = React.useState(false);
 
   const product = ACTIVE_PRODUCTS_FOR_NEW_LOAN.find((p) => p.productCode === productCode);
-
-  const selectProduct = (code: string) => {
-    setProductCode(code);
-    const p = ACTIVE_PRODUCTS_FOR_NEW_LOAN.find((x) => x.productCode === code);
-    if (p) setInterestRate(p.defaultInterestRate);
-  };
+  const firstRepaymentDate = addOneMonthIso(disbursementDate);
 
   const summary =
     product && principalAmount > 0 && installmentCount > 0
-      ? computeLoanOriginationSummary(principalAmount, interestRate, installmentCount, product.feeRules)
+      ? computeLoanOriginationSummary({
+          principal: principalAmount,
+          addOnRatePercent,
+          termMonths: installmentCount,
+          productFeeRules: product.feeRules,
+          disbursementDate,
+          firstRepaymentDate,
+          previousLoanOutstandingBalance,
+          waive,
+        })
       : null;
 
-  const rateOutOfRange = product ? interestRate < product.minInterestRate || interestRate > product.maxInterestRate : false;
+  const toggleWaive = (key: keyof LoanFeeWaivers) => setWaive((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const reset = () => {
     setProductCode('');
     setPrincipalAmount(50000);
     setInstallmentCount(12);
-    setInterestRate(0);
+    setAddOnRatePercent(ADD_ON_RATE_TIERS[0] ?? 2);
     setCoBorrowerName('');
     setDisbursementDate(todayIsoDate());
+    setPreviousLoanOutstandingBalance(0);
+    setWaive(NO_FEES_WAIVED);
   };
 
   return (
@@ -220,7 +250,7 @@ function CreateLoanAccountDialog({
           if (!o) reset();
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Account</DialogTitle>
             <DialogDescription>Preview only — creates a PENDING_APPROVAL loan account for this client.</DialogDescription>
@@ -228,7 +258,7 @@ function CreateLoanAccountDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Product Sub-type</Label>
-              <Select value={productCode} onValueChange={selectProduct}>
+              <Select value={productCode} onValueChange={setProductCode}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a product..." />
                 </SelectTrigger>
@@ -260,21 +290,53 @@ function CreateLoanAccountDialog({
               )}
             </div>
             <div className="space-y-1.5">
-              <Label>Contractual Rate (% monthly)</Label>
-              <Input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(Number(e.target.value))} />
-              {product && (
-                <p className={rateOutOfRange ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-                  Range: {product.minInterestRate}% – {product.maxInterestRate}%
-                </p>
-              )}
+              <Label>Add-On Rate (% monthly)</Label>
+              <Select value={String(addOnRatePercent)} onValueChange={(v) => setAddOnRatePercent(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ADD_ON_RATE_TIERS.map((tier) => (
+                    <SelectItem key={tier} value={String(tier)}>
+                      {tier}%
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {summary?.contractualRateFromChart
+                  ? `Contractual Rate (Interest Rate Chart): ${summary.contractualRatePercent}%`
+                  : 'No Interest Rate Chart entry for this term/rate — Contractual Rate not on file, please confirm with MIS.'}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Anticipated Disbursement Date</Label>
               <Input type="date" value={disbursementDate} onChange={(e) => setDisbursementDate(e.target.value)} />
             </div>
-            <div className="space-y-1.5 sm:col-span-2">
+            <div className="space-y-1.5">
               <Label>Co-Borrower Name (optional)</Label>
               <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} placeholder="e.g. Juan Dela Cruz" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Outstanding Balance from Previous Loan (renewal)</Label>
+              <Input
+                type="number"
+                value={previousLoanOutstandingBalance}
+                onChange={(e) => setPreviousLoanOutstandingBalance(Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">Leave at 0 for a brand-new loan — paid off from this loan's proceeds otherwise.</p>
+            </div>
+          </div>
+
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Waive Fees</p>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {FEE_WAIVER_LABELS.map(({ key, label }) => (
+                <label key={key} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">{label}</span>
+                  <Switch checked={waive[key]} onCheckedChange={() => toggleWaive(key)} />
+                </label>
+              ))}
             </div>
           </div>
 
@@ -287,8 +349,8 @@ function CreateLoanAccountDialog({
                   <dd className="font-semibold">{formatPeso(summary.monthlyPayment)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Total Interest</dt>
-                  <dd className="font-semibold">{formatPeso(summary.totalInterest)}</dd>
+                  <dt className="text-xs text-muted-foreground">Obligation</dt>
+                  <dd className="font-semibold">{formatPeso(summary.obligation)}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Net Proceeds</dt>
@@ -303,23 +365,51 @@ function CreateLoanAccountDialog({
                   <dd className="font-semibold">{summary.addOnAnnualRatePercent}%</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Total Fees</dt>
-                  <dd className="font-semibold">{formatPeso(summary.totalFees)}</dd>
+                  <dt className="text-xs text-muted-foreground">Total Deduction</dt>
+                  <dd className="font-semibold">{formatPeso(summary.totalDeduction)}</dd>
                 </div>
               </dl>
-              {summary.feeBreakdown.length > 0 && (
-                <ul className="mt-2 space-y-0.5 border-t pt-2 text-xs text-muted-foreground">
-                  {summary.feeBreakdown.map((fee) => (
-                    <li key={fee.name} className="flex justify-between">
-                      <span>{fee.name}</span>
-                      <span>{formatPeso(fee.amount)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <ul className="mt-2 space-y-0.5 border-t pt-2 text-xs text-muted-foreground">
+                <li className="flex justify-between">
+                  <span>Account Management Fee{waive.accountManagementFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.accountManagementFee)}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Processing Fee{waive.processingFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.processingFee)}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Digital Signature Fee{waive.digitalSignatureFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.digitalSignatureFee)}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Notarial Fee{waive.notarialFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.notarialFee)}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Insurance Fee{waive.insuranceFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.insuranceFee)}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Advance Interest Fee{waive.advanceInterestFee && ' (waived)'}</span>
+                  <span>{formatPeso(summary.fees.advanceInterestFee)}</span>
+                </li>
+                {summary.otherProductFees.map((fee) => (
+                  <li key={fee.name} className="flex justify-between">
+                    <span>{fee.name}</span>
+                    <span>{formatPeso(fee.amount)}</span>
+                  </li>
+                ))}
+                {summary.previousLoanOutstandingBalance > 0 && (
+                  <li className="flex justify-between font-medium text-foreground">
+                    <span>Outstanding Balance from Previous Loan</span>
+                    <span>{formatPeso(summary.previousLoanOutstandingBalance)}</span>
+                  </li>
+                )}
+              </ul>
               <p className="mt-2 text-xs text-muted-foreground">
-                Monthly Amortization uses the level-payment (<code>PMT</code>) formula; Net Proceeds deducts upfront fees from the
-                principal, matching the official calculator's <code>Loans_details</code> field set.
+                Net Proceeds = Principal − (all fees + previous balance, if any), matching the official calculator's{' '}
+                <code>Loans_details</code> field set. A waived fee is zeroed out entirely, never redistributed elsewhere.
               </p>
             </div>
           )}
@@ -328,7 +418,7 @@ function CreateLoanAccountDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button disabled={!product || rateOutOfRange} onClick={() => setConfirming(true)}>
+            <Button disabled={!product} onClick={() => setConfirming(true)}>
               Continue
             </Button>
           </DialogFooter>
@@ -343,7 +433,8 @@ function CreateLoanAccountDialog({
             </DialogTitle>
             <DialogDescription>
               Create a {product?.productName} loan account for {formatPeso(principalAmount)} over {installmentCount} months at{' '}
-              {interestRate}% monthly? This is a safety-net confirmation to prevent an accidental click.
+              {summary?.contractualRatePercent}% monthly (Contractual)? This is a safety-net confirmation to prevent an accidental
+              click.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -352,7 +443,14 @@ function CreateLoanAccountDialog({
             </Button>
             <Button
               onClick={() => {
-                onCreate({ productCode, principalAmount, installmentCount, interestRate, coBorrowerName, anticipatedDisbursementDate: disbursementDate });
+                onCreate({
+                  productCode,
+                  principalAmount,
+                  installmentCount,
+                  interestRate: summary?.contractualRatePercent ?? 0,
+                  coBorrowerName,
+                  anticipatedDisbursementDate: disbursementDate,
+                });
                 setConfirming(false);
                 onOpenChange(false);
                 reset();

@@ -670,52 +670,325 @@ function addMonths(date: Date, months: number): Date {
   return d;
 }
 
+export interface InterestRateChartEntry {
+  term: number;
+  addOnRate: number;
+  contractualRate: number;
+}
+
+/**
+ * The official calculator's Add-On → Contractual rate lookup table — evidence:
+ * `legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, sheet `Interest Rate Chart`
+ * (135 rows, `A2:C136`), read by the `Fill up form`/`manual input for LOAN AMOUNT` sheet's
+ * `Contractual Interest Rate` cell via
+ * `INDEX(C2:C136, MATCH(1, (A2:A136=Term)*(B2:B136=AddOnRate), 0))` — an exact 2D lookup, not a
+ * formula-derived conversion. This resolves `CALCULATION_ENGINE_SPEC.md` §3's "reverse direction
+ * (Add-On → Contractual)... uses a precomputed lookup table" note with the real table contents.
+ *
+ * Excludes one 3-row group in the source (`Add-On 10.0%` → contractual `0.1`/`0.1307`/`0.1436`)
+ * — internally inconsistent with every other tier (contractual rate lower than the add-on rate,
+ * and only 3 of 24 terms populated) and almost certainly stray test data, not a real product
+ * tier. Never fabricated a replacement value for it, per this project's evidence-only rule.
+ */
+export const INTEREST_RATE_CHART: InterestRateChartEntry[] = [
+  { term: 1, addOnRate: 1.5, contractualRate: 1.5 },
+  { term: 2, addOnRate: 1.5, contractualRate: 2.0 },
+  { term: 3, addOnRate: 1.5, contractualRate: 2.24 },
+  { term: 4, addOnRate: 1.5, contractualRate: 2.37 },
+  { term: 5, addOnRate: 1.5, contractualRate: 2.46 },
+  { term: 6, addOnRate: 1.5, contractualRate: 2.52 },
+  { term: 7, addOnRate: 1.5, contractualRate: 2.56 },
+  { term: 8, addOnRate: 1.5, contractualRate: 2.59 },
+  { term: 9, addOnRate: 1.5, contractualRate: 2.61 },
+  { term: 10, addOnRate: 1.5, contractualRate: 2.63 },
+  { term: 11, addOnRate: 1.5, contractualRate: 2.63 },
+  { term: 12, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 13, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 14, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 15, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 16, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 17, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 18, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 19, addOnRate: 1.5, contractualRate: 2.65 },
+  { term: 20, addOnRate: 1.5, contractualRate: 2.64 },
+  { term: 21, addOnRate: 1.5, contractualRate: 2.64 },
+  { term: 22, addOnRate: 1.5, contractualRate: 2.63 },
+  { term: 23, addOnRate: 1.5, contractualRate: 2.63 },
+  { term: 24, addOnRate: 1.5, contractualRate: 2.62 },
+  { term: 1, addOnRate: 1.75, contractualRate: 4.16 },
+  { term: 2, addOnRate: 1.75, contractualRate: 2.39 },
+  { term: 3, addOnRate: 1.75, contractualRate: 2.42 },
+  { term: 4, addOnRate: 1.75, contractualRate: 2.77 },
+  { term: 5, addOnRate: 1.75, contractualRate: 2.87 },
+  { term: 6, addOnRate: 1.75, contractualRate: 2.93 },
+  { term: 7, addOnRate: 1.75, contractualRate: 2.98 },
+  { term: 8, addOnRate: 1.75, contractualRate: 3.0 },
+  { term: 9, addOnRate: 1.75, contractualRate: 3.03 },
+  { term: 10, addOnRate: 1.75, contractualRate: 3.05 },
+  { term: 11, addOnRate: 1.75, contractualRate: 3.06 },
+  { term: 12, addOnRate: 1.75, contractualRate: 3.07 },
+  { term: 13, addOnRate: 1.75, contractualRate: 3.07 },
+  { term: 14, addOnRate: 1.75, contractualRate: 3.07 },
+  { term: 15, addOnRate: 1.75, contractualRate: 3.06 },
+  { term: 16, addOnRate: 1.75, contractualRate: 3.07 },
+  { term: 17, addOnRate: 1.75, contractualRate: 3.06 },
+  { term: 18, addOnRate: 1.75, contractualRate: 3.05 },
+  { term: 19, addOnRate: 1.75, contractualRate: 3.05 },
+  { term: 20, addOnRate: 1.75, contractualRate: 3.05 },
+  { term: 21, addOnRate: 1.75, contractualRate: 3.04 },
+  { term: 22, addOnRate: 1.75, contractualRate: 3.05 },
+  { term: 23, addOnRate: 1.75, contractualRate: 3.03 },
+  { term: 24, addOnRate: 1.75, contractualRate: 3.02 },
+  { term: 1, addOnRate: 2.0, contractualRate: 2.0 },
+  { term: 2, addOnRate: 2.0, contractualRate: 2.65 },
+  { term: 3, addOnRate: 2.0, contractualRate: 2.97 },
+  { term: 4, addOnRate: 2.0, contractualRate: 3.15 },
+  { term: 5, addOnRate: 2.0, contractualRate: 3.27 },
+  { term: 6, addOnRate: 2.0, contractualRate: 3.33 },
+  { term: 7, addOnRate: 2.0, contractualRate: 3.38 },
+  { term: 8, addOnRate: 2.0, contractualRate: 3.42 },
+  { term: 9, addOnRate: 2.0, contractualRate: 3.44 },
+  { term: 10, addOnRate: 2.0, contractualRate: 3.46 },
+  { term: 11, addOnRate: 2.0, contractualRate: 3.47 },
+  { term: 12, addOnRate: 2.0, contractualRate: 3.47 },
+  { term: 1, addOnRate: 2.25, contractualRate: 2.25 },
+  { term: 2, addOnRate: 2.25, contractualRate: 2.99 },
+  { term: 3, addOnRate: 2.25, contractualRate: 3.34 },
+  { term: 4, addOnRate: 2.25, contractualRate: 3.54 },
+  { term: 5, addOnRate: 2.25, contractualRate: 3.67 },
+  { term: 6, addOnRate: 2.25, contractualRate: 3.75 },
+  { term: 7, addOnRate: 2.25, contractualRate: 3.8 },
+  { term: 8, addOnRate: 2.25, contractualRate: 3.84 },
+  { term: 9, addOnRate: 2.25, contractualRate: 3.86 },
+  { term: 10, addOnRate: 2.25, contractualRate: 3.87 },
+  { term: 11, addOnRate: 2.25, contractualRate: 3.88 },
+  { term: 12, addOnRate: 2.25, contractualRate: 3.89 },
+  { term: 1, addOnRate: 2.5, contractualRate: 2.5 },
+  { term: 2, addOnRate: 2.5, contractualRate: 3.32 },
+  { term: 3, addOnRate: 2.5, contractualRate: 3.7 },
+  { term: 4, addOnRate: 2.5, contractualRate: 3.92 },
+  { term: 5, addOnRate: 2.5, contractualRate: 4.06 },
+  { term: 6, addOnRate: 2.5, contractualRate: 4.15 },
+  { term: 7, addOnRate: 2.5, contractualRate: 4.2 },
+  { term: 8, addOnRate: 2.5, contractualRate: 4.24 },
+  { term: 9, addOnRate: 2.5, contractualRate: 4.27 },
+  { term: 10, addOnRate: 2.5, contractualRate: 4.27 },
+  { term: 11, addOnRate: 2.5, contractualRate: 4.28 },
+  { term: 12, addOnRate: 2.5, contractualRate: 4.28 },
+  { term: 13, addOnRate: 2.5, contractualRate: 4.29 },
+  { term: 14, addOnRate: 2.5, contractualRate: 4.28 },
+  { term: 15, addOnRate: 2.5, contractualRate: 4.28 },
+  { term: 16, addOnRate: 2.5, contractualRate: 4.27 },
+  { term: 17, addOnRate: 2.5, contractualRate: 4.26 },
+  { term: 18, addOnRate: 2.5, contractualRate: 4.24 },
+  { term: 19, addOnRate: 2.5, contractualRate: 4.23 },
+  { term: 20, addOnRate: 2.5, contractualRate: 4.22 },
+  { term: 21, addOnRate: 2.5, contractualRate: 4.21 },
+  { term: 22, addOnRate: 2.5, contractualRate: 4.19 },
+  { term: 23, addOnRate: 2.5, contractualRate: 4.18 },
+  { term: 24, addOnRate: 2.5, contractualRate: 4.16 },
+  { term: 1, addOnRate: 2.75, contractualRate: 2.75 },
+  { term: 2, addOnRate: 2.75, contractualRate: 3.65 },
+  { term: 3, addOnRate: 2.75, contractualRate: 4.07 },
+  { term: 4, addOnRate: 2.75, contractualRate: 4.31 },
+  { term: 5, addOnRate: 2.75, contractualRate: 4.46 },
+  { term: 6, addOnRate: 2.75, contractualRate: 4.55 },
+  { term: 7, addOnRate: 2.75, contractualRate: 4.6 },
+  { term: 8, addOnRate: 2.75, contractualRate: 4.65 },
+  { term: 9, addOnRate: 2.75, contractualRate: 4.67 },
+  { term: 10, addOnRate: 2.75, contractualRate: 4.68 },
+  { term: 11, addOnRate: 2.75, contractualRate: 4.69 },
+  { term: 12, addOnRate: 2.75, contractualRate: 4.69 },
+  { term: 1, addOnRate: 3.0, contractualRate: 3.0 },
+  { term: 2, addOnRate: 3.0, contractualRate: 3.98 },
+  { term: 3, addOnRate: 3.0, contractualRate: 4.43 },
+  { term: 4, addOnRate: 3.0, contractualRate: 4.7 },
+  { term: 5, addOnRate: 3.0, contractualRate: 4.85 },
+  { term: 6, addOnRate: 3.0, contractualRate: 4.95 },
+  { term: 7, addOnRate: 3.0, contractualRate: 5.01 },
+  { term: 8, addOnRate: 3.0, contractualRate: 5.05 },
+  { term: 9, addOnRate: 3.0, contractualRate: 5.07 },
+  { term: 10, addOnRate: 3.0, contractualRate: 5.08 },
+  { term: 11, addOnRate: 3.0, contractualRate: 5.08 },
+  { term: 12, addOnRate: 3.0, contractualRate: 5.08 },
+  { term: 1, addOnRate: 3.5, contractualRate: 3.5 },
+  { term: 2, addOnRate: 3.5, contractualRate: 4.63 },
+  { term: 3, addOnRate: 3.5, contractualRate: 5.17 },
+  { term: 4, addOnRate: 3.5, contractualRate: 5.45 },
+  { term: 5, addOnRate: 3.5, contractualRate: 5.63 },
+  { term: 6, addOnRate: 3.5, contractualRate: 5.73 },
+  { term: 7, addOnRate: 3.5, contractualRate: 5.8 },
+  { term: 8, addOnRate: 3.5, contractualRate: 5.83 },
+  { term: 9, addOnRate: 3.5, contractualRate: 5.86 },
+  { term: 10, addOnRate: 3.5, contractualRate: 5.86 },
+  { term: 11, addOnRate: 3.5, contractualRate: 5.86 },
+  { term: 12, addOnRate: 3.5, contractualRate: 5.86 },
+];
+
+/** Every distinct Add-On Rate tier on file, for the Create Loan Account form's rate dropdown. */
+export const ADD_ON_RATE_TIERS: number[] = [...new Set(INTEREST_RATE_CHART.map((e) => e.addOnRate))].sort((a, b) => a - b);
+
+/** Exact lookup only — no interpolation, per this project's no-invented-formula rule. `null` when the term/add-on combination isn't on file. */
+export function lookupContractualRate(termMonths: number, addOnRatePercent: number): number | null {
+  const entry = INTEREST_RATE_CHART.find((e) => e.term === termMonths && Math.abs(e.addOnRate - addOnRatePercent) < 0.001);
+  return entry ? entry.contractualRate : null;
+}
+
+export interface LoanFeeWaivers {
+  accountManagementFee: boolean;
+  processingFee: boolean;
+  digitalSignatureFee: boolean;
+  notarialFee: boolean;
+  insuranceFee: boolean;
+  advanceInterestFee: boolean;
+}
+
+export const NO_FEES_WAIVED: LoanFeeWaivers = {
+  accountManagementFee: false,
+  processingFee: false,
+  digitalSignatureFee: false,
+  notarialFee: false,
+  insuranceFee: false,
+  advanceInterestFee: false,
+};
+
+export interface LoanOriginationParams {
+  principal: number;
+  /** Officer-entered Add-On Rate — looked up against `INTEREST_RATE_CHART` for the Contractual Rate actually used to run the schedule. */
+  addOnRatePercent: number;
+  termMonths: number;
+  /** The product's other configured fees (e.g. Documentary Stamp Tax, Credit Investigation Fee) — always applied, no per-fee waive evidenced for these. Its "Processing Fee" entry supplies the processing fee's own rate/flat amount. */
+  productFeeRules: MockFeeRule[];
+  disbursementDate: string;
+  firstRepaymentDate: string;
+  /** For loan renewals — the prior loan's remaining balance, paid off out of this loan's proceeds. `0` for a brand-new client. */
+  previousLoanOutstandingBalance: number;
+  waive: LoanFeeWaivers;
+}
+
 export interface LoanOriginationSummary {
+  contractualRatePercent: number;
+  /** `false` when no exact Interest Rate Chart entry exists for this term/add-on combination and the Add-On Rate was used as a fallback — flagged, never silently guessed. */
+  contractualRateFromChart: boolean;
   monthlyPayment: number;
   totalInterest: number;
+  /** Sum of every installment's amortization — matches the legacy `Obligation` field. */
+  obligation: number;
+  fees: {
+    accountManagementFee: number;
+    processingFee: number;
+    digitalSignatureFee: number;
+    notarialFee: number;
+    insuranceFee: number;
+    advanceInterestFee: number;
+  };
+  /** The product's other configured fees (e.g. Documentary Stamp Tax) — see `LoanOriginationParams.productFeeRules`. */
+  otherProductFees: { name: string; amount: number }[];
   totalFees: number;
-  feeBreakdown: { name: string; amount: number }[];
+  previousLoanOutstandingBalance: number;
+  /** `totalFees + previousLoanOutstandingBalance` — matches the legacy `Other Bank Charges/Deductions Collected` field. */
+  totalDeduction: number;
   netProceeds: number;
   addOnMonthlyRatePercent: number;
   addOnAnnualRatePercent: number;
 }
 
+function daysBetweenIso(fromIso: string, toIso: string): number {
+  return Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 86_400_000);
+}
+
 /**
  * Live "how much will this loan actually cost/disburse" preview for the Create Loan Account form
- * — the same figures the real official calculator (`legacy/reports/OFFICIAL CALCULATOR OF
- * EASYCASH 1.5.83 LMSv3.xlsm`, `Loans_details` sheet) surfaces when encoding a new loan: Monthly
- * Amortization, Net Proceeds, Processing Fee, Doc Stamp, and EIR Monthly/Annual.
+ * — reproduces the real official calculator
+ * (`legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, `manual input for LOAN
+ * AMOUNT` sheet) field-for-field, including its per-fee Waive toggle (column H: `NO` zeroes the
+ * fee out entirely) and its Advance Interest / Insurance Fee formulas, which are otherwise
+ * undocumented anywhere in this codebase:
  *
- * Formulas per `docs/Architecture/CALCULATION_ENGINE_SPEC.md` (both CONFIRMED against real
- * legacy data):
- * - Monthly Amortization: §2 Level Payment Amortization (`PMT`).
- * - Total Interest / Add-On (EIR) rate: §3 Add-On ↔ Contractual Rate Conversion —
- *   `AddOnMonthlyRate = (TotalInterest / Principal) / NumberOfInstallments`.
- * Net Proceeds = Principal − upfront fees, per the legacy field set itself (`Loans_details`:
- * "Net Proceeds", "Processing Fee Amount", "Doc Stamp" are all deducted from the released
- * principal, not added on top of it).
+ * - Contractual Rate: exact lookup against `INTEREST_RATE_CHART` (sheet `Interest Rate Chart`),
+ *   not a formula — see `lookupContractualRate()`.
+ * - Monthly Amortization: `PMT` — `CALCULATION_ENGINE_SPEC.md` §2 (CONFIRMED).
+ * - Account Management Fee = Principal × 1% (cell `G3`, fixed rate, not product-configurable).
+ * - Processing Fee = the product's own `Processing Fee` rule (flat or % of principal — `G5`).
+ * - Digital Signature Fee / Notarial Fee = flat ₱500 each (cells `G6`/`G7`).
+ * - Advance Interest Fee (cell `G4`) — a partial-period interest charge, `0` unless the gap
+ *   between disbursement and the first repayment date exceeds 30 days:
+ *   `Principal × (AddOnRate/100) × ((DaysBetween − 30) / 30)`. Same shape as
+ *   `CALCULATION_ENGINE_SPEC.md` §8's day-count formula, confirmed independently here against a
+ *   second, later-discovered legacy source.
+ * - Insurance Fee (cell `G8`) = `(Obligation / 1000) × TermMonths`, `+20` if `Obligation < 50,000`
+ *   — `Obligation = MonthlyAmortization × TermMonths` (cell `G17`/`G19`).
+ * - Net Proceeds = Principal − (all fees + any outstanding balance from a previous loan being
+ *   renewed/consolidated) — cells `G9`/`G10`.
+ *
+ * Every fee toggle mirrors the real form's `H` column: `waive.<fee> = true` reproduces typing
+ * `"NO"` in that column, zeroing the fee out entirely (never adjusting the rate to compensate).
  */
-export function computeLoanOriginationSummary(
-  principal: number,
-  monthlyContractualRatePercent: number,
-  installmentCount: number,
-  feeRules: MockFeeRule[],
-): LoanOriginationSummary {
-  const r = monthlyContractualRatePercent / 100;
+export function computeLoanOriginationSummary(params: LoanOriginationParams): LoanOriginationSummary {
+  const { principal, addOnRatePercent, termMonths, productFeeRules, disbursementDate, firstRepaymentDate, previousLoanOutstandingBalance, waive } = params;
+
+  const chartRate = lookupContractualRate(termMonths, addOnRatePercent);
+  const contractualRatePercent = chartRate ?? addOnRatePercent;
+  const contractualRateFromChart = chartRate !== null;
+
+  const r = contractualRatePercent / 100;
   const monthlyPayment =
-    installmentCount > 0 && r > 0
-      ? round2((r * principal) / (1 - Math.pow(1 + r, -installmentCount)))
-      : round2(principal / Math.max(installmentCount, 1));
-  const totalInterest = round2(monthlyPayment * installmentCount - principal);
-  const feeBreakdown = feeRules.map((f) => ({
-    name: f.name,
-    amount: f.computation === 'FLAT' ? f.value : round2(principal * (f.value / 100)),
-  }));
-  const totalFees = round2(feeBreakdown.reduce((sum, f) => sum + f.amount, 0));
-  const netProceeds = round2(principal - totalFees);
-  const addOnMonthlyRatePercent = principal > 0 && installmentCount > 0 ? round2((totalInterest / principal / installmentCount) * 100) : 0;
+    termMonths > 0 && r > 0
+      ? round2((r * principal) / (1 - Math.pow(1 + r, -termMonths)))
+      : round2(principal / Math.max(termMonths, 1));
+  const totalInterest = round2(monthlyPayment * termMonths - principal);
+  const obligation = round2(monthlyPayment * termMonths);
+
+  const accountManagementFee = waive.accountManagementFee ? 0 : round2(principal * 0.01);
+
+  const processingFeeRule = productFeeRules.find((f) => f.name === 'Processing Fee');
+  const processingFee = waive.processingFee || !processingFeeRule
+    ? 0
+    : processingFeeRule.computation === 'FLAT'
+      ? processingFeeRule.value
+      : round2(principal * (processingFeeRule.value / 100));
+
+  const digitalSignatureFee = waive.digitalSignatureFee ? 0 : 500;
+  const notarialFee = waive.notarialFee ? 0 : 500;
+
+  const daysToFirstRepayment = daysBetweenIso(disbursementDate, firstRepaymentDate);
+  const advanceInterestFee =
+    waive.advanceInterestFee || daysToFirstRepayment <= 30
+      ? 0
+      : round2(principal * (addOnRatePercent / 100) * ((daysToFirstRepayment - 30) / 30));
+
+  const insuranceFee = waive.insuranceFee
+    ? 0
+    : round2(obligation < 50000 ? (obligation / 1000) * termMonths + 20 : (obligation / 1000) * termMonths);
+
+  const otherProductFees = productFeeRules
+    .filter((f) => f.name !== 'Processing Fee')
+    .map((f) => ({ name: f.name, amount: f.computation === 'FLAT' ? f.value : round2(principal * (f.value / 100)) }));
+  const otherProductFeesTotal = round2(otherProductFees.reduce((sum, f) => sum + f.amount, 0));
+
+  const fees = { accountManagementFee, processingFee, digitalSignatureFee, notarialFee, insuranceFee, advanceInterestFee };
+  const totalFees = round2(Object.values(fees).reduce((sum, v) => sum + v, 0) + otherProductFeesTotal);
+  const totalDeduction = round2(totalFees + previousLoanOutstandingBalance);
+  const netProceeds = round2(principal - totalDeduction);
+
+  const addOnMonthlyRatePercent = principal > 0 && termMonths > 0 ? round2((totalInterest / principal / termMonths) * 100) : 0;
   const addOnAnnualRatePercent = round2(addOnMonthlyRatePercent * 12);
-  return { monthlyPayment, totalInterest, totalFees, feeBreakdown, netProceeds, addOnMonthlyRatePercent, addOnAnnualRatePercent };
+
+  return {
+    contractualRatePercent,
+    contractualRateFromChart,
+    monthlyPayment,
+    totalInterest,
+    obligation,
+    fees,
+    otherProductFees,
+    totalFees,
+    previousLoanOutstandingBalance,
+    totalDeduction,
+    netProceeds,
+    addOnMonthlyRatePercent,
+    addOnAnnualRatePercent,
+  };
 }
 
 function buildSchedule(
