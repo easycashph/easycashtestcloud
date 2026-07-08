@@ -8,6 +8,37 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-08
 
+### Loan Application ↔ Loan Account linking; 3-second hold on the final confirm button
+- New business rule (was not previously enforced anywhere): a loan account can only be created
+  from a specific, still-unconverted `APPROVED` Loan Application — matched via that application's
+  own `createdClientId` (the "Create Client" link). `findApprovedApplicationForClient()` is the
+  single source of truth for this; both `ClientProfilePage` and `LoanApplicationDetailPage` gate
+  their "Create Loan Account" button on it, with an explanatory message when absent. This means a
+  renewal loan needs its own newly-approved application too, not just an existing client
+  relationship — matches the already-modeled `accountType: 'RENEWAL'` field on
+  `MockLoanApplication`.
+- `MockLoanApplication` gained `loanAccountCreated`/`createdLoanAccountId` (mirrors the existing
+  `clientCreated`/`createdClientId` pattern); `MockLoanAccount` gained `sourceApplicationId`.
+  `createLoanAccountForClient()` now accepts a `sourceApplicationId` param and marks that
+  application converted when provided.
+- `LoanApplicationDetailPage`'s approved-application card is now a 2-step flow: Step 1 "Create
+  Client" (existing), Step 2 "Create Loan Account" (new) — appears once Step 1 is done, opens the
+  Create Loan Account form prefilled from the application's requested product/amount/term
+  (`assignedSubType`/`requestedAmount`/`requestedTermMonths`), and flips to "View Loan Account"
+  once used. `LoanDetailPage`'s Loan Terms tab shows an "Originated from" link back to the source
+  application when set.
+- Extracted `CreateLoanAccountDialog` (previously private to `ClientProfilePage`) into its own
+  shared component (`src/components/CreateLoanAccountDialog.tsx`) with an `initialValues` prop, so
+  both entry points share one form/formula implementation instead of duplicating it.
+- The dialog's final "Yes, create" button is now disabled for 3 seconds with a live countdown
+  ("Yes, create (3)" → "(2)" → "(1)" → "Yes, create") every time the safety-net confirm dialog
+  opens — an additional speed bump against a hasty double-click, on top of the existing
+  confirm-dialog step.
+- Fixed a pre-existing data bug found while testing this: two seed applications'
+  `assignedSubType` (`'SML-Reg'`, `'SL-Reg'`) didn't match any real `MOCK_LOAN_PRODUCTS` product
+  code (`'SML-REGULAR'`, `'SL-REGULAR'`), so the new prefill silently showed a blank Product
+  Sub-type. Corrected both.
+
 ### Generated Documents distributed onto Loan Accounts; Loan Products get editable document templates
 - Removed the standalone `/admin/documents` Generated Documents page/route/nav link
   (`GeneratedDocumentsPage.tsx` deleted). Its content now lives on `LoanDetailPage`'s Attachments

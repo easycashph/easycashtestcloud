@@ -580,6 +580,19 @@ export function LoanDetailPage() {
                       <dd className="text-right font-medium">{loan.disbursementBank.nameOnCardOrAccount}</dd>
                     </>
                   )}
+                  {loan.sourceApplicationId && (
+                    <>
+                      <dt className="text-muted-foreground">Originated from</dt>
+                      <dd className="text-right font-medium">
+                        <Link
+                          to={`/applications/${loan.sourceApplicationId}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          Loan Application
+                        </Link>
+                      </dd>
+                    </>
+                  )}
                   <dt className="text-muted-foreground">Loan officer</dt>
                   <dd className="text-right font-medium">{loan.loanOfficerName}</dd>
                   <dt className="text-muted-foreground">Approved at</dt>

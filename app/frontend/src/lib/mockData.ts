@@ -117,6 +117,8 @@ export interface MockLoanAccount {
     bankAccountNumber: string;
     nameOnCardOrAccount: string;
   };
+  /** Set when this loan account was created from a specific approved Loan Application — see `findApprovedApplicationForClient()`. */
+  sourceApplicationId?: string;
 }
 
 export interface MockRepaymentInstallment {
@@ -2390,6 +2392,9 @@ export interface MockLoanApplication {
   /** Set once "Create Client" has been used on this (Approved) application — prevents creating a duplicate client record. */
   clientCreated?: boolean;
   createdClientId?: string;
+  /** Set once "Create Loan Account" has been used on this application (after Create Client) — an application converts to at most one loan account. */
+  loanAccountCreated?: boolean;
+  createdLoanAccountId?: string;
 }
 
 /** Application-stage document names only (see section comment above) with fabricated size/upload date — metadata only, never actual file content. */
@@ -2593,7 +2598,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     propertiesOwned: ['Condominium unit — Pasay City'],
     creditScore: 700,
     requestedCategory: 'Seafarer Loan',
-    assignedSubType: 'SML-Reg',
+    assignedSubType: 'SML-REGULAR',
     requestedAmount: 250000,
     requestedTermMonths: 12,
     submittedAt: new Date(Date.now() - 9 * 86_400_000).toISOString(),
@@ -2628,7 +2633,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     propertiesOwned: [],
     creditScore: 560,
     requestedCategory: 'Salary Loan',
-    assignedSubType: 'SL-Reg',
+    assignedSubType: 'SL-REGULAR',
     requestedAmount: 100000,
     requestedTermMonths: 12,
     submittedAt: new Date(Date.now() - 5 * 86_400_000).toISOString(),
@@ -2876,6 +2881,8 @@ export function createLoanAccountForClient(
     paymentMethod?: string;
     /** Required (by the UI) only when `paymentMethod` is `BANK_TRANSFER` or `AUTO_DEBIT` — see `MockLoanAccount.disbursementBank`. */
     disbursementBank?: MockLoanAccount['disbursementBank'];
+    /** The approved Loan Application this loan account is being created from — see `findApprovedApplicationForClient()`. Marks that application as converted so it can't be used again. */
+    sourceApplicationId?: string;
   },
   actorName: string,
 ): MockLoanAccount {
@@ -2902,6 +2909,7 @@ export function createLoanAccountForClient(
     firstRepaymentDate: addMonths(disbursementDate, 1).toISOString(),
     coBorrowerName: params.coBorrowerName?.trim() || undefined,
     disbursementBank: params.disbursementBank,
+    sourceApplicationId: params.sourceApplicationId,
     balances: {
       principalBalance: 0,
       principalPaid: 0,
@@ -2937,7 +2945,26 @@ export function createLoanAccountForClient(
     entityId: loan.loanCode,
     at: loan.createdAt,
   });
+  if (params.sourceApplicationId) {
+    const sourceApplication = MOCK_LOAN_APPLICATIONS.find((a) => a.id === params.sourceApplicationId);
+    if (sourceApplication) {
+      sourceApplication.loanAccountCreated = true;
+      sourceApplication.createdLoanAccountId = loan.id;
+    }
+  }
   return loan;
+}
+
+/**
+ * Business rule: a client may only get a new loan account from a specific, still-unconverted
+ * APPROVED loan application (matched via `createdClientId` — the application "Create Client" used
+ * to produce this client record). A client with no approved application on file, or whose only
+ * approved application already converted to a loan account, cannot have a new loan account
+ * created — reflects that every loan (including a renewal) needs its own reviewed/approved
+ * application, not just an existing client relationship.
+ */
+export function findApprovedApplicationForClient(borrowerId: string): MockLoanApplication | undefined {
+  return MOCK_LOAN_APPLICATIONS.find((a) => a.status === 'APPROVED' && a.createdClientId === borrowerId && !a.loanAccountCreated);
 }
 
 // Seed activity log entries for every sample application — submission always,

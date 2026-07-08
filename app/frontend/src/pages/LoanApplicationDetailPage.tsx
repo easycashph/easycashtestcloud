@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, History, Lock, Paperclip, RotateCcw, Sparkles, UserPlus, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, History, Landmark, Lock, Paperclip, RotateCcw, Sparkles, UserPlus, XCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,12 +17,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { CreateLoanAccountDialog, type CreateLoanAccountParams } from '@/components/CreateLoanAccountDialog';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import {
   createClientFromApplication,
+  createLoanAccountForClient,
   findRepeatClientBorrower,
   getMockBorrower,
   getMockLoan,
@@ -60,6 +62,7 @@ export function LoanApplicationDetailPage() {
   const [, forceRerender] = React.useState(0);
   const [decisionNote, setDecisionNote] = React.useState('');
   const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'CREATE_CLIENT' | null>(null);
+  const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
 
   useLogPageView('Loan Application Detail', applicationId);
 
@@ -170,6 +173,26 @@ export function LoanApplicationDetailPage() {
     navigate(`/clients/${client.id}`);
   };
 
+  const createLoanFromApplication = (params: CreateLoanAccountParams) => {
+    if (!officialClient) return;
+    const loan = createLoanAccountForClient(
+      officialClient,
+      {
+        productCode: params.productCode,
+        principalAmount: params.principalAmount,
+        installmentCount: params.installmentCount,
+        interestRate: params.interestRate,
+        coBorrowerName: params.coBorrowerName,
+        anticipatedDisbursementDate: params.anticipatedDisbursementDate,
+        paymentMethod: params.paymentMethod,
+        disbursementBank: params.disbursementBank,
+        sourceApplicationId: application.id,
+      },
+      currentAccount.name,
+    );
+    navigate(`/loans/${loan.id}`);
+  };
+
   const isPending = application.status === 'PENDING_REVIEW';
   const applicationLogs = MOCK_ACTIVITY_LOGS.filter((l) => l.entityId === application.id);
 
@@ -214,25 +237,51 @@ export function LoanApplicationDetailPage() {
 
       {application.status === 'APPROVED' && (
         <Card className="border-success/40 bg-success/5">
-          <CardContent className="flex flex-col items-start justify-between gap-3 py-4 sm:flex-row sm:items-center">
-            <div>
-              <p className="text-sm font-medium">
-                {application.clientCreated ? 'Official client record created' : 'Ready to become an official client'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {application.clientCreated
-                  ? 'Profile picture, personal/contact info, and attachments were copied to Client Details.'
-                  : "Creates the official Client Details record from this application's info — profile picture, age, contact info, address, and attachments included. Does not create a loan account (that's a separate step on the client's profile)."}
-              </p>
+          <CardContent className="space-y-3 py-4">
+            <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-medium">
+                  Step 1: {application.clientCreated ? 'Official client record created' : 'Ready to become an official client'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {application.clientCreated
+                    ? 'Profile picture, personal/contact info, and attachments were copied to Client Details.'
+                    : "Creates the official Client Details record from this application's info — profile picture, age, contact info, address, and attachments included."}
+                </p>
+              </div>
+              {application.clientCreated ? (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${application.createdClientId}`)}>
+                  View Client Profile
+                </Button>
+              ) : (
+                <Button size="sm" onClick={() => setConfirmAction('CREATE_CLIENT')}>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client
+                </Button>
+              )}
             </div>
-            {application.clientCreated ? (
-              <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${application.createdClientId}`)}>
-                View Client Profile
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => setConfirmAction('CREATE_CLIENT')}>
-                <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client
-              </Button>
+
+            {application.clientCreated && (
+              <div className="flex flex-col items-start justify-between gap-3 border-t border-success/20 pt-3 sm:flex-row sm:items-center">
+                <div>
+                  <p className="text-sm font-medium">
+                    Step 2: {application.loanAccountCreated ? 'Loan account created' : 'Ready to create a loan account'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {application.loanAccountCreated
+                      ? 'This application has already been converted to a loan account — an application can only produce one.'
+                      : "Opens the Create Loan Account form, prefilled with this application's requested product/amount/term. Every loan account must trace back to one specific approved application."}
+                  </p>
+                </div>
+                {application.loanAccountCreated ? (
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/loans/${application.createdLoanAccountId}`)}>
+                    View Loan Account
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => setCreateLoanOpen(true)}>
+                    <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -505,6 +554,17 @@ export function LoanApplicationDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CreateLoanAccountDialog
+        open={createLoanOpen}
+        onOpenChange={setCreateLoanOpen}
+        onCreate={createLoanFromApplication}
+        initialValues={{
+          productCode: application.assignedSubType,
+          principalAmount: application.requestedAmount,
+          installmentCount: application.requestedTermMonths,
+        }}
+      />
     </div>
   );
 }
