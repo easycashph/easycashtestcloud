@@ -65,8 +65,15 @@ import infrastructure, interface, or `@prisma/client`). 8 modules: `identity`, `
   migration) was **RESOLVED 2026-07-08** (Option A — migrate all 1,799 legacy loans as-is,
   including the 79, flagged for manual accounting review post-migration; confirmed by Nomer Perez,
   MIS Manager). CP12 itself is not yet built — only its gating decision is now clear.
-- `document` and `audit` modules — no financial-write use case yet logs an `AuditLog` entry, and
-  no document-generation/storage capability exists server-side.
+- **Correction (2026-07-08): the claim previously here — "no financial-write use case yet logs an
+  `AuditLog` entry" — was factually wrong.** `IFinancialAuditLogger`/`PrismaFinancialAuditLogger`
+  (ADR-047, fail-closed by design) were built 2026-07-04 (CP2), and both `ActivateLoanUseCase` and
+  `ProcessPaymentUseCase` already call `.log()` inside their `IUnitOfWork.run()` block, with a
+  passing fail-closed regression test for each (`tests/unit/loan-account/ActivateLoanUseCase.test.ts`,
+  `ProcessPaymentUseCase.test.ts` — both assert the whole transaction rejects if the audit write
+  fails). Verified directly against the source and by running the suite, not re-derived from this
+  document. **No `document` module capability exists yet** (0 files) — that part of the original
+  claim stands; only the `audit` half was wrong.
 - **No live PostgreSQL has ever been available in this dev environment** — every DB-dependent
   claim is verified via `tsc`, mocked-Prisma unit tests, and mocked `supertest` requests. This
   remains the single largest outstanding verification gap in the whole backend.
@@ -201,13 +208,17 @@ this schema. That work cannot be meaningfully verified without at least one real
 to migrate into. Standing up Postgres (even just locally via the project's existing
 `docker-compose`) should happen before or alongside CP12, not after.
 
-### 4.4 Build the `audit` module before, not after, any real production use
+### 4.4 ~~Build the `audit` module before, not after, any real production use~~ — ALREADY DONE, this recommendation was based on a factual error
 
-`FINANCIAL_INVARIANTS.md §4`'s fail-closed audit-write rule is fully designed and even has a tested
-implementation pattern (`PrismaFinancialAuditLogger`), but **no financial-write use case actually
-calls it yet** — `ActivateLoanUseCase` and `ProcessPaymentUseCase` do not write `AuditLog` entries
-despite being the two use cases that move real money. This is a real, load-bearing gap for a
-financial system and should be closed before any live-money usage, not treated as a nice-to-have.
+**This recommendation is moot — verified 2026-07-08 by reading the source directly.**
+`FINANCIAL_INVARIANTS.md §4`'s fail-closed audit-write rule (`ADR-047`) is not just designed but
+**already implemented and wired in**: both `ActivateLoanUseCase` and `ProcessPaymentUseCase` call
+`financialAuditLogger.log()` inside their `IUnitOfWork.run()` block (no try/catch — a rejection
+aborts the whole transaction), and each has a passing fail-closed regression test asserting exactly
+that. This was built 2026-07-04 (CP2), predating this document's own "Verified fresh, 2026-07-07"
+pass — the original claim here should have been caught then and wasn't. Nothing to build; no
+action needed. The `document` module (server-side document generation/storage) remains genuinely
+unbuilt (0 files) if that capability is ever needed.
 
 ### 4.5 Resolve the frontend's small internal inconsistencies before they compound
 
