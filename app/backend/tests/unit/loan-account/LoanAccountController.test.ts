@@ -21,7 +21,7 @@ function buildDeps() {
     // Milestone 9.1/9.2 CP13.
     activateLoanUseCase: { execute: vi.fn() },
     processPaymentUseCase: { execute: vi.fn() },
-    idempotencyKeyStore: { find: vi.fn().mockResolvedValue(null), save: vi.fn() },
+    idempotencyKeyStore: { claim: vi.fn().mockResolvedValue({ outcome: 'CLAIMED' }), complete: vi.fn(), release: vi.fn() },
   } as never as ConstructorParameters<typeof LoanAccountController>[0];
 }
 
@@ -91,7 +91,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
 
     await controller.reject(req, res, vi.fn());
 
-    expect(deps.rejectLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'Insufficient documents');
+    expect(deps.rejectLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'authenticated-user-1', 'Insufficient documents');
   });
 
   it('list() returns the paginated envelope { items, nextCursor }', async () => {
@@ -250,7 +250,10 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan();
       const storedBody = { id: loan.id, status: 'ACTIVE' };
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
-      (deps.idempotencyKeyStore.find as ReturnType<typeof vi.fn>).mockResolvedValue({ statusCode: 200, responseBody: storedBody });
+      (deps.idempotencyKeyStore.claim as ReturnType<typeof vi.fn>).mockResolvedValue({
+        outcome: 'COMPLETED',
+        response: { statusCode: 200, responseBody: storedBody },
+      });
       const controller = new LoanAccountController(deps);
       const req = {
         params: { id: loan.id },
@@ -280,10 +283,14 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
 
       await controller.activate(req, buildResponse(), vi.fn());
 
-      expect(deps.idempotencyKeyStore.save).toHaveBeenCalledWith(
+      expect(deps.idempotencyKeyStore.claim).toHaveBeenCalledWith(
         'client-key-1',
         'POST /loan-accounts/:id/activate',
         'authenticated-user-1',
+      );
+      expect(deps.idempotencyKeyStore.complete).toHaveBeenCalledWith(
+        'client-key-1',
+        'POST /loan-accounts/:id/activate',
         expect.objectContaining({ statusCode: 200 }),
       );
     });
@@ -345,7 +352,10 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const loan = buildLoan();
       const storedBody = { loanAccount: { id: loan.id }, remainder: '0.00' };
       (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
-      (deps.idempotencyKeyStore.find as ReturnType<typeof vi.fn>).mockResolvedValue({ statusCode: 200, responseBody: storedBody });
+      (deps.idempotencyKeyStore.claim as ReturnType<typeof vi.fn>).mockResolvedValue({
+        outcome: 'COMPLETED',
+        response: { statusCode: 200, responseBody: storedBody },
+      });
       const controller = new LoanAccountController(deps);
       const req = {
         params: { id: loan.id },

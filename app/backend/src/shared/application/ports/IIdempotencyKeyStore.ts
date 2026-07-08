@@ -12,26 +12,48 @@
  * by any future module's balance-mutating endpoint that needs duplicate-
  * resubmission protection, mirroring why `IFinancialAuditLogger`/
  * `IUnitOfWork` live here rather than in a single module.
+ *
+ * 2026-07-08 (H-4 fix): `find`/`save` replaced with `claim`/`complete`/
+ * `release`. The old shape checked for a duplicate and stored the response
+ * only after the use case had already run — the uniqueness constraint never
+ * had a chance to block a second concurrent request before it reached the
+ * use case layer, so two requests carrying the same key could both execute
+ * a balance-mutating action in full. `claim()` now inserts the row (with no
+ * response yet) *before* the use case runs, so a genuinely concurrent
+ * duplicate collides with the DB unique constraint immediately.
  */
 export interface StoredIdempotentResponse {
   statusCode: number;
   responseBody: unknown;
 }
 
+export type IdempotencyClaim =
+  /** No prior row for this (key, endpoint) pair — caller may proceed to run the use case. */
+  | { outcome: 'CLAIMED' }
+  /** A prior request already ran this (key, endpoint) pair to completion — replay its response. */
+  | { outcome: 'COMPLETED'; response: StoredIdempotentResponse }
+  /** A prior request claimed this (key, endpoint) pair and hasn't finished yet — do not proceed. */
+  | { outcome: 'IN_PROGRESS' };
+
 export interface IIdempotencyKeyStore {
   /**
-   * Looks up a prior response recorded for this exact (key, endpoint) pair.
-   * `endpoint` scopes the key namespace (e.g. `"POST /loan-accounts/:id/activate"`)
-   * so the same client-chosen key value used against two different
-   * endpoints is never treated as a collision.
+   * Atomically claims (key, endpoint) for this request, or reports why it
+   * couldn't: `COMPLETED` (replay the stored response) or `IN_PROGRESS`
+   * (another request is currently executing the same key/endpoint pair).
    */
-  find(key: string, endpoint: string): Promise<StoredIdempotentResponse | null>;
+  claim(key: string, endpoint: string, userId: string): Promise<IdempotencyClaim>;
 
   /**
-   * Records a response for this (key, endpoint) pair. Callers must only
-   * call this once a real, successful response is ready to store — never
-   * for an error response, so a transient failure can still be retried
-   * with the same key.
+   * Records the successful response for a (key, endpoint) pair this caller
+   * previously claimed. Must only be called after a real, successful
+   * response is ready — never for an error response.
    */
-  save(key: string, endpoint: string, userId: string, response: StoredIdempotentResponse): Promise<void>;
+  complete(key: string, endpoint: string, response: StoredIdempotentResponse): Promise<void>;
+
+  /**
+   * Releases a claim this caller made but did not complete (its use case
+   * threw), so a retry with the same key can claim it again. Never removes
+   * an already-`complete()`d row.
+   */
+  release(key: string, endpoint: string): Promise<void>;
 }

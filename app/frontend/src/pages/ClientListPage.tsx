@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, MOCK_LOANS, type MockBorrowerProfile } from '@/lib/mockData';
+import { ACTIVE_LOAN_STATUSES, MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, MOCK_LOANS, type MockBorrowerProfile } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
 
 const BRANCH_OPTIONS = ['ALL', ...[...new Set(MOCK_BORROWERS.map((b) => b.homeBranchName))].sort()];
@@ -25,10 +25,11 @@ const LOAN_PRESENCE_OPTIONS: { value: LoanPresenceFilter; label: string }[] = [
   { value: 'NONE', label: 'No loans yet' },
 ];
 
+// 2026-07-08 (F-3 fix): was a hand-rolled copy of the "active loan" statuses that had drifted from
+// `clientHasActiveLoan()` in mockData.ts (the function that actually gates "Create Loan Account").
+// Now shares that one definition via `ACTIVE_LOAN_STATUSES`.
 function hasActiveLoan(b: MockBorrowerProfile): boolean {
-  return MOCK_LOANS.some(
-    (l) => b.loanIds.includes(l.id) && (l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS' || l.status === 'MATURED'),
-  );
+  return MOCK_LOANS.some((l) => b.loanIds.includes(l.id) && ACTIVE_LOAN_STATUSES.includes(l.status));
 }
 
 function initials(name: string): string {
@@ -191,7 +192,12 @@ export function ClientListPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Client Data')} title="Recent Activity — Client Data" />
+      {/* 2026-07-08 (F-5 fix): real client actions (Create Client, Edit) log entityType 'Client'
+          (singular) — the page-view-only 'Client Data' filter never matched them. */}
+      <RecentActivityPanel
+        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Client' || l.entityType === 'Client Data')}
+        title="Recent Activity — Client Data"
+      />
     </div>
   );
 }

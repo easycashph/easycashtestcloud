@@ -858,8 +858,17 @@ model AuditLog {
 // #9): a client-supplied Idempotency-Key header, checked via this small,
 // purpose-built lookup (deliberately separate from AuditLog, which records
 // history, not replay state), rejecting a duplicate resubmission before it
-// reaches the use case layer. Append-only, same convention as AuditLog — no
-// update/delete path exposed anywhere in the application for this table.
+// reaches the use case layer.
+//
+// 2026-07-08 (H-4 fix): statusCode/responseBody are nullable because a row is
+// now inserted as a claim BEFORE the use case runs (both null = "in
+// progress"), not just after it succeeds. This is what makes the @@unique
+// constraint actually block a concurrent duplicate: the second request's
+// claim-insert itself hits P2002, before it ever reaches the use case layer,
+// instead of only detecting the collision afterward. A row can be deleted by
+// `release()` if its own claiming request's use case throws — the only
+// update/delete paths this table has, both scoped to the row's own
+// still-pending (statusCode IS NULL) state.
 // ----------------------------------------------------------------------------
 
 model IdempotencyKey {
@@ -873,8 +882,10 @@ model IdempotencyKey {
   endpoint     String
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  statusCode   Int
-  responseBody Json
+  /// Null while the claiming request's use case is still running.
+  statusCode   Int?
+  /// Null while the claiming request's use case is still running.
+  responseBody Json?
   createdAt    DateTime @default(now())
 
   @@unique([key, endpoint])

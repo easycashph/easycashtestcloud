@@ -1,8 +1,12 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
+import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
 
 export interface ApproveLoanUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
+  financialAuditLogger: IFinancialAuditLogger;
+  unitOfWork: IUnitOfWork;
 }
 
 /**
@@ -10,15 +14,16 @@ export interface ApproveLoanUseCaseDeps {
  * events — this use case performs ONLY the PENDING_APPROVAL -> APPROVED
  * status transition. It does not create a LoanTransaction, does not
  * generate a RepaymentInstallment schedule, and does not touch any
- * balance field. A future ActivateLoanUseCase (once the calculation
- * engine exists) is responsible for those.
+ * balance field. `ActivateLoanUseCase` is responsible for those.
  *
- * This is also intentionally a single-aggregate operation — it does not
- * take an IUnitOfWork dependency, because it writes to LoanAccount only.
- * (The financial-write audit-logging requirement in
- * FINANCIAL_INVARIANTS.md §4 applies once this use case's audit entry is
- * wired up in a later milestone alongside the `audit` module, which is
- * out of scope for Milestone 7's build order.)
+ * 2026-07-08 (M-8 fix): a human approving a loan is a money-movement-
+ * authority decision — `FINANCIAL_INVARIANTS.md §4`'s fail-closed,
+ * same-transaction audit-write rule applies to it the same as any other
+ * financial-write use case, so this now wraps the save + audit-log write in
+ * one `IUnitOfWork.run()` block, mirroring `ActivateLoanUseCase`'s shape.
+ * (Previously deferred pending the `audit` module's infrastructure, which
+ * has existed and been wired into other use cases since CP2/CP8 — this was
+ * simply never revisited for `approve`/`reject`.)
  */
 export class ApproveLoanUseCase {
   constructor(private readonly deps: ApproveLoanUseCaseDeps) {}
@@ -30,6 +35,20 @@ export class ApproveLoanUseCase {
     }
 
     loanAccount.approve(approvedByUserId);
-    await this.deps.loanAccountRepository.save(loanAccount);
+
+    await this.deps.unitOfWork.run(async (ctx) => {
+      await this.deps.loanAccountRepository.save(loanAccount, ctx);
+      await this.deps.financialAuditLogger.log(
+        {
+          userId: approvedByUserId,
+          action: 'APPROVE_LOAN',
+          entityType: 'LoanAccount',
+          entityId: loanAccount.id,
+          previousValue: { status: 'PENDING_APPROVAL' },
+          newValue: { status: 'APPROVED' },
+        },
+        ctx,
+      );
+    });
   }
 }

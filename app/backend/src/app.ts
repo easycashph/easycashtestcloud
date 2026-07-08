@@ -173,8 +173,8 @@ export function createApp(): Express {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
-      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository }),
-      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository }),
+      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
+      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
       // cases (previously built with zero routes, per the D-2 precedent —
       // see ActivateLoanUseCase's/ProcessPaymentUseCase's own doc comments).

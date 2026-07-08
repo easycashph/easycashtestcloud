@@ -8,24 +8,27 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-08
 
-### Bug hunt: 5 new issues found, not yet fixed (see `docs/PROJECT_HANDOFF.md` §5 for full detail)
+### Bug hunt: 5 issues found and fixed (see `docs/PROJECT_HANDOFF.md` §5 for full detail)
 A full-codebase read (not just `tsc`/`eslint`, which stayed clean) surfaced 5 concrete bugs beyond
-the `PAYABLE_LOANS` fix below, several sharing its exact stale-module-constant shape. None are fixed
-in this entry — logged here for visibility, prioritized in `docs/LMS_PROJECT_SUMMARY.md` §4.7:
-- **Dashboard "Collections This Month" freezes after any loan is created/activated this
-  session** — `DASHBOARD_SUMMARY.totalPortfolioValue` (`mockData.ts`) is a module-level constant
-  computed once at import time; the "Collections This Month" card divides a live-recomputed
-  numerator by this frozen denominator, silently inflating the figure.
-- **"Create Client" always creates a new client record**, even for a repeat applicant who already
-  has a Client Data profile — `createClientFromApplication()` never checks the existing
+the `PAYABLE_LOANS` fix below, several sharing its exact stale-module-constant shape. All 5 fixed
+the same day:
+- **Dashboard "Collections This Month" froze after any loan was created/activated this
+  session** — `DASHBOARD_SUMMARY.totalPortfolioValue` (`mockData.ts`) was a module-level constant
+  computed once at import time; the "Collections This Month" card divided a live-recomputed
+  numerator by this frozen denominator, silently inflating the figure. Fixed: it's now a function
+  (`getTotalPortfolioValue()`), called fresh on every render.
+- **"Create Client" always created a new client record**, even for a repeat applicant who already
+  had a Client Data profile — `createClientFromApplication()` never checked the existing
   `findRepeatClientBorrower()` helper, splitting loan history across duplicate client records.
-- **Two implementations of "has active loan" disagree on `MATURED`** — `clientHasActiveLoan()`
-  (gates Create Loan Account) excludes it, `ClientListPage`'s `hasActiveLoan()` (drives the filter
-  badge) includes it.
-- **Recent Activity panels on Loan Accounts and Client Data never show real actions** —
+  Fixed: it now links to the existing profile when one matches, only minting a new record for a
+  genuinely new applicant.
+- **Two implementations of "has active loan" disagreed on `MATURED`** — `clientHasActiveLoan()`
+  (gates Create Loan Account) excluded it, `ClientListPage`'s `hasActiveLoan()` (drives the filter
+  badge) included it. Fixed: both now share one exported definition, `ACTIVE_LOAN_STATUSES`.
+- **Recent Activity panels on Loan Accounts and Client Data never showed real actions** —
   `entityType` string mismatches (`'Loan Accounts'` vs `'LoanAccount'`, `'Client Data'` vs
-  `'Client'`) mean both panels only ever show page-view noise, never real Approve/Activate/Create/
-  Edit actions.
+  `'Client'`) meant both panels only ever showed page-view noise, never real Approve/Activate/
+  Create/Edit actions. Fixed: both filters now match either label form.
 
 ### Fixed: "Record Payment" could land on a random unrelated loan
 - Root cause: `PaymentRecordingPage`'s `PAYABLE_LOANS` was a **module-level constant**, computed

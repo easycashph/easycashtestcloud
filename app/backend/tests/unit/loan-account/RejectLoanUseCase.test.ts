@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
+import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { LoanAccount } from '@modules/loan-account/domain/LoanAccount';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
@@ -25,57 +25,56 @@ function buildDeps(loan: LoanAccount) {
   return { loanAccountRepository, financialAuditLogger, unitOfWork };
 }
 
-describe('ApproveLoanUseCase (2026-07-08: wraps save + audit log in one IUnitOfWork.run(), M-8 fix)', () => {
-  it('approves and saves the loan account', async () => {
+describe('RejectLoanUseCase (2026-07-08: wraps save + audit log in one IUnitOfWork.run(), M-8 fix)', () => {
+  it('rejects and saves the loan account with the given reason', async () => {
     const loan = buildLoan();
     const deps = buildDeps(loan);
-    const useCase = new ApproveLoanUseCase(deps);
+    const useCase = new RejectLoanUseCase(deps);
 
-    await useCase.execute(loan.id, 'officer-1');
+    await useCase.execute(loan.id, 'officer-1', 'Insufficient documents');
 
-    expect(loan.status).toBe('APPROVED');
+    expect(loan.status).toBe('CLOSED_REJECTED');
     expect(deps.loanAccountRepository.save).toHaveBeenCalledWith(loan, undefined);
   });
 
-  it('writes a financial audit log entry for the approval', async () => {
+  it('writes a financial audit log entry for the rejection, including the reason', async () => {
     const loan = buildLoan();
     const deps = buildDeps(loan);
-    const useCase = new ApproveLoanUseCase(deps);
+    const useCase = new RejectLoanUseCase(deps);
 
-    await useCase.execute(loan.id, 'officer-1');
+    await useCase.execute(loan.id, 'officer-1', 'Insufficient documents');
 
     expect(deps.financialAuditLogger.log).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'officer-1',
-        action: 'APPROVE_LOAN',
+        action: 'REJECT_LOAN',
         entityType: 'LoanAccount',
         entityId: loan.id,
         previousValue: { status: 'PENDING_APPROVAL' },
-        newValue: { status: 'APPROVED' },
+        newValue: { status: 'CLOSED_REJECTED', reason: 'Insufficient documents' },
       }),
       undefined,
     );
   });
 
-  it('fails closed: if the audit write throws, the whole transaction (including the save) rolls back', async () => {
+  it('records a null reason when none was supplied', async () => {
     const loan = buildLoan();
     const deps = buildDeps(loan);
-    deps.financialAuditLogger.log.mockRejectedValue(new Error('audit write failed'));
-    deps.unitOfWork.run = vi.fn(async (work: (ctx: undefined) => Promise<unknown>) => {
-      // Mirrors PrismaUnitOfWork: a thrown error inside work() propagates,
-      // and a real transaction would roll back every write inside it.
-      return work(undefined);
-    });
-    const useCase = new ApproveLoanUseCase(deps);
+    const useCase = new RejectLoanUseCase(deps);
 
-    await expect(useCase.execute(loan.id, 'officer-1')).rejects.toThrow('audit write failed');
+    await useCase.execute(loan.id, 'officer-1');
+
+    expect(deps.financialAuditLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({ newValue: { status: 'CLOSED_REJECTED', reason: null } }),
+      undefined,
+    );
   });
 
   it('throws NotFoundError for an unknown loan account id', async () => {
     const loanAccountRepository = { findById: vi.fn().mockResolvedValue(null), findByLoanCode: vi.fn(), save: vi.fn() };
     const financialAuditLogger = { log: vi.fn() };
     const unitOfWork = { run: vi.fn() };
-    const useCase = new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork });
+    const useCase = new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork });
 
     await expect(useCase.execute('missing', 'officer-1')).rejects.toThrow(NotFoundError);
     expect(unitOfWork.run).not.toHaveBeenCalled();

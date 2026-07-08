@@ -480,14 +480,16 @@ initially missed non-`.ts` source files):
   order (equal dates are not a violation). 4 new regression tests added
   (`tests/unit/shared/calculation/PaymentAllocationService.test.ts`), full suite still green
   (468/474, up from 464/470).
-- **M-8 (2026-07-08 bug hunt) — NEW, not fixed.** `ApproveLoanUseCase`/`RejectLoanUseCase`
-  (`src/modules/loan-account/application/use-cases/ApproveLoanUseCase.ts`) write no
-  `IFinancialAuditLogger` entry, unlike `ActivateLoanUseCase`/`ProcessPaymentUseCase`. A
-  PENDING_APPROVAL→APPROVED (or →REJECTED) transition — performed by a human with money-movement
-  authority — currently leaves no forensic record of who approved/rejected which loan and when.
-  The gap is acknowledged in a code comment (deferred, not a regression) but is a real,
-  currently-shippable violation of `FINANCIAL_INVARIANTS.md §4`'s fail-closed audit rule as applied
-  to this use case.
+- **M-8 (2026-07-08 bug hunt) — RESOLVED, 2026-07-08.** Was: `ApproveLoanUseCase`/
+  `RejectLoanUseCase` wrote no `IFinancialAuditLogger` entry, unlike `ActivateLoanUseCase`/
+  `ProcessPaymentUseCase`. Fixed: both use cases now take `financialAuditLogger`/`unitOfWork` deps
+  and wrap their `loanAccountRepository.save()` + audit-log write in one `IUnitOfWork.run()` block,
+  mirroring `ActivateLoanUseCase`'s shape — `APPROVE_LOAN`/`REJECT_LOAN` entries, fail-closed (an
+  audit-write failure rolls back the status change too). `RejectLoanUseCase.execute()` gained a
+  required `rejectedByUserId` param (previously had no actor at all); `LoanAccountController.reject()`
+  now fetches `getCurrentUser(req)` to supply it, same as `approve()` already did. New regression
+  tests: `RejectLoanUseCase.test.ts` (new file), `ApproveLoanUseCase.test.ts` (extended) — both
+  assert the audit entry's shape and that an audit-write failure rolls back the save.
 - **M-7 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: `npm audit` — 4
   vulnerabilities in `app/backend` (1 moderate, 3 high), all transitive via `bcrypt@5.x →
   @mapbox/node-pre-gyp → tar` (path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds
@@ -502,24 +504,22 @@ initially missed non-`.ts` source files):
   scope.)
 
 ### High priority (new, 2026-07-08 bug hunt)
-- **H-4 — Idempotency guard does not prevent concurrent double-execution of balance-mutating
-  requests.** `src/shared/http/idempotency.ts:34-48`, backed by
-  `src/shared/infrastructure/PrismaIdempotencyKeyStore.ts:21-43`. `withIdempotency()` runs
-  `find()` → `execute()` → `save()` sequentially with no lock held between `find` and `execute`;
-  the DB's unique `(key, endpoint)` constraint only fires at `save()` time, *after* `execute()`
-  (the full use case, in its own already-committed transaction) has already run. The store's own
-  code comment claims the constraint "prevents a race... from both proceeding to the use case
-  layer" — that is incorrect; it only detects the collision after both requests already proceeded.
-  **Failure scenario:** a client retries `POST /loan-accounts/:id/payments` with the same
-  `Idempotency-Key` twice in quick succession (e.g. an automatic retry on a slow response). Both
-  requests miss the `find()` check and both run `ProcessPaymentUseCase.execute()` to completion —
-  optimistic concurrency on the loan account/installment doesn't stop this, since both are
-  logically-valid payments, not a stale-write conflict. The payment is applied twice; the second
-  request's `save()` then throws an unhandled Prisma `P2002` that surfaces as a raw 500, but the
-  double-charge has already committed. **Not yet fixed** — needs either a DB-level advisory lock
-  held across `execute()`, or an early row-insert-then-execute pattern (insert a `PENDING` idempotency
-  row before `execute()`, so the unique constraint blocks the second request before it runs the use
-  case at all).
+- **H-4 — RESOLVED, 2026-07-08.** Was: the idempotency guard didn't prevent concurrent
+  double-execution of balance-mutating requests — `withIdempotency()` ran `find()` → `execute()` →
+  `save()` sequentially with no lock held between `find` and `execute`, so the DB's unique
+  `(key, endpoint)` constraint only fired at `save()` time, *after* `execute()` had already run;
+  two concurrent requests with the same key could both fully process a payment/activation before
+  either write failed. Fixed with a claim-before-execute pattern: `IIdempotencyKeyStore.find`/
+  `save` replaced with `claim`/`complete`/`release`. `claim()` inserts the row (`statusCode`/
+  `responseBody` now nullable — migration `20260708062614_idempotency_claim_before_execute`)
+  *before* `execute()` runs; a second concurrent `claim()` for the same key hits the DB's own
+  unique-constraint violation (`P2002`) immediately and returns `IN_PROGRESS`, which
+  `withIdempotency()` turns into an immediate `409` — never reaching the use case a second time. On
+  a thrown error, `release()` deletes the still-pending claim row so a retry with the same key can
+  claim it again (preserves the pre-existing "a failed attempt stays retryable" contract).
+  Verified against the live Postgres instance (migration applied and running), plus rewritten
+  regression tests (`idempotency.test.ts`, `PrismaIdempotencyKeyStore.test.ts`) covering all four
+  outcomes (`CLAIMED`/`COMPLETED`/`IN_PROGRESS`/release-on-error).
 
 ### Low priority
 - **L-1** — `toPaginatedResponse`'s "full page ⇒ set nextCursor" heuristic always costs one
@@ -533,49 +533,38 @@ initially missed non-`.ts` source files):
 - **L-5** — `GET /loan-accounts/:id/transactions` for a nonexistent `loanAccountId` returns
   `200 { items: [], nextCursor: null }` instead of `404` — inconsistent with `GET /loan-accounts/:id`,
   which correctly 404s for the same nonexistent id.
-- **L-6 (2026-07-08 bug hunt) — NEW, not fixed.** `/auth/refresh`
-  (`src/modules/identity/interface/http/authRouter.ts:28`) has no dedicated rate limiter. `/login`
-  gets an 8-per-15-min limiter; `/refresh` relies only on the global app-wide limiter, despite
-  handling an equally sensitive operation (session continuation). Reuse-detection mitigates the
-  *consequence* of a stolen/guessed token but not the volume of guesses an attacker can attempt.
+- **L-6 (2026-07-08 bug hunt) — RESOLVED, 2026-07-08.** Was: `/auth/refresh` had no dedicated rate
+  limiter, relying only on the global app-wide limiter, despite handling an equally sensitive
+  operation to `/login` (session continuation). Fixed: a dedicated `refreshRateLimiter`
+  (20/15min — higher than login's 8/15min, since one legitimate client can refresh more than 8
+  times per 15 minutes across tabs/devices, but still a real endpoint-specific ceiling) added to
+  `POST /refresh` in `authRouter.ts`. New integration test in `tests/integration/auth.test.ts`
+  confirms it trips independently of the login limiter.
 
-### Frontend findings (new, 2026-07-08 full-codebase bug hunt)
+### Frontend findings (new, 2026-07-08 full-codebase bug hunt) — all RESOLVED, 2026-07-08
 Found by an independent full read of `app/frontend/src`, cross-checked against `CHANGELOG.md`.
-None fixed yet — logged here for triage (see `LMS_PROJECT_SUMMARY.md` §4.7 for suggested order).
-- **F-1 — Dashboard "Collections This Month" freezes after any loan is created/activated this
-  session.** `src/lib/mockData.ts:1309-1317` — `DASHBOARD_SUMMARY.totalPortfolioValue` is computed
-  once at import time from a one-time `MOCK_LOANS.filter()`. `src/pages/DashboardPage.tsx:282-283`
-  divides a freshly-recomputed numerator by this frozen denominator to scale the "Collections This
-  Month" card (line 406). Same root-cause shape as the `PAYABLE_LOANS` bug fixed earlier
-  2026-07-08 (stale module-level snapshot of a mutated mock array). **Failure scenario:** approve +
-  activate a new loan, then view the Dashboard — the figure is silently inflated because the
-  numerator grew while the denominator didn't.
-- **F-2 — "Create Client" always mints a new client record, even for a repeat applicant who
-  already has a profile.** `src/lib/mockData.ts:2815-2848` (`createClientFromApplication`)
-  unconditionally creates a new `MockBorrowerProfile`, never consulting the existing
-  `findRepeatClientBorrower()` helper (already used read-only elsewhere, e.g.
-  `LoanApplicationDetailPage.tsx:117`). **Failure scenario:** a repeat/renewal applicant's second
-  application, once approved, produces a second unrelated Client Data record with empty loan
-  history instead of attaching to their real profile — undermines the renewal-linking feature
-  documented in the 2026-07-08 changelog entry above.
-- **F-3 — Two implementations of "has active loan" disagree on whether `MATURED` counts.**
-  `clientHasActiveLoan()` (`src/lib/mockData.ts:2851-2857`, gates "Create Loan Account" on
-  `ClientProfilePage.tsx:185`) excludes `MATURED`; the separately hand-written `hasActiveLoan()`
-  (`src/pages/ClientListPage.tsx:28-32`, drives the "With active loan" filter/badge) includes it.
-  **Failure scenario:** a client with only a `MATURED` (past-term, unpaid) loan shows as "has
-  active loan" on Client List but is *not* blocked from creating a second loan account on their
-  profile page. Related to the pre-existing note in `LMS_PROJECT_SUMMARY.md` §4.5 that `MATURED`
-  is a frontend-only invention not yet reconciled with the backend.
-- **F-4 — "Recent Activity — Loan Accounts" panel never shows real loan-account actions.**
-  `src/pages/LoanListPage.tsx:217` filters by `entityType === 'Loan Accounts'` (the page-view
-  label), but every real loan action (Approve, Activate, Add Note, Upload/Delete Attachment) logs
-  `entityType: 'LoanAccount'` (singular, no space) — the strings never match, so the panel only
-  ever shows page-view noise. `LoanApplicationsPage.tsx:328` already shows the correct fix pattern
-  (ORs both label forms).
-- **F-5 — "Recent Activity — Client Data" panel never shows Create/Edit Client actions.**
-  Same root cause as F-4: `src/pages/ClientListPage.tsx:194` filters by `'Client Data'` only, but
-  real client actions log `entityType: 'Client'`. `MemberListPage.tsx:222` shows the correct
-  OR-combined fix pattern this page is missing.
+- **F-1 — RESOLVED.** Was: Dashboard "Collections This Month" froze after any loan was
+  created/activated this session — `DASHBOARD_SUMMARY.totalPortfolioValue` was computed once at
+  import time from a one-time `MOCK_LOANS.filter()`, the same stale-snapshot shape as the
+  `PAYABLE_LOANS` bug fixed earlier the same day. Fixed: `totalPortfolioValue` is now a function
+  (`getTotalPortfolioValue()`), called fresh in `DashboardPage`'s component body on every render
+  instead of read from a frozen module constant.
+- **F-2 — RESOLVED.** Was: "Create Client" always minted a new client record, even for a repeat
+  applicant who already had a profile — `createClientFromApplication()` never consulted the
+  existing `findRepeatClientBorrower()` helper. Fixed: it now checks `findRepeatClientBorrower()`
+  first and links the application to the existing profile (`clientCreated`/`createdClientId` set,
+  a `LINK_CLIENT` activity logged) instead of creating a duplicate — only falls through to minting
+  a new `MockBorrowerProfile` for a genuinely new applicant.
+- **F-3 — RESOLVED.** Was: `clientHasActiveLoan()` (gates "Create Loan Account") and
+  `ClientListPage`'s hand-rolled `hasActiveLoan()` (drives the "With active loan" filter/badge)
+  disagreed on whether `MATURED` counts as active. Fixed: `ACTIVE_LOAN_STATUSES` (already the
+  dashboard's own definition, includes `MATURED`) is now exported from `mockData.ts` and used by
+  both — one shared definition, no more drift.
+- **F-4 / F-5 — RESOLVED.** Was: the Loan Accounts and Client Data "Recent Activity" panels
+  filtered on the page-view label (`'Loan Accounts'`, `'Client Data'`) while real actions logged a
+  singular `entityType` (`'LoanAccount'`, `'Client'`), so neither panel ever showed a real action.
+  Fixed: both filters now OR-combine both label forms, matching the pattern `LoanApplicationsPage`/
+  `MemberListPage` already used correctly.
 
 ### Pre-existing, tracked since Milestone 7 (not from either HTTP-layer audit)
 - **ADR-007** (outstanding balance formula), **ADR-009** (repayment allocation order),

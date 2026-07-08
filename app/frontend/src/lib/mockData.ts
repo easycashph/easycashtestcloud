@@ -1303,18 +1303,37 @@ export function getMockLoan(id: string): MockLoanAccount | undefined {
 // Dashboard aggregates — all derived from MOCK_LOANS above, all sample data.
 // ---------------------------------------------------------------------------
 
-/** All still-active (not closed/rejected/written-off) loan statuses — ACTIVE, in arrears, and past-maturity-but-unpaid. */
-const ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS', 'MATURED'];
+/**
+ * All still-active (not closed/rejected/written-off) loan statuses — ACTIVE, in arrears, and
+ * past-maturity-but-unpaid. Exported (2026-07-08, F-3 fix) so every "does this client have an
+ * active loan" check in the app shares this one definition — `ClientListPage`'s `hasActiveLoan()`
+ * previously hand-rolled its own copy that included `MATURED`, while `clientHasActiveLoan()`
+ * below (which actually gates "Create Loan Account") excluded it, so a client with only a
+ * past-term, still-unpaid loan showed as "has active loan" on the list but wasn't blocked from
+ * opening a second one on their profile.
+ */
+export const ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS', 'MATURED'];
 
 export const DASHBOARD_SUMMARY = {
   totalActiveLoans: MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status)).length,
-  totalPortfolioValue: round2(
-    MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status)).reduce((sum, l) => sum + l.balances.principalBalance, 0),
-  ),
   totalCollectionsThisMonth: round2(1_245_320 + rng() * 50_000),
   overdueAccounts: MOCK_LOANS.filter((l) => l.status === 'ACTIVE_IN_ARREARS').length,
   overdueAmount: round2(MOCK_LOANS.filter((l) => l.status === 'ACTIVE_IN_ARREARS').reduce((sum, l) => sum + l.collectionsBalance, 0)),
 };
+
+/**
+ * 2026-07-08 (F-1 fix): was a `DASHBOARD_SUMMARY.totalPortfolioValue` field computed once at
+ * module load — the same stale-snapshot shape as the `PAYABLE_LOANS` bug fixed earlier the same
+ * day. `DashboardPage`'s Collections-This-Month scaling divides a live-recomputed numerator by
+ * this figure, so a frozen denominator silently drifted from reality after any loan was
+ * created/activated in the session. Now a function, called fresh wherever it's needed (same fix
+ * shape as `PAYABLE_LOANS` moving from a module constant into the component body).
+ */
+export function getTotalPortfolioValue(): number {
+  return round2(
+    MOCK_LOANS.filter((l) => ACTIVE_LOAN_STATUSES.includes(l.status)).reduce((sum, l) => sum + l.balances.principalBalance, 0),
+  );
+}
 
 const MONTH_LABELS = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
 const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2811,8 +2830,31 @@ export function logActivity(entry: Omit<MockActivityLogEntry, 'id'> & { id?: str
  * originates from the Loan Application. In-memory only: pushes onto
  * `MOCK_BORROWERS` and marks the application `clientCreated`. Safe to call
  * only once per application — callers must check `clientCreated` first.
+ *
+ * 2026-07-08 (F-2 fix): a repeat applicant (same `applicantName` already in
+ * `MOCK_BORROWERS`, per `findRepeatClientBorrower()` — the same lookup this
+ * page already uses read-only for its "Repeat Client" indicator) now links
+ * to their existing profile instead of always minting a new one. Previously
+ * this always created a fresh `MockBorrowerProfile`, splitting a returning
+ * client's loan history across two disconnected records — directly
+ * undermining the application→client→loan-account linking feature shipped
+ * earlier the same day.
  */
 export function createClientFromApplication(application: MockLoanApplication, actorName: string): MockBorrowerProfile {
+  const existingClient = findRepeatClientBorrower(application.applicantName);
+  if (existingClient) {
+    application.clientCreated = true;
+    application.createdClientId = existingClient.id;
+    logActivity({
+      userName: actorName,
+      action: 'LINK_CLIENT',
+      entityType: 'Client',
+      entityId: existingClient.id,
+      at: new Date().toISOString(),
+    });
+    return existingClient;
+  }
+
   const id = `borrower-app-${application.id}`;
   const approxBirthYear = new Date().getUTCFullYear() - application.age;
   const client: MockBorrowerProfile = {
@@ -2848,13 +2890,16 @@ export function createClientFromApplication(application: MockLoanApplication, ac
   return client;
 }
 
-/** Business rule: a client may never have 2 simultaneously ACTIVE/ACTIVE_IN_ARREARS loan accounts. */
+/**
+ * Business rule: a client may never have 2 simultaneously active loan accounts — "active" per the
+ * shared `ACTIVE_LOAN_STATUSES` definition above (ACTIVE, in arrears, or past-maturity-but-unpaid;
+ * 2026-07-08 F-3 fix — previously excluded MATURED here while `ClientListPage` counted it, so the
+ * two disagreed on whether a client with only a matured, unpaid loan could open a new one).
+ */
 export function clientHasActiveLoan(borrowerId: string): boolean {
   const client = MOCK_BORROWERS.find((b) => b.id === borrowerId);
   if (!client) return false;
-  return MOCK_LOANS.some(
-    (l) => client.loanIds.includes(l.id) && (l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS'),
-  );
+  return MOCK_LOANS.some((l) => client.loanIds.includes(l.id) && ACTIVE_LOAN_STATUSES.includes(l.status));
 }
 
 /**

@@ -85,10 +85,11 @@ export class LoanAccountController {
   reject = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
       const body = req.body as RejectLoanRequestBody;
       const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId); // H-1: same as approve() above.
-      await this.deps.rejectLoanUseCase.execute(req.params.id as string, body.reason);
+      await this.deps.rejectLoanUseCase.execute(req.params.id as string, currentUser.sub, body.reason);
       const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       res.status(200).json(presentLoanAccount(loanAccount));
     } catch (error) {

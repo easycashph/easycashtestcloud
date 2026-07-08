@@ -148,4 +148,14 @@ describe.skipIf(!runIntegration)('Auth API (integration)', () => {
       .send({ email: 'integration-test@easycash.ph', password: 'wrong' });
     expect(res.status).toBe(429);
   });
+
+  // 2026-07-08 (L-6 fix): /refresh previously had no dedicated rate limiter
+  // and relied only on the global app-wide one.
+  it('trips a dedicated refresh rate limiter after repeated attempts, separate from the login limiter', async () => {
+    for (let i = 0; i < 20; i += 1) {
+      await request(app).post('/api/v1/auth/refresh').send({});
+    }
+    const res = await request(app).post('/api/v1/auth/refresh').send({});
+    expect(res.status).toBe(429);
+  });
 });

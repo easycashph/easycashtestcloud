@@ -19,13 +19,32 @@ const loginRateLimiter = rateLimit({
   message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again later.' } },
 });
 
+/**
+ * 2026-07-08 (L-6 fix). `/refresh` handles session continuation — an
+ * equally sensitive operation to `/login` — but previously relied only on
+ * the global app-wide limiter (300/15min), a materially weaker throttle
+ * than login's dedicated 8/15min. Set higher than login's limit (a single
+ * legitimate client can legitimately refresh more than 8 times per 15
+ * minutes across multiple tabs/devices) but still a real, endpoint-specific
+ * ceiling on how many refresh attempts — valid or guessed — an attacker can
+ * make. Reuse-detection (identity module) still handles the *consequence*
+ * of a stolen/replayed token; this limits the *volume* of attempts.
+ */
+const refreshRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many refresh attempts. Try again later.' } },
+});
+
 export function createAuthRouter(deps: AuthControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new AuthController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
   router.post('/login', loginRateLimiter, validateBody(loginSchema), controller.login);
-  router.post('/refresh', controller.refresh);
+  router.post('/refresh', refreshRateLimiter, controller.refresh);
   router.post('/logout', controller.logout);
   router.post('/logout-all', requireAuth, controller.logoutAll);
   router.get('/me', requireAuth, controller.me);

@@ -1,43 +1,54 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
-import type { IIdempotencyKeyStore, StoredIdempotentResponse } from '../application/ports/IIdempotencyKeyStore';
+import type { IIdempotencyKeyStore, IdempotencyClaim, StoredIdempotentResponse } from '../application/ports/IIdempotencyKeyStore';
+
+const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
 /**
- * Milestone 9.1/9.2 CP13. Deliberately uses the plain `prisma` singleton
- * (not `resolveClient(ctx)`/`withTransaction`, unlike every financial
- * repository) — `find()` runs before the balance-mutating use case's own
- * `IUnitOfWork.run()` block even starts, and `save()` runs after that block
- * has already committed, so neither belongs inside that transaction.
+ * Milestone 9.1/9.2 CP13, reworked 2026-07-08 (H-4 fix). Deliberately uses
+ * the plain `prisma` singleton (not `resolveClient(ctx)`/`withTransaction`,
+ * unlike every financial repository) — `claim()` runs before the
+ * balance-mutating use case's own `IUnitOfWork.run()` block even starts, and
+ * `complete()`/`release()` run after that block has already committed or
+ * thrown, so none of the three belong inside that transaction.
  *
  * The compound-unique `(key, endpoint)` constraint (`schema.prisma`'s
  * `@@unique([key, endpoint])`) is what actually prevents a race between two
- * concurrent requests carrying the same key from both proceeding to the use
- * case layer: the second `save()` call for the same pair throws a Prisma
- * `P2002` unique-constraint violation, which is intentionally left
- * unhandled here — see `docs/PROJECT_HANDOFF.md` M-2 (Prisma exception
- * translation is a known, separately-tracked gap, not invented as a fix in
- * this file).
+ * concurrent requests carrying the same key: `claim()`'s own `create()` is
+ * the first write either request makes, so the second one's `create()` hits
+ * `P2002` *before* its caller ever runs the use case — not after, as the
+ * prior `find()`-then-`save()` shape did.
  */
 export class PrismaIdempotencyKeyStore implements IIdempotencyKeyStore {
-  async find(key: string, endpoint: string): Promise<StoredIdempotentResponse | null> {
-    const row = await prisma.idempotencyKey.findUnique({
-      where: { key_endpoint: { key, endpoint } },
-    });
-    if (!row) {
-      return null;
+  async claim(key: string, endpoint: string, userId: string): Promise<IdempotencyClaim> {
+    try {
+      await prisma.idempotencyKey.create({ data: { key, endpoint, userId } });
+      return { outcome: 'CLAIMED' };
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== UNIQUE_CONSTRAINT_VIOLATION) {
+        throw error;
+      }
+      const existing = await prisma.idempotencyKey.findUnique({ where: { key_endpoint: { key, endpoint } } });
+      if (existing && existing.statusCode !== null && existing.responseBody !== null) {
+        return { outcome: 'COMPLETED', response: { statusCode: existing.statusCode, responseBody: existing.responseBody } };
+      }
+      return { outcome: 'IN_PROGRESS' };
     }
-    return { statusCode: row.statusCode, responseBody: row.responseBody };
   }
 
-  async save(key: string, endpoint: string, userId: string, response: StoredIdempotentResponse): Promise<void> {
-    await prisma.idempotencyKey.create({
+  async complete(key: string, endpoint: string, response: StoredIdempotentResponse): Promise<void> {
+    await prisma.idempotencyKey.update({
+      where: { key_endpoint: { key, endpoint } },
       data: {
-        key,
-        endpoint,
-        userId,
         statusCode: response.statusCode,
         responseBody: response.responseBody as Prisma.InputJsonValue,
       },
     });
+  }
+
+  async release(key: string, endpoint: string): Promise<void> {
+    // Scoped to `statusCode: null` so this can never remove an
+    // already-`complete()`d row, even if called out of order.
+    await prisma.idempotencyKey.deleteMany({ where: { key, endpoint, statusCode: null } });
   }
 }

@@ -36,6 +36,7 @@ import {
   COLLECTIONS_VS_TARGET,
   DASHBOARD_SUMMARY,
   getDashboardLoanCategory,
+  getTotalPortfolioValue,
   LOAN_CATEGORY_OPTIONS,
   MOCK_ACTIVITY_LOGS,
   MOCK_LOANS,
@@ -279,7 +280,8 @@ export function DashboardPage() {
   // to how much of the whole portfolio's outstanding principal the current filter selects, so the
   // figures still move honestly with the filter instead of staying frozen — clearly disclosed as
   // an estimate, not implied precision.
-  const filterRatio = DASHBOARD_SUMMARY.totalPortfolioValue > 0 ? filteredOutstandingTotal / DASHBOARD_SUMMARY.totalPortfolioValue : 1;
+  const totalPortfolioValue = getTotalPortfolioValue();
+  const filterRatio = totalPortfolioValue > 0 ? filteredOutstandingTotal / totalPortfolioValue : 1;
   const scaledCollectionsThisMonth = round2Peso(DASHBOARD_SUMMARY.totalCollectionsThisMonth * filterRatio);
   const scaledCollectionsVsTarget = React.useMemo(
     () =>

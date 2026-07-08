@@ -214,7 +214,13 @@ export function LoanListPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Loan Accounts')} title="Recent Activity — Loan Accounts" />
+      {/* 2026-07-08 (F-4 fix): real loan-account actions (Approve, Activate, notes, attachments)
+          log entityType 'LoanAccount' (singular) — the page-view-only 'Loan Accounts' filter never
+          matched them. Same OR-combined fix pattern as LoanApplicationsPage below. */}
+      <RecentActivityPanel
+        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'LoanAccount' || l.entityType === 'Loan Accounts')}
+        title="Recent Activity — Loan Accounts"
+      />
     </div>
   );
 }

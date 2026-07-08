@@ -10,9 +10,27 @@ against the repository (`git log`, live test run, file listings), not reconstruc
 all clean (one pre-existing informational warning: main JS chunk is 1.02 MB, above Vite's 500 kB
 default threshold — not a defect, just an unaddressed code-splitting opportunity). A dedicated
 codebase-wide bug hunt (two independent full-read reviews, one per track) found **3 new backend
-issues and 5 new frontend issues**, none previously tracked — see §5 in `PROJECT_HANDOFF.md` for
-full detail (severity, file/line, failure scenario). None have been fixed yet; they are logged as a
-prioritized backlog pending a decision on which to schedule.
+issues and 5 new frontend issues**, none previously tracked.
+
+**2026-07-08, later the same day — all 8 findings fixed.** See `PROJECT_HANDOFF.md` §5 for full
+per-finding detail. Backend re-verified **against the live Postgres instance** (not just mocked
+Prisma) with `RUN_INTEGRATION_TESTS=1`: **510/510 tests passing, 77/77 files, 0 skipped** — up from
+499/499 with 6 always-skipped, because the idempotency-store rewrite (H-4) needed a real schema
+migration, and it seemed worth actually proving it against Postgres rather than only mocks.
+`eslint`/`tsc --noEmit` still clean. `app/frontend`: `tsc -b`, `eslint`, `npm run build` still all
+clean. A brief summary of what changed, grouped by finding:
+- **H-4 (idempotency race):** claim-before-execute pattern — a DB row is inserted *before* the use
+  case runs, so a genuinely concurrent duplicate request collides with the unique constraint
+  immediately (`409`) instead of racing the first request to completion. New migration
+  `20260708062614_idempotency_claim_before_execute` (nullable `statusCode`/`responseBody`).
+- **M-8 (no audit log on approve/reject):** both use cases now wrap their save + an
+  `APPROVE_LOAN`/`REJECT_LOAN` audit entry in one transaction, fail-closed, matching
+  `ActivateLoanUseCase`'s shape.
+- **L-6 (weak refresh rate limit):** dedicated 20/15min limiter added to `/auth/refresh`.
+- **F-1 through F-5 (frontend):** dashboard denominator now recomputed live; repeat-applicant
+  "Create Client" now links the existing profile instead of duplicating it; the two "has active
+  loan" rules now share one definition (`ACTIVE_LOAN_STATUSES`); both broken "Recent Activity"
+  panels now match the `entityType` real actions actually log.
 
 ---
 
@@ -256,22 +274,16 @@ was decided, why, and what's still open. This discipline has a real cost (a lot 
 written) but has clearly paid for itself already — continue it, especially through the CP12 /
 migration phase, which is the highest-risk remaining backend work.
 
-### 4.7 Triage the 2026-07-08 bug-hunt backlog (8 new findings, 0 fixed yet)
+### 4.7 The 2026-07-08 bug-hunt backlog — all 8 findings fixed the same day
 
 A dedicated full-read review (not just `tsc`/`eslint`, which both stayed clean throughout) found 8
-concrete, verified bugs across both tracks — full detail with file/line and failure scenarios is in
-`PROJECT_HANDOFF.md` §5. None have been fixed; this is deliberately a documentation-only pass,
-consistent with `CLAUDE.md`'s "analyze → design → wait for approval" workflow, since several of
-these touch business logic (duplicate client creation, double-payment risk) that deserves an
-explicit decision rather than a reflexive fix. Suggested triage order:
-1. **Backend H-4 (idempotency race)** — highest risk, since it can double-apply a real payment.
-   Worth fixing before CP12/any production pilot.
-2. **Frontend F-1 (stale dashboard denominator) and F-2 (duplicate client on repeat applicant)** —
-   both directly undermine features shipped in the last few days (the filter-scaled dashboard
-   figures, and the application→client→loan-account linking work). Same root-cause shape as the
-   `PAYABLE_LOANS` bug already fixed 2026-07-08 — worth a single sweep rather than one-off patches.
-3. Everything else (backend M-8/L-6, frontend F-3/F-4/F-5) is lower-severity and can wait for a
-   normal triage pass.
+concrete, verified bugs across both tracks. Initially logged documentation-only (per `CLAUDE.md`'s
+"analyze → design → wait for approval" workflow, since several touched business logic — duplicate
+client creation, double-payment risk — that deserved an explicit go-ahead before changing anything).
+User approved fixing all 8 the same day; all landed and re-verified — backend against the **live
+Postgres instance** (510/510 tests, up from 499/499 mocked-only, since the idempotency fix needed a
+real migration and it was worth proving against a real database), frontend build/lint/tsc still
+clean. Full per-finding detail (what changed, file/line) is in `PROJECT_HANDOFF.md` §5.
 
 ---
 
