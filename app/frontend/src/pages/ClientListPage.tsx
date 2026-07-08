@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { AlertCircle, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,10 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { ACTIVE_LOAN_STATUSES, MOCK_ACTIVITY_LOGS, MOCK_BORROWERS, MOCK_LOANS, type MockBorrowerProfile } from '@/lib/mockData';
-import { formatPeso } from '@/lib/utils';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
+import { fetchAllPages } from '@/lib/apiClient';
+import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
 
-const BRANCH_OPTIONS = ['ALL', ...[...new Set(MOCK_BORROWERS.map((b) => b.homeBranchName))].sort()];
+/** Matches LoanListPage's real status set — the mock data's extra 'MATURED' status doesn't exist in the real API. */
+const REAL_ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
 type LoanPresenceFilter = 'ALL' | 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
 
@@ -25,59 +28,102 @@ const LOAN_PRESENCE_OPTIONS: { value: LoanPresenceFilter; label: string }[] = [
   { value: 'NONE', label: 'No loans yet' },
 ];
 
-// 2026-07-08 (F-3 fix): was a hand-rolled copy of the "active loan" statuses that had drifted from
-// `clientHasActiveLoan()` in mockData.ts (the function that actually gates "Create Loan Account").
-// Now shares that one definition via `ACTIVE_LOAN_STATUSES`.
-function hasActiveLoan(b: MockBorrowerProfile): boolean {
-  return MOCK_LOANS.some((l) => b.loanIds.includes(l.id) && ACTIVE_LOAN_STATUSES.includes(l.status));
-}
-
 function initials(name: string): string {
   const parts = name.split(' ').filter(Boolean);
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
 }
 
-function getSortValue(b: MockBorrowerProfile, key: string): string | number | Date | null | undefined {
+interface ClientRow {
+  id: string;
+  name: string;
+  contactNumber: string;
+  email: string;
+  employer: string;
+  position: string;
+  loanCount: number;
+  hasActiveLoan: boolean;
+}
+
+function getSortValue(c: ClientRow, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'name':
-      return b.name;
+      return c.name;
     case 'contactNumber':
-      return b.contactNumber;
+      return c.contactNumber;
     case 'employer':
-      return b.employer;
-    case 'homeBranchName':
-      return b.homeBranchName;
+      return c.employer;
     case 'loans':
-      return b.loanIds.length;
+      return c.loanCount;
     default:
       return undefined;
   }
 }
 
+/**
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. Real `GET /borrowers` +
+ * `/loan-accounts` replace `MOCK_BORROWERS`/`MOCK_LOANS`. No branch filter/column, same reasoning
+ * as `LoanListPage.tsx`: no `GET /branches` endpoint yet, and every migrated record currently
+ * belongs to the single seeded "HQ" branch anyway.
+ */
 export function ClientListPage() {
   const navigate = useNavigate();
   useLogPageView('Client Data');
   const [search, setSearch] = React.useState('');
-  const [branch, setBranch] = React.useState('ALL');
   const [loanPresence, setLoanPresence] = React.useState<LoanPresenceFilter>('ALL');
 
-  const filtered = MOCK_BORROWERS.filter((b) => {
+  const borrowersQuery = useQuery({
+    queryKey: ['borrowers', 'all'],
+    queryFn: () => fetchAllPages<Borrower>('/borrowers'),
+  });
+  const loansQuery = useQuery({
+    queryKey: ['loan-accounts', 'all'],
+    queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
+  });
+  const isLoading = borrowersQuery.isLoading || loansQuery.isLoading;
+
+  const loansByBorrowerId = React.useMemo(() => {
+    const map = new Map<string, LoanAccount[]>();
+    for (const l of loansQuery.data ?? []) {
+      const list = map.get(l.borrowerId) ?? [];
+      list.push(l);
+      map.set(l.borrowerId, list);
+    }
+    return map;
+  }, [loansQuery.data]);
+
+  const rows: ClientRow[] = React.useMemo(
+    () =>
+      (borrowersQuery.data ?? []).map((b) => {
+        const loans = loansByBorrowerId.get(b.id) ?? [];
+        return {
+          id: b.id,
+          name: b.fullName,
+          contactNumber: b.mobilePhone1 ?? '—',
+          email: b.email ?? '—',
+          employer: b.incomeDetail?.employerName ?? '—',
+          position: b.incomeDetail?.position ?? '—',
+          loanCount: loans.length,
+          hasActiveLoan: loans.some((l) => REAL_ACTIVE_LOAN_STATUSES.includes(l.status)),
+        };
+      }),
+    [borrowersQuery.data, loansByBorrowerId],
+  );
+
+  const filtered = rows.filter((c) => {
     const query = search.trim().toLowerCase();
     const matchesSearch =
       query.length === 0 ||
-      b.name.toLowerCase().includes(query) ||
-      b.employer.toLowerCase().includes(query) ||
-      b.homeBranchName.toLowerCase().includes(query) ||
-      b.contactNumber.toLowerCase().includes(query) ||
-      b.email.toLowerCase().includes(query) ||
-      b.position.toLowerCase().includes(query);
-    const matchesBranch = branch === 'ALL' || b.homeBranchName === branch;
+      c.name.toLowerCase().includes(query) ||
+      c.employer.toLowerCase().includes(query) ||
+      c.contactNumber.toLowerCase().includes(query) ||
+      c.email.toLowerCase().includes(query) ||
+      c.position.toLowerCase().includes(query);
     const matchesLoanPresence =
       loanPresence === 'ALL' ||
-      (loanPresence === 'WITH_ACTIVE' && hasActiveLoan(b)) ||
-      (loanPresence === 'WITH_HISTORY' && b.loanIds.length > 0) ||
-      (loanPresence === 'NONE' && b.loanIds.length === 0);
-    return matchesSearch && matchesBranch && matchesLoanPresence;
+      (loanPresence === 'WITH_ACTIVE' && c.hasActiveLoan) ||
+      (loanPresence === 'WITH_HISTORY' && c.loanCount > 0) ||
+      (loanPresence === 'NONE' && c.loanCount === 0);
+    return matchesSearch && matchesLoanPresence;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: null, direction: 'asc' });
 
@@ -85,8 +131,14 @@ export function ClientListPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Client Data</h2>
-        <p className="text-sm text-muted-foreground">{MOCK_BORROWERS.length} sample borrower profiles.</p>
+        <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles.`}</p>
       </div>
+
+      {borrowersQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load clients. Is the backend running?
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
@@ -101,18 +153,6 @@ export function ClientListPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={branch} onValueChange={setBranch}>
-              <SelectTrigger className="w-full sm:w-44" aria-label="Filter by home branch">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {BRANCH_OPTIONS.map((b) => (
-                  <SelectItem key={b} value={b}>
-                    {b === 'ALL' ? 'All branches' : b}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={loanPresence} onValueChange={(v) => setLoanPresence(v as LoanPresenceFilter)}>
               <SelectTrigger className="w-full sm:w-48" aria-label="Filter by loan presence">
                 <SelectValue />
@@ -127,7 +167,7 @@ export function ClientListPage() {
             </Select>
           </div>
           <p className="text-xs text-muted-foreground">
-            {filtered.length} of {MOCK_BORROWERS.length} clients shown.
+            {filtered.length} of {rows.length} clients shown.
           </p>
         </CardHeader>
         <CardContent>
@@ -143,47 +183,46 @@ export function ClientListPage() {
                 <SortableTableHead sortKey="employer" currentSort={sort} onSort={toggleSort}>
                   Employer
                 </SortableTableHead>
-                <SortableTableHead sortKey="homeBranchName" currentSort={sort} onSort={toggleSort}>
-                  Home Branch
-                </SortableTableHead>
                 <SortableTableHead sortKey="loans" currentSort={sort} onSort={toggleSort} className="text-right">
                   Loans
                 </SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((b) => (
-                <TableRow key={b.id} className="cursor-pointer" onClick={() => navigate(`/clients/${b.id}`)}>
+              {sorted.map((c) => (
+                <TableRow key={c.id} className="cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={b.profilePictureUrl} alt={b.name} />
-                        <AvatarFallback>{initials(b.name)}</AvatarFallback>
+                        <AvatarFallback>{initials(c.name)}</AvatarFallback>
                       </Avatar>
-                      <div>
-                        <p className="font-medium">{b.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatPeso(b.monthlyIncome)}/mo income</p>
-                      </div>
+                      <p className="font-medium">{c.name}</p>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <p>{b.contactNumber}</p>
-                    <p className="text-xs text-muted-foreground">{b.email}</p>
+                    <p>{c.contactNumber}</p>
+                    <p className="text-xs text-muted-foreground">{c.email}</p>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <p>{b.employer}</p>
-                    <p className="text-xs text-muted-foreground">{b.position}</p>
+                    <p>{c.employer}</p>
+                    <p className="text-xs text-muted-foreground">{c.position}</p>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{b.homeBranchName}</TableCell>
                   <TableCell className="text-right">
-                    <Badge variant="outline">{b.loanIds.length}</Badge>
+                    <Badge variant="outline">{c.loanCount}</Badge>
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && (
+              {!isLoading && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                    No sample clients match your search.
+                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                    No clients match your search.
+                  </TableCell>
+                </TableRow>
+              )}
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                    Loading clients…
                   </TableCell>
                 </TableRow>
               )}

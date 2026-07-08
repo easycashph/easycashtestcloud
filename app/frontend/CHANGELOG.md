@@ -8,6 +8,30 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-09 (2)
+
+### Client Data list + profile now real, backed by the CP12-migrated legacy data
+Extends the wiring pattern to Client Data, the same day as the Loan Accounts wiring below:
+- **`ClientListPage`** — `GET /borrowers` + `/loan-accounts` replace `MOCK_BORROWERS`/`MOCK_LOANS`.
+  4,604 real borrower profiles, verified end-to-end in the browser. Dropped the branch
+  filter/column and the profile-picture avatar image, same reasoning as `LoanListPage`: no `GET
+  /branches` endpoint and no `profilePictureUrl` field on the real `Borrower` shape.
+- **`ClientProfilePage`** — a UUID from the now-real list doesn't exist in `getMockBorrower()`'s
+  data, so a new `RealClientProfileView` component (personal info, address, employer, real loan
+  history) renders instead of the page's "not found" state. Editing, Create Loan Account (needs a
+  loan-application eligibility check the backend doesn't have yet), and Attachments stay mock-only.
+- `loanApiTypes.ts`'s `Borrower` type expanded to mirror `BorrowerPresenter.presentBorrower()` in
+  full (income detail, government ID, addresses, civil status, birth date, loan cycle, etc.) — was
+  previously a 5-field stub good enough only for `LoanListPage`'s borrower-name lookup.
+- **Found and fixed while verifying in the browser**: the local dev backend's `CORS_ORIGIN` was
+  hardcoded to `http://localhost:5173`, but this preview environment's frontend runs on `5199` —
+  every request was silently blocked by the browser's CORS check. Updated the local `.env` (not
+  committed) to match; not a code bug, a local dev-environment config mismatch.
+- **Also found while verifying**: Docker Desktop had stopped (host machine was restarted earlier
+  this session to fix a full C: drive), so the backend's Postgres connection was dead and every
+  request 500'd. Restarted Docker, waited for the `easycash-postgres-1` container to report
+  healthy, then restarted the backend process — unrelated to this change, but blocked verifying it.
+
 ## 2026-07-09
 
 ### Loan Accounts list + detail now real, backed by the CP12-migrated legacy data

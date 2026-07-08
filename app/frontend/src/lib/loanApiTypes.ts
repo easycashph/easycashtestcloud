@@ -50,12 +50,57 @@ export interface LoanAccount {
   createdAt: string;
 }
 
+export interface BorrowerIncomeDetail {
+  employmentType: string | null;
+  employerName: string | null;
+  employerAddress: string | null;
+  natureOfBusiness: string | null;
+  position: string | null;
+  yearsEmployed: number | null;
+}
+
+export interface BorrowerGovernmentId {
+  sssNumber: string | null;
+  tinNumber: string | null;
+}
+
+export interface BorrowerAddress {
+  addressType: string | null;
+  houseUnitNumber: string | null;
+  street: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+  zipCode: string | null;
+  lengthOfStayMonths: number | null;
+  ownershipStatus: string | null;
+}
+
+export type BorrowerStatus = 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
+
+/** Mirrors `BorrowerPresenter.presentBorrower()` in app/backend exactly. */
 export interface Borrower {
   id: string;
+  branchId: string;
+  assignedLoanOfficerId: string | null;
   firstName: string;
+  middleName: string | null;
   lastName: string;
-  email: string | null;
+  fullName: string;
+  gender: string | null;
+  birthDate: string | null;
+  civilStatus: string | null;
   mobilePhone1: string | null;
+  mobilePhone2: string | null;
+  email: string | null;
+  status: BorrowerStatus;
+  loanCycle: number;
+  legacyId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  incomeDetail: BorrowerIncomeDetail | null;
+  governmentId: BorrowerGovernmentId | null;
+  addresses: BorrowerAddress[];
 }
 
 export interface LoanProductVersion {

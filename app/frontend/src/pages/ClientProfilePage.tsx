@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Briefcase, Home, Landmark, Mail, Paperclip, Pencil, Phone } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,8 @@ import {
   type MockBorrowerProfile,
   type MockLoanAccount,
 } from '@/lib/mockData';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import type { Borrower as RealBorrower, LoanAccount, LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function getLoanSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
@@ -142,6 +145,166 @@ function EditClientDialog({
   );
 }
 
+/**
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. `getMockBorrower()` only knows
+ * hand-authored mock clients — a borrower id from `ClientListPage`'s now-real list (a UUID,
+ * migrated from legacy data) doesn't exist there and would otherwise hit this page's "not found"
+ * state. Deliberately minimal, same scope decision as `LoanDetailPage.tsx`'s `RealLoanDetailView`:
+ * personal info + real loan history, read-only. Editing, Create Loan Account (needs a loan
+ * application eligibility check the backend doesn't have yet), and Attachments stay mock-only.
+ */
+function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
+  const navigate = useNavigate();
+
+  const borrowerQuery = useQuery({
+    queryKey: ['borrower', borrowerId],
+    queryFn: () => apiClient.get<RealBorrower>(`/borrowers/${borrowerId}`),
+    retry: false,
+  });
+  const borrower = borrowerQuery.data;
+
+  const loansQuery = useQuery({
+    queryKey: ['loan-accounts', 'all'],
+    queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
+  });
+  const productsQuery = useQuery({
+    queryKey: ['loan-products', 'all'],
+    queryFn: async () => {
+      const products = await fetchAllPages<LoanProduct & { versions?: LoanProductVersion[] }>('/loan-products');
+      const versionToProductName = new Map<string, string>();
+      for (const p of products) {
+        for (const v of p.versions ?? []) versionToProductName.set(v.id, p.name);
+      }
+      return versionToProductName;
+    },
+  });
+
+  const loans = (loansQuery.data ?? []).filter((l) => l.borrowerId === borrowerId);
+
+  if (borrowerQuery.isLoading) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Loading client…</p>;
+  }
+
+  if (!borrower) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        <p className="text-sm text-muted-foreground">Client not found: {borrowerId}</p>
+      </div>
+    );
+  }
+
+  const address = borrower.addresses[0];
+  const addressLine = address
+    ? [address.houseUnitNumber, address.street, address.barangay, address.cityMunicipality, address.province]
+        .filter(Boolean)
+        .join(', ')
+    : '—';
+  const num = (v: string) => Number.parseFloat(v) || 0;
+
+  return (
+    <div className="space-y-6">
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> Back
+      </Button>
+
+      <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+        Real client, migrated from legacy data (CP12) — details and loan history below are live.
+        Editing, Create Loan Account, and Attachments are not yet wired to real data for this screen.
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardHeader className="items-center text-center">
+            <Avatar className="h-16 w-16">
+              <AvatarFallback className="text-lg">
+                {((borrower.firstName[0] ?? '') + (borrower.lastName[0] ?? '')).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <CardTitle className="mt-2">{borrower.fullName}</CardTitle>
+            <Badge variant="outline" className="text-xs">
+              {borrower.status}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" /> {borrower.mobilePhone1 ?? '—'}
+            </div>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email ?? '—'}
+            </div>
+            <div className="flex items-center gap-2">
+              <Home className="h-4 w-4 text-muted-foreground" /> {addressLine}
+            </div>
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-muted-foreground" />
+              {borrower.incomeDetail?.position ?? '—'}, {borrower.incomeDetail?.employerName ?? '—'}
+            </div>
+            <dl className="grid grid-cols-2 gap-y-2 border-t pt-3">
+              <dt className="text-muted-foreground">Civil status</dt>
+              <dd className="text-right font-medium">{borrower.civilStatus ?? '—'}</dd>
+              <dt className="text-muted-foreground">Date of birth</dt>
+              <dd className="text-right font-medium">{borrower.birthDate ? formatDate(borrower.birthDate) : '—'}</dd>
+              <dt className="text-muted-foreground">Loan cycle</dt>
+              <dd className="text-right font-medium">{borrower.loanCycle}</dd>
+            </dl>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Loan History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableCell className="font-medium text-muted-foreground">Loan Code</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Product</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Collections Balance</TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loans.map((loan) => (
+                    <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
+                      <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
+                      <TableCell>{productsQuery.data?.get(loan.loanProductVersionId) ?? '—'}</TableCell>
+                      <TableCell>
+                        <LoanStatusBadge status={loan.status} />
+                      </TableCell>
+                      <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
+                    </TableRow>
+                  ))}
+                  {loansQuery.isLoading && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                        Loading loans…
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!loansQuery.isLoading && loans.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                        No loans on record for this client.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ClientProfilePage() {
   const { borrowerId } = useParams<{ borrowerId: string }>();
   const navigate = useNavigate();
@@ -167,7 +330,9 @@ export function ClientProfilePage() {
   });
 
   if (!borrower) {
-    return (
+    // Not a hand-authored mock client — try the real backend (a UUID from ClientListPage's now-real
+    // list, migrated via CP12). See RealClientProfileView's own doc comment for scope.
+    return borrowerId ? <RealClientProfileView borrowerId={borrowerId} /> : (
       <div className="space-y-4">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
