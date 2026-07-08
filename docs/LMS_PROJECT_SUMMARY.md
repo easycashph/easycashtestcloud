@@ -60,9 +60,11 @@ import infrastructure, interface, or `@prisma/client`). 8 modules: `identity`, `
   finding fixed and verified with a regression test.
 
 **What's explicitly not built yet, on purpose:**
-- **CP12** (legacy migration treatment) — the only remaining Milestone 9.1 checkpoint, gated on
-  a genuinely unresolved business decision (`ADR-007 §4`: how to treat 79 non-reconciling legacy
-  `CLOSED` loans during migration). Verified still `UNRESOLVED` in the ADR file itself.
+- **CP12** (legacy migration treatment) — the only remaining Milestone 9.1 checkpoint. Its blocking
+  business decision (`ADR-007 §4`: how to treat 79 non-reconciling legacy `CLOSED` loans during
+  migration) was **RESOLVED 2026-07-08** (Option A — migrate all 1,799 legacy loans as-is,
+  including the 79, flagged for manual accounting review post-migration; confirmed by Nomer Perez,
+  MIS Manager). CP12 itself is not yet built — only its gating decision is now clear.
 - `document` and `audit` modules — no financial-write use case yet logs an `AuditLog` entry, and
   no document-generation/storage capability exists server-side.
 - **No live PostgreSQL has ever been available in this dev environment** — every DB-dependent
@@ -131,20 +133,22 @@ Per the project's own milestone numbering:
 | 7 (core domain), 7.1 (audit remediation) | ✅ Complete |
 | 8 (HTTP layer), 8.1 (audit remediation) | ✅ Complete |
 | 9 (legacy evidence, ADRs, calc engine spec) | ✅ Complete |
-| **9.1 (calculation engine implementation)** | **In progress — CP1–CP11 and CP13 done; only CP12 remains, gated on a business decision** |
+| **9.1 (calculation engine implementation)** | **In progress — CP1–CP11 and CP13 done; ADR-007 §4 resolved 2026-07-08, CP12 unblocked and ready to be scoped/built** |
 | 9.2 | CP13 (HTTP exposure for activate/payment) shipped under this number |
 | **Frontend UI-preview track** | **Ongoing, evolving daily, parallel to Milestone 9.1 — not on the numbered milestone track** |
 
 **The project is currently at an inflection point.** The backend's calculation engine — the hardest
-and most business-risk-laden part of the whole platform — is essentially done and tested. The one
-blocking item (CP12) is a genuine business decision, not an engineering task. Meanwhile, the
-frontend has grown into a fully-featured, good-looking preview that the CEO can react to, but it
-has **no live wire to the backend that already exists to serve it**.
+and most business-risk-laden part of the whole platform — is essentially done and tested. The
+former blocking item (CP12) had its business decision resolved 2026-07-08 (see ADR-007 §4) — the
+only remaining work is engineering (scoping and building CP12 itself, ideally alongside standing up
+a real PostgreSQL instance per §4.3 below). Meanwhile, the frontend has grown into a fully-featured,
+good-looking preview that the CEO can react to, but it has **no live wire to the backend that
+already exists to serve it**.
 
 ### Trajectory
 
 If both tracks continue exactly as they have been:
-- The backend will finish Milestone 9.1 the moment `ADR-007 §4` is decided, needing at most a small,
+- The backend can now finish Milestone 9.1 with CP12 alone, needing at most a small,
   well-scoped CP12 checkpoint.
 - The frontend will keep growing in polish and feature surface indefinitely, because there is no
   natural "done" signal for a preview with no backend behind it — every new idea is easy to add as
@@ -159,11 +163,16 @@ If both tracks continue exactly as they have been:
 
 ## 4. Recommendations and Suggestions
 
-### 4.1 Decide ADR-007 §4 now — it is the single highest-leverage open item
+### 4.1 ~~Decide ADR-007 §4 now — it is the single highest-leverage open item~~ — DONE 2026-07-08
 
-This is a business decision, not an engineering one, and it is the only thing standing between
-"Milestone 9.1 in progress" and "Milestone 9.1 complete." The evidence and options are already
-written up (`ADR-007 §4`, Legacy Analysis §7.3–§7.4) — nothing further needs to be researched.
+**Resolved.** Option A selected (migrate all 1,799 legacy loans as-is, flag the 79 non-reconciling
+`CLOSED` accounts for manual review), confirmed by Nomer Perez (MIS Manager), 2026-07-08 — see
+`ADR-007` §4 for the full decision record, plus new supporting evidence gathered the same day
+(year-of-origination and product-type breakdown of the full 79-loan population, and a full
+transaction-history trace of one representative account) that rules out pandemic-era non-payment
+as the dominant cause and confirms at least some of the 79 hold real, not-yet-resolved balances
+rather than safe-to-discard artifacts. **Next highest-leverage item is now 4.3 below** (standing up
+Postgres) as the precondition for actually scoping/building CP12.
 
 ### 4.2 Scope and start the frontend↔backend wiring pass deliberately, before the frontend grows further
 
@@ -227,9 +236,11 @@ migration phase, which is the highest-risk remaining backend work.
 The Easycash LMS backend has a working, well-tested, evidence-based financial core (loan
 origination, activation, and payment processing, all reachable over a real, role-gated HTTP API) —
 the hardest engineering risk in the project is largely retired. The one remaining Milestone 9.1
-checkpoint is blocked on a business decision, not a technical one, and should be resolved next. In
-parallel, a fast-moving, increasingly rich frontend UI preview has demonstrated the platform's look,
-feel, and workflow to the business, but remains entirely disconnected from the real backend that
-already exists to serve it. The single highest-leverage next step for the project as a whole is not
-more backend checkpoints or more frontend polish, but a deliberate, scoped pilot that wires one real
+checkpoint (CP12) was blocked on a business decision, not a technical one — that decision was made
+2026-07-08 (ADR-007 §4, Option A: migrate all legacy loans as-is, flag the 79 non-reconciling ones
+for manual review), so only the engineering work of building CP12 itself remains. In parallel, a
+fast-moving, increasingly rich frontend UI preview has demonstrated the platform's look, feel, and
+workflow to the business, but remains entirely disconnected from the real backend that already
+exists to serve it. The single highest-leverage next step for the project as a whole is not more
+backend checkpoints or more frontend polish, but a deliberate, scoped pilot that wires one real
 screen end-to-end — closing the gap between the two tracks before it grows any wider.

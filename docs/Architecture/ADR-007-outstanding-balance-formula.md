@@ -1,9 +1,9 @@
 # ADR-007 — Outstanding Balance Formula
 
-**Status:** PARTIALLY ACCEPTED — mechanism decided; §3 (penalty inclusion) **RESOLVED
-2026-07-05** (Option B, two fields); §4 (migration treatment of non-reconciling `CLOSED` loans)
-remains **UNRESOLVED**, pending a business decision (Milestone 9 design review, 2026-07-03; §3
-resolved 2026-07-05).
+**Status:** ACCEPTED — mechanism decided; §3 (penalty inclusion) **RESOLVED 2026-07-05** (Option B,
+two fields); §4 (migration treatment of non-reconciling `CLOSED` loans) **RESOLVED 2026-07-08**
+(Option A, migrate as-is and flag for manual review). This ADR is now fully accepted — no open
+sections remain.
 **Context documents:** `docs/Legacy Analysis/2026-07-03-milestone9-financial-rules-verification.md`
 §3.1, §7.3–§7.5, §7.9–§7.10 (evidence); `docs/Architecture/FINANCIAL_INVARIANTS.md` §3, §8 (prior
 open-item listing and the balance-integrity invariants this ADR must operate within).
@@ -106,7 +106,7 @@ generic name would silently reintroduce the confusion for the next reader. **STA
 
 ---
 
-## 4. UNRESOLVED — Decision Required: how should the new system treat the 15.5% of legacy `CLOSED` loans whose balances don't reconcile to zero?
+## 4. RESOLVED — Decision: how should the new system treat the 15.5% of legacy `CLOSED` loans whose balances don't reconcile to zero?
 
 This question only matters for **migration** of legacy loan history into the new system, not for
 the calculation engine's forward-looking correctness (§1's decision holds regardless) — but it is
@@ -131,7 +131,7 @@ disproven from an export — genuinely unknowable from this evidence), and round
 (plausible only for the smallest-magnitude cases; the largest unreconciled amount is ₱692,813.97,
 far too large to be a rounding artifact).
 
-**Options, neither selected by this document:**
+**Options considered:**
 
 - **Option A — migrate as-is, flag for manual review.** Bring all 1,799 legacy loans across
   (including the 79 unreconciled ones) with their balances exactly as recorded, and flag the 79
@@ -141,16 +141,68 @@ far too large to be a rounding artifact).
   migration category (e.g. write them off formally at migration time, using the legacy system's
   own clean `WRITE_OFF` convention as a template, with an explicit migration-time audit trail).
   Requires a decision on whether this is even accounting-appropriate, which is outside what this
-  investigation can determine.
+  investigation can determine. **Not selected** — see rationale below.
 - **Option C — obtain institutional clarification first**, per the Legacy Analysis document's
   standing recommendation (§7.10, §8.14) — someone with knowledge of the legacy system's
   operations could very plausibly resolve the 54.4% "no special marker" category and the
   `REPAYMENT_UNDO`/`IMPORT` correlations quickly, turning "plausible, not proven" into either
-  "confirmed" or a firm "no, that's not it, here's what actually happened."
+  "confirmed" or a firm "no, that's not it, here's what actually happened." Not pursued as a
+  precondition — the additional evidence gathered below was judged sufficient to decide without it.
 
-**STATUS: UNRESOLVED — requires your decision**, and does not block calculation-engine
-implementation work (§1's decision is independent of this migration-time question), but does
-block a complete, confident migration plan.
+**Decision (2026-07-08): Option A — migrate all 1,799 legacy loans as-is, including the 79
+non-reconciling `CLOSED` accounts, with balances exactly as recorded in the legacy export; flag
+the 79 as a distinct population for manual accounting review post-migration.**
+
+**Confirmed by direct business decision (Nomer Perez, MIS Manager, 2026-07-08).**
+
+**Additional evidence gathered 2026-07-08 (extends the Legacy Analysis document's §7.3 findings,
+same evidence sources — full populations queried directly, not samples):**
+
+- **Year-of-origination distribution of the full 79-loan population** (not just the hand-traced
+  examples in §7.3.1) rules out "pandemic-era non-payment" as a sufficient explanation for the
+  population as a whole: 2019–2021 originations account for 25 of 79 (31.6%) — a real, plausible
+  contributor for that subset — but the single largest cohort is **2023** (35 of 79, 44.3%),
+  well after pandemic-era disruption. Full distribution: 2010 (1), 2012 (2), 2015 (9), 2016 (1),
+  2017 (2), 2018 (3), 2019 (10), 2020 (7), 2021 (8), 2022 (1), 2023 (35).
+- **Product-type breakdown of the 2023 cohort** shows concentration in `SML` (Seafarer/Allotment)
+  and `SL` (Salary Loan, including Corporate tie-up) products — 31 of 35 (88.6%): `SML-Self
+  Allotment` (8), `SL-Corporate` (8), `SML-Co-Borrower Allotment` (7), `SL-Regular` (6), plus
+  smaller counts of `PFL-Gadgets, Appliances`, `BL-Regular`, `SML-Regular`, `BL-Special`,
+  `SML-PDC`. Both dominant product families depend on a third party (manning agency or employer)
+  to remit payment via allotment/salary deduction — a plausible, **not yet confirmed** shared
+  root cause distinct from pandemic non-payment, worth flagging for the post-migration review
+  rather than resolving here.
+- **Full transaction-history trace of one representative case**, `SML-SPEC_N1U3L` (`SML-Special`,
+  disbursed 2020-08-20, 1,218 transactions): the account's balance reached exactly ₱0.00 on
+  2025-07-29 (two large `REPAYMENT` postings), but received a further `PENALTY_APPLIED` and `FEE`
+  posting the very next day, 2025-07-30 — the last two transactions in the account's entire
+  history — leaving a live, un-reconciled balance under a still-`CLOSED` account state. The
+  account-level `principalBalance` snapshot (₱278,407.47) also does not match the last
+  transaction's own `balance` field (₱133,333.33) on the same record — a second, independent
+  discrepancy. This is consistent with a **process gap** (nothing in the legacy system prevents
+  further postings against an already-`CLOSED` account) rather than data corruption, and directly
+  demonstrates that at least some of the 79 represent **real, not-yet-resolved financial
+  positions**, not artifacts safe to discard.
+
+**Rationale for Option A over Option B:** the traced case above shows a real, non-zero balance
+arising from legitimate post-closure transactions — an automatic write-off (Option B) would
+improperly discharge what may be a genuinely collectible amount. The population is also
+demonstrably heterogeneous (§7.3's five-category breakdown: `TRANSFER`, `IMPORT`,
+`REPAYMENT_UNDO`, no-marker, plus the 2023/allotment concentration found above) with no single
+root cause covering all 79 — a blanket write-off treatment risks discharging genuine receivables
+alongside genuine artifacts. Migrating as-is and flagging for case-by-case manual review preserves
+the full evidentiary record and defers the write-off/no-write-off judgment, loan by loan, to the
+humans best positioned to make it.
+
+**Related, not part of this decision:** a write-off **recovery/reversal mechanism** (for the
+general case of a written-off loan later becoming collectible again — e.g. an absconding client
+located by a collection agency) was discussed as a good, low-cost, evidence-backed addition
+regardless of this decision (the legacy system's own `WRITE_OFF`/`WRITE_OFF_ADJUSTMENT`
+transaction pair already demonstrates this pattern was in real use). Since Option A does not
+write off the 79 migrated loans, this mechanism is not required to close out this ADR, but should
+be designed into any future `WriteOffLoanUseCase` built for ordinary (non-migration) operations.
+
+**STATUS: RESOLVED.**
 
 ---
 
@@ -162,7 +214,7 @@ block a complete, confident migration plan.
 | Component-field summing is NOT a reliable reconciliation method | **CONFIRMED** — decided, §1 |
 | Overpayments/reversals/negative balances are valid states | **CONFIRMED** — decided, §2 (reaffirms `FINANCIAL_INVARIANTS.md §3`) |
 | Whether `outstandingBalance` includes penalty | **RESOLVED 2026-07-05 — Option B, both exposed, §3** |
-| Cause and migration treatment of the 15.5% non-reconciling `CLOSED` population | **PARTIALLY CONFIRMED (quantified by category); UNRESOLVED overall — decision required, §4** |
+| Cause and migration treatment of the 15.5% non-reconciling `CLOSED` population | **RESOLVED 2026-07-08 — Option A, migrate as-is + flag for manual review, §4** |
 
 ---
 
@@ -186,13 +238,18 @@ original text is preserved below for the historical record, not because it turne
   sums (e.g. `PaymentAllocationService`'s internal design per ADR-009 can proceed knowing it will
   write against a maintained running total, without yet knowing whether that total is one field
   or two).
-- **Does not block** migration-scoping discussions from starting (§4's options can be discussed
+- ~~**Does not block** migration-scoping discussions from starting (§4's options can be discussed
   and narrowed even before a final decision), but a concrete migration script should not be
-  written against the 79-loan population until §4 is resolved.
+  written against the 79-loan population until §4 is resolved.~~ **Superseded — §4 is now
+  resolved; CP12 may be scoped and built against Option A (migrate as-is, flag the 79 for manual
+  review).**
 
-**Now that §3 is resolved (2026-07-05), CP11 (the `outstandingBalance` summary getter,
-`collectionsBalance`/`accountingBalance` per §3's implementation note) is fully unblocked and may
-proceed.** §4 remains open and continues to block only CP12 (the separate legacy-migration
-track for the 79 non-reconciling `CLOSED` loans) — it does not gate CP11.
+**Now that both §3 (2026-07-05) and §4 (2026-07-08) are resolved, this ADR is fully ACCEPTED.**
+CP11 (the `outstandingBalance` summary getter, `collectionsBalance`/`accountingBalance` per §3's
+implementation note) was already unblocked and shipped. **CP12 (the legacy-migration checkpoint
+for all 1,799 loans, including the 79 non-reconciling `CLOSED` accounts per §4's Option A) is now
+unblocked and may be scoped** — per `docs/LMS_PROJECT_SUMMARY.md` §4.3, this should happen
+alongside standing up a real PostgreSQL instance, since migration work cannot be meaningfully
+verified without one.
 
 This ADR remains "PARTIALLY ACCEPTED" (not "Accepted") until §4 is also resolved.

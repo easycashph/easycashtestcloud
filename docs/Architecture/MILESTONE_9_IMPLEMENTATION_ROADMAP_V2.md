@@ -282,13 +282,14 @@ the review's findings adequately, which the rest of this document addresses dire
                          │ depends on: CP7                 │
                          └───────────────────────────────┘
 
- ═══════════════════════ GATE: ADR-007 §4 decision ═══════════════════════
+ ═══════════ ADR-007 §4 decision: RESOLVED 2026-07-08 (Option A) ═══════════
                                           │
                                           ▼
                          ┌───────────────────────────────┐
-                         │ CP12 (GATED, separate track):   │
-                         │ legacy migration treatment for  │
-                         │ the 79 non-reconciling loans    │
+                         │ CP12 (UNGATED, separate track): │
+                         │ legacy migration — all 1,799    │
+                         │ loans as-is, 79 non-reconciling │
+                         │ flagged for manual review       │
                          │ (loosely depends on CP8, CP9)   │
                          └───────────────────────────────┘
 
@@ -325,7 +326,9 @@ the recommended order is:
 9. CP9 — `ProcessPaymentUseCase`
 10. CP10 — Golden-master replay tests
 11. *(done, committed `b4c00d1`)* CP11 — `collectionsBalance`/`accountingBalance` summary getters — ADR-007 §3 resolved 2026-07-05, no longer gated
-12. *(separate track, gate)* CP12 — legacy migration treatment, once ADR-007 §4 is decided
+12. *(separate track, ungated — ADR-007 §4 resolved 2026-07-08, Option A)* CP12 — legacy migration
+    treatment: migrate all 1,799 loans as-is, flag the 79 non-reconciling `CLOSED` accounts for
+    manual review post-migration
 13. *(done, committed `eaee6c0`)* CP13 — HTTP exposure, including idempotency-key design — see `docs/Architecture/ADR-038-full-permission-matrix.md` §3.6 for the role mapping this shipped with
 
 ---
