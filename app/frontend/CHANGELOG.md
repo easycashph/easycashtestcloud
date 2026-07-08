@@ -8,6 +8,33 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-09 (3)
+
+### Loan Products now real (read-only), plus a real login race-condition fix
+- **`LoanProductsPage`** — real `GET /loan-products` replaces `MOCK_LOAN_PRODUCTS`. Deliberately
+  **read-only**: the real backend's `LoanProductVersion` is immutable by design (LPV-2/LPV-3 in
+  `schema.prisma` — editing a product must never affect historical loans), so the mock UI's
+  "Customize"/"Add New Product" in-place-edit dialogs don't correspond to any real mutation.
+  Dropped both entirely rather than fake them — a correct implementation needs a create-version +
+  activate-version workflow (`POST /loan-products/:id/versions`,
+  `POST /loan-products/:id/versions/:versionId/activate` already exist backend-side) that's out of
+  scope for this pass. Confirmed with the user before implementing (architecture mismatch,
+  CLAUDE.md §AI Collaboration Rules — never silently change how a workflow behaves). Document
+  templates also have no backend endpoint yet, so that section is dropped rather than faked.
+  Category grouping is dropped too — no such field on the real product.
+- `loanApiTypes.ts`'s `LoanProduct`/`LoanProductVersion` expanded to mirror
+  `LoanProductPresenter` in full (penalty rule, fee rules, amount/installment ranges, rounding
+  method, etc.) — was a 2-3 field stub only good enough for other pages' product-name lookups.
+- **Real bug found and fixed** (`roleContext.tsx`): a login race condition. On mount, `RoleProvider`
+  fires a silent `POST /auth/refresh` to restore a prior session; a manual `login()` call can
+  resolve *before* that silent refresh does (slow network, rate-limited, or a stale/expired refresh
+  token). Without a guard, the refresh's `catch` block would still fire afterwards and stomp the
+  just-set `'authenticated'` status back to `'unauthenticated'` — silently bouncing a user who just
+  logged in successfully back to the login screen. Fixed with a `loggedInRef` flag the mount-effect
+  checks before downgrading status. Found via direct reproduction in this session, after the
+  backend's `/auth/refresh` rate limit got exhausted from repeated dev-session reloads, which
+  reliably triggered the race.
+
 ## 2026-07-09 (2)
 
 ### Client Data list + profile now real, backed by the CP12-migrated legacy data

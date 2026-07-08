@@ -103,16 +103,64 @@ export interface Borrower {
   addresses: BorrowerAddress[];
 }
 
+export type PenaltyCalculationMethod = 'NONE' | 'OVERDUE_BALANCE_AND_INTEREST' | 'ON_REPAYMENT';
+export type FeeCalculationMethod = 'FLAT' | 'PERCENTAGE_OF_LOAN_AMOUNT';
+export type FeeTriggerEvent = 'DISBURSEMENT' | 'MANUAL' | 'CAPITALIZED_DISBURSEMENT';
+export type FeeApplicationType = 'REQUIRED' | 'OPTIONAL';
+export type RoundingMethod = 'NO_ROUNDING' | 'ROUND_REMAINDER_INTO_LAST_REPAYMENT';
+
+export interface PenaltyRule {
+  id: string;
+  calculationMethod: PenaltyCalculationMethod;
+  ratePercent: string | null;
+  capPercent: string | null;
+  gracePeriodDays: number;
+}
+
+export interface FeeRule {
+  id: string;
+  name: string;
+  calculationMethod: FeeCalculationMethod;
+  triggerEvent: FeeTriggerEvent;
+  applicationType: FeeApplicationType;
+  flatAmount: string | null;
+  percentage: string | null;
+  isActive: boolean;
+}
+
+/** Mirrors `LoanProductPresenter.presentLoanProductVersion()` in app/backend exactly. */
 export interface LoanProductVersion {
   id: string;
   loanProductId: string;
+  versionNumber: number;
+  previousVersionId: string | null;
   isActive: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  interestCalculationMethod: string;
+  daysInYearConvention: string;
+  repaymentPeriodUnit: string;
+  loanAmountMin: string;
+  loanAmountMax: string | null;
+  loanAmountDefault: string | null;
+  installmentCountMin: number;
+  installmentCountMax: number | null;
+  installmentCountDefault: number | null;
+  gracePeriodDefaultDays: number;
+  roundingMethod: RoundingMethod;
+  defaultInterestRate: string | null;
+  minInterestRate: string | null;
+  maxInterestRate: string | null;
+  penaltyRule: PenaltyRule | null;
+  feeRules: FeeRule[];
 }
 
 export interface LoanProduct {
   id: string;
   code: string;
   name: string;
+  description: string | null;
+  versions: LoanProductVersion[];
 }
 
 export interface InstallmentAmounts {

@@ -15,7 +15,7 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { fetchAllPages } from '@/lib/apiClient';
-import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
+import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 
 interface LoanRow {
   id: string;
@@ -98,7 +98,7 @@ export function LoanListPage() {
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
     queryFn: async () => {
-      const products = await fetchAllPages<LoanProduct & { versions?: LoanProductVersion[] }>('/loan-products');
+      const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProduct = new Map<string, { name: string; isActive: boolean }>();
       for (const p of products) {
         for (const v of p.versions ?? []) {

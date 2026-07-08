@@ -67,6 +67,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = React.useState<AuthStatus>('loading');
   const [user, setUser] = React.useState<AuthenticatedUserView | null>(null);
   const { loadPreferenceFor } = useTheme();
+  // A manual login() can resolve before the mount-time silent refresh below does (e.g. the
+  // refresh is slow, rate-limited, or the browser session predates a stale refresh token). Without
+  // this guard, the refresh's catch block would still fire afterwards and stomp the just-set
+  // 'authenticated' status back to 'unauthenticated', silently kicking the user back to the login
+  // screen despite a successful login.
+  const loggedInRef = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -75,12 +81,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const refreshed = await apiClient.post<RefreshResponse>('/auth/refresh');
         setAccessToken(refreshed.accessToken);
         const me = await apiClient.get<AuthenticatedUserView>('/auth/me');
-        if (cancelled) return;
+        if (cancelled || loggedInRef.current) return;
         setUser(me);
         loadPreferenceFor(me.id);
         setStatus('authenticated');
       } catch {
-        if (cancelled) return;
+        if (cancelled || loggedInRef.current) return;
         setAccessToken(null);
         loadPreferenceFor(null);
         setStatus('unauthenticated');
@@ -96,6 +102,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const login = React.useCallback(
     async (email: string, password: string) => {
       const result = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+      loggedInRef.current = true;
       setAccessToken(result.accessToken);
       setUser(result.user);
       loadPreferenceFor(result.user.id);

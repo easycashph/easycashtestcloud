@@ -30,7 +30,7 @@ import {
   type MockLoanAccount,
 } from '@/lib/mockData';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, LoanAccount, LoanProduct } from '@/lib/loanApiTypes';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function getLoanSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
@@ -170,7 +170,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
     queryFn: async () => {
-      const products = await fetchAllPages<LoanProduct & { versions?: LoanProductVersion[] }>('/loan-products');
+      const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProductName = new Map<string, string>();
       for (const p of products) {
         for (const v of p.versions ?? []) versionToProductName.set(v.id, p.name);
