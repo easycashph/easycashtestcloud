@@ -74,9 +74,17 @@ import infrastructure, interface, or `@prisma/client`). 8 modules: `identity`, `
   fails). Verified directly against the source and by running the suite, not re-derived from this
   document. **No `document` module capability exists yet** (0 files) — that part of the original
   claim stands; only the `audit` half was wrong.
-- **No live PostgreSQL has ever been available in this dev environment** — every DB-dependent
-  claim is verified via `tsc`, mocked-Prisma unit tests, and mocked `supertest` requests. This
-  remains the single largest outstanding verification gap in the whole backend.
+- ~~**No live PostgreSQL has ever been available in this dev environment**~~ — **CLOSED
+  2026-07-08.** Docker Desktop installed (required a WSL2 base distro, which this machine also
+  lacked — installed via `wsl --install`), `docker compose up -d postgres` brought up a real
+  PostgreSQL 16 instance, and all 5 migrations were deployed successfully (29 tables). The
+  previously-skipped `tests/integration/` suite (`auth.test.ts`,
+  `GoldenMasterReplay.test.ts` — real HTTP round-trips via `supertest` against a real database, not
+  mocked) was run for the first time with `RUN_INTEGRATION_TESTS=1`: **all 10 integration tests
+  pass**, including the full login → refresh-rotation → reuse-detection (C-01) → rate-limit flow.
+  Combined with the unit suite: **76/76 test files, 499/499 tests passing** (previously 6 were
+  always skipped pending exactly this). This was the single largest outstanding verification gap in
+  the whole backend — it is now closed, clearing the last precondition for scoping CP12 (§4.3).
 - Five calculation cases are explicitly flagged `STATUS: UNRESOLVED` in
   `CALCULATION_ENGINE_SPEC.md` (Flat-Rate interest, overpayment handling, penalty formula,
   maturity-capitalization timing, reversal/adjustment modeling) — deliberately not implemented
@@ -199,14 +207,12 @@ This is the most important structural recommendation. Concretely:
   decision that the backend has not made and will eventually need to either adopt or reconcile
   against.
 
-### 4.3 Address the standing "no live PostgreSQL" gap before CP12
+### 4.3 ~~Address the standing "no live PostgreSQL" gap before CP12~~ — DONE 2026-07-08
 
-Every backend claim to date has been verified without ever running against a real database. This
-has been an acceptable trade-off through the domain/application layers (which are correctly
-DB-agnostic by design), but CP12 is specifically about **migration** — moving real legacy data into
-this schema. That work cannot be meaningfully verified without at least one real Postgres instance
-to migrate into. Standing up Postgres (even just locally via the project's existing
-`docker-compose`) should happen before or alongside CP12, not after.
+**Resolved.** Docker Desktop + WSL2 installed, `docker compose up -d postgres` running, all 5
+migrations deployed, and the full test suite (unit + previously-skipped integration) passes clean
+against it — 499/499 tests, 76/76 files. CP12 can now be scoped and built with a real database
+available to migrate into and verify against, per the original concern here.
 
 ### 4.4 ~~Build the `audit` module before, not after, any real production use~~ — ALREADY DONE, this recommendation was based on a factual error
 
