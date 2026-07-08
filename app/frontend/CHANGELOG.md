@@ -8,6 +8,25 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-08
 
+### Bug hunt: 5 new issues found, not yet fixed (see `docs/PROJECT_HANDOFF.md` §5 for full detail)
+A full-codebase read (not just `tsc`/`eslint`, which stayed clean) surfaced 5 concrete bugs beyond
+the `PAYABLE_LOANS` fix below, several sharing its exact stale-module-constant shape. None are fixed
+in this entry — logged here for visibility, prioritized in `docs/LMS_PROJECT_SUMMARY.md` §4.7:
+- **Dashboard "Collections This Month" freezes after any loan is created/activated this
+  session** — `DASHBOARD_SUMMARY.totalPortfolioValue` (`mockData.ts`) is a module-level constant
+  computed once at import time; the "Collections This Month" card divides a live-recomputed
+  numerator by this frozen denominator, silently inflating the figure.
+- **"Create Client" always creates a new client record**, even for a repeat applicant who already
+  has a Client Data profile — `createClientFromApplication()` never checks the existing
+  `findRepeatClientBorrower()` helper, splitting loan history across duplicate client records.
+- **Two implementations of "has active loan" disagree on `MATURED`** — `clientHasActiveLoan()`
+  (gates Create Loan Account) excludes it, `ClientListPage`'s `hasActiveLoan()` (drives the filter
+  badge) includes it.
+- **Recent Activity panels on Loan Accounts and Client Data never show real actions** —
+  `entityType` string mismatches (`'Loan Accounts'` vs `'LoanAccount'`, `'Client Data'` vs
+  `'Client'`) mean both panels only ever show page-view noise, never real Approve/Activate/Create/
+  Edit actions.
+
 ### Fixed: "Record Payment" could land on a random unrelated loan
 - Root cause: `PaymentRecordingPage`'s `PAYABLE_LOANS` was a **module-level constant**, computed
   once by filtering `MOCK_LOANS` at import time. `createLoanAccountForClient()`/

@@ -480,6 +480,14 @@ initially missed non-`.ts` source files):
   order (equal dates are not a violation). 4 new regression tests added
   (`tests/unit/shared/calculation/PaymentAllocationService.test.ts`), full suite still green
   (468/474, up from 464/470).
+- **M-8 (2026-07-08 bug hunt) — NEW, not fixed.** `ApproveLoanUseCase`/`RejectLoanUseCase`
+  (`src/modules/loan-account/application/use-cases/ApproveLoanUseCase.ts`) write no
+  `IFinancialAuditLogger` entry, unlike `ActivateLoanUseCase`/`ProcessPaymentUseCase`. A
+  PENDING_APPROVAL→APPROVED (or →REJECTED) transition — performed by a human with money-movement
+  authority — currently leaves no forensic record of who approved/rejected which loan and when.
+  The gap is acknowledged in a code comment (deferred, not a regression) but is a real,
+  currently-shippable violation of `FINANCIAL_INVARIANTS.md §4`'s fail-closed audit rule as applied
+  to this use case.
 - **M-7 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: `npm audit` — 4
   vulnerabilities in `app/backend` (1 moderate, 3 high), all transitive via `bcrypt@5.x →
   @mapbox/node-pre-gyp → tar` (path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds
@@ -493,6 +501,26 @@ initially missed non-`.ts` source files):
   production-relevant — surfaces only under a full non-`--omit=dev` audit; out of this finding's
   scope.)
 
+### High priority (new, 2026-07-08 bug hunt)
+- **H-4 — Idempotency guard does not prevent concurrent double-execution of balance-mutating
+  requests.** `src/shared/http/idempotency.ts:34-48`, backed by
+  `src/shared/infrastructure/PrismaIdempotencyKeyStore.ts:21-43`. `withIdempotency()` runs
+  `find()` → `execute()` → `save()` sequentially with no lock held between `find` and `execute`;
+  the DB's unique `(key, endpoint)` constraint only fires at `save()` time, *after* `execute()`
+  (the full use case, in its own already-committed transaction) has already run. The store's own
+  code comment claims the constraint "prevents a race... from both proceeding to the use case
+  layer" — that is incorrect; it only detects the collision after both requests already proceeded.
+  **Failure scenario:** a client retries `POST /loan-accounts/:id/payments` with the same
+  `Idempotency-Key` twice in quick succession (e.g. an automatic retry on a slow response). Both
+  requests miss the `find()` check and both run `ProcessPaymentUseCase.execute()` to completion —
+  optimistic concurrency on the loan account/installment doesn't stop this, since both are
+  logically-valid payments, not a stale-write conflict. The payment is applied twice; the second
+  request's `save()` then throws an unhandled Prisma `P2002` that surfaces as a raw 500, but the
+  double-charge has already committed. **Not yet fixed** — needs either a DB-level advisory lock
+  held across `execute()`, or an early row-insert-then-execute pattern (insert a `PENDING` idempotency
+  row before `execute()`, so the unique constraint blocks the second request before it runs the use
+  case at all).
+
 ### Low priority
 - **L-1** — `toPaginatedResponse`'s "full page ⇒ set nextCursor" heuristic always costs one
   extra round trip to confirm the true last page. Standard, accepted cursor-pagination
@@ -505,6 +533,49 @@ initially missed non-`.ts` source files):
 - **L-5** — `GET /loan-accounts/:id/transactions` for a nonexistent `loanAccountId` returns
   `200 { items: [], nextCursor: null }` instead of `404` — inconsistent with `GET /loan-accounts/:id`,
   which correctly 404s for the same nonexistent id.
+- **L-6 (2026-07-08 bug hunt) — NEW, not fixed.** `/auth/refresh`
+  (`src/modules/identity/interface/http/authRouter.ts:28`) has no dedicated rate limiter. `/login`
+  gets an 8-per-15-min limiter; `/refresh` relies only on the global app-wide limiter, despite
+  handling an equally sensitive operation (session continuation). Reuse-detection mitigates the
+  *consequence* of a stolen/guessed token but not the volume of guesses an attacker can attempt.
+
+### Frontend findings (new, 2026-07-08 full-codebase bug hunt)
+Found by an independent full read of `app/frontend/src`, cross-checked against `CHANGELOG.md`.
+None fixed yet — logged here for triage (see `LMS_PROJECT_SUMMARY.md` §4.7 for suggested order).
+- **F-1 — Dashboard "Collections This Month" freezes after any loan is created/activated this
+  session.** `src/lib/mockData.ts:1309-1317` — `DASHBOARD_SUMMARY.totalPortfolioValue` is computed
+  once at import time from a one-time `MOCK_LOANS.filter()`. `src/pages/DashboardPage.tsx:282-283`
+  divides a freshly-recomputed numerator by this frozen denominator to scale the "Collections This
+  Month" card (line 406). Same root-cause shape as the `PAYABLE_LOANS` bug fixed earlier
+  2026-07-08 (stale module-level snapshot of a mutated mock array). **Failure scenario:** approve +
+  activate a new loan, then view the Dashboard — the figure is silently inflated because the
+  numerator grew while the denominator didn't.
+- **F-2 — "Create Client" always mints a new client record, even for a repeat applicant who
+  already has a profile.** `src/lib/mockData.ts:2815-2848` (`createClientFromApplication`)
+  unconditionally creates a new `MockBorrowerProfile`, never consulting the existing
+  `findRepeatClientBorrower()` helper (already used read-only elsewhere, e.g.
+  `LoanApplicationDetailPage.tsx:117`). **Failure scenario:** a repeat/renewal applicant's second
+  application, once approved, produces a second unrelated Client Data record with empty loan
+  history instead of attaching to their real profile — undermines the renewal-linking feature
+  documented in the 2026-07-08 changelog entry above.
+- **F-3 — Two implementations of "has active loan" disagree on whether `MATURED` counts.**
+  `clientHasActiveLoan()` (`src/lib/mockData.ts:2851-2857`, gates "Create Loan Account" on
+  `ClientProfilePage.tsx:185`) excludes `MATURED`; the separately hand-written `hasActiveLoan()`
+  (`src/pages/ClientListPage.tsx:28-32`, drives the "With active loan" filter/badge) includes it.
+  **Failure scenario:** a client with only a `MATURED` (past-term, unpaid) loan shows as "has
+  active loan" on Client List but is *not* blocked from creating a second loan account on their
+  profile page. Related to the pre-existing note in `LMS_PROJECT_SUMMARY.md` §4.5 that `MATURED`
+  is a frontend-only invention not yet reconciled with the backend.
+- **F-4 — "Recent Activity — Loan Accounts" panel never shows real loan-account actions.**
+  `src/pages/LoanListPage.tsx:217` filters by `entityType === 'Loan Accounts'` (the page-view
+  label), but every real loan action (Approve, Activate, Add Note, Upload/Delete Attachment) logs
+  `entityType: 'LoanAccount'` (singular, no space) — the strings never match, so the panel only
+  ever shows page-view noise. `LoanApplicationsPage.tsx:328` already shows the correct fix pattern
+  (ORs both label forms).
+- **F-5 — "Recent Activity — Client Data" panel never shows Create/Edit Client actions.**
+  Same root cause as F-4: `src/pages/ClientListPage.tsx:194` filters by `'Client Data'` only, but
+  real client actions log `entityType: 'Client'`. `MemberListPage.tsx:222` shows the correct
+  OR-combined fix pattern this page is missing.
 
 ### Pre-existing, tracked since Milestone 7 (not from either HTTP-layer audit)
 - **ADR-007** (outstanding balance formula), **ADR-009** (repayment allocation order),
