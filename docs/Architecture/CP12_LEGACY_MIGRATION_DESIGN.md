@@ -1,11 +1,13 @@
 # CP12 — Legacy MongoDB Migration: Analysis & Design
 
-**Status:** DESIGN — not yet approved for implementation.
+**Status:** APPROVED FOR IMPLEMENTATION — decisions locked in §5, 2026-07-08. Target: local dev
+Postgres only (see §5 point 7) — a future production cutover against Easycash's real backup
+database is the explicit longer-term goal, but is out of scope for this pass and needs its own
+separate go-ahead.
 **Prepared:** 2026-07-08.
 **Scope:** Milestone 9.1's last remaining checkpoint (CP12) — migrating the real legacy Mambu-era
 MongoDB export into `app/backend`'s Postgres schema. Per `CLAUDE.md`'s workflow, this document is
-the analyze/design step; no migration script is written or run against Postgres until this is
-approved, and the specific open questions in §5 are answered.
+the analyze/design step; §5 now records the answered decisions this implementation follows.
 
 **Source data location:** `legacy/mongodb/07012026_103239/db-easycash/` — a full `mongodump`
 export, confirmed real (real names/emails/phones), confirmed already `.gitignore`d
@@ -189,50 +191,50 @@ don't exist in the new system's storage — needs an explicit decision (§5 poin
 
 ---
 
-## 5. Open questions — need your decision before implementation starts
+## 5. Decisions (locked in 2026-07-08)
 
-1. **Branch/User FK resolution.** Every `loan_accounts`/`client_accounts` row references a legacy
-   `assignedBranchKey`/`assignedUserKey`, but the new schema has no migrated branch list or staff
-   roster yet (ADR-005: only one placeholder "HQ" branch exists). Options: (a) migrate everything
-   under the single placeholder HQ branch, leaving `loanOfficerId`/`assignedLoanOfficerId` null
-   (defer officer attribution to later), or (b) first migrate `mambu_users` into real `User` rows
-   (per ADR-039, identity-only, no passwords) so officer attribution is preserved from day one.
-   **Recommendation: (a) for a first pass** — officer attribution is valuable but not
-   correctness-critical the way balances/transactions are, and doing it later is a pure addition,
-   not a rework.
-2. **`loan_transactions.type` mapping (30 legacy values → 10 target values).** Needs your business
-   judgment, not mine, for at least: `IMPORT` (1,466 — likely a Mambu-internal migration marker
-   from *their own* onboarding; may not represent a real financial event at all), `FEE` vs.
-   `FEE_CHARGED` (two distinct legacy types, 6,194 and 11,038 rows respectively — is this a
-   real distinction or a data-entry inconsistency?), the six `*_REPAYMENT`/`*_REDUCED` types
-   (do these net against the ledger or are they display-only annotations?), and whether every
-   `*_ADJUSTMENT` type should collapse into the single target `ADJUSTMENT` value (losing which
-   original component it adjusted) or whether `LoanTransaction`'s existing `reversesTransactionId`
-   self-link is the intended mechanism instead (per TXN-1's "corrections are new, explicitly linked
-   reversal transactions").
-3. **`loan_accounts.accountState: CLOSED` (509 rows) → three-way split.** Needs a concrete rule:
-   what signal distinguishes a normally-paid-off `CLOSED` loan from a `CLOSED_WRITTEN_OFF` or
-   `CLOSED_REJECTED` one? Candidate signals found so far: a `WRITE_OFF`-typed transaction present
-   on the loan (15 exist total, far fewer than 509 — so most `CLOSED` loans are presumably
-   paid-off, not written-off), the `fullyPaid` boolean seen in the `loan_accounts` sample document,
-   or cross-referencing the 79 non-reconciling accounts already named in ADR-007 §4.
-4. **Attachment metadata migration.** Migrate the 21,104 `attachments` rows as metadata-only
-   (`storageKey` pointing at nothing, since the physical files are out of scope per ADR-006), skip
-   entirely for this pass, or something else? Metadata with no retrievable file may be more
-   confusing than useful in the new system's UI.
-5. **`activities`/`comments`/`custom_field_values` collections** — confirm these are genuinely out
-   of scope (CRM/notes data, not financial ledger data) before I spend time inspecting their
-   ~280 MB combined, or is there something in there that actually needs to migrate?
-6. **`FeeRule` source.** No per-product fee-rule-shaped field was found in the `loan_products`
-   sample — fee amounts appear to live per-transaction (`fees_amount`) rather than as a declared
-   rule. Should `FeeRule` rows be back-derived from historical fee transaction patterns (a real
-   inference, not a direct migration), left empty for legacy loans (fees already baked into each
-   loan's `feesDue`/`feesPaid` balance columns, no separate rule needed for historical data), or is
-   there a fee-schedule source I haven't found yet?
-7. **Where does this migration run, and when?** Confirm this is scoped to populate **your own local
-   dev Postgres** (matching `bootstrap-admin.ts`'s "local dev tooling" precedent) for now, not a
-   shared/production target — a real production cutover would need its own separate go-ahead,
-   timing, and rollback plan, well beyond this design pass.
+1. **Branch/User FK resolution — Option (a).** Migrate everything under the single placeholder HQ
+   branch; leave `loanOfficerId`/`assignedLoanOfficerId` null for this pass. Officer attribution
+   can be added later as a pure addition once a real staff roster exists — not a rework of this
+   migration.
+2. **`loan_transactions.type` mapping — `FEE` and `FEE_CHARGED` are genuinely distinct** (confirmed
+   by the business, not a data-entry inconsistency) — both map to `LoanTransactionType.FEE_CHARGED`
+   on the target side (the new schema doesn't carry the legacy sub-distinction, but the amounts are
+   preserved either way; if the sub-distinction turns out to matter later, it's recoverable from
+   `legacyId` cross-reference against the original dump, which is never deleted). **The
+   `*_ADJUSTMENT` types are loan-officer-initiated manual corrections** (confirmed) — these map to
+   the target `ADJUSTMENT` type, a real, distinct event class from the original transaction it
+   adjusts (not folded into `reversesTransactionId`, which per TXN-1 is for system-level reversals,
+   not a human loan officer's manual correction). `IMPORT` (1,466) — treated as a Mambu-internal
+   onboarding marker, not a real financial event; excluded from the migrated `LoanTransaction` rows
+   (does not affect any balance — the loan's own `principalDue`/`interestDue`/etc. columns are
+   migrated directly from `loan_accounts`, not reconstructed by replaying transactions).
+3. **`loan_accounts.accountState: CLOSED` (509 rows) — no three-way split needed.** Confirmed by
+   the MIS Manager: **Easycash has no write-off accounts** — collection proceeds via settlement
+   only, until an account's status becomes `CLOSED`. All 509 `CLOSED` rows map directly to the
+   target `CLOSED` status (paid off), not `CLOSED_WRITTEN_OFF`. `CLOSED_REJECTED` doesn't come from
+   this `accountState` value at all — a rejected application never became an active `loan_accounts`
+   row in the first place, so this target status simply has no legacy-migrated population (it only
+   ever gets created going forward, by the real `RejectLoanUseCase`). The 15 `WRITE_OFF`-typed
+   transactions found in `loan_transactions` (§2.4) are migrated as literal ledger entries (they're
+   real historical rows) but do **not** drive any status mapping — per the confirmed business fact,
+   no loan's *current* state is "written off."
+4. **Attachment metadata — migrate it.** All 21,104 `attachments` rows migrate as metadata
+   (`fileName`, `fileType`, `ownerId`, `uploadedAt`, `legacyId`) even though the physical files
+   themselves remain out of scope (ADR-006). A future storage-migration pass can backfill
+   `storageKey` once the actual files are located/transferred; the metadata existing now, even
+   temporarily file-less, is still useful (search, counts, "what was on file for this loan").
+5. **`activities`/`comments`/`custom_field_values` — confirmed CRM notes, out of scope.** Not
+   inspected further; excluded from migration entirely.
+6. **`FeeRule` source — Option (a): legacy loans keep their own balances, no back-derived
+   `FeeRule` rows.** Each migrated `LoanAccount`'s `feesDue`/`feesPaid` columns already carry the
+   real historical fee totals directly from `loan_accounts` — no separate `FeeRule` needs to exist
+   for a loan that already happened. `FeeRule` starts being populated only for **new** loan
+   products going forward (a real product-configuration task, unrelated to this migration).
+7. **Target: local dev Postgres only, this pass.** Confirmed explicit longer-term goal: prove the
+   migration is correct and repeatable against a local copy first, so the LMS is provably "fit" for
+   Easycash's real backup database before any production cutover is attempted. That cutover is a
+   separate, future, explicitly-approved step — not implied or scheduled by this design.
 
-**Do not start implementing until this design is explicitly approved — including the open
-questions above that materially change what the migration script does.**
+All seven decisions above are final for this implementation pass. Proceed to build the migration
+script per §3's approach.
