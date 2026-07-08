@@ -221,34 +221,54 @@ before `Administration`).
 - **Administration** — unchanged membership (Member Details, Loan Products, Activity Logs, About),
   minus the "LMS Configuration" entry that moves to Configuration above.
 
-### 8.2 Settings page — four sub-sections
+### 8.2 Settings page — four sub-sections, ALL per-user (corrected 2026-07-08)
 
 `LmsConfigurationPage.tsx` is renamed/restructured into a `SettingsPage` with an internal tabbed
 layout (reusing the existing `Tabs` component already used elsewhere, e.g. Payment Recording's
-Automatic/Manual toggle):
+Automatic/Manual toggle). **Correction from this document's first draft: Theme Color and Appearance
+are personal, per-user preferences, same as User Profile and Security — none of the four tabs are
+MIS-restricted.** (The first draft assumed Theme Color/Appearance stayed a shared, MIS-only,
+platform-wide setting, matching today's `LmsConfigurationPage`; that assumption was wrong — corrected
+per explicit instruction.)
 
 1. **User Profile** — the signed-in user's own personal details (name, email, contact number,
-   position/branch as applicable) in an editable form. **Not MIS-restricted** — every role manages
-   their own profile. Mock-only: "Save" updates local state and logs an activity entry, no API
-   call (no `PATCH /users/:id` exists yet — see §6 point 5).
+   position/branch as applicable) in an editable form. Mock-only: "Save" updates local state and
+   logs an activity entry, no API call (no `PATCH /users/:id` exists yet — see §6 point 5).
 2. **Security** — shows the signed-in user's username (email) read-only, plus a "Change Password"
    form (current password, new password, confirm new password) applying the same `PasswordPolicy`
    minimum-length rule the backend already enforces (12 characters — `PasswordPolicy.ts`), for
-   consistency even though this form doesn't call the backend yet. **Not MIS-restricted** — same
-   "manage your own account" reasoning as User Profile. Mock-only, same as above.
-3. **Theme Color** — the existing accent-picker content from today's `LmsConfigurationPage`,
-   unchanged in behavior. **Stays MIS-only** (`canManageLmsConfiguration`) — this is a
-   platform-wide shared setting (one `useTheme()` context for the whole app), not a per-user
-   preference, same as it is today.
-4. **Appearance** — the existing light/dark mode toggle, unchanged in behavior. **Stays MIS-only**,
-   same reasoning as Theme Color.
+   consistency even though this form doesn't call the backend yet. Mock-only, same as above.
+3. **Theme Color** — the existing accent-picker content from today's `LmsConfigurationPage`, now a
+   **personal preference**: each account gets its own saved accent, applied whenever that account
+   is the signed-in one.
+4. **Appearance** — the existing light/dark mode toggle, now also a **personal preference**, same
+   storage mechanism as Theme Color.
 
-**Design note on the MIS-only split:** User Profile/Security (personal, every role) vs. Theme
-Color/Appearance (shared, MIS-only) is this document's interpretation of the request — the mockup
-named all four as sub-sections of one "Settings" area without specifying per-tab access. This
-reasoning follows directly from what each setting actually controls (one user's own account vs.
-the whole platform's shared appearance) and from `canManageLmsConfiguration`'s existing MIS-only
-gate, which only ever made sense for the shared settings. Flag if this isn't the intended split.
+**Every tab in Settings is accessible to every role** — each user manages only their own account
+and their own appearance; there is no shared/platform-wide setting left in this page.
+
+### 8.2.1 Per-user theme persistence (mock mechanism, since there's still no backend to persist it)
+
+Today's `ThemeProvider` (`theme-provider.tsx`) stores one global `theme`/`accent` pair in
+`localStorage` under two fixed keys (`easycash-preview-theme`, `easycash-preview-accent`) — shared
+across every account, since there was previously no concept of "whose preference is this." Now that
+it's per-user, the storage key needs to be scoped to the signed-in account:
+- Read/write `localStorage` under a key that includes the current user's id/email (e.g.
+  `easycash-preview-theme:{userId}`, `easycash-preview-accent:{userId}`) instead of one fixed key.
+- On login (or, during the pre-Stage-0b transitional period, on account switch), `ThemeProvider`
+  re-reads the newly-signed-in user's own stored preference (falling back to the existing
+  system-preference/default logic for an account with no saved preference yet — first login looks
+  the same as it does today).
+- This is still entirely `localStorage`-based (mock), consistent with §6 point 5 — no backend
+  persistence of theme preference is being built in this pilot either.
+
+### 8.2.2 Remove the Topbar appearance-toggle shortcut
+
+`AppLayout.tsx`'s `Topbar` currently renders a standalone light/dark toggle button (`Sun`/`Moon`
+icon) directly next to `AccountSwitcher`, calling `toggleTheme()` independently of any Settings
+page. **This button is removed.** Appearance now has exactly one control surface: the Appearance
+tab inside Settings (§8.2, point 4). `useTheme()`'s `toggleTheme`/`setAccent` API is unchanged —
+only this one extra entry point into it goes away.
 
 ### 8.3 User creation (Administration → Member Details)
 
