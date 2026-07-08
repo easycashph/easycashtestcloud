@@ -70,6 +70,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Documentary Stamp Tax now has its own Waive toggle on Create Loan Account, defaulted to waived (every other fee still defaults to charged).',
       'Loan Applications are now linked to the Loan Account they become: a client can only get a new loan account from a specific approved application (renewals need their own approved application too), Loan Application detail now has a "Create Loan Account" step (prefilled from the application) once Create Client has been used, and a Loan Account shows a link back to the application it came from. The final "Yes, create" button on Create Loan Account also now holds for 3 seconds before it can be clicked, as an extra safety net on top of the existing confirmation step.',
       '"Approve Loan" and "Activate Loan" on a Loan Account are now real actions (previously both were placeholder "Coming Soon" buttons) — approving moves a loan from Pending Approval to Approved, and activating disburses it: generates its full repayment schedule and moves it to Active, completing the loan application → client → loan account → disbursement workflow end to end.',
+      'Fixed a bug where "Record Payment" on a freshly created/activated loan account could land on Payment Recording with a different, unrelated loan preselected instead of the one just clicked from.',
     ],
   },
   {

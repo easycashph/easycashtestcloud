@@ -8,6 +8,19 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
 
 ## 2026-07-08
 
+### Fixed: "Record Payment" could land on a random unrelated loan
+- Root cause: `PaymentRecordingPage`'s `PAYABLE_LOANS` was a **module-level constant**, computed
+  once by filtering `MOCK_LOANS` at import time. `createLoanAccountForClient()`/
+  `activateLoanAccount()` mutate `MOCK_LOANS` in place (`.push()`), but a frozen `.filter()`
+  snapshot taken before that push never picks up the new loan. So clicking "Record Payment" from
+  a loan account created/activated earlier in the session navigated to
+  `/payments?loanId=<that loan>`, but the preselection check (`PAYABLE_LOANS.some(...)`) failed
+  against the stale list and silently fell back to `PAYABLE_LOANS[0]` — a different, unrelated
+  loan.
+- Fix: `PAYABLE_LOANS` is now recomputed fresh from `MOCK_LOANS` inside the component body on
+  every mount, instead of once at module load. Verified end-to-end: created + approved + activated
+  a loan, clicked "Record Payment", confirmed the correct client/loan is preselected.
+
 ### Loan Application ↔ Loan Account linking; 3-second hold on the final confirm button
 - New business rule (was not previously enforced anywhere): a loan account can only be created
   from a specific, still-unconverted `APPROVED` Loan Application — matched via that application's

@@ -55,12 +55,15 @@ function getPreviewRowSortValue(
   }
 }
 
-const PAYABLE_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS');
-
 export function PaymentRecordingPage() {
   useLogPageView('Payment Recording');
   const [searchParams] = useSearchParams();
   const preselected = searchParams.get('loanId');
+  // Recomputed fresh on every render (not a module-level constant) — MOCK_LOANS is mutated in
+  // place by createLoanAccountForClient()/activateLoanAccount(), so a stale snapshot taken once
+  // at import time would silently miss any loan account created/activated during this session,
+  // making `preselected` fail its membership check below and fall back to an unrelated loan.
+  const PAYABLE_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS');
   const [loanId, setLoanId] = React.useState(preselected && PAYABLE_LOANS.some((l) => l.id === preselected) ? preselected : PAYABLE_LOANS[0]?.id ?? '');
   const [loanSearch, setLoanSearch] = React.useState('');
   const [loanStatusFilter, setLoanStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS'>('ALL');
