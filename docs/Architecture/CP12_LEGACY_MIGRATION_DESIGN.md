@@ -1,13 +1,67 @@
 # CP12 — Legacy MongoDB Migration: Analysis & Design
 
-**Status:** APPROVED FOR IMPLEMENTATION — decisions locked in §5, 2026-07-08. Target: local dev
-Postgres only (see §5 point 7) — a future production cutover against Easycash's real backup
-database is the explicit longer-term goal, but is out of scope for this pass and needs its own
-separate go-ahead.
+**Status:** IMPLEMENTED AND RUN, 2026-07-08 — Milestone 9.1 is now fully complete (CP1–CP13, all
+done). Migrated into local dev Postgres only (§5 point 7) — a future production cutover against
+Easycash's real backup database is the explicit longer-term goal, a separate, later,
+separately-approved step.
 **Prepared:** 2026-07-08.
 **Scope:** Milestone 9.1's last remaining checkpoint (CP12) — migrating the real legacy Mambu-era
-MongoDB export into `app/backend`'s Postgres schema. Per `CLAUDE.md`'s workflow, this document is
-the analyze/design step; §5 now records the answered decisions this implementation follows.
+MongoDB export into `app/backend`'s Postgres schema. Per `CLAUDE.md`'s workflow: analyzed (§1-§4),
+designed (§5, decisions locked in with the business), implemented and run (§6 — this section,
+added after the fact with the real results).
+
+## 6. Implementation results (2026-07-08)
+
+Script: `app/backend/scripts/migrate-legacy-data.ts` (dry-run by default; `--apply` writes for
+real). Idempotent (upserts on `legacyId` everywhere) — safe to re-run; confirmed by actually
+re-running it mid-session after fixing a bug (see below) with no duplication.
+
+**Verified directly against Postgres after the run** (not just trusting the script's own log):
+
+| Table | Rows |
+|---|---|
+| `LoanProduct` / `LoanProductVersion` / `PenaltyRule` | 43 each |
+| `Borrower` | 4,604 |
+| `BorrowerIncomeDetail` / `BorrowerGovernmentId` | 333 each |
+| `Address` | 1,384 |
+| `IdentificationDocument` | 888 |
+| `CharacterReference` | 92 |
+| `LoanAccount` | 1,777 |
+| `CoBorrower` / `LoanAccountCoBorrower` | 214 / 434 |
+| `LoanTransaction` | 279,490 |
+| `Attachment` (metadata only, per §5 point 4) | 21,012 |
+
+`LoanAccount.status` breakdown: `ACTIVE_IN_ARREARS` 1,142, `CLOSED` 501, `ACTIVE` 128,
+`PENDING_APPROVAL` 4, `APPROVED` 2 (sums to 1,777, matching the migrated count — the 22 skipped
+loans, see below, account for the gap from 1,799 source rows).
+
+`LoanTransaction.type` breakdown: `PENALTY_APPLIED` 252,725, `REPAYMENT` 9,299, `FEE_CHARGED`
+5,919, `ADJUSTMENT` 5,350, `INTEREST_APPLIED` 3,341, `DISBURSEMENT` 1,942, `DEFERRED_INTEREST_APPLIED`
+459, `DEFERRED_INTEREST_PAID` 419, `TRANSFER` 36.
+
+**Skipped rows (by design, not bugs — each was evaluated, not silently dropped):**
+- 1 `loan_products` row — literally `"TEST-PROD"` / `"Test Product"`, correctly excluded.
+- 15 `loan_accounts` rows — unresolved borrower reference (test/orphaned legacy data).
+- 7 `loan_accounts` rows — no source `firstRepaymentDate` (ADR-045: no fabrication rule exists,
+  so these are skipped rather than guessed).
+- 92 `attachments` rows — unresolved owner.
+- **244,973 `loan_transactions` rows (46.7%)** — the single largest finding of this migration.
+  1,466 are `IMPORT`-typed (a Mambu-internal onboarding marker, not a real financial event, per
+  §5 point 2's decision). The remaining **243,507 reference a `parent_account_key` that doesn't
+  match any of the 1,799 current `loan_accounts` records** — verified twice, against both that
+  collection's `uid` and `_id` fields, confirmed not a join-key bug in the script. These
+  transactions are presumed to belong to loan accounts that no longer exist in the current
+  `loan_accounts` snapshot (plausibly from the Excel → Mambu → SDevTech system transitions
+  `CLAUDE.md` documents). **Explicit decision (2026-07-08): proceed with the 53.3% that resolve,
+  accept the gap for this pass** — nothing is lost, the full 524,463-row source ledger remains
+  intact and untouched in the gitignored dump for future investigation if the cause is ever
+  identified and a fuller migration becomes worthwhile.
+
+**One implementation bug found and fixed during the real run:** 12 legacy loan codes are each
+reused across exactly 2 real records (different `uid`/`creationDate` — a renewal-style reuse
+pattern, not a data-entry error), but `LoanAccount.loanCode` is `@unique`. The first `--apply` run
+failed on the first collision. Fixed: the second occurrence of a reused code gets a `-LEGACY2`
+suffix so both real records migrate — neither is silently dropped to satisfy the constraint.
 
 **Source data location:** `legacy/mongodb/07012026_103239/db-easycash/` — a full `mongodump`
 export, confirmed real (real names/emails/phones), confirmed already `.gitignore`d

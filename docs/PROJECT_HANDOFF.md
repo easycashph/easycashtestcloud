@@ -29,10 +29,9 @@ which still describe the pre-pilot, fully-mock state and have not been fully rew
   trust `git log`, not a memorized hash. The frontend UI-preview commit referenced elsewhere in
   this document as `a85b815` is now `3b9b950` under its new hash; Milestone 9.1 CP11's commit
   (formerly `b4c00d1`) is now `e9448ed` — same content, new hash only.
-- **Latest completed backend implementation:** Milestone 9.2 **CP13** (2026-07-06), per
-  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering. CP1–CP11 and
-  CP13 are implemented, verified, and committed. **Only CP12 remains gated** — blocked on `ADR-007`
-  §4 (separate legacy-migration track, does not affect anything else).
+- **Latest completed backend implementation: CP12 (2026-07-08) — Milestone 9.1 is now fully
+  complete, CP1 through CP13, nothing gated or outstanding.** Per
+  `docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`'s checkpoint numbering.
 - **Overall status:** Backend has a working, tested HTTP API for `identity`, `borrower`,
   `loan-product`, `loan-account` (full CRUD-ish surfaces) and `ledger`/`repayment`
   (deliberately **read-only**). Core domain layer (Milestone 7) is complete and audited/remediated
@@ -51,7 +50,17 @@ which still describe the pre-pilot, fully-mock state and have not been fully rew
     fees), per `ADR-007` §3's resolved Option B. Deliberately never named `outstandingBalance` —
     that generic name is the exact ambiguity the ADR resolved. Both wired into
     `LoanAccountPresenter`.
-  - **CP12 (legacy migration treatment) — GATED on `ADR-007` §4, separate track, not started.**
+  - **CP12 (legacy migration) — Done, run 2026-07-08.** Full design + implementation:
+    `docs/Architecture/CP12_LEGACY_MIGRATION_DESIGN.md`. Real Mambu-era MongoDB export
+    (`legacy/mongodb/`, gitignored) migrated into local dev Postgres via
+    `scripts/migrate-legacy-data.ts` (idempotent, upserts on `legacyId`, `--apply` flag required to
+    write for real). Verified counts: 43 loan products, 4,604 borrowers, 1,777 loan accounts,
+    279,490 loan transactions, 21,012 attachment-metadata rows. Largest finding: 46.7% of the
+    524,463-row legacy transaction ledger (243,507 rows) references loan accounts that no longer
+    exist in the current `loan_accounts` snapshot — verified not a join-key bug, explicitly
+    accepted as a known gap for this pass (full source ledger remains intact in the gitignored
+    dump for future investigation). Target is local dev Postgres only — a production cutover
+    against Easycash's real backup database is an explicit longer-term goal, not yet scheduled.
   - **CP13 (HTTP exposure for `ActivateLoanUseCase`/`ProcessPaymentUseCase`) — Done, committed,
     2026-07-06.** `POST /loan-accounts/:id/activate` and `POST /loan-accounts/:id/payments`, both
     gated per `ADR-038` §3.6 (business-confirmed ahead of this implementation):

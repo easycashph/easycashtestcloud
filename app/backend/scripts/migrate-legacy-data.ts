@@ -1,0 +1,699 @@
+/* eslint-disable no-console */
+/**
+ * CP12 — Legacy MongoDB → Postgres migration.
+ * Design: `docs/Architecture/CP12_LEGACY_MIGRATION_DESIGN.md` (all mapping decisions locked in
+ * 2026-07-08 — read that document before changing anything here).
+ *
+ * Reads the legacy Mambu-era `mongodump` export directly from its `.bson` files (never connects
+ * to a live MongoDB, never writes back to the dump — CLAUDE.md's "never modify legacy data during
+ * migration"). Idempotent: every row upserts on `legacyId`, so re-running this script is always
+ * safe and produces the same end state, never duplicates.
+ *
+ * Usage:
+ *   npx tsx scripts/migrate-legacy-data.ts            # dry run — reports counts, writes nothing
+ *   npx tsx scripts/migrate-legacy-data.ts --apply     # actually writes to the configured DATABASE_URL
+ *
+ * Target: local dev Postgres only, per design doc §5 point 7 — this is local dev tooling
+ * (`scripts/`, not a route), matching `bootstrap-admin.ts`/`seed.ts`'s existing precedent. A
+ * future production cutover is a separate, later, separately-approved step.
+ */
+import 'dotenv/config';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { BSON } from 'bson';
+import { prisma } from '../src/shared/database/prismaClient';
+
+const APPLY = process.argv.includes('--apply');
+const DUMP_DIR = path.resolve(__dirname, '../../../legacy/mongodb/07012026_103239/db-easycash');
+const HQ_BRANCH_CODE = 'HQ';
+
+// ----------------------------------------------------------------------------
+// BSON reading
+// ----------------------------------------------------------------------------
+
+function* iterDocs<T = Record<string, unknown>>(collection: string): Generator<T> {
+  const file = path.join(DUMP_DIR, `${collection}.bson`);
+  const buf = fs.readFileSync(file);
+  let offset = 0;
+  while (offset < buf.length) {
+    const size = buf.readInt32LE(offset);
+    if (size <= 0) break;
+    yield BSON.deserialize(buf.subarray(offset, offset + size)) as T;
+    offset += size;
+  }
+}
+
+function loadAll<T = Record<string, unknown>>(collection: string): T[] {
+  return [...iterDocs<T>(collection)];
+}
+
+function indexBy<T extends Record<string, unknown>>(docs: T[], key: string): Map<string, T> {
+  const map = new Map<string, T>();
+  for (const d of docs) {
+    const k = d[key];
+    if (k !== undefined && k !== null) map.set(String(k), d);
+  }
+  return map;
+}
+
+function groupBy<T extends Record<string, unknown>>(docs: T[], key: string): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const d of docs) {
+    const k = d[key];
+    if (k === undefined || k === null) continue;
+    const arr = map.get(String(k)) ?? [];
+    arr.push(d);
+    map.set(String(k), arr);
+  }
+  return map;
+}
+
+// ----------------------------------------------------------------------------
+// Small helpers
+// ----------------------------------------------------------------------------
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toDecimalString(value: unknown): string {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+}
+
+interface Reconciliation {
+  collection: string;
+  sourceCount: number;
+  migrated: number;
+  skipped: number;
+  skipReasons: Map<string, number>;
+}
+
+function newReconciliation(collection: string, sourceCount: number): Reconciliation {
+  return { collection, sourceCount, migrated: 0, skipped: 0, skipReasons: new Map() };
+}
+
+function recordSkip(rec: Reconciliation, reason: string): void {
+  rec.skipped++;
+  rec.skipReasons.set(reason, (rec.skipReasons.get(reason) ?? 0) + 1);
+}
+
+function printReconciliation(recs: Reconciliation[]): void {
+  console.log('\n=== Reconciliation ===');
+  for (const r of recs) {
+    console.log(`${r.collection}: source=${r.sourceCount} migrated=${r.migrated} skipped=${r.skipped}`);
+    for (const [reason, count] of r.skipReasons) {
+      console.log(`    skipped (${reason}): ${count}`);
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Phase 1: LoanProduct + LoanProductVersion + PenaltyRule
+// Design doc §2.2 — 44 legacy products, one LoanProductVersion each (no retroactive
+// version-history reconstruction, per ADR-002/ADR-003).
+// ----------------------------------------------------------------------------
+
+const INTEREST_CALC_METHOD_MAP: Record<string, string> = {
+  FLAT: 'FLAT',
+  DECLINING_BALANCE: 'DECLINING_BALANCE',
+  DECLINING_BALANCE_DISCOUNTED: 'DECLINING_BALANCE_DISCOUNTED',
+};
+
+const ROUNDING_METHOD_MAP: Record<string, string> = {
+  NO_ROUNDING: 'NO_ROUNDING',
+  ROUND_REMAINDER_INTO_LAST_REPAYMENT: 'ROUND_REMAINDER_INTO_LAST_REPAYMENT',
+};
+
+const PENALTY_CALC_METHOD_MAP: Record<string, string> = {
+  NONE: 'NONE',
+  PERCENTAGE_PER_DAY: 'OVERDUE_BALANCE_AND_INTEREST',
+  ON_REPAYMENT: 'ON_REPAYMENT',
+};
+
+async function migrateLoanProducts(): Promise<{ rec: Reconciliation; productVersionIdByLegacyKey: Map<string, string> }> {
+  const products = loadAll<any>('loan_products');
+  const rec = newReconciliation('loan_products', products.length);
+  const productVersionIdByLegacyKey = new Map<string, string>();
+
+  for (const p of products) {
+    const uid = String(p.uid ?? p._id);
+    const code = String(p.id ?? uid);
+    const interestMethod = INTEREST_CALC_METHOD_MAP[String(p.interest_calculation_method)];
+    if (!interestMethod) {
+      recordSkip(rec, `unmapped interest_calculation_method=${p.interest_calculation_method}`);
+      continue;
+    }
+    const loanAmountMin = p.loan_amount?.minimum ?? p.loan_amount?.default ?? 0;
+
+    if (APPLY) {
+      const product = await prisma.loanProduct.upsert({
+        where: { code },
+        update: { name: String(p.name ?? code) },
+        create: { code, name: String(p.name ?? code), description: null },
+      });
+
+      const version = await prisma.loanProductVersion.upsert({
+        where: { legacyId: uid },
+        update: {},
+        create: {
+          loanProductId: product.id,
+          versionNumber: 1,
+          isActive: Boolean(p.active),
+          effectiveFrom: toDate(p.createdAt) ?? new Date(),
+          interestCalculationMethod: interestMethod as never,
+          repaymentScheduleMethod: 'FIXED',
+          repaymentPeriodUnit: 'MONTHS',
+          settlementOption: 'FULL_DUE_AMOUNTS',
+          roundingMethod: (ROUNDING_METHOD_MAP[String(p.rounding_repayment_schedule_method)] ?? 'NO_ROUNDING') as never,
+          loanAmountMin: toDecimalString(loanAmountMin),
+          loanAmountMax: p.loan_amount?.maximum != null ? toDecimalString(p.loan_amount.maximum) : null,
+          loanAmountDefault: p.loan_amount?.default != null ? toDecimalString(p.loan_amount.default) : null,
+          installmentCountMin: Number(p.num_installments?.minimum ?? 1),
+          installmentCountMax: p.num_installments?.maximum != null ? Number(p.num_installments.maximum) : null,
+          installmentCountDefault: p.num_installments?.default != null ? Number(p.num_installments.default) : null,
+          gracePeriodType: String(p.grace_period?.type ?? 'NONE'),
+          gracePeriodDefaultDays: Number(p.grace_period?.default ?? 0),
+          legacyId: uid,
+        },
+      });
+      productVersionIdByLegacyKey.set(uid, version.id);
+
+      const penaltyMethod = PENALTY_CALC_METHOD_MAP[String(p.penalty_calculation_method ?? p.loan_penalty_calculation_method)] ?? 'NONE';
+      await prisma.penaltyRule.upsert({
+        where: { loanProductVersionId: version.id },
+        update: {},
+        create: {
+          loanProductVersionId: version.id,
+          calculationMethod: penaltyMethod as never,
+          ratePercent: p.penalty_rate?.default != null ? toDecimalString(p.penalty_rate.default) : null,
+          capPercent: p.penalty_rate?.maximum != null ? toDecimalString(p.penalty_rate.maximum) : null,
+          gracePeriodDays: Number(p.grace_period?.default ?? 0),
+        },
+      });
+    } else {
+      productVersionIdByLegacyKey.set(uid, `dry-run:${uid}`);
+    }
+    rec.migrated++;
+  }
+
+  return { rec, productVersionIdByLegacyKey };
+}
+
+// ----------------------------------------------------------------------------
+// Phase 2: Borrower + related tables
+// Design doc §2.1 — 4,629 legacy clients.
+// ----------------------------------------------------------------------------
+
+const BORROWER_STATUS_MAP: Record<string, string> = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  EXITED: 'INACTIVE',
+  REJECTED: 'INACTIVE',
+};
+
+async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliation; borrowerIdByLegacyKey: Map<string, string> }> {
+  const clients = loadAll<any>('client_accounts');
+  const rec = newReconciliation('client_accounts', clients.length);
+  const borrowerIdByLegacyKey = new Map<string, string>();
+
+  const incomeByParent = indexBy(loadAll<any>('client_income_details'), 'parent_key');
+  const govIdByParent = indexBy(loadAll<any>('client_other_details'), 'parent_key');
+  const addressesByParent = groupBy(loadAll<any>('addresses'), 'parent_key');
+  const idDocsByClientKey = groupBy(loadAll<any>('identification_documents'), 'client_key');
+  const charRefsByParent = groupBy(loadAll<any>('character_references'), 'parent_key');
+
+  for (const c of clients) {
+    const uid = String(c.uid ?? c._id);
+    const status = BORROWER_STATUS_MAP[String(c.state)];
+    if (!status) {
+      recordSkip(rec, `unmapped state=${c.state}`);
+      continue;
+    }
+    if (!c.first_name || !c.last_name) {
+      recordSkip(rec, 'missing first/last name');
+      continue;
+    }
+
+    if (APPLY) {
+      const borrower = await prisma.borrower.upsert({
+        where: { legacyId: uid },
+        update: {},
+        create: {
+          branchId: hqBranchId,
+          firstName: String(c.first_name),
+          middleName: c.middle_name ? String(c.middle_name) : null,
+          lastName: String(c.last_name),
+          gender: c.gender ? String(c.gender) : null,
+          birthDate: toDate(c.birthdate),
+          civilStatus: c.civil_status ? String(c.civil_status) : null,
+          mobilePhone1: c.mobile_phone_1 != null ? String(c.mobile_phone_1) : null,
+          mobilePhone2: c.mobile_phone_2 != null ? String(c.mobile_phone_2) : null,
+          email: c.email_address ? String(c.email_address) : null,
+          status: status as never,
+          loanCycle: Number(c.loan_cycle ?? 0),
+          legacyId: uid,
+        },
+      });
+      borrowerIdByLegacyKey.set(uid, borrower.id);
+      borrowerIdByLegacyKey.set(String(c._id), borrower.id);
+
+      const income = incomeByParent.get(String(c._id));
+      if (income) {
+        await prisma.borrowerIncomeDetail.upsert({
+          where: { borrowerId: borrower.id },
+          update: {},
+          create: {
+            borrowerId: borrower.id,
+            employmentType: income.employment_type || null,
+            employerName: income.employer_name || null,
+            employerAddress: income.employer_address || null,
+            natureOfBusiness: income.nature_of_business || null,
+            position: income.position || null,
+            yearsEmployed: income.years_employed != null ? Number(income.years_employed) : null,
+          },
+        });
+      }
+
+      const govId = govIdByParent.get(String(c._id));
+      if (govId) {
+        await prisma.borrowerGovernmentId.upsert({
+          where: { borrowerId: borrower.id },
+          update: {},
+          create: {
+            borrowerId: borrower.id,
+            sssNumber: govId.sss_number || null,
+            tinNumber: govId.tin_number || null,
+          },
+        });
+      }
+
+      for (const addr of addressesByParent.get(String(c._id)) ?? []) {
+        await prisma.address.create({
+          data: {
+            ownerType: 'BORROWER',
+            ownerId: borrower.id,
+            addressType: addr.address_type || null,
+            houseUnitNumber: addr.house_unit_number || null,
+            street: addr.street || null,
+            barangay: addr.barangay || null,
+            cityMunicipality: addr.city_municipality || null,
+            province: addr.province || null,
+            zipCode: addr.zip_code || null,
+            lengthOfStayMonths: addr.length_of_stay != null ? Number(addr.length_of_stay) : null,
+            ownershipStatus: addr.status || null,
+          },
+        });
+      }
+
+      for (const doc of idDocsByClientKey.get(uid) ?? []) {
+        if (!doc.document_id || !doc.document_type) continue;
+        await prisma.identificationDocument.create({
+          data: {
+            borrowerId: borrower.id,
+            documentType: String(doc.document_type),
+            documentNumber: String(doc.document_id),
+            issuingAuthority: doc.is_using_authority || null,
+            validUntil: toDate(doc.valid_until),
+          },
+        });
+      }
+
+      for (const ref of charRefsByParent.get(String(c._id)) ?? []) {
+        if (!ref.first_name || !ref.last_name) continue;
+        await prisma.characterReference.create({
+          data: {
+            borrowerId: borrower.id,
+            firstName: String(ref.first_name),
+            lastName: String(ref.last_name),
+            relationship: ref.relationship || null,
+            phoneNumber: ref.phone_number != null ? String(ref.phone_number) : null,
+            emailAddress: ref.email_address || null,
+          },
+        });
+      }
+    } else {
+      borrowerIdByLegacyKey.set(uid, `dry-run:${uid}`);
+      borrowerIdByLegacyKey.set(String(c._id), `dry-run:${uid}`);
+    }
+    rec.migrated++;
+  }
+
+  return { rec, borrowerIdByLegacyKey };
+}
+
+// ----------------------------------------------------------------------------
+// Phase 3: LoanAccount + CoBorrower
+// Design doc §2.3/§2.5 — 1,799 legacy loans. accountHolderType is 100% CLIENT (verified) so no
+// Group-loan handling is needed (ADR-004).
+// ----------------------------------------------------------------------------
+
+const LOAN_STATUS_MAP: Record<string, string> = {
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  APPROVED: 'APPROVED',
+  ACTIVE: 'ACTIVE',
+  ACTIVE_IN_ARREARS: 'ACTIVE_IN_ARREARS',
+  // Design doc §5 point 3: confirmed by the MIS Manager — no write-off accounts exist;
+  // every legacy CLOSED loan is a normal settled/paid-off closure.
+  CLOSED: 'CLOSED',
+};
+
+async function migrateLoanAccounts(
+  hqBranchId: string,
+  productVersionIdByLegacyKey: Map<string, string>,
+  borrowerIdByLegacyKey: Map<string, string>,
+): Promise<{ rec: Reconciliation; loanAccountIdByLegacyKey: Map<string, string> }> {
+  const loans = loadAll<any>('loan_accounts');
+  const rec = newReconciliation('loan_accounts', loans.length);
+  const loanAccountIdByLegacyKey = new Map<string, string>();
+  // Design doc discovery (2026-07-08 apply run): 12 legacy loan codes are reused across exactly 2
+  // real records each (different uid/creationDate — a renewal-style reuse pattern, not a data
+  // error), but `LoanAccount.loanCode` is `@unique`. Both records are real financial history and
+  // must both migrate — the second occurrence gets a `-LEGACY2` suffix so neither is dropped.
+  const loanCodeUsageCount = new Map<string, number>();
+
+  const disbursementsByUid = indexBy(loadAll<any>('disbursements'), 'uid');
+  const coBorrowersByClientId = groupBy(loadAll<any>('co_borrowers'), 'parent_key');
+  const clientAccounts = loadAll<any>('client_accounts');
+  const clientIdByAccountHolderKey = indexBy(clientAccounts, 'uid');
+
+  for (const la of loans) {
+    const legacyId = String(la.uid ?? la._id);
+    const status = LOAN_STATUS_MAP[String(la.accountState)];
+    if (!status) {
+      recordSkip(rec, `unmapped accountState=${la.accountState}`);
+      continue;
+    }
+    const productVersionId = productVersionIdByLegacyKey.get(String(la.productTypeKey));
+    if (!productVersionId) {
+      recordSkip(rec, 'unresolved loan product');
+      continue;
+    }
+    const client = clientIdByAccountHolderKey.get(String(la.accountHolderKey));
+    const borrowerId = client ? borrowerIdByLegacyKey.get(String(client._id)) : undefined;
+    if (!borrowerId) {
+      recordSkip(rec, 'unresolved borrower');
+      continue;
+    }
+    const disb = disbursementsByUid.get(String(la.disbursementDetailsKey));
+    const firstRepaymentDate = toDate(disb?.first_repayment_date);
+    if (!firstRepaymentDate) {
+      // Design doc §3 point "firstRepaymentDate": no fabrication rule exists (ADR-045) — 7 legacy
+      // loans have no source value; skipped rather than guessed, per CLAUDE.md "never fabricate
+      // financial logic."
+      recordSkip(rec, 'missing firstRepaymentDate (no fabrication per ADR-045)');
+      continue;
+    }
+
+    const baseCode = String(la.id ?? legacyId);
+    const usageCount = (loanCodeUsageCount.get(baseCode) ?? 0) + 1;
+    loanCodeUsageCount.set(baseCode, usageCount);
+    const loanCode = usageCount === 1 ? baseCode : `${baseCode}-LEGACY${usageCount}`;
+
+    if (APPLY) {
+      const loanAccount = await prisma.loanAccount.upsert({
+        where: { legacyId },
+        update: {},
+        create: {
+          loanCode,
+          borrowerId,
+          loanProductVersionId: productVersionId,
+          branchId: hqBranchId,
+          status: status as never,
+          principalAmount: toDecimalString(la.loanAmount ?? la.principalBalance ?? 0),
+          principalBalance: toDecimalString(la.principalBalance ?? 0),
+          principalPaid: toDecimalString(la.principalPaid ?? 0),
+          principalDue: toDecimalString(la.principalDue ?? 0),
+          interestRate: toDecimalString(la.interestRate ?? 0),
+          interestBalance: toDecimalString(la.interestBalance ?? 0),
+          interestPaid: toDecimalString(la.interestPaid ?? 0),
+          interestDue: toDecimalString(la.interestDue ?? 0),
+          feesBalance: toDecimalString(la.feesBalance ?? 0),
+          feesPaid: toDecimalString(la.feesPaid ?? 0),
+          feesDue: toDecimalString(la.feesDue ?? 0),
+          penaltyBalance: toDecimalString(la.penaltyBalance ?? 0),
+          penaltyPaid: toDecimalString(la.penaltyPaid ?? 0),
+          penaltyDue: toDecimalString(la.penaltyDue ?? 0),
+          installmentCount: Number(la.repaymentInstallments ?? 1),
+          repaymentPeriodUnit: 'MONTHS',
+          gracePeriodDays: Number(la.gracePeriod ?? 0),
+          firstRepaymentDate,
+          approvedAt: toDate(la.approvedDate),
+          activatedAt: toDate(la.creationDate),
+          closedAt: toDate(la.closedDate),
+          legacyId,
+        },
+      });
+      loanAccountIdByLegacyKey.set(legacyId, loanAccount.id);
+
+      // Design doc §5 point: co_borrowers.parent_key resolves to the Borrower (client), not a
+      // specific loan (ADR-015 remains PENDING) — attached to every one of that borrower's
+      // migrated loans as a practical default; revisit once ADR-015 is formally decided.
+      const legacyClientId = client ? String(client._id) : null;
+      if (legacyClientId) {
+        for (const cb of coBorrowersByClientId.get(legacyClientId) ?? []) {
+          if (!cb.first_name || !cb.last_name) continue;
+          const coBorrower = await prisma.coBorrower.upsert({
+            where: { legacyId: String(cb.uid ?? cb._id) },
+            update: {},
+            create: {
+              firstName: String(cb.first_name),
+              lastName: String(cb.last_name),
+              gender: cb.gender || null,
+              civilStatus: cb.civil_status || null,
+              birthDate: toDate(cb.birth_date),
+              phoneNumber: cb.phone_number != null ? String(cb.phone_number) : null,
+              emailAddress: cb.email_address || null,
+              relationship: cb.relationship || null,
+              legacyId: String(cb.uid ?? cb._id),
+            },
+          });
+          await prisma.loanAccountCoBorrower.upsert({
+            where: { loanAccountId_coBorrowerId: { loanAccountId: loanAccount.id, coBorrowerId: coBorrower.id } },
+            update: {},
+            create: { loanAccountId: loanAccount.id, coBorrowerId: coBorrower.id },
+          });
+        }
+      }
+    } else {
+      loanAccountIdByLegacyKey.set(legacyId, `dry-run:${legacyId}`);
+    }
+    rec.migrated++;
+  }
+
+  return { rec, loanAccountIdByLegacyKey };
+}
+
+// ----------------------------------------------------------------------------
+// Phase 4: LoanTransaction (524,463 rows — batched)
+// Design doc §2.4/§5 point 2 — 30 legacy types -> 10 target types. IMPORT rows excluded (not a
+// real financial event, doesn't affect any migrated balance). FEE and FEE_CHARGED both map to
+// FEE_CHARGED (confirmed genuinely distinct by the business, but the target schema doesn't carry
+// the sub-distinction — amounts are preserved regardless). *_ADJUSTMENT types map to ADJUSTMENT
+// (confirmed loan-officer-initiated manual corrections, a real distinct event class).
+// ----------------------------------------------------------------------------
+
+const TRANSACTION_TYPE_MAP: Record<string, string> = {
+  DISBURSMENT: 'DISBURSEMENT',
+  REPAYMENT: 'REPAYMENT',
+  FEE_CHARGED: 'FEE_CHARGED',
+  FEE: 'FEE_CHARGED',
+  PENALTY_APPLIED: 'PENALTY_APPLIED',
+  INTEREST_APPLIED: 'INTEREST_APPLIED',
+  DEFERRED_INTEREST_APPLIED: 'DEFERRED_INTEREST_APPLIED',
+  DEFERRED_INTEREST_PAID: 'DEFERRED_INTEREST_PAID',
+  TRANSFER: 'TRANSFER',
+  WRITE_OFF: 'ADJUSTMENT',
+  REPAYMENT_UNDO: 'ADJUSTMENT',
+  FEE_REPAYMENT: 'ADJUSTMENT',
+  PENALTY_REPAYMENT: 'ADJUSTMENT',
+  FEES_DUE_REDUCED: 'ADJUSTMENT',
+  PENALTIES_DUE_REDUCED: 'ADJUSTMENT',
+  INTEREST_DUE_REDUCED: 'ADJUSTMENT',
+  PENALTY_ADJUSTMENT: 'ADJUSTMENT',
+  FEE_ADJUSTMENT: 'ADJUSTMENT',
+  FEE_REDUCTION_ADJUSTMENT: 'ADJUSTMENT',
+  INTEREST_APPLIED_ADJUSTMENT: 'ADJUSTMENT',
+  INTEREST_REDUCTION_ADJUSTMENT: 'ADJUSTMENT',
+  DEFERRED_INTEREST_APPLIED_ADJUSTMENT: 'ADJUSTMENT',
+  DEFERRED_INTEREST_PAID_ADJUSTMENT: 'ADJUSTMENT',
+  DISBURSMENT_ADJUSTMENT: 'ADJUSTMENT',
+  REPAYMENT_ADJUSTMENT: 'ADJUSTMENT',
+  PENALTY_REDUCTION_ADJUSTMENT: 'ADJUSTMENT',
+  TRANSFER_ADJUSTMENT: 'ADJUSTMENT',
+  WRITE_OFF_ADJUSTMENT: 'ADJUSTMENT',
+  // IMPORT deliberately absent — excluded, see design doc §5 point 2.
+};
+
+const BATCH_SIZE = 2000;
+
+async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacyKey: Map<string, string>): Promise<Reconciliation> {
+  const file = path.join(DUMP_DIR, 'loan_transactions.bson');
+  const rec = newReconciliation('loan_transactions', 0);
+  let batch: any[] = [];
+
+  async function flush(): Promise<void> {
+    if (batch.length === 0) return;
+    if (APPLY) {
+      await prisma.$transaction(
+        batch.map((row) =>
+          prisma.loanTransaction.upsert({
+            where: { legacyId: row.legacyId },
+            update: {},
+            create: row,
+          }),
+        ),
+      );
+    }
+    rec.migrated += batch.length;
+    batch = [];
+  }
+
+  for (const tx of iterDocs<any>('loan_transactions')) {
+    rec.sourceCount++;
+    const legacyType = String(tx.type);
+    if (legacyType === 'IMPORT') {
+      recordSkip(rec, 'IMPORT (not a real financial event)');
+      continue;
+    }
+    const mappedType = TRANSACTION_TYPE_MAP[legacyType];
+    if (!mappedType) {
+      recordSkip(rec, `unmapped type=${legacyType}`);
+      continue;
+    }
+    const loanAccountId = loanAccountIdByLegacyKey.get(String(tx.parent_account_key));
+    if (!loanAccountId) {
+      recordSkip(rec, 'unresolved loan account');
+      continue;
+    }
+    const entryDate = toDate(tx.entry_date ?? tx.creation_date);
+    if (!entryDate) {
+      recordSkip(rec, 'missing entry date');
+      continue;
+    }
+
+    batch.push({
+      loanAccountId,
+      type: mappedType,
+      amount: toDecimalString(tx.amount ?? 0),
+      principalComponent: toDecimalString(tx.principal_amount ?? 0),
+      interestComponent: toDecimalString(tx.interest_amount ?? 0),
+      feesComponent: toDecimalString(tx.fees_amount ?? 0),
+      penaltyComponent: toDecimalString(tx.penalty_amount ?? 0),
+      balanceAfter: toDecimalString(tx.balance ?? tx.principal_balance ?? 0),
+      branchId: hqBranchId,
+      entryDate,
+      comment: tx.comment || null,
+      legacyId: String(tx.uid ?? tx._id),
+    });
+
+    if (batch.length >= BATCH_SIZE) {
+      await flush();
+      console.log(`  ...${rec.migrated} transactions migrated so far`);
+    }
+  }
+  await flush();
+
+  return rec;
+}
+
+// ----------------------------------------------------------------------------
+// Phase 5: Attachment metadata (21,104 rows, no physical files — ADR-006)
+// ----------------------------------------------------------------------------
+
+async function migrateAttachments(loanAccountIdByLegacyKey: Map<string, string>, borrowerIdByLegacyKey: Map<string, string>): Promise<Reconciliation> {
+  const attachments = loadAll<any>('attachments');
+  const rec = newReconciliation('attachments', attachments.length);
+
+  for (const a of attachments) {
+    const isLoanAttachment = String(a.type) === 'loan_account';
+    const ownerId = isLoanAttachment ? loanAccountIdByLegacyKey.get(String(a.uid)) : borrowerIdByLegacyKey.get(String(a.clientUID));
+    if (!ownerId) {
+      recordSkip(rec, 'unresolved owner');
+      continue;
+    }
+    if (APPLY) {
+      await prisma.attachment.upsert({
+        where: { legacyId: String(a._id) },
+        update: {},
+        create: {
+          ownerType: isLoanAttachment ? 'LOAN_ACCOUNT' : 'BORROWER',
+          ownerId,
+          fileName: String(a.fileName ?? 'unknown'),
+          fileType: String(a.fileType ?? ''),
+          // No physical file was migrated (ADR-006) — storageKey is a placeholder pointing at
+          // nothing retrievable yet, per design doc §5 point 4 ("migrate metadata now, backfill
+          // storageKey in a future storage-migration pass").
+          storageKey: `legacy-unmigrated:${a.path ?? a._id}`,
+          uploadedAt: toDate(a.createdAt) ?? new Date(),
+          legacyId: String(a._id),
+        },
+      });
+    }
+    rec.migrated++;
+  }
+
+  return rec;
+}
+
+// ----------------------------------------------------------------------------
+// Main
+// ----------------------------------------------------------------------------
+
+async function main(): Promise<void> {
+  console.log(`CP12 legacy migration — mode: ${APPLY ? 'APPLY (writing to DB)' : 'DRY RUN (no writes)'}`);
+  console.log(`Dump directory: ${DUMP_DIR}`);
+  if (!fs.existsSync(DUMP_DIR)) {
+    throw new Error(`Dump directory not found: ${DUMP_DIR}`);
+  }
+
+  const branch = await prisma.branch.findUnique({ where: { code: HQ_BRANCH_CODE } });
+  if (!branch) {
+    throw new Error(`No Branch with code "${HQ_BRANCH_CODE}" found. Run "npx prisma db seed" first.`);
+  }
+
+  const recs: Reconciliation[] = [];
+
+  console.log('\nPhase 1/5: Loan Products...');
+  const { rec: productsRec, productVersionIdByLegacyKey } = await migrateLoanProducts();
+  recs.push(productsRec);
+
+  console.log('Phase 2/5: Borrowers...');
+  const { rec: borrowersRec, borrowerIdByLegacyKey } = await migrateBorrowers(branch.id);
+  recs.push(borrowersRec);
+
+  console.log('Phase 3/5: Loan Accounts + Co-Borrowers...');
+  const { rec: loansRec, loanAccountIdByLegacyKey } = await migrateLoanAccounts(
+    branch.id,
+    productVersionIdByLegacyKey,
+    borrowerIdByLegacyKey,
+  );
+  recs.push(loansRec);
+
+  console.log('Phase 4/5: Loan Transactions (this is the big one — 524k+ rows)...');
+  const transactionsRec = await migrateLoanTransactions(branch.id, loanAccountIdByLegacyKey);
+  recs.push(transactionsRec);
+
+  console.log('Phase 5/5: Attachment metadata...');
+  const attachmentsRec = await migrateAttachments(loanAccountIdByLegacyKey, borrowerIdByLegacyKey);
+  recs.push(attachmentsRec);
+
+  printReconciliation(recs);
+
+  if (!APPLY) {
+    console.log('\nDry run complete — no data was written. Re-run with --apply to write to the database.');
+  } else {
+    console.log('\nMigration complete.');
+  }
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

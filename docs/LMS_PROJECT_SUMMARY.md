@@ -1,8 +1,20 @@
 # Easycash LMS — Project Summary
 
-**Prepared:** 2026-07-07, refreshed 2026-07-08 (full-project re-verification + bug hunt)
+**Prepared:** 2026-07-07, refreshed 2026-07-08 (full-project re-verification + bug hunt + CP12)
 **Scope:** Full-project analysis — `app/backend`, `app/frontend`, and `docs/` — verified directly
 against the repository (`git log`, live test run, file listings), not reconstructed from memory.
+
+**2026-07-08, end of day — CP12 done, Milestone 9.1 is now fully complete (CP1–CP13, nothing
+gated).** Real legacy MongoDB data (Mambu-era export, `legacy/mongodb/`, gitignored) migrated into
+local dev Postgres: 43 loan products, 4,604 borrowers, 1,777 loan accounts, 279,490 loan
+transactions, 21,012 attachment-metadata rows — all verified directly against Postgres row counts,
+not just the migration script's own log. Full design + results:
+`docs/Architecture/CP12_LEGACY_MIGRATION_DESIGN.md`. Largest open finding: 46.7% of the legacy
+transaction ledger (243,507 of 524,463 rows) references loan accounts no longer present in the
+current `loan_accounts` snapshot — verified not a migration-script bug, explicitly accepted as a
+known gap for this pass (nothing is lost — the full source ledger remains intact in the gitignored
+dump). This pass targets local dev Postgres only; a production cutover against Easycash's real
+backup database is an explicit longer-term goal, not yet scheduled.
 
 **2026-07-08 re-verification:** `npx vitest run` in `app/backend` → **493 passed, 6 skipped
 (integration, requires `RUN_INTEGRATION_TESTS=1`), 0 failed** (75/76 files) — unchanged from
@@ -180,16 +192,15 @@ Per the project's own milestone numbering:
 | 7 (core domain), 7.1 (audit remediation) | ✅ Complete |
 | 8 (HTTP layer), 8.1 (audit remediation) | ✅ Complete |
 | 9 (legacy evidence, ADRs, calc engine spec) | ✅ Complete |
-| **9.1 (calculation engine implementation)** | **In progress — CP1–CP11 and CP13 done; ADR-007 §4 resolved 2026-07-08, CP12 unblocked and ready to be scoped/built** |
+| **9.1 (calculation engine implementation)** | **✅ Complete — CP1–CP13 all done, CP12 run 2026-07-08 (real legacy data migrated to local dev Postgres)** |
 | 9.2 | CP13 (HTTP exposure for activate/payment) shipped under this number |
-| **Frontend UI-preview track** | **Ongoing, evolving daily, parallel to Milestone 9.1 — not on the numbered milestone track** |
+| **Frontend UI-preview track** | **Ongoing, evolving daily, parallel to Milestone 9.1 — not on the numbered milestone track. Real login and Payment Recording wired to the backend as of 2026-07-08 (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`); every other page still mock-only.** |
 
 **The project is currently at an inflection point.** The backend's calculation engine — the hardest
-and most business-risk-laden part of the whole platform — is essentially done and tested. The
-former blocking item (CP12) had its business decision resolved 2026-07-08 (see ADR-007 §4) — the
-only remaining work is engineering (scoping and building CP12 itself, ideally alongside standing up
-a real PostgreSQL instance per §4.3 below). Meanwhile, the frontend has grown into a fully-featured,
-good-looking preview that the CEO can react to, but it has **no live wire to the backend that
+and most business-risk-laden part of the whole platform — is done, tested, and now has real legacy
+data behind it (CP12, 2026-07-08). Meanwhile, the frontend has grown into a fully-featured,
+good-looking preview that the CEO can react to, and a first wiring pass (real login, real Payment
+Recording) already closed part of the gap. It still has **no live wire to the backend that
 already exists to serve it**.
 
 ### Trajectory
@@ -294,14 +305,13 @@ clean. Full per-finding detail (what changed, file/line) is in `PROJECT_HANDOFF.
 ## 5. One-paragraph Executive Summary
 
 The Easycash LMS backend has a working, well-tested, evidence-based financial core (loan
-origination, activation, and payment processing, all reachable over a real, role-gated HTTP API) —
-the hardest engineering risk in the project is largely retired. The one remaining Milestone 9.1
-checkpoint (CP12) was blocked on a business decision, not a technical one — that decision was made
-2026-07-08 (ADR-007 §4, Option A: migrate all legacy loans as-is, flag the 79 non-reconciling ones
-for manual review), so only the engineering work of building CP12 itself remains. In parallel, a
-fast-moving, increasingly rich frontend UI preview has demonstrated the platform's look, feel, and
-workflow to the business. **Update, 2026-07-08:** the first wiring pilot closed part of that gap the
-same day — real login and real Payment Recording now call the backend directly (see
-`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`); every other page remains mock-only.
-The single highest-leverage next step for the project as a whole is extending that same pattern to
-the rest of the frontend, one screen at a time, rather than a "big bang" cutover.
+origination, activation, and payment processing, all reachable over a real, role-gated HTTP API),
+and as of 2026-07-08, **Milestone 9.1 is fully complete** — CP12 (legacy migration) ran the same
+day, putting real historical loan/borrower/transaction data behind that engine for the first time.
+The hardest engineering risk in the project is retired. In parallel, a fast-moving, increasingly
+rich frontend UI preview has demonstrated the platform's look, feel, and workflow to the business,
+and a first wiring pilot (also 2026-07-08) already closed part of the gap between the two tracks —
+real login and real Payment Recording now call the backend directly; every other page remains
+mock-only. The single highest-leverage next step for the project as a whole is extending that same
+wiring pattern to the rest of the frontend, one screen at a time, now backed by real data instead
+of an empty database.
