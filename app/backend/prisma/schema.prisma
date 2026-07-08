@@ -167,10 +167,11 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  borrowers    Borrower[]
-  loanAccounts LoanAccount[]
-  transactions LoanTransaction[]
+  users            User[]
+  borrowers        Borrower[]
+  loanAccounts     LoanAccount[]
+  transactions     LoanTransaction[]
+  loanApplications LoanApplication[]
 
   @@map("branches")
 }
@@ -191,15 +192,17 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles                  UserRole[]
-  refreshTokens          RefreshToken[]
-  auditLogs              AuditLog[]
-  borrowersAsLoanOfficer Borrower[]        @relation("BorrowerLoanOfficer")
-  loanAccountsAsOfficer  LoanAccount[]     @relation("LoanAccountOfficer")
-  loanAccountsApproved   LoanAccount[]     @relation("LoanAccountApprovedBy")
-  transactionsPosted     LoanTransaction[] @relation("LoanTransactionPostedBy")
-  attachmentsUploaded    Attachment[]      @relation("AttachmentUploadedBy")
-  idempotencyKeys        IdempotencyKey[]
+  roles                    UserRole[]
+  refreshTokens            RefreshToken[]
+  auditLogs                AuditLog[]
+  borrowersAsLoanOfficer   Borrower[]        @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer    LoanAccount[]     @relation("LoanAccountOfficer")
+  loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
+  transactionsPosted       LoanTransaction[] @relation("LoanTransactionPostedBy")
+  attachmentsUploaded      Attachment[]      @relation("AttachmentUploadedBy")
+  idempotencyKeys          IdempotencyKey[]
+  loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
+  loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
 
   @@map("users")
 }
@@ -360,9 +363,10 @@ model LoanProductVersion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  penaltyRule  PenaltyRule?
-  feeRules     FeeRule[]
-  loanAccounts LoanAccount[]
+  penaltyRule      PenaltyRule?
+  feeRules         FeeRule[]
+  loanAccounts     LoanAccount[]
+  loanApplications LoanApplication[]
 
   @@unique([loanProductId, versionNumber])
   @@map("loan_product_versions")
@@ -870,6 +874,97 @@ model AuditLog {
 // update/delete paths this table has, both scoped to the row's own
 // still-pending (statusCode IS NULL) state.
 // ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// Loan Applications — Milestone 9.2
+//
+// The pre-underwriting intake/review workflow that gates loan account
+// creation on the frontend's mock UI (a new/renewal loan account may only be
+// created from a specific, still-unconverted APPROVED application). This
+// pass covers intake, review, and the approve/decline/revert decision only —
+// deliberately NOT the "Approved application -> create Borrower -> create
+// LoanAccount" conversion step, which stays a separate follow-up so each
+// piece can be verified independently (confirmed with the business owner,
+// 2026-07-09).
+//
+// Fields mirror the frontend's MockLoanApplication only for what this pass
+// persists — the paper intake form (ECLC-LOFN01) collects many more fields
+// (nickname, TIN, SSS, dependents, character references, etc.) shown on the
+// create form for workflow completeness but never persisted even in the mock
+// today; not modeled here either pending a real requirement to store them.
+// AI risk/recommendation is explicitly a frontend-only rule-based demo, never
+// a real ML engine — not modeled backend-side at all.
+enum LoanApplicationStatus {
+  PENDING_REVIEW
+  APPROVED
+  DECLINED
+}
+
+enum LoanApplicationReviewState {
+  UNREVIEWED
+  REVIEWED
+}
+
+enum LoanApplicationAccountType {
+  NEW
+  RENEWAL
+}
+
+model LoanApplication {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  applicantName   String
+  age             Int?
+  address         String?
+  monthlyIncome   Decimal? @db.Decimal(14, 2)
+  employer        String?
+  propertiesOwned String[] @default([])
+  creditScore     Int?
+  coBorrowerName  String?
+
+  referralSource      String?
+  accountType         LoanApplicationAccountType?
+  loanPurpose         String?
+  requestedCategory   String
+  requestedAmount     Decimal                     @db.Decimal(14, 2)
+  requestedTermMonths Int
+  /// Ticked-checklist of document names the applicant submitted at intake
+  /// (e.g. "Valid ID", "Proof of Billing") — no file upload/storage exists
+  /// yet, this is metadata only, matching the mock's `submittedDocuments`.
+  submittedDocuments  String[]                    @default([])
+
+  encodedByUserId String?
+  /// Set only for a walk-in/branch-encoded application (staff filled the
+  /// paper form on the applicant's behalf) — null for a self-service intake.
+  encodedBy       User?   @relation("LoanApplicationEncodedBy", fields: [encodedByUserId], references: [id])
+
+  status      LoanApplicationStatus      @default(PENDING_REVIEW)
+  /// Independent "seen it" inbox flag — orthogonal to `status`; flips to
+  /// REVIEWED when a reviewer opens the application, regardless of decision.
+  reviewState LoanApplicationReviewState @default(UNREVIEWED)
+
+  /// Staff picks the specific product sub-type during review — approval is
+  /// blocked until this is set (mirrors the mock UI's rule).
+  assignedLoanProductVersionId String?
+  assignedLoanProductVersion   LoanProductVersion? @relation(fields: [assignedLoanProductVersionId], references: [id])
+
+  reviewedByUserId String?
+  reviewedBy       User?     @relation("LoanApplicationReviewedBy", fields: [reviewedByUserId], references: [id])
+  reviewedAt       DateTime?
+  /// Free-text reason recorded on approve/decline/revert — required by the
+  /// mock UI's confirmation dialog, kept optional here since the API layer
+  /// enforces "required" rather than the schema.
+  decisionNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([status])
+  @@map("loan_applications")
+}
 
 model IdempotencyKey {
   id           String   @id @default(uuid())

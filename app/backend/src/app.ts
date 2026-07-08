@@ -54,6 +54,16 @@ import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrast
 import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
 import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
 import { PrismaDashboardRepository } from '@modules/dashboard/infrastructure/PrismaDashboardRepository';
+import { createLoanApplicationRouter } from '@modules/loan-application/interface/http/loanApplicationRouter';
+import { CreateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/CreateLoanApplicationUseCase';
+import { GetLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationUseCase';
+import { ListLoanApplicationsUseCase } from '@modules/loan-application/application/use-cases/ListLoanApplicationsUseCase';
+import { MarkLoanApplicationReviewedUseCase } from '@modules/loan-application/application/use-cases/MarkLoanApplicationReviewedUseCase';
+import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/application/use-cases/AssignLoanApplicationProductUseCase';
+import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
+import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
+import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -234,6 +244,24 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', dashboardRouter);
+
+  // --- loan-application module wiring (Milestone 9.2: intake/review/decision workflow only —
+  // approved-application-to-Borrower/LoanAccount conversion is a deliberate follow-up) ---
+  const loanApplicationRepository = new PrismaLoanApplicationRepository();
+  const loanApplicationRouter = createLoanApplicationRouter(
+    {
+      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository }),
+      getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
+      listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
+      markLoanApplicationReviewedUseCase: new MarkLoanApplicationReviewedUseCase({ loanApplicationRepository }),
+      assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository }),
+      approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
+      declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
+      revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({ loanApplicationRepository, auditLogger }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanApplicationRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
