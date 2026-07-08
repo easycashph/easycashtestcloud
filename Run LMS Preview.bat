@@ -9,71 +9,42 @@ echo ============================================
 echo   Easycash LMS - Starting Preview
 echo ============================================
 echo.
+echo Kung nagsara agad ang window na ito nang walang
+echo mensahe, buksan ito sa pamamagitan ng PowerShell
+echo sa halip na i-double-click:
+echo   cd "%ROOT_DIR%"
+echo   .\"Run LMS Preview.bat"
+echo.
 
-REM --- Backend: needs Docker Desktop running with the Postgres container up ---
-echo Sinusuri kung tumatakbo ang Postgres (Docker)...
-docker ps >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo BABALA: Hindi mahanap ang Docker o hindi ito tumatakbo.
-    echo Ang LMS (login, Payment Recording) ay nangangailangan ng backend + Postgres.
-    echo Buksan muna ang Docker Desktop, tapos patakbuhin: docker compose up -d postgres
-    echo sa loob ng "app\docker" folder, saka ulitin ang script na ito.
-    echo.
-    pause
-)
+echo [1/4] Sinisimulan ang backend server sa bagong window...
+start "Easycash LMS Backend Server" cmd /k "cd /d "%BACKEND_DIR%" && npm run dev"
 
-cd /d "%BACKEND_DIR%"
+echo [2/4] Naghihintay habang nagsi-start ang backend (10 segundo)...
+timeout /t 10 /nobreak >nul
 
-if not exist node_modules (
-    echo Unang beses lang ito: nag-iinstall ng backend dependencies, sandali lang...
-    call npm install
-    if errorlevel 1 (
-        echo.
-        echo Nagka-error sa npm install ng backend. Suriin ang mensahe sa itaas.
-        pause
-        exit /b 1
-    )
-)
+echo [3/4] Sinisimulan ang frontend server sa bagong window...
+start "Easycash LMS Frontend Server" cmd /k "cd /d "%FRONTEND_DIR%" && npm run dev"
 
-echo Sinisimulan ang backend server sa bagong window...
-start "Easycash LMS Backend Server" cmd /k npm run dev
-
-echo Naghihintay habang nagsi-start ang backend...
-timeout /t 6 /nobreak >nul
-
-REM --- Frontend ---
-cd /d "%FRONTEND_DIR%"
-
-if not exist node_modules (
-    echo Unang beses lang ito: nag-iinstall ng frontend dependencies, sandali lang...
-    call npm install
-    if errorlevel 1 (
-        echo.
-        echo Nagka-error sa npm install ng frontend. Suriin ang mensahe sa itaas.
-        pause
-        exit /b 1
-    )
-)
-
-echo Sinisimulan ang frontend dev server sa bagong window...
-start "Easycash LMS Frontend Server" cmd /k npm run dev
-
-echo Naghihintay habang nagsi-start ang frontend...
-timeout /t 6 /nobreak >nul
+echo [4/4] Naghihintay habang nagsi-start ang frontend (8 segundo)...
+timeout /t 8 /nobreak >nul
 
 echo Binubuksan ang preview sa iyong default browser...
 start "" "http://localhost:5173/"
 
 echo.
 echo ============================================
-echo Kung hindi nag-load ang page, o lumalabas ang
-echo "Could not reach the server" pagka-login, tingnan
-echo ang "Easycash LMS Backend Server" window - dapat
-echo may nakalagay doong "listening on port 4000".
-echo Tingnan din ang "Easycash LMS Frontend Server"
-echo window para sa tamang URL/port (posibleng iba
-echo kung 5173 ay busy), tapos buksan iyon nang manual.
+echo Dalawang bagong window ang dapat lumabas:
+echo   "Easycash LMS Backend Server"  -- hintayin
+echo     ang "listening on port 4000"
+echo   "Easycash LMS Frontend Server" -- hintayin
+echo     ang "Local: http://localhost:5173/"
+echo.
+echo Kung "Could not reach the server" pa rin sa
+echo pag-login, tingnan ang Backend Server window
+echo para sa error (kadalasan Docker/Postgres ay
+echo hindi pa tumatakbo -- buksan ang Docker Desktop
+echo tapos sa "app\docker" folder patakbuhin:
+echo   docker compose up -d postgres
 echo ============================================
 echo.
 echo Isara na lang ang window na ito. Huwag isara ang
