@@ -8,6 +8,20 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-09 (4)
+
+### Statement of Account now real, for migrated loans
+- **`StatementOfAccountPage`** — new `RealStatementOfAccountView` renders when a loan id from the
+  now-real Loan Accounts list isn't in `getMockLoan()`'s data, same fallback pattern as
+  `RealLoanDetailView`/`RealClientProfileView`. Real borrower name, loan code, product name,
+  collections/accounting balances, and repayment schedule via `GET /loan-accounts/:id`,
+  `/borrowers/:id`, `/loan-products`, `/loan-accounts/:id/repayment-schedule`. Dropped Branch and
+  Loan Officer name — no `GET /branches` or staff/user-lookup endpoint exists yet. Print stays real
+  (`window.print()`, no backend needed); Export PDF stays Coming Soon.
+- Verified end-to-end in the browser against a real APPROVED (not yet activated) loan — correctly
+  shows real balances and the "no schedule yet — loan has not been activated" empty state, since a
+  repayment schedule doesn't exist until a loan is activated.
+
 ## 2026-07-09 (3)
 
 ### Loan Products now real (read-only), plus a real login race-condition fix
