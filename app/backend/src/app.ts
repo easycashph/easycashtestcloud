@@ -51,6 +51,9 @@ import { createRepaymentRouter } from '@modules/repayment/interface/http/repayme
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
 import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrastructure/PrismaRepaymentInstallmentRepository';
+import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
+import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
+import { PrismaDashboardRepository } from '@modules/dashboard/infrastructure/PrismaDashboardRepository';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -222,6 +225,15 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', repaymentRouter);
+
+  // --- dashboard module wiring (Milestone 9.2: read-only portfolio aggregates) ---
+  const dashboardRouter = createDashboardRouter(
+    {
+      getDashboardSummaryUseCase: new GetDashboardSummaryUseCase({ dashboardRepository: new PrismaDashboardRepository() }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', dashboardRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
