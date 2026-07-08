@@ -20,12 +20,13 @@ export interface LoanAccountBalances {
   penaltyDue: string;
 }
 
+/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly — note plain `CLOSED`, not `CLOSED_PAID`. */
 export type LoanAccountStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'
   | 'ACTIVE'
   | 'ACTIVE_IN_ARREARS'
-  | 'CLOSED_PAID'
+  | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED';
 
@@ -42,12 +43,31 @@ export interface LoanAccount {
   accountingBalance: string;
   interestRate: string;
   installmentCount: number;
+  firstRepaymentDate: string;
+  approvedAt: string | null;
+  activatedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
 }
 
 export interface Borrower {
   id: string;
   firstName: string;
   lastName: string;
+  email: string | null;
+  mobilePhone1: string | null;
+}
+
+export interface LoanProductVersion {
+  id: string;
+  loanProductId: string;
+  isActive: boolean;
+}
+
+export interface LoanProduct {
+  id: string;
+  code: string;
+  name: string;
 }
 
 export interface InstallmentAmounts {

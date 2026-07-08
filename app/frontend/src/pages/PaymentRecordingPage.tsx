@@ -25,7 +25,7 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
-import { apiClient, ApiError } from '@/lib/apiClient';
+import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, PaginatedResponse, ProcessPaymentResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 
 type AllocationMode = 'AUTOMATIC' | 'MANUAL';
@@ -89,8 +89,11 @@ export function PaymentRecordingPage() {
   const loansQuery = useQuery({
     queryKey: ['loan-accounts', 'payable'],
     queryFn: async () => {
-      const page = await apiClient.get<PaginatedResponse<LoanAccount>>('/loan-accounts?limit=200');
-      return page.items.filter((l) => PAYABLE_STATUSES.includes(l.status));
+      // 2026-07-08 (post-CP12 fix): was a single `?limit=200` call — silently truncated once real
+      // migrated data pushed past 200 active loans. `fetchAllPages` follows `nextCursor` until
+      // every page is read.
+      const all = await fetchAllPages<LoanAccount>('/loan-accounts');
+      return all.filter((l) => PAYABLE_STATUSES.includes(l.status));
     },
   });
   const payableLoans = loansQuery.data ?? [];

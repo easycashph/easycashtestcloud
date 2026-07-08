@@ -131,3 +131,32 @@ export const apiClient = {
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
     apiRequest<T>(path, { method: 'POST', body, headers }),
 };
+
+interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+/**
+ * Loops a cursor-paginated `GET` endpoint (max `limit=200` per page, per `pagination.ts`'s
+ * `MAX_LIMIT`) until `nextCursor` is null, returning every item. `basePath` must not already
+ * include a `limit`/`cursor` query param — this appends them itself.
+ *
+ * Real datasets here (loan accounts, borrowers, loan products) are in the low thousands, not the
+ * 10,000+/100,000+ scale `CLAUDE.md` designs the platform for — looping a handful of 200-row pages
+ * once per page load is a deliberate, honest simplification for now, not a claim this scales
+ * indefinitely. A genuinely paginated list UI (cursor-driven Next/Previous, not "load everything")
+ * is the right fix once a list actually approaches that scale.
+ */
+export async function fetchAllPages<T>(basePath: string, pageSize = 200): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | null = null;
+  do {
+    const separator = basePath.includes('?') ? '&' : '?';
+    const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+    const page: CursorPage<T> = await apiClient.get<CursorPage<T>>(`${basePath}${separator}limit=${pageSize}${cursorParam}`);
+    items.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return items;
+}

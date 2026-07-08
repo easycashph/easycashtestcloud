@@ -1,6 +1,7 @@
 import * as React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,32 +12,38 @@ import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import {
-  getMockBorrowerForLoan,
-  MOCK_ACTIVITY_LOGS,
-  MOCK_LOANS,
-  REPORT_BRANCHES,
-  type LoanAccountStatus,
-  type MockLoanAccount,
-} from '@/lib/mockData';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+import { fetchAllPages } from '@/lib/apiClient';
+import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
 
-function getSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
+interface LoanRow {
+  id: string;
+  loanCode: string;
+  borrowerId: string;
+  borrowerName: string;
+  productName: string;
+  productActive: boolean;
+  status: LoanAccountStatus;
+  principalAmount: number;
+  collectionsBalance: number;
+  createdAt: string;
+}
+
+function getSortValue(loan: LoanRow, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'loanCode':
       return loan.loanCode;
     case 'borrowerName':
       return loan.borrowerName;
-    case 'productType':
-      return loan.productType;
+    case 'productName':
+      return loan.productName;
     case 'status':
       return loan.status;
     case 'principalAmount':
       return loan.principalAmount;
     case 'collectionsBalance':
       return loan.collectionsBalance;
-    case 'branchName':
-      return loan.branchName;
     case 'createdAt':
       return new Date(loan.createdAt);
     default:
@@ -51,26 +58,88 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'ACTIVE_IN_ARREARS', label: 'In Arrears' },
   { value: 'CLOSED', label: 'Closed' },
+  { value: 'CLOSED_WRITTEN_OFF', label: 'Written Off' },
+  { value: 'CLOSED_REJECTED', label: 'Rejected' },
 ];
 
-const PRODUCT_OPTIONS = ['ALL', ...[...new Set(MOCK_LOANS.map((l) => l.productType))].sort()];
-
+/**
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12 (real legacy data migrated —
+ * `docs/Architecture/CP12_LEGACY_MIGRATION_DESIGN.md`). Real `GET /loan-accounts`, `/borrowers`,
+ * `/loan-products` replace `MOCK_LOANS`. No branch filter/column: the backend has no `GET
+ * /branches` endpoint yet, and every migrated record currently belongs to the single seeded "HQ"
+ * branch anyway (§5 point 1 of the CP12 design), so a branch dimension has no real value to show
+ * right now — removed rather than faked.
+ *
+ * Loads every page up front (`fetchAllPages`) rather than a real paginated list UI — a deliberate,
+ * honest simplification while the dataset is in the low thousands (see `apiClient.ts`'s
+ * `fetchAllPages` doc comment); revisit with real cursor pagination once a list approaches
+ * `CLAUDE.md`'s 100,000+ loan design target.
+ */
 export function LoanListPage() {
   const navigate = useNavigate();
   useLogPageView('Loan Accounts');
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<LoanAccountStatus | 'ALL'>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
-  const [branchId, setBranchId] = React.useState<string>('ALL');
 
-  const filtered = MOCK_LOANS.filter((loan) => {
+  const loansQuery = useQuery({
+    queryKey: ['loan-accounts', 'all'],
+    queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
+  });
+
+  const borrowerIds = React.useMemo(() => [...new Set((loansQuery.data ?? []).map((l) => l.borrowerId))], [loansQuery.data]);
+  const borrowersQuery = useQuery({
+    queryKey: ['borrowers', 'all'],
+    queryFn: () => fetchAllPages<Borrower>('/borrowers'),
+    enabled: borrowerIds.length > 0,
+  });
+  const borrowerById = React.useMemo(() => new Map((borrowersQuery.data ?? []).map((b) => [b.id, b])), [borrowersQuery.data]);
+
+  const productsQuery = useQuery({
+    queryKey: ['loan-products', 'all'],
+    queryFn: async () => {
+      const products = await fetchAllPages<LoanProduct & { versions?: LoanProductVersion[] }>('/loan-products');
+      const versionToProduct = new Map<string, { name: string; isActive: boolean }>();
+      for (const p of products) {
+        for (const v of p.versions ?? []) {
+          versionToProduct.set(v.id, { name: p.name, isActive: v.isActive });
+        }
+      }
+      return versionToProduct;
+    },
+  });
+
+  const isLoading = loansQuery.isLoading || borrowersQuery.isLoading || productsQuery.isLoading;
+
+  const rows: LoanRow[] = React.useMemo(() => {
+    const versionMap = productsQuery.data ?? new Map();
+    return (loansQuery.data ?? []).map((l) => {
+      const borrower = borrowerById.get(l.borrowerId);
+      const productInfo = versionMap.get(l.loanProductVersionId);
+      return {
+        id: l.id,
+        loanCode: l.loanCode,
+        borrowerId: l.borrowerId,
+        borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
+        productName: productInfo?.name ?? '—',
+        productActive: productInfo?.isActive ?? true,
+        status: l.status,
+        principalAmount: Number.parseFloat(l.principalAmount) || 0,
+        collectionsBalance: Number.parseFloat(l.collectionsBalance) || 0,
+        createdAt: l.createdAt,
+      };
+    });
+  }, [loansQuery.data, borrowerById, productsQuery.data]);
+
+  const productOptions = React.useMemo(() => ['ALL', ...[...new Set(rows.map((r) => r.productName))].sort()], [rows]);
+
+  const filtered = rows.filter((loan) => {
     const matchesStatus = status === 'ALL' || loan.status === status;
-    const matchesProduct = product === 'ALL' || loan.productType === product;
-    const matchesBranch = branchId === 'ALL' || loan.branchId === branchId;
+    const matchesProduct = product === 'ALL' || loan.productName === product;
     const query = search.trim().toLowerCase();
     const matchesSearch =
       query.length === 0 || loan.borrowerName.toLowerCase().includes(query) || loan.loanCode.toLowerCase().includes(query);
-    return matchesStatus && matchesProduct && matchesBranch && matchesSearch;
+    return matchesStatus && matchesProduct && matchesSearch;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
@@ -78,8 +147,16 @@ export function LoanListPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Loan Accounts</h2>
-        <p className="text-sm text-muted-foreground">{MOCK_LOANS.length} sample loan accounts.</p>
+        <p className="text-sm text-muted-foreground">
+          {isLoading ? 'Loading…' : `${rows.length} loan accounts.`}
+        </p>
       </div>
+
+      {loansQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan accounts. Is the backend running?
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
@@ -111,22 +188,9 @@ export function LoanListPage() {
                 <SelectValue placeholder="All products" />
               </SelectTrigger>
               <SelectContent>
-                {PRODUCT_OPTIONS.map((p) => (
+                {productOptions.map((p) => (
                   <SelectItem key={p} value={p}>
                     {p === 'ALL' ? 'All products' : p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={branchId} onValueChange={setBranchId}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All branches</SelectItem>
-                {REPORT_BRANCHES.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -143,7 +207,7 @@ export function LoanListPage() {
                 <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
                   Borrower
                 </SortableTableHead>
-                <SortableTableHead sortKey="productType" currentSort={sort} onSort={toggleSort}>
+                <SortableTableHead sortKey="productName" currentSort={sort} onSort={toggleSort}>
                   Product
                 </SortableTableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
@@ -155,9 +219,6 @@ export function LoanListPage() {
                 <SortableTableHead sortKey="collectionsBalance" currentSort={sort} onSort={toggleSort} className="text-right">
                   Collections Balance
                 </SortableTableHead>
-                <SortableTableHead sortKey="branchName" currentSort={sort} onSort={toggleSort}>
-                  Branch
-                </SortableTableHead>
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Created
                 </SortableTableHead>
@@ -167,26 +228,11 @@ export function LoanListPage() {
               {sorted.map((loan) => (
                 <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                   <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
-                  <TableCell className="font-medium">
-                    {(() => {
-                      const borrower = getMockBorrowerForLoan(loan);
-                      return borrower ? (
-                        <Link
-                          to={`/clients/${borrower.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-primary underline-offset-2 hover:underline"
-                        >
-                          {loan.borrowerName}
-                        </Link>
-                      ) : (
-                        loan.borrowerName
-                      );
-                    })()}
-                  </TableCell>
+                  <TableCell className="font-medium">{loan.borrowerName}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span>{loan.productType}</span>
-                      {loan.isDiscontinuedProduct && (
+                      <span>{loan.productName}</span>
+                      {!loan.productActive && (
                         <Badge variant="secondary" className="text-[10px]">
                           Discontinued
                         </Badge>
@@ -198,14 +244,20 @@ export function LoanListPage() {
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(loan.principalAmount)}</TableCell>
                   <TableCell className="text-right">{formatPeso(loan.collectionsBalance)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{loan.branchName}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(loan.createdAt)}</TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && (
+              {!isLoading && filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                    No sample loans match your search/filter.
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    No loans match your search/filter.
+                  </TableCell>
+                </TableRow>
+              )}
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    Loading loan accounts…
                   </TableCell>
                 </TableRow>
               )}
@@ -214,9 +266,6 @@ export function LoanListPage() {
         </CardContent>
       </Card>
 
-      {/* 2026-07-08 (F-4 fix): real loan-account actions (Approve, Activate, notes, attachments)
-          log entityType 'LoanAccount' (singular) — the page-view-only 'Loan Accounts' filter never
-          matched them. Same OR-combined fix pattern as LoanApplicationsPage below. */}
       <RecentActivityPanel
         entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'LoanAccount' || l.entityType === 'Loan Accounts')}
         title="Recent Activity — Loan Accounts"
@@ -224,3 +273,4 @@ export function LoanListPage() {
     </div>
   );
 }
+

@@ -8,6 +8,32 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-09
+
+### Loan Accounts list + detail now real, backed by the CP12-migrated legacy data
+Extends the wiring pilot pattern to the two next highest-value pages, now that CP12 (`docs/
+Architecture/CP12_LEGACY_MIGRATION_DESIGN.md`) has put 1,777 real loan accounts / 4,604 real
+borrowers into the backend:
+- **`LoanListPage`** — `GET /loan-accounts`, `/borrowers`, `/loan-products` replace `MOCK_LOANS`.
+  Fixed a real bug found in the process: the existing single `?limit=200` fetch (both here and in
+  `PaymentRecordingPage`) silently truncated once real data pushed the loan count past 200 —
+  replaced with a new `fetchAllPages()` helper (`apiClient.ts`) that follows `nextCursor` until
+  every page is read; verified against the live backend, correctly returns all 1,777 loans across
+  9 pages. No branch filter/column — the backend has no `GET /branches` endpoint yet, and every
+  migrated record currently belongs to the single seeded "HQ" branch anyway, so a branch dimension
+  has no real value to show right now.
+- **`LoanDetailPage`** — a UUID from the now-real list doesn't exist in `getMockLoan()`'s
+  hand-authored data, so a new `RealLoanDetailView` component (balances, loan terms, repayment
+  schedule) renders instead of the page's "not found" state when a mock lookup misses but the
+  backend has the loan. Deliberately does not rewire this page's other tabs (notes, attachments,
+  AI risk assessment, reminders, approve/activate actions) — those stay mock-only for this pass.
+- Fixed `loanApiTypes.ts`'s `LoanAccountStatus`: had `CLOSED_PAID`, the real backend enum value is
+  plain `CLOSED` — a mismatch that would have made every closed real loan fail to match any status
+  filter.
+- Verified end-to-end against the live backend (direct API calls, login → list → borrower →
+  product → repayment-schedule → full pagination loop) — all real, all correct, including the
+  1,777-loan pagination fix.
+
 ## 2026-07-08
 
 ### Frontend↔Backend Wiring Pilot — real login and real Payment Recording (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`)

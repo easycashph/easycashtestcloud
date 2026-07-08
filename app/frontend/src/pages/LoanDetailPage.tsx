@@ -1,6 +1,9 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
+import { apiClient } from '@/lib/apiClient';
+import type { Borrower as RealBorrower, LoanAccount, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -352,6 +355,167 @@ function RemindersPanel({ loanId }: { loanId: string }) {
   );
 }
 
+/**
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12. `getMockLoan()` only ever knows
+ * about hand-authored mock loans — a loan from `LoanListPage`'s now-real list (a UUID, migrated
+ * from legacy data) doesn't exist there and would otherwise hit this page's "not found" state.
+ * This is a deliberately minimal real-data view (balances, borrower, repayment schedule) rather
+ * than a full rewiring of every tab on this 700+-line page (notes, attachments, AI risk
+ * assessment, reminders, approve/activate actions) — those stay mock-only for now; see
+ * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
+ */
+function RealLoanDetailView({ loanId }: { loanId: string }) {
+  const navigate = useNavigate();
+
+  const loanQuery = useQuery({
+    queryKey: ['loan-account', loanId],
+    queryFn: () => apiClient.get<LoanAccount>(`/loan-accounts/${loanId}`),
+    retry: false,
+  });
+  const loan = loanQuery.data;
+
+  const borrowerQuery = useQuery({
+    queryKey: ['borrower', loan?.borrowerId],
+    queryFn: () => apiClient.get<RealBorrower>(`/borrowers/${loan!.borrowerId}`),
+    enabled: Boolean(loan?.borrowerId),
+  });
+
+  const installmentsQuery = useQuery({
+    queryKey: ['repayment-schedule', loanId],
+    queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
+  });
+
+  if (loanQuery.isLoading) {
+    return <p className="py-10 text-center text-sm text-muted-foreground">Loading loan account…</p>;
+  }
+
+  if (!loan) {
+    return (
+      <div className="space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        <p className="text-sm text-muted-foreground">Loan not found: {loanId}</p>
+      </div>
+    );
+  }
+
+  const borrower = borrowerQuery.data;
+  const installments = installmentsQuery.data?.items ?? [];
+  const num = (v: string) => Number.parseFloat(v) || 0;
+
+  return (
+    <div className="space-y-6">
+      <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+        <ArrowLeft className="mr-2 h-4 w-4" /> Back
+      </Button>
+
+      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">{loan.loanCode}</h2>
+          <p className="text-sm text-muted-foreground">
+            {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+          </p>
+        </div>
+        <LoanStatusBadge status={loan.status} />
+      </div>
+
+      <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+        Real loan account, migrated from legacy data (CP12) — balances and repayment schedule below
+        are live. Notes, attachments, AI risk assessment, and approve/activate actions are not yet
+        wired to real data for this screen.
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Collections Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BalanceRow label="Principal" value={num(loan.balances.principalBalance)} />
+            <BalanceRow label="Interest" value={num(loan.balances.interestBalance)} />
+            <BalanceRow label="Fees" value={num(loan.balances.feesBalance)} />
+            <BalanceRow label="Penalty" value={num(loan.balances.penaltyBalance)} />
+            <Separator className="my-1" />
+            <BalanceRow label="Total (collections)" value={num(loan.collectionsBalance)} emphasize />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Loan Terms</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            <BalanceRow label="Principal Amount" value={num(loan.principalAmount)} emphasize />
+            <div className="flex items-center justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">Interest Rate</span>
+              <span className="tabular-nums">{loan.interestRate}%</span>
+            </div>
+            <div className="flex items-center justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">Installments</span>
+              <span className="tabular-nums">{loan.installmentCount}</span>
+            </div>
+            <div className="flex items-center justify-between py-1.5 text-sm">
+              <span className="text-muted-foreground">First Repayment</span>
+              <span>{formatDate(loan.firstRepaymentDate)}</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Accounting Balance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BalanceRow label="Total (accounting, excl. penalty)" value={num(loan.accountingBalance)} emphasize />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Repayment Schedule</CardTitle>
+          <CardDescription>{installments.length} installments.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {installmentsQuery.isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : installments.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {installments.map((i) => (
+                  <TableRow key={i.id}>
+                    <TableCell>{i.installmentNumber}</TableCell>
+                    <TableCell>{formatDate(i.dueDate)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
+                    <TableCell>
+                      {/* InstallmentStatusBadge's type is mockData's RepaymentInstallmentStatus,
+                          which spells this status "LATE" — the real API spells it "OVERDUE". */}
+                      <InstallmentStatusBadge status={i.status === 'OVERDUE' ? 'LATE' : i.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function LoanDetailPage() {
   const { loanId } = useParams<{ loanId: string }>();
   const navigate = useNavigate();
@@ -377,12 +541,14 @@ export function LoanDetailPage() {
   );
 
   if (!loan) {
-    return (
+    // Not a hand-authored mock loan — try the real backend (a UUID from LoanListPage's now-real
+    // list, migrated via CP12). See RealLoanDetailView's own doc comment for scope.
+    return loanId ? <RealLoanDetailView loanId={loanId} /> : (
       <div className="space-y-4">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <p className="text-sm text-muted-foreground">Sample loan not found: {loanId}</p>
+        <p className="text-sm text-muted-foreground">Loan not found.</p>
       </div>
     );
   }
