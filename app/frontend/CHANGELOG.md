@@ -39,6 +39,22 @@ app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same d
   code (`'SML-REGULAR'`, `'SL-REGULAR'`), so the new prefill silently showed a blank Product
   Sub-type. Corrected both.
 
+### "Approve Loan"/"Activate Loan" implemented — completes the full application-to-disbursement workflow
+- Both buttons on `LoanDetailPage` were `ComingSoonButton` placeholders; now real actions, each
+  behind the same safety-net confirm-dialog pattern used elsewhere in this preview.
+- New `approveLoanAccount(loan, actorName)`: `PENDING_APPROVAL` → `APPROVED`, sets `approvedAt`,
+  appends an `APPROVED` timeline entry, logs `APPROVE_LOAN_ACCOUNT`.
+- New `activateLoanAccount(loan, actorName)`: `APPROVED` → `ACTIVE` (disbursement) — generates the
+  loan's full repayment schedule via the same `buildSchedule()` every other active loan in this
+  preview uses (so a freshly-disbursed loan's schedule looks identical in shape to a seeded one),
+  recomputes `principalDue`/`interestDue`/`collectionsBalance`/`accountingBalance` from scratch
+  (nothing paid yet), sets `activatedAt`, appends a `DISBURSED` timeline entry, logs
+  `ACTIVATE_LOAN_ACCOUNT`.
+- End-to-end tested: Loan Application (`APPROVED`) → Create Client → Create Loan Account
+  (prefilled from the application) → Approve Loan → Activate Loan/Disburse — verified the
+  resulting loan's Status Timeline shows all three steps in order with correct actor/timestamp,
+  and its Repayment Schedule tab shows the full declining-balance amortization table.
+
 ### Generated Documents distributed onto Loan Accounts; Loan Products get editable document templates
 - Removed the standalone `/admin/documents` Generated Documents page/route/nav link
   (`GeneratedDocumentsPage.tsx` deleted). Its content now lives on `LoanDetailPage`'s Attachments

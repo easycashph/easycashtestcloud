@@ -2967,6 +2967,51 @@ export function findApprovedApplicationForClient(borrowerId: string): MockLoanAp
   return MOCK_LOAN_APPLICATIONS.find((a) => a.status === 'APPROVED' && a.createdClientId === borrowerId && !a.loanAccountCreated);
 }
 
+/** `PENDING_APPROVAL` → `APPROVED` — confirmed via a safety-net dialog in the UI (`LoanDetailPage`). */
+export function approveLoanAccount(loan: MockLoanAccount, actorName: string): void {
+  const at = new Date().toISOString();
+  loan.status = 'APPROVED';
+  loan.approvedAt = at;
+  MOCK_TIMELINES[loan.id] = [...(MOCK_TIMELINES[loan.id] ?? []), { status: 'APPROVED', label: 'Approved', at, actor: actorName }];
+  logActivity({ userName: actorName, action: 'APPROVE_LOAN_ACCOUNT', entityType: 'LoanAccount', entityId: loan.loanCode, at });
+}
+
+/**
+ * `APPROVED` → `ACTIVE` (disbursement) — generates the repayment schedule (same `PMT`-shaped
+ * `buildSchedule()` every other active loan in this preview uses) and recomputes balances from
+ * scratch, matching a freshly-disbursed loan (nothing paid yet).
+ */
+export function activateLoanAccount(loan: MockLoanAccount, actorName: string): void {
+  const at = new Date().toISOString();
+  const installments = buildSchedule(loan.id, loan.principalAmount, loan.interestRate, loan.installmentCount, new Date(loan.firstRepaymentDate), 0, 0);
+  MOCK_INSTALLMENTS[loan.id] = installments;
+
+  const interestDue = round2(installments.reduce((sum, i) => sum + i.due.interest, 0));
+  loan.balances = {
+    principalBalance: loan.principalAmount,
+    principalPaid: 0,
+    principalDue: loan.principalAmount,
+    interestBalance: interestDue,
+    interestPaid: 0,
+    interestDue,
+    feesBalance: loan.balances.feesDue,
+    feesPaid: 0,
+    feesDue: loan.balances.feesDue,
+    penaltyBalance: 0,
+    penaltyPaid: 0,
+    penaltyDue: 0,
+  };
+  loan.accountingBalance = round2(loan.balances.principalBalance + loan.balances.interestBalance + loan.balances.feesBalance);
+  loan.collectionsBalance = round2(loan.accountingBalance + loan.balances.penaltyBalance);
+  loan.status = 'ACTIVE';
+  loan.activatedAt = at;
+  MOCK_TIMELINES[loan.id] = [
+    ...(MOCK_TIMELINES[loan.id] ?? []),
+    { status: 'DISBURSED', label: 'Disbursed / Activated', at, actor: actorName },
+  ];
+  logActivity({ userName: actorName, action: 'ACTIVATE_LOAN_ACCOUNT', entityType: 'LoanAccount', entityId: loan.loanCode, at });
+}
+
 // Seed activity log entries for every sample application — submission always,
 // plus a decision entry for any application already reviewed above.
 for (const app of MOCK_LOAN_APPLICATIONS) {

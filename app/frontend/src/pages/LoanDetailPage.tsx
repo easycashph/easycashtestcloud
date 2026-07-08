@@ -1,9 +1,10 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,6 +19,8 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import {
+  activateLoanAccount,
+  approveLoanAccount,
   buildReminderMessage,
   getGeneratedDocumentsForLoan,
   getMockBorrowerForLoan,
@@ -352,6 +355,9 @@ function RemindersPanel({ loanId }: { loanId: string }) {
 export function LoanDetailPage() {
   const { loanId } = useParams<{ loanId: string }>();
   const navigate = useNavigate();
+  const { currentAccount } = useRole();
+  const [, forceRerender] = React.useState(0);
+  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | null>(null);
   useLogPageView('Loan Account Detail', loanId);
   const loan = loanId ? getMockLoan(loanId) : undefined;
 
@@ -384,6 +390,13 @@ export function LoanDetailPage() {
   const timeline = MOCK_TIMELINES[loan.id] ?? [];
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const borrower = getMockBorrowerForLoan(loan);
+
+  const confirmLoanStatusChange = () => {
+    if (confirmAction === 'APPROVE') approveLoanAccount(loan, currentAccount.name);
+    else if (confirmAction === 'ACTIVATE') activateLoanAccount(loan, currentAccount.name);
+    setConfirmAction(null);
+    forceRerender((n) => n + 1);
+  };
 
   return (
     <div className="space-y-6">
@@ -418,8 +431,8 @@ export function LoanDetailPage() {
           ) : (
             <ComingSoonButton>Record Payment</ComingSoonButton>
           )}
-          {loan.status === 'APPROVED' && <ComingSoonButton>Activate Loan</ComingSoonButton>}
-          {loan.status === 'PENDING_APPROVAL' && <ComingSoonButton>Approve Loan</ComingSoonButton>}
+          {loan.status === 'APPROVED' && <Button onClick={() => setConfirmAction('ACTIVATE')}>Activate Loan</Button>}
+          {loan.status === 'PENDING_APPROVAL' && <Button onClick={() => setConfirmAction('APPROVE')}>Approve Loan</Button>}
         </div>
       </div>
 
@@ -677,6 +690,27 @@ export function LoanDetailPage() {
         entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityId === loan.loanCode || l.entityId === loan.id)}
         title="Recent Activity — This Loan Account"
       />
+
+      <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" /> Confirm {confirmAction === 'APPROVE' ? 'approval' : 'disbursement'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmAction === 'APPROVE'
+                ? `This will approve ${loan.loanCode} — the account moves from Pending Approval to Approved, ready to be activated/disbursed. This is a safety-net confirmation to prevent an accidental click.`
+                : `This will activate ${loan.loanCode} — disbursing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAction(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmLoanStatusChange}>Yes, confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
