@@ -71,7 +71,10 @@ export function createApp(): Express {
 
   // Secure-by-default baseline (CLAUDE.md §Security).
   app.use(helmet());
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  // CORS_ORIGIN may be a comma-separated list (e.g. multiple local dev ports
+  // running side by side) — split rather than assume a single origin.
+  const corsOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
