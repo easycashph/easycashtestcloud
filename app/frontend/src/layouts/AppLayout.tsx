@@ -3,8 +3,6 @@ import {
   LayoutDashboard,
   Landmark,
   Wallet,
-  Moon,
-  Sun,
   Menu,
   Users,
   Package,
@@ -19,15 +17,20 @@ import {
   Info,
 } from 'lucide-react';
 import * as React from 'react';
-import { AccountSwitcher } from '@/components/AccountSwitcher';
+import { AccountMenu } from '@/components/AccountMenu';
 import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
-import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/mockData';
 import { LMS_VERSION } from '@/lib/lmsVersion';
 import { cn } from '@/lib/utils';
 
-/** Section/tab order confirmed by the business (2026-07-06): Home → Loan → Collection → Administration. */
+/**
+ * Section/tab order confirmed by the business: Home → Loan → Collection → Configuration →
+ * Administration (2026-07-08 — `Configuration` inserted before `Administration` as part of the
+ * frontend↔backend wiring pilot's Stage 0c, see `docs/Architecture/
+ * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` §8.1; previous order, confirmed 2026-07-06, had no
+ * `Configuration` group).
+ */
 const NAV_GROUPS = [
   {
     label: 'Home',
@@ -54,9 +57,12 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Configuration',
+    items: [{ to: '/configuration/settings', label: 'Settings', icon: Settings, end: false }],
+  },
+  {
     label: 'Administration',
     items: [
-      { to: '/admin/configuration', label: 'LMS Configuration', icon: Settings, end: false },
       { to: '/admin/members', label: 'Member Details', icon: ShieldCheck, end: false },
       { to: '/products', label: 'Loan Products', icon: Package, end: false },
       { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
@@ -116,8 +122,8 @@ function Sidebar({ open }: { open: boolean }) {
   );
 }
 
+/** Appearance now has exactly one control surface — Settings > Appearance (see SettingsPage) — the standalone toggle formerly here was removed 2026-07-08. */
 function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
-  const { theme, toggleTheme } = useTheme();
   return (
     <header className="flex h-16 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
@@ -130,10 +136,7 @@ function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
-          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </Button>
-        <AccountSwitcher />
+        <AccountMenu />
       </div>
     </header>
   );

@@ -1,13 +1,26 @@
 import * as React from 'react';
-import { MOCK_LMS_MEMBERS, type LmsRole, type MockLmsMember } from './mockData';
+import { apiClient, ApiError, setAccessToken } from './apiClient';
+import type { AuthenticatedUserView, LoginResponse, RefreshResponse } from './authTypes';
+import { useTheme } from '@/components/theme-provider';
+import type { LmsRole } from './mockData';
+import { LoginPage } from '@/pages/LoginPage';
 
-/** All staff accounts are selectable from the "Switch Account" panel — real confirmed roster. */
-export const SWITCHABLE_ACCOUNTS: MockLmsMember[] = MOCK_LMS_MEMBERS;
+/** Authenticated account shape every existing page already consumes (`currentAccount.id/name/role`) — unchanged from the mock era, now sourced from the real backend. */
+export interface AuthenticatedAccount {
+  id: string;
+  name: string;
+  role: LmsRole;
+  /** Full role list — a real user can hold more than one; every existing permission check uses `role` (the first/primary one), matching this app's one-role-per-session UX so far. */
+  roles: LmsRole[];
+  email: string;
+  branchId: string;
+}
 
 interface RoleContextValue {
-  currentAccount: MockLmsMember;
+  currentAccount: AuthenticatedAccount;
   role: LmsRole;
-  switchAccount: (memberId: string) => void;
+  /** Signs out and returns to the Login page. Replaces the old mock account switcher — with real auth, "switching" means logging in as someone else. */
+  logout: () => Promise<void>;
   /** Only "MIS" (super user) may add/edit LMS member accounts. */
   canManageMembers: boolean;
   /** MIS, Loan Operation Manager, and CRM may view/assign/approve/decline Loan Applications. Finance, Accounting, and Collection Officer cannot. */
@@ -18,52 +31,116 @@ interface RoleContextValue {
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
   canCreateLoanAccount: boolean;
-  /** Only MIS may change LMS Configuration (theme color, appearance). */
-  canManageLmsConfiguration: boolean;
 }
 
 const RoleContext = React.createContext<RoleContextValue | undefined>(undefined);
 
+const KNOWN_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
+
+function toAccount(user: AuthenticatedUserView): AuthenticatedAccount {
+  const roles = user.roles.filter((r): r is LmsRole => (KNOWN_ROLES as string[]).includes(r));
+  return {
+    id: user.id,
+    name: `${user.firstName} ${user.lastName}`.trim(),
+    role: roles[0] ?? 'Collection Officer',
+    roles: roles.length > 0 ? roles : ['Collection Officer'],
+    email: user.email,
+    branchId: user.branchId,
+  };
+}
+
+type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
+
 /**
- * Mock account switcher (NOT real authentication/authorization — no
- * username/password check happens anywhere). Lets the CEO see, live, how
- * access changes when "switched" to a different staff account, per the
- * confirmed access policy:
- *   - MIS: super user, all access, including reverting a decided Loan
- *     Application back to Pending Review.
- *   - Loan Operation Manager, CRM: same base access as Finance/Accounting/
- *     Collection Officer, PLUS the special right to access Loan
- *     Applications (assign product sub-type, approve, decline) — but
- *     neither can revert a decision once made.
- *   - Finance / Accounting / Collection Officer: share one base access tier
- *     — cannot manage LMS members, cannot access Loan Applications.
- *   - Only MIS ever sees Activity Logs (the dedicated section and every
- *     per-section "Recent Activity" panel) — not even Loan Operation
- *     Manager or CRM.
- * Held in memory only; defaults to the first MIS account so the full
- * feature set is visible on first load.
+ * Frontend↔Backend Wiring Pilot, Stage 0b
+ * (`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). Replaces the mock,
+ * pick-any-account "Switch Account" panel with a real session backed by `POST /auth/login` and
+ * `GET /auth/me`. Gates its `children` behind authentication: renders the Login page instead of
+ * `children` until a real session exists, so every already-existing page under `AppLayout` can go
+ * on assuming `currentAccount` is always defined, exactly as before this pilot.
+ *
+ * On mount, attempts a silent `POST /auth/refresh` (reads the HttpOnly refresh-token cookie from a
+ * prior session, if any) before falling back to the Login page — an access token is never persisted
+ * client-side (see `apiClient.ts`), so every hard page reload re-derives one this way.
  */
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-  const [currentAccount, setCurrentAccount] = React.useState<MockLmsMember>(SWITCHABLE_ACCOUNTS[0]);
-  const value = React.useMemo<RoleContextValue>(
-    () => ({
-      currentAccount,
-      role: currentAccount.role,
-      switchAccount: (memberId: string) => {
-        const next = SWITCHABLE_ACCOUNTS.find((m) => m.id === memberId);
-        if (next) setCurrentAccount(next);
-      },
-      canManageMembers: currentAccount.role === 'MIS',
-      canAccessLoanApplications:
-        currentAccount.role === 'MIS' || currentAccount.role === 'Loan Operation Manager' || currentAccount.role === 'CRM',
-      canRevertLoanApplicationDecision: currentAccount.role === 'MIS',
-      canViewActivityLogs: currentAccount.role === 'MIS',
-      canCreateLoanAccount:
-        currentAccount.role === 'MIS' || currentAccount.role === 'Loan Operation Manager' || currentAccount.role === 'CRM',
-      canManageLmsConfiguration: currentAccount.role === 'MIS',
-    }),
-    [currentAccount],
+  const [status, setStatus] = React.useState<AuthStatus>('loading');
+  const [user, setUser] = React.useState<AuthenticatedUserView | null>(null);
+  const { loadPreferenceFor } = useTheme();
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const refreshed = await apiClient.post<RefreshResponse>('/auth/refresh');
+        setAccessToken(refreshed.accessToken);
+        const me = await apiClient.get<AuthenticatedUserView>('/auth/me');
+        if (cancelled) return;
+        setUser(me);
+        loadPreferenceFor(me.id);
+        setStatus('authenticated');
+      } catch {
+        if (cancelled) return;
+        setAccessToken(null);
+        loadPreferenceFor(null);
+        setStatus('unauthenticated');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Bootstrap runs once on mount only — loadPreferenceFor is a stable useCallback identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const login = React.useCallback(
+    async (email: string, password: string) => {
+      const result = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+      setAccessToken(result.accessToken);
+      setUser(result.user);
+      loadPreferenceFor(result.user.id);
+      setStatus('authenticated');
+    },
+    [loadPreferenceFor],
   );
+
+  const logout = React.useCallback(async () => {
+    try {
+      await apiClient.post('/auth/logout');
+    } catch {
+      // Best-effort — even if the network call fails, clear local session state below so the
+      // user isn't stuck "logged in" against a UI that can no longer reach the backend.
+    }
+    setAccessToken(null);
+    setUser(null);
+    loadPreferenceFor(null);
+    setStatus('unauthenticated');
+  }, [loadPreferenceFor]);
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated' || !user) {
+    return <LoginPage onLogin={login} />;
+  }
+
+  const currentAccount = toAccount(user);
+  const value: RoleContextValue = {
+    currentAccount,
+    role: currentAccount.role,
+    logout,
+    canManageMembers: currentAccount.roles.includes('MIS'),
+    canAccessLoanApplications: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+    canRevertLoanApplicationDecision: currentAccount.roles.includes('MIS'),
+    canViewActivityLogs: currentAccount.roles.includes('MIS'),
+    canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+  };
+
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
 
@@ -72,3 +149,6 @@ export function useRole(): RoleContextValue {
   if (!ctx) throw new Error('useRole must be used within a RoleProvider');
   return ctx;
 }
+
+/** Re-exported so call sites can narrow a caught error without importing apiClient directly. */
+export { ApiError };

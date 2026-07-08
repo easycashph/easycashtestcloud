@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
-import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoanListPage } from '@/pages/LoanListPage';
 import { LoanDetailPage } from '@/pages/LoanDetailPage';
@@ -18,19 +17,20 @@ import { CollectionReportPage } from '@/pages/CollectionReportPage';
 import { TransactionReportPage } from '@/pages/TransactionReportPage';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
-import { LmsConfigurationPage } from '@/pages/LmsConfigurationPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { AboutPage } from '@/pages/AboutPage';
 
 /**
- * Milestone 9.1 UI preview build (pre-CP13): every route below renders
- * against `src/lib/mockData.ts` only — nothing here calls `app/backend`.
- * No auth guard exists; `/login` is a static display screen the app never
- * actually requires passing through (see `LoginPage`'s own doc comment).
+ * Milestone 9.1 UI preview build, Stage 0/1 of the frontend↔backend wiring pilot (`docs/
+ * Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). Authentication is real (`RoleProvider`
+ * gates everything below behind a real session — see `roleContext.tsx`), Payment Recording is
+ * real (`PaymentRecordingPage`); every other route still renders against `src/lib/mockData.ts`
+ * only. `/login` is no longer a route: `RoleProvider` renders `LoginPage` in place of this whole
+ * tree whenever there's no active session, instead of requiring in-app navigation to reach it.
  */
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="loans" element={<LoanListPage />} />
@@ -47,9 +47,9 @@ export default function App() {
         <Route path="reports/loans" element={<LoanReportPage />} />
         <Route path="reports/collections" element={<CollectionReportPage />} />
         <Route path="reports/transactions" element={<TransactionReportPage />} />
+        <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<MemberListPage />} />
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />
-        <Route path="admin/configuration" element={<LmsConfigurationPage />} />
         <Route path="admin/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

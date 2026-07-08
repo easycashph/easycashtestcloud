@@ -41,17 +41,21 @@ The **Easycash Loan Management System Platform** is the enterprise digital lendi
 Sheets, a prior Mambu-based system, an SDevTech platform, and a MongoDB export) while preserving
 every validated business rule from that legacy data.
 
-Two tracks are being built **in parallel, deliberately not yet connected to each other**:
+Two tracks were built **in parallel, deliberately not connected to each other** — **until
+2026-07-08**, when the first real wiring pass connected a first slice of the two (see
+`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`):
 
 | Track | What it is | Status |
 |---|---|---|
 | **`app/backend`** | The real system — Clean Architecture, TypeScript, Express, Prisma/PostgreSQL schema, real financial calculation engine, real tests | Milestone 9.1, in progress, most-of-the-way built |
-| **`app/frontend`** | A CEO-facing **UI preview** against hand-authored mock data | Feature-rich, evolving daily, **zero API calls into the backend** |
+| **`app/frontend`** | A CEO-facing **UI preview**, mostly against hand-authored mock data | Feature-rich, evolving daily. **Real authentication and real Payment Recording** now call `app/backend`; every other page is still mock-only |
 
 This split is intentional: the frontend exists to validate layout, workflow, and business rules
 with the CEO *before* the corresponding backend capability is built or wired up. As of this
-writing, the backend has real HTTP endpoints for loan activation and payment recording (CP13) that
-the frontend does not yet call.
+writing, real login (`POST /auth/login`, session refresh) and real Payment Recording (`GET
+/loan-accounts`, `/repayment-schedule`, `POST /payments`) are wired; every other page — Dashboard,
+Loan Applications, Client Data, Loan Accounts list/detail, Reports — still reads `mockData.ts`
+only.
 
 ---
 
@@ -296,7 +300,8 @@ checkpoint (CP12) was blocked on a business decision, not a technical one — th
 2026-07-08 (ADR-007 §4, Option A: migrate all legacy loans as-is, flag the 79 non-reconciling ones
 for manual review), so only the engineering work of building CP12 itself remains. In parallel, a
 fast-moving, increasingly rich frontend UI preview has demonstrated the platform's look, feel, and
-workflow to the business, but remains entirely disconnected from the real backend that already
-exists to serve it. The single highest-leverage next step for the project as a whole is not more
-backend checkpoints or more frontend polish, but a deliberate, scoped pilot that wires one real
-screen end-to-end — closing the gap between the two tracks before it grows any wider.
+workflow to the business. **Update, 2026-07-08:** the first wiring pilot closed part of that gap the
+same day — real login and real Payment Recording now call the backend directly (see
+`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`); every other page remains mock-only.
+The single highest-leverage next step for the project as a whole is extending that same pattern to
+the rest of the frontend, one screen at a time, rather than a "big bang" cutover.

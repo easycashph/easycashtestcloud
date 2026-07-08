@@ -1,12 +1,52 @@
 # Frontend Changelog — Milestone 9.1 UI Preview Build
 
-Scope note: everything in this changelog is a **CEO-facing UI preview** built against
-hand-authored mock data in `src/lib/mockData.ts`. It exists to demonstrate layout, navigation, and
-interaction flow before the real backend HTTP API (`app/backend` CP13) is wired up. **No entry
-below touches `app/backend` or any real database.** See the "Preview Mode" banner rendered in the
-app itself, and the top-of-file comment in `src/lib/mockData.ts`, for the same disclosure.
+Scope note: most of this changelog is a **CEO-facing UI preview** built against hand-authored mock
+data in `src/lib/mockData.ts`, existing to demonstrate layout, navigation, and interaction flow
+before the real backend HTTP API is wired up. **Correction, 2026-07-08:** this stopped being
+universally true the same day — see the "Frontend↔Backend Wiring Pilot" entry below. Authentication
+and Payment Recording now call `app/backend` for real; every other page is still mock-only. The
+"Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
+data*, not the whole app anymore.
 
 ## 2026-07-08
+
+### Frontend↔Backend Wiring Pilot — real login and real Payment Recording (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`)
+The first two pieces of the frontend actually talking to `app/backend`, per the approved design
+doc's Stages 0 and 1:
+- **Real authentication.** New `src/lib/apiClient.ts` (in-memory access token, `credentials:
+  'include'`, transparent refresh-and-retry on a `401`). `roleContext.tsx` rewritten:
+  `RoleProvider` now gates the whole app behind a real session — `POST /auth/refresh` on mount,
+  `POST /auth/login`/`GET /auth/me` on sign-in — rendering the new `LoginPage` (Username, Password,
+  Login, a visibly non-functional "Forgot password?") instead of the app whenever there's no
+  session. The old mock "Switch Account" panel (`AccountSwitcher.tsx`) is gone, replaced by
+  `AccountMenu.tsx` — a real current-user menu with a real `POST /auth/logout`.
+- **Navigation restructure.** New `Configuration` nav group (Home → Loan → Collection →
+  Configuration → Administration), inserted before Administration. "LMS Configuration" renamed to
+  **Settings** and moved there.
+- **Settings page**, replacing `LmsConfigurationPage.tsx`: four tabs — User Profile, Security,
+  Theme Color, Appearance — **all personal, per-user preferences**, none MIS-restricted (an earlier
+  design draft assumed Theme Color/Appearance stayed shared/MIS-only; corrected before
+  implementation). User Profile shows the real signed-in user's name/email/role from `/auth/me`;
+  Security's "Change Password" form is mock-only (no backend endpoint exists yet). Theme Color/
+  Appearance are real, working per-user preferences — `theme-provider.tsx` now scopes its
+  `localStorage` keys per signed-in user id instead of one global key, switching on login/logout.
+  The old standalone dark/light toggle button next to the account menu is removed; Appearance now
+  has exactly one control surface (the Settings tab).
+- **Payment Recording is real.** `GET /loan-accounts`, `/repayment-schedule`, `/borrowers/:id`
+  replace `MOCK_LOANS`/`MOCK_INSTALLMENTS`; `POST /loan-accounts/:id/payments` (with a real
+  `Idempotency-Key`) replaces the `ComingSoonButton` placeholder, behind a confirm dialog. The
+  existing client-side `previewCrossInstallmentAllocation()` allocation-preview table is unchanged
+  — still a legitimate non-authoritative preview of the same rule the backend enforces for real.
+  Manual allocation mode has no backend equivalent, so it stays visible but disabled with an
+  explanatory note rather than being removed. `paymentMethod` display is now informational-only
+  (staff reference, not tied to any stored loan field or submitted to the API) — the real
+  `LoanAccount` has no such column.
+- Verified: `tsc`/`eslint` clean, and a live manual pass against a real backend + Postgres instance
+  (freshly seeded — the dev database had no branch/roles/users before this pilot) confirmed login,
+  the account menu, nav, Settings' User Profile tab, and Payment Recording's read path all render
+  correctly with real data and no console errors. The payment *submit* path is implemented against
+  the documented API contract but not yet exercised against a live loan (the dev database has no
+  loan accounts yet) — noted honestly rather than claimed as fully proven.
 
 ### Bug hunt: 5 issues found and fixed (see `docs/PROJECT_HANDOFF.md` §5 for full detail)
 A full-codebase read (not just `tsc`/`eslint`, which stayed clean) surfaced 5 concrete bugs beyond

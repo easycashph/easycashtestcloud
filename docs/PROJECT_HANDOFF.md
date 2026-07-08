@@ -8,6 +8,13 @@ track, **plus** the separate, mock-data-only `app/frontend` CEO-facing UI previe
 **Read this document in full before touching any code.** If anything here conflicts with what
 you observe in the repository, trust the repository and update this document.
 
+**2026-07-08 update — this document's "frontend/backend are separate, disconnected tracks"
+framing is now partially stale.** The first wiring pilot landed the same day: real login and real
+Payment Recording now call `app/backend` directly. See `docs/Architecture/
+FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for full detail and `LMS_PROJECT_SUMMARY.md` for a current
+top-level summary — both are more current than the rest of this document's frontend sections below,
+which still describe the pre-pilot, fully-mock state and have not been fully rewritten yet.
+
 ---
 
 ## 1. Current Project State

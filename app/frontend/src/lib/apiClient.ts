@@ -1,0 +1,133 @@
+/**
+ * Frontend↔Backend Wiring Pilot, Stage 0a (`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`).
+ *
+ * Thin `fetch` wrapper for the real `app/backend` HTTP API — the first code in this frontend that
+ * ever calls it. Deliberately NOT a generated client / not axios: the API surface being wired is
+ * still small (auth + one pilot screen), so a small hand-written wrapper is easier to reason about
+ * than a codegen step.
+ *
+ * Access token lives in memory only (a module-level variable), never `localStorage`/`sessionStorage`
+ * — mirrors the backend's own refresh-token discipline (HttpOnly cookie, never in a JS-readable
+ * store). This means a hard page reload always starts from `status: 'loading'` and re-derives a
+ * fresh access token via `/auth/refresh` (using the HttpOnly cookie), which is intentional, not a
+ * bug — see `roleContext.tsx`'s bootstrap effect.
+ */
+
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly ruleId?: string;
+
+  constructor(status: number, code: string, message: string, ruleId?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.ruleId = ruleId;
+  }
+}
+
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+/**
+ * De-duplicates concurrent refresh attempts: if three requests all get a 401 at the same moment,
+ * they must not each independently call `/auth/refresh` — the backend's refresh-token rotation
+ * treats a second concurrent use of the same refresh token as reuse (see backend `RefreshTokenUseCase`
+ * C-01 handling) and would revoke the session. All concurrent callers await the same in-flight promise.
+ */
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          accessToken = null;
+          return false;
+        }
+        const body = (await res.json()) as { accessToken: string };
+        accessToken = body.accessToken;
+        return true;
+      } catch {
+        accessToken = null;
+        return false;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
+interface ApiRequestInit extends Omit<RequestInit, 'body'> {
+  body?: unknown;
+  /** Extra headers beyond Authorization/Content-Type, e.g. Idempotency-Key. */
+  headers?: Record<string, string>;
+}
+
+async function rawRequest(path: string, init: ApiRequestInit): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const hasBody = init.body !== undefined;
+  if (hasBody && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: 'include',
+    body: hasBody ? JSON.stringify(init.body) : undefined,
+  });
+}
+
+/**
+ * Runs one API call, transparently refreshing and retrying exactly once on a 401 — the standard
+ * rotation-aware interceptor pattern this backend's cookie-based refresh flow expects. A second
+ * 401 (after a successful refresh) is a real auth failure, not retried again.
+ */
+async function apiRequest<T>(path: string, init: ApiRequestInit = {}, allowRefreshRetry = true): Promise<T> {
+  const res = await rawRequest(path, init);
+
+  if (res.status === 401 && allowRefreshRetry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return apiRequest<T>(path, init, false);
+    }
+  }
+
+  if (res.status === 204) return undefined as T;
+
+  const contentType = res.headers.get('content-type') ?? '';
+  const data: unknown = contentType.includes('application/json') ? await res.json() : undefined;
+
+  if (!res.ok) {
+    const errorBody = (data as { error?: { code?: string; message?: string; ruleId?: string } } | undefined)?.error;
+    throw new ApiError(
+      res.status,
+      errorBody?.code ?? 'UNKNOWN_ERROR',
+      errorBody?.message ?? 'Something went wrong. Please try again.',
+      errorBody?.ruleId,
+    );
+  }
+
+  return data as T;
+}
+
+export const apiClient = {
+  get: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'GET' }),
+  post: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
+    apiRequest<T>(path, { method: 'POST', body, headers }),
+};

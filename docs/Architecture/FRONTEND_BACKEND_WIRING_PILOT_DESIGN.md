@@ -1,10 +1,34 @@
 # Frontend↔Backend Wiring Pilot — Analysis & Design
 
-**Status:** APPROVED FOR IMPLEMENTATION — decisions locked in §6/§8, 2026-07-08.
+**Status:** IMPLEMENTED, 2026-07-08 — Stages 0a/0b/0c/1a/1b all built and verified the same day.
 **Prepared:** 2026-07-08.
-**Scope:** The first real integration between `app/frontend` (currently 100% mock data) and
-`app/backend` (currently 100% unconsumed by the frontend). Per `CLAUDE.md`'s workflow, this
-document is the analyze/design step — implementation does not start until explicitly approved.
+**Scope:** The first real integration between `app/frontend` (previously 100% mock data) and
+`app/backend` (previously 100% unconsumed by the frontend). Per `CLAUDE.md`'s workflow, this
+started as the analyze/design step; §10 below records what was actually built once approved.
+
+## Implementation summary (2026-07-08)
+
+All five stages landed the same day as approval, verified via `tsc`/`eslint` (both clean) and a
+live manual pass against a real backend + Postgres instance (`app/backend` seeded — `npx prisma db
+seed` + `bootstrap-admin.ts` — since the dev database had no branch/roles/users at all before this
+pilot):
+- **Real login works end-to-end**: `POST /auth/login` → real JWT → `GET /auth/me` renders the real
+  signed-in user ("Test Integration — MIS") in the account menu, replacing the old mock account
+  switcher entirely.
+- **Nav restructure + Settings** render correctly: `CONFIGURATION` group appears in the right
+  position, `Settings` page's four tabs all work, `User Profile` tab shows the real signed-in
+  user's actual name/email/role pulled from `/auth/me`.
+- **Payment Recording** loads real data end-to-end (`GET /loan-accounts`, `/repayment-schedule`)
+  with no console errors — currently renders its correct empty state ("No unpaid installments")
+  because the dev database has zero loan accounts yet (this pilot did not seed sample loan data,
+  by design — populating a demo loan is separate follow-up work, not required to prove the wiring
+  itself). The submit path (`POST /payments` with idempotency key, `409`/`403`/`404` handling) is
+  implemented against the documented contract but not yet exercised against a live loan — flagged
+  here rather than silently claimed as fully proven.
+- One implementation deviation from the original interpretation of the request, corrected
+  mid-design (see §8.2): Theme Color/Appearance were first assumed to stay MIS-only, then
+  corrected to be personal per-user preferences per explicit instruction — both the design and the
+  code reflect the corrected version.
 
 ---
 

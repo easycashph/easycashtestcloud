@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { AlertCircle, Search } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,16 +9,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ComingSoonButton } from '@/components/ComingSoonButton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS, MOCK_INSTALLMENTS, MOCK_LOANS } from '@/lib/mockData';
+import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
+import { apiClient, ApiError } from '@/lib/apiClient';
+import type { Borrower, LoanAccount, PaginatedResponse, ProcessPaymentResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 
 type AllocationMode = 'AUTOMATIC' | 'MANUAL';
+
+const PAYABLE_STATUSES: LoanAccount['status'][] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
 function parseAmount(value: string): number {
   const parsed = Number.parseFloat(value);
@@ -55,46 +68,85 @@ function getPreviewRowSortValue(
   }
 }
 
+/**
+ * Frontend↔Backend Wiring Pilot, Stage 1
+ * (`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). Real loan/installment data via
+ * `GET /loan-accounts`, `/repayment-schedule`, `/borrowers/:id`; real payment submission via
+ * `POST /loan-accounts/:id/payments` (idempotency-key protected). The allocation preview table
+ * itself is unchanged — `previewCrossInstallmentAllocation()` is a legitimate client-side preview
+ * of the same fees→penalty→interest→principal rule the backend enforces authoritatively; only its
+ * data source changed, from mock installments to real ones.
+ *
+ * Manual allocation mode has no backend equivalent (`ProcessPaymentUseCase` only ever runs the
+ * automatic engine) — per design §6 point 2, it stays visible but disabled, not removed.
+ */
 export function PaymentRecordingPage() {
   useLogPageView('Payment Recording');
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const preselected = searchParams.get('loanId');
-  // Recomputed fresh on every render (not a module-level constant) — MOCK_LOANS is mutated in
-  // place by createLoanAccountForClient()/activateLoanAccount(), so a stale snapshot taken once
-  // at import time would silently miss any loan account created/activated during this session,
-  // making `preselected` fail its membership check below and fall back to an unrelated loan.
-  const PAYABLE_LOANS = MOCK_LOANS.filter((l) => l.status === 'ACTIVE' || l.status === 'ACTIVE_IN_ARREARS');
-  const [loanId, setLoanId] = React.useState(preselected && PAYABLE_LOANS.some((l) => l.id === preselected) ? preselected : PAYABLE_LOANS[0]?.id ?? '');
+
+  const loansQuery = useQuery({
+    queryKey: ['loan-accounts', 'payable'],
+    queryFn: async () => {
+      const page = await apiClient.get<PaginatedResponse<LoanAccount>>('/loan-accounts?limit=200');
+      return page.items.filter((l) => PAYABLE_STATUSES.includes(l.status));
+    },
+  });
+  const payableLoans = loansQuery.data ?? [];
+
+  const borrowerIds = React.useMemo(() => [...new Set((loansQuery.data ?? []).map((l) => l.borrowerId))], [loansQuery.data]);
+  const borrowersQuery = useQuery({
+    queryKey: ['borrowers', borrowerIds],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        borrowerIds.map(async (id) => [id, await apiClient.get<Borrower>(`/borrowers/${id}`)] as const),
+      );
+      return new Map(entries);
+    },
+    enabled: borrowerIds.length > 0,
+  });
+  const borrowerName = (borrowerId: string) => {
+    const b = borrowersQuery.data?.get(borrowerId);
+    return b ? `${b.firstName} ${b.lastName}` : 'Loading…';
+  };
+
+  const [loanId, setLoanId] = React.useState('');
+  React.useEffect(() => {
+    if (loanId || payableLoans.length === 0) return;
+    setLoanId(preselected && payableLoans.some((l) => l.id === preselected) ? preselected : payableLoans[0]!.id);
+    // Runs once payableLoans first becomes available — intentionally not re-running on every
+    // payableLoans/preselected change, so a staff member's in-progress selection is never
+    // silently overwritten by a background refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payableLoans.length]);
+
   const [loanSearch, setLoanSearch] = React.useState('');
   const [loanStatusFilter, setLoanStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS'>('ALL');
 
-  // Narrows the loan-account dropdown only — never the allocation math below. The currently
-  // selected loan is always kept in the options (pinned on top) so the Select never shows an
-  // empty value just because the search/filter excluded it.
-  const searchedLoans = PAYABLE_LOANS.filter((l) => {
+  const searchedLoans = payableLoans.filter((l) => {
     const query = loanSearch.trim().toLowerCase();
-    const matchesSearch =
-      query.length === 0 || l.borrowerName.toLowerCase().includes(query) || l.loanCode.toLowerCase().includes(query);
+    const matchesSearch = query.length === 0 || borrowerName(l.borrowerId).toLowerCase().includes(query) || l.loanCode.toLowerCase().includes(query);
     const matchesStatus = loanStatusFilter === 'ALL' || l.status === loanStatusFilter;
     return matchesSearch && matchesStatus;
   });
-  const selectedLoan = PAYABLE_LOANS.find((l) => l.id === loanId);
+  const selectedLoan = payableLoans.find((l) => l.id === loanId);
   const loanOptions =
     selectedLoan && !searchedLoans.some((l) => l.id === selectedLoan.id) ? [selectedLoan, ...searchedLoans] : searchedLoans;
+
   const [amount, setAmount] = React.useState('1000.00');
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
-  const [manualPrincipal, setManualPrincipal] = React.useState('0.00');
-  const [manualInterest, setManualInterest] = React.useState('0.00');
-  const [manualPenalty, setManualPenalty] = React.useState('0.00');
-  const [manualFees, setManualFees] = React.useState('0.00');
+  const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const idempotencyKeyRef = React.useRef<string | null>(null);
 
-  const loan = PAYABLE_LOANS.find((l) => l.id === loanId);
-  const [paymentMethod, setPaymentMethod] = React.useState(loan?.paymentMethod ?? ACTIVE_PAYMENT_METHODS[0]!.code);
-
-  React.useEffect(() => {
-    if (loan) setPaymentMethod(loan.paymentMethod);
-  }, [loan]);
-  const unpaidInstallments = (MOCK_INSTALLMENTS[loanId] ?? [])
+  const installmentsQuery = useQuery({
+    queryKey: ['repayment-schedule', loanId],
+    queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
+    enabled: Boolean(loanId),
+  });
+  const unpaidInstallments = (installmentsQuery.data?.items ?? [])
     .filter((i) => i.status !== 'PAID')
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
@@ -105,14 +157,13 @@ export function PaymentRecordingPage() {
       id: i.id,
       installmentNumber: i.installmentNumber,
       remainingDue: {
-        feesDue: Math.max(0, i.due.fees - i.paid.fees),
-        penaltyDue: Math.max(0, i.due.penalty - i.paid.penalty),
-        interestDue: Math.max(0, i.due.interest - i.paid.interest),
-        principalDue: Math.max(0, i.due.principal - i.paid.principal),
+        feesDue: Math.max(0, parseAmount(i.due.fees) - parseAmount(i.paid.fees)),
+        penaltyDue: Math.max(0, parseAmount(i.due.penalty) - parseAmount(i.paid.penalty)),
+        interestDue: Math.max(0, parseAmount(i.due.interest) - parseAmount(i.paid.interest)),
+        principalDue: Math.max(0, parseAmount(i.due.principal) - parseAmount(i.paid.principal)),
       },
     })),
   );
-  // Display-only sort — see getPreviewRowSortValue's own doc comment.
   const previewRowsWithDueDate = preview.rows.map((row) => ({
     ...row,
     dueDate: unpaidInstallments.find((i) => i.id === row.installmentId)?.dueDate ?? '',
@@ -133,35 +184,58 @@ export function PaymentRecordingPage() {
     { fees: 0, penalty: 0, interest: 0, principal: 0 },
   );
 
-  // Manual allocation (mock only): the staff types in exactly how much of
-  // the payment goes to each component, instead of the automatic
-  // fees -> penalty -> interest -> principal engine deciding.
-  const manualTotals = {
-    principal: parseAmount(manualPrincipal),
-    interest: parseAmount(manualInterest),
-    penalty: parseAmount(manualPenalty),
-    fees: parseAmount(manualFees),
-  };
-  const manualSum = manualTotals.principal + manualTotals.interest + manualTotals.penalty + manualTotals.fees;
-  const manualRemainder = Math.round((paymentAmount - manualSum) * 100) / 100;
-  const manualMismatch = Math.abs(manualRemainder) > 0.004;
+  const paymentMutation = useMutation({
+    mutationFn: async () => {
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
+      return apiClient.post<ProcessPaymentResponse>(
+        `/loan-accounts/${loanId}/payments`,
+        { paymentAmount: amount },
+        { 'Idempotency-Key': idempotencyKeyRef.current },
+      );
+    },
+    onSuccess: () => {
+      idempotencyKeyRef.current = null;
+      setConfirmOpen(false);
+      setSubmitError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
+      void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        if (error.status === 409) {
+          setSubmitError('This loan was just updated by another action (or this payment is already being processed). Refresh and try again.');
+        } else if (error.status === 403) {
+          setSubmitError("You don't have permission to record a payment on this loan.");
+        } else {
+          setSubmitError(error.message);
+        }
+      } else {
+        setSubmitError('Could not reach the server. Check your connection and try again.');
+      }
+    },
+  });
 
-  function prefillManualFromAutomatic() {
-    setManualPrincipal(totals.principal.toFixed(2));
-    setManualInterest(totals.interest.toFixed(2));
-    setManualPenalty(totals.penalty.toFixed(2));
-    setManualFees(totals.fees.toFixed(2));
-  }
+  const openConfirm = () => {
+    idempotencyKeyRef.current = null;
+    setSubmitError(null);
+    setConfirmOpen(true);
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
         <p className="text-sm text-muted-foreground">
-          Allocation preview only — Automatic mode: fees → penalty → interest → principal, oldest installment first (ADR-009). Manual
-          mode lets staff type in the exact split. No payment is actually posted from this screen yet.
+          Live — posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
+          oldest installment first (ADR-009).
         </p>
       </div>
+
+      {loansQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan accounts. Is the backend running?
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -199,20 +273,22 @@ export function PaymentRecordingPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="loan-select">Loan account</Label>
-              <Select value={loanId} onValueChange={setLoanId}>
+              <Select value={loanId} onValueChange={setLoanId} disabled={loansQuery.isLoading || payableLoans.length === 0}>
                 <SelectTrigger id="loan-select">
-                  <SelectValue placeholder="Select a loan" />
+                  <SelectValue placeholder={loansQuery.isLoading ? 'Loading…' : 'Select a loan'} />
                 </SelectTrigger>
                 <SelectContent>
                   {loanOptions.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.borrowerName} — {l.loanCode}
+                      {borrowerName(l.borrowerId)} — {l.loanCode}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {searchedLoans.length} of {PAYABLE_LOANS.length} payable loan accounts match.
+                {loansQuery.isLoading
+                  ? 'Loading loan accounts…'
+                  : `${searchedLoans.length} of ${payableLoans.length} payable loan accounts match.`}
               </p>
             </div>
 
@@ -226,93 +302,17 @@ export function PaymentRecordingPage() {
               <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="AUTOMATIC">Automatic</TabsTrigger>
-                  <TabsTrigger value="MANUAL">Manual</TabsTrigger>
+                  <TabsTrigger value="MANUAL" disabled>
+                    Manual
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
               <p className="text-xs text-muted-foreground">
                 {allocationMode === 'AUTOMATIC'
                   ? 'System splits the payment automatically (fees → penalty → interest → principal).'
-                  : 'Staff manually enters how much of the payment applies to each component.'}
+                  : 'Not yet supported in live mode — automatic allocation only.'}
               </p>
             </div>
-
-            {allocationMode === 'MANUAL' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground">Manual split</p>
-                  <button
-                    type="button"
-                    onClick={prefillManualFromAutomatic}
-                    className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-                  >
-                    Copy automatic split
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="manual-principal" className="text-xs">
-                      Principal
-                    </Label>
-                    <Input
-                      id="manual-principal"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={manualPrincipal}
-                      onChange={(e) => setManualPrincipal(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="manual-interest" className="text-xs">
-                      Interest
-                    </Label>
-                    <Input
-                      id="manual-interest"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={manualInterest}
-                      onChange={(e) => setManualInterest(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="manual-penalty" className="text-xs">
-                      Penalty
-                    </Label>
-                    <Input
-                      id="manual-penalty"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={manualPenalty}
-                      onChange={(e) => setManualPenalty(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="manual-fees" className="text-xs">
-                      Fees
-                    </Label>
-                    <Input id="manual-fees" type="number" min="0" step="0.01" value={manualFees} onChange={(e) => setManualFees(e.target.value)} />
-                  </div>
-                </div>
-
-                <div
-                  className={`rounded-md border px-2 py-1.5 text-xs ${
-                    manualMismatch ? 'border-warning/40 bg-warning/10 text-warning-foreground' : 'border-border bg-secondary/40 text-muted-foreground'
-                  }`}
-                >
-                  {manualMismatch ? (
-                    <>
-                      Manual split ({formatPeso(manualSum)}) does not equal the payment amount ({formatPeso(paymentAmount)}) — difference of{' '}
-                      {formatPeso(Math.abs(manualRemainder))} {manualRemainder > 0 ? 'unallocated' : 'over-allocated'}.
-                    </>
-                  ) : (
-                    <>Manual split matches the payment amount exactly.</>
-                  )}
-                </div>
-              </div>
-            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="payment-method">Mode of payment</Label>
@@ -328,33 +328,22 @@ export function PaymentRecordingPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {paymentMethod === 'AUTO_DEBIT' && (
-                <p className="rounded-md border bg-secondary/40 px-2 py-1.5 text-xs text-muted-foreground">
-                  ATM Card on File — client consent-based; Easycash debits the account directly.
-                </p>
-              )}
-              {paymentMethod === 'CASH' && loan?.collectionAgentName && (
-                <p className="rounded-md border bg-secondary/40 px-2 py-1.5 text-xs text-muted-foreground">
-                  Assigned Collection Agent (door-to-door): <span className="font-medium text-foreground">{loan.collectionAgentName}</span>
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">Recorded for staff reference only — not yet a field on the backend loan account.</p>
             </div>
 
-            {loan && (
+            {selectedLoan && (
               <div className="rounded-md border bg-secondary/40 p-3 text-xs text-muted-foreground">
                 <p>
-                  <span className="font-medium text-foreground">{loan.borrowerName}</span> — {loan.productType}
+                  <span className="font-medium text-foreground">{borrowerName(selectedLoan.borrowerId)}</span> — {selectedLoan.loanCode}
                 </p>
-                <p className="mt-1">Collections balance: {formatPeso(loan.collectionsBalance)}</p>
-                <p>Accounting balance: {formatPeso(loan.accountingBalance)}</p>
+                <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
+                <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
               </div>
             )}
 
-            <ComingSoonButton className="w-full">Submit Payment</ComingSoonButton>
-            <p className="text-xs text-muted-foreground">
-              Payment posting requires CP13 (HTTP exposure), not yet built. This form only demonstrates the allocation preview —
-              Automatic (ADR-009 engine) or Manual (staff-entered split).
-            </p>
+            <Button className="w-full" disabled={!loanId || paymentAmount <= 0} onClick={openConfirm}>
+              Submit Payment
+            </Button>
           </CardContent>
         </Card>
 
@@ -362,45 +351,13 @@ export function PaymentRecordingPage() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Allocation Preview</CardTitle>
-              <CardDescription>
-                {allocationMode === 'AUTOMATIC' ? 'Per-installment split for the entered amount' : 'Manually entered component split'}
-              </CardDescription>
+              <CardDescription>Per-installment split for the entered amount</CardDescription>
             </div>
-            <Badge variant="outline">Simulated client-side — not the real engine</Badge>
+            <Badge variant="outline">Preview — final split is computed by the server on submit</Badge>
           </CardHeader>
           <CardContent>
-            {allocationMode === 'MANUAL' ? (
-              <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Fees</p>
-                    <p className="text-sm font-semibold">{formatPeso(manualTotals.fees)}</p>
-                  </div>
-                  <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Penalty</p>
-                    <p className="text-sm font-semibold">{formatPeso(manualTotals.penalty)}</p>
-                  </div>
-                  <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Interest</p>
-                    <p className="text-sm font-semibold">{formatPeso(manualTotals.interest)}</p>
-                  </div>
-                  <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Principal</p>
-                    <p className="text-sm font-semibold">{formatPeso(manualTotals.principal)}</p>
-                  </div>
-                  <div
-                    className={`rounded-md border p-2 text-center ${manualMismatch ? 'border-warning/40 bg-warning/10' : ''}`}
-                  >
-                    <p className="text-xs text-muted-foreground">Unallocated</p>
-                    <p className="text-sm font-semibold">{formatPeso(manualRemainder)}</p>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Manual entry — the staff-typed split above, not the automatic fees → penalty → interest → principal engine (ADR-009).
-                  This does not apply against specific installments in this preview; the real posting logic (once CP13 is wired to this
-                  screen) would still need to decide which installment(s) each manually-entered component is applied to.
-                </p>
-              </>
+            {installmentsQuery.isLoading ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Loading installments…</p>
             ) : unpaidInstallments.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">No unpaid installments for this loan.</p>
             ) : (
@@ -417,28 +374,13 @@ export function PaymentRecordingPage() {
                       <SortableTableHead sortKey="feesApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
                         Fees
                       </SortableTableHead>
-                      <SortableTableHead
-                        sortKey="penaltyApplied"
-                        currentSort={previewSort}
-                        onSort={togglePreviewSort}
-                        className="text-right"
-                      >
+                      <SortableTableHead sortKey="penaltyApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
                         Penalty
                       </SortableTableHead>
-                      <SortableTableHead
-                        sortKey="interestApplied"
-                        currentSort={previewSort}
-                        onSort={togglePreviewSort}
-                        className="text-right"
-                      >
+                      <SortableTableHead sortKey="interestApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
                         Interest
                       </SortableTableHead>
-                      <SortableTableHead
-                        sortKey="principalApplied"
-                        currentSort={previewSort}
-                        onSort={togglePreviewSort}
-                        className="text-right"
-                      >
+                      <SortableTableHead sortKey="principalApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
                         Principal
                       </SortableTableHead>
                     </TableRow>
@@ -487,12 +429,6 @@ export function PaymentRecordingPage() {
                     <p className="text-sm font-semibold">{formatPeso(preview.remainder)}</p>
                   </div>
                 </div>
-                {preview.remainder > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Remainder after exhausting all unpaid installments shown — overpayment disposition is still{' '}
-                    <span className="font-medium">STATUS: UNRESOLVED</span> per CALCULATION_ENGINE_SPEC.md §11, not invented here.
-                  </p>
-                )}
               </>
             )}
           </CardContent>
@@ -500,6 +436,32 @@ export function PaymentRecordingPage() {
       </div>
 
       <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Payment Recording')} title="Recent Activity — Payment Recording" />
+
+      <Dialog open={confirmOpen} onOpenChange={(open) => !paymentMutation.isPending && setConfirmOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Payment</DialogTitle>
+            <DialogDescription>
+              Post {formatPeso(paymentAmount)} against {selectedLoan ? `${borrowerName(selectedLoan.borrowerId)} — ${selectedLoan.loanCode}` : 'this loan'}?
+              This cannot be undone from this screen.
+            </DialogDescription>
+          </DialogHeader>
+          {submitError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={paymentMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={() => paymentMutation.mutate()} disabled={paymentMutation.isPending}>
+              {paymentMutation.isPending ? 'Posting…' : 'Confirm Payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
