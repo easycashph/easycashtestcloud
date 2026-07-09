@@ -483,6 +483,51 @@ model BorrowerGovernmentId {
   @@map("borrower_government_ids")
 }
 
+/// Philippine Standard Geographic Code reference data — read-only lookup tables imported from the
+/// legacy `db-address-api` Mongo dump (scripts/import-psgc-reference-data.ts). Used to decode the
+/// raw PSGC codes some legacy borrower addresses were stored as (see scripts/fix-coded-addresses.ts)
+/// and, going forward, to back a real cascading Region -> Province -> City/Municipality -> Barangay
+/// picker instead of free-text entry.
+model PsgcRegion {
+  code      String         @id
+  name      String
+  provinces PsgcProvince[]
+
+  @@map("psgc_regions")
+}
+
+model PsgcProvince {
+  code       String                 @id
+  name       String
+  regionCode String
+  region     PsgcRegion             @relation(fields: [regionCode], references: [code])
+  cities     PsgcCityMunicipality[]
+
+  @@index([regionCode])
+  @@map("psgc_provinces")
+}
+
+model PsgcCityMunicipality {
+  code         String         @id
+  name         String
+  provinceCode String
+  province     PsgcProvince   @relation(fields: [provinceCode], references: [code])
+  barangays    PsgcBarangay[]
+
+  @@index([provinceCode])
+  @@map("psgc_city_municipalities")
+}
+
+model PsgcBarangay {
+  code                 String               @id
+  name                 String
+  cityMunicipalityCode String
+  cityMunicipality     PsgcCityMunicipality @relation(fields: [cityMunicipalityCode], references: [code])
+
+  @@index([cityMunicipalityCode])
+  @@map("psgc_barangays")
+}
+
 /// ADR-014: polymorphic owner (Borrower or Co-Borrower) — a direct sample
 /// cross-reference during Phase 0 exploration showed an address attached
 /// to a Co-Borrower's own ID, not only to a Borrower.

@@ -231,7 +231,7 @@ describe('PrismaLoanAccountRepository', () => {
       await repo.findMany({ limit: 25 });
 
       const callArgs = loanAccountOps.findMany.mock.calls[0]?.[0];
-      expect(callArgs.where).toBeUndefined();
+      expect(callArgs.where).toEqual({});
     });
 
     it('omits cursor/skip on the first page', async () => {

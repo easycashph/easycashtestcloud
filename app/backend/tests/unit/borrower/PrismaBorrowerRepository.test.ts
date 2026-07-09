@@ -120,7 +120,7 @@ describe('PrismaBorrowerRepository', () => {
       await repo.findMany({ limit: 20 });
 
       const callArgs = borrowerOps.findMany.mock.calls[0]?.[0];
-      expect(callArgs.where).toBeUndefined();
+      expect(callArgs.where).toEqual({});
     });
 
     it('omits cursor/skip on the first page', async () => {
