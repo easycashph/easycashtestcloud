@@ -7,12 +7,15 @@
 export interface UserRecord {
   id: string;
   branchId: string;
+  branchName: string;
   email: string;
   passwordHash: string;
   firstName: string;
   lastName: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   roles: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface CreateUserInput {
@@ -24,9 +27,24 @@ export interface CreateUserInput {
   roleNames: string[];
 }
 
+export interface FindManyUsersOptions {
+  limit: number;
+  cursor?: string;
+}
+
+export interface UpdateUserInput {
+  firstName?: string;
+  lastName?: string;
+  branchId?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  roleNames?: string[];
+}
+
 export interface IUserRepository {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
+  findMany(options: FindManyUsersOptions): Promise<UserRecord[]>;
   create(input: CreateUserInput): Promise<UserRecord>;
+  update(id: string, patch: UpdateUserInput): Promise<UserRecord>;
   hasAnyUserWithRole(roleName: string): Promise<boolean>;
 }

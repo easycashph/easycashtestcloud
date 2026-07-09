@@ -20,12 +20,15 @@ const { RoleNotFoundError } = await import('@modules/identity/application/errors
 const baseUserRow = {
   id: 'user-1',
   branchId: 'branch-1',
+  branch: { name: 'Manila' },
   email: 'officer@easycash.ph',
   passwordHash: 'hash',
   firstName: 'Ana',
   lastName: 'Reyes',
   status: 'ACTIVE' as const,
   roles: [{ role: { name: 'CRM' } }],
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
 
 describe('PrismaUserRepository', () => {

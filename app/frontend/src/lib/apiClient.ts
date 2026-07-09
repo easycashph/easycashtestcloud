@@ -130,6 +130,8 @@ export const apiClient = {
   get: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
     apiRequest<T>(path, { method: 'POST', body, headers }),
+  patch: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
+    apiRequest<T>(path, { method: 'PATCH', body, headers }),
 };
 
 interface CursorPage<T> {

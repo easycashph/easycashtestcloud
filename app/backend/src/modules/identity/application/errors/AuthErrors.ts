@@ -90,6 +90,13 @@ export class WeakPasswordError extends DomainError {
  * this reflects a server-side data/configuration problem (missing seed
  * data), not a client input mistake.
  */
+export class EmailAlreadyInUseError extends DomainError {
+  constructor(email: string) {
+    super('EMAIL_ALREADY_IN_USE', `A user with email "${email}" already exists.`, undefined, 409);
+    this.name = 'EmailAlreadyInUseError';
+  }
+}
+
 export class RoleNotFoundError extends DomainError {
   constructor(missingRoleNames: string[]) {
     super(

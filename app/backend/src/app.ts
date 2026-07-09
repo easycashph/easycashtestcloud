@@ -67,6 +67,10 @@ import { PrismaLoanApplicationRepository } from '@modules/loan-application/infra
 import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
 import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
+import { createUserRouter } from '@modules/identity/interface/http/userRouter';
+import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
+import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
+import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -140,6 +144,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1/auth', authRouter);
+
+  // --- identity module wiring: staff/user administration (Member Details) ---
+  const userRouter = createUserRouter(
+    {
+      listUsersUseCase: new ListUsersUseCase({ userRepository }),
+      createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher }),
+      updateUserUseCase: new UpdateUserUseCase({ userRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', userRouter);
 
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
   const borrowerRepository = new PrismaBorrowerRepository();

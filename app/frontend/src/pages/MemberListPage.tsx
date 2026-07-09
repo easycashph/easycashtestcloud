@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Lock, Pencil, Plus } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, Lock, Pencil, Plus } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,39 +15,67 @@ import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { emptyDraftMember, logActivity, MOCK_ACTIVITY_LOGS, MOCK_LMS_MEMBERS, type LmsRole, type MockLmsMember } from '@/lib/mockData';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import type { CreateUserRequest, UpdateUserRequest, User, UserStatus } from '@/lib/userApiTypes';
+import type { LmsRole } from '@/lib/mockData';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate } from '@/lib/utils';
 
-function getSortValue(member: MockLmsMember, key: string): string | number | Date | null | undefined {
+const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
+
+function getSortValue(user: User, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'name':
-      return member.name;
+      return user.fullName;
     case 'role':
-      return member.role;
+      return user.roles[0] ?? '';
     case 'branchName':
-      return member.branchName;
+      return user.branchName;
     case 'email':
-      return member.email;
+      return user.email;
     case 'status':
-      return member.status;
-    case 'lastLoginAt':
-      return member.lastLoginAt ? new Date(member.lastLoginAt) : null;
+      return user.status;
+    case 'createdAt':
+      return new Date(user.createdAt);
     default:
       return undefined;
   }
 }
 
-function MemberForm({ value, onChange }: { value: MockLmsMember; onChange: (next: MockLmsMember) => void }) {
+interface MemberDraft {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  role: LmsRole;
+  status: UserStatus;
+}
+
+function emptyDraft(): MemberDraft {
+  return { firstName: '', lastName: '', email: '', password: '', role: 'Collection Officer', status: 'ACTIVE' };
+}
+
+function MemberForm({ value, onChange, showPassword }: { value: MemberDraft; onChange: (next: MemberDraft) => void; showPassword: boolean }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-1.5 sm:col-span-2">
-        <Label>Full Name</Label>
-        <Input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} />
+      <div className="space-y-1.5">
+        <Label>First Name</Label>
+        <Input value={value.firstName} onChange={(e) => onChange({ ...value, firstName: e.target.value })} />
       </div>
       <div className="space-y-1.5">
-        <Label>Email</Label>
-        <Input value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} />
+        <Label>Last Name</Label>
+        <Input value={value.lastName} onChange={(e) => onChange({ ...value, lastName: e.target.value })} />
       </div>
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label>Email</Label>
+        <Input type="email" value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} />
+      </div>
+      {showPassword && (
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label>Temporary Password</Label>
+          <Input type="password" value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label>Role</Label>
         <Select value={value.role} onValueChange={(v) => onChange({ ...value, role: v as LmsRole })}>
@@ -54,24 +83,24 @@ function MemberForm({ value, onChange }: { value: MockLmsMember; onChange: (next
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="MIS">MIS</SelectItem>
-            <SelectItem value="Loan Operation Manager">Loan Operation Manager</SelectItem>
-            <SelectItem value="CRM">CRM</SelectItem>
-            <SelectItem value="Finance">Finance</SelectItem>
-            <SelectItem value="Accounting">Accounting</SelectItem>
-            <SelectItem value="Collection Officer">Collection Officer</SelectItem>
+            {LMS_ROLES.map((r) => (
+              <SelectItem key={r} value={r}>
+                {r}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-1.5">
         <Label>Status</Label>
-        <Select value={value.status} onValueChange={(v) => onChange({ ...value, status: v as MockLmsMember['status'] })}>
+        <Select value={value.status} onValueChange={(v) => onChange({ ...value, status: v as UserStatus })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ACTIVE">Active</SelectItem>
-            <SelectItem value="DISABLED">Disabled</SelectItem>
+            <SelectItem value="INACTIVE">Inactive</SelectItem>
+            <SelectItem value="SUSPENDED">Suspended</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -79,43 +108,75 @@ function MemberForm({ value, onChange }: { value: MockLmsMember; onChange: (next
   );
 }
 
+/**
+ * Wired to the real backend (`GET/POST /users`, `PATCH /users/:id`). New members are created in
+ * the signed-in admin's own branch — there's no branch-picker endpoint yet, so branch reassignment
+ * isn't offered here either; only name, email, role, and status are editable per the backend's
+ * current `UpdateUserInput` shape.
+ */
 export function MemberListPage() {
   useLogPageView('Member Details');
   const { canManageMembers, role, currentAccount } = useRole();
-  const [members, setMembers] = React.useState<MockLmsMember[]>(MOCK_LMS_MEMBERS);
+  const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
-  const [draft, setDraft] = React.useState<MockLmsMember>(emptyDraftMember());
-  const [editingMember, setEditingMember] = React.useState<MockLmsMember | null>(null);
-  const { sorted, sort, toggleSort } = useSortableTable(members, getSortValue, { key: 'lastLoginAt', direction: 'desc' });
+  const [draft, setDraft] = React.useState<MemberDraft>(emptyDraft());
+  const [editingUser, setEditingUser] = React.useState<User | null>(null);
+  const [editDraft, setEditDraft] = React.useState<MemberDraft>(emptyDraft());
+
+  const usersQuery = useQuery({
+    queryKey: ['users', 'all'],
+    queryFn: () => fetchAllPages<User>('/users'),
+  });
+  const members = usersQuery.data ?? [];
+  const { sorted, sort, toggleSort } = useSortableTable(members, getSortValue, { key: 'createdAt', direction: 'desc' });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<User>('/users', {
+        branchId: currentAccount.branchId,
+        email: draft.email,
+        password: draft.password,
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+        roleNames: [draft.role],
+      } satisfies CreateUserRequest),
+    onSuccess: () => {
+      setAddOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['users', 'all'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () => {
+      if (!editingUser) return Promise.reject(new Error('No member selected'));
+      return apiClient.patch<User>(`/users/${editingUser.id}`, {
+        firstName: editDraft.firstName,
+        lastName: editDraft.lastName,
+        status: editDraft.status,
+        roleNames: [editDraft.role],
+      } satisfies UpdateUserRequest);
+    },
+    onSuccess: () => {
+      setEditingUser(null);
+      queryClient.invalidateQueries({ queryKey: ['users', 'all'] });
+    },
+  });
 
   const openAdd = () => {
-    setDraft(emptyDraftMember());
+    setDraft(emptyDraft());
     setAddOpen(true);
   };
 
-  const saveNewMember = () => {
-    setMembers((prev) => [...prev, draft]);
-    setAddOpen(false);
-    logActivity({
-      userName: currentAccount.name,
-      action: 'ADD_MEMBER',
-      entityType: 'LmsMember',
-      entityId: draft.email || draft.name,
-      at: new Date().toISOString(),
+  const openEdit = (user: User) => {
+    setEditingUser(user);
+    setEditDraft({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      password: '',
+      role: (user.roles[0] as LmsRole) ?? 'Collection Officer',
+      status: user.status,
     });
-  };
-
-  const saveEditedMember = () => {
-    if (!editingMember) return;
-    setMembers((prev) => prev.map((m) => (m.id === editingMember.id ? editingMember : m)));
-    logActivity({
-      userName: currentAccount.name,
-      action: 'EDIT_MEMBER',
-      entityType: 'LmsMember',
-      entityId: editingMember.email,
-      at: new Date().toISOString(),
-    });
-    setEditingMember(null);
   };
 
   return (
@@ -141,12 +202,16 @@ export function MemberListPage() {
         )}
       </div>
 
+      {usersQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load staff accounts. Is the backend running?
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Staff Accounts</CardTitle>
-          <CardDescription>
-            Policy preview: use "Switch Account" in the top bar to see Add/Edit actions appear or disappear live.
-          </CardDescription>
+          <CardDescription>{usersQuery.isLoading ? 'Loading…' : `${members.length} accounts, sorted by newest first.`}</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -167,20 +232,20 @@ export function MemberListPage() {
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Status
                 </SortableTableHead>
-                <SortableTableHead sortKey="lastLoginAt" currentSort={sort} onSort={toggleSort} isDateColumn>
-                  Last Login
+                <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Created
                 </SortableTableHead>
                 {canManageMembers && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((member) => (
-                <TableRow key={member.id}>
+              {sorted.map((user) => (
+                <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-7 w-7">
                         <AvatarFallback className="text-xs">
-                          {member.name
+                          {user.fullName
                             .split(' ')
                             .filter(Boolean)
                             .map((p) => p[0])
@@ -189,31 +254,36 @@ export function MemberListPage() {
                             .toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">{member.name}</span>
+                      <span className="font-medium">{user.fullName}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={member.role === 'MIS' ? 'default' : 'outline'}>{member.role}</Badge>
+                    <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>{user.roles.join(', ') || '—'}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{member.branchName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{member.email}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{user.branchName}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
                   <TableCell>
-                    <Badge variant={member.status === 'ACTIVE' ? 'success' : 'secondary'}>
-                      {member.status === 'ACTIVE' ? 'Active' : 'Disabled'}
+                    <Badge variant={user.status === 'ACTIVE' ? 'success' : user.status === 'SUSPENDED' ? 'destructive' : 'secondary'}>
+                      {user.status === 'ACTIVE' ? 'Active' : user.status === 'SUSPENDED' ? 'Suspended' : 'Inactive'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {member.lastLoginAt ? formatDate(member.lastLoginAt) : 'Never'}
-                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
                   {canManageMembers && (
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => setEditingMember(member)}>
+                      <Button variant="outline" size="sm" onClick={() => openEdit(user)}>
                         <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
                       </Button>
                     </TableCell>
                   )}
                 </TableRow>
               ))}
+              {sorted.length === 0 && !usersQuery.isLoading && (
+                <TableRow>
+                  <TableCell colSpan={canManageMembers ? 7 : 6} className="py-8 text-center text-sm text-muted-foreground">
+                    No staff accounts found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -225,32 +295,49 @@ export function MemberListPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Member</DialogTitle>
-            <DialogDescription>Preview only — added members are held in this browser tab and are not saved anywhere.</DialogDescription>
+            <DialogDescription>Creates a real staff account in your branch.</DialogDescription>
           </DialogHeader>
-          <MemberForm value={draft} onChange={setDraft} />
+          <MemberForm value={draft} onChange={setDraft} showPassword />
+          {createMutation.isError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the account.'}
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveNewMember} disabled={!draft.name || !draft.email}>
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={!draft.firstName || !draft.lastName || !draft.email || !draft.password || createMutation.isPending}
+            >
               Add Member
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editingMember !== null} onOpenChange={(open) => !open && setEditingMember(null)}>
+      <Dialog open={editingUser !== null} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit / Customize Member Details</DialogTitle>
-            <DialogDescription>Preview only — changes update this browser tab's in-memory copy and are not saved anywhere.</DialogDescription>
+            <DialogTitle>Edit Member Details</DialogTitle>
+            <DialogDescription>Updates the real staff account. Email and branch cannot be changed here.</DialogDescription>
           </DialogHeader>
-          {editingMember && <MemberForm value={editingMember} onChange={setEditingMember} />}
+          {editingUser && <MemberForm value={editDraft} onChange={setEditDraft} showPassword={false} />}
+          {updateMutation.isError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {updateMutation.error instanceof Error ? updateMutation.error.message : 'Could not update the account.'}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingMember(null)}>
+            <Button variant="outline" onClick={() => setEditingUser(null)}>
               Cancel
             </Button>
-            <Button onClick={saveEditedMember}>Save Changes</Button>
+            <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,11 +1,18 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
-import type { CreateUserInput, IUserRepository, UserRecord } from '../application/ports/IUserRepository';
+import type {
+  CreateUserInput,
+  FindManyUsersOptions,
+  IUserRepository,
+  UpdateUserInput,
+  UserRecord,
+} from '../application/ports/IUserRepository';
 import { Email } from '../domain/Email';
 import { RoleNotFoundError } from '../application/errors/AuthErrors';
 
 const USER_WITH_ROLES_INCLUDE = {
   roles: { include: { role: true } },
+  branch: true,
 } satisfies Prisma.UserInclude;
 
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof USER_WITH_ROLES_INCLUDE }>;
@@ -14,13 +21,27 @@ function toUserRecord(row: UserWithRoles): UserRecord {
   return {
     id: row.id,
     branchId: row.branchId,
+    branchName: row.branch.name,
     email: row.email,
     passwordHash: row.passwordHash,
     firstName: row.firstName,
     lastName: row.lastName,
     status: row.status,
     roles: row.roles.map((userRole) => userRole.role.name),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
+}
+
+/** Resolves role names to Role rows, throwing RoleNotFoundError (audit finding H-03) if any don't exist. */
+async function resolveRoleIds(roleNames: string[]): Promise<string[]> {
+  const roles = await prisma.role.findMany({ where: { name: { in: roleNames } } });
+  const resolvedNames = new Set(roles.map((role) => role.name));
+  const missingNames = roleNames.filter((name) => !resolvedNames.has(name));
+  if (missingNames.length > 0) {
+    throw new RoleNotFoundError(missingNames);
+  }
+  return roles.map((role) => role.id);
 }
 
 export class PrismaUserRepository implements IUserRepository {
@@ -43,17 +64,19 @@ export class PrismaUserRepository implements IUserRepository {
     return row ? toUserRecord(row) : null;
   }
 
-  async create(input: CreateUserInput): Promise<UserRecord> {
-    const roles = await prisma.role.findMany({ where: { name: { in: input.roleNames } } });
+  /** Mirrors PrismaLoanApplicationRepository.findMany: cursor pagination, newest first. LMS staff accounts have no branch dimension to filter by here — every authenticated user may view the roster. */
+  async findMany(options: FindManyUsersOptions): Promise<UserRecord[]> {
+    const rows = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: options.limit,
+      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    return rows.map(toUserRecord);
+  }
 
-    // Audit finding H-03: fail loudly if any requested role didn't
-    // resolve, instead of silently creating a user with fewer (or zero)
-    // roles than requested.
-    const resolvedNames = new Set(roles.map((role) => role.name));
-    const missingNames = input.roleNames.filter((name) => !resolvedNames.has(name));
-    if (missingNames.length > 0) {
-      throw new RoleNotFoundError(missingNames);
-    }
+  async create(input: CreateUserInput): Promise<UserRecord> {
+    const roleIds = await resolveRoleIds(input.roleNames);
 
     const created = await prisma.user.create({
       data: {
@@ -66,13 +89,38 @@ export class PrismaUserRepository implements IUserRepository {
         firstName: input.firstName,
         lastName: input.lastName,
         roles: {
-          create: roles.map((role) => ({ roleId: role.id })),
+          create: roleIds.map((roleId) => ({ roleId })),
         },
       },
       include: USER_WITH_ROLES_INCLUDE,
     });
 
     return toUserRecord(created);
+  }
+
+  async update(id: string, patch: UpdateUserInput): Promise<UserRecord> {
+    const roleIds = patch.roleNames ? await resolveRoleIds(patch.roleNames) : undefined;
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        firstName: patch.firstName,
+        lastName: patch.lastName,
+        branchId: patch.branchId,
+        status: patch.status,
+        ...(roleIds
+          ? {
+              roles: {
+                deleteMany: {},
+                create: roleIds.map((roleId) => ({ roleId })),
+              },
+            }
+          : {}),
+      },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+
+    return toUserRecord(updated);
   }
 
   async hasAnyUserWithRole(roleName: string): Promise<boolean> {

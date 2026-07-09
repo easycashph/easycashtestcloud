@@ -1,0 +1,25 @@
+import { z } from 'zod';
+
+/** Matches the seeded Role rows exactly — see prisma/seed.ts and frontend LmsRole. */
+export const LMS_ROLE_NAMES = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'] as const;
+
+export const createUserSchema = z.object({
+  branchId: z.string().uuid(),
+  email: z.string().email(),
+  password: z.string().min(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  roleNames: z.array(z.enum(LMS_ROLE_NAMES)).min(1),
+});
+
+export type CreateUserRequestBody = z.infer<typeof createUserSchema>;
+
+export const updateUserSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  branchId: z.string().uuid().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
+  roleNames: z.array(z.enum(LMS_ROLE_NAMES)).min(1).optional(),
+});
+
+export type UpdateUserRequestBody = z.infer<typeof updateUserSchema>;
