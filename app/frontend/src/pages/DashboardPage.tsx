@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { ComponentType } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bar,
   BarChart,
@@ -14,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertOctagon, AlertTriangle, Banknote, Filter, Landmark, RotateCcw, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import { AlertCircle, AlertOctagon, AlertTriangle, Banknote, Filter, Landmark, RotateCcw, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +29,8 @@ import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillD
 import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
+import { apiClient } from '@/lib/apiClient';
+import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import {
   buildDisbursementTrend,
   buildPortfolioByCategory,
@@ -210,6 +213,15 @@ export function DashboardPage() {
   useLogPageView('Dashboard');
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
+  // Live portfolio-wide totals from the real backend (GET /dashboard/summary). The endpoint has no
+  // category/date filtering or per-loan detail, so it only backs the three Overview cards below,
+  // and only while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range) — once
+  // filtered, those cards fall back to the mock-derived, client-side-filterable figures instead.
+  const summaryQuery = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
+  });
+
   // Portfolio Filter — the master filter for the whole Dashboard (loan category + origination
   // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
   // Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health) reacts
@@ -251,6 +263,7 @@ export function DashboardPage() {
     () => buildDisbursementTrend(portfolioFilteredLoans, 6),
     [portfolioFilteredLoans],
   );
+  const liveSummary = !isFiltered ? summaryQuery.data : undefined;
   const filteredActiveCount =
     filteredPortfolioHealth.good.count + filteredPortfolioHealth.activeInArrears.count + filteredPortfolioHealth.matured.count;
   const filteredOutstandingTotal =
@@ -382,16 +395,29 @@ export function DashboardPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
         <p className="text-sm text-muted-foreground">
-          Portfolio summary across all branches — sample data{isFiltered ? ', reflecting the Portfolio Filter above' : ''}. Click a
-          chart segment, bar, or figure to see the loan accounts behind it.
+          {liveSummary
+            ? 'Live portfolio summary across all branches. '
+            : `Portfolio summary across all branches — sample data${isFiltered ? ', reflecting the Portfolio Filter above' : ''}. `}
+          Click a chart segment, bar, or figure to see the loan accounts behind it.
         </p>
       </div>
+
+      {summaryQuery.isError && !isFiltered && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load live dashboard totals. Is the backend running? Showing sample
+          data below instead.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           title="Total Active Loans"
-          value={filteredActiveCount.toString()}
-          hint={`${formatPeso(filteredOutstandingTotal)} outstanding principal`}
+          value={liveSummary ? liveSummary.totalActiveLoans.count.toString() : filteredActiveCount.toString()}
+          hint={
+            liveSummary
+              ? `${formatPeso(Number(liveSummary.totalActiveLoans.outstandingPrincipalBalance))} outstanding principal`
+              : `${formatPeso(filteredOutstandingTotal)} outstanding principal`
+          }
           icon={Landmark}
           onClick={() =>
             setDrillDown({
@@ -405,14 +431,18 @@ export function DashboardPage() {
         />
         <SummaryCard
           title="Collections This Month"
-          value={formatPeso(scaledCollectionsThisMonth)}
-          hint={isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
+          value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
+          hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
           icon={Banknote}
         />
         <SummaryCard
           title="Overdue Accounts"
-          value={filteredPortfolioHealth.activeInArrears.count.toString()}
-          hint={`${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`}
+          value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
+          hint={
+            liveSummary
+              ? `${formatPeso(Number(liveSummary.overdueAccounts.atRiskCollectionsBalance))} at risk (collections balance)`
+              : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`
+          }
           icon={AlertOctagon}
           tone="destructive"
           onClick={() => openVennSegment('activeInArrears')}
@@ -420,7 +450,7 @@ export function DashboardPage() {
         <SummaryCard
           title="Portfolio Growth"
           value="+4.8%"
-          hint="Month-over-month disbursement (portfolio-wide)"
+          hint="Month-over-month disbursement (portfolio-wide) — sample data"
           icon={TrendingUp}
         />
       </div>
