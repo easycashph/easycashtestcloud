@@ -21,12 +21,20 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { AboutPage } from '@/pages/AboutPage';
 
 /**
- * Milestone 9.1 UI preview build, Stage 0/1 of the frontend↔backend wiring pilot (`docs/
- * Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). Authentication is real (`RoleProvider`
- * gates everything below behind a real session — see `roleContext.tsx`), Payment Recording is
- * real (`PaymentRecordingPage`); every other route still renders against `src/lib/mockData.ts`
- * only. `/login` is no longer a route: `RoleProvider` renders `LoginPage` in place of this whole
- * tree whenever there's no active session, instead of requiring in-app navigation to reach it.
+ * Milestone 9.1 UI, ongoing frontend↔backend wiring (`docs/Architecture/
+ * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). `/login` is no longer a route: `RoleProvider` renders
+ * `LoginPage` in place of this whole tree whenever there's no active session.
+ *
+ * Wiring status per route (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for
+ * detail):
+ * - Real: auth, LoanListPage, LoanApplications* (list/create/detail), ClientListPage,
+ *   ClientProfilePage, LoanProductsPage (read-only by design), PaymentRecordingPage,
+ *   MemberListPage, ActivityLogPage.
+ * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
+ *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
+ *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
+ *   AI risk assessment, approve/activate actions, payment history, and timeline are still mock).
+ * - Mock only: PaymentRemindersPage, all *ReportPage routes, SettingsPage, AboutPage.
  */
 export default function App() {
   return (
