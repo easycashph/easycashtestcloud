@@ -1,16 +1,20 @@
 import * as React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Lock } from 'lucide-react';
+import { AlertCircle, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { PaginationControls } from '@/components/PaginationControls';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useRole } from '@/lib/roleContext';
-import { fetchAllPages } from '@/lib/apiClient';
+import { useCursorPagination } from '@/lib/useCursorPagination';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { formatDateTime } from '@/lib/utils';
+
+const PAGE_SIZE = 100;
 
 function getSortValue(log: AuditLog, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -50,13 +54,18 @@ const ACTION_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'second
 export function ActivityLogPage() {
   const { canViewActivityLogs, currentAccount } = useRole();
   const [action, setAction] = React.useState<string>('ALL');
+  const [search, setSearch] = React.useState('');
+  const debouncedSearch = useDebouncedValue(search);
 
-  const logsQuery = useQuery({
-    queryKey: ['audit-logs', 'all'],
-    queryFn: () => fetchAllPages<AuditLog>('/audit-logs'),
-    enabled: canViewActivityLogs,
-  });
-  const logs = React.useMemo(() => logsQuery.data ?? [], [logsQuery.data]);
+  const {
+    items: logs,
+    query: logsQuery,
+    pageNumber,
+    hasNext,
+    hasPrev,
+    goNext,
+    goPrev,
+  } = useCursorPagination<AuditLog>(['audit-logs'], '/audit-logs', { search: debouncedSearch }, PAGE_SIZE, canViewActivityLogs);
 
   const actionOptions = React.useMemo(() => ['ALL', ...[...new Set(logs.map((l) => l.action))].sort()], [logs]);
   const filtered = logs.filter((log) => action === 'ALL' || log.action === action);
@@ -103,20 +112,31 @@ export function ActivityLogPage() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Recorded Actions</CardTitle>
-            <CardDescription>{filtered.length} of {logs.length} entries shown.</CardDescription>
+            <CardDescription>{filtered.length} of {logs.length} entries on this page.</CardDescription>
           </div>
-          <Select value={action} onValueChange={setAction}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {actionOptions.map((a) => (
-                <SelectItem key={a} value={a}>
-                  {a === 'ALL' ? 'All actions' : a.replaceAll('_', ' ')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search user, action, entity..."
+                className="w-full pl-8 sm:w-64"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={action} onValueChange={setAction}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {actionOptions.map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {a === 'ALL' ? 'All actions' : a.replaceAll('_', ' ')}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -160,6 +180,15 @@ export function ActivityLogPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={pageNumber}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={goNext}
+            onPrev={goPrev}
+            pageSize={PAGE_SIZE}
+            itemCount={logs.length}
+          />
         </CardContent>
       </Card>
     </div>

@@ -9,13 +9,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
+import { useCursorPagination } from '@/lib/useCursorPagination';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
+
+const PAGE_SIZE = 100;
 
 interface LoanRow {
   id: string;
@@ -70,24 +75,33 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
  * branch anyway (§5 point 1 of the CP12 design), so a branch dimension has no real value to show
  * right now — removed rather than faked.
  *
- * Loads every page up front (`fetchAllPages`) rather than a real paginated list UI — a deliberate,
- * honest simplification while the dataset is in the low thousands (see `apiClient.ts`'s
- * `fetchAllPages` doc comment); revisit with real cursor pagination once a list approaches
- * `CLAUDE.md`'s 100,000+ loan design target.
+ * Real, server-side pagination (100 rows/page, Next/Previous — see `useCursorPagination`) replaced
+ * the earlier "load every loan up front" approach that this doc comment used to flag as a temporary
+ * stopgap — it became the actual frontend-lag problem it warned about. Borrower/loan-code search
+ * goes to the backend's `?search=` param (debounced); status/product have no backend filter param
+ * yet, so those two narrow within the current page only, not across every loan.
  */
 export function LoanListPage() {
   const navigate = useNavigate();
   useLogPageView('Loan Accounts');
   const [search, setSearch] = React.useState('');
+  const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanAccountStatus | 'ALL'>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
 
-  const loansQuery = useQuery({
-    queryKey: ['loan-accounts', 'all'],
-    queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
-  });
+  const {
+    items: loans,
+    query: loansQuery,
+    pageNumber,
+    hasNext,
+    hasPrev,
+    goNext,
+    goPrev,
+  } = useCursorPagination<LoanAccount>(['loan-accounts'], '/loan-accounts', { search: debouncedSearch }, PAGE_SIZE);
 
-  const borrowerIds = React.useMemo(() => [...new Set((loansQuery.data ?? []).map((l) => l.borrowerId))], [loansQuery.data]);
+  // Still loaded in full for the name join — there's no batch "GET /borrowers?ids=" endpoint, and
+  // borrower search is already covered server-side via the loan-accounts search param above.
+  const borrowerIds = React.useMemo(() => [...new Set(loans.map((l) => l.borrowerId))], [loans]);
   const borrowersQuery = useQuery({
     queryKey: ['borrowers', 'all'],
     queryFn: () => fetchAllPages<Borrower>('/borrowers'),
@@ -113,7 +127,7 @@ export function LoanListPage() {
 
   const rows: LoanRow[] = React.useMemo(() => {
     const versionMap = productsQuery.data ?? new Map();
-    return (loansQuery.data ?? []).map((l) => {
+    return loans.map((l) => {
       const borrower = borrowerById.get(l.borrowerId);
       const productInfo = versionMap.get(l.loanProductVersionId);
       return {
@@ -129,17 +143,14 @@ export function LoanListPage() {
         createdAt: l.createdAt,
       };
     });
-  }, [loansQuery.data, borrowerById, productsQuery.data]);
+  }, [loans, borrowerById, productsQuery.data]);
 
   const productOptions = React.useMemo(() => ['ALL', ...[...new Set(rows.map((r) => r.productName))].sort()], [rows]);
 
   const filtered = rows.filter((loan) => {
     const matchesStatus = status === 'ALL' || loan.status === status;
     const matchesProduct = product === 'ALL' || loan.productName === product;
-    const query = search.trim().toLowerCase();
-    const matchesSearch =
-      query.length === 0 || loan.borrowerName.toLowerCase().includes(query) || loan.loanCode.toLowerCase().includes(query);
-    return matchesStatus && matchesProduct && matchesSearch;
+    return matchesStatus && matchesProduct;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
@@ -148,7 +159,7 @@ export function LoanListPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Loan Accounts</h2>
         <p className="text-sm text-muted-foreground">
-          {isLoading ? 'Loading…' : `${rows.length} loan accounts.`}
+          {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
         </p>
       </div>
 
@@ -263,6 +274,15 @@ export function LoanListPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={pageNumber}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={goNext}
+            onPrev={goPrev}
+            pageSize={PAGE_SIZE}
+            itemCount={loans.length}
+          />
         </CardContent>
       </Card>
 

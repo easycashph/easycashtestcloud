@@ -9,12 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
+import { useCursorPagination } from '@/lib/useCursorPagination';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
+
+const PAGE_SIZE = 100;
 
 /** Matches LoanListPage's real status set — the mock data's extra 'MATURED' status doesn't exist in the real API. */
 const REAL_ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
@@ -64,17 +69,34 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  * `/loan-accounts` replace `MOCK_BORROWERS`/`MOCK_LOANS`. No branch filter/column, same reasoning
  * as `LoanListPage.tsx`: no `GET /branches` endpoint yet, and every migrated record currently
  * belongs to the single seeded "HQ" branch anyway.
+ *
+ * Real, server-side pagination (100 rows/page, Next/Previous — see `useCursorPagination`) replaced
+ * the earlier "load every borrower up front" approach, which was the direct cause of frontend lag.
+ * Search now goes to the backend's `?search=` param (debounced) instead of filtering an
+ * already-fully-loaded array. The "Loan presence" filter is the one thing that still only sees the
+ * current page — it can't be pushed server-side without a new backend filter param, so it narrows
+ * within the 100 loaded rows rather than across the whole client base.
  */
 export function ClientListPage() {
   const navigate = useNavigate();
   useLogPageView('Client Data');
   const [search, setSearch] = React.useState('');
+  const debouncedSearch = useDebouncedValue(search);
   const [loanPresence, setLoanPresence] = React.useState<LoanPresenceFilter>('ALL');
 
-  const borrowersQuery = useQuery({
-    queryKey: ['borrowers', 'all'],
-    queryFn: () => fetchAllPages<Borrower>('/borrowers'),
-  });
+  const {
+    items: borrowers,
+    query: borrowersQuery,
+    pageNumber,
+    hasNext,
+    hasPrev,
+    goNext,
+    goPrev,
+  } = useCursorPagination<Borrower>(['borrowers'], '/borrowers', { search: debouncedSearch }, PAGE_SIZE);
+
+  // Still loaded in full — needed to compute the "Loans" column/filter for whichever borrowers are
+  // on the current page. Loan accounts aren't yet searchable/filterable by borrowerId server-side,
+  // so this stays a `fetchAllPages` call rather than being paginated itself.
   const loansQuery = useQuery({
     queryKey: ['loan-accounts', 'all'],
     queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
@@ -93,7 +115,7 @@ export function ClientListPage() {
 
   const rows: ClientRow[] = React.useMemo(
     () =>
-      (borrowersQuery.data ?? []).map((b) => {
+      borrowers.map((b) => {
         const loans = loansByBorrowerId.get(b.id) ?? [];
         return {
           id: b.id,
@@ -106,24 +128,16 @@ export function ClientListPage() {
           hasActiveLoan: loans.some((l) => REAL_ACTIVE_LOAN_STATUSES.includes(l.status)),
         };
       }),
-    [borrowersQuery.data, loansByBorrowerId],
+    [borrowers, loansByBorrowerId],
   );
 
   const filtered = rows.filter((c) => {
-    const query = search.trim().toLowerCase();
-    const matchesSearch =
-      query.length === 0 ||
-      c.name.toLowerCase().includes(query) ||
-      c.employer.toLowerCase().includes(query) ||
-      c.contactNumber.toLowerCase().includes(query) ||
-      c.email.toLowerCase().includes(query) ||
-      c.position.toLowerCase().includes(query);
     const matchesLoanPresence =
       loanPresence === 'ALL' ||
       (loanPresence === 'WITH_ACTIVE' && c.hasActiveLoan) ||
       (loanPresence === 'WITH_HISTORY' && c.loanCount > 0) ||
       (loanPresence === 'NONE' && c.loanCount === 0);
-    return matchesSearch && matchesLoanPresence;
+    return matchesLoanPresence;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: null, direction: 'asc' });
 
@@ -131,7 +145,7 @@ export function ClientListPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Client Data</h2>
-        <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles.`}</p>
+        <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
       </div>
 
       {borrowersQuery.isError && (
@@ -228,6 +242,15 @@ export function ClientListPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={pageNumber}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={goNext}
+            onPrev={goPrev}
+            pageSize={PAGE_SIZE}
+            itemCount={borrowers.length}
+          />
         </CardContent>
       </Card>
 

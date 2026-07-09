@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Lock, Pencil, Plus } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, Lock, Pencil, Plus, Search } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,17 +11,21 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { useCursorPagination } from '@/lib/useCursorPagination';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { apiClient } from '@/lib/apiClient';
 import type { CreateUserRequest, UpdateUserRequest, User, UserStatus } from '@/lib/userApiTypes';
 import type { LmsRole } from '@/lib/mockData';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate } from '@/lib/utils';
 
 const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
+const PAGE_SIZE = 100;
 
 function getSortValue(user: User, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -122,12 +126,18 @@ export function MemberListPage() {
   const [draft, setDraft] = React.useState<MemberDraft>(emptyDraft());
   const [editingUser, setEditingUser] = React.useState<User | null>(null);
   const [editDraft, setEditDraft] = React.useState<MemberDraft>(emptyDraft());
+  const [search, setSearch] = React.useState('');
+  const debouncedSearch = useDebouncedValue(search);
 
-  const usersQuery = useQuery({
-    queryKey: ['users', 'all'],
-    queryFn: () => fetchAllPages<User>('/users'),
-  });
-  const members = usersQuery.data ?? [];
+  const {
+    items: members,
+    query: usersQuery,
+    pageNumber,
+    hasNext,
+    hasPrev,
+    goNext,
+    goPrev,
+  } = useCursorPagination<User>(['users'], '/users', { search: debouncedSearch }, PAGE_SIZE);
   const { sorted, sort, toggleSort } = useSortableTable(members, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   const createMutation = useMutation({
@@ -142,7 +152,7 @@ export function MemberListPage() {
       } satisfies CreateUserRequest),
     onSuccess: () => {
       setAddOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['users', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 
@@ -158,7 +168,7 @@ export function MemberListPage() {
     },
     onSuccess: () => {
       setEditingUser(null);
-      queryClient.invalidateQueries({ queryKey: ['users', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 
@@ -184,7 +194,7 @@ export function MemberListPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">LMS Member Details</h2>
-          <p className="text-sm text-muted-foreground">{members.length} staff accounts using the Loan Management System.</p>
+          <p className="text-sm text-muted-foreground">{members.length} staff accounts on this page.</p>
         </div>
         {canManageMembers ? (
           <Button onClick={openAdd}>
@@ -212,6 +222,15 @@ export function MemberListPage() {
         <CardHeader>
           <CardTitle className="text-base">Staff Accounts</CardTitle>
           <CardDescription>{usersQuery.isLoading ? 'Loading…' : `${members.length} accounts, sorted by newest first.`}</CardDescription>
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search name or email..."
+              className="w-full pl-8"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -286,6 +305,15 @@ export function MemberListPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={pageNumber}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={goNext}
+            onPrev={goPrev}
+            pageSize={PAGE_SIZE}
+            itemCount={members.length}
+          />
         </CardContent>
       </Card>
 

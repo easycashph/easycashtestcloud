@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, FilePlus2, Lock, MailOpen, Search } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -10,14 +10,19 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { useCursorPagination } from '@/lib/useCursorPagination';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { apiClient } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+const PAGE_SIZE = 100;
 
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -61,29 +66,44 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'warning' | 'success' 
  * email-inbox-style "seen" flag, independent of the approve/decline decision — the backend only
  * exposes a one-way mark-reviewed transition (no "mark unreviewed"), so the bulk action below is
  * one-directional to match.
+ *
+ * Real, server-side pagination (100 rows/page — see `useCursorPagination`) replaced loading every
+ * application up front. Applicant-name search goes to the backend's `?search=` param (debounced);
+ * status and category have no backend filter param yet, so those two narrow within the current page
+ * only, not across every application.
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canAccessLoanApplications, currentAccount } = useRole();
   const [search, setSearch] = React.useState('');
+  const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   useLogPageView('Loan Applications');
 
-  const applicationsQuery = useQuery({
-    queryKey: ['loan-applications', 'all'],
-    queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
-    enabled: canAccessLoanApplications,
-  });
-  const applications = React.useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
+  const {
+    items: applications,
+    query: applicationsQuery,
+    pageNumber,
+    hasNext,
+    hasPrev,
+    goNext,
+    goPrev,
+  } = useCursorPagination<LoanApplication>(
+    ['loan-applications'],
+    '/loan-applications',
+    { search: debouncedSearch },
+    PAGE_SIZE,
+    canAccessLoanApplications,
+  );
 
   const markReviewedMutation = useMutation({
     mutationFn: (id: string) => apiClient.post<LoanApplication>(`/loan-applications/${id}/mark-reviewed`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['loan-applications', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['loan-applications'] });
     },
   });
 
@@ -97,9 +117,7 @@ export function LoanApplicationsPage() {
   const filtered = applications.filter((app) => {
     const matchesStatus = status === 'ALL' || app.status === status;
     const matchesCategory = category === 'ALL' || app.requestedCategory === category;
-    const query = search.trim().toLowerCase();
-    const matchesSearch = query.length === 0 || app.applicantName.toLowerCase().includes(query);
-    return matchesStatus && matchesCategory && matchesSearch;
+    return matchesStatus && matchesCategory;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
@@ -151,8 +169,8 @@ export function LoanApplicationsPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
           <p className="text-sm text-muted-foreground">
-            {applications.length} application{applications.length === 1 ? '' : 's'} ({pendingCount} pending decision) — intake,
-            review, and decision workflow, wired to the live backend.
+            {applications.length} application{applications.length === 1 ? '' : 's'} on this page ({pendingCount} pending decision) —
+            intake, review, and decision workflow, wired to the live backend.
           </p>
         </div>
         <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
@@ -300,6 +318,15 @@ export function LoanApplicationsPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={pageNumber}
+            hasNext={hasNext}
+            hasPrev={hasPrev}
+            onNext={goNext}
+            onPrev={goPrev}
+            pageSize={PAGE_SIZE}
+            itemCount={applications.length}
+          />
         </CardContent>
       </Card>
 
