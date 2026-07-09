@@ -95,7 +95,10 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
   async findMany(options: FindManyLoanApplicationsOptions, ctx?: TransactionContext): Promise<LoanApplication[]> {
     const client = resolveClient(ctx);
     const rows = await client.loanApplication.findMany({
-      where: options.branchId ? { branchId: options.branchId } : undefined,
+      where: {
+        ...(options.branchId ? { branchId: options.branchId } : {}),
+        ...(options.search ? { applicantName: { contains: options.search, mode: 'insensitive' } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),

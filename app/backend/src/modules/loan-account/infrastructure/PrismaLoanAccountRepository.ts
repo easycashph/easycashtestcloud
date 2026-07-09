@@ -203,11 +203,22 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     return row ? toDomain(row) : null;
   }
 
-  /** Milestone 8 / D-4: cursor pagination only, no search/filter/sort. */
   async findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]> {
     const client = resolveClient(ctx);
+    const where: Prisma.LoanAccountWhereInput = {
+      ...(options.branchId ? { branchId: options.branchId } : {}),
+      ...(options.search
+        ? {
+            OR: [
+              { loanCode: { contains: options.search, mode: 'insensitive' } },
+              { borrower: { firstName: { contains: options.search, mode: 'insensitive' } } },
+              { borrower: { lastName: { contains: options.search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
     const rows = await client.loanAccount.findMany({
-      where: options.branchId ? { branchId: options.branchId } : undefined,
+      where,
       include: LOAN_ACCOUNT_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: options.limit,

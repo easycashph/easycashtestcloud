@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { CreateLoanApplicationUseCase } from '../../application/use-cases/CreateLoanApplicationUseCase';
@@ -59,7 +59,8 @@ export class LoanApplicationController {
     try {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const applications = await this.deps.listLoanApplicationsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope) });
+      const search = parseSearchParam(req.query);
+      const applications = await this.deps.listLoanApplicationsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
       res.status(200).json(toPaginatedResponse(applications.map(presentLoanApplication), limit, (item) => item.id));
     } catch (error) {
       next(error);

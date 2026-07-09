@@ -25,6 +25,13 @@ export function parsePaginationParams(query: Request['query']): PaginationParams
   return { limit, cursor };
 }
 
+/** Parses an optional `?search=` free-text query param, trimmed, empty string treated as absent. */
+export function parseSearchParam(query: Request['query']): string | undefined {
+  const raw = query.search;
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   nextCursor: string | null;

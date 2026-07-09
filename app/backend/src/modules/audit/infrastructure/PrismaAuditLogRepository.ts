@@ -1,10 +1,23 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import type { AuditLogRecord, FindManyAuditLogsOptions, IAuditLogRepository } from '../application/ports/IAuditLogRepository';
 
 export class PrismaAuditLogRepository implements IAuditLogRepository {
   /** Mirrors PrismaLoanApplicationRepository.findMany: cursor pagination, newest first. No branch dimension — see IAuditLogRepository doc. */
   async findMany(options: FindManyAuditLogsOptions): Promise<AuditLogRecord[]> {
+    const where: Prisma.AuditLogWhereInput = options.search
+      ? {
+          OR: [
+            { action: { contains: options.search, mode: 'insensitive' } },
+            { entityType: { contains: options.search, mode: 'insensitive' } },
+            { entityId: { contains: options.search, mode: 'insensitive' } },
+            { user: { firstName: { contains: options.search, mode: 'insensitive' } } },
+            { user: { lastName: { contains: options.search, mode: 'insensitive' } } },
+          ],
+        }
+      : {};
     const rows = await prisma.auditLog.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),

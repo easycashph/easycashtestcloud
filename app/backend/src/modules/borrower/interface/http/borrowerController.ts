@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
 import type { CreateBorrowerUseCase } from '../../application/use-cases/CreateBorrowerUseCase';
 import type { GetBorrowerUseCase } from '../../application/use-cases/GetBorrowerUseCase';
@@ -51,7 +51,8 @@ export class BorrowerController {
     try {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope) });
+      const search = parseSearchParam(req.query);
+      const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
       res.status(200).json(toPaginatedResponse(borrowers.map(presentBorrower), limit, (item) => item.id));
     } catch (error) {
       next(error);

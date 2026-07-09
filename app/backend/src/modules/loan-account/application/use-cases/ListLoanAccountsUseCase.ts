@@ -10,6 +10,7 @@ export interface ListLoanAccountsInput {
   cursor?: string;
   /** Milestone 8.1 / H-1: set for a branch-scoped caller, omitted for a global caller. */
   branchId?: string;
+  search?: string;
 }
 
 export class ListLoanAccountsUseCase {

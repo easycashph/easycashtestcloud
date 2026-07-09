@@ -66,7 +66,17 @@ export class PrismaUserRepository implements IUserRepository {
 
   /** Mirrors PrismaLoanApplicationRepository.findMany: cursor pagination, newest first. LMS staff accounts have no branch dimension to filter by here — every authenticated user may view the roster. */
   async findMany(options: FindManyUsersOptions): Promise<UserRecord[]> {
+    const where: Prisma.UserWhereInput = options.search
+      ? {
+          OR: [
+            { firstName: { contains: options.search, mode: 'insensitive' } },
+            { lastName: { contains: options.search, mode: 'insensitive' } },
+            { email: { contains: options.search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
     const rows = await prisma.user.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),

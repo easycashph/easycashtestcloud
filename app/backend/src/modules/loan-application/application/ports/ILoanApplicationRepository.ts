@@ -5,6 +5,8 @@ export interface FindManyLoanApplicationsOptions {
   limit: number;
   cursor?: string;
   branchId?: string;
+  /** Case-insensitive match against applicantName. */
+  search?: string;
 }
 
 export interface ILoanApplicationRepository {

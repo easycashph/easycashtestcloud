@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import type { ListUsersUseCase } from '../../application/use-cases/ListUsersUseCase';
 import type { CreateUserUseCase } from '../../application/use-cases/CreateUserUseCase';
 import type { UpdateUserUseCase } from '../../application/use-cases/UpdateUserUseCase';
@@ -19,7 +19,8 @@ export class UserController {
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { limit, cursor } = parsePaginationParams(req.query);
-      const users = await this.deps.listUsersUseCase.execute({ limit, cursor });
+      const search = parseSearchParam(req.query);
+      const users = await this.deps.listUsersUseCase.execute({ limit, cursor, search });
       res.status(200).json(toPaginatedResponse(users.map(presentUser), limit, (item) => item.id));
     } catch (error) {
       next(error);

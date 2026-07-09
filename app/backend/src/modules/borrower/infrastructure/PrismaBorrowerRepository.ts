@@ -108,8 +108,23 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
    */
   async findMany(options: FindManyBorrowersOptions, ctx?: TransactionContext): Promise<Borrower[]> {
     const client = resolveClient(ctx);
+    const where: Prisma.BorrowerWhereInput = {
+      ...(options.branchId ? { branchId: options.branchId } : {}),
+      ...(options.search
+        ? {
+            OR: [
+              { firstName: { contains: options.search, mode: 'insensitive' } },
+              { middleName: { contains: options.search, mode: 'insensitive' } },
+              { lastName: { contains: options.search, mode: 'insensitive' } },
+              { email: { contains: options.search, mode: 'insensitive' } },
+              { mobilePhone1: { contains: options.search, mode: 'insensitive' } },
+              { mobilePhone2: { contains: options.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
     const rows = await client.borrower.findMany({
-      where: options.branchId ? { branchId: options.branchId } : undefined,
+      where,
       include: BORROWER_INCLUDE,
       orderBy: { createdAt: 'desc' },
       take: options.limit,

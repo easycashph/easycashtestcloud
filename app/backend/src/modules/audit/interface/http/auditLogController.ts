@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import type { ListAuditLogsUseCase } from '../../application/use-cases/ListAuditLogsUseCase';
 import { presentAuditLog } from './presenters/AuditLogPresenter';
 
@@ -14,7 +14,8 @@ export class AuditLogController {
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { limit, cursor } = parsePaginationParams(req.query);
-      const records = await this.deps.listAuditLogsUseCase.execute({ limit, cursor });
+      const search = parseSearchParam(req.query);
+      const records = await this.deps.listAuditLogsUseCase.execute({ limit, cursor, search });
       res.status(200).json(toPaginatedResponse(records.map(presentAuditLog), limit, (item) => item.id));
     } catch (error) {
       next(error);

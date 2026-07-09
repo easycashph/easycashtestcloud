@@ -22,6 +22,8 @@ export interface AuditLogRecord {
 export interface FindManyAuditLogsOptions {
   limit: number;
   cursor?: string;
+  /** Case-insensitive match against action/entityType/entityId or the acting user's first/last name. */
+  search?: string;
 }
 
 export interface IAuditLogRepository {

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
-import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
+import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
 import { withIdempotency } from '@shared/http/idempotency';
 import { Money } from '@shared/domain/Money';
@@ -59,7 +59,8 @@ export class LoanAccountController {
     try {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope) });
+      const search = parseSearchParam(req.query);
+      const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
       res.status(200).json(toPaginatedResponse(loanAccounts.map(presentLoanAccount), limit, (item) => item.id));
     } catch (error) {
       next(error);

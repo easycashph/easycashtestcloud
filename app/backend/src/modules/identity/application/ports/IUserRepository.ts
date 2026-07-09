@@ -30,6 +30,8 @@ export interface CreateUserInput {
 export interface FindManyUsersOptions {
   limit: number;
   cursor?: string;
+  /** Case-insensitive match against firstName/lastName/email. */
+  search?: string;
 }
 
 export interface UpdateUserInput {

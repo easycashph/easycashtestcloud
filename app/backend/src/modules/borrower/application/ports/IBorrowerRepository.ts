@@ -10,11 +10,12 @@ import type { Borrower } from '../../domain/Borrower';
  * atomicity — but the port is transaction-ready from the start.
  */
 export interface FindManyBorrowersOptions {
-  /** Cursor-paginated (Milestone 8 / D-4: limit + cursor only, no search/filter/sort). */
   limit: number;
   cursor?: string;
   /** Milestone 8.1 / H-1: filters to one branch when supplied (a branch-scoped caller); omitted entirely for a global caller. */
   branchId?: string;
+  /** Case-insensitive match against firstName/middleName/lastName/email/mobilePhone1/mobilePhone2. */
+  search?: string;
 }
 
 export interface IBorrowerRepository {
