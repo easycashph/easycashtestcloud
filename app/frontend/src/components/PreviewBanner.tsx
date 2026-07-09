@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Zap } from 'lucide-react';
 
 /**
  * Always-visible reminder that this build is a CEO-facing UI preview using
@@ -12,6 +12,16 @@ export function PreviewBanner() {
       <AlertTriangle className="h-3.5 w-3.5" />
       Preview Mode — Sample Data. Not connected to live systems. Contains real customer names with fabricated figures — do not share
       outside internal review.
+      {/* import.meta.env.DEV is only true when served by `vite dev` (the local hot-reload server,
+          e.g. via "Run LMS Preview.bat") — false in the Docker/nginx-served production build. Lets
+          the user tell at a glance which frontend they're actually browsing when both can run
+          side by side on different ports. */}
+      {import.meta.env.DEV && (
+        <span className="ml-2 flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-warning">
+          <Zap className="h-3 w-3" />
+          Hot Reload — localhost:{window.location.port || '80'}
+        </span>
+      )}
     </div>
   );
 }
