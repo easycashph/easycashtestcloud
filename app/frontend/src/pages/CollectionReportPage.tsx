@@ -1,7 +1,8 @@
 import * as React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,46 +10,17 @@ import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { DAILY_REPORT_ROWS, MOCK_ACTIVITY_LOGS, MONTHLY_REPORT_ROWS, REPORT_BRANCHES, YEARLY_REPORT_ROWS } from '@/lib/mockData';
+import { apiClient } from '@/lib/apiClient';
+import type { CollectionReportRow, ReportGranularity } from '@/lib/reportApiTypes';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
-interface DailyRow {
-  date: string;
-  amountCollected: number;
-  collectionTarget: number;
-}
-
-function getDailyRowSortValue(row: DailyRow, key: string): string | number | Date | null | undefined {
+function getSortValue(row: CollectionReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
-    case 'date':
-      return new Date(row.date);
+    case 'period':
+      return row.period;
     case 'amountCollected':
-      return row.amountCollected;
-    case 'collectionTarget':
-      return row.collectionTarget;
-    case 'percentOfTarget':
-      return row.collectionTarget === 0 ? 0 : row.amountCollected / row.collectionTarget;
-    default:
-      return undefined;
-  }
-}
-
-interface PeriodRow {
-  label: string;
-  amountCollected: number;
-  collectionTarget: number;
-}
-
-function getPeriodRowSortValue(row: PeriodRow, key: string): string | number | Date | null | undefined {
-  switch (key) {
-    case 'label':
-      return row.label;
-    case 'amountCollected':
-      return row.amountCollected;
-    case 'collectionTarget':
-      return row.collectionTarget;
-    case 'percentOfTarget':
-      return row.collectionTarget === 0 ? 0 : row.amountCollected / row.collectionTarget;
+      return Number(row.amountCollected);
     default:
       return undefined;
   }
@@ -56,108 +28,83 @@ function getPeriodRowSortValue(row: PeriodRow, key: string): string | number | D
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
-function useBranchFilter() {
-  const [branchId, setBranchId] = React.useState<string>('ALL');
-  return { branchId, setBranchId };
+function useCollectionReport(granularity: ReportGranularity, from?: string, to?: string) {
+  return useQuery({
+    queryKey: ['reports', 'collections', granularity, from, to],
+    queryFn: () => {
+      const params = new URLSearchParams({ granularity });
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      return apiClient.get<{ items: CollectionReportRow[] }>(`/reports/collections?${params.toString()}`);
+    },
+  });
 }
 
-function BranchSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function ErrorBanner({ message }: { message: string }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-56">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="ALL">All branches</SelectItem>
-        {REPORT_BRANCHES.map((b) => (
-          <SelectItem key={b.id} value={b.id}>
-            {b.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+      <AlertCircle className="h-4 w-4 shrink-0" /> {message}
+    </div>
   );
 }
 
 function DailyCollectionReport() {
-  const { branchId, setBranchId } = useBranchFilter();
   const [range, setRange] = React.useState<DateRange>(() => {
     const to = new Date();
     const from = new Date(to.getTime() - 13 * 86_400_000);
     return { from: isoDate(from), to: isoDate(to) };
   });
 
-  const filtered = DAILY_REPORT_ROWS.filter((row) => {
-    const day = row.date.slice(0, 10);
-    const matchesBranch = branchId === 'ALL' || row.branchId === branchId;
-    const matchesRange = (!range.from || day >= range.from) && (!range.to || day <= range.to);
-    return matchesBranch && matchesRange;
-  });
-
-  const byDay = new Map<string, { date: string; amountCollected: number; collectionTarget: number }>();
-  for (const row of filtered) {
-    const key = row.date.slice(0, 10);
-    const entry = byDay.get(key) ?? { date: row.date, amountCollected: 0, collectionTarget: 0 };
-    entry.amountCollected += row.amountCollected;
-    entry.collectionTarget += row.collectionTarget;
-    byDay.set(key, entry);
-  }
-  const rows = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const totalCollected = rows.reduce((sum, r) => sum + r.amountCollected, 0);
-  const totalTarget = rows.reduce((sum, r) => sum + r.collectionTarget, 0);
-  // The chart above always stays chronological (a trend line reversed
-  // would be confusing); only the table below is independently sortable —
-  // Date defaults to recent-to-oldest per the standing requirement.
-  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getDailyRowSortValue, { key: 'date', direction: 'desc' });
+  const query = useCollectionReport('DAILY', range.from || undefined, range.to || undefined);
+  const rows = query.data?.items ?? [];
+  const totalCollected = rows.reduce((sum, r) => sum + Number(r.amountCollected), 0);
+  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: 'period', direction: 'desc' });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <DateRangeFilter value={range} onChange={setRange} />
-        <BranchSelect value={branchId} onChange={setBranchId} />
       </div>
+      {query.isError && <ErrorBanner message="Could not load the collection report. Is the backend running?" />}
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="date" tickFormatter={(d: string) => formatDate(d)} tick={{ fontSize: 11 }} />
+            <XAxis dataKey="period" tickFormatter={(d: string) => formatDate(d)} tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
             <Tooltip labelFormatter={(d) => formatDate(d as string)} formatter={pesoTooltipFormatter} />
-            <Line type="monotone" dataKey="collectionTarget" name="Target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
-            <Line type="monotone" dataKey="amountCollected" name="Collected" stroke="hsl(var(--chart-3))" strokeWidth={2} />
+            <Line
+              type="monotone"
+              dataKey={(row: CollectionReportRow) => Number(row.amountCollected)}
+              name="Collected"
+              stroke="hsl(var(--chart-3))"
+              strokeWidth={2}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
-            <SortableTableHead sortKey="date" currentSort={sort} onSort={toggleSort} isDateColumn>
+            <SortableTableHead sortKey="period" currentSort={sort} onSort={toggleSort} isDateColumn>
               Date
             </SortableTableHead>
             <SortableTableHead sortKey="amountCollected" currentSort={sort} onSort={toggleSort} className="text-right">
               Collected
             </SortableTableHead>
-            <SortableTableHead sortKey="collectionTarget" currentSort={sort} onSort={toggleSort} className="text-right">
-              Target
-            </SortableTableHead>
-            <SortableTableHead sortKey="percentOfTarget" currentSort={sort} onSort={toggleSort} className="text-right">
-              % of Target
-            </SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedRows.map((row) => (
-            <TableRow key={row.date}>
-              <TableCell>{formatDate(row.date)}</TableCell>
-              <TableCell className="text-right">{formatPeso(row.amountCollected)}</TableCell>
-              <TableCell className="text-right">{formatPeso(row.collectionTarget)}</TableCell>
-              <TableCell className="text-right">{((row.amountCollected / row.collectionTarget) * 100).toFixed(0)}%</TableCell>
+            <TableRow key={row.period}>
+              <TableCell>{formatDate(row.period)}</TableCell>
+              <TableCell className="text-right">{formatPeso(Number(row.amountCollected))}</TableCell>
             </TableRow>
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                No sample data in this date range.
+              <TableCell colSpan={2} className="py-8 text-center text-sm text-muted-foreground">
+                {query.isLoading ? 'Loading…' : 'No collections in this date range.'}
               </TableCell>
             </TableRow>
           )}
@@ -166,8 +113,6 @@ function DailyCollectionReport() {
           <TableRow>
             <TableCell>Total</TableCell>
             <TableCell className="text-right">{formatPeso(totalCollected)}</TableCell>
-            <TableCell className="text-right">{formatPeso(totalTarget)}</TableCell>
-            <TableCell className="text-right">{totalTarget > 0 ? ((totalCollected / totalTarget) * 100).toFixed(0) : 0}%</TableCell>
           </TableRow>
         </TableFooter>
       </Table>
@@ -175,63 +120,48 @@ function DailyCollectionReport() {
   );
 }
 
-function PeriodCollectionReport({ rows: allRows }: { rows: typeof MONTHLY_REPORT_ROWS }) {
-  const { branchId, setBranchId } = useBranchFilter();
-  const filtered = allRows.filter((r) => branchId === 'ALL' || r.branchId === branchId);
-
-  const byLabel = new Map<string, { label: string; amountCollected: number; collectionTarget: number }>();
-  for (const row of filtered) {
-    const entry = byLabel.get(row.label) ?? { label: row.label, amountCollected: 0, collectionTarget: 0 };
-    entry.amountCollected += row.amountCollected;
-    entry.collectionTarget += row.collectionTarget;
-    byLabel.set(row.label, entry);
-  }
-  const rows = [...byLabel.values()];
-  const totalCollected = rows.reduce((sum, r) => sum + r.amountCollected, 0);
-  const totalTarget = rows.reduce((sum, r) => sum + r.collectionTarget, 0);
-  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getPeriodRowSortValue, { key: null, direction: 'asc' });
+function PeriodCollectionReport({ granularity, from }: { granularity: 'MONTHLY' | 'YEARLY'; from: string }) {
+  const query = useCollectionReport(granularity, from);
+  const rows = query.data?.items ?? [];
+  const totalCollected = rows.reduce((sum, r) => sum + Number(r.amountCollected), 0);
+  const { sorted: sortedRows, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: null, direction: 'asc' });
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <BranchSelect value={branchId} onChange={setBranchId} />
-      </div>
+      {query.isError && <ErrorBanner message="Could not load the collection report. Is the backend running?" />}
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+            <XAxis dataKey="period" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
             <Tooltip formatter={pesoTooltipFormatter} />
-            <Line type="monotone" dataKey="collectionTarget" name="Target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
-            <Line type="monotone" dataKey="amountCollected" name="Collected" stroke="hsl(var(--chart-3))" strokeWidth={2} />
+            <Line
+              type="monotone"
+              dataKey={(row: CollectionReportRow) => Number(row.amountCollected)}
+              name="Collected"
+              stroke="hsl(var(--chart-3))"
+              strokeWidth={2}
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
       <Table>
         <TableHeader>
           <TableRow>
-            <SortableTableHead sortKey="label" currentSort={sort} onSort={toggleSort}>
+            <SortableTableHead sortKey="period" currentSort={sort} onSort={toggleSort}>
               Period
             </SortableTableHead>
             <SortableTableHead sortKey="amountCollected" currentSort={sort} onSort={toggleSort} className="text-right">
               Collected
             </SortableTableHead>
-            <SortableTableHead sortKey="collectionTarget" currentSort={sort} onSort={toggleSort} className="text-right">
-              Target
-            </SortableTableHead>
-            <SortableTableHead sortKey="percentOfTarget" currentSort={sort} onSort={toggleSort} className="text-right">
-              % of Target
-            </SortableTableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedRows.map((row) => (
-            <TableRow key={row.label}>
-              <TableCell>{row.label}</TableCell>
-              <TableCell className="text-right">{formatPeso(row.amountCollected)}</TableCell>
-              <TableCell className="text-right">{formatPeso(row.collectionTarget)}</TableCell>
-              <TableCell className="text-right">{((row.amountCollected / row.collectionTarget) * 100).toFixed(0)}%</TableCell>
+            <TableRow key={row.period}>
+              <TableCell>{row.period}</TableCell>
+              <TableCell className="text-right">{formatPeso(Number(row.amountCollected))}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -239,8 +169,6 @@ function PeriodCollectionReport({ rows: allRows }: { rows: typeof MONTHLY_REPORT
           <TableRow>
             <TableCell>Total</TableCell>
             <TableCell className="text-right">{formatPeso(totalCollected)}</TableCell>
-            <TableCell className="text-right">{formatPeso(totalTarget)}</TableCell>
-            <TableCell className="text-right">{totalTarget > 0 ? ((totalCollected / totalTarget) * 100).toFixed(0) : 0}%</TableCell>
           </TableRow>
         </TableFooter>
       </Table>
@@ -248,13 +176,23 @@ function PeriodCollectionReport({ rows: allRows }: { rows: typeof MONTHLY_REPORT
   );
 }
 
+/**
+ * Wired to the real backend (`GET /reports/collections`) — sums `REPAYMENT` transactions per
+ * period. Drops the mock version's Target/% of Target columns: there's no collection-target/quota
+ * concept anywhere in the backend (no config table, no field) — showing a fabricated target would
+ * violate CLAUDE.md's "never invent business rules." Branch scoping is automatic from the
+ * signed-in session, matching Dashboard/Payment Reminders.
+ */
 export function CollectionReportPage() {
   useLogPageView('Collection Report');
+  const twelveMonthsAgo = React.useMemo(() => isoDate(new Date(Date.now() - 365 * 86_400_000)), []);
+  const fourYearsAgo = React.useMemo(() => isoDate(new Date(Date.now() - 4 * 365 * 86_400_000)), []);
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Collection Report</h2>
-        <p className="text-sm text-muted-foreground">Collections vs. target — sample data, filterable by period/branch.</p>
+        <p className="text-sm text-muted-foreground">Real collections (REPAYMENT transactions), filterable by period.</p>
       </div>
 
       <Card>
@@ -273,10 +211,10 @@ export function CollectionReportPage() {
               <DailyCollectionReport />
             </TabsContent>
             <TabsContent value="monthly">
-              <PeriodCollectionReport rows={MONTHLY_REPORT_ROWS} />
+              <PeriodCollectionReport granularity="MONTHLY" from={twelveMonthsAgo} />
             </TabsContent>
             <TabsContent value="yearly">
-              <PeriodCollectionReport rows={YEARLY_REPORT_ROWS} />
+              <PeriodCollectionReport granularity="YEARLY" from={fourYearsAgo} />
             </TabsContent>
           </Tabs>
         </CardContent>

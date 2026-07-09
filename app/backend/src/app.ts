@@ -74,6 +74,11 @@ import { UpdateUserUseCase } from '@modules/identity/application/use-cases/Updat
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
+import { createReportingRouter } from '@modules/reporting/interface/http/reportingRouter';
+import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
+import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
+import { ListReportTransactionsUseCase } from '@modules/reporting/application/use-cases/ListReportTransactionsUseCase';
+import { PrismaReportingRepository } from '@modules/reporting/infrastructure/PrismaReportingRepository';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -302,6 +307,18 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', paymentReminderRouter);
+
+  // --- reporting module wiring: Loan/Collection/Transaction Report pages ---
+  const reportingRepository = new PrismaReportingRepository();
+  const reportingRouter = createReportingRouter(
+    {
+      getLoanOriginationReportUseCase: new GetLoanOriginationReportUseCase({ reportingRepository }),
+      getCollectionReportUseCase: new GetCollectionReportUseCase({ reportingRepository }),
+      listReportTransactionsUseCase: new ListReportTransactionsUseCase({ reportingRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', reportingRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
