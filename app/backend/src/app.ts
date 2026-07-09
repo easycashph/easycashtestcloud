@@ -23,6 +23,10 @@ import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerR
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
+import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
+import { createPsgcRouter } from '@modules/psgc/interface/http/psgcRouter';
+import { ListPsgcOptionsUseCase } from '@modules/psgc/application/use-cases/ListPsgcOptionsUseCase';
+import { PrismaPsgcRepository } from '@modules/psgc/infrastructure/PrismaPsgcRepository';
 import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateCoBorrowerUseCase';
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
@@ -172,12 +176,20 @@ export function createApp(): Express {
       createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
+      updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository }),
       createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
     },
     tokenService,
   );
   app.use('/api/v1', borrowerRouter);
+
+  // --- psgc module wiring: read-only Philippine address reference data (Region/Province/City/Barangay) ---
+  const psgcRouter = createPsgcRouter(
+    { listPsgcOptionsUseCase: new ListPsgcOptionsUseCase({ psgcRepository: new PrismaPsgcRepository() }) },
+    tokenService,
+  );
+  app.use('/api/v1', psgcRouter);
 
   // --- loan-product module wiring (Milestone 8: HTTP API layer) ---
   const loanProductRepository = new PrismaLoanProductRepository();

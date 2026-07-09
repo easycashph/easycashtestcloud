@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Briefcase, Home, Landmark, Mail, Paperclip, Pencil, Phone } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, ArrowLeft, Briefcase, Home, Landmark, Mail, Paperclip, Pencil, Phone } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import {
 } from '@/lib/mockData';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanProduct } from '@/lib/loanApiTypes';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function getLoanSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
@@ -145,16 +146,194 @@ function EditClientDialog({
   );
 }
 
+interface RealEditDraft {
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  mobilePhone1: string;
+  email: string;
+  civilStatus: string;
+  address: AddressDraft;
+}
+
+function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
+  const existing = borrower.addresses[0];
+  return {
+    firstName: borrower.firstName,
+    lastName: borrower.lastName,
+    middleName: borrower.middleName ?? '',
+    mobilePhone1: borrower.mobilePhone1 ?? '',
+    email: borrower.email ?? '',
+    civilStatus: borrower.civilStatus ?? '',
+    address: existing
+      ? {
+          houseUnitNumber: existing.houseUnitNumber ?? '',
+          street: existing.street ?? '',
+          barangay: existing.barangay ?? '',
+          cityMunicipality: existing.cityMunicipality ?? '',
+          province: existing.province ?? '',
+          zipCode: existing.zipCode ?? '',
+        }
+      : emptyAddressDraft(),
+  };
+}
+
+/**
+ * Real edit dialog for a migrated (CP12) client — wired to `PATCH /borrowers/:id`. Address entry
+ * uses the cascading `PsgcAddressPicker` instead of free text, so a saved address can never again
+ * end up as a raw PSGC code (see scripts/fix-coded-addresses.ts). The picker can't pre-select the
+ * client's existing address into its dropdowns (no name->code reverse lookup — see the picker's own
+ * doc comment), so the current address is shown as read-only context above it; leaving the picker
+ * untouched keeps the existing address unchanged.
+ */
+function RealEditClientDialog({
+  open,
+  onOpenChange,
+  borrower,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  borrower: RealBorrower;
+}) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = React.useState<RealEditDraft>(() => draftFromBorrower(borrower));
+  const [addressTouched, setAddressTouched] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setDraft(draftFromBorrower(borrower));
+      setAddressTouched(false);
+    }
+  }, [open, borrower]);
+
+  const existingAddress = borrower.addresses[0];
+  const existingAddressLine = existingAddress
+    ? [existingAddress.houseUnitNumber, existingAddress.street, existingAddress.barangay, existingAddress.cityMunicipality, existingAddress.province]
+        .filter(Boolean)
+        .join(', ')
+    : 'None on file';
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<RealBorrower>(`/borrowers/${borrower.id}`, {
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+        middleName: draft.middleName || undefined,
+        mobilePhone1: draft.mobilePhone1 || undefined,
+        email: draft.email || undefined,
+        civilStatus: draft.civilStatus || undefined,
+        ...(addressTouched
+          ? {
+              addresses: [
+                {
+                  houseUnitNumber: draft.address.houseUnitNumber || undefined,
+                  street: draft.address.street || undefined,
+                  barangay: draft.address.barangay || undefined,
+                  cityMunicipality: draft.address.cityMunicipality || undefined,
+                  province: draft.address.province || undefined,
+                  zipCode: draft.address.zipCode || undefined,
+                },
+              ],
+            }
+          : {}),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['borrower', borrower.id] });
+      onOpenChange(false);
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Client Details</DialogTitle>
+          <DialogDescription>Updates the real client record.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>First Name</Label>
+            <Input value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Last Name</Label>
+            <Input value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Middle Name</Label>
+            <Input value={draft.middleName} onChange={(e) => setDraft({ ...draft, middleName: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Mobile Number</Label>
+            <Input value={draft.mobilePhone1} onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Email</Label>
+            <Input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Civil Status</Label>
+            <Select value={draft.civilStatus} onValueChange={(v) => setDraft({ ...draft, civilStatus: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Single">Single</SelectItem>
+                <SelectItem value="Married">Married</SelectItem>
+                <SelectItem value="Widowed">Widowed</SelectItem>
+                <SelectItem value="Separated">Separated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-1.5 border-t pt-3">
+          <Label>Address</Label>
+          <p className="text-xs text-muted-foreground">
+            Current on file: <span className="font-medium text-foreground">{existingAddressLine}</span>. Select below to replace it —
+            leave untouched to keep the current address.
+          </p>
+          <PsgcAddressPicker
+            value={draft.address}
+            onChange={(patch) => {
+              setAddressTouched(true);
+              setDraft((prev) => ({ ...prev, address: { ...prev.address, ...patch } }));
+            }}
+          />
+        </div>
+
+        {updateMutation.isError && (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {updateMutation.error instanceof Error ? updateMutation.error.message : 'Could not save changes.'}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. `getMockBorrower()` only knows
  * hand-authored mock clients — a borrower id from `ClientListPage`'s now-real list (a UUID,
  * migrated from legacy data) doesn't exist there and would otherwise hit this page's "not found"
  * state. Deliberately minimal, same scope decision as `LoanDetailPage.tsx`'s `RealLoanDetailView`:
- * personal info + real loan history, read-only. Editing, Create Loan Account (needs a loan
- * application eligibility check the backend doesn't have yet), and Attachments stay mock-only.
+ * personal info + real loan history. Editing is now real (`RealEditClientDialog`); Create Loan
+ * Account (needs a loan application eligibility check the backend doesn't have yet) and
+ * Attachments stay mock-only.
  */
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
+  const [editOpen, setEditOpen] = React.useState(false);
 
   const borrowerQuery = useQuery({
     queryKey: ['borrower', borrowerId],
@@ -212,7 +391,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
         Real client, migrated from legacy data (CP12) — details and loan history below are live.
-        Editing, Create Loan Account, and Attachments are not yet wired to real data for this screen.
+        Create Loan Account and Attachments are not yet wired to real data for this screen.
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -227,6 +406,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
             <Badge variant="outline" className="text-xs">
               {borrower.status}
             </Badge>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit / Customize Details
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center gap-2">
@@ -301,6 +483,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </Card>
         </div>
       </div>
+
+      <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
     </div>
   );
 }

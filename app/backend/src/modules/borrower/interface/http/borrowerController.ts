@@ -4,15 +4,17 @@ import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWri
 import type { CreateBorrowerUseCase } from '../../application/use-cases/CreateBorrowerUseCase';
 import type { GetBorrowerUseCase } from '../../application/use-cases/GetBorrowerUseCase';
 import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorrowersUseCase';
+import type { UpdateBorrowerUseCase } from '../../application/use-cases/UpdateBorrowerUseCase';
 import type { CreateCoBorrowerUseCase } from '../../application/use-cases/CreateCoBorrowerUseCase';
 import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorrowerUseCase';
-import type { CreateBorrowerRequestBody, CreateCoBorrowerRequestBody } from './borrowerSchemas';
+import type { CreateBorrowerRequestBody, CreateCoBorrowerRequestBody, UpdateBorrowerRequestBody } from './borrowerSchemas';
 import { presentBorrower, presentCoBorrower } from './presenters/BorrowerPresenter';
 
 export interface BorrowerControllerDeps {
   createBorrowerUseCase: CreateBorrowerUseCase;
   getBorrowerUseCase: GetBorrowerUseCase;
   listBorrowersUseCase: ListBorrowersUseCase;
+  updateBorrowerUseCase: UpdateBorrowerUseCase;
   createCoBorrowerUseCase: CreateCoBorrowerUseCase;
   getCoBorrowerUseCase: GetCoBorrowerUseCase;
 }
@@ -54,6 +56,19 @@ export class BorrowerController {
       const search = parseSearchParam(req.query);
       const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
       res.status(200).json(toPaginatedResponse(borrowers.map(presentBorrower), limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId); // H-1: reject cross-branch writes for non-global roles.
+      const body = req.body as UpdateBorrowerRequestBody;
+      const borrower = await this.deps.updateBorrowerUseCase.execute(req.params.id as string, body);
+      res.status(200).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
     }

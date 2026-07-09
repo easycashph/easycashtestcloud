@@ -4,7 +4,7 @@ import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { BorrowerController, type BorrowerControllerDeps } from './borrowerController';
-import { createBorrowerSchema, createCoBorrowerSchema } from './borrowerSchemas';
+import { createBorrowerSchema, createCoBorrowerSchema, updateBorrowerSchema } from './borrowerSchemas';
 
 /**
  * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination staff only for
@@ -21,6 +21,13 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.post('/borrowers', requireAuth, requireRole(...ORIGINATION_ROLES), validateBody(createBorrowerSchema), controller.create);
   router.get('/borrowers/:id', requireAuth, controller.get);
   router.get('/borrowers', requireAuth, controller.list);
+  router.patch(
+    '/borrowers/:id',
+    requireAuth,
+    requireRole(...ORIGINATION_ROLES),
+    validateBody(updateBorrowerSchema),
+    controller.update,
+  );
 
   router.post(
     '/co-borrowers',

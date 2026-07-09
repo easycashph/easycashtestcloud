@@ -220,4 +220,26 @@ export class Borrower {
     this.props.loanCycle += 1;
     this.props.updatedAt = new Date();
   }
+
+  /** PATCH-style: only overwrites fields actually present in `patch`; `name`, if given, must already be a full PersonName (built by the caller from whichever of first/middle/last changed). */
+  updateContactDetails(patch: {
+    name?: PersonName;
+    civilStatus?: string;
+    mobilePhone1?: string;
+    mobilePhone2?: string;
+    email?: string;
+  }): void {
+    if (patch.name !== undefined) this.props.name = patch.name;
+    if (patch.civilStatus !== undefined) this.props.civilStatus = patch.civilStatus;
+    if (patch.mobilePhone1 !== undefined) this.props.mobilePhone1 = patch.mobilePhone1;
+    if (patch.mobilePhone2 !== undefined) this.props.mobilePhone2 = patch.mobilePhone2;
+    if (patch.email !== undefined) this.props.email = patch.email;
+    this.props.updatedAt = new Date();
+  }
+
+  /** Always replaces the whole list — an Address has no independent identity to merge against (see Address VO doc comment). */
+  replaceAddresses(addresses: Address[]): void {
+    this.props.addresses = addresses;
+    this.props.updatedAt = new Date();
+  }
 }
