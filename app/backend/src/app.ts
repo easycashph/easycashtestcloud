@@ -64,6 +64,9 @@ import { ApproveLoanApplicationUseCase } from '@modules/loan-application/applica
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
+import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
+import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
+import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -262,6 +265,16 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanApplicationRouter);
+
+  // --- audit module wiring (Milestone 9.2: read-only Activity Logs API, MIS only —
+  // the audit trail itself is written by identity/loan-application use cases via IAuditLogger) ---
+  const auditLogRouter = createAuditLogRouter(
+    {
+      listAuditLogsUseCase: new ListAuditLogsUseCase({ auditLogRepository: new PrismaAuditLogRepository() }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', auditLogRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
