@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FilePlus2, Lock, Mail, MailOpen, Search } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, FilePlus2, Lock, MailOpen, Search } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,22 +14,16 @@ import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
-import {
-  logActivity,
-  MOCK_ACTIVITY_LOGS,
-  MOCK_LOAN_APPLICATIONS,
-  type LoanApplicationReviewState,
-  type LoanApplicationStatus,
-  type MockLoanApplication,
-  type MockRiskLevel,
-} from '@/lib/mockData';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 }
 
-function getSortValue(app: MockLoanApplication, key: string): string | number | Date | null | undefined {
+function getSortValue(app: LoanApplication, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'applicantName':
       return app.applicantName;
@@ -36,14 +31,12 @@ function getSortValue(app: MockLoanApplication, key: string): string | number | 
       return app.requestedCategory;
     case 'requestedAmount':
       return app.requestedAmount;
-    case 'aiRisk':
-      return app.aiRisk;
     case 'status':
       return app.status;
     case 'reviewState':
       return app.reviewState;
-    case 'submittedAt':
-      return new Date(app.submittedAt);
+    case 'createdAt':
+      return new Date(app.createdAt);
     default:
       return undefined;
   }
@@ -56,43 +49,48 @@ const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] 
   { value: 'DECLINED', label: 'Declined' },
 ];
 
-const RISK_BADGE_VARIANT: Record<MockRiskLevel, 'success' | 'warning' | 'destructive'> = {
-  'Low Risk': 'success',
-  'Medium Risk': 'warning',
-  'High Risk': 'destructive',
-};
-
 const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'warning' | 'success' | 'destructive'> = {
   PENDING_REVIEW: 'warning',
   APPROVED: 'success',
   DECLINED: 'destructive',
 };
 
-const CATEGORY_OPTIONS = ['ALL', ...[...new Set(MOCK_LOAN_APPLICATIONS.map((a) => a.requestedCategory))].sort()];
-
 /**
- * Represents applications that would arrive via API from the future public
- * Easycash loan-application website (not built yet — see
- * `docs/PROJECT_HANDOFF.md`). Everything here is local mock data; approving,
- * declining, or toggling review state only updates this browser tab's
- * in-memory state, per `src/lib/mockData.ts`'s `MOCK_LOAN_APPLICATIONS`
- * comment.
- *
- * `reviewState` (Reviewed/Unreviewed) is a separate email-inbox-style "seen"
- * flag, independent of the approve/decline decision — bulk toggle below
- * mirrors "mark as read/unread" over a selection or the whole inbox.
+ * Wired to the real backend Loan Applications module (`GET /loan-applications`,
+ * `POST /loan-applications/:id/mark-reviewed`). `reviewState` (Reviewed/Unreviewed) is a separate
+ * email-inbox-style "seen" flag, independent of the approve/decline decision — the backend only
+ * exposes a one-way mark-reviewed transition (no "mark unreviewed"), so the bulk action below is
+ * one-directional to match.
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { canAccessLoanApplications, currentAccount } = useRole();
-  const applications = MOCK_LOAN_APPLICATIONS;
-  const [, forceRerender] = React.useState(0);
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   useLogPageView('Loan Applications');
+
+  const applicationsQuery = useQuery({
+    queryKey: ['loan-applications', 'all'],
+    queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
+    enabled: canAccessLoanApplications,
+  });
+  const applications = React.useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
+
+  const markReviewedMutation = useMutation({
+    mutationFn: (id: string) => apiClient.post<LoanApplication>(`/loan-applications/${id}/mark-reviewed`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan-applications', 'all'] });
+    },
+  });
+
+  const categoryOptions = React.useMemo(
+    () => ['ALL', ...[...new Set(applications.map((a) => a.requestedCategory))].sort()],
+    [applications],
+  );
 
   // Computed unconditionally, before the early return below, so
   // useSortableTable's hook call is never skipped on some renders.
@@ -103,7 +101,7 @@ export function LoanApplicationsPage() {
     const matchesSearch = query.length === 0 || app.applicantName.toLowerCase().includes(query);
     return matchesStatus && matchesCategory && matchesSearch;
   });
-  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'submittedAt', direction: 'desc' });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   if (!canAccessLoanApplications) {
     return (
@@ -141,20 +139,10 @@ export function LoanApplicationsPage() {
     });
   };
 
-  const setReviewStateForSelected = (reviewState: LoanApplicationReviewState) => {
-    for (const app of applications) {
-      if (!selected.has(app.id) || app.reviewState === reviewState) continue;
-      app.reviewState = reviewState;
-      logActivity({
-        userName: currentAccount.name,
-        action: reviewState === 'REVIEWED' ? 'MARK_APPLICATION_REVIEWED' : 'MARK_APPLICATION_UNREVIEWED',
-        entityType: 'LoanApplication',
-        entityId: app.id,
-        at: new Date().toISOString(),
-      });
-    }
+  const markSelectedReviewed = async () => {
+    const targets = applications.filter((app) => selected.has(app.id) && app.reviewState === 'UNREVIEWED');
+    await Promise.all(targets.map((app) => markReviewedMutation.mutateAsync(app.id)));
     setSelected(new Set());
-    forceRerender((n) => n + 1);
   };
 
   return (
@@ -163,14 +151,20 @@ export function LoanApplicationsPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
           <p className="text-sm text-muted-foreground">
-            {applications.length} sample applications ({pendingCount} pending decision) — represents intake from the future public
-            loan application website (not built yet). Not connected to any live system.
+            {applications.length} application{applications.length === 1 ? '' : 's'} ({pendingCount} pending decision) — intake,
+            review, and decision workflow, wired to the live backend.
           </p>
         </div>
         <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
           <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
         </Button>
       </div>
+
+      {applicationsQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan applications. Is the backend running?
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
@@ -202,7 +196,7 @@ export function LoanApplicationsPage() {
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORY_OPTIONS.map((c) => (
+                {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c === 'ALL' ? 'All categories' : c}
                   </SelectItem>
@@ -214,18 +208,10 @@ export function LoanApplicationsPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={selected.size === 0}
-              onClick={() => setReviewStateForSelected('REVIEWED')}
+              disabled={selected.size === 0 || markReviewedMutation.isPending}
+              onClick={() => void markSelectedReviewed()}
             >
               <MailOpen className="mr-1.5 h-3.5 w-3.5" /> Mark as Reviewed
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={selected.size === 0}
-              onClick={() => setReviewStateForSelected('UNREVIEWED')}
-            >
-              <Mail className="mr-1.5 h-3.5 w-3.5" /> Mark as Pending Review
             </Button>
             {selected.size > 0 && <span className="text-xs text-muted-foreground">{selected.size} selected</span>}
           </div>
@@ -252,16 +238,13 @@ export function LoanApplicationsPage() {
                 <SortableTableHead sortKey="requestedAmount" currentSort={sort} onSort={toggleSort} className="text-right">
                   Amount
                 </SortableTableHead>
-                <SortableTableHead sortKey="aiRisk" currentSort={sort} onSort={toggleSort}>
-                  AI Risk
-                </SortableTableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Decision Status
                 </SortableTableHead>
                 <SortableTableHead sortKey="reviewState" currentSort={sort} onSort={toggleSort}>
                   Review
                 </SortableTableHead>
-                <SortableTableHead sortKey="submittedAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Submitted
                 </SortableTableHead>
               </TableRow>
@@ -281,7 +264,6 @@ export function LoanApplicationsPage() {
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-7 w-7">
-                        <AvatarImage src={app.profilePictureUrl} alt={app.applicantName} />
                         <AvatarFallback className="text-xs">{applicantInitials(app.applicantName)}</AvatarFallback>
                       </Avatar>
                       <span>{app.applicantName}</span>
@@ -292,9 +274,6 @@ export function LoanApplicationsPage() {
                   </TableCell>
                   <TableCell className="cursor-pointer text-right" onClick={() => navigate(`/applications/${app.id}`)}>
                     {formatPeso(app.requestedAmount)}
-                  </TableCell>
-                  <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    <Badge variant={RISK_BADGE_VARIANT[app.aiRisk]}>{app.aiRisk}</Badge>
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{app.status.replaceAll('_', ' ')}</Badge>
@@ -308,14 +287,14 @@ export function LoanApplicationsPage() {
                     className="cursor-pointer text-xs text-muted-foreground"
                     onClick={() => navigate(`/applications/${app.id}`)}
                   >
-                    {formatDate(app.submittedAt)}
+                    {formatDate(app.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                    No sample applications match your search/filter.
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    {applicationsQuery.isLoading ? 'Loading applications…' : 'No applications match your search/filter.'}
                   </TableCell>
                 </TableRow>
               )}

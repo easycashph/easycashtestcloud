@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, FilePlus2, Lock, Plus, Trash2 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,21 +19,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { createLoanApplication, INTAKE_DOCUMENT_OPTIONS, logActivity } from '@/lib/mockData';
+import { apiClient } from '@/lib/apiClient';
+import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
+import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
 
 /**
  * Officer-encoded loan application intake — mirrors the company's real paper
  * form "LOAN APPLICATION" (Form No. ECLC-LOFN01, Rev 02), section for section,
  * so a loan officer can encode a walk-in applicant while the public
- * application website does not exist yet. Mock/preview only: submitting adds
- * an in-memory sample application (PENDING_REVIEW), same as every other
- * mutation in this build.
+ * application website does not exist yet. Wired to the real backend
+ * (`POST /loan-applications`) — submitting creates a real PENDING_REVIEW record.
  *
- * Only the fields the LMS currently models are persisted onto the sample
- * record (see `CreateLoanApplicationInput`); the remaining paper-form fields
- * are shown for workflow completeness and clearly note that they are not yet
- * stored. No real client data should ever be typed here — sample data only.
+ * Only the fields the LMS currently models are persisted onto the record (see
+ * `CreateLoanApplicationRequest`); the remaining paper-form fields are shown for
+ * workflow completeness and clearly note that they are not yet stored.
  */
 
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
@@ -200,40 +201,38 @@ export function LoanApplicationCreatePage() {
     });
   };
 
-  const submit = () => {
-    const application = createLoanApplication({
-      applicantName,
-      age: age ?? 0,
-      address: presentAddress.trim(),
-      monthlyIncome: income,
-      employer: employer.trim(),
-      propertiesOwned: propertiesOwned
-        .split(',')
-        .map((p) => p.trim())
-        .filter(Boolean),
-      creditScore: Number(creditScore) || 0,
-      coBorrowerName:
-        hasCoBorrower && coBorrowerName.trim()
-          ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
-          : undefined,
-      requestedCategory: loanCategory,
-      requestedAmount: amount,
-      requestedTermMonths: term,
-      referralSource: referralDetail.trim() ? `${referralSource} — ${referralDetail.trim()}` : referralSource,
-      accountType,
-      loanPurpose: loanPurpose.trim() || undefined,
-      submittedDocuments: [...documents],
-      encodedBy: currentAccount.name,
-    });
-    logActivity({
-      userName: currentAccount.name,
-      action: 'CREATE_LOAN_APPLICATION',
-      entityType: 'LoanApplication',
-      entityId: application.id,
-      at: new Date().toISOString(),
-    });
-    navigate(`/applications/${application.id}`, { replace: true });
-  };
+  const createMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanApplication>('/loan-applications', {
+        branchId: currentAccount.branchId,
+        applicantName,
+        age: age ?? undefined,
+        address: presentAddress.trim() || undefined,
+        monthlyIncome: income > 0 ? income : undefined,
+        employer: employer.trim() || undefined,
+        propertiesOwned: propertiesOwned
+          .split(',')
+          .map((p) => p.trim())
+          .filter(Boolean),
+        creditScore: Number(creditScore) || undefined,
+        coBorrowerName:
+          hasCoBorrower && coBorrowerName.trim()
+            ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
+            : undefined,
+        requestedCategory: loanCategory,
+        requestedAmount: amount,
+        requestedTermMonths: term,
+        referralSource: referralDetail.trim() ? `${referralSource} — ${referralDetail.trim()}` : referralSource,
+        accountType,
+        loanPurpose: loanPurpose.trim() || undefined,
+        submittedDocuments: [...documents],
+      } satisfies CreateLoanApplicationRequest),
+    onSuccess: (application) => {
+      navigate(`/applications/${application.id}`, { replace: true });
+    },
+  });
+
+  const submit = () => createMutation.mutate();
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -590,8 +589,14 @@ export function LoanApplicationCreatePage() {
             and character references are captured on the paper form itself and are not yet stored by this preview. The applicant signs
             the Undertaking on the printed form — no signature is captured here.
           </p>
+          {createMutation.isError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the application.'}
+            </div>
+          )}
           <div className="flex items-center gap-2">
-            <Button disabled={!canSubmit} onClick={() => setConfirmOpen(true)}>
+            <Button disabled={!canSubmit || createMutation.isPending} onClick={() => setConfirmOpen(true)}>
               <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
