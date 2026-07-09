@@ -1,45 +1,35 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, MessageSquareText, MonitorSmartphone, CheckCircle2, Clock, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, AlertTriangle, Clock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import {
-  buildReminderMessage,
-  MOCK_ACTIVITY_LOGS,
-  MOCK_PAYMENT_REMINDERS,
-  REMINDER_TYPE_LABELS,
-  type MockPaymentReminder,
-  type PaymentReminderType,
-} from '@/lib/mockData';
+import { apiClient } from '@/lib/apiClient';
+import type { PaymentReminder, PaymentReminderStatus } from '@/lib/paymentReminderApiTypes';
+import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
-function getSortValue(r: MockPaymentReminder, key: string): string | number | Date | null | undefined {
+function remainingDue(r: PaymentReminder): number {
+  return Number(r.due.total) - Number(r.paid.total);
+}
+
+function getSortValue(r: PaymentReminder, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'loanCode':
       return r.loanCode;
     case 'borrowerName':
       return r.borrowerName;
-    case 'reminderType':
-      return r.reminderType;
     case 'dueDate':
       return new Date(r.dueDate);
     case 'amountDue':
-      return r.installmentAmountDue + r.penaltyDue;
+      return remainingDue(r);
     case 'status':
       return r.status;
     default:
@@ -47,111 +37,68 @@ function getSortValue(r: MockPaymentReminder, key: string): string | number | Da
   }
 }
 
-const TYPE_OPTIONS: { value: PaymentReminderType | 'ALL'; label: string }[] = [
-  { value: 'ALL', label: 'All reminder types' },
-  { value: 'FIVE_DAYS_BEFORE', label: REMINDER_TYPE_LABELS.FIVE_DAYS_BEFORE },
-  { value: 'THREE_DAYS_BEFORE', label: REMINDER_TYPE_LABELS.THREE_DAYS_BEFORE },
-  { value: 'ONE_DAY_BEFORE', label: REMINDER_TYPE_LABELS.ONE_DAY_BEFORE },
-  { value: 'DUE_DATE', label: REMINDER_TYPE_LABELS.DUE_DATE },
-  { value: 'PAST_DUE_WEEKLY', label: REMINDER_TYPE_LABELS.PAST_DUE_WEEKLY },
+const STATUS_OPTIONS: { value: PaymentReminderStatus | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All statuses' },
+  { value: 'LATE', label: 'Overdue' },
+  { value: 'PARTIALLY_PAID', label: 'Partially Paid' },
+  { value: 'PENDING', label: 'Upcoming' },
 ];
 
-const STATUS_OPTIONS = ['ALL', 'SENT', 'SCHEDULED'] as const;
-
-function MessagePreviewDialog({ reminder, onClose }: { reminder: MockPaymentReminder | null; onClose: () => void }) {
-  if (!reminder) return null;
-  return (
-    <Dialog open={!!reminder} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Reminder Message Preview</DialogTitle>
-          <DialogDescription>
-            {reminder.loanCode} · {REMINDER_TYPE_LABELS[reminder.reminderType]} · {reminder.status === 'SENT' ? 'Sent' : 'Scheduled'}{' '}
-            {formatDate(reminder.triggerDate)}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{buildReminderMessage(reminder)}</pre>
-          <div className="space-y-1.5">
-            {reminder.channels.map((c) => (
-              <div key={c.channel} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                <div className="flex items-center gap-2">
-                  {c.channel === 'SMS' ? <MessageSquareText className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
-                  <span>{c.channel === 'SMS' ? 'SMS' : 'Email'}</span>
-                  <span className="text-xs text-muted-foreground">{c.recipient}</span>
-                </div>
-                <Badge variant={c.sent ? 'success' : 'outline'}>
-                  {c.sent ? (
-                    <span className="flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Sent
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> Scheduled
-                    </span>
-                  )}
-                </Badge>
-              </div>
-            ))}
-            <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <MonitorSmartphone className="h-4 w-4" />
-                <span>Client Easycash Account Dashboard</span>
-              </div>
-              <Badge variant="secondary">Coming Soon</Badge>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Preview only — no real SMS/email is sent from this build. "Sent" simply means this reminder's trigger date has already
-            passed; a real notification service is future work (see CP13+).
-          </p>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+const STATUS_BADGE: Record<PaymentReminderStatus, { variant: 'destructive' | 'warning' | 'outline'; label: string }> = {
+  LATE: { variant: 'destructive', label: 'Overdue' },
+  PARTIALLY_PAID: { variant: 'warning', label: 'Partially Paid' },
+  PENDING: { variant: 'outline', label: 'Upcoming' },
+};
 
 /**
- * Automatic Payment Reminders — system-generated schedule (5/3/1 days
- * before due, on the due date, and weekly while past due), sent via SMS and
- * Email. Fully mock: no real notification service runs here. See
- * `MOCK_PAYMENT_REMINDERS` in `src/lib/mockData.ts` for the generation
- * logic and `buildReminderMessage()` for the exact message content.
+ * Wired to the real backend (`GET /payment-reminders`) — one row per active loan account's next
+ * not-fully-paid installment. There's no notification/scheduling service in this build yet (no
+ * SMS/email actually goes out), so this is an "Upcoming & Overdue Installments" worklist, not a
+ * simulated reminder-send history like the earlier mock version.
  */
 export function PaymentRemindersPage() {
   useLogPageView('Payment Reminders');
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
-  const [status, setStatus] = React.useState<(typeof STATUS_OPTIONS)[number]>('ALL');
-  const [type, setType] = React.useState<PaymentReminderType | 'ALL'>('ALL');
-  const [previewing, setPreviewing] = React.useState<MockPaymentReminder | null>(null);
+  const [status, setStatus] = React.useState<PaymentReminderStatus | 'ALL'>('ALL');
 
-  const filtered = MOCK_PAYMENT_REMINDERS.filter((r) => {
+  const remindersQuery = useQuery({
+    queryKey: ['payment-reminders'],
+    queryFn: () => apiClient.get<{ items: PaymentReminder[] }>('/payment-reminders'),
+  });
+  const reminders = remindersQuery.data?.items ?? [];
+
+  const filtered = reminders.filter((r) => {
     const query = search.trim().toLowerCase();
     const matchesSearch =
       query.length === 0 || r.borrowerName.toLowerCase().includes(query) || r.loanCode.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || r.status === status;
-    const matchesType = type === 'ALL' || r.reminderType === type;
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus;
   });
-  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'desc' });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'asc' });
 
-  const sentCount = MOCK_PAYMENT_REMINDERS.filter((r) => r.status === 'SENT').length;
+  const overdueCount = reminders.filter((r) => r.status === 'LATE').length;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Payment Reminders</h2>
         <p className="text-sm text-muted-foreground">
-          {MOCK_PAYMENT_REMINDERS.length} sample reminders across active loan accounts ({sentCount} sent) — automatic schedule: 5 days
-          before due, 3 days before, 1 day before, due date, and weekly while past due. Sent via SMS and Email; client dashboard channel
-          is Coming Soon.
+          {reminders.length} active loan account{reminders.length === 1 ? '' : 's'} with an installment due or overdue (
+          {overdueCount} overdue). Each row is the next unpaid installment for that loan. No SMS/email notification service is wired
+          up yet — this is a worklist, not a send history.
         </p>
       </div>
 
+      {remindersQuery.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load payment reminders. Is the backend running?
+        </div>
+      )}
+
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <CardTitle className="text-base">Reminder Schedule — Search &amp; Filter</CardTitle>
+          <CardTitle className="text-base">Upcoming &amp; Overdue Installments — Search &amp; Filter</CardTitle>
           <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -162,24 +109,12 @@ export function PaymentRemindersPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as (typeof STATUS_OPTIONS)[number])}>
-              <SelectTrigger className="w-full sm:w-44">
+            <Select value={status} onValueChange={(v) => setStatus(v as PaymentReminderStatus | 'ALL')}>
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s === 'ALL' ? 'All statuses' : s === 'SENT' ? 'Sent' : 'Scheduled'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={type} onValueChange={(v) => setType(v as PaymentReminderType | 'ALL')}>
-              <SelectTrigger className="w-full sm:w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_OPTIONS.map((option) => (
+                {STATUS_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -198,66 +133,45 @@ export function PaymentRemindersPage() {
                 <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
                   Borrower
                 </SortableTableHead>
-                <SortableTableHead sortKey="reminderType" currentSort={sort} onSort={toggleSort}>
-                  Reminder
-                </SortableTableHead>
                 <SortableTableHead sortKey="dueDate" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Due Date
                 </SortableTableHead>
                 <SortableTableHead sortKey="amountDue" currentSort={sort} onSort={toggleSort} className="text-right">
                   Amount Due
                 </SortableTableHead>
-                <TableHead>Channels</TableHead>
+                <TableHead>Progress</TableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Status
                 </SortableTableHead>
-                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="cursor-pointer font-mono text-xs" onClick={() => navigate(`/loans/${r.loanId}`)}>
-                    {r.loanCode}
-                  </TableCell>
-                  <TableCell className="font-medium">{r.borrowerName}</TableCell>
-                  <TableCell>
-                    <Badge variant={r.reminderType === 'PAST_DUE_WEEKLY' ? 'destructive' : 'outline'}>
-                      {REMINDER_TYPE_LABELS[r.reminderType]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{formatDate(r.dueDate)}</TableCell>
-                  <TableCell className="text-right">{formatPeso(r.installmentAmountDue + r.penaltyDue)}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <MessageSquareText className="h-3.5 w-3.5 text-muted-foreground" />
-                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={r.status === 'SENT' ? 'success' : 'outline'}>
-                      {r.status === 'SENT' ? (
+              {sorted.map((r) => {
+                const badge = STATUS_BADGE[r.status];
+                return (
+                  <TableRow key={r.installmentId} className="cursor-pointer" onClick={() => navigate(`/loans/${r.loanAccountId}`)}>
+                    <TableCell className="font-mono text-xs">{r.loanCode}</TableCell>
+                    <TableCell className="font-medium">{r.borrowerName}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatDate(r.dueDate)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(remainingDue(r))}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {r.installmentsPaidCount} of {r.installmentsTotalCount} paid
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={badge.variant}>
                         <span className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3" /> Sent
+                          {r.status === 'LATE' ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                          {badge.label}
                         </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> Scheduled
-                        </span>
-                      )}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="outline" size="sm" onClick={() => setPreviewing(r)}>
-                      Preview Message
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                    No sample reminders match your filter.
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                    {remindersQuery.isLoading ? 'Loading…' : 'No installments match your filter.'}
                   </TableCell>
                 </TableRow>
               )}
@@ -267,8 +181,6 @@ export function PaymentRemindersPage() {
       </Card>
 
       <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Payment Reminders')} title="Recent Activity — Payment Reminders" />
-
-      <MessagePreviewDialog reminder={previewing} onClose={() => setPreviewing(null)} />
     </div>
   );
 }

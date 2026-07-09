@@ -71,6 +71,9 @@ import { createUserRouter } from '@modules/identity/interface/http/userRouter';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
 import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
+import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
+import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
+import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -290,6 +293,15 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', auditLogRouter);
+
+  // --- payment-reminder module wiring: cross-loan "next due installment" list (Payment Reminders) ---
+  const paymentReminderRouter = createPaymentReminderRouter(
+    {
+      listPaymentRemindersUseCase: new ListPaymentRemindersUseCase({ paymentReminderRepository: new PrismaPaymentReminderRepository() }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', paymentReminderRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
