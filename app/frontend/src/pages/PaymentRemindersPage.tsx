@@ -20,6 +20,15 @@ function remainingDue(r: PaymentReminder): number {
   return Number(r.due.total) - Number(r.paid.total);
 }
 
+function remainingDueByComponent(r: PaymentReminder) {
+  return {
+    principal: Number(r.due.principal) - Number(r.paid.principal),
+    interest: Number(r.due.interest) - Number(r.paid.interest),
+    penalty: Number(r.due.penalty) - Number(r.paid.penalty),
+    fees: Number(r.due.fees) - Number(r.paid.fees),
+  };
+}
+
 function getSortValue(r: PaymentReminder, key: string): string | number | Date | null | undefined {
   switch (key) {
     case 'loanCode':
@@ -28,6 +37,14 @@ function getSortValue(r: PaymentReminder, key: string): string | number | Date |
       return r.borrowerName;
     case 'dueDate':
       return new Date(r.dueDate);
+    case 'principalDue':
+      return remainingDueByComponent(r).principal;
+    case 'interestDue':
+      return remainingDueByComponent(r).interest;
+    case 'penaltyDue':
+      return remainingDueByComponent(r).penalty;
+    case 'feesDue':
+      return remainingDueByComponent(r).fees;
     case 'amountDue':
       return remainingDue(r);
     case 'status':
@@ -136,8 +153,20 @@ export function PaymentRemindersPage() {
                 <SortableTableHead sortKey="dueDate" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Due Date
                 </SortableTableHead>
+                <SortableTableHead sortKey="principalDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Principal Due
+                </SortableTableHead>
+                <SortableTableHead sortKey="interestDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Interest Due
+                </SortableTableHead>
+                <SortableTableHead sortKey="penaltyDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Penalty Due
+                </SortableTableHead>
+                <SortableTableHead sortKey="feesDue" currentSort={sort} onSort={toggleSort} className="text-right">
+                  Fees Due
+                </SortableTableHead>
                 <SortableTableHead sortKey="amountDue" currentSort={sort} onSort={toggleSort} className="text-right">
-                  Amount Due
+                  Total Amount Due
                 </SortableTableHead>
                 <TableHead>Progress</TableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
@@ -148,12 +177,17 @@ export function PaymentRemindersPage() {
             <TableBody>
               {sorted.map((r) => {
                 const badge = STATUS_BADGE[r.status];
+                const components = remainingDueByComponent(r);
                 return (
                   <TableRow key={r.installmentId} className="cursor-pointer" onClick={() => navigate(`/loans/${r.loanAccountId}`)}>
                     <TableCell className="font-mono text-xs">{r.loanCode}</TableCell>
                     <TableCell className="font-medium">{r.borrowerName}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDate(r.dueDate)}</TableCell>
-                    <TableCell className="text-right">{formatPeso(remainingDue(r))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(components.principal)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(components.interest)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(components.penalty)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(components.fees)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatPeso(remainingDue(r))}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {r.installmentsPaidCount} of {r.installmentsTotalCount} paid
                     </TableCell>
@@ -170,7 +204,7 @@ export function PaymentRemindersPage() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={10} className="py-10 text-center text-sm text-muted-foreground">
                     {remindersQuery.isLoading ? 'Loading…' : 'No installments match your filter.'}
                   </TableCell>
                 </TableRow>
