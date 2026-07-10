@@ -21,8 +21,9 @@ export interface LmsTeamMember {
 
 /** Current LMS developer team, shown on the About page. Update when the team roster changes. */
 export const LMS_DEV_TEAM_MEMBERS: LmsTeamMember[] = [
-  { name: 'Jomer Biason', role: 'MIS Assistant', note: 'Vibe Coder and Programmer' },
-  { name: 'Nomer Perez', role: 'MIS Manager', note: 'Reviewer' },
+  { name: 'Jomer Biason', role: 'MIS Assistant', note: 'Full-stack Engineer' },
+  { name: 'Nomer Perez', role: 'MIS Manager', note: 'Quality Assurance Engineer' },
+  { name: 'Howell Hay', role: 'CEO', note: 'Product Manager' },
 ];
 
 /**
@@ -57,6 +58,19 @@ export interface LmsChangelogEntry {
  * concise and plain-language, translated for a non-technical reader — this is stakeholder-facing.)
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.9.4',
+    date: 'July 10, 2026',
+    highlights: [
+      'Dashboard, Loan Applications, Activity Logs, Member Details, Payment Reminders, and Loan/Collection/Transaction Reports are now wired to the real backend, replacing sample data — the platform has no remaining mock-only pages except Settings and About.',
+      'Member Details can now add and edit real staff accounts (name, email, role, status), backed by a real account-management API.',
+      'Fixed a real data-quality issue: about 68% of migrated client addresses had been stored as raw geographic codes instead of place names. Imported the official Philippine address reference data (regions, provinces, cities/municipalities, barangays) and corrected 940 of 944 affected records.',
+      'Client Edit now uses a real cascading Region → Province → City/Municipality → Barangay address picker instead of free text, so an address can\'t be saved as a raw code again.',
+      'Search boxes on Client Data, Loan Applications, Loan Accounts, Member Details, and Activity Logs now search the full dataset on the server instead of only what was already loaded on screen.',
+      'Fixed slow page loads on list pages: each now loads 100 records at a time with Next/Previous paging, instead of loading the entire dataset up front.',
+      'Login page and app header now show the platform\'s official name, Easycash Loan Management System Platform.',
+    ],
+  },
   {
     version: '0.9.3',
     date: 'July 8, 2026',

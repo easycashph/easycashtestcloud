@@ -48,7 +48,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         <CardHeader className="items-center text-center">
           <img src="/logo-easycash.png" alt="Easycash logo" className="mb-2 h-16 w-16 object-contain" />
           <CardTitle className="text-lg">{COMPANY_INFO.name}</CardTitle>
-          <p className="text-sm text-muted-foreground">Enterprise Digital Lending Platform</p>
+          <p className="text-sm text-muted-foreground">Easycash Loan Management System Platform</p>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>

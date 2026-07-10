@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { env } from '@shared/config/env';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
@@ -10,10 +11,18 @@ import { loginSchema } from './authSchemas';
  * Milestone 6 plan §4/§8: stricter than the global rate limiter already
  * mounted in app.ts — specifically protects the login endpoint against
  * brute-force/credential-stuffing attempts.
+ *
+ * 2026-07-10: kept tight in production AND in the automated test suite (see
+ * `tests/integration/auth.test.ts`'s "trips the login rate limiter" case,
+ * which asserts the strict 8/15min ceiling) — relaxed only for local
+ * `development`, where repeated manual/automated UI-preview testing kept
+ * tripping the production limit, which isn't the threat this limiter exists
+ * to stop. Never disabled entirely (CLAUDE.md "Rate Limiting" is a required
+ * security control) — just a much higher ceiling in development specifically.
  */
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 8,
+  limit: env.NODE_ENV === 'development' ? 1000 : 8,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Try again later.' } },

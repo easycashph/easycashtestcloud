@@ -131,8 +131,7 @@ function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
           <Menu className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-sm font-semibold">Digital Lending Platform</h1>
-          <p className="text-xs text-muted-foreground">Enterprise loan management</p>
+          <h1 className="text-sm font-semibold">Easycash Loan Management System Platform</h1>
         </div>
       </div>
       <div className="flex items-center gap-3">
