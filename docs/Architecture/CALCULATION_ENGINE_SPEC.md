@@ -8,7 +8,11 @@ per `CLAUDE.md`'s Decision Log requirement.
 (all sections); `docs/Architecture/ADR-007-outstanding-balance-formula.md`,
 `ADR-009-payment-allocation-order.md`, `ADR-010-addon-vs-contractual-interest.md`,
 `ADR-032-loan-release-vs-disbursement.md`, `ADR-047-financial-audit-isolation.md`,
-`ADR-048-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`.
+`ADR-048-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`. As of 2026-07-11,
+also cross-validated against a second, independently-built system: MIS Nomer's own hand-built
+Excel-based LMS, `legacy/reports/BETA 1.5.83 LMSv3.xlsm` (§1, §2) — see those sections for what
+was and wasn't traced (the workbook's ~32MB `vbaProject.bin` macro code was not decompiled; only
+its worked-example output was verified against this spec's formulas).
 **Rule:** every formula below is either cited to verified legacy evidence, a legal loan document,
 or explicitly marked `STATUS: UNRESOLVED`. No formula in this document was filled in from general
 lending-industry convention. Where a formula is `UNRESOLVED`, implementation must not proceed for
@@ -62,7 +66,18 @@ second installment: `15164.97 × 0.0495 = 750.67`) and loan `SL-LAZ_V5N0R`
 (`2000 × 0.2499 = 499.8`, matching the real `INTEREST_APPLIED` transaction exactly). See
 `docs/Architecture/ADR-010-addon-vs-contractual-interest.md` §1–§2.
 
-**STATUS: CONFIRMED.**
+**Second, independent source (2026-07-11):** MIS Nomer's own hand-built Excel-based LMS,
+`legacy/reports/BETA 1.5.83 LMSv3.xlsm` (a separate, personally-maintained tool — not SDevTech/
+Mambu legacy production data, but a second from-scratch implementation of the same lending
+business's rules). Its `TempAmort` sheet's 5-period worked example (₱102,912.36 principal, 5-month
+term) has no live formula for `Interest`/`Principal`/`Balance` (pasted computed values — the sheet's
+`vbaProject.bin`, ~32MB, is presumed to hold the actual macro logic and was not decompiled), but
+reverse-derivation from the pasted values confirms `Interest_n ÷ Balance_(n-1)` is constant at
+`4.85000%` across all 5 periods (`4.85000%` to `4.85001%`, floating-point noise only) — the exact
+same `Interest_n = Balance_(n-1) × Rate` relationship as this formula, and matching the workbook's
+own `Rate_details` lookup table (`TERM=5 → CONTRACTUAL=4.85`).
+
+**STATUS: CONFIRMED** (now by two independently-built systems, not just one legacy source).
 
 ### Rounding
 Not specified by the formula itself. `Money.multiply()` (already implemented) rounds to
@@ -80,6 +95,11 @@ half-up rounding — a fixed, documented arithmetic default for a single multipl
 | 17,782.61 | 4.95% | 880.24 | `SL-REG_U1V1J`, installment 1 |
 | 15,164.97 | 4.95% | 750.67 | `SL-REG_U1V1J`, installment 2 |
 | 2,000.00 | 24.99% | 499.80 | `SL-LAZ_V5N0R`, installment 1 |
+| 102,912.36 | 4.85% | 4,991.25 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 1 |
+| 84,231.92 | 4.85% | 4,085.25 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 2 |
+| 64,645.48 | 4.85% | 3,135.31 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 3 |
+| 44,109.10 | 4.85% | 2,139.29 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 4 |
+| 22,576.70 | 4.85% | 1,094.97 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 5 |
 
 ### Edge Cases
 - **Zero balance** (fully paid): `Interest_n = 0 × rate = 0`. Not separately verified against
@@ -96,8 +116,8 @@ half-up rounding — a fixed, documented arithmetic default for a single multipl
   construction rules.
 
 ### Test Vectors
-See Examples table above — these three rows are directly reusable as unit test fixtures, each
-citing its real-loan source.
+See Examples table above — every row is directly reusable as a unit test fixture, each citing its
+source loan/workbook.
 
 ### Dependencies
 None (this is a leaf calculation).
@@ -148,7 +168,17 @@ double-precision Excel calculation, not evidence against the formula) after 8 pe
 independent from-scratch `PMT` reimplementation, tested against 9 real released loans, matching
 each to within a few centavos).
 
-**STATUS: CONFIRMED.**
+**Second, independent source (2026-07-11):** MIS Nomer's own hand-built Excel-based LMS,
+`legacy/reports/BETA 1.5.83 LMSv3.xlsm`, sheet `TempAmort` (see §1's evidence entry above for
+this source's nature/caveats). Recomputing `MonthlyPayment = (Rate × Principal) / (1 − (1 +
+Rate)^−n)` with `Principal = 102,912.36`, `Rate = 4.85%`, `n = 5` gives `23,671.69` — an **exact
+match**, to the centavo, against the workbook's own pasted `Amortization` value for installments
+1–4. Installment 5 shows `23,671.67` (2 centavos less) with `Balance` landing on exactly `0` —
+consistent with this project's own `ROUND_REMAINDER_INTO_LAST_REPAYMENT` behavior (§7), not a
+contradiction of it, though this workbook's own internal logic for *why* it does this was not
+traced (VBA not decompiled — see §1).
+
+**STATUS: CONFIRMED** (now by two independently-built systems, not just one legacy source).
 
 ### Rounding
 `MonthlyPayment` should be rounded to `Decimal(14,2)` once, at computation time — not
@@ -164,11 +194,12 @@ which is exact given both operands are already `Decimal(14,2)`.
 | `principal` | `monthlyContractualRate` | `numberOfInstallments` | `monthlyPayment` | Source |
 |---|---|---|---|---|
 | 80,953.71 | 3.7% | 8 | 11,875.38 | `Sample Computation Sheet` worked example |
+| 102,912.36 | 4.85% | 5 | 23,671.69 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort` worked example |
 
-(Only one full worked example with every period's values was found in the evidence; additional
-test vectors should be constructed once §4's `UNRESOLVED` flat-rate question and real disbursed-
-loan schedules are available for cross-checking against `repayments.bson` schedule rows for
-other products.)
+(Two full worked examples with every period's values are now available, from two independently
+built sources. Additional test vectors should still be constructed once §4's `UNRESOLVED` flat-rate
+question and real disbursed-loan schedules are available for cross-checking against
+`repayments.bson` schedule rows for other products.)
 
 ### Edge Cases
 - **`numberOfInstallments = 1`**: `MonthlyPayment` reduces to `Principal × (1 + MonthlyContractualRate)`
