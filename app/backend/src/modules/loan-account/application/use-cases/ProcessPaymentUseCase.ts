@@ -1,6 +1,11 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
-import { PaymentAllocationService, type AllocatableInstallment } from '@shared/domain/calculation/PaymentAllocationService';
+import {
+  PaymentAllocationService,
+  type AllocatableInstallment,
+  type InstallmentAllocation,
+} from '@shared/domain/calculation/PaymentAllocationService';
+import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/errors/CalculationDomainErrors';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
@@ -51,6 +56,93 @@ function toRemainingDue(installment: RepaymentInstallment): AllocatableInstallme
     interestDue: installment.due.interest.subtract(installment.paid.interest),
     principalDue: installment.due.principal.subtract(installment.paid.principal),
   };
+}
+
+/**
+ * A staff-entered per-installment override of `PaymentAllocationService`'s
+ * automatic fees->penalty->interest->principal waterfall (2026-07-10, user
+ * request via Payment Recording's "Manual" tab). Every field is required
+ * (even if zero) so a caller cannot omit a component by accident.
+ */
+export interface ManualAllocationInput {
+  installmentId: string;
+  principal: Money;
+  interest: Money;
+  penalty: Money;
+  fees: Money;
+}
+
+/**
+ * Validates and converts staff-entered manual allocations into the same
+ * `InstallmentAllocation[]` shape `PaymentAllocationService.allocate()`
+ * produces, so the rest of `execute()` (recordPayment, ledger totals,
+ * transaction) needs no manual-vs-automatic branching beyond this point.
+ *
+ * Unlike the automatic engine, manual mode never carries a remainder —
+ * the caller committed to an exact split, so any mismatch against
+ * `paymentAmount` or against an installment's remaining due is a hard
+ * rejection (400), not something silently absorbed.
+ */
+function toManualAllocations(
+  manualAllocations: readonly ManualAllocationInput[],
+  paymentAmount: Money,
+  unpaidInstallments: readonly RepaymentInstallment[],
+): InstallmentAllocation[] {
+  if (manualAllocations.length === 0) {
+    throw new InvalidPaymentAllocationInputError('at least one installment allocation is required for a manual payment.');
+  }
+
+  const remainingDueById = new Map(unpaidInstallments.map((i) => [i.id, toRemainingDue(i)]));
+  const seenInstallmentIds = new Set<string>();
+  let total = Money.ZERO;
+
+  const allocations: InstallmentAllocation[] = manualAllocations.map((entry) => {
+    if (seenInstallmentIds.has(entry.installmentId)) {
+      throw new InvalidPaymentAllocationInputError(`installment "${entry.installmentId}" was specified more than once.`);
+    }
+    seenInstallmentIds.add(entry.installmentId);
+
+    const remaining = remainingDueById.get(entry.installmentId);
+    if (!remaining) {
+      throw new InvalidPaymentAllocationInputError(
+        `installment "${entry.installmentId}" is not an unpaid installment on this loan.`,
+      );
+    }
+
+    for (const [label, applied, due] of [
+      ['principal', entry.principal, remaining.principalDue],
+      ['interest', entry.interest, remaining.interestDue],
+      ['penalty', entry.penalty, remaining.penaltyDue],
+      ['fees', entry.fees, remaining.feesDue],
+    ] as const) {
+      if (applied.isNegative()) {
+        throw new InvalidPaymentAllocationInputError(`${label} amount for installment "${entry.installmentId}" cannot be negative.`);
+      }
+      if (applied.greaterThan(due)) {
+        throw new InvalidPaymentAllocationInputError(
+          `${label} amount for installment "${entry.installmentId}" (${applied.toString()}) exceeds its remaining ${label} due (${due.toString()}).`,
+        );
+      }
+    }
+
+    total = total.add(entry.principal).add(entry.interest).add(entry.penalty).add(entry.fees);
+
+    return {
+      installmentId: entry.installmentId,
+      principalApplied: entry.principal,
+      interestApplied: entry.interest,
+      penaltyApplied: entry.penalty,
+      feesApplied: entry.fees,
+    };
+  });
+
+  if (!total.equals(paymentAmount)) {
+    throw new InvalidPaymentAllocationInputError(
+      `manual allocations total ${total.toString()} does not match the payment amount ${paymentAmount.toString()}.`,
+    );
+  }
+
+  return allocations;
 }
 
 /**
@@ -108,7 +200,13 @@ function toRemainingDue(installment: RepaymentInstallment): AllocatableInstallme
 export class ProcessPaymentUseCase {
   constructor(private readonly deps: ProcessPaymentUseCaseDeps) {}
 
-  async execute(loanAccountId: string, paymentAmount: Money, postedByUserId: string, paidAt: Date = new Date()): Promise<ProcessPaymentResult> {
+  async execute(
+    loanAccountId: string,
+    paymentAmount: Money,
+    postedByUserId: string,
+    paidAt: Date = new Date(),
+    manualAllocations?: readonly ManualAllocationInput[],
+  ): Promise<ProcessPaymentResult> {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) {
       throw new NotFoundError('LoanAccount', loanAccountId);
@@ -119,7 +217,9 @@ export class ProcessPaymentUseCase {
       .filter((installment) => installment.status !== 'PAID')
       .sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
-    const { allocations, remainder } = PaymentAllocationService.allocate(paymentAmount, unpaidInstallments.map(toRemainingDue));
+    const { allocations, remainder } = manualAllocations
+      ? { allocations: toManualAllocations(manualAllocations, paymentAmount, unpaidInstallments), remainder: Money.ZERO }
+      : PaymentAllocationService.allocate(paymentAmount, unpaidInstallments.map(toRemainingDue));
 
     const installmentsById = new Map(unpaidInstallments.map((installment) => [installment.id, installment]));
     const installmentsToSave: RepaymentInstallment[] = [];

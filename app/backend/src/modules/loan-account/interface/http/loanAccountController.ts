@@ -143,11 +143,19 @@ export class LoanAccountController {
 
       await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
         const paymentAmount = Money.of(body.paymentAmount);
+        const manualAllocations = body.allocations?.map((a) => ({
+          installmentId: a.installmentId,
+          principal: Money.of(a.principal),
+          interest: Money.of(a.interest),
+          penalty: Money.of(a.penalty),
+          fees: Money.of(a.fees),
+        }));
         const { loanAccount, remainder } = await this.deps.processPaymentUseCase.execute(
           req.params.id as string,
           paymentAmount,
           currentUser.sub,
           body.paidAt,
+          manualAllocations,
         );
         return {
           statusCode: 200,

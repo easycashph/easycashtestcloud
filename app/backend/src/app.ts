@@ -112,7 +112,26 @@ export function createApp(): Express {
   // CORS_ORIGIN may be a comma-separated list (e.g. multiple local dev ports
   // running side by side) — split rather than assume a single origin.
   const corsOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
-  app.use(cors({ origin: corsOrigins, credentials: true }));
+  // In development, the browser-preview tool assigns Vite a random free port on every
+  // restart (5173 is frequently already taken), so a fixed allow-list constantly falls
+  // out of date. Accept any http(s)://localhost:<port> / 127.0.0.1:<port> origin in dev
+  // only — production still enforces the exact CORS_ORIGIN allow-list below.
+  const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  app.use(
+    cors({
+      origin:
+        env.NODE_ENV === 'development'
+          ? (origin, callback) => {
+              if (!origin || localhostOriginPattern.test(origin) || corsOrigins.includes(origin)) {
+                callback(null, true);
+              } else {
+                callback(new Error('Not allowed by CORS'));
+              }
+            }
+          : corsOrigins,
+      credentials: true,
+    }),
+  );
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
