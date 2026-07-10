@@ -174,7 +174,7 @@ export function LoanApplicationsPage() {
           </p>
         </div>
         <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
-          <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
+          <FilePlus2 className="mr-2 h-4 w-4" /> Create Loan Application
         </Button>
       </div>
 

@@ -37,7 +37,12 @@ export class LoanApplicationController {
       const body = req.body as CreateLoanApplicationRequestBody;
       const scope = resolveBranchScope(req);
       const branchId = resolveWriteBranchId(scope, body.branchId);
-      const application = await this.deps.createLoanApplicationUseCase.execute({ ...body, branchId });
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.createLoanApplicationUseCase.execute({
+        ...body,
+        branchId,
+        encodedByUserId: currentUser.sub,
+      });
       res.status(201).json(presentLoanApplication(application));
     } catch (error) {
       next(error);

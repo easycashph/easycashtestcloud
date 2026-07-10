@@ -156,25 +156,6 @@ export function LoanApplicationCreatePage() {
   const [documents, setDocuments] = React.useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  if (!canAccessLoanApplications) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Create Loan Application</h2>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Lock className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
-            <p className="text-sm text-muted-foreground">
-              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const age = computeAge(dateOfBirth);
   const applicantName = [firstName, middleName, lastName].map((p) => p.trim()).filter(Boolean).join(' ');
   const amount = Number(requestedAmount);
@@ -233,6 +214,28 @@ export function LoanApplicationCreatePage() {
   });
 
   const submit = () => createMutation.mutate();
+
+  // Access gate placed after every hook above (React Hooks rules: never return early before a
+  // hook call) — was previously above the createMutation useMutation() call, a real
+  // rules-of-hooks violation, not just a lint nag.
+  if (!canAccessLoanApplications) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Create Loan Application</h2>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <Lock className="h-6 w-6 text-muted-foreground" />
+            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
+            <p className="text-sm text-muted-foreground">
+              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -597,7 +600,7 @@ export function LoanApplicationCreatePage() {
           )}
           <div className="flex items-center gap-2">
             <Button disabled={!canSubmit || createMutation.isPending} onClick={() => setConfirmOpen(true)}>
-              <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
+              <FilePlus2 className="mr-2 h-4 w-4" /> Create Loan Application
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
               Cancel
@@ -629,7 +632,7 @@ export function LoanApplicationCreatePage() {
                 submit();
               }}
             >
-              Confirm — Create Application
+              Confirm — Create Loan Application
             </Button>
           </DialogFooter>
         </DialogContent>
