@@ -404,7 +404,7 @@ export function PaymentRecordingPage() {
                   >
                     <div className="flex items-center justify-between">
                       <p className="font-medium">{l.loanCode}</p>
-                      <Badge variant={l.status === 'ACTIVE_IN_ARREARS' ? 'destructive' : 'outline'}>
+                      <Badge variant={l.status === 'ACTIVE_IN_ARREARS' ? 'destructive' : 'success'}>
                         {l.status === 'ACTIVE_IN_ARREARS' ? 'In Arrears' : 'Active'}
                       </Badge>
                     </div>
