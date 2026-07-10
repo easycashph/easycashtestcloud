@@ -2,8 +2,8 @@ import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
-import { apiClient } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import type { Borrower as RealBorrower, LoanAccount, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -385,6 +385,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
   });
 
+  const transactionsQuery = useQuery({
+    queryKey: ['loan-transactions', loanId],
+    queryFn: () => fetchAllPages<LoanTransaction>(`/loan-accounts/${loanId}/transactions`),
+  });
+
   if (loanQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading loan account…</p>;
   }
@@ -403,6 +408,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const borrower = borrowerQuery.data;
   const installments = installmentsQuery.data?.items ?? [];
   const num = (v: string) => Number.parseFloat(v) || 0;
+  const paymentHistory = (transactionsQuery.data ?? [])
+    .filter((t) => t.type === 'REPAYMENT')
+    .sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
 
   return (
     <div className="space-y-6">
@@ -518,6 +526,47 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   </TableCell>
                   <TableCell />
                 </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Payment History</CardTitle>
+          <CardDescription>{paymentHistory.length} payment{paymentHistory.length === 1 ? '' : 's'} posted against this loan.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {transactionsQuery.isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : paymentHistory.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No payments recorded yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Amount Paid</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Balance After</TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paymentHistory.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell>{formatDate(t.entryDate)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(t.principalComponent))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(t.interestComponent))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(t.penaltyComponent))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(t.feesComponent))}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatPeso(num(t.amount))}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(t.balanceAfter))}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           )}
