@@ -68,6 +68,14 @@ export interface LoanAccountProps {
   activatedAt?: Date;
   closedAt?: Date;
   closedReason?: string;
+  /**
+   * CP12 migration follow-up (2026-07-09): true when this loan's legacy record had no
+   * account-level balance snapshot at all, so every `balances` field was migrated as 0.00 for
+   * lack of any other value — never set by `create()`/`activate()` for a loan originated through
+   * this system itself, which always populates real balances. Read-only from the application's
+   * perspective; only ever set via the one-time backfill script.
+   */
+  legacyBalanceDataMissing: boolean;
   legacyId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -155,6 +163,7 @@ export class LoanAccount {
         repaymentPeriodUnit: input.repaymentPeriodUnit ?? 'MONTHS',
         gracePeriodDays: input.gracePeriodDays ?? 0,
         firstRepaymentDate: input.firstRepaymentDate,
+        legacyBalanceDataMissing: false,
         legacyId: input.legacyId,
         createdAt: now,
         updatedAt: now,
@@ -283,6 +292,10 @@ export class LoanAccount {
 
   get closedReason(): string | undefined {
     return this.props.closedReason;
+  }
+
+  get legacyBalanceDataMissing(): boolean {
+    return this.props.legacyBalanceDataMissing;
   }
 
   get legacyId(): string | undefined {

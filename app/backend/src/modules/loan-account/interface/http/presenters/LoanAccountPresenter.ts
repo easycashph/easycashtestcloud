@@ -54,6 +54,7 @@ export function presentLoanAccount(loanAccount: LoanAccount) {
     activatedAt: loanAccount.activatedAt?.toISOString() ?? null,
     closedAt: loanAccount.closedAt?.toISOString() ?? null,
     closedReason: loanAccount.closedReason ?? null,
+    legacyBalanceDataMissing: loanAccount.legacyBalanceDataMissing,
     legacyId: loanAccount.legacyId ?? null,
     createdAt: loanAccount.createdAt.toISOString(),
     updatedAt: loanAccount.updatedAt.toISOString(),

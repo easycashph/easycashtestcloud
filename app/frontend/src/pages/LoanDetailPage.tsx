@@ -501,9 +501,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
                     <TableCell>
-                      {/* InstallmentStatusBadge's type is mockData's RepaymentInstallmentStatus,
-                          which spells this status "LATE" — the real API spells it "OVERDUE". */}
-                      <InstallmentStatusBadge status={i.status === 'OVERDUE' ? 'LATE' : i.status} />
+                      <InstallmentStatusBadge status={i.status} />
                     </TableCell>
                   </TableRow>
                 ))}

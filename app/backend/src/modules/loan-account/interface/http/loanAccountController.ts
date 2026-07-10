@@ -60,7 +60,14 @@ export class LoanAccountController {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
-      const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
+      const borrowerId = typeof req.query.borrowerId === 'string' ? req.query.borrowerId : undefined;
+      const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({
+        limit,
+        cursor,
+        branchId: resolveBranchFilter(scope),
+        search,
+        borrowerId,
+      });
       res.status(200).json(toPaginatedResponse(loanAccounts.map(presentLoanAccount), limit, (item) => item.id));
     } catch (error) {
       next(error);

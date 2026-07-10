@@ -54,6 +54,7 @@ function toDomain(row: LoanAccountRow): LoanAccount {
     activatedAt: row.activatedAt ?? undefined,
     closedAt: row.closedAt ?? undefined,
     closedReason: row.closedReason ?? undefined,
+    legacyBalanceDataMissing: row.legacyBalanceDataMissing,
     legacyId: row.legacyId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -203,10 +204,12 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     return row ? toDomain(row) : null;
   }
 
+  /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): borrowerId equality filter combined with the pre-existing branch/search filters. */
   async findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]> {
     const client = resolveClient(ctx);
     const where: Prisma.LoanAccountWhereInput = {
       ...(options.branchId ? { branchId: options.branchId } : {}),
+      ...(options.borrowerId ? { borrowerId: options.borrowerId } : {}),
       ...(options.search
         ? {
             OR: [

@@ -11,6 +11,8 @@ export interface ListLoanAccountsInput {
   /** Milestone 8.1 / H-1: set for a branch-scoped caller, omitted for a global caller. */
   branchId?: string;
   search?: string;
+  /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): filters to one borrower's loan history. */
+  borrowerId?: string;
 }
 
 export class ListLoanAccountsUseCase {

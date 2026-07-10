@@ -178,9 +178,7 @@ function RealStatementOfAccountView({ loanId }: { loanId: string }) {
                     <TableCell className="text-right">{formatPeso(num(inst.due.interest))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(inst.paid.principal) + num(inst.paid.interest))}</TableCell>
                     <TableCell>
-                      {/* InstallmentStatusBadge's type is mockData's RepaymentInstallmentStatus, which
-                          spells this status "LATE" — the real API spells it "OVERDUE". */}
-                      <InstallmentStatusBadge status={inst.status === 'OVERDUE' ? 'LATE' : inst.status} />
+                      <InstallmentStatusBadge status={inst.status} />
                     </TableCell>
                   </TableRow>
                 ))}

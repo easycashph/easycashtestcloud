@@ -447,7 +447,10 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                     <TableCell className="font-medium text-muted-foreground">Loan Code</TableCell>
                     <TableCell className="font-medium text-muted-foreground">Product</TableCell>
                     <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Principal Balance</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Interest Balance</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Penalty Balance</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Fees Balance</TableCell>
                     <TableCell className="text-right font-medium text-muted-foreground">Collections Balance</TableCell>
                   </TableRow>
                 </TableHeader>
@@ -460,19 +463,22 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                         <LoanStatusBadge status={loan.status} />
                       </TableCell>
                       <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(loan.balances.feesBalance))}</TableCell>
                       <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
                     </TableRow>
                   ))}
                   {loansQuery.isLoading && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                         Loading loans…
                       </TableCell>
                     </TableRow>
                   )}
                   {!loansQuery.isLoading && loans.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                         No loans on record for this client.
                       </TableCell>
                     </TableRow>
@@ -681,7 +687,7 @@ export function ClientProfilePage() {
                   ))}
                   {loans.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                         No loans on record for this sample client.
                       </TableCell>
                     </TableRow>

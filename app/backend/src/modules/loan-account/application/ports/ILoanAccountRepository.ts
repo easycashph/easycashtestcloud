@@ -8,6 +8,8 @@ export interface FindManyLoanAccountsOptions {
   branchId?: string;
   /** Case-insensitive match against loanCode or the borrower's first/last name. */
   search?: string;
+  /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): filters to one borrower's loan history — read-only, combinable with branchId. */
+  borrowerId?: string;
 }
 
 export interface ILoanAccountRepository {

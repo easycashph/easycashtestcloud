@@ -300,8 +300,18 @@ Documentation includes:
 * Developer Guide
 * User Guide
 * Change Log
+* Session Logs
 
 Documentation is part of the deliverable.
+
+## Session Logs
+
+At the end of every substantive AI-assisted session (multiple bugs fixed, a migration, a feature
+wired, etc.), write or update a session log in `docs/SESSION_LOG_<date-range>.md` covering what
+was done, in what order, why, bugs found and their root causes/fixes, and current state plus known
+follow-up work. This is so context is never lost between conversations — a fresh session (or a
+new team member) should be able to read it and pick up where things left off. Small/trivial
+sessions (a single one-line fix, a question answered) don't need a full log.
 
 ---
 

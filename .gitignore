@@ -29,6 +29,12 @@ Thumbs.db
 # Database
 legacy/mongodb/
 
+# Real MongoDB export used for the 2026-07-09 CP12 migration (real client names, addresses,
+# financial records) — highly sensitive PII, same class as legacy/mongodb/ above. Different casing
+# ("MongoDB dump" vs "mongodb") means it was NOT covered by the rule above until now; found
+# untracked-but-not-ignored during the 2026-07-09 session and fixed immediately, before any commit.
+legacy/MongoDB dump/
+
 # Real client case files (scanned IDs, credit bureau reports, selfies) — highly sensitive PII,
 # must never enter git history. Only the small curated subset copied into app/frontend/public/
 # for the UI preview is tracked.

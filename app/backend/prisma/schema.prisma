@@ -692,6 +692,16 @@ model LoanAccount {
   closedAt         DateTime?
   closedReason     String?
 
+  /// CP12 migration follow-up (2026-07-09): true for a loan whose legacy record had NO
+  /// account-level balance snapshot fields at all (principalBalance/interestBalance/feesBalance/
+  /// penaltyBalance all absent, not zero) — 624 of 1,805 migrated loans, 191 of them
+  /// Active/ActiveInArrears. All balance columns on those rows were migrated as 0.00 for lack of
+  /// any other value, which would misleadingly read as "fully settled" — this flag exists so
+  /// staff can tell "genuinely zero" apart from "balance unknown, needs manual reconciliation".
+  /// Never set for a loan created going forward through this system's own
+  /// ActivateLoanUseCase/ProcessPaymentUseCase, which always populate real balances.
+  legacyBalanceDataMissing Boolean @default(false)
+
   legacyId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

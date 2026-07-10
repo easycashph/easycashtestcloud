@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { apiClient, ApiError, setAccessToken } from './apiClient';
+import { apiClient, ApiError, setAccessToken, setOnSessionExpired } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
 import type { LmsRole } from './mockData';
@@ -122,6 +122,20 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     loadPreferenceFor(null);
     setStatus('unauthenticated');
+  }, [loadPreferenceFor]);
+
+  // Without this, a session that goes bad mid-use (refresh token expired, or revoked via the
+  // backend's rotation-reuse detection) left every page silently 401-ing forever with no way to
+  // recover except a manual hard reload — `apiClient.ts`'s `onSessionExpired` hook fires exactly
+  // once per failed background refresh, and this bounces the user back to the Login page instead.
+  React.useEffect(() => {
+    setOnSessionExpired(() => {
+      setAccessToken(null);
+      setUser(null);
+      loadPreferenceFor(null);
+      setStatus('unauthenticated');
+    });
+    return () => setOnSessionExpired(null);
   }, [loadPreferenceFor]);
 
   if (status === 'loading') {

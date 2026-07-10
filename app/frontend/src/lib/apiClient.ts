@@ -40,6 +40,22 @@ export function getAccessToken(): string | null {
 }
 
 /**
+ * Fires once whenever a background `/auth/refresh` fails while the app believed it had a live
+ * session (i.e. every 401-triggered refresh attempt in `apiRequest`, not the initial bootstrap
+ * refresh in `roleContext.tsx`, which has its own try/catch). Without this, a session that goes
+ * bad mid-use (refresh token expired, or revoked via the backend's reuse-detection) left
+ * `accessToken` permanently `null` with no signal to the rest of the app — every page kept
+ * rendering as if logged in, but every request 401'd forever with no way to recover except a
+ * manual hard reload. `roleContext.tsx`'s `RoleProvider` subscribes to this to bounce the user
+ * back to the Login page immediately instead.
+ */
+let onSessionExpired: (() => void) | null = null;
+
+export function setOnSessionExpired(callback: (() => void) | null): void {
+  onSessionExpired = callback;
+}
+
+/**
  * De-duplicates concurrent refresh attempts: if three requests all get a 401 at the same moment,
  * they must not each independently call `/auth/refresh` — the backend's refresh-token rotation
  * treats a second concurrent use of the same refresh token as reuse (see backend `RefreshTokenUseCase`
@@ -89,6 +105,11 @@ async function rawRequest(path: string, init: ApiRequestInit): Promise<Response>
     ...init,
     headers,
     credentials: 'include',
+    // Disables conditional (ETag/If-None-Match) caching. Without this, two identical GETs fired
+    // close together (e.g. React StrictMode's dev-mode double-invoke of effects) can surface a raw
+    // 304 response to this code — `res.ok` is false for 304 (only 200-299 is "ok"), and a 304 has
+    // no body, so it was being misread as a generic failure ("Something went wrong").
+    cache: 'no-store',
     body: hasBody ? JSON.stringify(init.body) : undefined,
   });
 }
@@ -106,6 +127,7 @@ async function apiRequest<T>(path: string, init: ApiRequestInit = {}, allowRefre
     if (refreshed) {
       return apiRequest<T>(path, init, false);
     }
+    onSessionExpired?.();
   }
 
   if (res.status === 204) return undefined as T;

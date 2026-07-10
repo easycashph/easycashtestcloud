@@ -36,6 +36,7 @@ export interface LoanAccount {
   borrowerId: string;
   loanProductVersionId: string;
   branchId: string;
+  loanOfficerId: string | null;
   status: LoanAccountStatus;
   principalAmount: string;
   balances: LoanAccountBalances;
@@ -43,10 +44,13 @@ export interface LoanAccount {
   accountingBalance: string;
   interestRate: string;
   installmentCount: number;
+  repaymentPeriodUnit: string;
   firstRepaymentDate: string;
   approvedAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;
+  /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all — NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
+  legacyBalanceDataMissing: boolean;
   createdAt: string;
 }
 
@@ -178,7 +182,33 @@ export interface RepaymentInstallment {
   dueDate: string;
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
-  status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE';
+  status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+}
+
+export type LoanTransactionType =
+  | 'DISBURSEMENT'
+  | 'REPAYMENT'
+  | 'FEE_CHARGED'
+  | 'PENALTY_APPLIED'
+  | 'INTEREST_APPLIED'
+  | 'DEFERRED_INTEREST_APPLIED'
+  | 'DEFERRED_INTEREST_PAID'
+  | 'TRANSFER'
+  | 'ADJUSTMENT'
+  | 'REVERSAL';
+
+export interface LoanTransaction {
+  id: string;
+  loanAccountId: string;
+  type: LoanTransactionType;
+  amount: string;
+  principalComponent: string;
+  interestComponent: string;
+  feesComponent: string;
+  penaltyComponent: string;
+  balanceAfter: string;
+  entryDate: string;
+  comment: string | null;
 }
 
 export interface PaginatedResponse<T> {
