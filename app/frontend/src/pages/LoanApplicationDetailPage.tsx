@@ -19,13 +19,57 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { LoanProduct } from '@/lib/loanApiTypes';
+import type { User } from '@/lib/userApiTypes';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
+
+/**
+ * Curated product-class whitelist per loan type, confirmed with the business 2026-07-10 — not
+ * every active `LoanProduct` in the database, deliberately: only these are offered through this
+ * assignment flow. `discontinued: true` entries are still real, currently-active products (loans
+ * already running under them still need to be assignable/visible), but are no longer offered to
+ * new applicants going forward — surfaced with a badge, not hidden, so staff can tell the
+ * difference at a glance.
+ */
+const LOAN_TYPE_OPTIONS = ['Salary Loan', 'Seafarer Loan', 'Business Loan'] as const;
+type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
+
+const PRODUCT_CLASS_BY_TYPE: Record<LoanTypeOption, { name: string; discontinued?: boolean }[]> = {
+  'Salary Loan': [
+    { name: 'SL-Regular' },
+    { name: 'SL-Corporate' },
+    { name: 'SL-Snap-A', discontinued: true },
+    { name: 'SL-Snap-B', discontinued: true },
+    { name: 'SL-Online', discontinued: true },
+    { name: 'SL-Online_New', discontinued: true },
+    { name: 'SL-Lazada', discontinued: true },
+    { name: 'SL-Lazada -New', discontinued: true },
+    { name: 'SL-Lazada-Promo', discontinued: true },
+  ],
+  'Seafarer Loan': [
+    { name: 'SML-Regular' },
+    { name: 'SML-Special' },
+    { name: 'SML-Kaborrow', discontinued: true },
+    { name: 'SML-PDC', discontinued: true },
+    { name: 'SML-Quick Cash', discontinued: true },
+    { name: 'SML-Co-Borrower Allotment', discontinued: true },
+    { name: 'SML-Self Allotment', discontinued: true },
+  ],
+  'Business Loan': [{ name: 'BL-Regular' }, { name: 'BL-Special' }],
+};
+
+function findLoanTypeForProductName(productName: string): LoanTypeOption | null {
+  for (const type of LOAN_TYPE_OPTIONS) {
+    if (PRODUCT_CLASS_BY_TYPE[type].some((c) => c.name === productName)) return type;
+  }
+  return null;
+}
 
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
@@ -66,10 +110,50 @@ export function LoanApplicationDetailPage() {
       (productsQuery.data ?? []).flatMap((product) =>
         product.versions
           .filter((v) => v.isActive)
-          .map((v) => ({ id: v.id, label: `${product.name} (v${v.versionNumber})` })),
+          .map((v) => ({ id: v.id, productName: product.name, label: `${product.name} (v${v.versionNumber})` })),
       ),
     [productsQuery.data],
   );
+  const versionIdByProductName = React.useMemo(
+    () => new Map(activeVersionOptions.map((v) => [v.productName, v.id])),
+    [activeVersionOptions],
+  );
+  const productNameByVersionId = React.useMemo(
+    () => new Map(activeVersionOptions.map((v) => [v.id, v.productName])),
+    [activeVersionOptions],
+  );
+
+  const assignedProductName = application?.assignedLoanProductVersionId
+    ? (productNameByVersionId.get(application.assignedLoanProductVersionId) ?? null)
+    : null;
+
+  // Local UI-only step — narrows which product classes the second dropdown offers. Initialized
+  // from whatever the application is currently assigned to, if it falls under one of the 3 curated
+  // types; otherwise starts unset so staff picks a type first.
+  const [selectedProductType, setSelectedProductType] = React.useState<LoanTypeOption | ''>('');
+  React.useEffect(() => {
+    if (assignedProductName) {
+      const resolvedType = findLoanTypeForProductName(assignedProductName);
+      if (resolvedType) setSelectedProductType(resolvedType);
+    }
+    // Only re-derive when the application itself (or its assignment) changes, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [application?.id, assignedProductName]);
+
+  const productClassOptions = React.useMemo(() => {
+    if (!selectedProductType) return [];
+    return PRODUCT_CLASS_BY_TYPE[selectedProductType]
+      .map((c) => ({ ...c, versionId: versionIdByProductName.get(c.name) }))
+      .filter((c): c is { name: string; discontinued?: boolean; versionId: string } => Boolean(c.versionId));
+  }, [selectedProductType, versionIdByProductName]);
+
+  // Resolves encodedByUserId/reviewedByUserId (raw LMS account ids) into display names for the
+  // "encoded by" / "reviewed by" indicators below — same join pattern used elsewhere (e.g.
+  // LoanListPage's borrower/product name join).
+  const usersQuery = useQuery({ queryKey: ['users', 'all'], queryFn: () => fetchAllPages<User>('/users') });
+  const userNameById = React.useMemo(() => new Map((usersQuery.data ?? []).map((u) => [u.id, u.fullName])), [usersQuery.data]);
+  const encodedByName = application?.encodedByUserId ? (userNameById.get(application.encodedByUserId) ?? 'Unknown account') : null;
+  const reviewedByName = application?.reviewedByUserId ? (userNameById.get(application.reviewedByUserId) ?? 'Unknown account') : null;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['loan-application', applicationId] });
@@ -190,6 +274,7 @@ export function LoanApplicationDetailPage() {
             </div>
             <p className="font-mono text-xs text-muted-foreground">
               {application.requestedCategory} · Submitted {formatDate(application.createdAt)}
+              {encodedByName ? ` · Encoded by ${encodedByName}` : ''}
             </p>
           </div>
         </div>
@@ -206,8 +291,8 @@ export function LoanApplicationDetailPage() {
           <CardHeader>
             <CardTitle>Applicant Details</CardTitle>
             <CardDescription>
-              {application.encodedByUserId
-                ? 'Walk-in applicant — encoded at the branch from the paper form (ECLC-LOFN01)'
+              {encodedByName
+                ? `Walk-in applicant — encoded by ${encodedByName} from the paper form (ECLC-LOFN01)`
                 : 'Submitted via the (not yet built) public loan application website'}
             </CardDescription>
           </CardHeader>
@@ -287,30 +372,72 @@ export function LoanApplicationDetailPage() {
 
             <Separator className="my-4" />
 
-            <div className="space-y-1.5">
-              <Label>Assigned product version</Label>
+            <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                The client only selects a category when applying — staff assigns the specific product version here.
+                The client only selects a category when applying — staff assigns the specific product type and class here.
               </p>
               {isPending ? (
-                <Select
-                  value={application.assignedLoanProductVersionId ?? ''}
-                  onValueChange={(v) => assignProductMutation.mutate(v)}
-                  disabled={assignProductMutation.isPending}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Not yet assigned" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeVersionOptions.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Assigned product type</Label>
+                    <Select
+                      value={selectedProductType}
+                      onValueChange={(v) => setSelectedProductType(v as LoanTypeOption)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select product type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LOAN_TYPE_OPTIONS.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Assigned product class</Label>
+                    <Select
+                      value={application.assignedLoanProductVersionId ?? ''}
+                      onValueChange={(v) => assignProductMutation.mutate(v)}
+                      disabled={!selectedProductType || assignProductMutation.isPending}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={selectedProductType ? 'Select product class' : 'Select a product type first'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productClassOptions.map((c) => (
+                          <SelectItem key={c.versionId} value={c.versionId} disabled={c.discontinued}>
+                            <span className="flex items-center gap-2">
+                              {c.name}
+                              {c.discontinued && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px]"
+                                  title="Discontinued — no longer offered to new applicants, not selectable here"
+                                >
+                                  Discontinued
+                                </Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               ) : (
-                <p className="font-mono text-sm">{application.assignedLoanProductVersionId ?? 'Not assigned'}</p>
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Assigned product type</p>
+                    <p className="font-medium">{selectedProductType || 'Not assigned'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Assigned product class</p>
+                    <p className="font-mono">{assignedProductName ?? 'Not assigned'}</p>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -347,7 +474,10 @@ export function LoanApplicationDetailPage() {
               <div className="space-y-3">
                 <div className="rounded-md border p-3 text-sm">
                   <p className="font-medium">{application.status === 'APPROVED' ? 'Approved' : 'Declined'}</p>
-                  <p className="text-xs text-muted-foreground">{application.reviewedAt && formatDate(application.reviewedAt)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {application.reviewedAt && formatDate(application.reviewedAt)}
+                    {reviewedByName ? ` · by ${reviewedByName}` : ''}
+                  </p>
                   {application.decisionNote && <p className="mt-2 text-sm text-muted-foreground">{application.decisionNote}</p>}
                 </div>
                 {canRevertLoanApplicationDecision ? (
@@ -369,6 +499,8 @@ export function LoanApplicationDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
 
       <RecentActivityPanel entries={applicationLogs} title="Recent Activity — This Application" />
 
