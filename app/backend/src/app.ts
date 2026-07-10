@@ -71,6 +71,12 @@ import { PrismaLoanApplicationRepository } from '@modules/loan-application/infra
 import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
 import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
+import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
+import { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
+import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
+import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
+import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
+import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
@@ -339,6 +345,20 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', reportingRouter);
+
+  // --- document module wiring: attachment upload/list/download (Loan Application intake, and the
+  // pre-existing legacy-migrated Borrower/LoanAccount attachment rows) ---
+  const attachmentRepository = new PrismaAttachmentRepository();
+  const fileStorage = new LocalFileStorage();
+  const documentRouter = createDocumentRouter(
+    {
+      uploadAttachmentUseCase: new UploadAttachmentUseCase({ attachmentRepository, fileStorage }),
+      listAttachmentsForOwnerUseCase: new ListAttachmentsForOwnerUseCase({ attachmentRepository }),
+      downloadAttachmentUseCase: new DownloadAttachmentUseCase({ attachmentRepository, fileStorage }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', documentRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 
