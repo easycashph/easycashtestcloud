@@ -55,6 +55,9 @@ enum AddressOwnerType {
 enum AttachmentOwnerType {
   BORROWER
   LOAN_ACCOUNT
+  /// Added 2026-07-10 for the Loan Application intake attachment-upload feature — a scanned
+  /// supporting document (payslip, valid ID, etc.) attached before a Borrower/LoanAccount exists.
+  LOAN_APPLICATION
 }
 
 /// LP-1: a Loan Product Version has exactly one interest calculation method.
@@ -849,6 +852,9 @@ model Attachment {
   ownerId          String
   fileName         String
   fileType         String
+  /// Bytes on disk — absent for pre-existing legacy-migrated rows (nullable), always set for
+  /// uploads through the new attachment-upload feature (2026-07-10).
+  fileSize         Int?
   storageKey       String
   uploadedByUserId String?
   uploadedBy       User?               @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])

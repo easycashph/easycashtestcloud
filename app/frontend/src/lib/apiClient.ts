@@ -156,6 +156,85 @@ export const apiClient = {
     apiRequest<T>(path, { method: 'PATCH', body, headers }),
 };
 
+/**
+ * Multipart upload — deliberately bypasses `apiRequest`'s `JSON.stringify(init.body)` (a `FormData`
+ * body must reach `fetch` untouched, and its Content-Type, including the multipart boundary, must
+ * be left for the browser to set — never set it manually here). Still shares the same
+ * Authorization/credentials/refresh-retry behavior as every other authenticated call.
+ */
+export async function uploadFile<T>(path: string, formData: FormData, allowRefreshRetry = true): Promise<T> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    cache: 'no-store',
+    body: formData,
+  });
+
+  if (res.status === 401 && allowRefreshRetry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return uploadFile<T>(path, formData, false);
+    onSessionExpired?.();
+  }
+
+  const contentType = res.headers.get('content-type') ?? '';
+  const data: unknown = contentType.includes('application/json') ? await res.json() : undefined;
+
+  if (!res.ok) {
+    const errorBody = (data as { error?: { code?: string; message?: string; ruleId?: string } } | undefined)?.error;
+    throw new ApiError(
+      res.status,
+      errorBody?.code ?? 'UNKNOWN_ERROR',
+      errorBody?.message ?? 'Something went wrong. Please try again.',
+      errorBody?.ruleId,
+    );
+  }
+
+  return data as T;
+}
+
+/**
+ * Fetches a binary response (e.g. an attachment download) as a Blob, then triggers the browser's
+ * normal save-file flow — needed because the endpoint requires a Bearer token header, which a
+ * plain `<a href>` navigation can't send.
+ */
+export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
+  const headers = new Headers();
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  let res = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: 'include', cache: 'no-store' });
+
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+      res = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: 'include', cache: 'no-store' });
+    } else {
+      onSessionExpired?.();
+    }
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, 'DOWNLOAD_FAILED', 'Could not download the file.');
+  }
+
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const fileName = match?.[1] ? decodeURIComponent(match[1]) : fallbackFileName;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 interface CursorPage<T> {
   items: T[];
   nextCursor: string | null;
