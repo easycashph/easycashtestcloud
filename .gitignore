@@ -29,6 +29,10 @@ Thumbs.db
 # Database
 legacy/mongodb/
 
+# Extracted mongodump.exe (from legacy/mongodb-ELCI-LMS_batchfile-source-code.zip) — a large
+# third-party binary, not source code; never committed.
+legacy/mongodb-tools/
+
 # Real MongoDB export used for the 2026-07-09 CP12 migration (real client names, addresses,
 # financial records) — highly sensitive PII, same class as legacy/mongodb/ above. Different casing
 # ("MongoDB dump" vs "mongodb") means it was NOT covered by the rule above until now; found
@@ -53,6 +57,17 @@ legacy/reports/*.xlsx
 # legacy/reports/*.xlsx above — must never enter git history. Added 2026-07-07 after this file was
 # found sitting untracked but NOT gitignored (the *.xlsx rule above doesn't match .xlsm).
 legacy/reports/*.xlsm
+
+# Local database backups (backup-database.bat output) — never committed.
+backups/
+
+# Old SDevTech MongoDB backup batch/PowerShell scripts — contains a hardcoded remote DB
+# username/password (root/sdevtech2021) in plain text. Never committed to git history.
+legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
+
+# Reverse-engineered MongoDB remote backup script (2026-07-10) — same hardcoded remote
+# credentials as the zip above, structurally required for mongodump to connect. Never committed.
+backup-mongodb.bat
 
 # Build
 dist/

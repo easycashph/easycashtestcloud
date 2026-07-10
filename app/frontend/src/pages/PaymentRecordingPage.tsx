@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertCircle, Search } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -98,19 +98,30 @@ export function PaymentRecordingPage() {
   });
   const payableLoans = loansQuery.data ?? [];
 
+  // One query per borrower (React Query's own de-duplication/caching applies per-id) instead of a
+  // single Promise.all firing every unique borrower request at once — with ~1,300 payable loans,
+  // that burst was enough on its own to trip the backend's general rate limit and surface as
+  // "Could not load loan accounts" even though the loans themselves had already loaded fine, and
+  // every borrower name showed "Loading…" for as long as the slowest of the ~1,300 requests took
+  // (a single Promise.all never resolves any entry until every entry resolves).
   const borrowerIds = React.useMemo(() => [...new Set((loansQuery.data ?? []).map((l) => l.borrowerId))], [loansQuery.data]);
-  const borrowersQuery = useQuery({
-    queryKey: ['borrowers', borrowerIds],
-    queryFn: async () => {
-      const entries = await Promise.all(
-        borrowerIds.map(async (id) => [id, await apiClient.get<Borrower>(`/borrowers/${id}`)] as const),
-      );
-      return new Map(entries);
-    },
-    enabled: borrowerIds.length > 0,
+  const borrowerQueries = useQueries({
+    queries: borrowerIds.map((id) => ({
+      queryKey: ['borrowers', id],
+      queryFn: () => apiClient.get<Borrower>(`/borrowers/${id}`),
+      staleTime: 5 * 60 * 1000,
+    })),
   });
+  const borrowerById = React.useMemo(() => {
+    const map = new Map<string, Borrower>();
+    borrowerIds.forEach((id, i) => {
+      const data = borrowerQueries[i]?.data;
+      if (data) map.set(id, data);
+    });
+    return map;
+  }, [borrowerIds, borrowerQueries]);
   const borrowerName = (borrowerId: string) => {
-    const b = borrowersQuery.data?.get(borrowerId);
+    const b = borrowerById.get(borrowerId);
     return b ? `${b.firstName} ${b.lastName}` : 'Loading…';
   };
 
