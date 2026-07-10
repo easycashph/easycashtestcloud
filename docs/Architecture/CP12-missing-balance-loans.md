@@ -1,29 +1,22 @@
 # CP12 Follow-up — Loans Flagged for Missing Balance Data
 
-Generated 2026-07-09T12:44:03.875Z by `scripts/flag-missing-balance-loans.ts`.
+Generated 2026-07-10T06:29:29.547Z by `scripts/flag-missing-balance-loans.ts`.
 
-613 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
+607 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
 no principal/interest/fees/penalty balance snapshot at all (not zero — absent). All balance
 columns on these rows read 0.00 but do NOT mean the loan is settled; each requires manual
 reconciliation against other records (e.g. the loan's own transaction history's running
 `balance` field, or physical/legacy paper records) before being treated as collectible or not.
 
-**Update (2026-07-09, same day):** the 189 of these loans in ACTIVE/ACTIVE_IN_ARREARS status that
-had matching data have since had their balances reconstructed from real evidence — see
-`docs/Architecture/CP12-repayment-schedule-migration.md`. This flag intentionally remains `true`
-on those rows (it documents provenance — reconstructed, not sourced from a direct legacy account
--level snapshot — not "still broken"). The remaining ~424 non-active (mostly CLOSED) flagged loans
-are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the problem being solved.
-
 ## By status
 
 | Status | Count |
 |---|---|
-| CLOSED | 418 |
-| ACTIVE_IN_ARREARS | 54 |
-| ACTIVE | 135 |
+| CLOSED | 417 |
+| ACTIVE_IN_ARREARS | 60 |
+| ACTIVE | 125 |
 | APPROVED | 2 |
-| PENDING_APPROVAL | 4 |
+| PENDING_APPROVAL | 3 |
 
 ## Full list (loan code, status)
 
@@ -54,7 +47,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | BL-REG_00059 | ACTIVE |
 | BL-REG_00060 | ACTIVE |
 | BL-REG_00061 | ACTIVE |
-| BL-REG_00062 | ACTIVE |
+| BL-REG_00062 | APPROVED |
 | BL-REG_O5D7N | CLOSED |
 | BL-REG_Y813H | ACTIVE |
 | BL-SPEC_00002 | CLOSED |
@@ -76,7 +69,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | PFL-GAD_00011 | CLOSED |
 | PFL-GAD_00013 | CLOSED |
 | PFL-GAD_00015 | CLOSED |
-| PFL-GAD_00016 | ACTIVE |
+| PFL-GAD_00016 | ACTIVE_IN_ARREARS |
 | PFL-GADG_00002 | CLOSED |
 | PFL-GADG_00005 | CLOSED |
 | REL-REG_00001 | PENDING_APPROVAL |
@@ -109,7 +102,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-CORP_00047 | CLOSED |
 | SL-CORP_00048 | CLOSED |
 | SL-CORP_00049 | ACTIVE_IN_ARREARS |
-| SL-CORP_00051 | ACTIVE |
+| SL-CORP_00051 | ACTIVE_IN_ARREARS |
 | SL-CORP_00054 | CLOSED |
 | SL-CORP_00056 | CLOSED |
 | SL-CORP_00059 | ACTIVE |
@@ -132,14 +125,14 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-CORP_00078 | ACTIVE_IN_ARREARS |
 | SL-CORP_00086 | ACTIVE_IN_ARREARS |
 | SL-CORP_00087 | ACTIVE_IN_ARREARS |
-| SL-CORP_00090 | ACTIVE |
+| SL-CORP_00090 | ACTIVE_IN_ARREARS |
 | SL-CORP_00093 | ACTIVE |
 | SL-CORP_00094 | ACTIVE_IN_ARREARS |
 | SL-CORP_00095 | ACTIVE |
 | SL-CORP_00096 | ACTIVE |
 | SL-CORP_00097 | ACTIVE_IN_ARREARS |
 | SL-CORP_00099 | ACTIVE |
-| SL-CORP_00100 | ACTIVE |
+| SL-CORP_00100 | ACTIVE_IN_ARREARS |
 | SL-CORP_00103 | ACTIVE |
 | SL-CORP_00105 | ACTIVE |
 | SL-CORP_00106 | ACTIVE |
@@ -151,7 +144,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-CORP_00116 | ACTIVE |
 | SL-LAZ_00001 | ACTIVE |
 | SL-LAZ_00004 | ACTIVE |
-| SL-LAZ_00004-DUP2 | CLOSED |
+| SL-LAZ_00004-LEGACY2 | CLOSED |
 | SL-LAZ_00008 | ACTIVE |
 | SL-LAZ_00011 | ACTIVE |
 | SL-LAZ_00013 | ACTIVE |
@@ -181,9 +174,9 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-REG_00021 | CLOSED |
 | SL-REG_00022 | CLOSED |
 | SL-REG_00025 | CLOSED |
-| SL-REG_00025-DUP2 | CLOSED |
+| SL-REG_00025-LEGACY2 | CLOSED |
 | SL-REG_00026 | CLOSED |
-| SL-REG_00026-DUP2 | CLOSED |
+| SL-REG_00026-LEGACY2 | CLOSED |
 | SL-REG_00027 | CLOSED |
 | SL-REG_00028 | CLOSED |
 | SL-REG_00029 | CLOSED |
@@ -218,7 +211,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-REG_00069 | CLOSED |
 | SL-REG_00070 | ACTIVE |
 | SL-REG_00071 | ACTIVE |
-| SL-REG_00077 | ACTIVE |
+| SL-REG_00077 | ACTIVE_IN_ARREARS |
 | SL-REG_00078 | CLOSED |
 | SL-REG_00079 | CLOSED |
 | SL-REG_00080 | ACTIVE_IN_ARREARS |
@@ -230,19 +223,18 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SL-REG_00089 | ACTIVE_IN_ARREARS |
 | SL-REG_00090 | CLOSED |
 | SL-REG_00092 | CLOSED |
-| SL-REG_00099 | ACTIVE |
+| SL-REG_00099 | ACTIVE_IN_ARREARS |
 | SL-REG_00100 | ACTIVE |
 | SL-REG_00101 | ACTIVE |
 | SL-REG_00102 | ACTIVE_IN_ARREARS |
-| SL-REG_00103 | ACTIVE_IN_ARREARS |
+| SL-REG_00103 | ACTIVE |
 | SL-REG_00104 | ACTIVE |
 | SL-REG_00105 | ACTIVE |
-| SL-REG_00106 | ACTIVE |
+| SL-REG_00106 | ACTIVE_IN_ARREARS |
 | SL-REG_00109 | ACTIVE |
 | SL-REG_00114 | ACTIVE |
 | SL-REG_00115 | ACTIVE |
 | SL-REG_00116 | ACTIVE |
-| SL-REG_00117 | APPROVED |
 | SML-Co-Borrower_00025 | CLOSED |
 | SML-Co-Borrower_00027 | CLOSED |
 | SML-Co-Borrower_00028 | CLOSED |
@@ -263,11 +255,11 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-Co-Borrower_00047 | CLOSED |
 | SML-Co-Borrower_00048 | CLOSED |
 | SML-Co-Borrower_00049 | CLOSED |
-| SML-Co-Borrower_00049-DUP2 | CLOSED |
+| SML-Co-Borrower_00049-LEGACY2 | CLOSED |
 | SML-Co-Borrower_00051 | CLOSED |
-| SML-Co-Borrower_00051-DUP2 | CLOSED |
+| SML-Co-Borrower_00051-LEGACY2 | CLOSED |
 | SML-Co-Borrower_00053 | CLOSED |
-| SML-Co-Borrower_00053-DUP2 | CLOSED |
+| SML-Co-Borrower_00053-LEGACY2 | CLOSED |
 | SML-Co-Borrower_00054 | CLOSED |
 | SML-Co-Borrower_00055 | CLOSED |
 | SML-Co-Borrower_00056 | CLOSED |
@@ -324,7 +316,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-PDC_00004 | CLOSED |
 | SML-PDC_00005 | CLOSED |
 | SML-PDC_00007 | CLOSED |
-| SML-PDC_00007-DUP2 | CLOSED |
+| SML-PDC_00007-LEGACY2 | CLOSED |
 | SML-PDC_00009 | CLOSED |
 | SML-PDC_00010 | CLOSED |
 | SML-PDC_00011 | ACTIVE |
@@ -349,7 +341,6 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-QC_00021 | CLOSED |
 | SML-QC_00022 | CLOSED |
 | SML-QC_00026 | CLOSED |
-| SML-QC_00027 | PENDING_APPROVAL |
 | SML-REG_00001 | ACTIVE |
 | SML-REG_00004 | ACTIVE |
 | SML-REG_00012 | CLOSED |
@@ -551,7 +542,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-REG_00290 | CLOSED |
 | SML-REG_00291 | CLOSED |
 | SML-REG_00292 | CLOSED |
-| SML-REG_00294 | CLOSED |
+| SML-REG_00294 | ACTIVE_IN_ARREARS |
 | SML-REG_00296 | CLOSED |
 | SML-REG_00300 | ACTIVE |
 | SML-REG_00303 | ACTIVE_IN_ARREARS |
@@ -565,7 +556,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-REG_00318 | ACTIVE |
 | SML-REG_00320 | ACTIVE |
 | SML-REG_00321 | CLOSED |
-| SML-REG_00322 | ACTIVE |
+| SML-REG_00322 | ACTIVE_IN_ARREARS |
 | SML-REG_00323 | ACTIVE_IN_ARREARS |
 | SML-REG_00325 | CLOSED |
 | SML-REG_00329 | ACTIVE |
@@ -581,9 +572,9 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-REG_00343 | ACTIVE |
 | SML-REG_00346 | ACTIVE |
 | SML-REG_00347 | CLOSED |
-| SML-REG_00348 | ACTIVE_IN_ARREARS |
+| SML-REG_00348 | ACTIVE |
 | SML-REG_00350 | CLOSED |
-| SML-REG_00351 | ACTIVE_IN_ARREARS |
+| SML-REG_00351 | ACTIVE |
 | SML-REG_00352 | CLOSED |
 | SML-REG_00354 | ACTIVE |
 | SML-REG_00355 | ACTIVE |
@@ -599,10 +590,6 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-REG_00367 | ACTIVE |
 | SML-REG_00369 | ACTIVE |
 | SML-REG_00370 | ACTIVE |
-| SML-REG_00372 | ACTIVE |
-| SML-REG_00373 | ACTIVE |
-| SML-REG_00376 | ACTIVE |
-| SML-REG_00377 | ACTIVE |
 | SML-Seacon_00001 | CLOSED |
 | SML-Self_00014 | CLOSED |
 | SML-Self_00015 | CLOSED |
@@ -615,12 +602,12 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-Self_00025 | CLOSED |
 | SML-Self_00026 | CLOSED |
 | SML-Self_00027 | CLOSED |
-| SML-Self_00027-DUP2 | CLOSED |
+| SML-Self_00027-LEGACY2 | CLOSED |
 | SML-Self_00028 | CLOSED |
-| SML-Self_00028-DUP2 | CLOSED |
+| SML-Self_00028-LEGACY2 | CLOSED |
 | SML-Self_00029 | CLOSED |
 | SML-Self_00030 | CLOSED |
-| SML-Self_00030-DUP2 | CLOSED |
+| SML-Self_00030-LEGACY2 | CLOSED |
 | SML-Self_00031 | CLOSED |
 | SML-Self_00032 | CLOSED |
 | SML-Self_00033 | CLOSED |
@@ -628,7 +615,7 @@ are untouched; 0.00 on a closed loan is plausible (paid off) and wasn't the prob
 | SML-Self_00035 | CLOSED |
 | SML-Self_00036 | CLOSED |
 | SML-Self_00038 | CLOSED |
-| SML-Self_00038-DUP2 | CLOSED |
+| SML-Self_00038-LEGACY2 | CLOSED |
 | SML-Self_00040 | CLOSED |
 | SML-Self_00041 | CLOSED |
 | SML-Self_00044 | CLOSED |
