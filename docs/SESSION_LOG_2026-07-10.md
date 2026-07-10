@@ -159,7 +159,7 @@
   enforces the exact `CORS_ORIGIN` allow-list) — a `nodemon`-style watcher picked up the change and
   restarted the already-running dev backend automatically.
 
-## Current state / known follow-up
+## Current state as of Sections 1–6 (MIS Nomer's machine)
 
 - `origin/main` is at `512da53` (includes the N+1 fix + gitignore updates from earlier in this
   session; the Payment Recording redesign and manual-allocation feature are committed locally as of
@@ -175,3 +175,125 @@
 - Manual allocation mode currently has no dedicated backend integration test (only the unit-level
   `ProcessPaymentUseCase` tests) — worth adding one alongside the automatic-mode integration
   coverage if/when that suite is extended.
+
+---
+
+## 7. Loan Application intake fixes (MIS Jomer's machine, same calendar day)
+
+- User asked to make the Loan Applications "Create Application" flow fully functional and asked for
+  an indicator of who encoded a walk-in application.
+- Found a real bug: `loanApplicationController.ts`'s `create` handler never called
+  `getCurrentUser(req)` — `encodedByUserId` was always `null` in the database despite the field,
+  domain logic, and even the frontend's own confirm-dialog text ("encoded by {currentAccount.name}")
+  already assuming it worked. The Detail page's `encodedByUserId` truthy-check therefore always fell
+  through to "Submitted via the (not yet built) public loan application website," even for
+  staff-encoded walk-ins. Fixed by deriving it from the authenticated request, matching how
+  `reviewedByUserId` already works for approve/decline.
+- Also renamed "Create Application" buttons to "Create Loan Application" per business request, and
+  fixed a real `react-hooks/rules-of-hooks` violation caught by ESLint while touching
+  `LoanApplicationCreatePage.tsx` (a `useMutation` call sat after an early return for unauthorized
+  users — moved below all hooks).
+- Added the actual "encoded by" / "reviewed by" name display on the Detail page (resolves the raw
+  user id against `GET /users`, same join pattern as borrower/product names elsewhere).
+- Verified end-to-end via a real `POST /loan-applications` call and the Detail page render — the
+  header now reads "… · Encoded by Jomer Biason" and the Applicant Details card reads "Walk-in
+  applicant — encoded by Jomer Biason…".
+
+## 8. Cascading product type/class assignment with a "Discontinued" indicator
+
+- User asked to replace the flat "Assign product version" dropdown on Loan Application approval
+  with two cascading selects: Assigned product type (Salary Loan / Seafarer Loan / Business Loan),
+  then Assigned product class filtered to that type.
+- Cross-checked the user's requested class list against real active `LoanProduct` rows in the
+  database before building anything (CLAUDE.md "never guess") — found real mismatches (no
+  `SL-Special` exists; the Seafarer entry the user meant was `SML-Special`, not `SL-Special`) and
+  asked clarifying questions rather than assuming. Confirmed with the user: Salary Loan = SL-Regular/
+  SL-Corporate (current) + SL-Snap-A/B, SL-Online, SL-Online_New, SL-Lazada variants (existing but
+  discontinued); Seafarer Loan = SML-Regular/SML-Special (current) + SML-Kaborrow, SML-PDC,
+  SML-Quick Cash, SML-Co-Borrower Allotment, SML-Self Allotment (discontinued, added in a follow-up
+  request); Business Loan = BL-Regular/BL-Special.
+- Discontinued classes show a badge and are `disabled` on the `SelectItem` (not just visually
+  greyed — actually non-clickable, confirmed via `aria-disabled` and that the dropdown doesn't close
+  on a click attempt), per the user's explicit "hindi dapat clickable" requirement.
+- Verified all three type→class cascades and the disabled behavior live in the browser preview.
+
+## 9. Attachment upload feature (new Document module)
+
+- User asked whether an attachment-upload button with auto-fill from the uploaded document was
+  feasible. Flagged the auto-fill/OCR half as a separate, bigger decision (cloud OCR = cost +
+  third-party dependency vs. local Tesseract = lower accuracy, both needing a business decision) and
+  scoped this session to attachment upload only, which the user agreed to.
+- Backend: new Document module (`app/backend/src/modules/document/`) — `IAttachmentRepository`/
+  `IFileStorage` ports, `LocalFileStorage` (CLAUDE.md storage abstraction — an `S3FileStorage` could
+  implement the same port later without touching application logic), `PrismaAttachmentRepository`,
+  and `POST/GET /attachments`, `GET /attachments/:id/download`. Added `LOAN_APPLICATION` to the
+  `AttachmentOwnerType` enum and a `fileSize` column (two migrations; existing 21,012 legacy-migrated
+  attachment rows get `fileSize = NULL`, harmless since the column is nullable).
+- Security: server-generates the storage key (never the client-supplied file name) to avoid path
+  traversal, whitelists MIME types (PDF/JPEG/PNG only) and caps size at 10 MB, enforced both in
+  multer and again in `UploadAttachmentUseCase`. Upload restricted to MIS/Loan Operation Manager/CRM
+  (same roles as loan-application writes); list/download only require authentication.
+- Frontend: reusable `AttachmentsPanel` component (built generic against `AttachmentOwnerType` so
+  Borrower/LoanAccount pages can adopt it later), wired into the Loan Application Detail page.
+  `apiClient.ts` gained `uploadFile()` (raw `FormData`, must not let `apiRequest`'s
+  `JSON.stringify` touch it) and `downloadFile()` (fetches as a Bearer-authenticated blob then
+  triggers a normal browser save, since a plain `<a href>` can't send the auth header).
+- Verified end-to-end in the browser: uploaded a real file via a synthesized `File`/`DataTransfer`
+  event on the hidden input, confirmed `POST /attachments → 201`, the file appearing in the list,
+  and `GET /attachments/:id/download → 200` on a manual download click.
+- Full backend suite re-run after these changes: 525/532 passing (no regressions).
+
+## 10. Migration tooling: ledger + automated status checks
+
+- While investigating why the local database still showed `₱0.00` balances on some real loans
+  despite CP12 fixes supposedly already applied, discovered the actual gap: `resolve-address-codes.ts`
+  and three balance-recompute follow-up scripts (`migrate-repayment-schedules.ts`,
+  `flag-missing-balance-loans.ts`, `recompute-active-loan-balances-from-schedule.ts`) are **not**
+  Prisma migrations — `prisma migrate deploy` never runs them, so pulling the commit that added them
+  doesn't apply them. Ran all four (after the user supplied a matching July-9 legacy dump), which
+  fixed the visibly-broken loan the user had pointed at (`SML-REG_00359` / Raquel Laoreno).
+- Wrote `docs/DEVICE_SYNC_GUIDE.md` (fetch/pull-before-push order; the full post-pull checklist:
+  `npm install`, `prisma generate`, `prisma migrate deploy`, one-off scripts, Docker rebuild) and
+  `docs/Architecture/MIGRATION_LEDGER.md` (dependency order of every one-off script + a per-device
+  "who's run what" table), so this class of "did I actually apply that" confusion doesn't recur.
+- Wrote `app/backend/scripts/check-migration-status.ts` (read-only PASS/ACTION-NEEDED report per
+  known CP12 script) and `app/backend/scripts/check-legacy-sync-safety.ts` (flags which loans have
+  "gone native" in the LMS — at least one `LoanTransaction` with no `legacyId` — versus which are
+  still safe to rely on a legacy re-import for, since `migrate-legacy-data.ts`'s `update: {}` upsert
+  pattern never refreshes an already-migrated loan's balance from a newer dump).
+- `check-migration-status.ts` incidentally surfaced a real, pre-existing data inconsistency, not a
+  script bug: `SML-REG_00294`'s repayment schedule shows fully paid (every installment, principal +
+  interest) but its `status` is still `ACTIVE_IN_ARREARS`, not `CLOSED`. Logged in the ledger for
+  manual review — not auto-fixed, since changing a loan's status isn't this script's call to make.
+
+## 11. Reconciling with MIS Nomer's parallel session (Sections 1–6 above)
+
+- Before pushing Sections 7–10's work, `git fetch` showed 2 new commits from MIS Nomer's machine —
+  the Payment Recording redesign (Section 6) and its merge commit, both touching `app/backend/src/app.ts`
+  (same file this session's Document-module wiring also touched).
+- Committed this session's work first in 4 scoped commits (loan-application fixes; cascading
+  product assignment + attachments-panel wiring; the Document module backend; `app.ts` wiring), then
+  pulled — `git`'s automatic merge resolved `app.ts` cleanly (non-overlapping regions, no manual
+  conflict markers). Re-ran the full backend suite post-merge: 530/537 passing (Nomer's 5 new
+  manual-allocation tests plus this session's, no regressions), both frontend and backend typecheck
+  clean.
+- The merge also reintroduced `.claude/launch.json`'s wrong-drive-letter problem (Nomer's commit had
+  it as `C:\...`, this machine is `D:\...`) — the two machines had been silently overwriting each
+  other's absolute path on every pull. Fixed properly this time: `runtimeExecutable` changed to a
+  relative path (`.\.claude\run-frontend.bat`, matching the convention `backend-preview` already
+  used), verified working in the browser preview, committed. This should be the last time this
+  specific conflict happens.
+
+## Current state (end of this log, both machines' work merged)
+
+- `origin/main` includes everything through both machines' sessions today — Payment Recording
+  client-first redesign + manual allocation (Nomer), loan-application encoded-by/product-assignment/
+  attachment-upload features (Jomer), and the migration tooling in Section 10.
+- Full backend suite: 530/537 passing, 7 intentionally skipped. Both frontend and backend typecheck
+  clean.
+- Known follow-ups carried forward: PSGC reference tables still need the right legacy dump path to
+  populate (Section 6's note); `backup-mongodb.bat` still not run against the real remote server;
+  manual allocation mode still has no dedicated integration test; `SML-REG_00294`'s
+  status/schedule mismatch (Section 10) needs a human decision, not a script fix; the OCR/auto-fill
+  half of the attachment feature (Section 9) is deliberately not started, pending a business decision
+  on cloud vs. local OCR.
