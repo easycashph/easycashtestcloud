@@ -34,11 +34,26 @@ export const rejectLoanSchema = z.object({
 
 export type RejectLoanRequestBody = z.infer<typeof rejectLoanSchema>;
 
+const manualAllocationSchema = z.object({
+  installmentId: z.string().min(1),
+  principal: decimalStringSchema,
+  interest: decimalStringSchema,
+  penalty: decimalStringSchema,
+  fees: decimalStringSchema,
+});
+
 /** Milestone 9.1/9.2 CP13: POST /loan-accounts/:id/payments request body. */
 export const processPaymentSchema = z.object({
   paymentAmount: decimalStringSchema,
   /** Defaults to "now" in the use case if omitted — see ProcessPaymentUseCase's own default parameter. */
   paidAt: z.coerce.date().optional(),
+  /**
+   * 2026-07-10 (Payment Recording "Manual" tab): when present, overrides the
+   * automatic fees->penalty->interest->principal split with an exact,
+   * staff-entered per-installment breakdown — see
+   * `ProcessPaymentUseCase.toManualAllocations` for validation rules.
+   */
+  allocations: z.array(manualAllocationSchema).optional(),
 });
 
 export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;

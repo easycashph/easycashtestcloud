@@ -213,6 +213,89 @@ describe('ProcessPaymentUseCase', () => {
     });
   });
 
+  describe('manual per-installment allocation (2026-07-10, Payment Recording "Manual" tab)', () => {
+    it('applies an exact staff-entered split instead of the automatic waterfall', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('2000.00', '300.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '1000.00', interest: '150.00' });
+      const inst2 = buildInstallment(2, '2026-09-15', { principal: '1000.00', interest: '150.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1, inst2]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', Money.of('300.00'), 'officer-1', undefined, [
+        // Deliberately interest-only on inst2, none of inst1 — automatic mode would never do this.
+        { installmentId: 'installment-2', principal: Money.ZERO, interest: Money.of('150.00'), penalty: Money.ZERO, fees: Money.ZERO },
+        { installmentId: 'installment-1', principal: Money.of('150.00'), interest: Money.ZERO, penalty: Money.ZERO, fees: Money.ZERO },
+      ]);
+
+      expect(inst1.paid.principal.equals(Money.of('150.00'))).toBe(true);
+      expect(inst1.paid.interest.isZero()).toBe(true);
+      expect(inst2.paid.interest.equals(Money.of('150.00'))).toBe(true);
+      expect(inst2.paid.principal.isZero()).toBe(true);
+      expect(result.remainder.isZero()).toBe(true);
+    });
+
+    it('rejects a manual allocation whose total does not match paymentAmount', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '500.00', interest: '50.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await expect(
+        useCase.execute('loan-1', Money.of('100.00'), 'officer-1', undefined, [
+          { installmentId: 'installment-1', principal: Money.of('50.00'), interest: Money.ZERO, penalty: Money.ZERO, fees: Money.ZERO },
+        ]),
+      ).rejects.toThrow(InvalidPaymentAllocationInputError);
+      expect(deps.unitOfWork.run).not.toHaveBeenCalled();
+    });
+
+    it('rejects a manual component amount that exceeds that installment\'s remaining due', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '500.00', interest: '50.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await expect(
+        useCase.execute('loan-1', Money.of('600.00'), 'officer-1', undefined, [
+          { installmentId: 'installment-1', principal: Money.of('600.00'), interest: Money.ZERO, penalty: Money.ZERO, fees: Money.ZERO },
+        ]),
+      ).rejects.toThrow(InvalidPaymentAllocationInputError);
+      expect(deps.unitOfWork.run).not.toHaveBeenCalled();
+    });
+
+    it('rejects a manual allocation referencing an installment that is not unpaid on this loan', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await expect(
+        useCase.execute('loan-1', Money.of('100.00'), 'officer-1', undefined, [
+          { installmentId: 'not-a-real-installment', principal: Money.of('100.00'), interest: Money.ZERO, penalty: Money.ZERO, fees: Money.ZERO },
+        ]),
+      ).rejects.toThrow(InvalidPaymentAllocationInputError);
+    });
+
+    it('rejects an empty manual allocation list', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await expect(useCase.execute('loan-1', Money.of('100.00'), 'officer-1', undefined, [])).rejects.toThrow(
+        InvalidPaymentAllocationInputError,
+      );
+    });
+  });
+
   describe('financial audit log entry (CP2, fail-closed) and IUnitOfWork atomicity', () => {
     it('writes a PROCESS_PAYMENT audit entry, sharing the same ctx as every other write', async () => {
       const deps = buildDeps();

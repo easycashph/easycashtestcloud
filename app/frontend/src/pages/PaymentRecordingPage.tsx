@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, Search } from 'lucide-react';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, ChevronLeft, Search } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,13 +22,40 @@ import {
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
-import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, ApiError } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, PaginatedResponse, ProcessPaymentResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 
 type AllocationMode = 'AUTOMATIC' | 'MANUAL';
+
+/** One manual per-installment entry (Payment Recording "Manual" tab) — every field is a raw text input value, parsed on demand. */
+interface ManualEntry {
+  principal: string;
+  interest: string;
+  penalty: string;
+  fees: string;
+}
+
+function manualEntryTotal(entry: ManualEntry): number {
+  return (
+    (Number.parseFloat(entry.principal) || 0) +
+    (Number.parseFloat(entry.interest) || 0) +
+    (Number.parseFloat(entry.penalty) || 0) +
+    (Number.parseFloat(entry.fees) || 0)
+  );
+}
+
+function remainingDue(i: RepaymentInstallment) {
+  return {
+    principal: Math.max(0, parseAmount(i.due.principal) - parseAmount(i.paid.principal)),
+    interest: Math.max(0, parseAmount(i.due.interest) - parseAmount(i.paid.interest)),
+    penalty: Math.max(0, parseAmount(i.due.penalty) - parseAmount(i.paid.penalty)),
+    fees: Math.max(0, parseAmount(i.due.fees) - parseAmount(i.paid.fees)),
+  };
+}
 
 const PAYABLE_STATUSES: LoanAccount['status'][] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
@@ -77,76 +104,65 @@ function getPreviewRowSortValue(
  * of the same fees→penalty→interest→principal rule the backend enforces authoritatively; only its
  * data source changed, from mock installments to real ones.
  *
- * Manual allocation mode has no backend equivalent (`ProcessPaymentUseCase` only ever runs the
- * automatic engine) — per design §6 point 2, it stays visible but disabled, not removed.
+ * Manual allocation mode (2026-07-10): staff pick specific unpaid installments and enter an exact
+ * Principal/Interest/Penalty/Fees split per installment, which `ProcessPaymentUseCase` now accepts
+ * as `manualAllocations` instead of running its automatic fees→penalty→interest→principal engine.
+ * Client-side validates the four fields sum to the payment amount before enabling Submit; the
+ * backend re-validates authoritatively (per-installment remaining-due caps + exact total match)
+ * before posting.
  */
 export function PaymentRecordingPage() {
   useLogPageView('Payment Recording');
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
-  const preselected = searchParams.get('loanId');
+  const preselectedLoanId = searchParams.get('loanId');
 
-  const loansQuery = useQuery({
-    queryKey: ['loan-accounts', 'payable'],
-    queryFn: async () => {
-      // 2026-07-08 (post-CP12 fix): was a single `?limit=200` call — silently truncated once real
-      // migrated data pushed past 200 active loans. `fetchAllPages` follows `nextCursor` until
-      // every page is read.
-      const all = await fetchAllPages<LoanAccount>('/loan-accounts');
-      return all.filter((l) => PAYABLE_STATUSES.includes(l.status));
-    },
-  });
-  const payableLoans = loansQuery.data ?? [];
+  // Step 1: find the client. Deep-linked from LoanDetailPage's "Record Payment" button
+  // (?loanId=...) resolves the client automatically instead of making staff search again.
+  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(null);
+  const [loanId, setLoanId] = React.useState('');
 
-  // One query per borrower (React Query's own de-duplication/caching applies per-id) instead of a
-  // single Promise.all firing every unique borrower request at once — with ~1,300 payable loans,
-  // that burst was enough on its own to trip the backend's general rate limit and surface as
-  // "Could not load loan accounts" even though the loans themselves had already loaded fine, and
-  // every borrower name showed "Loading…" for as long as the slowest of the ~1,300 requests took
-  // (a single Promise.all never resolves any entry until every entry resolves).
-  const borrowerIds = React.useMemo(() => [...new Set((loansQuery.data ?? []).map((l) => l.borrowerId))], [loansQuery.data]);
-  const borrowerQueries = useQueries({
-    queries: borrowerIds.map((id) => ({
-      queryKey: ['borrowers', id],
-      queryFn: () => apiClient.get<Borrower>(`/borrowers/${id}`),
-      staleTime: 5 * 60 * 1000,
-    })),
+  const preselectedLoanQuery = useQuery({
+    queryKey: ['loan-accounts', preselectedLoanId],
+    queryFn: () => apiClient.get<LoanAccount>(`/loan-accounts/${preselectedLoanId}`),
+    enabled: Boolean(preselectedLoanId) && !selectedBorrower,
   });
-  const borrowerById = React.useMemo(() => {
-    const map = new Map<string, Borrower>();
-    borrowerIds.forEach((id, i) => {
-      const data = borrowerQueries[i]?.data;
-      if (data) map.set(id, data);
+  React.useEffect(() => {
+    if (!preselectedLoanQuery.data || selectedBorrower) return;
+    const loan = preselectedLoanQuery.data;
+    void apiClient.get<Borrower>(`/borrowers/${loan.borrowerId}`).then((borrower) => {
+      setSelectedBorrower(borrower);
+      setLoanId(loan.id);
     });
-    return map;
-  }, [borrowerIds, borrowerQueries]);
-  const borrowerName = (borrowerId: string) => {
-    const b = borrowerById.get(borrowerId);
-    return b ? `${b.firstName} ${b.lastName}` : 'Loading…';
+  }, [preselectedLoanQuery.data, selectedBorrower]);
+
+  const [clientSearch, setClientSearch] = React.useState('');
+  const debouncedClientSearch = useDebouncedValue(clientSearch);
+  const clientSearchQuery = useQuery({
+    queryKey: ['borrowers', 'search', debouncedClientSearch],
+    queryFn: () => apiClient.get<PaginatedResponse<Borrower>>(`/borrowers?search=${encodeURIComponent(debouncedClientSearch)}&limit=10`),
+    enabled: !selectedBorrower && debouncedClientSearch.trim().length > 0,
+  });
+  const clientResults = clientSearchQuery.data?.items ?? [];
+
+  const chooseClient = (borrower: Borrower) => {
+    setSelectedBorrower(borrower);
+    setLoanId('');
+  };
+  const changeClient = () => {
+    setSelectedBorrower(null);
+    setLoanId('');
+    setClientSearch('');
   };
 
-  const [loanId, setLoanId] = React.useState('');
-  React.useEffect(() => {
-    if (loanId || payableLoans.length === 0) return;
-    setLoanId(preselected && payableLoans.some((l) => l.id === preselected) ? preselected : payableLoans[0]!.id);
-    // Runs once payableLoans first becomes available — intentionally not re-running on every
-    // payableLoans/preselected change, so a staff member's in-progress selection is never
-    // silently overwritten by a background refetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payableLoans.length]);
-
-  const [loanSearch, setLoanSearch] = React.useState('');
-  const [loanStatusFilter, setLoanStatusFilter] = React.useState<'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS'>('ALL');
-
-  const searchedLoans = payableLoans.filter((l) => {
-    const query = loanSearch.trim().toLowerCase();
-    const matchesSearch = query.length === 0 || borrowerName(l.borrowerId).toLowerCase().includes(query) || l.loanCode.toLowerCase().includes(query);
-    const matchesStatus = loanStatusFilter === 'ALL' || l.status === loanStatusFilter;
-    return matchesSearch && matchesStatus;
+  // Step 2: that client's own active loans only — never the whole company's ~1,300 payable loans.
+  const clientLoansQuery = useQuery({
+    queryKey: ['loan-accounts', 'by-borrower', selectedBorrower?.id],
+    queryFn: () => apiClient.get<PaginatedResponse<LoanAccount>>(`/loan-accounts?borrowerId=${selectedBorrower!.id}&limit=50`),
+    enabled: Boolean(selectedBorrower),
   });
-  const selectedLoan = payableLoans.find((l) => l.id === loanId);
-  const loanOptions =
-    selectedLoan && !searchedLoans.some((l) => l.id === selectedLoan.id) ? [selectedLoan, ...searchedLoans] : searchedLoans;
+  const clientPayableLoans = (clientLoansQuery.data?.items ?? []).filter((l) => PAYABLE_STATUSES.includes(l.status));
+  const selectedLoan = clientPayableLoans.find((l) => l.id === loanId);
 
   const [amount, setAmount] = React.useState('1000.00');
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
@@ -154,6 +170,29 @@ export function PaymentRecordingPage() {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const idempotencyKeyRef = React.useRef<string | null>(null);
+
+  // Manual mode (2026-07-10): staff picks specific unpaid installments and types the exact
+  // Principal/Interest/Penalty/Fees split for each, overriding the automatic waterfall. Keyed by
+  // installmentId — an installment only appears here once staff has explicitly included it.
+  const [manualEntries, setManualEntries] = React.useState<Record<string, ManualEntry>>({});
+  React.useEffect(() => {
+    setManualEntries({});
+  }, [loanId]);
+  const toggleManualInstallment = (installmentId: string, include: boolean) => {
+    setManualEntries((prev) => {
+      const next = { ...prev };
+      if (include) {
+        next[installmentId] = { principal: '', interest: '', penalty: '', fees: '' };
+      } else {
+        delete next[installmentId];
+      }
+      return next;
+    });
+  };
+  const updateManualField = (installmentId: string, field: keyof ManualEntry, value: string) => {
+    setManualEntries((prev) => ({ ...prev, [installmentId]: { ...prev[installmentId]!, [field]: value } }));
+  };
+  const manualTotal = Object.values(manualEntries).reduce((sum, e) => sum + manualEntryTotal(e), 0);
 
   const installmentsQuery = useQuery({
     queryKey: ['repayment-schedule', loanId],
@@ -198,14 +237,30 @@ export function PaymentRecordingPage() {
     { fees: 0, penalty: 0, interest: 0, principal: 0 },
   );
 
+  const manualInstallmentCount = Object.keys(manualEntries).length;
+  // Cent-level float comparison — same epsilon the automatic Remainder box's peso display already
+  // rounds to, so "matches" here agrees with what staff sees on screen.
+  const manualMismatch = manualInstallmentCount === 0 || Math.abs(manualTotal - paymentAmount) > 0.005;
+
   const paymentMutation = useMutation({
     mutationFn: async () => {
       if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
-      return apiClient.post<ProcessPaymentResponse>(
-        `/loan-accounts/${loanId}/payments`,
-        { paymentAmount: amount },
-        { 'Idempotency-Key': idempotencyKeyRef.current },
-      );
+      const body =
+        allocationMode === 'MANUAL'
+          ? {
+              paymentAmount: amount,
+              allocations: Object.entries(manualEntries).map(([installmentId, e]) => ({
+                installmentId,
+                principal: (Number.parseFloat(e.principal) || 0).toFixed(2),
+                interest: (Number.parseFloat(e.interest) || 0).toFixed(2),
+                penalty: (Number.parseFloat(e.penalty) || 0).toFixed(2),
+                fees: (Number.parseFloat(e.fees) || 0).toFixed(2),
+              })),
+            }
+          : { paymentAmount: amount };
+      return apiClient.post<ProcessPaymentResponse>(`/loan-accounts/${loanId}/payments`, body, {
+        'Idempotency-Key': idempotencyKeyRef.current,
+      });
     },
     onSuccess: () => {
       idempotencyKeyRef.current = null;
@@ -245,120 +300,265 @@ export function PaymentRecordingPage() {
         </p>
       </div>
 
-      {loansQuery.isError && (
+      {clientLoansQuery.isError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan accounts. Is the backend running?
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load this client's loan accounts. Is the backend running?
         </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Payment Details</CardTitle>
-            <CardDescription>Select a loan and enter an amount to preview allocation.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="loan-search">Find loan account</Label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="loan-search"
-                  placeholder="Search borrower or loan code..."
-                  className="pl-8"
-                  value={loanSearch}
-                  onChange={(e) => setLoanSearch(e.target.value)}
-                />
-              </div>
-              <Select
-                value={loanStatusFilter}
-                onValueChange={(v) => setLoanStatusFilter(v as 'ALL' | 'ACTIVE' | 'ACTIVE_IN_ARREARS')}
-              >
-                <SelectTrigger aria-label="Filter loan accounts by status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All payable statuses</SelectItem>
-                  <SelectItem value="ACTIVE">Active only</SelectItem>
-                  <SelectItem value="ACTIVE_IN_ARREARS">In Arrears only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {!selectedBorrower ? (
+            <>
+              <CardHeader>
+                <CardTitle>Find Client</CardTitle>
+                <CardDescription>Search by borrower name or loan code, then choose one of their active loans.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="client-search"
+                    autoFocus
+                    placeholder="Search client name or loan code..."
+                    className="pl-8"
+                    value={clientSearch}
+                    onChange={(e) => setClientSearch(e.target.value)}
+                  />
+                </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="loan-select">Loan account</Label>
-              <Select value={loanId} onValueChange={setLoanId} disabled={loansQuery.isLoading || payableLoans.length === 0}>
-                <SelectTrigger id="loan-select">
-                  <SelectValue placeholder={loansQuery.isLoading ? 'Loading…' : 'Select a loan'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {loanOptions.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {borrowerName(l.borrowerId)} — {l.loanCode}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {loansQuery.isLoading
-                  ? 'Loading loan accounts…'
-                  : `${searchedLoans.length} of ${payableLoans.length} payable loan accounts match.`}
-              </p>
-            </div>
+                {clientSearchQuery.isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Searching…</p>}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="amount">Payment amount</Label>
-              <Input id="amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </div>
+                {!clientSearchQuery.isLoading && debouncedClientSearch.trim().length > 0 && clientResults.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No clients match "{debouncedClientSearch}".</p>
+                )}
 
-            <div className="space-y-1.5">
-              <Label>Allocation</Label>
-              <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="AUTOMATIC">Automatic</TabsTrigger>
-                  <TabsTrigger value="MANUAL" disabled>
-                    Manual
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <p className="text-xs text-muted-foreground">
-                {allocationMode === 'AUTOMATIC'
-                  ? 'System splits the payment automatically (fees → penalty → interest → principal).'
-                  : 'Not yet supported in live mode — automatic allocation only.'}
-              </p>
-            </div>
+                {clientResults.length > 0 && (
+                  <div className="max-h-80 space-y-1 overflow-y-auto">
+                    {clientResults.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => chooseClient(b)}
+                        className="w-full rounded-md border p-2.5 text-left text-sm hover:bg-secondary/60"
+                      >
+                        <p className="font-medium">{b.fullName}</p>
+                        {b.mobilePhone1 && <p className="text-xs text-muted-foreground">{b.mobilePhone1}</p>}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="payment-method">Mode of payment</Label>
-              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                <SelectTrigger id="payment-method">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTIVE_PAYMENT_METHODS.map((m) => (
-                    <SelectItem key={m.code} value={m.code}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Recorded for staff reference only — not yet a field on the backend loan account.</p>
-            </div>
+                {debouncedClientSearch.trim().length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Start typing to find a client.</p>
+                )}
+              </CardContent>
+            </>
+          ) : !loanId ? (
+            <>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>{selectedBorrower.fullName}</CardTitle>
+                    <CardDescription>Choose which loan to record a payment against.</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={changeClient}>
+                    <ChevronLeft className="mr-1 h-4 w-4" /> Change client
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {clientLoansQuery.isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Loading loans…</p>}
+                {!clientLoansQuery.isLoading && clientPayableLoans.length === 0 && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">This client has no active loans to pay.</p>
+                )}
+                {clientPayableLoans.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => setLoanId(l.id)}
+                    className="w-full rounded-md border p-2.5 text-left text-sm hover:bg-secondary/60"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">{l.loanCode}</p>
+                      <Badge variant={l.status === 'ACTIVE_IN_ARREARS' ? 'destructive' : 'outline'}>
+                        {l.status === 'ACTIVE_IN_ARREARS' ? 'In Arrears' : 'Active'}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Collections balance: {formatPeso(parseAmount(l.collectionsBalance))}
+                    </p>
+                  </button>
+                ))}
+              </CardContent>
+            </>
+          ) : (
+            <>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Payment Details</CardTitle>
+                    <CardDescription>Enter an amount to preview allocation.</CardDescription>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setLoanId('')}>
+                    <ChevronLeft className="mr-1 h-4 w-4" /> Change loan
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {selectedLoan && (
+                  <div className="rounded-md border bg-secondary/40 p-3 text-xs text-muted-foreground">
+                    <p>
+                      <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> — {selectedLoan.loanCode}
+                    </p>
+                    <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
+                    <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
+                  </div>
+                )}
 
-            {selectedLoan && (
-              <div className="rounded-md border bg-secondary/40 p-3 text-xs text-muted-foreground">
-                <p>
-                  <span className="font-medium text-foreground">{borrowerName(selectedLoan.borrowerId)}</span> — {selectedLoan.loanCode}
-                </p>
-                <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
-                <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
-              </div>
-            )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="amount">Payment amount</Label>
+                  <Input id="amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                </div>
 
-            <Button className="w-full" disabled={!loanId || paymentAmount <= 0} onClick={openConfirm}>
-              Submit Payment
-            </Button>
-          </CardContent>
+                <div className="space-y-1.5">
+                  <Label>Allocation</Label>
+                  <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="AUTOMATIC">Automatic</TabsTrigger>
+                      <TabsTrigger value="MANUAL">Manual</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  <p className="text-xs text-muted-foreground">
+                    {allocationMode === 'AUTOMATIC'
+                      ? 'System splits the payment automatically (fees → penalty → interest → principal).'
+                      : 'Pick installments below and type the exact Principal/Interest/Penalty/Fees amounts. The four fields must add up to the payment amount before you can submit.'}
+                  </p>
+                </div>
+
+                {allocationMode === 'MANUAL' && (
+                  <div className="space-y-1.5">
+                    <Label>Installments</Label>
+                    {installmentsQuery.isLoading ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground">Loading installments…</p>
+                    ) : unpaidInstallments.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground">No unpaid installments for this loan.</p>
+                    ) : (
+                      <div className="max-h-96 space-y-2 overflow-y-auto">
+                        {unpaidInstallments.map((inst) => {
+                          const due = remainingDue(inst);
+                          const entry = manualEntries[inst.id];
+                          const included = Boolean(entry);
+                          return (
+                            <div key={inst.id} className="rounded-md border p-2.5">
+                              <label className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={included}
+                                  onChange={(e) => toggleManualInstallment(inst.id, e.target.checked)}
+                                />
+                                <span className="font-medium">Installment #{inst.installmentNumber}</span>
+                                <span className="text-xs text-muted-foreground">{formatDate(inst.dueDate)}</span>
+                              </label>
+                              {included && entry && (
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                  <div>
+                                    <Label htmlFor={`${inst.id}-principal`} className="text-xs text-muted-foreground">
+                                      Principal (due {formatPeso(due.principal)})
+                                    </Label>
+                                    <Input
+                                      id={`${inst.id}-principal`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={entry.principal}
+                                      onChange={(e) => updateManualField(inst.id, 'principal', e.target.value)}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`${inst.id}-interest`} className="text-xs text-muted-foreground">
+                                      Interest (due {formatPeso(due.interest)})
+                                    </Label>
+                                    <Input
+                                      id={`${inst.id}-interest`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={entry.interest}
+                                      onChange={(e) => updateManualField(inst.id, 'interest', e.target.value)}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`${inst.id}-penalty`} className="text-xs text-muted-foreground">
+                                      Penalty (due {formatPeso(due.penalty)})
+                                    </Label>
+                                    <Input
+                                      id={`${inst.id}-penalty`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={entry.penalty}
+                                      onChange={(e) => updateManualField(inst.id, 'penalty', e.target.value)}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`${inst.id}-fees`} className="text-xs text-muted-foreground">
+                                      Fees (due {formatPeso(due.fees)})
+                                    </Label>
+                                    <Input
+                                      id={`${inst.id}-fees`}
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={entry.fees}
+                                      onChange={(e) => updateManualField(inst.id, 'fees', e.target.value)}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div
+                      className={`rounded-md border p-2 text-center text-xs ${
+                        manualMismatch ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-success/40 bg-success/10'
+                      }`}
+                    >
+                      Entered total: {formatPeso(manualTotal)} / Payment amount: {formatPeso(paymentAmount)}
+                      {manualMismatch && ' — must match before submitting.'}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-method">Mode of payment</Label>
+                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <SelectTrigger id="payment-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ACTIVE_PAYMENT_METHODS.map((m) => (
+                        <SelectItem key={m.code} value={m.code}>
+                          {m.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Recorded for staff reference only — not yet a field on the backend loan account.</p>
+                </div>
+
+                <Button
+                  className="w-full"
+                  disabled={!loanId || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
+                  onClick={openConfirm}
+                >
+                  Submit Payment
+                </Button>
+              </CardContent>
+            </>
+          )}
         </Card>
 
         <Card className="lg:col-span-2">
@@ -456,7 +656,7 @@ export function PaymentRecordingPage() {
           <DialogHeader>
             <DialogTitle>Confirm Payment</DialogTitle>
             <DialogDescription>
-              Post {formatPeso(paymentAmount)} against {selectedLoan ? `${borrowerName(selectedLoan.borrowerId)} — ${selectedLoan.loanCode}` : 'this loan'}?
+              Post {formatPeso(paymentAmount)} against {selectedLoan && selectedBorrower ? `${selectedBorrower.fullName} — ${selectedLoan.loanCode}` : 'this loan'}?
               This cannot be undone from this screen.
             </DialogDescription>
           </DialogHeader>

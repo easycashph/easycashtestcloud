@@ -322,6 +322,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
         expect.objectContaining({}),
         'authenticated-user-1',
         undefined,
+        undefined,
       );
       const body = res.json.mock.calls[0]?.[0];
       expect(body.remainder).toBe('25.00');

@@ -94,17 +94,84 @@
 - Verified: frontend typecheck clean. Not yet re-tested live in a browser this session (no preview
   tool was available) — should be manually re-verified in the actual Payment Recording page.
 
+## 5. MongoDB remote backup script (reverse-engineered from MIS Jomer's original)
+
+- User wants to run their own backup of the SDevTech-managed remote MongoDB database, same as MIS
+  Jomer's existing `legacy/mongodb-ELCI-LMS_batchfile-source-code.zip` (`.bat`/`.ps1` + a bundled
+  `mongodump.exe` 100.13.0).
+- Extracted just `mongodump.exe` to `legacy/mongodb-tools/` (verified working via `--version`) and
+  gitignored it — a large third-party binary, not source.
+- Wrote `backup-mongodb.bat` at the project root: same remote host/port/credentials as the original
+  (structurally required for `mongodump` to connect — these are real SDevTech server credentials,
+  same sensitivity as the original zip), but output redirected to `legacy\mongodb\<timestamp>.zip`
+  (gitignored, per user's explicit request) instead of the original's `D:\MISA-LAPTOP-KQ4\...`
+  path, and pointed at the local `legacy\mongodb-tools\mongodump.exe` instead of a path relative to
+  MIS Jomer's laptop. Compresses and cleans up backups older than 7 days, same as the original.
+  Gitignored the script itself too, since it embeds the same plaintext credentials.
+- Deliberately did not execute it against the real remote server — user explicitly wants to run it
+  themselves ("gusto ko na ako mismo ang mag-run").
+
+## 6. Payment Recording redesign: client-first flow + manual per-installment allocation
+
+- User flagged that Payment Recording had two confusing, side-by-side search controls ("Find loan
+  account" text box + "Loan account" dropdown) and asked for a cashier-realistic flow: find the
+  *client* first, then pick from *their* active loans only.
+- Redesigned `PaymentRecordingPage.tsx` into three steps in the same card: (1) Find Client — debounced
+  search against `GET /borrowers?search=`, results as clickable rows; (2) that client's own
+  ACTIVE/ACTIVE_IN_ARREARS loans only via `GET /loan-accounts?borrowerId=`, never the whole
+  company's ~1,300 payable loans; (3) the existing payment form, now scoped to the chosen loan. The
+  `?loanId=` deep link from `LoanDetailPage`'s "Record Payment" button still works — it resolves the
+  loan's borrower automatically via `GET /loan-accounts/:id` + `GET /borrowers/:id` instead of
+  requiring the search step again.
+- User then asked for a real gap: no way to enter Principal/Interest/Penalty/Fees amounts manually
+  to post a payment — only a lump sum with server-computed automatic allocation. Per
+  CLAUDE.md's "never invent business rules," asked the user two design questions before touching
+  financial logic: manual mode = pick specific installment(s) then enter an exact per-component
+  split overriding the automatic waterfall (not just an edge-case override); validated on both
+  frontend (real-time, blocks submit on mismatch) and backend (authoritative).
+- Backend: `ProcessPaymentUseCase` now accepts an optional `manualAllocations` parameter. When
+  present, skips `PaymentAllocationService.allocate()`'s automatic waterfall entirely and instead
+  validates the caller-supplied split via a new `toManualAllocations()` — each installment must be
+  one of the loan's actual unpaid installments, no installment repeated, no negative amount, no
+  component amount exceeding that installment's remaining due for that component, and the grand
+  total across every entry must exactly equal `paymentAmount` (hard rejection on any mismatch — no
+  remainder concept in manual mode, unlike automatic overpayment). Added `allocations` to
+  `processPaymentSchema` (Zod) and wired it through the controller. Added 5 new unit tests
+  (happy path + 4 rejection cases) — all 15 `ProcessPaymentUseCase` tests pass.
+- Frontend: enabled the previously-disabled "Manual" allocation tab. Selecting it shows the unpaid
+  installment list with checkboxes; checking one reveals four amount fields (Principal/Interest/
+  Penalty/Fees) with that installment's remaining due shown as a hint. A running total vs. Payment
+  Amount is shown live (green when matched, red when not); Submit Payment stays disabled until they
+  match exactly.
+- User manually verified both changes live in the browser preview and confirmed they look correct.
+
+## Local dev environment fixes found along the way
+
+- `.claude/launch.json`'s `frontend-preview` config pointed at `D:\ECLC CLAUDE CODE\...` — wrong
+  drive letter (project is on `C:`). Fixed to `C:\ECLC CLAUDE CODE\...`.
+- `.claude/run-frontend.bat` hardcoded `--port 5173`, which fought the browser-preview tool's own
+  dynamic port assignment (Vite would silently fall back to 5174 while the tool's proxy still
+  pointed at its originally-assigned port, causing a blank/`chrome-error://` page). Fixed to honor
+  a `%PORT%` env var with a `--strictPort` flag, defaulting to 5173 only when unset.
+- Backend CORS (`app.ts`) only allowed the exact `CORS_ORIGIN` env value (`http://localhost:5173`),
+  which broke every time the preview tool assigned a different port. In development only, CORS now
+  accepts any `http://localhost:<port>` / `http://127.0.0.1:<port>` origin (production still
+  enforces the exact `CORS_ORIGIN` allow-list) — a `nodemon`-style watcher picked up the change and
+  restarted the already-running dev backend automatically.
+
 ## Current state / known follow-up
 
-- `origin/main` is at `dd2975d`, fully merged, both sessions' work combined.
+- `origin/main` is at `512da53` (includes the N+1 fix + gitignore updates from earlier in this
+  session; the Payment Recording redesign and manual-allocation feature are committed locally as of
+  this log but not yet pushed — see below).
 - SSH commit signing is set up and working for future commits from this machine.
 - The PSGC reference tables (`psgc_barangays` etc.) exist in the schema but are **empty** — the
   other session's import script expects a legacy dump path
   (`legacy/mongodb/07012026_103239/db-address-api`) that isn't present in this working copy; the
   cascading address picker will show empty dropdowns until that's run with the right dump
   available.
-- The Payment Recording N+1 fix should be manually verified in a live browser (reload the page,
-  confirm borrower names populate promptly and no "Could not load loan accounts" error appears).
-- Same "1,300+ individual `GET /borrower/:id` calls" pattern is worth a quick audit across any
-  other real-data pages introduced by the other session, in case it recurs elsewhere under
-  different data volumes.
+- `backup-mongodb.bat` has not yet been run against the real remote server — that's on the user
+  ("MIS Nomer") to do themselves.
+- Manual allocation mode currently has no dedicated backend integration test (only the unit-level
+  `ProcessPaymentUseCase` tests) — worth adding one alongside the automatic-mode integration
+  coverage if/when that suite is extended.
