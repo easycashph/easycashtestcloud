@@ -126,6 +126,30 @@ the per-device log of what's already been run where.
 
 ---
 
+## 4. Re-importing a fresh SDevTech dump while both systems are still in use
+
+The LMS project's end goal is to fully replace SDevTech, but during the transition some loans
+may still see activity in both systems. `migrate-legacy-data.ts` and its follow-ups are safe to
+re-run against a newer dump in the sense that they never overwrite an existing row (`update: {}`
+on every upsert) — but that also means a loan account's balance fields are only ever set **once**,
+at first migration, and never refreshed from a later dump. A loan that has since had a real
+payment posted through the LMS itself will NOT get its balance corrected by re-importing legacy
+data — the two systems will silently diverge for that loan.
+
+Check which loans are still safe to rely on a re-import for, and which have already "gone
+native" (must only be updated through the LMS from now on):
+
+```bash
+cd app/backend
+npx tsx scripts/check-legacy-sync-safety.ts
+```
+
+Read-only. Detects "gone native" by an evidence-based signal — a loan account with at least one
+`LoanTransaction` that has no `legacyId` (i.e. posted through the LMS itself, not the migration
+scripts) — not a guess.
+
+---
+
 ## 4. Quick reference — full sync checklist
 
 - [ ] `git fetch origin` + `git status` — check for remote updates
