@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "frontend-preview",
-      "runtimeExecutable": "C:\\ECLC CLAUDE CODE\\.claude\\run-frontend.bat",
+      "runtimeExecutable": "D:\\ECLC CLAUDE CODE\\.claude\\run-frontend.bat",
       "runtimeArgs": [],
       "port": 5173,
       "autoPort": true
