@@ -7,6 +7,12 @@ covers the one-time setup that guide assumes you've already done.
 Each device (Windows machine, MacBook, etc.) has its **own local PostgreSQL database**, migrated
 from the same SDevTech MongoDB export — the code is shared via GitHub, but the database is not.
 
+**Shortcut:** after cloning the repo (§2 below), `./setup-macos.sh` (at the repo root) automates
+§1 (prerequisite checks) through §4 (Postgres, npm install, Prisma generate/migrate/seed) in one
+run. It deliberately stops before §5 — populating real legacy data and creating your login user
+need a real dump file and a human decision at each step, not something a script should do
+unattended. The sections below explain what that script does and cover everything after it.
+
 ---
 
 ## 1. Install prerequisites
