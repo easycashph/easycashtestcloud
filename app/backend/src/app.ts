@@ -110,7 +110,15 @@ export function createApp(): Express {
   app.use(
     rateLimit({
       windowMs: 15 * 60 * 1000,
-      limit: 300,
+      // Kept tight in production (300/15min covers real traffic without being
+      // a meaningful brute-force throttle by itself — the per-endpoint
+      // limiters in authRouter.ts do that job). Relaxed in development only,
+      // matching loginRateLimiter's precedent: this global limiter counts
+      // every request app-wide (dashboard polling, list pages, health
+      // checks, manual testing), so it was getting exhausted by normal local
+      // development activity and locking developers out for up to 15
+      // minutes — not the threat this limiter exists to stop.
+      limit: env.NODE_ENV === 'development' ? 5000 : 300,
       standardHeaders: true,
       legacyHeaders: false,
     }),
