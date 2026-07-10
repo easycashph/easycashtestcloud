@@ -164,7 +164,14 @@ export function PaymentRecordingPage() {
   const clientPayableLoans = (clientLoansQuery.data?.items ?? []).filter((l) => PAYABLE_STATUSES.includes(l.status));
   const selectedLoan = clientPayableLoans.find((l) => l.id === loanId);
 
-  const [amount, setAmount] = React.useState('1000.00');
+  // Starts blank rather than a hardcoded guess (e.g. "1000.00") — the effect below fills it in
+  // once the oldest unpaid installment's actual total due is known, per loan selection.
+  const [amount, setAmount] = React.useState('');
+  const todayDateString = () => new Date().toISOString().slice(0, 10);
+  // Defaults to today but stays editable — staff often record a payment (e.g. cash collected in
+  // the field) after the fact, and the backend's ProcessPaymentUseCase already accepts an explicit
+  // paidAt; this UI simply exposes it instead of silently always using "now".
+  const [paidAt, setPaidAt] = React.useState(todayDateString());
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
   const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -202,6 +209,21 @@ export function PaymentRecordingPage() {
   const unpaidInstallments = (installmentsQuery.data?.items ?? [])
     .filter((i) => i.status !== 'PAID')
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+  // Clears the previous loan's amount immediately on switch, so it never briefly shows a stale
+  // figure while the new loan's schedule is still loading.
+  React.useEffect(() => {
+    setAmount('');
+  }, [loanId]);
+  // Auto-fills once the oldest unpaid installment's real total due is known — the amount staff
+  // will most commonly want to collect. Only fires while amount is still blank (the effect above
+  // guarantees that's "just switched loans", not "staff already typed something").
+  React.useEffect(() => {
+    if (amount !== '' || unpaidInstallments.length === 0) return;
+    const oldest = remainingDue(unpaidInstallments[0]!);
+    const total = oldest.principal + oldest.interest + oldest.penalty + oldest.fees;
+    setAmount(total.toFixed(2));
+  }, [amount, unpaidInstallments]);
 
   const paymentAmount = Number.parseFloat(amount) || 0;
   const preview = previewCrossInstallmentAllocation(
@@ -249,6 +271,7 @@ export function PaymentRecordingPage() {
         allocationMode === 'MANUAL'
           ? {
               paymentAmount: amount,
+              paidAt,
               allocations: Object.entries(manualEntries).map(([installmentId, e]) => ({
                 installmentId,
                 principal: (Number.parseFloat(e.principal) || 0).toFixed(2),
@@ -257,7 +280,7 @@ export function PaymentRecordingPage() {
                 fees: (Number.parseFloat(e.fees) || 0).toFixed(2),
               })),
             }
-          : { paymentAmount: amount };
+          : { paymentAmount: amount, paidAt };
       return apiClient.post<ProcessPaymentResponse>(`/loan-accounts/${loanId}/payments`, body, {
         'Idempotency-Key': idempotencyKeyRef.current,
       });
@@ -422,6 +445,12 @@ export function PaymentRecordingPage() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <Label htmlFor="paid-at">Payment date</Label>
+                  <Input id="paid-at" type="date" max={todayDateString()} value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">When the payment was actually received — defaults to today, editable for a late-entered payment.</p>
+                </div>
+
+                <div className="space-y-1.5">
                   <Label>Allocation</Label>
                   <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
                     <TabsList className="grid w-full grid-cols-2">
@@ -565,7 +594,7 @@ export function PaymentRecordingPage() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Allocation Preview</CardTitle>
-              <CardDescription>Per-installment split for the entered amount</CardDescription>
+              <CardDescription>Per-installment split for the entered amount, dated {formatDate(paidAt)}</CardDescription>
             </div>
             <Badge variant="outline">Preview — final split is computed by the server on submit</Badge>
           </CardHeader>
@@ -585,24 +614,25 @@ export function PaymentRecordingPage() {
                       <SortableTableHead sortKey="dueDate" currentSort={previewSort} onSort={togglePreviewSort} isDateColumn>
                         Due Date
                       </SortableTableHead>
-                      <SortableTableHead sortKey="feesApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
-                        Fees
-                      </SortableTableHead>
-                      <SortableTableHead sortKey="penaltyApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
-                        Penalty
+                      <SortableTableHead sortKey="principalApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
+                        Principal
                       </SortableTableHead>
                       <SortableTableHead sortKey="interestApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
                         Interest
                       </SortableTableHead>
-                      <SortableTableHead sortKey="principalApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
-                        Principal
+                      <SortableTableHead sortKey="penaltyApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
+                        Penalty
                       </SortableTableHead>
+                      <SortableTableHead sortKey="feesApplied" currentSort={previewSort} onSort={togglePreviewSort} className="text-right">
+                        Fees
+                      </SortableTableHead>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedPreviewRows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
                           Enter a payment amount above ₱0.00 to see the allocation.
                         </TableCell>
                       </TableRow>
@@ -611,10 +641,13 @@ export function PaymentRecordingPage() {
                         <TableRow key={row.installmentId}>
                           <TableCell>{row.installmentNumber}</TableCell>
                           <TableCell>{formatDate(row.dueDate)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(row.feesApplied)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(row.penaltyApplied)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(row.interestApplied)}</TableCell>
                           <TableCell className="text-right">{formatPeso(row.principalApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.interestApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.penaltyApplied)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(row.feesApplied)}</TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatPeso(row.principalApplied + row.interestApplied + row.penaltyApplied + row.feesApplied)}
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -623,20 +656,20 @@ export function PaymentRecordingPage() {
 
                 <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
                   <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Fees</p>
-                    <p className="text-sm font-semibold">{formatPeso(totals.fees)}</p>
-                  </div>
-                  <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Penalty</p>
-                    <p className="text-sm font-semibold">{formatPeso(totals.penalty)}</p>
+                    <p className="text-xs text-muted-foreground">Principal</p>
+                    <p className="text-sm font-semibold">{formatPeso(totals.principal)}</p>
                   </div>
                   <div className="rounded-md border p-2 text-center">
                     <p className="text-xs text-muted-foreground">Interest</p>
                     <p className="text-sm font-semibold">{formatPeso(totals.interest)}</p>
                   </div>
                   <div className="rounded-md border p-2 text-center">
-                    <p className="text-xs text-muted-foreground">Principal</p>
-                    <p className="text-sm font-semibold">{formatPeso(totals.principal)}</p>
+                    <p className="text-xs text-muted-foreground">Penalty</p>
+                    <p className="text-sm font-semibold">{formatPeso(totals.penalty)}</p>
+                  </div>
+                  <div className="rounded-md border p-2 text-center">
+                    <p className="text-xs text-muted-foreground">Fees</p>
+                    <p className="text-sm font-semibold">{formatPeso(totals.fees)}</p>
                   </div>
                   <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-center">
                     <p className="text-xs text-muted-foreground">Remainder</p>
@@ -656,8 +689,8 @@ export function PaymentRecordingPage() {
           <DialogHeader>
             <DialogTitle>Confirm Payment</DialogTitle>
             <DialogDescription>
-              Post {formatPeso(paymentAmount)} against {selectedLoan && selectedBorrower ? `${selectedBorrower.fullName} — ${selectedLoan.loanCode}` : 'this loan'}?
-              This cannot be undone from this screen.
+              Post {formatPeso(paymentAmount)} against {selectedLoan && selectedBorrower ? `${selectedBorrower.fullName} — ${selectedLoan.loanCode}` : 'this loan'},
+              dated {formatDate(paidAt)}? This cannot be undone from this screen.
             </DialogDescription>
           </DialogHeader>
           {submitError && (
