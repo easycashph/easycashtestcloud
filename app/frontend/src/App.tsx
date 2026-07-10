@@ -26,15 +26,18 @@ import { AboutPage } from '@/pages/AboutPage';
  * `LoginPage` in place of this whole tree whenever there's no active session.
  *
  * Wiring status per route (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for
- * detail):
+ * detail; last verified 2026-07-11 — this list drifted stale before, double-check against the
+ * actual page before trusting it blindly):
  * - Real: auth, LoanListPage, LoanApplications* (list/create/detail), ClientListPage,
  *   ClientProfilePage, LoanProductsPage (read-only by design), PaymentRecordingPage,
- *   MemberListPage, ActivityLogPage.
+ *   MemberListPage, ActivityLogPage, PaymentRemindersPage, LoanReportPage, CollectionReportPage,
+ *   TransactionReportPage.
  * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
  *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
  *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
- *   AI risk assessment, approve/activate actions, payment history, and timeline are still mock).
- * - Mock only: PaymentRemindersPage, all *ReportPage routes, SettingsPage, AboutPage.
+ *   AI risk assessment, approve/activate actions, and timeline are still mock — payment history
+ *   is real as of 2026-07-11).
+ * - Mock only: SettingsPage, AboutPage.
  */
 export default function App() {
   return (
