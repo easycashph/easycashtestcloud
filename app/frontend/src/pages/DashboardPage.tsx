@@ -29,24 +29,127 @@ import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillD
 import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
-import { apiClient } from '@/lib/apiClient';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
-import {
-  buildDisbursementTrend,
-  buildPortfolioByCategory,
-  buildPortfolioHealth,
-  buildPortfolioQualityMetrics,
-  COLLECTIONS_VS_TARGET,
-  DASHBOARD_SUMMARY,
-  getDashboardLoanCategory,
-  getTotalPortfolioValue,
-  LOAN_CATEGORY_OPTIONS,
-  MOCK_ACTIVITY_LOGS,
-  MOCK_LOANS,
-  SAMPLE_COLLECTIONS_PROJECTION,
-  type PortfolioCategorySlice,
-} from '@/lib/mockData';
+import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
+import type { AuditLog } from '@/lib/auditLogApiTypes';
+import type { MockActivityLogEntry } from '@/lib/mockData';
+import { COLLECTIONS_VS_TARGET, SAMPLE_COLLECTIONS_PROJECTION } from '@/lib/mockData';
 import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+
+/** Loan row shape every portfolio widget below reads — assembled once from the real `GET
+ * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
+interface PortfolioLoanRow {
+  id: string;
+  loanCode: string;
+  borrowerName: string;
+  /** Real product name (e.g. "SML-Regular") — shown in the drill-down dialog's Product column. */
+  productType: string;
+  /** Product family grouping derived from `productType` (Seafarer Loan / Salary Loan / Business Loan / Other) — used for Portfolio Breakdown. */
+  category: string;
+  status: LoanAccountStatus;
+  principalAmount: number;
+  collectionsBalance: number;
+  activatedAt: string | null;
+  createdAt: string;
+  interestPaid: number;
+  interestBalance: number;
+  penaltyPaid: number;
+  penaltyBalance: number;
+  principalBalance: number;
+}
+
+/** The real backend has no `MATURED` status yet (`LoanAccountStatus` in `loanApiTypes.ts` — 7
+ * values, `ACTIVE`/`ACTIVE_IN_ARREARS` are the only "still active and collecting" states). The
+ * "Matured" bucket below therefore always reads 0 against live data — left visible, not hidden,
+ * so the gap is honest rather than silently dropped, until the backend models that concept. */
+const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
+
+/** Same product-family grouping already approved for the mock dashboard (see the historical
+ * `getDashboardLoanCategory` in `mockData.ts`) — every SML-* product is a Seafarer Loan sub-class,
+ * SL-* is Salary Loan, BL-* is Business Loan, everything else (PFL/REL/CL/OFW/...) is legacy.
+ * Confirmed against the real `loan_products.name` values in the migrated database. */
+function categorizeProductName(productName: string): string {
+  if (productName.startsWith('Seafarer Loan') || productName.startsWith('SML')) return 'Seafarer Loan';
+  if (productName.startsWith('Salary Loan') || /^SL[-_ ]/.test(productName)) return 'Salary Loan';
+  if (productName.startsWith('Business Loan') || /^BL[-_ ]/.test(productName)) return 'Business Loan';
+  return 'Other (Legacy)';
+}
+
+function buildRealPortfolioHealth(loans: PortfolioLoanRow[]) {
+  const good = loans.filter((l) => l.status === 'ACTIVE');
+  const arrears = loans.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
+  const matured: PortfolioLoanRow[] = []; // see REAL_ACTIVE_STATUSES note — not tracked by the backend yet
+  const writtenOff = loans.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
+  const sum = (rows: PortfolioLoanRow[], pick: (l: PortfolioLoanRow) => number) =>
+    Math.round(rows.reduce((total, l) => total + pick(l), 0) * 100) / 100;
+  return {
+    good: { count: good.length, collectionsBalance: sum(good, (l) => l.collectionsBalance), interestIncome: sum(good, (l) => l.interestPaid), loans: good },
+    activeInArrears: {
+      count: arrears.length,
+      collectionsBalance: sum(arrears, (l) => l.collectionsBalance),
+      penaltyIncome: sum(arrears, (l) => l.penaltyPaid + l.penaltyBalance),
+      accruedRevenue: sum(arrears, (l) => l.interestBalance),
+      loans: arrears,
+    },
+    matured: { count: 0, collectionsBalance: 0, creditLoss: 0, loans: matured },
+    writtenOff: { count: writtenOff.length, collectionsBalance: sum(writtenOff, (l) => l.collectionsBalance), loans: writtenOff },
+  };
+}
+
+interface PortfolioCategorySlice {
+  category: string;
+  value: number;
+  loans: PortfolioLoanRow[];
+}
+
+function buildRealPortfolioByCategory(loans: PortfolioLoanRow[]): PortfolioCategorySlice[] {
+  const byCategory = new Map<string, PortfolioCategorySlice>();
+  for (const loan of loans) {
+    if (!REAL_ACTIVE_STATUSES.includes(loan.status)) continue;
+    const slice = byCategory.get(loan.category) ?? { category: loan.category, value: 0, loans: [] };
+    slice.value = Math.round((slice.value + loan.principalBalance) * 100) / 100;
+    slice.loans.push(loan);
+    byCategory.set(loan.category, slice);
+  }
+  return [...byCategory.values()];
+}
+
+function buildRealQualityMetrics(loans: PortfolioLoanRow[]) {
+  const health = buildRealPortfolioHealth(loans);
+  const delinquentLoans = [...health.activeInArrears.loans, ...health.matured.loans];
+  const activePortfolio = [...health.good.loans, ...delinquentLoans];
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const totalOutstanding = activePortfolio.reduce((sum, l) => sum + l.collectionsBalance, 0);
+  const delinquentOutstanding = delinquentLoans.reduce((sum, l) => sum + l.collectionsBalance, 0);
+  return {
+    delinquencyRatePercent: activePortfolio.length === 0 ? 0 : round2((delinquentLoans.length / activePortfolio.length) * 100),
+    portfolioAtRiskPercent: totalOutstanding === 0 ? 0 : round2((delinquentOutstanding / totalOutstanding) * 100),
+    averageLoanSize:
+      activePortfolio.length === 0 ? 0 : round2(activePortfolio.reduce((sum, l) => sum + l.principalAmount, 0) / activePortfolio.length),
+    writtenOffExposure: health.writtenOff.loans.reduce((sum, l) => sum + l.collectionsBalance, 0),
+  };
+}
+
+const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function buildRealDisbursementTrend(loans: PortfolioLoanRow[], monthsBack = 6) {
+  const now = new Date();
+  const buckets: { month: string; year: number; monthIndex: number; disbursed: number }[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const target = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    let disbursed = 0;
+    for (const loan of loans) {
+      if (!loan.activatedAt) continue;
+      const activated = new Date(loan.activatedAt);
+      if (activated.getFullYear() === target.getFullYear() && activated.getMonth() === target.getMonth()) {
+        disbursed += loan.principalAmount;
+      }
+    }
+    buckets.push({ month: MONTH_SHORT_NAMES[target.getMonth()]!, year: target.getFullYear(), monthIndex: target.getMonth(), disbursed: Math.round(disbursed * 100) / 100 });
+  }
+  return buckets;
+}
 
 // Deliberately excludes --chart-1: that variable is re-themed per the LMS Configuration
 // accent color (emerald/violet/amber/rose) and can collide with one of the other fixed
@@ -213,14 +316,80 @@ export function DashboardPage() {
   useLogPageView('Dashboard');
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
-  // Live portfolio-wide totals from the real backend (GET /dashboard/summary). The endpoint has no
-  // category/date filtering or per-loan detail, so it only backs the three Overview cards below,
-  // and only while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range) — once
-  // filtered, those cards fall back to the mock-derived, client-side-filterable figures instead.
+  // Live portfolio-wide totals from the real backend (GET /dashboard/summary) — backs the three
+  // Overview cards while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range).
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
   });
+
+  // Full portfolio, fetched once and aggregated client-side — same pattern LoanListPage already
+  // uses for the borrower/product name join. Every filterable card below (Quality Metrics,
+  // Disbursement Trend, Portfolio Breakdown, Portfolio Health, and every drill-down) reacts to
+  // this, replacing the former MOCK_LOANS-driven versions.
+  const loanAccountsQuery = useQuery({ queryKey: ['loan-accounts', 'all'], queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts') });
+  const borrowersQuery = useQuery({ queryKey: ['borrowers', 'all'], queryFn: () => fetchAllPages<Borrower>('/borrowers') });
+  const productsQuery = useQuery({
+    queryKey: ['loan-products', 'all'],
+    queryFn: async () => {
+      const products = await fetchAllPages<LoanProduct>('/loan-products');
+      const versionToProductName = new Map<string, string>();
+      for (const p of products) {
+        for (const v of p.versions ?? []) versionToProductName.set(v.id, p.name);
+      }
+      return versionToProductName;
+    },
+  });
+  const auditLogsQuery = useQuery({ queryKey: ['audit-logs', 'dashboard-recent'], queryFn: () => fetchAllPages<AuditLog>('/audit-logs') });
+  const recentActivityEntries: MockActivityLogEntry[] = React.useMemo(
+    () =>
+      [...(auditLogsQuery.data ?? [])]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 10)
+        .map((log) => ({
+          id: log.id,
+          userName: log.userName ?? log.userEmail ?? 'System',
+          action: log.action,
+          entityType: log.entityType,
+          entityId: log.entityId,
+          at: log.createdAt,
+        })),
+    [auditLogsQuery.data],
+  );
+
+  const isPortfolioLoading = loanAccountsQuery.isLoading || borrowersQuery.isLoading || productsQuery.isLoading;
+
+  const allPortfolioLoans: PortfolioLoanRow[] = React.useMemo(() => {
+    if (!loanAccountsQuery.data) return [];
+    const borrowerById = new Map((borrowersQuery.data ?? []).map((b) => [b.id, b]));
+    const versionToProductName = productsQuery.data ?? new Map<string, string>();
+    return loanAccountsQuery.data.map((l): PortfolioLoanRow => {
+      const borrower = borrowerById.get(l.borrowerId);
+      const productName = versionToProductName.get(l.loanProductVersionId) ?? '—';
+      return {
+        id: l.id,
+        loanCode: l.loanCode,
+        borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
+        productType: productName,
+        category: categorizeProductName(productName),
+        status: l.status,
+        principalAmount: Number.parseFloat(l.principalAmount) || 0,
+        collectionsBalance: Number.parseFloat(l.collectionsBalance) || 0,
+        activatedAt: l.activatedAt,
+        createdAt: l.createdAt,
+        interestPaid: Number.parseFloat(l.balances.interestPaid) || 0,
+        interestBalance: Number.parseFloat(l.balances.interestBalance) || 0,
+        penaltyPaid: Number.parseFloat(l.balances.penaltyPaid) || 0,
+        penaltyBalance: Number.parseFloat(l.balances.penaltyBalance) || 0,
+        principalBalance: Number.parseFloat(l.balances.principalBalance) || 0,
+      };
+    });
+  }, [loanAccountsQuery.data, borrowersQuery.data, productsQuery.data]);
+
+  const loanCategoryOptions = React.useMemo(
+    () => [...new Set(buildRealPortfolioByCategory(allPortfolioLoans).map((s) => s.category))].sort(),
+    [allPortfolioLoans],
+  );
 
   // Portfolio Filter — the master filter for the whole Dashboard (loan category + origination
   // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
@@ -241,26 +410,26 @@ export function DashboardPage() {
   const portfolioFilteredLoans = React.useMemo(() => {
     const fromTime = dateRange.from ? new Date(dateRange.from).getTime() : null;
     const toTime = dateRange.to ? new Date(`${dateRange.to}T23:59:59.999`).getTime() : null;
-    return MOCK_LOANS.filter((loan) => {
-      if (categoryFilter !== ALL_CATEGORIES && getDashboardLoanCategory(loan) !== categoryFilter) return false;
+    return allPortfolioLoans.filter((loan) => {
+      if (categoryFilter !== ALL_CATEGORIES && loan.category !== categoryFilter) return false;
       const originated = new Date(loan.createdAt).getTime();
       if (fromTime !== null && originated < fromTime) return false;
       if (toTime !== null && originated > toTime) return false;
       return true;
     });
-  }, [categoryFilter, dateRange]);
+  }, [allPortfolioLoans, categoryFilter, dateRange]);
 
-  const filteredPortfolioHealth = React.useMemo(() => buildPortfolioHealth(portfolioFilteredLoans), [portfolioFilteredLoans]);
+  const filteredPortfolioHealth = React.useMemo(() => buildRealPortfolioHealth(portfolioFilteredLoans), [portfolioFilteredLoans]);
   const filteredPortfolioByCategory = React.useMemo(
-    () => buildPortfolioByCategory(portfolioFilteredLoans),
+    () => buildRealPortfolioByCategory(portfolioFilteredLoans),
     [portfolioFilteredLoans],
   );
   const filteredQualityMetrics = React.useMemo(
-    () => buildPortfolioQualityMetrics(portfolioFilteredLoans),
+    () => buildRealQualityMetrics(portfolioFilteredLoans),
     [portfolioFilteredLoans],
   );
   const filteredDisbursementTrend = React.useMemo(
-    () => buildDisbursementTrend(portfolioFilteredLoans, 6),
+    () => buildRealDisbursementTrend(portfolioFilteredLoans, 6),
     [portfolioFilteredLoans],
   );
   const liveSummary = !isFiltered ? summaryQuery.data : undefined;
@@ -288,14 +457,17 @@ export function DashboardPage() {
   );
 
   // Collections This Month and Collections vs. Target have no per-loan, per-calendar-month payment
-  // date in the mock data model to sum bottom-up (see the Collections Forecast doc comment in
-  // mockData.ts for why the Forecast card *can* do this and these two can't). Scaled proportionally
-  // to how much of the whole portfolio's outstanding principal the current filter selects, so the
-  // figures still move honestly with the filter instead of staying frozen — clearly disclosed as
-  // an estimate, not implied precision.
-  const totalPortfolioValue = getTotalPortfolioValue();
+  // date available to sum bottom-up (see the Collections Forecast doc comment below for why the
+  // Forecast card *can* do this and these two can't). Scaled proportionally to how much of the
+  // whole portfolio's outstanding principal the current filter selects, off the real, unfiltered
+  // Collections This Month total from `GET /dashboard/summary` — an honest estimate derived from
+  // real numbers, clearly disclosed as such, not a fabricated figure.
+  const totalPortfolioValue = React.useMemo(
+    () => allPortfolioLoans.filter((l) => REAL_ACTIVE_STATUSES.includes(l.status)).reduce((sum, l) => sum + l.principalBalance, 0),
+    [allPortfolioLoans],
+  );
   const filterRatio = totalPortfolioValue > 0 ? filteredOutstandingTotal / totalPortfolioValue : 1;
-  const scaledCollectionsThisMonth = round2Peso(DASHBOARD_SUMMARY.totalCollectionsThisMonth * filterRatio);
+  const scaledCollectionsThisMonth = round2Peso(Number(summaryQuery.data?.collectionsThisMonth.amount ?? 0) * filterRatio);
   const scaledCollectionsVsTarget = React.useMemo(
     () =>
       COLLECTIONS_VS_TARGET.map((m) => ({
@@ -334,7 +506,7 @@ export function DashboardPage() {
     setDrillDown({
       title: `Loans activated in ${bucket.month} ${bucket.year}`,
       description:
-        'The mock loan accounts whose activation date falls in the selected month.' +
+        'The loan accounts whose activation date falls in the selected month.' +
         (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
       loans,
     });
@@ -366,7 +538,7 @@ export function DashboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL_CATEGORIES}>All Categories</SelectItem>
-                  {LOAN_CATEGORY_OPTIONS.map((category) => (
+                  {loanCategoryOptions.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
                     </SelectItem>
@@ -397,7 +569,11 @@ export function DashboardPage() {
         <p className="text-sm text-muted-foreground">
           {liveSummary
             ? 'Live portfolio summary across all branches. '
-            : `Portfolio summary across all branches — sample data${isFiltered ? ', reflecting the Portfolio Filter above' : ''}. `}
+            : isFiltered
+              ? 'Live figures, computed from the loan accounts matching the Portfolio Filter above. '
+              : summaryQuery.isError
+                ? 'Could not reach the backend — showing sample data below. '
+                : 'Loading live portfolio summary… '}
           Click a chart segment, bar, or figure to see the loan accounts behind it.
         </p>
       </div>
@@ -406,6 +582,16 @@ export function DashboardPage() {
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" /> Could not load live dashboard totals. Is the backend running? Showing sample
           data below instead.
+        </div>
+      )}
+
+      {isPortfolioLoading && (
+        <p className="text-sm text-muted-foreground">Loading live portfolio data ({allPortfolioLoans.length} loan accounts so far)…</p>
+      )}
+      {(loanAccountsQuery.isError || borrowersQuery.isError || productsQuery.isError) && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load the live loan portfolio. Quality Metrics, Disbursement Trend,
+          Portfolio Breakdown, and Loan Portfolio Health below will be empty until this loads.
         </div>
       )}
 
@@ -655,7 +841,8 @@ export function DashboardPage() {
           <CardDescription>
             Good vs. Matured loan accounts, with the overlap — Active Accounts in Arrears: still active and paying, just sometimes
             late, where Easycash earns penalty/late-fee income on top of amortization. Click any region for the accounts behind it.
-            {isFiltered ? ' Reflects the filter above.' : ''}
+            {isFiltered ? ' Reflects the filter above.' : ''} "Matured" always reads 0 for now — the backend does not track that
+            status yet.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -700,7 +887,7 @@ export function DashboardPage() {
 
       <LoanDrillDownDialog drillDown={drillDown} onClose={() => setDrillDown(null)} />
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Dashboard')} title="Recent Activity — Dashboard" />
+      <RecentActivityPanel entries={recentActivityEntries} title="Recent Activity — Dashboard" />
     </div>
   );
 }

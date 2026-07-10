@@ -2,13 +2,23 @@ import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { LoanStatusBadge } from '@/components/StatusBadge';
-import type { MockLoanAccount } from '@/lib/mockData';
+import type { LoanAccountStatus } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
+
+/** Minimal shape every drill-down source (real, backend-derived loan rows) must provide — deliberately not `MockLoanAccount`, since this dialog only ever renders these 6 fields. */
+export interface DrillDownLoan {
+  id: string;
+  loanCode: string;
+  borrowerName: string;
+  productType: string;
+  status: LoanAccountStatus;
+  collectionsBalance: number;
+}
 
 export interface LoanDrillDown {
   title: string;
   description?: string;
-  loans: MockLoanAccount[];
+  loans: DrillDownLoan[];
 }
 
 /**
