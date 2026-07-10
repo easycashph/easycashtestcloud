@@ -505,6 +505,19 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     </TableCell>
                   </TableRow>
                 ))}
+                <TableRow className="border-t-2 font-semibold">
+                  <TableCell colSpan={2}>Total</TableCell>
+                  <TableCell className="text-right">
+                    {formatPeso(installments.reduce((sum, i) => sum + num(i.due.principal), 0))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatPeso(installments.reduce((sum, i) => sum + num(i.due.interest), 0))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.principal) + num(i.paid.interest), 0))}
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
               </TableBody>
             </Table>
           )}
