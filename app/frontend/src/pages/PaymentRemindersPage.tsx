@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Clock, Search } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Clock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -54,6 +55,8 @@ function getSortValue(r: PaymentReminder, key: string): string | number | Date |
   }
 }
 
+const PAGE_SIZE = 50;
+
 const STATUS_OPTIONS: { value: PaymentReminderStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'LATE', label: 'Overdue' },
@@ -78,6 +81,7 @@ export function PaymentRemindersPage() {
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<PaymentReminderStatus | 'ALL'>('ALL');
+  const [page, setPage] = React.useState(1);
 
   const remindersQuery = useQuery({
     queryKey: ['payment-reminders'],
@@ -93,6 +97,17 @@ export function PaymentRemindersPage() {
     return matchesSearch && matchesStatus;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'asc' });
+
+  // Resets to page 1 whenever the search/status filter, sort order, or the underlying data
+  // changes — otherwise a filter/sort could leave the view stranded on a now-empty or
+  // no-longer-relevant later page.
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, status, sort.key, sort.direction, reminders.length]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const overdueCount = reminders.filter((r) => r.status === 'LATE').length;
 
@@ -175,7 +190,7 @@ export function PaymentRemindersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((r) => {
+              {pageRows.map((r) => {
                 const badge = STATUS_BADGE[r.status];
                 const components = remainingDueByComponent(r);
                 return (
@@ -211,6 +226,35 @@ export function PaymentRemindersPage() {
               )}
             </TableBody>
           </Table>
+
+          {sorted.length > 0 && (
+            <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
+              <p>
+                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sorted.length)} of {sorted.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" /> Previous
+                </Button>
+                <span>
+                  Page {currentPage} of {pageCount}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                >
+                  Next <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
