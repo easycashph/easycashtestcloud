@@ -407,9 +407,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     void queryClient.invalidateQueries({ queryKey: ['loan-transactions', loanId] });
     void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
   };
+  // 2026-07-11 (Reverse Payment feature) — these three ReversePaymentUseCase rejections are also
+  // HTTP 409 (see LedgerDomainErrors.ts), but they're permanent, expected business rules, not a
+  // transient version conflict — showing the generic "just updated, try again" message for them
+  // was actively misleading (a payment that predates this feature will NEVER become reversible by
+  // refreshing and retrying). Surface the backend's own already-descriptive message instead.
+  const PERMANENT_REVERSAL_REJECTION_CODES = new Set([
+    'TRANSACTION_NOT_REVERSIBLE',
+    'TRANSACTION_ALREADY_REVERSED',
+    'NO_REVERSIBLE_ALLOCATION_DATA',
+  ]);
   const onActionError = (error: unknown) => {
     if (error instanceof ApiError) {
-      if (error.status === 409) {
+      if (PERMANENT_REVERSAL_REJECTION_CODES.has(error.code)) {
+        setActionError(error.message);
+      } else if (error.status === 409) {
         setActionError('This loan was just updated by another action. Refresh and try again.');
       } else if (error.status === 403) {
         setActionError("You don't have permission to do this.");
@@ -594,6 +606,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
+                  {/* 2026-07-11 (user request): display only — feesDue/penaltyDue are already
+                      wired end-to-end (schema/API/DTO), but AmortizationScheduleGenerator never
+                      populates them yet (no confirmed Penalty formula — CALCULATION_ENGINE_SPEC.md
+                      §12, UNRESOLVED — and no recurring per-installment Fees rule either), so these
+                      columns will read ₱0.00 for every installment until that engine exists. */}
+                  <TableCell className="text-right font-medium text-muted-foreground">Fees Due</TableCell>
+                  <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
                   <TableCell className="font-medium text-muted-foreground">Status</TableCell>
                 </TableRow>
@@ -605,6 +624,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     <TableCell>{formatDate(i.dueDate)}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.penalty))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
                     <TableCell>
                       <InstallmentStatusBadge status={i.status} />
