@@ -907,6 +907,104 @@ output, not from principal directly.
 ### Referenced ADRs
 None — sourced directly from the VBA macro source, not a legacy-data ADR investigation.
 
+### Open discrepancy (not yet resolved)
+A second, newer live-production Excel calculator, `legacy/reports/Net Amount Auto Computation v3
+with Account Management Fee.xlsx` (`AutoV2` sheet, e.g. cell `D16`:
+`ROUNDUP((Amortization×Term)/1000×Term, 0)`), computes the same core formula **without** the
+`+20 if TotalContract < 50,000` term present in the `CalculateInsurance()` macro above. Not yet
+investigated further or confirmed either way (no real loan with `TotalContract < 50,000` has been
+traced through both sources) — flagged here so it isn't lost, not acted on.
+
+---
+
+## 14. Advance Interest Fee (Loan Origination)
+
+### Purpose
+Computes the one-time Advance Interest Fee deducted at loan disbursement (Create Loan Account —
+`OriginationFees.advanceInterestFee`) when the gap between disbursement and the first scheduled
+repayment exceeds 30 days.
+
+### Inputs
+- `grossLoanAmount: Money` (Principal)
+- `addOnRatePercent: Percentage` — the `LoanProductVersion`/quote's Add-On Rate, **not**
+  Contractual Rate (§3, `ADR-010`).
+- `disbursementDate: Date`
+- `firstRepaymentDate: Date`
+
+### Outputs
+- `advanceInterestFee: Money`
+
+### Configuration Required
+Per-`LoanProductVersion` eligibility (`chargesAdvanceInterestFee`-style flag) — **UNRESOLVED**, see
+`ADR-046` §4/§7. Currently implemented as a per-loan auto-computed suggestion (always populated
+when the >30-day condition holds), freely editable/zeroable by staff, rather than a per-product
+hard rule — a deliberate scope choice pending that business decision.
+
+### Formula
+```
+gapDays = firstRepaymentDate − disbursementDate   (calendar days)
+IF gapDays > 30:
+    excessDays = gapDays − 30
+    advanceInterestFee = CEILING(grossLoanAmount × (addOnRatePercent / 100) × (excessDays / 30), 1)
+ELSE:
+    advanceInterestFee = 0
+```
+
+**Evidence:** `ADR-046` (population-wide statistical fit: 62.6% exact match, 74.6% within 5% across
+449 real loans, 2021 encoding-anomaly cohort excluded) plus, as of 2026-07-11, independent
+corroboration against a live, currently-active account (`SML-REG_00373`) matched exactly across
+three separate sources — see `ADR-046` §3.5:
+
+| Source | Advance Interest Fee |
+|---|---|
+| This formula, hand-computed | ₱1,508.00 |
+| Official Disclosure Statement (R.A. 3765) for this account | ₱1,508.00 |
+| Legacy SDevTech production system's stored value | ₱1,508.00 |
+
+(Inputs: Gross ₱115,926.97, Add-On Rate 3.00%/month, disbursed 2026-07-03, 1st due 2026-08-15 —
+43-day gap, 13 excess days.) The same live-account cross-check also independently reconfirmed the
+Account Management Fee (exactly 1% of Gross) and the §13 Insurance Fee macro formula, both exact.
+
+A second, newer live-production Excel calculator (`Net Amount Auto Computation v3 with Account
+Management Fee.xlsx`, `AutoV2` sheet, cell `D20` and 20+ structurally-identical per-quote copies)
+was independently read and found algebraically identical to this formula, confirming the Add-On
+Rate rate-basis and ceiling-to-whole-peso rounding a second, independent way. That sheet also
+revealed a manual per-quote `"With Advance Interest?"` YES/NO toggle gating the fee even when the
+>30-day condition holds — a plausible real mechanism behind the per-product/per-loan eligibility
+gap `ADR-046` already flags as unresolved, but not itself a confirmed configuration rule.
+
+**STATUS: CONFIRMED** — formula, rate basis, and rounding convention. Per-product eligibility
+remains **UNRESOLVED** (business decision required, see `ADR-046` §7).
+
+### Rounding
+`CEILING(x, 1)` — round UP to the nearest whole peso, same convention as §13 Insurance Fee; departs
+from this document's usual `Decimal(14,2)` precision, intentionally, for this fee only.
+
+### Precision
+Intermediate values are not rounded — only the final result, via `CEILING`.
+
+### Examples
+See the Evidence table above — directly reusable as a test fixture.
+
+### Edge Cases
+- `gapDays ≤ 30`: fee is `0`, no partial credit.
+- No per-product eligibility gate is currently enforced (see Configuration Required) — the fee is
+  suggested for every loan meeting the >30-day condition, regardless of product.
+
+### Validation Rules
+`grossLoanAmount` and `addOnRatePercent` must both be positive; dates must be valid calendar dates
+with `firstRepaymentDate ≥ disbursementDate`.
+
+### Test Vectors
+See Examples table above.
+
+### Dependencies
+None beyond its own inputs — computed independently of §1–§13.
+
+### Referenced ADRs
+`ADR-046` (primary source), `ADR-010` (Add-On vs. Contractual rate distinction), `ADR-045`
+(`firstRepaymentDate` as an explicit input).
+
 ---
 
 ## Summary — What Can Be Implemented Now vs. What Remains Blocked
@@ -926,8 +1024,9 @@ None — sourced directly from the VBA macro source, not a legacy-data ADR inves
 | §11 Overpayment Handling | UNRESOLVED | **No** — blocked, needs evidence |
 | §12 Penalty Calculation | UNRESOLVED | **No** — blocked, needs evidence, and gated by ADR-008 (not produced this milestone) |
 | §13 Insurance Fee (Loan Origination) | CONFIRMED (sourced from real VBA macro, verified against 4 real loans) | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeInsuranceFee()` |
+| §14 Advance Interest Fee (Loan Origination) | CONFIRMED (formula/rate-basis/rounding; per-product eligibility UNRESOLVED, see `ADR-046` §7) — exact match against a live 2026 account across 3 independent sources | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeAdvanceInterestFee()`, as a per-loan suggestion pending the eligibility decision |
 
 **Correctness over completeness, as instructed**: this document ends with five genuinely
 unresolved calculations (§4, §9's timing, §10's data model, §11, §12) rather than inventing
 formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business
-decision), §8, and §13 are ready to guide real implementation.
+decision), §8, §13, and §14 are ready to guide real implementation.
