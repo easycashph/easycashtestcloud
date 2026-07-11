@@ -364,6 +364,7 @@ export function createApp(): Express {
         preQualificationService,
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
+      preQualificationService,
     },
     tokenService,
   );

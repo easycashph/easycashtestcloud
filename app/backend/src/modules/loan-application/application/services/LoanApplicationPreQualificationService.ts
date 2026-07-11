@@ -1,7 +1,7 @@
 import type { IGeocodingService } from '@shared/geo/IGeocodingService';
 import { haversineDistanceKm } from '@shared/geo/haversineDistanceKm';
 import type { IBranchRepository } from '../ports/IBranchRepository';
-import { computeFlatRateAmortization } from '../config/loanCategoryFlatRates';
+import { computeFlatRateAmortization, getMonthlyFlatRate } from '../config/loanCategoryFlatRates';
 
 const MIN_AGE = 18;
 const MAX_AGE = 55;
@@ -25,6 +25,24 @@ export interface PreQualificationResult {
   distanceFromBranchKm: number | null;
 }
 
+export interface PreQualificationCheck {
+  passed: boolean;
+  label: string;
+  /** Human-readable explanation of the actual numbers behind the pass/fail — shown on the Detail
+   * page's decision-scoring breakdown so the officer can see exactly why the system landed on
+   * PREAPPROVED/PREDECLINED, not just the final verdict. */
+  detail: string;
+}
+
+export interface PreQualificationBreakdown {
+  status: 'PREAPPROVED' | 'PREDECLINED';
+  checks: {
+    age: PreQualificationCheck;
+    income: PreQualificationCheck;
+    distance: PreQualificationCheck;
+  };
+}
+
 /**
  * Advisory-only system pre-classification — never an autonomous approval/decline. All three rules
  * must pass for PREAPPROVED; any failure (including missing/unknown data) is PREDECLINED, except
@@ -41,19 +59,59 @@ export class LoanApplicationPreQualificationService {
   ) {}
 
   async classify(input: PreQualificationInput): Promise<PreQualificationResult> {
-    const ageOk = input.age !== undefined && input.age >= MIN_AGE && input.age <= MAX_AGE;
-
-    const incomeOk =
-      input.monthlyIncome !== undefined &&
-      input.monthlyIncome >
-        computeFlatRateAmortization(input.requestedAmount, input.requestedTermMonths, input.requestedCategory);
-
     const distanceFromBranchKm = await this.resolveDistanceKm(input.branchId, input.applicantAddressText);
-    const distanceOk = distanceFromBranchKm === null || distanceFromBranchKm <= MAX_DISTANCE_KM;
+    const breakdown = this.evaluateCriteria({ ...input, distanceFromBranchKm });
+    return { status: breakdown.status, distanceFromBranchKm };
+  }
+
+  /**
+   * Pure, no I/O — re-evaluates the same three rules from already-known inputs (reusing a
+   * previously-resolved `distanceFromBranchKm` rather than re-geocoding) so the Detail page can
+   * show a live "why" breakdown on every read without an extra network call.
+   */
+  evaluateCriteria(input: {
+    age: number | undefined;
+    monthlyIncome: number | undefined;
+    requestedAmount: number;
+    requestedTermMonths: number;
+    requestedCategory: string;
+    distanceFromBranchKm: number | null;
+  }): PreQualificationBreakdown {
+    const ageOk = input.age !== undefined && input.age >= MIN_AGE && input.age <= MAX_AGE;
+    const ageCheck: PreQualificationCheck = {
+      passed: ageOk,
+      label: 'Age',
+      detail:
+        input.age === undefined
+          ? 'Age not on record.'
+          : `Age ${input.age} — requires ${MIN_AGE}–${MAX_AGE}.`,
+    };
+
+    const amortization = computeFlatRateAmortization(input.requestedAmount, input.requestedTermMonths, input.requestedCategory);
+    const incomeOk = input.monthlyIncome !== undefined && input.monthlyIncome > amortization;
+    const monthlyFlatRatePercent = (getMonthlyFlatRate(input.requestedCategory) * 100).toFixed(2);
+    const incomeCheck: PreQualificationCheck = {
+      passed: incomeOk,
+      label: 'Monthly income vs. loan amount',
+      detail:
+        input.monthlyIncome === undefined
+          ? `Monthly income not yet recorded — needs to exceed the estimated ₱${amortization.toFixed(2)}/month amortization (${monthlyFlatRatePercent}% flat rate).`
+          : `Monthly income ₱${input.monthlyIncome.toFixed(2)} vs. estimated ₱${amortization.toFixed(2)}/month amortization.`,
+    };
+
+    const distanceOk = input.distanceFromBranchKm === null || input.distanceFromBranchKm <= MAX_DISTANCE_KM;
+    const distanceCheck: PreQualificationCheck = {
+      passed: distanceOk,
+      label: 'Address proximity to branch',
+      detail:
+        input.distanceFromBranchKm === null
+          ? 'Distance from branch could not be verified — treated as passing.'
+          : `${input.distanceFromBranchKm} km from branch — requires ${MAX_DISTANCE_KM} km or less.`,
+    };
 
     return {
-      status: ageOk && incomeOk && distanceOk ? 'PREAPPROVED' : 'PREDECLINED',
-      distanceFromBranchKm,
+      status: ageCheck.passed && incomeCheck.passed && distanceCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
+      checks: { age: ageCheck, income: incomeCheck, distance: distanceCheck },
     };
   }
 

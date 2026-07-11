@@ -1,7 +1,10 @@
 import type { LoanApplication } from '../../../domain/LoanApplication';
+import type { PreQualificationBreakdown } from '../../../application/services/LoanApplicationPreQualificationService';
 
-/** Milestone 9.2 / D-5 convention: the only place a LoanApplication becomes JSON-safe. */
-export function presentLoanApplication(application: LoanApplication) {
+/** Milestone 9.2 / D-5 convention: the only place a LoanApplication becomes JSON-safe.
+ * `breakdown` is optional purely for callers/tests that don't need the decision-scoring
+ * explanation — every real HTTP route passes it (see `LoanApplicationController.present`). */
+export function presentLoanApplication(application: LoanApplication, breakdown?: PreQualificationBreakdown) {
   const p = application.toProps();
   return {
     id: p.id,
@@ -32,5 +35,6 @@ export function presentLoanApplication(application: LoanApplication) {
     decisionNote: p.decisionNote ?? null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+    preQualificationBreakdown: breakdown ?? null,
   };
 }

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, ArrowLeft, Lock, Paperclip, RotateCcw, ShieldCheck, UserPlus } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Lock, Paperclip, RotateCcw, ShieldCheck, UserPlus, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -248,12 +248,32 @@ function findLoanTypeForProductName(productName: string): LoanTypeOption | null 
   return null;
 }
 
+/** One pass/fail row of the decision-scoring breakdown — mirrors the backend's
+ * `PreQualificationCheck` shape exactly (label + detail text already composed server-side). */
+function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-2 py-1">
+      {passed ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      ) : (
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+      )}
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
 /**
- * Plain data entry for the three inputs a future AI risk-scoring feature will read (income, credit
+ * Shows both the "why" behind the system's PREAPPROVED/PREDECLINED verdict (a live-recomputed
+ * decision-scoring breakdown from the backend's `LoanApplicationPreQualificationService` —
+ * age/income/distance, each pass or fail) and the editable inputs that feed it (income, credit
  * score, properties owned) — moved here from the Create form's old "Verification Inputs" section,
- * since these are no longer officer-encoded at intake. No scoring/PREAPPROVED-PREDECLINED logic
- * exists yet (that's still a separate, deferred feature) — this card is only the data source it
- * will eventually read from.
+ * since these are no longer officer-encoded at intake. Saving re-runs the same classification
+ * server-side (see `UpdateLoanApplicationUseCase`), so this card's breakdown always matches the
+ * status badge shown at the top of the page.
  */
 function AiRiskManagementSummaryCard({
   application,
@@ -297,10 +317,19 @@ function AiRiskManagementSummaryCard({
           <ShieldCheck className="h-4 w-4 text-muted-foreground" /> AI Risk Management Summary
         </CardTitle>
         <CardDescription>
-          Feeds a future AI risk-assessment feature (not yet built) — for now, plain data recorded by the reviewing officer.
+          Computed by the LMS itself from age, income, and address — a deterministic rule-based calculation, not an external AI
+          model. Advisory only; the officer's Approve/Decline decision below is what actually counts.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {application.preQualificationBreakdown && (
+          <div className="rounded-md border p-3">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Decision scoring</p>
+            <DecisionScoringRow {...application.preQualificationBreakdown.checks.age} />
+            <DecisionScoringRow {...application.preQualificationBreakdown.checks.income} />
+            <DecisionScoringRow {...application.preQualificationBreakdown.checks.distance} />
+          </div>
+        )}
         {saveMutation.isError && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />

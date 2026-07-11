@@ -10,6 +10,24 @@
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 
+export interface PreQualificationCheck {
+  passed: boolean;
+  label: string;
+  detail: string;
+}
+
+/** The "why" behind `status` — mirrors the backend's `LoanApplicationPreQualificationService`
+ * `evaluateCriteria()` output, re-derived on every read (cheap, no I/O — reuses the cached
+ * `distanceFromBranchKm`, never re-geocodes). */
+export interface PreQualificationBreakdown {
+  status: 'PREAPPROVED' | 'PREDECLINED';
+  checks: {
+    age: PreQualificationCheck;
+    income: PreQualificationCheck;
+    distance: PreQualificationCheck;
+  };
+}
+
 export interface LoanApplication {
   id: string;
   branchId: string;
@@ -39,6 +57,7 @@ export interface LoanApplication {
   decisionNote: string | null;
   createdAt: string;
   updatedAt: string;
+  preQualificationBreakdown: PreQualificationBreakdown | null;
 }
 
 /** Body for `POST /loan-applications`. `branchId` is overridden server-side for non-global roles. */
