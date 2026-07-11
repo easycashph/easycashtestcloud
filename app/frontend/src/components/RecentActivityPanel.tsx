@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,10 +12,16 @@ import { formatDateTime } from '@/lib/utils';
  * Renders nothing at all for any other role, not even a lock notice —
  * this is meant to be an ambient audit widget, not a page users are
  * expected to request access to.
+ *
+ * 2026-07-11 (user request): default limit lowered 10 -> 5 — 10 full-width
+ * entry cards took up too much vertical space on a page that already has
+ * its own primary content above this panel. A "View All Activity" link to
+ * the dedicated Activity Logs page (/admin/activity-logs) covers the full
+ * history instead of growing this panel indefinitely.
  */
 export function RecentActivityPanel({
   entries,
-  limit = 10,
+  limit = 5,
   title = 'Recent Activity',
 }: {
   entries: MockActivityLogEntry[];
@@ -28,11 +35,18 @@ export function RecentActivityPanel({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <History className="h-4 w-4 text-muted-foreground" /> {title}
-        </CardTitle>
-        <CardDescription>MIS-only · recent to oldest</CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <History className="h-4 w-4 text-muted-foreground" /> {title}
+          </CardTitle>
+          <CardDescription>MIS-only · recent to oldest</CardDescription>
+        </div>
+        {entries.length > limit && (
+          <Link to="/admin/activity-logs" className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline">
+            View All Activity
+          </Link>
+        )}
       </CardHeader>
       <CardContent>
         {recent.length === 0 ? (
