@@ -59,6 +59,19 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.5',
+    date: 'July 11, 2026',
+    highlights: [
+      'Loan applications are now automatically pre-classified Pre-approved or Pre-declined by the system itself — based on the applicant\'s age, whether income covers the loan\'s estimated payment, and how far their home address is from the branch — replacing the old "Pending Review" step. The loan officer still makes the real, final Approved/Declined decision; the system\'s classification is advisory only.',
+      'Loan Applications and Client Profiles now show a real Risk & Payment Summary — how many days a loan is overdue, how many payments were ever late, and an overall risk level — computed by the LMS itself from real repayment history, not an outside AI service.',
+      'Loan Account details now show which specific installments were late (matching the count in the Risk Assessment summary above it), plus a full Payment History tab showing every transaction on the account — disbursement, repayments, and fees.',
+      'Loan officers can now upload specific applicant documents during intake — profile picture, valid ID, proof of billing, and loan-type-specific documents (employee ID, business clearance, seaman\'s book, etc.) — tagged by document type, with an in-app preview so reviewing no longer requires downloading first. The applicant\'s uploaded profile picture now appears as their photo throughout the Loan Applications area.',
+      'An optional AI-assisted auto-fill can now read an uploaded ID or payslip (using a local, on-premises AI model — no data leaves the company\'s own systems) and suggest values for the loan application form, which the loan officer always reviews before submitting.',
+      'Fixed address and mobile number formatting throughout Loan Applications and Client profiles — addresses and phone numbers now display consistently instead of a mix of ALL CAPS and lowercase.',
+      'Fixed a bug where visiting a Client Profile before a Loan Application could cause the application page to show an error screen; also fixed several smaller display issues.',
+    ],
+  },
+  {
     version: '0.9.4',
     date: 'July 10, 2026',
     highlights: [

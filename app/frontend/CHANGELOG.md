@@ -8,6 +8,66 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-11
+
+### System-computed PREAPPROVED/PREDECLINED pre-qualification for Loan Applications
+- Replaces `PENDING_REVIEW` and the separate manual "reviewed" inbox flag with an automatic,
+  rule-based classification (`LoanApplicationPreQualificationService`) — advisory only, the officer's
+  `APPROVED`/`DECLINED` decision still overrides it. Three rules, all confirmed business numbers:
+  age 18–55, monthly income above a flat-rate amortization estimate (3.0%/month, the dominant rate
+  across SL/SML/BL-Regular per the real ledger), and home address within 50km of the branch
+  (OpenStreetMap Nominatim geocoding — free/open-source, fails open if unresolved).
+- New `PATCH /loan-applications/:id` (AI Risk Management Summary on the Detail page) — moved
+  monthly income/credit score/properties-owned off the intake form, since a fresh application no
+  longer has income at creation time and needs re-classifying once the officer records it.
+- `LoanApplicationsPage`'s "Review" column and mark-reviewed bulk action are removed entirely — no
+  longer meaningful once every application is system-classified.
+
+### Real, rule-based Risk Assessment (Loan Account + Client Profile)
+- Replaces the mock "AI Risk Assessment" card on the Loan Account detail page with a real
+  computation (`LoanRiskAssessmentService`) — deterministic rules over the loan's own repayment
+  history: days past due and late-installment count (inferred by comparing `lastPaidAt` to
+  `dueDate`, since `RepaymentInstallment.status` is a live-derived getter that loses the "was late"
+  signal once an installment is paid).
+- New "Risk & Payment Summary" card on the Client Profile page (`BorrowerRiskSummaryService`),
+  combining the worst risk among a borrower's active loans with their lifetime on-time-payment
+  track record across every loan they've ever had.
+- Loan Account detail's Repayment Schedule now visually flags every installment counted as "late"
+  by the Risk Assessment card (currently overdue, or a "Paid late" badge for settled installments
+  paid after their due date), and gained a Payment History tab (`GET /loan-accounts/:id/transactions`,
+  already existed backend-side) listing every ledger transaction — disbursement, repayments, fees.
+  Both now live inside one compact tabbed card instead of two separate always-expanded sections;
+  the balance/terms summary above them was condensed from three bordered cards into one dense
+  stat-tile grid.
+- Thresholds (DPD/late-count/on-time-rate buckets) are proposed defaults pending business
+  confirmation, same posture as the loan-application pre-qualification's flat-rate constant before
+  it was finalized.
+
+### AI document auto-fill, categorized attachments, and preview
+- New `ai-extraction` module: a local Ollama vision model reads an uploaded ID/payslip/PDF/DOCX to
+  suggest Loan Application form values — ephemeral, never persisted, never a cloud AI call.
+- Attachments gain a `documentCategory` (profile picture, valid ID, proof of billing,
+  employee ID, business clearance, corporate payslip, seaman's book, OEC, etc.) so specific
+  application documents are distinguishable, with conditional upload slots on the intake form based
+  on loan type/co-borrower — plus an in-app preview modal (image/PDF) so reviewing no longer
+  requires downloading first. The AI Auto-fill upload is now auto-saved as a real attachment once
+  the application is created (best-effort, never blocks/rolls back the application).
+- The applicant's uploaded Profile Picture attachment now renders as their avatar throughout the
+  Loan Applications list and detail page (falls back to initials).
+
+### Fixes
+- Proper-case formatting for cascading PSGC addresses and PH mobile numbers across Loan
+  Application and Client pages — was previously a mix of ALL CAPS/lowercase and raw digit strings.
+- Added a top-level `ErrorBoundary` — without one, a render crash unmounted `RoleProvider` and was
+  indistinguishable from being logged out, when the session itself was never touched.
+- Fixed a real React Query cache-key collision: three pages (`ClientProfilePage`, `DashboardPage`,
+  `LoanListPage`) cached a `Map` under the same key (`['loan-products', 'all']`) that
+  `LoanApplicationDetailPage`, `LoanProductsPage`, and `StatementOfAccountPage` expect to hold a
+  plain array — visiting a Map-caching page before an array-expecting one served the wrong shape
+  from cache and crashed with `(productsQuery.data ?? []).flatMap is not a function`. This was the
+  actual cause of an intermittent "Something went wrong loading this page" report this session, not
+  a session/auth issue as it first appeared. Gave the three Map queries their own distinct keys.
+
 ## 2026-07-09 (4)
 
 ### Statement of Account now real, for migrated loans

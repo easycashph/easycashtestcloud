@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, LoanAccount, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +124,35 @@ function BalanceRow({ label, value, emphasize }: { label: string; value: number;
       <span className={cn('text-muted-foreground', emphasize && 'font-medium text-foreground')}>{label}</span>
       <span className={cn('tabular-nums', emphasize && 'font-semibold')}>{formatPeso(value)}</span>
     </div>
+  );
+}
+
+/** Compact stat tile — replaces `RealLoanDetailView`'s old three separate bordered Cards (Collections
+ * Balance / Loan Terms / Accounting Balance) with one dense grid, per this session's "make it
+ * compact" request. */
+function MiniStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn('tabular-nums', emphasize ? 'font-semibold' : 'text-sm')}>{value}</p>
+    </div>
+  );
+}
+
+const TRANSACTION_TYPE_VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'secondary'> = {
+  REPAYMENT: 'success',
+  DISBURSEMENT: 'secondary',
+  PENALTY_APPLIED: 'destructive',
+  FEE_CHARGED: 'warning',
+  REVERSAL: 'destructive',
+  ADJUSTMENT: 'warning',
+};
+
+function TransactionTypeBadge({ type }: { type: string }) {
+  return (
+    <Badge variant={TRANSACTION_TYPE_VARIANT[type] ?? 'secondary'} className="text-[10px]">
+      {type.replaceAll('_', ' ')}
+    </Badge>
   );
 }
 
@@ -373,6 +402,19 @@ function RemindersPanel({ loanId }: { loanId: string }) {
  * assessment, reminders, approve/activate actions) — those stay mock-only for now; see
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
+/** Same "was this ever late" logic as the backend's `LoanRiskAssessmentService` — `status` alone
+ * can't tell for a settled installment (it's a live-derived value that resets to PAID), so a
+ * currently-LATE row OR a PAID row whose `lastPaidAt` came after its `dueDate` both count. Kept in
+ * sync with that service's doc comment intentionally — this is what the Risk Assessment card's
+ * "late payment" count above is counting, made visible per-row here. */
+function wasInstallmentLate(installment: RepaymentInstallment): boolean {
+  if (installment.status === 'LATE') return true;
+  if (installment.status === 'PAID' && installment.lastPaidAt) {
+    return new Date(installment.lastPaidAt) > new Date(installment.dueDate);
+  }
+  return false;
+}
+
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
 
@@ -394,6 +436,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
   });
 
+  const transactionsQuery = useQuery({
+    queryKey: ['loan-transactions', loanId],
+    queryFn: () => apiClient.get<PaginatedResponse<LoanTransaction>>(`/loan-accounts/${loanId}/transactions?limit=200`),
+  });
+
   if (loanQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading loan account…</p>;
   }
@@ -411,10 +458,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const borrower = borrowerQuery.data;
   const installments = installmentsQuery.data?.items ?? [];
+  const transactions = transactionsQuery.data?.items ?? [];
   const num = (v: string) => Number.parseFloat(v) || 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
@@ -429,97 +477,114 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <LoanStatusBadge status={loan.status} />
       </div>
 
-      <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real loan account, migrated from legacy data (CP12) — balances, repayment schedule, and risk
-        assessment below are live. Notes, attachments, and approve/activate actions are not yet
-        wired to real data for this screen.
-      </div>
-
       <AiRiskAssessmentCard loanId={loan.id} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Collections Balance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BalanceRow label="Principal" value={num(loan.balances.principalBalance)} />
-            <BalanceRow label="Interest" value={num(loan.balances.interestBalance)} />
-            <BalanceRow label="Fees" value={num(loan.balances.feesBalance)} />
-            <BalanceRow label="Penalty" value={num(loan.balances.penaltyBalance)} />
-            <Separator className="my-1" />
-            <BalanceRow label="Total (collections)" value={num(loan.collectionsBalance)} emphasize />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Loan Terms</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 text-sm">
-            <BalanceRow label="Principal Amount" value={num(loan.principalAmount)} emphasize />
-            <div className="flex items-center justify-between py-1.5 text-sm">
-              <span className="text-muted-foreground">Interest Rate</span>
-              <span className="tabular-nums">{loan.interestRate}%</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 text-sm">
-              <span className="text-muted-foreground">Installments</span>
-              <span className="tabular-nums">{loan.installmentCount}</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 text-sm">
-              <span className="text-muted-foreground">First Repayment</span>
-              <span>{formatDate(loan.firstRepaymentDate)}</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Accounting Balance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <BalanceRow label="Total (accounting, excl. penalty)" value={num(loan.accountingBalance)} emphasize />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
+          <MiniStat label="Collections Balance" value={formatPeso(num(loan.collectionsBalance))} emphasize />
+          <MiniStat label="Accounting Balance" value={formatPeso(num(loan.accountingBalance))} emphasize />
+          <MiniStat label="Principal" value={formatPeso(num(loan.balances.principalBalance))} />
+          <MiniStat label="Interest" value={formatPeso(num(loan.balances.interestBalance))} />
+          <MiniStat label="Penalty" value={formatPeso(num(loan.balances.penaltyBalance))} />
+          <MiniStat label="Fees" value={formatPeso(num(loan.balances.feesBalance))} />
+          <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
+          <MiniStat label="Interest Rate" value={`${loan.interestRate}%`} />
+          <MiniStat label="Installments" value={String(loan.installmentCount)} />
+          <MiniStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
+        </CardContent>
+      </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Repayment Schedule</CardTitle>
-          <CardDescription>{installments.length} installments.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {installmentsQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
-          ) : installments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                  <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                  <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
-                  <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
-                  <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
-                  <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {installments.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell>{i.installmentNumber}</TableCell>
-                    <TableCell>{formatDate(i.dueDate)}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
-                    <TableCell>
-                      <InstallmentStatusBadge status={i.status} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+        <Tabs defaultValue="schedule">
+          <CardHeader className="pb-2">
+            <TabsList>
+              <TabsTrigger value="schedule">Repayment Schedule ({installments.length})</TabsTrigger>
+              <TabsTrigger value="payments">Payment History ({transactions.length})</TabsTrigger>
+            </TabsList>
+          </CardHeader>
+          <CardContent>
+            <TabsContent value="schedule" className="mt-0">
+              {installmentsQuery.isLoading ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+              ) : installments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {installments.map((i) => {
+                      const late = wasInstallmentLate(i);
+                      return (
+                        <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
+                          <TableCell>{i.installmentNumber}</TableCell>
+                          <TableCell>{formatDate(i.dueDate)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
+                          <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                          <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <InstallmentStatusBadge status={i.status} />
+                              {late && i.status === 'PAID' && (
+                                <Badge variant="destructive" className="text-[10px]">
+                                  Paid late
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                Rows shaded red are the installments counted as "late" in the Risk Assessment card above — currently overdue, or
+                paid after their due date.
+              </p>
+            </TabsContent>
+            <TabsContent value="payments" className="mt-0">
+              {transactionsQuery.isLoading ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+              ) : transactions.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No transactions recorded yet.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Type</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Amount</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Balance After</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Comment</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((t) => (
+                      <TableRow key={t.id}>
+                        <TableCell>{formatDate(t.entryDate)}</TableCell>
+                        <TableCell>
+                          <TransactionTypeBadge type={t.type} />
+                        </TableCell>
+                        <TableCell className="text-right">{formatPeso(num(t.amount))}</TableCell>
+                        <TableCell className="text-right">{formatPeso(num(t.balanceAfter))}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{t.comment ?? '—'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
+          </CardContent>
+        </Tabs>
       </Card>
     </div>
   );
