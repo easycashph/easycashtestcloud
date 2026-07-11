@@ -275,7 +275,7 @@ export function PaymentRecordingPage() {
   const paymentMutation = useMutation({
     mutationFn: async () => {
       if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
-      const base = { paymentAmount: amount, paidAt, orNumber, arNumber: arNumber || undefined };
+      const base = { paymentAmount: amount, paidAt, orNumber: orNumber.trim() || undefined, arNumber: arNumber.trim() || undefined };
       const body =
         allocationMode === 'MANUAL'
           ? {
@@ -462,8 +462,9 @@ export function PaymentRecordingPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="or-number">OR# *</Label>
+                    <Label htmlFor="or-number">OR#</Label>
                     <Input id="or-number" placeholder="Official Receipt #" value={orNumber} onChange={(e) => setOrNumber(e.target.value)} />
+                    <p className="text-xs text-muted-foreground">Leave blank if not yet issued — enter AR# instead, add OR# later.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="ar-number">AR#</Label>
@@ -601,7 +602,7 @@ export function PaymentRecordingPage() {
 
                 <Button
                   className="w-full"
-                  disabled={!loanId || paymentAmount <= 0 || orNumber.trim().length === 0 || (allocationMode === 'MANUAL' && manualMismatch)}
+                  disabled={!loanId || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
                   onClick={openConfirm}
                 >
                   Submit Payment
@@ -711,8 +712,9 @@ export function PaymentRecordingPage() {
             <DialogTitle>Confirm Payment</DialogTitle>
             <DialogDescription>
               Post {formatPeso(paymentAmount)} against {selectedLoan && selectedBorrower ? `${selectedBorrower.fullName} — ${selectedLoan.loanCode}` : 'this loan'},
-              dated {formatDate(paidAt)}, OR# {orNumber}
-              {arNumber ? `, AR# ${arNumber}` : ''}? This cannot be undone from this screen.
+              dated {formatDate(paidAt)}
+              {orNumber.trim() ? `, OR# ${orNumber.trim()}` : ''}
+              {arNumber.trim() ? `, AR# ${arNumber.trim()}` : ''}? This cannot be undone from this screen.
             </DialogDescription>
           </DialogHeader>
           {submitError && (

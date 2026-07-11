@@ -66,11 +66,12 @@ export const processPaymentSchema = z.object({
    */
   allocations: z.array(manualAllocationSchema).optional(),
   /**
-   * 2026-07-11 (user request): Official Receipt number, matching the
-   * SDevTech system's own OR#/AR# fields — required on every payment, a
-   * real business receipt is always issued.
+   * 2026-07-11: Official Receipt number, matching the SDevTech system's own
+   * OR#/AR# fields. No longer required (2026-07-11 follow-up, user
+   * request) — OR# isn't always issued yet at the time of payment; AR# may
+   * be the only receipt number available then, with OR# added later.
    */
-  orNumber: z.string().min(1),
+  orNumber: z.string().min(1).optional(),
   /** Acknowledgment Receipt number — optional; not every payment channel issues one. */
   arNumber: z.string().min(1).optional(),
 });
