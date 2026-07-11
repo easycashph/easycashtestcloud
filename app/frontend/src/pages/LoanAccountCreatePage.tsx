@@ -165,7 +165,9 @@ export function LoanAccountCreatePage() {
   const [advanceInterestFee, setAdvanceInterestFee] = React.useState('0.00');
   const [outstandingBalancePayoff, setOutstandingBalancePayoff] = React.useState('0.00');
   const [docStampFee, setDocStampFee] = React.useState('0.00');
-  const [accountManagementFee, setAccountManagementFee] = React.useState('0.00');
+  // Account Management Fee is entered as a percent of principal too (same pattern as Processing
+  // Fee) — defaults to 1%, the one confirmed real-data rate whenever this fee is charged at all.
+  const [accountManagementFeePercent, setAccountManagementFeePercent] = React.useState('1');
   const [otherFees, setOtherFees] = React.useState('0.00');
   const [notarialFee, setNotarialFee] = React.useState('0.00');
   const [webFee, setWebFee] = React.useState('0.00');
@@ -181,15 +183,11 @@ export function LoanAccountCreatePage() {
     setWebFee(isSlCorp ? '0.00' : '500.00');
   }, [selectedProduct]);
 
-  // Account Management Fee: confirmed exactly 1% of principal whenever charged (every nonzero
-  // sample in real data). Recomputes live as principal changes — still freely overridable/zeroable
-  // by staff afterward, same "default then editable" pattern as every other field in this form.
-  React.useEffect(() => {
-    if (principalNum > 0) setAccountManagementFee((principalNum * 0.01).toFixed(2));
-  }, [principalNum]);
-
   const processingFeePercentNum = Number.parseFloat(processingFeePercent) || 0;
   const processingFee = ((principalNum * processingFeePercentNum) / 100).toFixed(2);
+
+  const accountManagementFeePercentNum = Number.parseFloat(accountManagementFeePercent) || 0;
+  const accountManagementFee = ((principalNum * accountManagementFeePercentNum) / 100).toFixed(2);
 
   const feeFields = [
     processingFee,
@@ -553,16 +551,18 @@ export function LoanAccountCreatePage() {
                   <Input id="doc-stamp" type="number" min="0" step="0.01" value={docStampFee} onChange={(e) => setDocStampFee(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="account-mgmt-fee">Account Management Fee</Label>
+                  <Label htmlFor="account-mgmt-fee-percent">Account Management Fee (%)</Label>
                   <Input
-                    id="account-mgmt-fee"
+                    id="account-mgmt-fee-percent"
                     type="number"
                     min="0"
                     step="0.01"
-                    value={accountManagementFee}
-                    onChange={(e) => setAccountManagementFee(e.target.value)}
+                    value={accountManagementFeePercent}
+                    onChange={(e) => setAccountManagementFeePercent(e.target.value)}
                   />
-                  <p className="text-xs text-muted-foreground">Defaults to 1% of principal (confirmed real-data rate).</p>
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to 1% (confirmed real-data rate) = {formatPeso(Number.parseFloat(accountManagementFee))}
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="other-fees">Others</Label>
