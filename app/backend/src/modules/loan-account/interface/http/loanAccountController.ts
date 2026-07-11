@@ -178,26 +178,37 @@ export class LoanAccountController {
 
   /**
    * 2026-07-11 (Reverse Payment feature). MIS-only (enforced by the router's `requireRole('MIS')`,
-   * not here — same division of concerns as every other route). No idempotency wrapper, unlike
-   * `activate`/`processPayment` above: a duplicate reversal attempt is already safely rejected by
-   * `ReversePaymentUseCase`'s own `TransactionAlreadyReversedError`, not a source of double
-   * financial effect the way a duplicate activate/payment click would be.
+   * not here — same division of concerns as every other route).
+   *
+   * 2026-07-11 follow-up: DOES use `withIdempotency`, unlike this doc comment originally claimed —
+   * real testing surfaced the gap that reasoning missed. `ReversePaymentUseCase`'s own
+   * `TransactionAlreadyReversedError` only catches a duplicate attempt that arrives *after* the
+   * first one has already committed; two requests racing to reverse the same transaction can both
+   * pass that check before either writes, and the loser then fails with a confusing
+   * `ConcurrencyConflictError` ("this loan was just updated by another action") instead of a clear
+   * "already in progress" response. Same shape as `activate`/`processPayment` above, except the
+   * frontend sends a key derived from the transaction id (not a fresh random one per click) — see
+   * `LoanDetailPage.tsx`'s `reverseMutation` — so this specific race is caught deterministically,
+   * not just reduced to "usually fine."
    */
   reversePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const endpoint = 'POST /loan-accounts/:id/transactions/:transactionId/reverse';
       const scope = resolveBranchScope(req);
       const currentUser = getCurrentUser(req);
       const body = req.body as ReversePaymentRequestBody;
       const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId); // H-1: same as approve()/reject()/processPayment() above.
 
-      const loanAccount = await this.deps.reversePaymentUseCase.execute(
-        req.params.id as string,
-        req.params.transactionId as string,
-        currentUser.sub,
-        body.reason,
-      );
-      res.status(200).json(presentLoanAccount(loanAccount));
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const loanAccount = await this.deps.reversePaymentUseCase.execute(
+          req.params.id as string,
+          req.params.transactionId as string,
+          currentUser.sub,
+          body.reason,
+        );
+        return { statusCode: 200, body: presentLoanAccount(loanAccount) };
+      });
     } catch (error) {
       next(error);
     }

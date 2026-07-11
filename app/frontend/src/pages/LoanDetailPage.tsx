@@ -436,9 +436,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const reverseMutation = useMutation({
     mutationFn: () =>
-      apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/transactions/${reverseTarget!.id}/reverse`, {
-        reason: reverseReason.trim(),
-      }),
+      // Idempotency-Key is derived from the transaction id, not a fresh random one per click
+      // (unlike activateMutation above) — a given transaction can only ever be successfully
+      // reversed once, so two racing/duplicate attempts at reversing the SAME transaction share
+      // this exact key and get deterministically caught by the idempotency layer, rather than one
+      // of them hitting a confusing ConcurrencyConflictError. See the backend controller's own
+      // doc comment on reversePayment for the full story.
+      apiClient.post<LoanAccount>(
+        `/loan-accounts/${loanId}/transactions/${reverseTarget!.id}/reverse`,
+        { reason: reverseReason.trim() },
+        { 'Idempotency-Key': `reverse-payment-${reverseTarget!.id}` },
+      ),
     onSuccess: () => {
       setReverseTarget(null);
       setReverseReason('');
