@@ -10,6 +10,8 @@ export const createLoanApplicationSchema = z.object({
   propertiesOwned: z.array(z.string()).optional(),
   creditScore: z.coerce.number().int().optional(),
   coBorrowerName: z.string().min(1).optional(),
+  mobilePhone: z.string().min(1).optional(),
+  email: z.string().email().optional(),
   referralSource: z.string().min(1).optional(),
   accountType: z.enum(['NEW', 'RENEWAL']).optional(),
   loanPurpose: z.string().min(1).optional(),
@@ -32,3 +34,15 @@ export const decideLoanApplicationSchema = z.object({
 });
 
 export type DecideLoanApplicationRequestBody = z.infer<typeof decideLoanApplicationSchema>;
+
+/** Risk-input fields, editable post-creation on the Detail page's AI Risk Management Summary —
+ * moved off the Create form's intake fields (see loanApplicationSchemas' create schema above) now
+ * that they're treated as inputs to a future risk-scoring feature rather than officer-encoded
+ * at intake. All optional — PATCH semantics, send only what changed. */
+export const updateLoanApplicationSchema = z.object({
+  monthlyIncome: z.coerce.number().nonnegative().optional(),
+  creditScore: z.coerce.number().int().optional(),
+  propertiesOwned: z.array(z.string()).optional(),
+});
+
+export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;

@@ -1,14 +1,13 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, FilePlus2, Lock, MailOpen, Search } from 'lucide-react';
+import { AlertCircle, FilePlus2, Lock, Search } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
@@ -17,7 +16,6 @@ import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { apiClient } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -38,8 +36,6 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
       return app.requestedAmount;
     case 'status':
       return app.status;
-    case 'reviewState':
-      return app.reviewState;
     case 'createdAt':
       return new Date(app.createdAt);
     default:
@@ -49,23 +45,24 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
 
 const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
-  { value: 'PENDING_REVIEW', label: 'Pending Review' },
+  { value: 'PREAPPROVED', label: 'Pre-approved' },
+  { value: 'PREDECLINED', label: 'Pre-declined' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'DECLINED', label: 'Declined' },
 ];
 
-const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'warning' | 'success' | 'destructive'> = {
-  PENDING_REVIEW: 'warning',
+const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
+  PREAPPROVED: 'secondary',
+  PREDECLINED: 'warning',
   APPROVED: 'success',
   DECLINED: 'destructive',
 };
 
 /**
- * Wired to the real backend Loan Applications module (`GET /loan-applications`,
- * `POST /loan-applications/:id/mark-reviewed`). `reviewState` (Reviewed/Unreviewed) is a separate
- * email-inbox-style "seen" flag, independent of the approve/decline decision — the backend only
- * exposes a one-way mark-reviewed transition (no "mark unreviewed"), so the bulk action below is
- * one-directional to match.
+ * Wired to the real backend Loan Applications module (`GET /loan-applications`). Every application
+ * is system-classified PREAPPROVED/PREDECLINED at creation (and re-classified whenever the Detail
+ * page's AI Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
+ * — advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
  *
  * Real, server-side pagination (100 rows/page — see `useCursorPagination`) replaced loading every
  * application up front. Applicant-name search goes to the backend's `?search=` param (debounced);
@@ -74,13 +71,11 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'warning' | 'success' 
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { canAccessLoanApplications, currentAccount } = useRole();
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
-  const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
   useLogPageView('Loan Applications');
 
@@ -99,13 +94,6 @@ export function LoanApplicationsPage() {
     PAGE_SIZE,
     canAccessLoanApplications,
   );
-
-  const markReviewedMutation = useMutation({
-    mutationFn: (id: string) => apiClient.post<LoanApplication>(`/loan-applications/${id}/mark-reviewed`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['loan-applications'] });
-    },
-  });
 
   const categoryOptions = React.useMemo(
     () => ['ALL', ...[...new Set(applications.map((a) => a.requestedCategory))].sort()],
@@ -141,27 +129,7 @@ export function LoanApplicationsPage() {
     );
   }
 
-  const pendingCount = applications.filter((a) => a.status === 'PENDING_REVIEW').length;
-  const allFilteredSelected = filtered.length > 0 && filtered.every((a) => selected.has(a.id));
-
-  const toggleSelectAll = () => {
-    setSelected(allFilteredSelected ? new Set() : new Set(filtered.map((a) => a.id)));
-  };
-
-  const toggleSelectRow = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const markSelectedReviewed = async () => {
-    const targets = applications.filter((app) => selected.has(app.id) && app.reviewState === 'UNREVIEWED');
-    await Promise.all(targets.map((app) => markReviewedMutation.mutateAsync(app.id)));
-    setSelected(new Set());
-  };
+  const pendingCount = applications.filter((a) => a.status === 'PREAPPROVED' || a.status === 'PREDECLINED').length;
 
   return (
     <div className="space-y-6">
@@ -174,7 +142,7 @@ export function LoanApplicationsPage() {
           </p>
         </div>
         <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
-          <FilePlus2 className="mr-2 h-4 w-4" /> Create Loan Application
+          <FilePlus2 className="mr-2 h-4 w-4" /> Create Loan Applicant Profile
         </Button>
       </div>
 
@@ -222,31 +190,11 @@ export function LoanApplicationsPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={selected.size === 0 || markReviewedMutation.isPending}
-              onClick={() => void markSelectedReviewed()}
-            >
-              <MailOpen className="mr-1.5 h-3.5 w-3.5" /> Mark as Reviewed
-            </Button>
-            {selected.size > 0 && <span className="text-xs text-muted-foreground">{selected.size} selected</span>}
-          </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={allFilteredSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all rows"
-                  />
-                </TableHead>
                 <SortableTableHead sortKey="applicantName" currentSort={sort} onSort={toggleSort}>
                   Applicant
                 </SortableTableHead>
@@ -259,9 +207,6 @@ export function LoanApplicationsPage() {
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Decision Status
                 </SortableTableHead>
-                <SortableTableHead sortKey="reviewState" currentSort={sort} onSort={toggleSort}>
-                  Review
-                </SortableTableHead>
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Submitted
                 </SortableTableHead>
@@ -269,16 +214,7 @@ export function LoanApplicationsPage() {
             </TableHeader>
             <TableBody>
               {sorted.map((app) => (
-                <TableRow key={app.id} className={app.reviewState === 'UNREVIEWED' ? 'font-medium' : undefined}>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input"
-                      checked={selected.has(app.id)}
-                      onChange={() => toggleSelectRow(app.id)}
-                      aria-label={`Select ${app.applicantName}`}
-                    />
-                  </TableCell>
+                <TableRow key={app.id}>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-7 w-7">
@@ -296,11 +232,6 @@ export function LoanApplicationsPage() {
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{app.status.replaceAll('_', ' ')}</Badge>
                   </TableCell>
-                  <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    <Badge variant={app.reviewState === 'REVIEWED' ? 'secondary' : 'outline'}>
-                      {app.reviewState === 'REVIEWED' ? 'Reviewed' : 'Pending Review'}
-                    </Badge>
-                  </TableCell>
                   <TableCell
                     className="cursor-pointer text-xs text-muted-foreground"
                     onClick={() => navigate(`/applications/${app.id}`)}
@@ -311,7 +242,7 @@ export function LoanApplicationsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     {applicationsQuery.isLoading ? 'Loading applications…' : 'No applications match your search/filter.'}
                   </TableCell>
                 </TableRow>

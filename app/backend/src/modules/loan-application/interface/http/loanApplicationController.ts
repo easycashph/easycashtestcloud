@@ -5,15 +5,16 @@ import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { CreateLoanApplicationUseCase } from '../../application/use-cases/CreateLoanApplicationUseCase';
 import type { GetLoanApplicationUseCase } from '../../application/use-cases/GetLoanApplicationUseCase';
 import type { ListLoanApplicationsUseCase } from '../../application/use-cases/ListLoanApplicationsUseCase';
-import type { MarkLoanApplicationReviewedUseCase } from '../../application/use-cases/MarkLoanApplicationReviewedUseCase';
 import type { AssignLoanApplicationProductUseCase } from '../../application/use-cases/AssignLoanApplicationProductUseCase';
 import type { ApproveLoanApplicationUseCase } from '../../application/use-cases/ApproveLoanApplicationUseCase';
 import type { DeclineLoanApplicationUseCase } from '../../application/use-cases/DeclineLoanApplicationUseCase';
 import type { RevertLoanApplicationDecisionUseCase } from '../../application/use-cases/RevertLoanApplicationDecisionUseCase';
+import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type {
   AssignLoanApplicationProductRequestBody,
   CreateLoanApplicationRequestBody,
   DecideLoanApplicationRequestBody,
+  UpdateLoanApplicationRequestBody,
 } from './loanApplicationSchemas';
 import { presentLoanApplication } from './presenters/LoanApplicationPresenter';
 
@@ -21,11 +22,11 @@ export interface LoanApplicationControllerDeps {
   createLoanApplicationUseCase: CreateLoanApplicationUseCase;
   getLoanApplicationUseCase: GetLoanApplicationUseCase;
   listLoanApplicationsUseCase: ListLoanApplicationsUseCase;
-  markLoanApplicationReviewedUseCase: MarkLoanApplicationReviewedUseCase;
   assignLoanApplicationProductUseCase: AssignLoanApplicationProductUseCase;
   approveLoanApplicationUseCase: ApproveLoanApplicationUseCase;
   declineLoanApplicationUseCase: DeclineLoanApplicationUseCase;
   revertLoanApplicationDecisionUseCase: RevertLoanApplicationDecisionUseCase;
+  updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -72,15 +73,6 @@ export class LoanApplicationController {
     }
   };
 
-  markReviewed = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const application = await this.deps.markLoanApplicationReviewedUseCase.execute(req.params.id as string);
-      res.status(200).json(presentLoanApplication(application));
-    } catch (error) {
-      next(error);
-    }
-  };
-
   assignProduct = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as AssignLoanApplicationProductRequestBody;
@@ -117,6 +109,19 @@ export class LoanApplicationController {
     try {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.revertLoanApplicationDecisionUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json(presentLoanApplication(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanApplicationUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const body = req.body as UpdateLoanApplicationRequestBody;
+      const application = await this.deps.updateLoanApplicationUseCase.execute(req.params.id as string, body);
       res.status(200).json(presentLoanApplication(application));
     } catch (error) {
       next(error);

@@ -62,16 +62,22 @@ import { createLoanApplicationRouter } from '@modules/loan-application/interface
 import { CreateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/CreateLoanApplicationUseCase';
 import { GetLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationUseCase';
 import { ListLoanApplicationsUseCase } from '@modules/loan-application/application/use-cases/ListLoanApplicationsUseCase';
-import { MarkLoanApplicationReviewedUseCase } from '@modules/loan-application/application/use-cases/MarkLoanApplicationReviewedUseCase';
 import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/application/use-cases/AssignLoanApplicationProductUseCase';
 import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
+import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
+import { LoanApplicationPreQualificationService } from '@modules/loan-application/application/services/LoanApplicationPreQualificationService';
+import { NominatimGeocodingService } from '@shared/geo/NominatimGeocodingService';
 import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
 import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
+import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
+import { ExtractLoanApplicationFieldsUseCase } from '@modules/ai-extraction/application/use-cases/ExtractLoanApplicationFieldsUseCase';
+import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/OllamaVisionModelClient';
 import { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
@@ -316,19 +322,27 @@ export function createApp(): Express {
   );
   app.use('/api/v1', dashboardRouter);
 
-  // --- loan-application module wiring (Milestone 9.2: intake/review/decision workflow only —
+  // --- loan-application module wiring (Milestone 9.2: intake/decision workflow, plus the
+  // system-computed PREAPPROVED/PREDECLINED pre-qualification added 2026-07-11 —
   // approved-application-to-Borrower/LoanAccount conversion is a deliberate follow-up) ---
   const loanApplicationRepository = new PrismaLoanApplicationRepository();
+  const branchRepository = new PrismaBranchRepository();
+  const geocodingService = new NominatimGeocodingService();
+  const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
   const loanApplicationRouter = createLoanApplicationRouter(
     {
-      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository }),
+      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
-      markLoanApplicationReviewedUseCase: new MarkLoanApplicationReviewedUseCase({ loanApplicationRepository }),
       assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository }),
       approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
       declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
-      revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({ loanApplicationRepository, auditLogger }),
+      revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        preQualificationService,
+      }),
+      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
     },
     tokenService,
   );
@@ -378,6 +392,18 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', documentRouter);
+
+  // --- ai-extraction module wiring: local Ollama (moondream) — auto-fill suggestions for the
+  // Loan Application intake form from an uploaded ID/payslip/PDF/DOCX, never persisted here ---
+  const aiExtractionRouter = createAiExtractionRouter(
+    {
+      extractLoanApplicationFieldsUseCase: new ExtractLoanApplicationFieldsUseCase({
+        visionModelClient: new OllamaVisionModelClient(),
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', aiExtractionRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 

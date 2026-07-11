@@ -8,6 +8,7 @@ import {
   assignLoanApplicationProductSchema,
   createLoanApplicationSchema,
   decideLoanApplicationSchema,
+  updateLoanApplicationSchema,
 } from './loanApplicationSchemas';
 
 /** Mirrors the mock UI's `canAccessLoanApplications` — MIS, Loan Operation Manager, and CRM only. */
@@ -21,8 +22,14 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
 
   router.post('/loan-applications', requireAuth, requireApplicationAccess, validateBody(createLoanApplicationSchema), controller.create);
   router.get('/loan-applications/:id', requireAuth, requireApplicationAccess, controller.get);
+  router.patch(
+    '/loan-applications/:id',
+    requireAuth,
+    requireApplicationAccess,
+    validateBody(updateLoanApplicationSchema),
+    controller.update,
+  );
   router.get('/loan-applications', requireAuth, requireApplicationAccess, controller.list);
-  router.post('/loan-applications/:id/mark-reviewed', requireAuth, requireApplicationAccess, controller.markReviewed);
   router.post(
     '/loan-applications/:id/assign-product',
     requireAuth,

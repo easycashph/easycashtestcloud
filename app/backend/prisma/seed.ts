@@ -15,13 +15,18 @@ async function main() {
   // list exists. This seed creates exactly one placeholder branch. Adding
   // the real branch list later is a data change only — the schema does not
   // need to change.
+  // Address confirmed 2026-07-11 for the loan-application pre-qualification distance rule
+  // (LoanApplicationPreQualificationService) — latitude/longitude are left null here and geocoded
+  // lazily on first use, so seeding never makes a network call.
+  const headOfficeAddress = 'Unit 9 G/F The Midland Plaza, M Adriatico, Barangay 669, Ermita, Manila';
   const headOffice = await prisma.branch.upsert({
     where: { code: 'HQ' },
-    update: {},
+    update: { address: headOfficeAddress },
     create: {
       code: 'HQ',
       name: 'Head Office (provisional — pending ADR-005)',
       isActive: true,
+      address: headOfficeAddress,
     },
   });
 

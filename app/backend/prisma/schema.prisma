@@ -60,6 +60,22 @@ enum AttachmentOwnerType {
   LOAN_APPLICATION
 }
 
+/// Tags a Loan Application intake attachment by what it actually is (valid ID vs. payslip vs.
+/// profile picture, etc.) so a future risk-scoring feature can look up specific documents by type
+/// instead of an undifferentiated attachment list. Nullable on Attachment — manual uploads via the
+/// generic Attachments panel have no category.
+enum AttachmentDocumentCategory {
+  PROFILE_PICTURE
+  VALID_ID_BORROWER
+  VALID_ID_CO_BORROWER
+  PROOF_OF_BILLING
+  EMPLOYEE_ID
+  BUSINESS_CLEARANCE
+  CORPORATE_PAYSLIP
+  SEAMANS_BOOK
+  OVERSEAS_EMPLOYMENT_CERTIFICATE
+}
+
 /// LP-1: a Loan Product Version has exactly one interest calculation method.
 enum InterestCalculationMethod {
   FLAT
@@ -168,6 +184,11 @@ model Branch {
   code      String   @unique
   name      String
   isActive  Boolean  @default(true)
+  /// Physical office address — used to geocode the branch once (see
+  /// LoanApplicationPreQualificationService) for the loan-application distance rule.
+  address   String?
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -856,6 +877,7 @@ model Attachment {
   /// uploads through the new attachment-upload feature (2026-07-10).
   fileSize         Int?
   storageKey       String
+  documentCategory AttachmentDocumentCategory?
   uploadedByUserId String?
   uploadedBy       User?               @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
   uploadedAt       DateTime            @default(now())
@@ -956,15 +978,14 @@ model AuditLog {
 // today; not modeled here either pending a real requirement to store them.
 // AI risk/recommendation is explicitly a frontend-only rule-based demo, never
 // a real ML engine — not modeled backend-side at all.
+/// PREAPPROVED/PREDECLINED are computed by LoanApplicationPreQualificationService at creation and
+/// re-computed whenever the AI Risk Management Summary is saved (advisory only — the officer makes
+/// the real, final APPROVED/DECLINED call; system verdicts never auto-approve or auto-decline).
 enum LoanApplicationStatus {
-  PENDING_REVIEW
+  PREAPPROVED
+  PREDECLINED
   APPROVED
   DECLINED
-}
-
-enum LoanApplicationReviewState {
-  UNREVIEWED
-  REVIEWED
 }
 
 enum LoanApplicationAccountType {
@@ -985,6 +1006,8 @@ model LoanApplication {
   propertiesOwned String[] @default([])
   creditScore     Int?
   coBorrowerName  String?
+  mobilePhone     String?
+  email           String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?
@@ -1002,10 +1025,11 @@ model LoanApplication {
   /// paper form on the applicant's behalf) — null for a self-service intake.
   encodedBy       User?   @relation("LoanApplicationEncodedBy", fields: [encodedByUserId], references: [id])
 
-  status      LoanApplicationStatus      @default(PENDING_REVIEW)
-  /// Independent "seen it" inbox flag — orthogonal to `status`; flips to
-  /// REVIEWED when a reviewer opens the application, regardless of decision.
-  reviewState LoanApplicationReviewState @default(UNREVIEWED)
+  status LoanApplicationStatus @default(PREDECLINED)
+  /// Cached at creation from geocoding the applicant's address against the assigned branch's
+  /// coordinates — null if geocoding failed/was inconclusive (the distance rule fails open in that
+  /// case; see LoanApplicationPreQualificationService).
+  distanceFromBranchKm Decimal? @db.Decimal(6, 2)
 
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).

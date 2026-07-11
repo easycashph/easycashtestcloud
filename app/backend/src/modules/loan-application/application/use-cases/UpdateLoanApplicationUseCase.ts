@@ -1,29 +1,32 @@
 import { NotFoundError } from '@shared/errors/DomainError';
-import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 
-export interface RevertLoanApplicationDecisionUseCaseDeps {
+export interface UpdateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
-  auditLogger: IAuditLogger;
   preQualificationService: LoanApplicationPreQualificationService;
 }
 
-/** MIS-only — role gating happens at the router (requireRole), not here; this use case only knows the state transition. */
-export class RevertLoanApplicationDecisionUseCase {
-  constructor(private readonly deps: RevertLoanApplicationDecisionUseCaseDeps) {}
+export interface UpdateLoanApplicationInput {
+  monthlyIncome?: number;
+  creditScore?: number;
+  propertiesOwned?: string[];
+}
 
-  async execute(id: string, revertedByUserId: string): Promise<LoanApplication> {
+export class UpdateLoanApplicationUseCase {
+  constructor(private readonly deps: UpdateLoanApplicationUseCaseDeps) {}
+
+  async execute(id: string, input: UpdateLoanApplicationInput): Promise<LoanApplication> {
     const application = await this.deps.loanApplicationRepository.findById(id);
     if (!application) {
       throw new NotFoundError('LoanApplication', id);
     }
+    application.updateApplicantFinancials(input);
 
-    const previousStatus = application.status;
+    // Re-classify with the freshly saved income — no-ops (via applySystemClassification's own
+    // guard) once a human has already made the real APPROVED/DECLINED decision.
     const props = application.toProps();
-    // Revert always reflects current data (a fresh classification), never a memorized old value —
-    // e.g. income recorded after the original decision now factors into where it lands.
     const classification = await this.deps.preQualificationService.classify({
       branchId: props.branchId,
       age: props.age,
@@ -33,18 +36,9 @@ export class RevertLoanApplicationDecisionUseCase {
       requestedCategory: props.requestedCategory,
       applicantAddressText: props.address,
     });
+    application.applySystemClassification(classification);
 
-    application.revert(classification.status);
     await this.deps.loanApplicationRepository.save(application);
-    await this.deps.auditLogger.log({
-      userId: revertedByUserId,
-      action: 'REVERT_LOAN_APPLICATION_DECISION',
-      entityType: 'LoanApplication',
-      entityId: application.id,
-      previousValue: { status: previousStatus },
-      newValue: { status: classification.status },
-    });
-
     return application;
   }
 }
