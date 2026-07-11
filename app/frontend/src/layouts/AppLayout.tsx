@@ -97,7 +97,7 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
           <Button
             variant="ghost"
             size="icon"
-            className="hidden shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground lg:inline-flex"
+            className="hidden shrink-0 rounded-full bg-sidebar-accent/10 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/20 hover:text-sidebar-foreground lg:inline-flex"
             onClick={onCollapse}
             aria-label="Hide side menu"
           >
@@ -155,7 +155,7 @@ function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          className="hidden lg:inline-flex"
+          className="hidden rounded-full bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex"
           onClick={onCollapseToggle}
           aria-label={collapsed ? 'Show side menu' : 'Hide side menu'}
         >
