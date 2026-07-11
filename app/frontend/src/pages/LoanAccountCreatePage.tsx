@@ -79,6 +79,76 @@ function computeAdvanceInterestFee(principal: number, addOnRatePercent: number, 
   return Math.ceil(principal * (addOnRatePercent / 100) * (excessDays / 30));
 }
 
+/** Everything `computeNetProceedsForPrincipal` needs besides the principal guess itself — one
+ * field per fee-affecting input already live in the form. */
+interface FeeComputationContext {
+  installmentCountNum: number;
+  interestRateNum: number;
+  addOnRateNum: number;
+  disbursementDateObj: Date | null;
+  firstRepaymentDateObj: Date | null;
+  processingFeePercentNum: number;
+  accountManagementFeePercentNum: number;
+  outstandingBalancePayoffNum: number;
+  docStampFeeNum: number;
+  otherFeesNum: number;
+  notarialFeeNum: number;
+  webFeeNum: number;
+}
+
+/** Re-derives Net Proceeds for a given candidate principal, using the exact same formulas as the
+ * live form (percent-based Processing/Account Management Fee, computeAdvanceInterestFee,
+ * computeInsuranceFee via the same PMT the schedule preview uses) — kept as a pure function so
+ * `solveGrossForDesiredNet` below can call it repeatedly without duplicating fee logic. */
+function computeNetProceedsForPrincipal(principal: number, ctx: FeeComputationContext): number {
+  // Rounded to centavos here, matching the .toFixed(2) the real form applies to these two fields
+  // before summing — solving against the unrounded fraction instead left the solver converging on
+  // a principal that was off by a centavo once the real (rounded) fee fields were summed.
+  const processingFee = Number((((principal * ctx.processingFeePercentNum) / 100)).toFixed(2));
+  const accountManagementFee = Number((((principal * ctx.accountManagementFeePercentNum) / 100)).toFixed(2));
+  const advanceInterestFee =
+    ctx.addOnRateNum > 0 && ctx.disbursementDateObj && ctx.firstRepaymentDateObj
+      ? computeAdvanceInterestFee(principal, ctx.addOnRateNum, ctx.disbursementDateObj, ctx.firstRepaymentDateObj)
+      : 0;
+  const scheduleForGuess =
+    ctx.interestRateNum > 0 && ctx.installmentCountNum > 0 && ctx.firstRepaymentDateObj
+      ? previewLoanSchedule(principal, ctx.interestRateNum, ctx.installmentCountNum, ctx.firstRepaymentDateObj)
+      : null;
+  const insuranceFee = scheduleForGuess ? computeInsuranceFee(scheduleForGuess.monthlyPayment, ctx.installmentCountNum) : 0;
+
+  const totalFees =
+    processingFee +
+    advanceInterestFee +
+    ctx.outstandingBalancePayoffNum +
+    ctx.docStampFeeNum +
+    accountManagementFee +
+    ctx.otherFeesNum +
+    ctx.notarialFeeNum +
+    ctx.webFeeNum +
+    insuranceFee;
+
+  return principal - totalFees;
+}
+
+/**
+ * Reverse-solves the Gross/Principal Amount that nets to `desiredNet` after all fees — the same
+ * goal-seek idea as the legacy Excel's own "Net Amount Auto Computation" workbook (`AutoV2`'s
+ * F/G/H columns: guess Gross, measure the resulting Net, nudge Gross by the shortfall, repeat).
+ * Converges fast because every fee here is at most a percentage of principal, so
+ * `computeNetProceedsForPrincipal`'s slope w.r.t. principal stays comfortably below 1 — 12
+ * iterations clears sub-centavo precision even at unusually high combined fee percentages.
+ */
+function solveGrossForDesiredNet(desiredNet: number, ctx: FeeComputationContext): number {
+  let guess = desiredNet;
+  for (let i = 0; i < 12; i++) {
+    const net = computeNetProceedsForPrincipal(guess, ctx);
+    const shortfall = desiredNet - net;
+    if (Math.abs(shortfall) < 0.005) break;
+    guess += shortfall;
+  }
+  return Math.round(guess * 100) / 100;
+}
+
 /**
  * Find Client -> Loan Terms -> Schedule Preview -> Create. Scoped to an EXISTING client only
  * (2026-07-11 user decision) — a renewal or any new loan account goes straight here without
@@ -130,6 +200,13 @@ export function LoanAccountCreatePage() {
   const selectedVersion = selectedProduct ? activeSupportedVersion(selectedProduct) : undefined;
 
   const [principalAmount, setPrincipalAmount] = React.useState('');
+  // Amount Entry Mode (2026-07-11): lets staff enter the exact Net Amount a client asked for
+  // (e.g. "gusto niya makuha ₱20,000 net") instead of the Gross/Principal — Principal Amount is
+  // then reverse-solved via solveGrossForDesiredNet(), same goal-seek idea as the legacy Excel's
+  // own "Net Amount Auto Computation" workbook. Principal Amount stays visible and editable in
+  // both modes, matching this form's "default then editable" pattern everywhere else.
+  const [amountEntryMode, setAmountEntryMode] = React.useState<'gross' | 'net'>('gross');
+  const [desiredNetAmount, setDesiredNetAmount] = React.useState('');
   const [installmentCount, setInstallmentCount] = React.useState('');
   const [addOnRate, setAddOnRate] = React.useState('');
   const [interestRate, setInterestRate] = React.useState('');
@@ -251,6 +328,46 @@ export function LoanAccountCreatePage() {
 
   const accountManagementFeePercentNum = Number.parseFloat(accountManagementFeePercent) || 0;
   const accountManagementFee = ((principalNum * accountManagementFeePercentNum) / 100).toFixed(2);
+
+  const desiredNetNum = Number.parseFloat(desiredNetAmount) || 0;
+
+  // Net Amount mode: reverse-solves Principal Amount from the desired Net Proceeds, using the
+  // exact same fee formulas as everywhere else in this form (see solveGrossForDesiredNet's own
+  // doc comment). Still just populates principalAmount — staff can override it afterward like any
+  // other auto-filled field, and switching back to Gross mode simply stops re-solving it.
+  React.useEffect(() => {
+    if (amountEntryMode !== 'net' || desiredNetNum <= 0) return;
+    const solved = solveGrossForDesiredNet(desiredNetNum, {
+      installmentCountNum,
+      interestRateNum,
+      addOnRateNum,
+      disbursementDateObj: disbursementDate ? new Date(disbursementDate) : null,
+      firstRepaymentDateObj: firstRepaymentDate ? new Date(firstRepaymentDate) : null,
+      processingFeePercentNum,
+      accountManagementFeePercentNum,
+      outstandingBalancePayoffNum: Number.parseFloat(outstandingBalancePayoff) || 0,
+      docStampFeeNum: Number.parseFloat(docStampFee) || 0,
+      otherFeesNum: Number.parseFloat(otherFees) || 0,
+      notarialFeeNum: Number.parseFloat(notarialFee) || 0,
+      webFeeNum: Number.parseFloat(webFee) || 0,
+    });
+    setPrincipalAmount(solved.toFixed(2));
+  }, [
+    amountEntryMode,
+    desiredNetNum,
+    installmentCountNum,
+    interestRateNum,
+    addOnRateNum,
+    disbursementDate,
+    firstRepaymentDate,
+    processingFeePercentNum,
+    accountManagementFeePercentNum,
+    outstandingBalancePayoff,
+    docStampFee,
+    otherFees,
+    notarialFee,
+    webFee,
+  ]);
 
   const feeFields = [
     processingFee,
@@ -441,7 +558,46 @@ export function LoanAccountCreatePage() {
                 {selectedVersion && (
                   <>
                     <div className="space-y-1.5">
-                      <Label htmlFor="principal">Principal Amount</Label>
+                      <Label>Amount Entry Mode</Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={amountEntryMode === 'gross' ? 'default' : 'outline'}
+                          onClick={() => setAmountEntryMode('gross')}
+                        >
+                          Gross Amount
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={amountEntryMode === 'net' ? 'default' : 'outline'}
+                          onClick={() => setAmountEntryMode('net')}
+                        >
+                          Desired Net Amount
+                        </Button>
+                      </div>
+                    </div>
+
+                    {amountEntryMode === 'net' && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="desired-net">Desired Net Amount</Label>
+                        <Input
+                          id="desired-net"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={desiredNetAmount}
+                          onChange={(e) => setDesiredNetAmount(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Principal Amount below is solved automatically so Net Proceeds matches this exactly.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="principal">{amountEntryMode === 'net' ? 'Principal Amount (solved)' : 'Principal Amount'}</Label>
                       <Input
                         id="principal"
                         type="number"
