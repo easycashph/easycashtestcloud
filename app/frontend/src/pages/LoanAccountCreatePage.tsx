@@ -30,6 +30,30 @@ function activeSupportedVersion(product: LoanProduct): LoanProductVersion | unde
   return product.versions.find((v) => v.isActive && v.interestCalculationMethod !== 'FLAT');
 }
 
+/**
+ * Products confirmed (2026-07-11, direct DB query against `loan_accounts`/`loan_applications`/
+ * `document_template_mappings`) to have ZERO real usage anywhere — never used to originate a real
+ * loan, never referenced by a loan application, no document template linked. Hidden from this
+ * dropdown only, purely to declutter it (user request) — deliberately NOT deleted or deactivated
+ * at the data layer (no `LoanProductVersion.isActive` change, no DB write), so this is trivially
+ * reversible by removing an entry here, and every other page (Loan Products, reports, etc.) still
+ * sees these products exactly as before. `CM-Car` additionally has a corrupted `name` field
+ * ("addOnRates:[1.75...", clearly leaked seed data, not a real product name) — flagged here, not
+ * fixed, since correcting the name is a data question for the user, not a hide-from-dropdown one.
+ */
+const HIDDEN_PRODUCT_CODES = new Set([
+  'SL-Snap-A',
+  'SL-Snap-B',
+  'SML-Kab',
+  'TEST-PROD',
+  'SL-OL_NEW',
+  'PL-S',
+  'SML-OTH',
+  'CL-REG',
+  'CL-SPEC',
+  'CM-Car',
+]);
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -193,7 +217,9 @@ export function LoanAccountCreatePage() {
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
     enabled: Boolean(selectedBorrower),
   });
-  const availableProducts = (productsQuery.data ?? []).filter((p) => activeSupportedVersion(p));
+  const availableProducts = (productsQuery.data ?? [])
+    .filter((p) => activeSupportedVersion(p) && !HIDDEN_PRODUCT_CODES.has(p.code))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const [loanProductId, setLoanProductId] = React.useState('');
   const selectedProduct = availableProducts.find((p) => p.id === loanProductId);
