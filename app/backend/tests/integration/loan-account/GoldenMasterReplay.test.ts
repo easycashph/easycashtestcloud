@@ -42,7 +42,13 @@ function buildDeps() {
     save: vi.fn(),
   };
   const repaymentInstallmentRepository = { findById: vi.fn(), findByLoanAccountId: vi.fn(), save: vi.fn(), saveMany: vi.fn() };
-  const loanTransactionRepository = { findById: vi.fn(), findByLoanAccountId: vi.fn(), create: vi.fn() };
+  const loanTransactionRepository = {
+    findById: vi.fn(),
+    findByLoanAccountId: vi.fn(),
+    findByReversesTransactionId: vi.fn(),
+    create: vi.fn(),
+  };
+  const paymentAllocationRepository = { createMany: vi.fn(), findByLoanTransactionId: vi.fn() };
   const financialAuditLogger = { log: vi.fn() };
   const unitOfWork = { run: vi.fn(async (work: (ctx: TransactionContext) => Promise<unknown>) => work(mockCtx)) };
 
@@ -51,6 +57,7 @@ function buildDeps() {
     loanProductRepository,
     repaymentInstallmentRepository,
     loanTransactionRepository,
+    paymentAllocationRepository,
     financialAuditLogger,
     unitOfWork,
   };

@@ -61,6 +61,12 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     return rows.map(toDomain);
   }
 
+  async findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanTransaction.findUnique({ where: { reversesTransactionId: transactionId } });
+    return row ? toDomain(row) : null;
+  }
+
   async create(transaction: LoanTransaction, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
     await client.loanTransaction.create({

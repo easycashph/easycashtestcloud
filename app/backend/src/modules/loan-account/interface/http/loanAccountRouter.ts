@@ -4,7 +4,7 @@ import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { LoanAccountController, type LoanAccountControllerDeps } from './loanAccountController';
-import { createLoanAccountSchema, processPaymentSchema, rejectLoanSchema } from './loanAccountSchemas';
+import { createLoanAccountSchema, processPaymentSchema, rejectLoanSchema, reversePaymentSchema } from './loanAccountSchemas';
 
 /**
  * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination and
@@ -66,6 +66,16 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     requireRole(...PAYMENT_RECORDING_ROLES),
     validateBody(processPaymentSchema),
     controller.processPayment,
+  );
+  // 2026-07-11 (Reverse Payment feature, user decision): MIS only — a narrower gate than payment
+  // recording itself, same "accidental-click safety net for a financially consequential action"
+  // reasoning as loan-application's revert-decision route above.
+  router.post(
+    '/loan-accounts/:id/transactions/:transactionId/reverse',
+    requireAuth,
+    requireRole('MIS'),
+    validateBody(reversePaymentSchema),
+    controller.reversePayment,
   );
 
   return router;

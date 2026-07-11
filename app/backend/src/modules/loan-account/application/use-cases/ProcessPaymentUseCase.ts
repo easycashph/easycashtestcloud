@@ -9,7 +9,9 @@ import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/e
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
+import type { IPaymentAllocationRepository } from '@modules/ledger/application/ports/IPaymentAllocationRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
+import { PaymentAllocation } from '@modules/ledger/domain/PaymentAllocation';
 import { TransactionComponents } from '@modules/ledger/domain/valueObjects/TransactionComponents';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
@@ -21,6 +23,8 @@ export interface ProcessPaymentUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
   repaymentInstallmentRepository: IRepaymentInstallmentRepository;
   loanTransactionRepository: ILoanTransactionRepository;
+  /** 2026-07-11 (Reverse Payment feature) — see `PaymentAllocation`'s own doc comment for why this is recorded alongside the transaction. */
+  paymentAllocationRepository: IPaymentAllocationRepository;
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
 }
@@ -172,6 +176,10 @@ function toManualAllocations(
  *   6. A financial audit log entry (CP2, fail-closed — no try/catch
  *      around it, so a rejection aborts the whole transaction, including
  *      1-5; `FINANCIAL_INVARIANTS.md` §4).
+ *   7. 2026-07-11 (Reverse Payment feature): one `PaymentAllocation` row per installment step 3
+ *      actually touched, recording exactly what this transaction did to it — see that entity's
+ *      own doc comment for why. Read back by `ReversePaymentUseCase` to know precisely what to
+ *      undo later.
  *
  * `paymentAmount <= 0` is rejected by `PaymentAllocationService.allocate()`
  * itself (`InvalidPaymentAllocationInputError`) — deliberately not
@@ -285,12 +293,33 @@ export class ProcessPaymentUseCase {
       arNumber,
     });
 
+    // 2026-07-11 (Reverse Payment feature): one PaymentAllocation row per installment this
+    // payment actually touched — mirrors the same zero-skip filter as the installmentsToSave
+    // loop above, built after repaymentTransaction exists since each row needs its id.
+    const paymentAllocationsToSave: PaymentAllocation[] = allocations
+      .filter((allocation) => !allocation.feesApplied
+        .add(allocation.penaltyApplied)
+        .add(allocation.interestApplied)
+        .add(allocation.principalApplied)
+        .isZero())
+      .map((allocation) =>
+        PaymentAllocation.create({
+          loanTransactionId: repaymentTransaction.id,
+          repaymentInstallmentId: allocation.installmentId,
+          principalApplied: allocation.principalApplied,
+          interestApplied: allocation.interestApplied,
+          feesApplied: allocation.feesApplied,
+          penaltyApplied: allocation.penaltyApplied,
+        }),
+      );
+
     await this.deps.unitOfWork.run(async (ctx) => {
       await this.deps.loanAccountRepository.save(loanAccount, ctx);
       if (installmentsToSave.length > 0) {
         await this.deps.repaymentInstallmentRepository.saveMany(installmentsToSave, ctx);
       }
       await this.deps.loanTransactionRepository.create(repaymentTransaction, ctx);
+      await this.deps.paymentAllocationRepository.createMany(paymentAllocationsToSave, ctx);
       await this.deps.financialAuditLogger.log(
         {
           userId: postedByUserId,

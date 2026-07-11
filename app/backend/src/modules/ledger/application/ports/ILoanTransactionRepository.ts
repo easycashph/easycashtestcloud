@@ -16,6 +16,8 @@ export interface ILoanTransactionRepository {
     options: FindByLoanAccountIdOptions,
     ctx?: TransactionContext,
   ): Promise<LoanTransaction[]>;
+  /** 2026-07-11 (Reverse Payment feature): looks up the (at most one, per the schema's `@unique` constraint) REVERSAL transaction that already reverses `transactionId`, if any — how `ReversePaymentUseCase` rejects a double-reversal. */
+  findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null>;
   /**
    * TXN-1: append-only. Deliberately no `update()`/`delete()` method on
    * this port at all — the type signature itself makes editing a posted

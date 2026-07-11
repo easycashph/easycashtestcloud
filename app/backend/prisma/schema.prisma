@@ -813,7 +813,12 @@ model LoanTransaction {
   legacyId  String?  @unique
   createdAt DateTime @default(now())
 
-  appliedFees AppliedFee[]
+  appliedFees        AppliedFee[]
+  /// 2026-07-11 (Reverse Payment): per-installment breakdown of this
+  /// transaction's effect — see `PaymentAllocation`'s own doc comment for
+  /// why this exists. Present on REPAYMENT (and, going forward, REVERSAL)
+  /// transactions; empty for every other type.
+  paymentAllocations PaymentAllocation[]
 
   /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
   /// volume table (legacy equivalent: 524k rows) — date-range and
@@ -859,6 +864,8 @@ model RepaymentSchedule {
   /// to scope this to every balance-mutating aggregate, not just one.
   version Int @default(0)
 
+  paymentAllocations PaymentAllocation[]
+
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
   /// all filter on due date and status — previously unindexed beyond
@@ -867,6 +874,45 @@ model RepaymentSchedule {
   @@index([dueDate])
   @@index([status])
   @@map("repayment_schedules")
+}
+
+/// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one
+/// payment across possibly several installments (`ADR-009`'s waterfall, or a
+/// staff-entered manual split) but only ever persisted the AGGREGATE
+/// principal/interest/fees/penalty totals on the resulting `LoanTransaction`
+/// — no record existed of exactly which installment(s), and how much of
+/// each component, that one transaction actually touched. That's fine for
+/// display, but not enough to safely reverse a specific past payment later
+/// (undoing the wrong installment, or the wrong amount, would itself be a
+/// financial error) — especially once other payments have touched the same
+/// loan afterward. This table closes that gap: one row per
+/// (transaction, installment) pair a REPAYMENT transaction affected, with
+/// the exact per-component amounts applied. `ReversePaymentUseCase` reads
+/// these rows back to know precisely what to undo, per installment, then
+/// negates them via the same `RepaymentInstallment.recordPayment()` /
+/// `LoanAccount.applyPayment()` primitives `ProcessPaymentUseCase` itself
+/// uses (Money/InstallmentAmounts/TransactionComponents already support
+/// negative amounts — see `Money`'s own doc comment). Written going forward
+/// only; not backfilled for transactions recorded before this feature
+/// existed — those remain reversible only by the older, coarser workaround
+/// (a manual ADJUSTMENT transaction), same as before this feature.
+model PaymentAllocation {
+  id                     String            @id @default(uuid())
+  loanTransactionId      String
+  loanTransaction        LoanTransaction   @relation(fields: [loanTransactionId], references: [id])
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+
+  principalApplied Decimal @default(0) @db.Decimal(14, 2)
+  interestApplied  Decimal @default(0) @db.Decimal(14, 2)
+  feesApplied      Decimal @default(0) @db.Decimal(14, 2)
+  penaltyApplied   Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([loanTransactionId])
+  @@index([repaymentInstallmentId])
+  @@map("payment_allocations")
 }
 
 /// FEE-4: once applied to a specific loan, a fee amount is immutable even

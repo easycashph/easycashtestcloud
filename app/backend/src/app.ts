@@ -46,11 +46,13 @@ import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
+import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
+import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
 import { createRepaymentRouter } from '@modules/repayment/interface/http/repaymentRouter';
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
@@ -252,6 +254,9 @@ export function createApp(): Express {
   // cases need them too — same repository instances, not duplicated ones.
   const loanTransactionRepository = new PrismaLoanTransactionRepository();
   const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
+  // 2026-07-11 (Reverse Payment feature): shared by ProcessPaymentUseCase (writes the breakdown)
+  // and ReversePaymentUseCase (reads it back) below — see PaymentAllocation's own doc comment.
+  const paymentAllocationRepository = new PrismaPaymentAllocationRepository();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -274,6 +279,15 @@ export function createApp(): Express {
         loanAccountRepository,
         repaymentInstallmentRepository,
         loanTransactionRepository,
+        paymentAllocationRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      reversePaymentUseCase: new ReversePaymentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        paymentAllocationRepository,
         financialAuditLogger,
         unitOfWork,
       }),

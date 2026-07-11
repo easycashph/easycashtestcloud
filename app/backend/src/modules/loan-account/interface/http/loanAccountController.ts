@@ -12,7 +12,13 @@ import type { ApproveLoanUseCase } from '../../application/use-cases/ApproveLoan
 import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUseCase';
 import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
 import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
-import type { CreateLoanAccountRequestBody, ProcessPaymentRequestBody, RejectLoanRequestBody } from './loanAccountSchemas';
+import type { ReversePaymentUseCase } from '../../application/use-cases/ReversePaymentUseCase';
+import type {
+  CreateLoanAccountRequestBody,
+  ProcessPaymentRequestBody,
+  RejectLoanRequestBody,
+  ReversePaymentRequestBody,
+} from './loanAccountSchemas';
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 
 export interface LoanAccountControllerDeps {
@@ -23,6 +29,7 @@ export interface LoanAccountControllerDeps {
   rejectLoanUseCase: RejectLoanUseCase;
   activateLoanUseCase: ActivateLoanUseCase;
   processPaymentUseCase: ProcessPaymentUseCase;
+  reversePaymentUseCase: ReversePaymentUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
 
@@ -164,6 +171,33 @@ export class LoanAccountController {
           body: { loanAccount: presentLoanAccount(loanAccount), remainder: remainder.toString() },
         };
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * 2026-07-11 (Reverse Payment feature). MIS-only (enforced by the router's `requireRole('MIS')`,
+   * not here — same division of concerns as every other route). No idempotency wrapper, unlike
+   * `activate`/`processPayment` above: a duplicate reversal attempt is already safely rejected by
+   * `ReversePaymentUseCase`'s own `TransactionAlreadyReversedError`, not a source of double
+   * financial effect the way a duplicate activate/payment click would be.
+   */
+  reversePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as ReversePaymentRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId); // H-1: same as approve()/reject()/processPayment() above.
+
+      const loanAccount = await this.deps.reversePaymentUseCase.execute(
+        req.params.id as string,
+        req.params.transactionId as string,
+        currentUser.sub,
+        body.reason,
+      );
+      res.status(200).json(presentLoanAccount(loanAccount));
     } catch (error) {
       next(error);
     }

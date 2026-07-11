@@ -368,8 +368,13 @@ function RemindersPanel({ loanId }: { loanId: string }) {
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { currentAccount } = useRole();
   const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  // 2026-07-11 (Reverse Payment feature, user request): correcting a wrongly-entered payment.
+  // MIS-only (matches the backend's requireRole('MIS') gate) — see reverseMutation below.
+  const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
+  const [reverseReason, setReverseReason] = React.useState('');
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -429,9 +434,27 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   });
   const actionPending = approveMutation.isPending || activateMutation.isPending;
 
+  const reverseMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/transactions/${reverseTarget!.id}/reverse`, {
+        reason: reverseReason.trim(),
+      }),
+    onSuccess: () => {
+      setReverseTarget(null);
+      setReverseReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
   const openConfirm = (action: 'APPROVE' | 'ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
+  };
+  const openReverseConfirm = (transaction: LoanTransaction) => {
+    setActionError(null);
+    setReverseReason('');
+    setReverseTarget(transaction);
   };
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
@@ -459,7 +482,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const paymentHistory = (transactionsQuery.data ?? [])
     .filter((t) => t.type === 'REPAYMENT')
     .sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
+  // 2026-07-11 (Reverse Payment feature): which REPAYMENT ids already have a REVERSAL pointing at
+  // them — computed from the same already-fetched transaction list, no extra request needed.
+  const reversedTransactionIds = new Set(
+    (transactionsQuery.data ?? []).map((t) => t.reversesTransactionId).filter((id): id is string => id !== null),
+  );
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const canReversePayment = currentAccount.roles.includes('MIS');
 
   return (
     <div className="space-y-6">
@@ -616,22 +645,42 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Amount Paid</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Balance After</TableCell>
+                  {canReversePayment && <TableCell className="font-medium text-muted-foreground">&nbsp;</TableCell>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paymentHistory.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell>{formatDate(t.entryDate)}</TableCell>
-                    <TableCell className="font-mono text-xs">{t.orNumber ?? '—'}</TableCell>
-                    <TableCell className="font-mono text-xs">{t.arNumber ?? '—'}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(t.principalComponent))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(t.interestComponent))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(t.penaltyComponent))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(t.feesComponent))}</TableCell>
-                    <TableCell className="text-right font-semibold">{formatPeso(num(t.amount))}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(t.balanceAfter))}</TableCell>
-                  </TableRow>
-                ))}
+                {paymentHistory.map((t) => {
+                  const isReversed = reversedTransactionIds.has(t.id);
+                  return (
+                    <TableRow key={t.id} className={isReversed ? 'opacity-60' : undefined}>
+                      <TableCell>
+                        {formatDate(t.entryDate)}
+                        {isReversed && (
+                          <Badge variant="secondary" className="ml-2 text-[10px]">
+                            Reversed
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{t.orNumber ?? '—'}</TableCell>
+                      <TableCell className="font-mono text-xs">{t.arNumber ?? '—'}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(t.principalComponent))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(t.interestComponent))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(t.penaltyComponent))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(t.feesComponent))}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatPeso(num(t.amount))}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatPeso(num(t.balanceAfter))}</TableCell>
+                      {canReversePayment && (
+                        <TableCell>
+                          {!isReversed && (
+                            <Button variant="outline" size="sm" onClick={() => openReverseConfirm(t)}>
+                              Reverse
+                            </Button>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -662,6 +711,58 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
             <Button onClick={confirmLoanStatusChange} disabled={actionPending}>
               {actionPending ? 'Processing…' : 'Yes, confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={reverseTarget !== null}
+        onOpenChange={(open) => !open && !reverseMutation.isPending && (setReverseTarget(null), setReverseReason(''))}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" /> Reverse this payment?
+            </DialogTitle>
+            <DialogDescription>
+              {reverseTarget &&
+                `This creates a new REVERSAL transaction undoing the ${formatPeso(num(reverseTarget.amount))} payment from ${formatDate(reverseTarget.entryDate)} — the original entry is never edited or deleted, only corrected. After reversing, record the correct payment as a new entry. A reason is required.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="reverse-reason">Reason</Label>
+            <Textarea
+              id="reverse-reason"
+              placeholder="e.g. Cashier entered the wrong amount"
+              value={reverseReason}
+              onChange={(e) => setReverseReason(e.target.value)}
+              disabled={reverseMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReverseTarget(null);
+                setReverseReason('');
+              }}
+              disabled={reverseMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => reverseMutation.mutate()}
+              disabled={reverseMutation.isPending || reverseReason.trim().length === 0}
+            >
+              {reverseMutation.isPending ? 'Reversing…' : 'Yes, reverse this payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

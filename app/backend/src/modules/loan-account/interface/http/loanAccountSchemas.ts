@@ -76,3 +76,16 @@ export const processPaymentSchema = z.object({
 });
 
 export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;
+
+/**
+ * 2026-07-11 (Reverse Payment feature, user request): POST
+ * /loan-accounts/:id/transactions/:transactionId/reverse request body. `reason` is required
+ * (not `.optional()`, unlike `rejectLoanSchema.reason` above) — a mandatory audit trail for a
+ * financially consequential, irreversible-in-the-other-direction action, per explicit user
+ * decision when this feature was designed.
+ */
+export const reversePaymentSchema = z.object({
+  reason: z.string().min(1),
+});
+
+export type ReversePaymentRequestBody = z.infer<typeof reversePaymentSchema>;
