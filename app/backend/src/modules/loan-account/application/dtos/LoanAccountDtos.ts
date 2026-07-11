@@ -13,5 +13,15 @@ export interface CreateLoanAccountInput {
   gracePeriodDays?: number;
   /** ADR-045 (Concept 1 — Exact First Repayment Date): explicit input, never derived. */
   firstRepaymentDate: Date;
+  /** 2026-07-11 (Create Loan Account origination fees) — each omitted/undefined defaults to 0. */
+  processingFee?: string;
+  advanceInterestFee?: string;
+  outstandingBalancePayoff?: string;
+  docStampFee?: string;
+  accountManagementFee?: string;
+  otherFees?: string;
+  notarialFee?: string;
+  webFee?: string;
+  insuranceFee?: string;
   legacyId?: string;
 }

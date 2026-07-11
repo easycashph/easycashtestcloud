@@ -24,6 +24,16 @@ export const createLoanAccountSchema = z.object({
   gracePeriodDays: z.coerce.number().int().min(0).optional(),
   /** ADR-045 (Concept 1 — Exact First Repayment Date): required, explicit input, never derived. */
   firstRepaymentDate: z.coerce.date(),
+  /** 2026-07-11 (Create Loan Account origination fees) — each omitted defaults to 0 in the use case. */
+  processingFee: decimalStringSchema.optional(),
+  advanceInterestFee: decimalStringSchema.optional(),
+  outstandingBalancePayoff: decimalStringSchema.optional(),
+  docStampFee: decimalStringSchema.optional(),
+  accountManagementFee: decimalStringSchema.optional(),
+  otherFees: decimalStringSchema.optional(),
+  notarialFee: decimalStringSchema.optional(),
+  webFee: decimalStringSchema.optional(),
+  insuranceFee: decimalStringSchema.optional(),
   legacyId: z.string().min(1).optional(),
 });
 

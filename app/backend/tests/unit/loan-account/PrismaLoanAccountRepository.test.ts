@@ -15,6 +15,7 @@ vi.mock('@shared/database/prismaClient', () => ({ prisma: prismaMock }));
 
 const { PrismaLoanAccountRepository } = await import('@modules/loan-account/infrastructure/PrismaLoanAccountRepository');
 const { LoanAccount } = await import('@modules/loan-account/domain/LoanAccount');
+const { OriginationFees } = await import('@modules/loan-account/domain/valueObjects/OriginationFees');
 const { Money } = await import('@shared/domain/Money');
 const { Percentage } = await import('@shared/domain/Percentage');
 const { ConcurrencyConflictError } = await import('@shared/errors/DomainError');
@@ -49,6 +50,9 @@ function buildExistingLoan(version: number) {
     firstRepaymentDate: new Date('2026-08-15'),
     createdAt: new Date(),
     updatedAt: new Date(),
+    legacyBalanceDataMissing: false,
+    originationFees: OriginationFees.zero(),
+    netProceeds: Money.of('10000.00'),
     appliedFees: [],
     coBorrowerIds: [],
     version,
@@ -186,6 +190,17 @@ describe('PrismaLoanAccountRepository', () => {
         activatedAt: null,
         closedAt: null,
         closedReason: null,
+        legacyBalanceDataMissing: false,
+        processingFee: '0.00',
+        advanceInterestFee: '0.00',
+        outstandingBalancePayoff: '0.00',
+        docStampFee: '0.00',
+        accountManagementFee: '0.00',
+        otherFees: '0.00',
+        notarialFee: '0.00',
+        webFee: '0.00',
+        insuranceFee: '0.00',
+        netProceeds: '10000.00',
         legacyId: null,
         createdAt: now,
         updatedAt: now,

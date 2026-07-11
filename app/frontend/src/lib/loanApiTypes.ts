@@ -51,6 +51,19 @@ export interface LoanAccount {
   closedAt: string | null;
   /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all — NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
+  /** 2026-07-11 (Create Loan Account origination fees) — one-time deductions taken at disbursement, set once at creation. */
+  originationFees: {
+    processingFee: string;
+    advanceInterestFee: string;
+    outstandingBalancePayoff: string;
+    docStampFee: string;
+    accountManagementFee: string;
+    otherFees: string;
+    notarialFee: string;
+    webFee: string;
+    insuranceFee: string;
+  };
+  netProceeds: string;
   createdAt: string;
 }
 
@@ -165,6 +178,14 @@ export interface LoanProduct {
   name: string;
   description: string | null;
   versions: LoanProductVersion[];
+}
+
+/** `GET /interest-rate-chart` — Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account). See the backend Prisma model's own doc comment for provenance. */
+export interface InterestRateChartEntry {
+  id: string;
+  addOnRatePercent: string;
+  termMonths: number;
+  contractualRatePercent: string;
 }
 
 export interface InstallmentAmounts {

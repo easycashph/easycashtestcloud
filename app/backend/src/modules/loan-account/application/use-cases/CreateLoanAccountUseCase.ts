@@ -74,6 +74,17 @@ export class CreateLoanAccountUseCase {
       installmentCount: input.installmentCount,
       gracePeriodDays: input.gracePeriodDays,
       firstRepaymentDate: input.firstRepaymentDate,
+      originationFees: {
+        processingFee: Money.of(input.processingFee ?? '0'),
+        advanceInterestFee: Money.of(input.advanceInterestFee ?? '0'),
+        outstandingBalancePayoff: Money.of(input.outstandingBalancePayoff ?? '0'),
+        docStampFee: Money.of(input.docStampFee ?? '0'),
+        accountManagementFee: Money.of(input.accountManagementFee ?? '0'),
+        otherFees: Money.of(input.otherFees ?? '0'),
+        notarialFee: Money.of(input.notarialFee ?? '0'),
+        webFee: Money.of(input.webFee ?? '0'),
+        insuranceFee: Money.of(input.insuranceFee ?? '0'),
+      },
       legacyId: input.legacyId,
     });
 

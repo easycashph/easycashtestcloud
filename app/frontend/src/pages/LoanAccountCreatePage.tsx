@@ -23,7 +23,7 @@ import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { formatDate, formatPeso } from '@/lib/utils';
-import type { Borrower, LoanAccount, LoanProduct, LoanProductVersion, PaginatedResponse } from '@/lib/loanApiTypes';
+import type { Borrower, InterestRateChartEntry, LoanAccount, LoanProduct, LoanProductVersion, PaginatedResponse } from '@/lib/loanApiTypes';
 
 /** Only `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` versions — `ActivateLoanUseCase` rejects `FLAT` outright (`UnsupportedInterestCalculationMethodError`), so offering one here would let staff create a loan account that can never actually be activated. */
 function activeSupportedVersion(product: LoanProduct): LoanProductVersion | undefined {
@@ -93,6 +93,7 @@ export function LoanAccountCreatePage() {
 
   const [principalAmount, setPrincipalAmount] = React.useState('');
   const [installmentCount, setInstallmentCount] = React.useState('');
+  const [addOnRate, setAddOnRate] = React.useState('');
   const [interestRate, setInterestRate] = React.useState('');
   const [firstRepaymentDate, setFirstRepaymentDate] = React.useState(defaultFirstRepaymentDate());
 
@@ -102,12 +103,35 @@ export function LoanAccountCreatePage() {
     if (!selectedVersion) return;
     setPrincipalAmount(selectedVersion.loanAmountDefault ?? selectedVersion.loanAmountMin);
     setInstallmentCount(String(selectedVersion.installmentCountDefault ?? selectedVersion.installmentCountMin));
+    setAddOnRate('');
     setInterestRate(selectedVersion.defaultInterestRate ?? '');
   }, [selectedVersion]);
 
+  const rateChartQuery = useQuery({
+    queryKey: ['interest-rate-chart'],
+    queryFn: () => apiClient.get<PaginatedResponse<InterestRateChartEntry>>('/interest-rate-chart'),
+  });
+  const rateChart = rateChartQuery.data?.items ?? [];
+
   const principalNum = Number.parseFloat(principalAmount) || 0;
   const installmentCountNum = Number.parseInt(installmentCount, 10) || 0;
+  const addOnRateNum = Number.parseFloat(addOnRate) || 0;
   const interestRateNum = Number.parseFloat(interestRate) || 0;
+
+  // Auto-fills the Contractual Rate from the (Add-On Rate, Term) -> Contractual Rate lookup table
+  // (`Rate_details`, see the backend Prisma model's own doc comment) whenever either input changes
+  // and a matching chart entry exists — still freely editable afterward (e.g. when nothing matches,
+  // matching the pattern every other "default then editable" field in this form already uses).
+  const chartMatch =
+    addOnRateNum > 0 && installmentCountNum > 0
+      ? rateChart.find((e) => Number(e.addOnRatePercent) === addOnRateNum && e.termMonths === installmentCountNum)
+      : undefined;
+  React.useEffect(() => {
+    if (chartMatch) setInterestRate(chartMatch.contractualRatePercent);
+    // Only auto-fills when a match is found — deliberately does not clear an already-entered rate
+    // when there's no match, so staff can still type one manually (see the "not on file" note below).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartMatch?.contractualRatePercent]);
 
   const principalOutOfRange =
     selectedVersion !== undefined &&
@@ -128,6 +152,59 @@ export function LoanAccountCreatePage() {
       ? previewLoanSchedule(principalNum, interestRateNum, installmentCountNum, new Date(firstRepaymentDate))
       : null;
 
+  // Origination fees (2026-07-11) — one-time deductions taken at disbursement. Per
+  // LEGACY_EXCEL_LMS_REFERENCE.md, only Account Management Fee (1% of principal), Notarial Fee,
+  // and Web Fee have confirmed defaults from real data; the rest (Processing Fee, Advance
+  // Interest, Outstanding Balance payoff, Doc Stamp, Insurance, Others) vary too much per loan to
+  // default — staff enters those directly, starting at 0. All nine fields stay freely editable
+  // regardless of whether a default was applied.
+  // Processing Fee is entered as a percent of principal (matching the Excel's own O=P/I
+  // relationship, just entered in the other direction) — no confirmed formula exists for what
+  // that percent should be (see the "not reliably confirmed" note above), so it starts blank.
+  const [processingFeePercent, setProcessingFeePercent] = React.useState('');
+  const [advanceInterestFee, setAdvanceInterestFee] = React.useState('0.00');
+  const [outstandingBalancePayoff, setOutstandingBalancePayoff] = React.useState('0.00');
+  const [docStampFee, setDocStampFee] = React.useState('0.00');
+  const [accountManagementFee, setAccountManagementFee] = React.useState('0.00');
+  const [otherFees, setOtherFees] = React.useState('0.00');
+  const [notarialFee, setNotarialFee] = React.useState('0.00');
+  const [webFee, setWebFee] = React.useState('0.00');
+  const [insuranceFee, setInsuranceFee] = React.useState('0.00');
+
+  // Notarial/Web Fee defaults: ₱500/₱500 generally, but confirmed ₱300/₱0 specifically for the
+  // SL-CORP product (4/4 real loans sampled) — only that exact, confirmed product code gets the
+  // override; every other product keeps the general default rather than guessing.
+  React.useEffect(() => {
+    if (!selectedProduct) return;
+    const isSlCorp = selectedProduct.code === 'SL-CORP';
+    setNotarialFee(isSlCorp ? '300.00' : '500.00');
+    setWebFee(isSlCorp ? '0.00' : '500.00');
+  }, [selectedProduct]);
+
+  // Account Management Fee: confirmed exactly 1% of principal whenever charged (every nonzero
+  // sample in real data). Recomputes live as principal changes — still freely overridable/zeroable
+  // by staff afterward, same "default then editable" pattern as every other field in this form.
+  React.useEffect(() => {
+    if (principalNum > 0) setAccountManagementFee((principalNum * 0.01).toFixed(2));
+  }, [principalNum]);
+
+  const processingFeePercentNum = Number.parseFloat(processingFeePercent) || 0;
+  const processingFee = ((principalNum * processingFeePercentNum) / 100).toFixed(2);
+
+  const feeFields = [
+    processingFee,
+    advanceInterestFee,
+    outstandingBalancePayoff,
+    docStampFee,
+    accountManagementFee,
+    otherFees,
+    notarialFee,
+    webFee,
+    insuranceFee,
+  ];
+  const totalFees = feeFields.reduce((sum, v) => sum + (Number.parseFloat(v) || 0), 0);
+  const netProceeds = principalNum - totalFees;
+
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
@@ -139,8 +216,21 @@ export function LoanAccountCreatePage() {
         branchId: currentAccount.branchId,
         principalAmount: principalNum.toFixed(2),
         interestRate: interestRateNum.toFixed(3),
+        // Informational snapshot fields only (ADR-010) — interestRate above is what actually runs
+        // the schedule; these just record which Add-On Rate/Contractual Rate pair was used.
+        addOnInterestRate: addOnRateNum > 0 ? addOnRateNum.toFixed(3) : undefined,
+        contractualInterestRate: interestRateNum.toFixed(3),
         installmentCount: installmentCountNum,
         firstRepaymentDate,
+        processingFee,
+        advanceInterestFee,
+        outstandingBalancePayoff,
+        docStampFee,
+        accountManagementFee,
+        otherFees,
+        notarialFee,
+        webFee,
+        insuranceFee,
       }),
     onSuccess: (loan) => {
       navigate(`/loans/${loan.id}`);
@@ -168,7 +258,8 @@ export function LoanAccountCreatePage() {
     !installmentCountOutOfRange &&
     interestRateNum > 0 &&
     !interestRateOutOfRange &&
-    Boolean(firstRepaymentDate);
+    Boolean(firstRepaymentDate) &&
+    netProceeds >= 0;
 
   return (
     <div className="space-y-6">
@@ -314,12 +405,25 @@ export function LoanAccountCreatePage() {
                     </div>
 
                     <div className="space-y-1.5">
+                      <Label htmlFor="add-on-rate">Add-On Rate (% monthly)</Label>
+                      <Input id="add-on-rate" type="number" min="0" step="0.001" value={addOnRate} onChange={(e) => setAddOnRate(e.target.value)} />
+                      <p className="text-xs text-muted-foreground">Looks up the Contractual Rate below from the Interest Rate Chart, by this rate and the term.</p>
+                    </div>
+
+                    <div className="space-y-1.5">
                       <Label htmlFor="rate">Contractual Rate (% monthly)</Label>
                       <Input id="rate" type="number" min="0" step="0.001" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
-                      {(selectedVersion.minInterestRate || selectedVersion.maxInterestRate) && (
-                        <p className={`text-xs ${interestRateOutOfRange ? 'text-destructive' : 'text-muted-foreground'}`}>
-                          Range: {selectedVersion.minInterestRate ?? '0'}%{selectedVersion.maxInterestRate ? `–${selectedVersion.maxInterestRate}%` : '+'}
+                      {addOnRateNum > 0 && installmentCountNum > 0 && !chartMatch ? (
+                        <p className="text-xs text-warning">
+                          No Interest Rate Chart entry for {addOnRateNum}% / {installmentCountNum} months — not on file, please confirm
+                          with MIS and enter it manually.
                         </p>
+                      ) : (
+                        (selectedVersion.minInterestRate || selectedVersion.maxInterestRate) && (
+                          <p className={`text-xs ${interestRateOutOfRange ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            Range: {selectedVersion.minInterestRate ?? '0'}%{selectedVersion.maxInterestRate ? `–${selectedVersion.maxInterestRate}%` : '+'}
+                          </p>
+                        )
                       )}
                     </div>
 
@@ -397,6 +501,103 @@ export function LoanAccountCreatePage() {
             )}
           </CardContent>
         </Card>
+
+        {selectedBorrower && selectedVersion && (
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle>Origination Fees</CardTitle>
+              <CardDescription>
+                One-time deductions taken at disbursement. Account Management Fee, Notarial Fee, and Web Fee are pre-filled from
+                confirmed real-data defaults — every field stays editable.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="processing-fee-percent">Processing Fee (%)</Label>
+                  <Input
+                    id="processing-fee-percent"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={processingFeePercent}
+                    onChange={(e) => setProcessingFeePercent(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">= {formatPeso(Number.parseFloat(processingFee))}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="advance-interest-fee">Advance Interest</Label>
+                  <Input
+                    id="advance-interest-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={advanceInterestFee}
+                    onChange={(e) => setAdvanceInterestFee(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="outstanding-balance">Outstanding Balance (previous loan)</Label>
+                  <Input
+                    id="outstanding-balance"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={outstandingBalancePayoff}
+                    onChange={(e) => setOutstandingBalancePayoff(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Leave at 0 for a brand-new loan — paid off from this loan's proceeds otherwise (renewal).</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="doc-stamp">Doc Stamp</Label>
+                  <Input id="doc-stamp" type="number" min="0" step="0.01" value={docStampFee} onChange={(e) => setDocStampFee(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="account-mgmt-fee">Account Management Fee</Label>
+                  <Input
+                    id="account-mgmt-fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={accountManagementFee}
+                    onChange={(e) => setAccountManagementFee(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Defaults to 1% of principal (confirmed real-data rate).</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="other-fees">Others</Label>
+                  <Input id="other-fees" type="number" min="0" step="0.01" value={otherFees} onChange={(e) => setOtherFees(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="notarial-fee">Notarial Fee</Label>
+                  <Input id="notarial-fee" type="number" min="0" step="0.01" value={notarialFee} onChange={(e) => setNotarialFee(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="web-fee">Web Fee</Label>
+                  <Input id="web-fee" type="number" min="0" step="0.01" value={webFee} onChange={(e) => setWebFee(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="insurance-fee">Insurance Fee</Label>
+                  <Input id="insurance-fee" type="number" min="0" step="0.01" value={insuranceFee} onChange={(e) => setInsuranceFee(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border bg-secondary/40 p-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Fees</p>
+                  <p className="font-semibold">{formatPeso(totalFees)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Net Proceeds (Principal − Total Fees)</p>
+                  <p className={`font-semibold ${netProceeds < 0 ? 'text-destructive' : 'text-success'}`}>{formatPeso(netProceeds)}</p>
+                </div>
+              </div>
+              {netProceeds < 0 && (
+                <p className="text-xs text-destructive">Total fees exceed the principal amount — check the entries above before submitting.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Dialog open={confirmOpen} onOpenChange={(open) => !createMutation.isPending && setConfirmOpen(open)}>
@@ -405,8 +606,9 @@ export function LoanAccountCreatePage() {
             <DialogTitle>Confirm Loan Account Creation</DialogTitle>
             <DialogDescription>
               Create a {selectedProduct?.name} loan account for {selectedBorrower?.fullName} — {formatPeso(principalNum)} over{' '}
-              {installmentCountNum} months at {interestRateNum}% monthly? This creates the account in Pending Approval; it will need to
-              be approved and activated separately.
+              {installmentCountNum} months at {interestRateNum}% monthly, net proceeds {formatPeso(netProceeds)} after{' '}
+              {formatPeso(totalFees)} in fees? This creates the account in Pending Approval; it will need to be approved and activated
+              separately.
             </DialogDescription>
           </DialogHeader>
           {submitError && (

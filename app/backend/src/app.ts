@@ -78,6 +78,9 @@ import { UpdateUserUseCase } from '@modules/identity/application/use-cases/Updat
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
+import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
+import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
+import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
 import { createReportingRouter } from '@modules/reporting/interface/http/reportingRouter';
 import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
@@ -346,6 +349,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', paymentReminderRouter);
+
+  // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
+  const interestRateChartRouter = createInterestRateChartRouter(
+    {
+      listInterestRateChartUseCase: new ListInterestRateChartUseCase({
+        interestRateChartRepository: new PrismaInterestRateChartRepository(),
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', interestRateChartRouter);
 
   // --- reporting module wiring: Loan/Collection/Transaction Report pages ---
   const reportingRepository = new PrismaReportingRepository();

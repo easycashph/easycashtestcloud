@@ -294,6 +294,26 @@ model LoanProduct {
   @@map("loan_products")
 }
 
+/// 2026-07-11 (Create Loan Account, Contractual Rate auto-fill): staff enters an Add-On Rate and
+/// Term; the Contractual Rate actually used to run the declining-balance schedule (§1/§2 of
+/// CALCULATION_ENGINE_SPEC.md) is looked up here rather than typed. Sourced directly from MIS
+/// Nomer's own Excel LMS (`legacy/reports/BETA 1.5.83 LMSv3.xlsm`, sheet `Rate_details`) — real
+/// data, not invented; one confirmed typo (Add-On 1.75%, Term 3: "242" -> 2.42) corrected with the
+/// user's explicit confirmation before seeding. Global (not per-product) — no product column
+/// exists in the source table; revisit if a per-product chart is ever needed.
+model InterestRateChart {
+  id                     String  @id @default(uuid())
+  addOnRatePercent       Decimal @db.Decimal(6, 3)
+  termMonths             Int
+  contractualRatePercent Decimal @db.Decimal(6, 3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([addOnRatePercent, termMonths])
+  @@map("interest_rate_chart")
+}
+
 /// LPV-1: every approved LoanAccount references a specific, immutable
 /// version. Editing a product never affects loans already approved under
 /// a prior version (LPV-3).
@@ -701,6 +721,28 @@ model LoanAccount {
   /// Never set for a loan created going forward through this system's own
   /// ActivateLoanUseCase/ProcessPaymentUseCase, which always populate real balances.
   legacyBalanceDataMissing Boolean @default(false)
+
+  /// 2026-07-11 (Create Loan Account, origination fees): one-time deductions taken at
+  /// disbursement — distinct from feesBalance/feesPaid/feesDue above, which track recurring
+  /// per-installment fees. Staff-entered amounts, not auto-computed from a fixed formula, per
+  /// `docs/Architecture/LEGACY_EXCEL_LMS_REFERENCE.md` — real data (Loans_details, BETA 1.5.83
+  /// LMSv3.xlsm) shows most of these vary too much per loan to derive a reliable per-product
+  /// formula (confirmed: only Account Management Fee at exactly 1% of principal when charged).
+  /// advanceInterestFee's real formula IS confirmed separately (ADR-046) but is still captured
+  /// here as a plain entered amount, not recomputed by this schema.
+  processingFee            Decimal @default(0) @db.Decimal(14, 2)
+  advanceInterestFee       Decimal @default(0) @db.Decimal(14, 2)
+  /// Previous loan's remaining balance, paid off from this loan's proceeds — the renewal case.
+  outstandingBalancePayoff Decimal @default(0) @db.Decimal(14, 2)
+  docStampFee              Decimal @default(0) @db.Decimal(14, 2)
+  accountManagementFee     Decimal @default(0) @db.Decimal(14, 2)
+  otherFees                Decimal @default(0) @db.Decimal(14, 2)
+  notarialFee              Decimal @default(0) @db.Decimal(14, 2)
+  webFee                   Decimal @default(0) @db.Decimal(14, 2)
+  insuranceFee             Decimal @default(0) @db.Decimal(14, 2)
+  /// = principalAmount - (sum of the 9 fee/payoff fields above). Computed once at creation, never
+  /// recomputed later — matches every other origination snapshot field's LA-4 treatment.
+  netProceeds              Decimal @default(0) @db.Decimal(14, 2)
 
   legacyId  String?  @unique
   createdAt DateTime @default(now())
