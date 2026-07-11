@@ -37,9 +37,10 @@ function activeSupportedVersion(product: LoanProduct): LoanProductVersion | unde
  * dropdown only, purely to declutter it (user request) — deliberately NOT deleted or deactivated
  * at the data layer (no `LoanProductVersion.isActive` change, no DB write), so this is trivially
  * reversible by removing an entry here, and every other page (Loan Products, reports, etc.) still
- * sees these products exactly as before. `CM-Car` additionally has a corrupted `name` field
- * ("addOnRates:[1.75...", clearly leaked seed data, not a real product name) — flagged here, not
- * fixed, since correcting the name is a data question for the user, not a hide-from-dropdown one.
+ * sees these products exactly as before. `CM-Car`'s `name` was separately fixed at the data layer
+ * (2026-07-11) — the legacy source record had it corrupted to the literal string
+ * "addOnRates:[1.75"; see `scripts/migrate-legacy-data.ts`'s `KNOWN_CORRUPTED_PRODUCT_NAMES` for
+ * the full story and the recovered real name ("Chattel Mortgage - Car").
  */
 const HIDDEN_PRODUCT_CODES = new Set([
   'SL-Snap-A',
