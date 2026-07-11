@@ -430,10 +430,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       </div>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real loan account, migrated from legacy data (CP12) — balances and repayment schedule below
-        are live. Notes, attachments, AI risk assessment, and approve/activate actions are not yet
+        Real loan account, migrated from legacy data (CP12) — balances, repayment schedule, and risk
+        assessment below are live. Notes, attachments, and approve/activate actions are not yet
         wired to real data for this screen.
       </div>
+
+      <AiRiskAssessmentCard loanId={loan.id} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
