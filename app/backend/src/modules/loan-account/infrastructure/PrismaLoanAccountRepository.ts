@@ -237,4 +237,19 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     }
     await prisma.$transaction((tx) => writeGraph(tx, loanAccount));
   }
+
+  async findMaxLoanCodeSequenceForPrefix(prefix: string, ctx?: TransactionContext): Promise<number> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanAccount.findMany({
+      where: { loanCode: { startsWith: `${prefix}_` } },
+      select: { loanCode: true },
+    });
+    let max = 0;
+    for (const row of rows) {
+      const suffix = row.loanCode.slice(prefix.length + 1);
+      const n = Number.parseInt(suffix, 10);
+      if (Number.isInteger(n) && n > max) max = n;
+    }
+    return max;
+  }
 }

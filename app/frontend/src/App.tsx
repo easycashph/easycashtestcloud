@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoanListPage } from '@/pages/LoanListPage';
+import { LoanAccountCreatePage } from '@/pages/LoanAccountCreatePage';
 import { LoanDetailPage } from '@/pages/LoanDetailPage';
 import { LoanApplicationsPage } from '@/pages/LoanApplicationsPage';
 import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
@@ -28,15 +29,15 @@ import { AboutPage } from '@/pages/AboutPage';
  * Wiring status per route (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for
  * detail; last verified 2026-07-11 — this list drifted stale before, double-check against the
  * actual page before trusting it blindly):
- * - Real: auth, LoanListPage, LoanApplications* (list/create/detail), ClientListPage,
- *   ClientProfilePage, LoanProductsPage (read-only by design), PaymentRecordingPage,
- *   MemberListPage, ActivityLogPage, PaymentRemindersPage, LoanReportPage, CollectionReportPage,
- *   TransactionReportPage.
+ * - Real: auth, LoanListPage, LoanAccountCreatePage, LoanApplications* (list/create/detail),
+ *   ClientListPage, ClientProfilePage, LoanProductsPage (read-only by design),
+ *   PaymentRecordingPage, MemberListPage, ActivityLogPage, PaymentRemindersPage, LoanReportPage,
+ *   CollectionReportPage, TransactionReportPage.
  * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
  *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
  *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
- *   AI risk assessment, approve/activate actions, and timeline are still mock — payment history
- *   is real as of 2026-07-11).
+ *   AI risk assessment, and timeline are still mock — payment history, approve/activate, and
+ *   Record Payment are real as of 2026-07-11).
  * - Mock only: SettingsPage, AboutPage.
  */
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="loans" element={<LoanListPage />} />
+        <Route path="loans/new" element={<LoanAccountCreatePage />} />
         <Route path="loans/:loanId" element={<LoanDetailPage />} />
         <Route path="applications" element={<LoanApplicationsPage />} />
         <Route path="applications/new" element={<LoanApplicationCreatePage />} />

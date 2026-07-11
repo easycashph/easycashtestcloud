@@ -1,5 +1,6 @@
 export interface CreateLoanAccountInput {
-  loanCode: string;
+  /** 2026-07-11: optional — omit to auto-generate `{product.code}_{NNNNN}` (see CreateLoanAccountUseCase). */
+  loanCode?: string;
   borrowerId: string;
   loanProductVersionId: string;
   branchId: string;

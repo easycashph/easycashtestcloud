@@ -17,6 +17,14 @@ export interface ILoanAccountRepository {
   findByLoanCode(loanCode: string, ctx?: TransactionContext): Promise<LoanAccount | null>;
   findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]>;
   /**
+   * 2026-07-11 (Create Loan Account): the highest numeric suffix among existing loan codes of the
+   * form `{prefix}_NNNNN` (matches the real convention observed across migrated legacy data, e.g.
+   * `SML-REG_00377`) — 0 if none exist yet. Used to auto-generate the next code; not atomic against
+   * concurrent creates for the same prefix (acceptable for a low-frequency, staff-driven action,
+   * not a high-throughput one).
+   */
+  findMaxLoanCodeSequenceForPrefix(prefix: string, ctx?: TransactionContext): Promise<number>;
+  /**
    * Milestone 9.1 checkpoint 6 / `docs/Architecture/ADR-optimistic-
    * concurrency.md`: for an existing aggregate, throws
    * `ConcurrencyConflictError` if `loanAccount.version` no longer matches

@@ -245,4 +245,37 @@ describe('PrismaLoanAccountRepository', () => {
       expect(callArgs.skip).toBeUndefined();
     });
   });
+
+  describe('findMaxLoanCodeSequenceForPrefix (2026-07-11)', () => {
+    it('returns 0 when no loan code matches the prefix', async () => {
+      loanAccountOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(0);
+      expect(loanAccountOps.findMany).toHaveBeenCalledWith({
+        where: { loanCode: { startsWith: 'SML-REG_' } },
+        select: { loanCode: true },
+      });
+    });
+
+    it('returns the highest numeric suffix among matching loan codes', async () => {
+      loanAccountOps.findMany.mockResolvedValue([{ loanCode: 'SML-REG_00012' }, { loanCode: 'SML-REG_00059' }, { loanCode: 'SML-REG_00003' }]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(59);
+    });
+
+    it('ignores a non-numeric or malformed suffix rather than throwing', async () => {
+      loanAccountOps.findMany.mockResolvedValue([{ loanCode: 'SML-REG_OLD' }, { loanCode: 'SML-REG_00010' }]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(10);
+    });
+  });
 });

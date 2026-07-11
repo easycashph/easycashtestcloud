@@ -59,8 +59,10 @@ export class CreateLoanAccountUseCase {
       );
     }
 
+    const loanCode = input.loanCode ?? (await this.generateLoanCode(version.loanProductId));
+
     const loanAccount = LoanAccount.create({
-      loanCode: input.loanCode,
+      loanCode,
       borrowerId: input.borrowerId,
       loanProductVersionId: input.loanProductVersionId,
       branchId: input.branchId,
@@ -77,5 +79,21 @@ export class CreateLoanAccountUseCase {
 
     await this.deps.loanAccountRepository.save(loanAccount);
     return loanAccount;
+  }
+
+  /**
+   * 2026-07-11 (Create Loan Account): `{productCode}_{NNNNN}` (5-digit, zero-padded) — matches the
+   * real convention observed across every migrated legacy loan code (e.g. `SML-REG_00377`,
+   * `BL-REG_00059`), confirmed directly against the database, not assumed. Not atomic against a
+   * concurrent create for the same product — acceptable for this low-frequency, staff-driven
+   * action (see `findMaxLoanCodeSequenceForPrefix`'s own doc comment).
+   */
+  private async generateLoanCode(loanProductId: string): Promise<string> {
+    const product = await this.deps.loanProductRepository.findById(loanProductId);
+    if (!product) {
+      throw new NotFoundError('LoanProduct', loanProductId);
+    }
+    const nextSequence = (await this.deps.loanAccountRepository.findMaxLoanCodeSequenceForPrefix(product.code)) + 1;
+    return `${product.code}_${String(nextSequence).padStart(5, '0')}`;
   }
 }

@@ -20,7 +20,12 @@ function buildVersion(overrides: Partial<{ loanAmountMin: string; loanAmountMax?
 }
 
 function buildRepos(version: LoanProductVersion | null) {
-  const loanAccountRepository: ILoanAccountRepository = { findById: vi.fn(), findByLoanCode: vi.fn(), save: vi.fn() };
+  const loanAccountRepository = {
+    findById: vi.fn(),
+    findByLoanCode: vi.fn(),
+    save: vi.fn(),
+    findMaxLoanCodeSequenceForPrefix: vi.fn().mockResolvedValue(0),
+  } as unknown as ILoanAccountRepository;
   const loanProductRepository = {
     findById: vi.fn(),
     findByCode: vi.fn(),
@@ -185,6 +190,69 @@ describe('CreateLoanAccountUseCase', () => {
           firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(InstallmentCountOutOfRangeError);
+    });
+  });
+
+  describe('2026-07-11: auto-generated loanCode when omitted', () => {
+    it('generates {product.code}_00001 when no loan account exists yet for that product', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      (loanProductRepository.findById as ReturnType<typeof vi.fn>).mockResolvedValue({ code: 'SML-REG' });
+      (loanAccountRepository.findMaxLoanCodeSequenceForPrefix as ReturnType<typeof vi.fn>).mockResolvedValue(0);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('SML-REG_00001');
+      expect(loanAccountRepository.findMaxLoanCodeSequenceForPrefix).toHaveBeenCalledWith('SML-REG');
+    });
+
+    it('increments past the highest existing sequence for that product prefix', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      (loanProductRepository.findById as ReturnType<typeof vi.fn>).mockResolvedValue({ code: 'BL-REG' });
+      (loanAccountRepository.findMaxLoanCodeSequenceForPrefix as ReturnType<typeof vi.fn>).mockResolvedValue(59);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('BL-REG_00060');
+    });
+
+    it('respects an explicitly-supplied loanCode instead of generating one', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        loanCode: 'CUSTOM-CODE-1',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('CUSTOM-CODE-1');
+      expect(loanProductRepository.findById).not.toHaveBeenCalled();
     });
   });
 });

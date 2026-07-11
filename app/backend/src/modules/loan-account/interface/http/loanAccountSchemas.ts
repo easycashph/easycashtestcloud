@@ -10,7 +10,8 @@ import { decimalStringSchema } from '@shared/http/decimalValidation';
  * decimal.js parse error.
  */
 export const createLoanAccountSchema = z.object({
-  loanCode: z.string().min(1),
+  /** 2026-07-11: optional — omit to auto-generate `{product.code}_{NNNNN}` (see CreateLoanAccountUseCase). */
+  loanCode: z.string().min(1).optional(),
   borrowerId: z.string().min(1),
   loanProductVersionId: z.string().min(1),
   branchId: z.string().min(1),

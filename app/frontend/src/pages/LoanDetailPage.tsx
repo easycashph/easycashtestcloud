@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -359,13 +359,17 @@ function RemindersPanel({ loanId }: { loanId: string }) {
  * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12. `getMockLoan()` only ever knows
  * about hand-authored mock loans — a loan from `LoanListPage`'s now-real list (a UUID, migrated
  * from legacy data) doesn't exist there and would otherwise hit this page's "not found" state.
- * This is a deliberately minimal real-data view (balances, borrower, repayment schedule) rather
- * than a full rewiring of every tab on this 700+-line page (notes, attachments, AI risk
- * assessment, reminders, approve/activate actions) — those stay mock-only for now; see
+ * This is a deliberately minimal real-data view (balances, borrower, repayment schedule, payment
+ * history, approve/activate/record-payment actions — wired 2026-07-11) rather than a full
+ * rewiring of every tab on this 700+-line page (notes, attachments, AI risk assessment,
+ * reminders) — those stay mock-only for now; see
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | null>(null);
+  const [actionError, setActionError] = React.useState<string | null>(null);
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -390,6 +394,50 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => fetchAllPages<LoanTransaction>(`/loan-accounts/${loanId}/transactions`),
   });
 
+  const onActionSuccess = () => {
+    setConfirmAction(null);
+    setActionError(null);
+    void queryClient.invalidateQueries({ queryKey: ['loan-account', loanId] });
+    void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
+    void queryClient.invalidateQueries({ queryKey: ['loan-transactions', loanId] });
+    void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
+  };
+  const onActionError = (error: unknown) => {
+    if (error instanceof ApiError) {
+      if (error.status === 409) {
+        setActionError('This loan was just updated by another action. Refresh and try again.');
+      } else if (error.status === 403) {
+        setActionError("You don't have permission to do this.");
+      } else {
+        setActionError(error.message);
+      }
+    } else {
+      setActionError('Could not reach the server. Check your connection and try again.');
+    }
+  };
+
+  const approveMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/approve`, {}),
+    onSuccess: onActionSuccess,
+    onError: onActionError,
+  });
+  const activateMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/activate`, {}, { 'Idempotency-Key': crypto.randomUUID() }),
+    onSuccess: onActionSuccess,
+    onError: onActionError,
+  });
+  const actionPending = approveMutation.isPending || activateMutation.isPending;
+
+  const openConfirm = (action: 'APPROVE' | 'ACTIVATE') => {
+    setActionError(null);
+    setConfirmAction(action);
+  };
+  const confirmLoanStatusChange = () => {
+    if (confirmAction === 'APPROVE') approveMutation.mutate();
+    else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
+  };
+
   if (loanQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading loan account…</p>;
   }
@@ -411,6 +459,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const paymentHistory = (transactionsQuery.data ?? [])
     .filter((t) => t.type === 'REPAYMENT')
     .sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime());
+  const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
 
   return (
     <div className="space-y-6">
@@ -425,8 +474,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
           </p>
         </div>
-        <LoanStatusBadge status={loan.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <LoanStatusBadge status={loan.status} />
+          {canRecordPayment && <Button onClick={() => navigate(`/payments?loanId=${loan.id}`)}>Record Payment</Button>}
+          {loan.status === 'PENDING_APPROVAL' && <Button onClick={() => openConfirm('APPROVE')}>Approve Loan</Button>}
+          {loan.status === 'APPROVED' && <Button onClick={() => openConfirm('ACTIVATE')}>Activate Loan</Button>}
+        </div>
       </div>
+
+      {actionError && !confirmAction && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
         Real loan account, migrated from legacy data (CP12) — balances and repayment schedule below
@@ -576,6 +637,35 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && !actionPending && setConfirmAction(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" /> Confirm {confirmAction === 'APPROVE' ? 'approval' : 'disbursement'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmAction === 'APPROVE'
+                ? `This will approve ${loan.loanCode} — the account moves from Pending Approval to Approved, ready to be activated/disbursed. This is a safety-net confirmation to prevent an accidental click.`
+                : `This will activate ${loan.loanCode} — disbursing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
+            </DialogDescription>
+          </DialogHeader>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmAction(null)} disabled={actionPending}>
+              Cancel
+            </Button>
+            <Button onClick={confirmLoanStatusChange} disabled={actionPending}>
+              {actionPending ? 'Processing…' : 'Yes, confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
