@@ -206,6 +206,8 @@ export class ProcessPaymentUseCase {
     postedByUserId: string,
     paidAt: Date = new Date(),
     manualAllocations?: readonly ManualAllocationInput[],
+    orNumber?: string,
+    arNumber?: string,
   ): Promise<ProcessPaymentResult> {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) {
@@ -279,6 +281,8 @@ export class ProcessPaymentUseCase {
       postedByUserId,
       branchId: loanAccount.branchId,
       entryDate: paidAt,
+      orNumber,
+      arNumber,
     });
 
     await this.deps.unitOfWork.run(async (ctx) => {

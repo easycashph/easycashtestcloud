@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createLoanAccountSchema, rejectLoanSchema } from '@modules/loan-account/interface/http/loanAccountSchemas';
+import { createLoanAccountSchema, processPaymentSchema, rejectLoanSchema } from '@modules/loan-account/interface/http/loanAccountSchemas';
 
 describe('createLoanAccountSchema', () => {
   const base = {
@@ -73,5 +73,27 @@ describe('rejectLoanSchema', () => {
 
   it('accepts a reason string', () => {
     expect(rejectLoanSchema.safeParse({ reason: 'Insufficient documents' }).success).toBe(true);
+  });
+});
+
+describe('processPaymentSchema', () => {
+  it('rejects a body missing orNumber (2026-07-11: every payment must have a receipt number)', () => {
+    const result = processPaymentSchema.safeParse({ paymentAmount: '500.00' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty-string orNumber', () => {
+    const result = processPaymentSchema.safeParse({ paymentAmount: '500.00', orNumber: '' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts orNumber alone, arNumber omitted (not every channel issues an AR)', () => {
+    const result = processPaymentSchema.safeParse({ paymentAmount: '500.00', orNumber: 'OR-1001' });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts both orNumber and arNumber', () => {
+    const result = processPaymentSchema.safeParse({ paymentAmount: '500.00', orNumber: 'OR-1001', arNumber: 'AR-2002' });
+    expect(result.success).toBe(true);
   });
 });

@@ -156,6 +156,8 @@ export class LoanAccountController {
           currentUser.sub,
           body.paidAt,
           manualAllocations,
+          body.orNumber,
+          body.arNumber,
         );
         return {
           statusCode: 200,

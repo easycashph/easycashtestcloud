@@ -54,6 +54,14 @@ export const processPaymentSchema = z.object({
    * `ProcessPaymentUseCase.toManualAllocations` for validation rules.
    */
   allocations: z.array(manualAllocationSchema).optional(),
+  /**
+   * 2026-07-11 (user request): Official Receipt number, matching the
+   * SDevTech system's own OR#/AR# fields — required on every payment, a
+   * real business receipt is always issued.
+   */
+  orNumber: z.string().min(1),
+  /** Acknowledgment Receipt number — optional; not every payment channel issues one. */
+  arNumber: z.string().min(1).optional(),
 });
 
 export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;

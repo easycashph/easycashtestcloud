@@ -749,6 +749,19 @@ model LoanTransaction {
   entryDate      DateTime
   comment        String?
 
+  /// Official Receipt number — required on every REPAYMENT posted through
+  /// Payment Recording (2026-07-11 user request), matching the SDevTech
+  /// system's own OR#/AR# fields (also independently found in MIS Nomer's
+  /// own Excel LMS's Payment_History sheet — see
+  /// docs/Architecture/LEGACY_EXCEL_LMS_REFERENCE.md §3.1). Nullable at the
+  /// schema level because non-REPAYMENT transaction types (DISBURSEMENT,
+  /// ADJUSTMENT, etc.) have no receipt to record — requiredness for
+  /// REPAYMENT specifically is enforced by processPaymentSchema, not here.
+  orNumber String?
+  /// Acknowledgment Receipt number — optional; not every payment channel
+  /// issues one.
+  arNumber String?
+
   /// Present on a transaction that IS a reversal — points to the original
   /// transaction it corrects (TXN-1).
   reversesTransactionId String?          @unique

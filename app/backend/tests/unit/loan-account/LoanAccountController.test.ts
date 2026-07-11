@@ -309,7 +309,7 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const controller = new LoanAccountController(deps);
       const req = {
         params: { id: loan.id },
-        body: { paymentAmount: '500.00' },
+        body: { paymentAmount: '500.00', orNumber: 'OR-1001' },
         authUser: authUser(['Collection Officer'], 'branch-1'),
         header: vi.fn().mockReturnValue(undefined),
       } as unknown as Request;
@@ -322,6 +322,8 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
         expect.objectContaining({}),
         'authenticated-user-1',
         undefined,
+        undefined,
+        'OR-1001',
         undefined,
       );
       const body = res.json.mock.calls[0]?.[0];

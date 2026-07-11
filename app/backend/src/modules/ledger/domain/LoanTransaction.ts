@@ -26,6 +26,8 @@ export interface LoanTransactionProps {
   branchId: string;
   entryDate: Date;
   comment?: string;
+  orNumber?: string;
+  arNumber?: string;
   reversesTransactionId?: string;
   legacyId?: string;
   createdAt: Date;
@@ -46,6 +48,8 @@ export interface CreateLoanTransactionProps {
   branchId: string;
   entryDate: Date;
   comment?: string;
+  orNumber?: string;
+  arNumber?: string;
   reversesTransactionId?: string;
   legacyId?: string;
 }
@@ -83,6 +87,8 @@ export class LoanTransaction {
       branchId: input.branchId,
       entryDate: input.entryDate,
       comment: input.comment,
+      orNumber: input.orNumber,
+      arNumber: input.arNumber,
       reversesTransactionId: input.reversesTransactionId,
       legacyId: input.legacyId,
       createdAt: new Date(),
@@ -131,6 +137,14 @@ export class LoanTransaction {
 
   get comment(): string | undefined {
     return this.props.comment;
+  }
+
+  get orNumber(): string | undefined {
+    return this.props.orNumber;
+  }
+
+  get arNumber(): string | undefined {
+    return this.props.arNumber;
   }
 
   get reversesTransactionId(): string | undefined {

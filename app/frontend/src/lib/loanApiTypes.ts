@@ -209,6 +209,8 @@ export interface LoanTransaction {
   balanceAfter: string;
   entryDate: string;
   comment: string | null;
+  orNumber: string | null;
+  arNumber: string | null;
 }
 
 export interface PaginatedResponse<T> {

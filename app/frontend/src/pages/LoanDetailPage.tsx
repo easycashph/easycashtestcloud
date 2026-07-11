@@ -547,6 +547,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               <TableHeader>
                 <TableRow>
                   <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">OR#</TableCell>
+                  <TableCell className="font-medium text-muted-foreground">AR#</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
                   <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
@@ -559,6 +561,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {paymentHistory.map((t) => (
                   <TableRow key={t.id}>
                     <TableCell>{formatDate(t.entryDate)}</TableCell>
+                    <TableCell className="font-mono text-xs">{t.orNumber ?? '—'}</TableCell>
+                    <TableCell className="font-mono text-xs">{t.arNumber ?? '—'}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(t.principalComponent))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(t.interestComponent))}</TableCell>
                     <TableCell className="text-right">{formatPeso(num(t.penaltyComponent))}</TableCell>
@@ -891,8 +895,8 @@ export function LoanDetailPage() {
                   </Table>
                 )}
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Discontinued channels (e.g. DragonPay, ECPay) may still appear here as historical reference even though they are no
-                  longer offered for new payments.
+                  Discontinued channels (e.g. ECPay, Bayad Center) may still appear here as historical reference even though they are
+                  no longer offered for new payments.
                 </p>
               </TabsContent>
 

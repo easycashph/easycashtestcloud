@@ -172,6 +172,11 @@ export function PaymentRecordingPage() {
   // the field) after the fact, and the backend's ProcessPaymentUseCase already accepts an explicit
   // paidAt; this UI simply exposes it instead of silently always using "now".
   const [paidAt, setPaidAt] = React.useState(todayDateString());
+  // OR#/AR# (2026-07-11 user request): matches the SDevTech system's own receipt-number fields.
+  // OR# is required — a real payment always has an Official Receipt; AR# is optional since not
+  // every payment channel issues an Acknowledgment Receipt.
+  const [orNumber, setOrNumber] = React.useState('');
+  const [arNumber, setArNumber] = React.useState('');
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
   const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -211,9 +216,12 @@ export function PaymentRecordingPage() {
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   // Clears the previous loan's amount immediately on switch, so it never briefly shows a stale
-  // figure while the new loan's schedule is still loading.
+  // figure while the new loan's schedule is still loading. Also clears OR#/AR# — a receipt number
+  // is specific to one payment, never reused across a different loan selection.
   React.useEffect(() => {
     setAmount('');
+    setOrNumber('');
+    setArNumber('');
   }, [loanId]);
   // Auto-fills once the oldest unpaid installment's real total due is known — the amount staff
   // will most commonly want to collect. Only fires while amount is still blank (the effect above
@@ -267,11 +275,11 @@ export function PaymentRecordingPage() {
   const paymentMutation = useMutation({
     mutationFn: async () => {
       if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
+      const base = { paymentAmount: amount, paidAt, orNumber, arNumber: arNumber || undefined };
       const body =
         allocationMode === 'MANUAL'
           ? {
-              paymentAmount: amount,
-              paidAt,
+              ...base,
               allocations: Object.entries(manualEntries).map(([installmentId, e]) => ({
                 installmentId,
                 principal: (Number.parseFloat(e.principal) || 0).toFixed(2),
@@ -280,7 +288,7 @@ export function PaymentRecordingPage() {
                 fees: (Number.parseFloat(e.fees) || 0).toFixed(2),
               })),
             }
-          : { paymentAmount: amount, paidAt };
+          : base;
       return apiClient.post<ProcessPaymentResponse>(`/loan-accounts/${loanId}/payments`, body, {
         'Idempotency-Key': idempotencyKeyRef.current,
       });
@@ -289,6 +297,8 @@ export function PaymentRecordingPage() {
       idempotencyKeyRef.current = null;
       setConfirmOpen(false);
       setSubmitError(null);
+      setOrNumber('');
+      setArNumber('');
       void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
       void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
     },
@@ -450,6 +460,17 @@ export function PaymentRecordingPage() {
                   <p className="text-xs text-muted-foreground">When the payment was actually received — defaults to today, editable for a late-entered payment.</p>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="or-number">OR# *</Label>
+                    <Input id="or-number" placeholder="Official Receipt #" value={orNumber} onChange={(e) => setOrNumber(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ar-number">AR#</Label>
+                    <Input id="ar-number" placeholder="Acknowledgment Receipt #" value={arNumber} onChange={(e) => setArNumber(e.target.value)} />
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
                   <Label>Allocation</Label>
                   <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
@@ -580,7 +601,7 @@ export function PaymentRecordingPage() {
 
                 <Button
                   className="w-full"
-                  disabled={!loanId || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
+                  disabled={!loanId || paymentAmount <= 0 || orNumber.trim().length === 0 || (allocationMode === 'MANUAL' && manualMismatch)}
                   onClick={openConfirm}
                 >
                   Submit Payment
@@ -690,7 +711,8 @@ export function PaymentRecordingPage() {
             <DialogTitle>Confirm Payment</DialogTitle>
             <DialogDescription>
               Post {formatPeso(paymentAmount)} against {selectedLoan && selectedBorrower ? `${selectedBorrower.fullName} — ${selectedLoan.loanCode}` : 'this loan'},
-              dated {formatDate(paidAt)}? This cannot be undone from this screen.
+              dated {formatDate(paidAt)}, OR# {orNumber}
+              {arNumber ? `, AR# ${arNumber}` : ''}? This cannot be undone from this screen.
             </DialogDescription>
           </DialogHeader>
           {submitError && (
