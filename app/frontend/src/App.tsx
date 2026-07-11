@@ -33,7 +33,8 @@ import { AboutPage } from '@/pages/AboutPage';
  * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
  *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
  *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
- *   AI risk assessment, approve/activate actions, payment history, and timeline are still mock).
+ *   approve/activate actions, and timeline are still mock — risk assessment and payment history
+ *   are real).
  * - Mock only: PaymentRemindersPage, all *ReportPage routes, SettingsPage, AboutPage.
  */
 export default function App() {

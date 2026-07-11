@@ -90,7 +90,7 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
  * `LoanRiskAssessmentService`, from real repayment data — days past due, late-payment count) — no
  * external AI/ML model call. Replaced the earlier mock (`getMockRiskAssessment`) 2026-07-11.
  */
-function AiRiskAssessmentCard({ loanId }: { loanId: string }) {
+function RiskAssessmentCard({ loanId }: { loanId: string }) {
   const query = useQuery({
     queryKey: ['loan-risk-assessment', loanId],
     queryFn: () => apiClient.get<LoanRiskAssessment>(`/loan-accounts/${loanId}/risk-assessment`),
@@ -397,9 +397,9 @@ function RemindersPanel({ loanId }: { loanId: string }) {
  * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12. `getMockLoan()` only ever knows
  * about hand-authored mock loans — a loan from `LoanListPage`'s now-real list (a UUID, migrated
  * from legacy data) doesn't exist there and would otherwise hit this page's "not found" state.
- * This is a deliberately minimal real-data view (balances, borrower, repayment schedule) rather
- * than a full rewiring of every tab on this 700+-line page (notes, attachments, AI risk
- * assessment, reminders, approve/activate actions) — those stay mock-only for now; see
+ * This is a deliberately minimal real-data view (balances, borrower, repayment schedule, risk
+ * assessment, payment history) rather than a full rewiring of every tab on this 700+-line page
+ * (notes, attachments, reminders, approve/activate actions) — those stay mock-only for now; see
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
 /** Same "was this ever late" logic as the backend's `LoanRiskAssessmentService` — `status` alone
@@ -477,7 +477,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <LoanStatusBadge status={loan.status} />
       </div>
 
-      <AiRiskAssessmentCard loanId={loan.id} />
+      <RiskAssessmentCard loanId={loan.id} />
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
@@ -676,7 +676,7 @@ export function LoanDetailPage() {
         </div>
       </div>
 
-      <AiRiskAssessmentCard loanId={loan.id} />
+      <RiskAssessmentCard loanId={loan.id} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">

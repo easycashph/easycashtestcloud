@@ -17,7 +17,7 @@ import {
 
 const HELPS_YOU = [
   'Originate and service loans with configurable products, interest, fees, and penalties',
-  'Review online loan applications with an AI-assisted risk summary',
+  'Review online loan applications with a system-computed risk summary and decision scoring',
   'Record payments and run automated collection reminders',
   'Track portfolio health — good, in-arrears, and matured accounts',
   'Read income and credit-loss figures, delinquency rate, and portfolio at risk at a glance',

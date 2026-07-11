@@ -82,7 +82,7 @@ export interface CreateLoanApplicationRequest {
   submittedDocuments?: string[];
 }
 
-/** Body for `PATCH /loan-applications/:id` — the Detail page's AI Risk Management Summary card.
+/** Body for `PATCH /loan-applications/:id` — the Detail page's Risk Management Summary card.
  * Send only what changed; omitted fields are left untouched server-side. */
 export interface UpdateLoanApplicationRequest {
   monthlyIncome?: number;

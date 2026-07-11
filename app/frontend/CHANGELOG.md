@@ -17,18 +17,19 @@ data*, not the whole app anymore.
   age 18–55, monthly income above a flat-rate amortization estimate (3.0%/month, the dominant rate
   across SL/SML/BL-Regular per the real ledger), and home address within 50km of the branch
   (OpenStreetMap Nominatim geocoding — free/open-source, fails open if unresolved).
-- New `PATCH /loan-applications/:id` (AI Risk Management Summary on the Detail page) — moved
+- New `PATCH /loan-applications/:id` (Risk Management Summary on the Detail page) — moved
   monthly income/credit score/properties-owned off the intake form, since a fresh application no
   longer has income at creation time and needs re-classifying once the officer records it.
 - `LoanApplicationsPage`'s "Review" column and mark-reviewed bulk action are removed entirely — no
   longer meaningful once every application is system-classified.
 
 ### Real, rule-based Risk Assessment (Loan Account + Client Profile)
-- Replaces the mock "AI Risk Assessment" card on the Loan Account detail page with a real
-  computation (`LoanRiskAssessmentService`) — deterministic rules over the loan's own repayment
-  history: days past due and late-installment count (inferred by comparing `lastPaidAt` to
-  `dueDate`, since `RepaymentInstallment.status` is a live-derived getter that loses the "was late"
-  signal once an installment is paid).
+- Replaces the mock "AI Risk Assessment" card on the Loan Account detail page — renamed "Risk
+  Assessment", since it's the LMS's own computation, not an AI model — with a real one
+  (`LoanRiskAssessmentService`): deterministic rules over the loan's own repayment history, days
+  past due and late-installment count (inferred by comparing `lastPaidAt` to `dueDate`, since
+  `RepaymentInstallment.status` is a live-derived getter that loses the "was late" signal once an
+  installment is paid).
 - New "Risk & Payment Summary" card on the Client Profile page (`BorrowerRiskSummaryService`),
   combining the worst risk among a borrower's active loans with their lifetime on-time-payment
   track record across every loan they've ever had.
@@ -67,6 +68,38 @@ data*, not the whole app anymore.
   from cache and crashed with `(productsQuery.data ?? []).flatMap is not a function`. This was the
   actual cause of an intermittent "Something went wrong loading this page" report this session, not
   a session/auth issue as it first appeared. Gave the three Map queries their own distinct keys.
+
+### Decision scoring breakdown for Loan Applications
+- The Risk Management Summary card now shows a "Decision scoring" breakdown — age, income vs. loan
+  amount, and address proximity to branch, each as its own pass/fail row with the actual numbers
+  behind it, not just the final PREAPPROVED/PREDECLINED badge. `LoanApplicationPreQualificationService`
+  gains `evaluateCriteria()`, a pure/no-I/O method that re-derives the same breakdown from
+  already-known fields (reusing the cached `distanceFromBranchKm` rather than re-geocoding), called
+  on every read/mutation so it never goes stale relative to the status badge.
+- Fixed the card's description, left over from before this feature existed ("Feeds a future AI
+  risk-assessment feature (not yet built)").
+
+### Terminology cleanup: "LMS", not "AI", for the platform's own computations
+- Renamed every UI label/description that called the platform's own deterministic, rule-based
+  computations "AI" — "AI Risk Management Summary" → "Risk Management Summary", "AI Risk
+  Assessment" → "Risk Assessment" (Loan Account detail's card and function name), the About page's
+  "AI-assisted risk summary" copy → "system-computed risk summary and decision scoring". These are
+  the LMS computing its own results from real data (age/income/address, repayment history) — not an
+  external AI model, and the wording now says so plainly rather than implying otherwise.
+- The genuine AI feature (a local Ollama vision model reading uploaded documents to suggest
+  Loan Application form values — "AI Auto-fill") is unaffected and keeps its name, since it
+  actually is AI.
+- Also refreshed two stale doc comments (`App.tsx`'s routing overview, `LoanDetailPage.tsx`'s
+  `RealLoanDetailView` doc comment) that still said risk assessment/payment history were mock-only
+  — both have been real since earlier today.
+
+### Backfilled the missing July 9 entry in the About page's changelog
+- The in-app About page changelog (`lmsVersion.ts`'s `LMS_CHANGELOG`, distinct from this file —
+  see this file's own header note) had a gap: `0.9.3` was dated July 8 and the next entry jumped
+  straight to July 10, with nothing for July 9 even though that was a full migration + wiring day
+  (see the four "2026-07-09" entries below). Inserted the missing entry and renumbered everything
+  after it forward by one (`0.9.4`→`0.9.5`, `0.9.5`→`0.9.6`) — this changelog file's own July 9
+  entries were already complete and needed no changes.
 
 ## 2026-07-09 (4)
 

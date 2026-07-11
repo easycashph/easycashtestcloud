@@ -275,7 +275,7 @@ function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label:
  * server-side (see `UpdateLoanApplicationUseCase`), so this card's breakdown always matches the
  * status badge shown at the top of the page.
  */
-function AiRiskManagementSummaryCard({
+function RiskManagementSummaryCard({
   application,
   canEdit,
 }: {
@@ -314,11 +314,11 @@ function AiRiskManagementSummaryCard({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> AI Risk Management Summary
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Risk Management Summary
         </CardTitle>
         <CardDescription>
-          Computed by the LMS itself from age, income, and address — a deterministic rule-based calculation, not an external AI
-          model. Advisory only; the officer's Approve/Decline decision below is what actually counts.
+          Computed by the LMS itself from age, income, and address — a deterministic rule-based calculation. Advisory only; the
+          officer's Approve/Decline decision below is what actually counts.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -843,7 +843,7 @@ export function LoanApplicationDetailPage() {
         </Card>
       </div>
 
-      <AiRiskManagementSummaryCard application={application} canEdit={canAccessLoanApplications} />
+      <RiskManagementSummaryCard application={application} canEdit={canAccessLoanApplications} />
 
       <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
 

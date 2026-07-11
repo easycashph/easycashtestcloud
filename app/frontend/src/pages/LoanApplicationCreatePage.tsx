@@ -872,7 +872,7 @@ export function LoanApplicationCreatePage() {
           <p className="text-xs text-muted-foreground">
             Preview build: only the fields the LMS models today (name, age, address, mobile no., email, employment, co-borrower,
             requested loan, documents) are saved onto the sample application record. Monthly income, credit score, and properties
-            owned are now recorded after creation, on the application's AI Risk Management Summary. Dependants, spouse details,
+            owned are now recorded after creation, on the application's Risk Management Summary. Dependants, spouse details,
             TIN/SSS, and character references are captured on the paper form itself and are not yet stored by this preview. The
             applicant signs the Undertaking on the printed form — no signature is captured here.
           </p>

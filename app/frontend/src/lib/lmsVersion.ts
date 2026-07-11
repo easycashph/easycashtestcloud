@@ -59,12 +59,13 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.5',
+    version: '0.9.6',
     date: 'July 11, 2026',
     highlights: [
       'Loan applications are now automatically pre-classified Pre-approved or Pre-declined by the system itself — based on the applicant\'s age, whether income covers the loan\'s estimated payment, and how far their home address is from the branch — replacing the old "Pending Review" step. The loan officer still makes the real, final Approved/Declined decision; the system\'s classification is advisory only.',
-      'Loan Applications and Client Profiles now show a real Risk & Payment Summary — how many days a loan is overdue, how many payments were ever late, and an overall risk level — computed by the LMS itself from real repayment history, not an outside AI service.',
+      'Loan Applications and Client Profiles now show a real Risk & Payment Summary — how many days a loan is overdue, how many payments were ever late, and an overall risk level — computed by the LMS itself from real repayment history.',
       'Loan Account details now show which specific installments were late (matching the count in the Risk Assessment summary above it), plus a full Payment History tab showing every transaction on the account — disbursement, repayments, and fees.',
+      'Loan Application details now show a Decision Scoring breakdown — age, income vs. loan amount, and address proximity to the branch, each shown pass or fail with the actual numbers behind it — so it\'s clear exactly why the system pre-approved or pre-declined an applicant, not just the final result.',
       'Loan officers can now upload specific applicant documents during intake — profile picture, valid ID, proof of billing, and loan-type-specific documents (employee ID, business clearance, seaman\'s book, etc.) — tagged by document type, with an in-app preview so reviewing no longer requires downloading first. The applicant\'s uploaded profile picture now appears as their photo throughout the Loan Applications area.',
       'An optional AI-assisted auto-fill can now read an uploaded ID or payslip (using a local, on-premises AI model — no data leaves the company\'s own systems) and suggest values for the loan application form, which the loan officer always reviews before submitting.',
       'Fixed address and mobile number formatting throughout Loan Applications and Client profiles — addresses and phone numbers now display consistently instead of a mix of ALL CAPS and lowercase.',
@@ -72,7 +73,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.4',
+    version: '0.9.5',
     date: 'July 10, 2026',
     highlights: [
       'Dashboard, Loan Applications, Activity Logs, Member Details, Payment Reminders, and Loan/Collection/Transaction Reports are now wired to the real backend, replacing sample data — the platform has no remaining mock-only pages except Settings and About.',
@@ -82,6 +83,18 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Search boxes on Client Data, Loan Applications, Loan Accounts, Member Details, and Activity Logs now search the full dataset on the server instead of only what was already loaded on screen.',
       'Fixed slow page loads on list pages: each now loads 100 records at a time with Next/Previous paging, instead of loading the entire dataset up front.',
       'Login page and app header now show the platform\'s official name, Easycash Loan Management System Platform.',
+    ],
+  },
+  {
+    version: '0.9.4',
+    date: 'July 9, 2026',
+    highlights: [
+      'Migrated the company\'s real production data into the platform\'s own database for the first time: 4,604 borrowers, 44 loan products (with their versions), 1,790 loan accounts, 280,172 transactions, 251 co-borrowers, 2,372 addresses, 440 ID documents, and 334 income records — sourced from the legacy system export, not sample data.',
+      'Client Data (list and profile) now shows this real, migrated client data instead of sample data.',
+      'Loan Accounts (list and detail) now shows this real, migrated loan data instead of sample data. Fixed a pagination bug that had been silently truncating long lists, and a status-naming mismatch left over from the legacy system.',
+      'Loan Products now shows the real, migrated product catalog (view-only, since editing a live product safely needs its own dedicated workflow, planned separately).',
+      'Statement of Account now generates from real loan data for a migrated loan account.',
+      'Fixed a login bug where a background session check could occasionally interrupt a login that had just succeeded.',
     ],
   },
   {
@@ -177,7 +190,7 @@ export const LMS_ABOUT_SECTIONS: { heading: string; body: string }[] = [
   },
   {
     heading: 'ONLINE LOAN APPLICATION',
-    body: 'Receive applications from the public application portal, review them with an AI-assisted risk summary, assign the right product sub-type, and approve or decline with a confirmation-gated workflow. Repeat clients are detected automatically, with their prior payment history surfaced during review.',
+    body: 'Receive applications from the public application portal, review them with a system-computed risk summary and decision scoring breakdown, assign the right product sub-type, and approve or decline with a confirmation-gated workflow. Repeat clients are detected automatically, with their prior payment history surfaced during review.',
   },
   {
     heading: 'PAYMENT & COLLECTION',

@@ -61,7 +61,7 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
 /**
  * Wired to the real backend Loan Applications module (`GET /loan-applications`). Every application
  * is system-classified PREAPPROVED/PREDECLINED at creation (and re-classified whenever the Detail
- * page's AI Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
+ * page's Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
  * — advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
  *
  * Real, server-side pagination (100 rows/page — see `useCursorPagination`) replaced loading every
