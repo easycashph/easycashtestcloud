@@ -241,6 +241,16 @@ export interface PaginatedResponse<T> {
   nextCursor: string | null;
 }
 
+/** 2026-07-11 (user request, Collections use case): free-text note on a loan account. */
+export interface LoanNote {
+  id: string;
+  loanAccountId: string;
+  authorUserId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface ProcessPaymentResponse {
   loanAccount: LoanAccount;
   remainder: string;

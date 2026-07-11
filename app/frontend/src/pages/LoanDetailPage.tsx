@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
 import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, LoanAccount, LoanNote, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,7 +118,8 @@ function BalanceRow({ label, value, emphasize }: { label: string; value: number;
   );
 }
 
-interface LoanNote {
+/** Mock-only shape used by the legacy hand-authored-loans NotesPanel below — distinct from the real `LoanNote` API type (`@/lib/loanApiTypes`) used by `RealLoanDetailView`. */
+interface MockLoanNote {
   id: string;
   author: string;
   text: string;
@@ -131,7 +132,7 @@ interface LoanNote {
  */
 function NotesPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) {
   const { currentAccount } = useRole();
-  const [notes, setNotes] = React.useState<LoanNote[]>(() => [
+  const [notes, setNotes] = React.useState<MockLoanNote[]>(() => [
     {
       id: `${loanId}-note-seed`,
       author: 'M. Santos (Loan Officer)',
@@ -397,6 +398,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const transactionsQuery = useQuery({
     queryKey: ['loan-transactions', loanId],
     queryFn: () => fetchAllPages<LoanTransaction>(`/loan-accounts/${loanId}/transactions`),
+  });
+
+  // 2026-07-11 (user request, Collections use case): free-text notes on this loan account.
+  const notesQuery = useQuery({
+    queryKey: ['loan-notes', loanId],
+    queryFn: () => apiClient.get<{ items: LoanNote[] }>(`/loan-accounts/${loanId}/notes`),
+  });
+  const [noteDraft, setNoteDraft] = React.useState('');
+  const addNoteMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanNote>(`/loan-accounts/${loanId}/notes`, { text: noteDraft.trim() }),
+    onSuccess: () => {
+      setNoteDraft('');
+      void queryClient.invalidateQueries({ queryKey: ['loan-notes', loanId] });
+    },
   });
 
   const onActionSuccess = () => {
@@ -712,6 +727,47 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 })}
               </TableBody>
             </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Notes</CardTitle>
+          <CardDescription>Free-text notes on this loan account — e.g. what was discussed/agreed with the borrower.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="new-note">Add a note</Label>
+            <Textarea
+              id="new-note"
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Type a note about this loan account..."
+              rows={3}
+              disabled={addNoteMutation.isPending}
+            />
+            <Button size="sm" onClick={() => addNoteMutation.mutate()} disabled={!noteDraft.trim() || addNoteMutation.isPending}>
+              {addNoteMutation.isPending ? 'Adding…' : 'Add Note'}
+            </Button>
+          </div>
+          <Separator />
+          {notesQuery.isLoading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : (notesQuery.data?.items.length ?? 0) === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No notes yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {notesQuery.data!.items.map((note) => (
+                <li key={note.id} className="rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{note.authorName}</p>
+                    <p className="text-xs text-muted-foreground">{formatDate(note.createdAt)}</p>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{note.text}</p>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

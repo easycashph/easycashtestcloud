@@ -204,6 +204,7 @@ model User {
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
+  loanNotesAuthored        LoanNote[]
 
   @@map("users")
 }
@@ -759,6 +760,7 @@ model LoanAccount {
   repaymentSchedule RepaymentSchedule[]
   appliedFees       AppliedFee[]
   coBorrowers       LoanAccountCoBorrower[]
+  notes             LoanNote[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -913,6 +915,25 @@ model PaymentAllocation {
   @@index([loanTransactionId])
   @@index([repaymentInstallmentId])
   @@map("payment_allocations")
+}
+
+/// 2026-07-11 (user request, Collections use case): a free-text note tied to a loan account —
+/// e.g. what was discussed/agreed with the borrower during a collection call. Deliberately simple
+/// (just text + author + timestamp, no structured fields like contact method or outcome code) per
+/// explicit user decision — flexibility over structure. Append-only, like AppliedFee/PaymentAllocation:
+/// no update/delete anywhere in this system: a correction is a new note, not an edit of history.
+model LoanNote {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+  authorUserId  String
+  author        User        @relation(fields: [authorUserId], references: [id])
+  text          String
+
+  createdAt DateTime @default(now())
+
+  @@index([loanAccountId])
+  @@map("loan_notes")
 }
 
 /// FEE-4: once applied to a specific loan, a fee amount is immutable even
