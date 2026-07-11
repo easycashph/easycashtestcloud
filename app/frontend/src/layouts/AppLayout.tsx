@@ -23,7 +23,6 @@ import { AccountMenu } from '@/components/AccountMenu';
 import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/mockData';
-import { LMS_VERSION } from '@/lib/lmsVersion';
 import { cn } from '@/lib/utils';
 
 /**
@@ -132,11 +131,6 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
             </div>
           ))}
         </nav>
-        <div className="shrink-0 p-3">
-          <p className="rounded-md border border-sidebar-border bg-sidebar-accent/10 px-3 py-2 text-[11px] leading-snug text-sidebar-foreground/70">
-            UI Preview build — v{LMS_VERSION}. Sample data only.
-          </p>
-        </div>
       </aside>
     </div>
   );
