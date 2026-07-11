@@ -1,5 +1,6 @@
 import { prisma } from '@shared/database/prismaClient';
 import type {
+  AttachmentDocumentCategory,
   AttachmentOwnerType,
   AttachmentRecord,
   CreateAttachmentInput,
@@ -16,6 +17,7 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
         fileType: input.fileType,
         fileSize: input.fileSize,
         storageKey: input.storageKey,
+        documentCategory: input.documentCategory,
         uploadedByUserId: input.uploadedByUserId,
       },
       include: { uploadedBy: { select: { firstName: true, lastName: true } } },
@@ -48,6 +50,7 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
     fileType: string;
     fileSize: number | null;
     storageKey: string;
+    documentCategory: string | null;
     uploadedByUserId: string | null;
     uploadedBy: { firstName: string; lastName: string } | null;
     uploadedAt: Date;
@@ -60,6 +63,7 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
       fileType: row.fileType,
       fileSize: row.fileSize ?? 0,
       storageKey: row.storageKey,
+      documentCategory: row.documentCategory as AttachmentDocumentCategory | null,
       uploadedByUserId: row.uploadedByUserId,
       uploadedByName: row.uploadedBy ? `${row.uploadedBy.firstName} ${row.uploadedBy.lastName}` : null,
       uploadedAt: row.uploadedAt,

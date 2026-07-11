@@ -1,15 +1,19 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Download, Loader2, Paperclip, Upload } from 'lucide-react';
+import { AlertCircle, Download, Eye, Loader2, Paperclip, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AttachmentPreviewModal } from '@/components/AttachmentPreviewModal';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
-import type { Attachment, AttachmentOwnerType } from '@/lib/documentApiTypes';
+import {
+  ATTACHMENT_ACCEPTED_MIME,
+  ATTACHMENT_ACCEPTED_TYPES,
+  ATTACHMENT_MAX_FILE_SIZE_BYTES,
+  DOCUMENT_CATEGORY_LABELS,
+  type Attachment,
+  type AttachmentOwnerType,
+} from '@/lib/documentApiTypes';
 import { formatDateTime } from '@/lib/utils';
-
-const ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png';
-const ACCEPTED_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png']);
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -55,6 +59,7 @@ export function AttachmentsPanel({
     },
   });
 
+  const [previewAttachment, setPreviewAttachment] = React.useState<Attachment | null>(null);
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const handleDownload = async (attachment: Attachment) => {
     setLocalError(null);
@@ -72,13 +77,13 @@ export function AttachmentsPanel({
     const file = e.target.files?.[0];
     if (!file) return;
     setLocalError(null);
-    if (!ACCEPTED_MIME.has(file.type)) {
+    if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
       setLocalError('Unsupported file type. Allowed: PDF, JPEG, PNG.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setLocalError(`File exceeds the ${MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit.`);
+    if (file.size > ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+      setLocalError(`File exceeds the ${ATTACHMENT_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -112,21 +117,37 @@ export function AttachmentsPanel({
             {attachments.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-3 p-2.5 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{a.fileName}</p>
+                  <p className="truncate font-medium">
+                    {a.fileName}
+                    {a.documentCategory && (
+                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-normal text-primary">
+                        {DOCUMENT_CATEGORY_LABELS[a.documentCategory]}
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {formatFileSize(a.fileSize)} · {a.uploadedByName ?? 'Unknown'} · {formatDateTime(a.uploadedAt)}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0"
-                  disabled={downloadingId === a.id}
-                  onClick={() => void handleDownload(a)}
-                  aria-label={`Download ${a.fileName}`}
-                >
-                  {downloadingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPreviewAttachment(a)}
+                    aria-label={`Preview ${a.fileName}`}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={downloadingId === a.id}
+                    onClick={() => void handleDownload(a)}
+                    aria-label={`Download ${a.fileName}`}
+                  >
+                    {downloadingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -137,7 +158,7 @@ export function AttachmentsPanel({
             <input
               ref={fileInputRef}
               type="file"
-              accept={ACCEPTED_TYPES}
+              accept={ATTACHMENT_ACCEPTED_TYPES}
               className="hidden"
               onChange={handleFileSelected}
               disabled={uploadMutation.isPending}
@@ -159,6 +180,7 @@ export function AttachmentsPanel({
           </div>
         )}
       </CardContent>
+      <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
     </Card>
   );
 }

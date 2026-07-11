@@ -197,11 +197,11 @@ export async function uploadFile<T>(path: string, formData: FormData, allowRefre
 }
 
 /**
- * Fetches a binary response (e.g. an attachment download) as a Blob, then triggers the browser's
- * normal save-file flow — needed because the endpoint requires a Bearer token header, which a
- * plain `<a href>` navigation can't send.
+ * Fetches a binary response (e.g. an attachment) as a `Response`, transparently refreshing and
+ * retrying once on a 401 — same pattern as `apiRequest`. Shared by `downloadFile` (save-as) and
+ * the attachment preview modal (renders the blob inline instead of saving it).
  */
-export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
+async function fetchFileResponse(path: string): Promise<Response> {
   const headers = new Headers();
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   let res = await fetch(`${API_BASE_URL}${path}`, { headers, credentials: 'include', cache: 'no-store' });
@@ -219,6 +219,23 @@ export async function downloadFile(path: string, fallbackFileName: string): Prom
   if (!res.ok) {
     throw new ApiError(res.status, 'DOWNLOAD_FAILED', 'Could not download the file.');
   }
+
+  return res;
+}
+
+/** Fetches a binary response body as a `Blob` — e.g. for inline attachment preview. */
+export async function fetchFileBlob(path: string): Promise<Blob> {
+  const res = await fetchFileResponse(path);
+  return res.blob();
+}
+
+/**
+ * Fetches a binary response (e.g. an attachment download) as a Blob, then triggers the browser's
+ * normal save-file flow — needed because the endpoint requires a Bearer token header, which a
+ * plain `<a href>` navigation can't send.
+ */
+export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
+  const res = await fetchFileResponse(path);
 
   const disposition = res.headers.get('content-disposition') ?? '';
   const match = /filename="?([^"]+)"?/.exec(disposition);

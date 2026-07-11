@@ -30,6 +30,7 @@ export class DocumentController {
         fileName: req.file.originalname,
         fileType: req.file.mimetype,
         data: req.file.buffer,
+        documentCategory: body.documentCategory ?? null,
         uploadedByUserId: currentUser.sub,
       });
       res.status(201).json(presentAttachment(attachment));

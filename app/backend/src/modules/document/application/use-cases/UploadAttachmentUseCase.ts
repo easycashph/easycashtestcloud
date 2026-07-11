@@ -1,7 +1,12 @@
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { ValidationError } from '@shared/errors/DomainError';
-import type { AttachmentOwnerType, AttachmentRecord, IAttachmentRepository } from '../ports/IAttachmentRepository';
+import type {
+  AttachmentDocumentCategory,
+  AttachmentOwnerType,
+  AttachmentRecord,
+  IAttachmentRepository,
+} from '../ports/IAttachmentRepository';
 import type { IFileStorage } from '../ports/IFileStorage';
 
 /** Whitelist, not a blocklist — CLAUDE.md Security. Covers the document types the Loan Application
@@ -16,6 +21,7 @@ export interface UploadAttachmentInput {
   fileName: string;
   fileType: string;
   data: Buffer;
+  documentCategory: AttachmentDocumentCategory | null;
   uploadedByUserId: string | null;
 }
 
@@ -56,6 +62,7 @@ export class UploadAttachmentUseCase {
       fileType: input.fileType,
       fileSize: input.data.length,
       storageKey,
+      documentCategory: input.documentCategory,
       uploadedByUserId: input.uploadedByUserId,
     });
   }

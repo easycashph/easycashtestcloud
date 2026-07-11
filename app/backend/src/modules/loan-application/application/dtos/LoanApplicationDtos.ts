@@ -10,6 +10,8 @@ export interface CreateLoanApplicationInput {
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  mobilePhone?: string;
+  email?: string;
   referralSource?: string;
   accountType?: LoanApplicationAccountType;
   loanPurpose?: string;

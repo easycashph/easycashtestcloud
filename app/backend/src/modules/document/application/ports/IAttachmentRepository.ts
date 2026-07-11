@@ -1,5 +1,16 @@
 export type AttachmentOwnerType = 'BORROWER' | 'LOAN_ACCOUNT' | 'LOAN_APPLICATION';
 
+export type AttachmentDocumentCategory =
+  | 'PROFILE_PICTURE'
+  | 'VALID_ID_BORROWER'
+  | 'VALID_ID_CO_BORROWER'
+  | 'PROOF_OF_BILLING'
+  | 'EMPLOYEE_ID'
+  | 'BUSINESS_CLEARANCE'
+  | 'CORPORATE_PAYSLIP'
+  | 'SEAMANS_BOOK'
+  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE';
+
 export interface AttachmentRecord {
   id: string;
   ownerType: AttachmentOwnerType;
@@ -8,6 +19,7 @@ export interface AttachmentRecord {
   fileType: string;
   fileSize: number;
   storageKey: string;
+  documentCategory: AttachmentDocumentCategory | null;
   uploadedByUserId: string | null;
   uploadedByName: string | null;
   uploadedAt: Date;
@@ -20,6 +32,7 @@ export interface CreateAttachmentInput {
   fileType: string;
   fileSize: number;
   storageKey: string;
+  documentCategory: AttachmentDocumentCategory | null;
   uploadedByUserId: string | null;
 }
 

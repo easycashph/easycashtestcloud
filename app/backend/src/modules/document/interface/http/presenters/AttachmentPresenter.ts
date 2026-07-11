@@ -7,6 +7,7 @@ export interface AttachmentResponse {
   fileName: string;
   fileType: string;
   fileSize: number;
+  documentCategory: string | null;
   uploadedByUserId: string | null;
   uploadedByName: string | null;
   uploadedAt: string;
@@ -20,6 +21,7 @@ export function presentAttachment(record: AttachmentRecord): AttachmentResponse 
     fileName: record.fileName,
     fileType: record.fileType,
     fileSize: record.fileSize,
+    documentCategory: record.documentCategory,
     uploadedByUserId: record.uploadedByUserId,
     uploadedByName: record.uploadedByName,
     uploadedAt: record.uploadedAt.toISOString(),
