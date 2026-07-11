@@ -58,6 +58,28 @@ function computeInsuranceFee(monthlyAmortization: number, termMonths: number): n
 }
 
 /**
+ * Advance Interest Fee — `docs/Architecture/ADR-046-advance-interest-fee-extended-first-repayment-gap.md`
+ * (ACCEPTED, 62.6% exact match / 74.6% within 5% against 449 real loans, 2021 encoding-anomaly
+ * cohort excluded). Rate basis is Add-On Rate, NOT Contractual Rate (confirmed two ways in the
+ * ADR: population-wide formula-fit testing and direct MIS Assistant testimony). Rounding is
+ * ceiling to the nearest whole peso — deliberately NOT this project's usual 2-decimal rounding,
+ * per the ADR's own §3.4/§4.
+ *
+ * ADR-046 §4 also found eligibility is per-product ("some products almost always charge it...
+ * others almost never do") and flags "which LoanProductVersions should charge this" as
+ * UNRESOLVED, requiring a business decision not yet made. This function does NOT enforce any
+ * per-product eligibility — it always returns the formula's result when the >30-day gap exists,
+ * exactly like Insurance Fee: a well-evidenced starting suggestion, not an auto-applied rule.
+ * Staff decide per loan whether it applies and can zero it out, same as every other fee here.
+ */
+function computeAdvanceInterestFee(principal: number, addOnRatePercent: number, disbursementDate: Date, firstRepaymentDate: Date): number {
+  const gapDays = Math.round((firstRepaymentDate.getTime() - disbursementDate.getTime()) / 86_400_000);
+  if (gapDays <= 30) return 0;
+  const excessDays = gapDays - 30;
+  return Math.ceil(principal * (addOnRatePercent / 100) * (excessDays / 30));
+}
+
+/**
  * Find Client -> Loan Terms -> Schedule Preview -> Create. Scoped to an EXISTING client only
  * (2026-07-11 user decision) — a renewal or any new loan account goes straight here without
  * needing its own reviewed/approved Loan Application first. A brand-new (not-yet-a-client)
@@ -111,6 +133,10 @@ export function LoanAccountCreatePage() {
   const [installmentCount, setInstallmentCount] = React.useState('');
   const [addOnRate, setAddOnRate] = React.useState('');
   const [interestRate, setInterestRate] = React.useState('');
+  // Anticipated Disbursement Date — distinct from First Repayment Date (matches Loans_details'
+  // own column split in the Excel LMS); the gap between the two drives Advance Interest Fee
+  // (ADR-046). Defaults to today, editable.
+  const [disbursementDate, setDisbursementDate] = React.useState(todayIsoDate());
   const [firstRepaymentDate, setFirstRepaymentDate] = React.useState(defaultFirstRepaymentDate());
 
   // Fills in the product's configured defaults whenever a new product is selected — still freely
@@ -169,12 +195,12 @@ export function LoanAccountCreatePage() {
       : null;
 
   // Origination fees (2026-07-11) — one-time deductions taken at disbursement. Account Management
-  // Fee (1% of principal), Notarial Fee, Web Fee, and Insurance Fee (see computeInsuranceFee's own
-  // doc comment — sourced from the real CalculateInsurance() VBA macro, verified against 4 real
-  // loans) all have confirmed defaults from real data. Processing Fee, Advance Interest,
-  // Outstanding Balance payoff, Doc Stamp, and Others vary too much per loan (or have no evidence
-  // at all) to default — staff enters those directly, starting at 0. All nine fields stay freely
-  // editable regardless of whether a default was applied.
+  // Fee (1% of principal), Notarial Fee, Web Fee, Insurance Fee (computeInsuranceFee — real VBA
+  // macro, verified against 4 real loans), and Advance Interest Fee (computeAdvanceInterestFee —
+  // ADR-046, verified against 449 real loans) all have confirmed defaults from real data.
+  // Processing Fee, Outstanding Balance payoff, Doc Stamp, and Others vary too much per loan (or
+  // have no evidence at all) to default — staff enters those directly, starting at 0. All nine
+  // fields stay freely editable regardless of whether a default was applied.
   // Processing Fee is entered as a percent of principal (matching the Excel's own O=P/I
   // relationship, just entered in the other direction) — no confirmed formula exists for what
   // that percent should be (see the "not reliably confirmed" note above), so it starts blank.
@@ -208,6 +234,17 @@ export function LoanAccountCreatePage() {
       setInsuranceFee(computeInsuranceFee(preview.monthlyPayment, installmentCountNum).toFixed(2));
     }
   }, [preview?.monthlyPayment, installmentCountNum]);
+
+  // Advance Interest Fee (ADR-046): recomputes live from Principal, Add-On Rate, and the
+  // disbursement->first-repayment gap — see computeAdvanceInterestFee's own doc comment for why
+  // this stays a per-loan suggestion rather than an auto-applied per-product rule. Still freely
+  // editable/zeroable afterward.
+  React.useEffect(() => {
+    if (principalNum > 0 && addOnRateNum > 0 && disbursementDate && firstRepaymentDate) {
+      const fee = computeAdvanceInterestFee(principalNum, addOnRateNum, new Date(disbursementDate), new Date(firstRepaymentDate));
+      setAdvanceInterestFee(fee.toFixed(2));
+    }
+  }, [principalNum, addOnRateNum, disbursementDate, firstRepaymentDate]);
 
   const processingFeePercentNum = Number.parseFloat(processingFeePercent) || 0;
   const processingFee = ((principalNum * processingFeePercentNum) / 100).toFixed(2);
@@ -452,6 +489,16 @@ export function LoanAccountCreatePage() {
                     </div>
 
                     <div className="space-y-1.5">
+                      <Label htmlFor="disbursement-date">Anticipated Disbursement Date</Label>
+                      <Input
+                        id="disbursement-date"
+                        type="date"
+                        value={disbursementDate}
+                        onChange={(e) => setDisbursementDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
                       <Label htmlFor="first-repayment">First Repayment Date</Label>
                       <Input
                         id="first-repayment"
@@ -460,6 +507,9 @@ export function LoanAccountCreatePage() {
                         value={firstRepaymentDate}
                         onChange={(e) => setFirstRepaymentDate(e.target.value)}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        A gap over 30 days from disbursement auto-computes an Advance Interest Fee below (ADR-046).
+                      </p>
                     </div>
 
                     <Button className="w-full" disabled={!canSubmit} onClick={openConfirm}>
@@ -559,6 +609,10 @@ export function LoanAccountCreatePage() {
                     value={advanceInterestFee}
                     onChange={(e) => setAdvanceInterestFee(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Auto-computed when disbursement-to-first-repayment gap exceeds 30 days (ADR-046) — zero it out if this product/loan
+                    shouldn't charge it.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="outstanding-balance">Outstanding Balance (previous loan)</Label>
