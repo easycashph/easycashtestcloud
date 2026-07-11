@@ -413,6 +413,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       void queryClient.invalidateQueries({ queryKey: ['loan-notes', loanId] });
     },
   });
+  // 2026-07-11 (user request): MIS-only, permanent delete — the one truly-destructive action in
+  // this app's data model (every other record is append-only/reversible). Confirmation dialog is
+  // the accidental-click safety net, same as every other consequential action here.
+  const [noteToDelete, setNoteToDelete] = React.useState<LoanNote | null>(null);
+  const deleteNoteMutation = useMutation({
+    mutationFn: () => apiClient.delete<void>(`/loan-accounts/${loanId}/notes/${noteToDelete!.id}`),
+    onSuccess: () => {
+      setNoteToDelete(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-notes', loanId] });
+    },
+  });
 
   const onActionSuccess = () => {
     setConfirmAction(null);
@@ -524,6 +535,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   );
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
+  // 2026-07-11 (user request): only MIS may permanently delete a note.
+  const canDeleteNotes = currentAccount.roles.includes('MIS');
 
   return (
     <div className="space-y-6">
@@ -760,9 +773,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <ul className="space-y-3">
               {notesQuery.data!.items.map((note) => (
                 <li key={note.id} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium">{note.authorName}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(note.createdAt)}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">{formatDate(note.createdAt)}</p>
+                      {canDeleteNotes && (
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-destructive hover:text-destructive" onClick={() => setNoteToDelete(note)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{note.text}</p>
                 </li>
@@ -848,6 +868,28 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={reverseMutation.isPending || reverseReason.trim().length === 0}
             >
               {reverseMutation.isPending ? 'Reversing…' : 'Yes, reverse this payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={noteToDelete !== null} onOpenChange={(open) => !open && !deleteNoteMutation.isPending && setNoteToDelete(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" /> Delete this note?
+            </DialogTitle>
+            <DialogDescription>
+              This permanently deletes the note — unlike everything else in this system, it cannot be undone or reversed afterward.
+              {noteToDelete && <span className="mt-2 block rounded-md border bg-secondary/40 p-2 text-xs italic">"{noteToDelete.text}"</span>}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNoteToDelete(null)} disabled={deleteNoteMutation.isPending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => deleteNoteMutation.mutate()} disabled={deleteNoteMutation.isPending}>
+              {deleteNoteMutation.isPending ? 'Deleting…' : 'Yes, delete this note'}
             </Button>
           </DialogFooter>
         </DialogContent>

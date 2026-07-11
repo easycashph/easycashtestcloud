@@ -1,7 +1,21 @@
+import type { Prisma } from '@prisma/client';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import { LoanNote } from '../domain/LoanNote';
+import { LoanNote, type LoanNoteProps } from '../domain/LoanNote';
 import type { ILoanNoteRepository, LoanNoteView } from '../application/ports/ILoanNoteRepository';
+
+type LoanNoteRow = Prisma.LoanNoteGetPayload<Record<string, never>>;
+
+function toDomain(row: LoanNoteRow): LoanNote {
+  const props: LoanNoteProps = {
+    id: row.id,
+    loanAccountId: row.loanAccountId,
+    authorUserId: row.authorUserId,
+    text: row.text,
+    createdAt: row.createdAt,
+  };
+  return LoanNote.reconstitute(props);
+}
 
 export class PrismaLoanNoteRepository implements ILoanNoteRepository {
   async create(note: LoanNote, ctx?: TransactionContext): Promise<void> {
@@ -15,6 +29,17 @@ export class PrismaLoanNoteRepository implements ILoanNoteRepository {
         createdAt: note.createdAt,
       },
     });
+  }
+
+  async findById(id: string, ctx?: TransactionContext): Promise<LoanNote | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanNote.findUnique({ where: { id } });
+    return row ? toDomain(row) : null;
+  }
+
+  async delete(id: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.loanNote.delete({ where: { id } });
   }
 
   async findByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanNoteView[]> {

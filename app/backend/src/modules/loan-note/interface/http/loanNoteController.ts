@@ -3,6 +3,7 @@ import { getCurrentUser } from '@shared/middleware/requireAuth';
 import { resolveBranchScope, assertBranchAccess } from '@shared/http/branchScope';
 import type { CreateLoanNoteUseCase } from '../../application/use-cases/CreateLoanNoteUseCase';
 import type { ListLoanNotesUseCase } from '../../application/use-cases/ListLoanNotesUseCase';
+import type { DeleteLoanNoteUseCase } from '../../application/use-cases/DeleteLoanNoteUseCase';
 import type { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import type { CreateLoanNoteRequestBody } from './loanNoteSchemas';
 import { presentLoanNote, presentLoanNoteView } from './presenters/LoanNotePresenter';
@@ -10,6 +11,7 @@ import { presentLoanNote, presentLoanNoteView } from './presenters/LoanNotePrese
 export interface LoanNoteControllerDeps {
   createLoanNoteUseCase: CreateLoanNoteUseCase;
   listLoanNotesUseCase: ListLoanNotesUseCase;
+  deleteLoanNoteUseCase: DeleteLoanNoteUseCase;
   getLoanAccountUseCase: GetLoanAccountUseCase;
 }
 
@@ -40,6 +42,21 @@ export class LoanNoteController {
 
       const notes = await this.deps.listLoanNotesUseCase.execute(req.params.id as string);
       res.status(200).json({ items: notes.map(presentLoanNoteView) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** MIS-only (enforced by the router's `requireRole('MIS')`, not here). Permanent delete — see `DeleteLoanNoteUseCase`'s own doc comment. */
+  delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId); // H-1: same as every other loan-account sub-resource write.
+
+      await this.deps.deleteLoanNoteUseCase.execute(req.params.id as string, req.params.noteId as string, currentUser.sub);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

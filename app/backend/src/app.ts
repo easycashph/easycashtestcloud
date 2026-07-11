@@ -56,6 +56,7 @@ import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructur
 import { createLoanNoteRouter } from '@modules/loan-note/interface/http/loanNoteRouter';
 import { CreateLoanNoteUseCase } from '@modules/loan-note/application/use-cases/CreateLoanNoteUseCase';
 import { ListLoanNotesUseCase } from '@modules/loan-note/application/use-cases/ListLoanNotesUseCase';
+import { DeleteLoanNoteUseCase } from '@modules/loan-note/application/use-cases/DeleteLoanNoteUseCase';
 import { PrismaLoanNoteRepository } from '@modules/loan-note/infrastructure/PrismaLoanNoteRepository';
 import { createRepaymentRouter } from '@modules/repayment/interface/http/repaymentRouter';
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
@@ -307,6 +308,7 @@ export function createApp(): Express {
     {
       createLoanNoteUseCase: new CreateLoanNoteUseCase({ loanNoteRepository, loanAccountRepository }),
       listLoanNotesUseCase: new ListLoanNotesUseCase({ loanNoteRepository }),
+      deleteLoanNoteUseCase: new DeleteLoanNoteUseCase({ loanNoteRepository, auditLogger }),
       getLoanAccountUseCase,
     },
     tokenService,
