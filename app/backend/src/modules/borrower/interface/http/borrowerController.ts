@@ -7,6 +7,7 @@ import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorro
 import type { UpdateBorrowerUseCase } from '../../application/use-cases/UpdateBorrowerUseCase';
 import type { CreateCoBorrowerUseCase } from '../../application/use-cases/CreateCoBorrowerUseCase';
 import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorrowerUseCase';
+import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
 import type { CreateBorrowerRequestBody, CreateCoBorrowerRequestBody, UpdateBorrowerRequestBody } from './borrowerSchemas';
 import { presentBorrower, presentCoBorrower } from './presenters/BorrowerPresenter';
 
@@ -17,6 +18,7 @@ export interface BorrowerControllerDeps {
   updateBorrowerUseCase: UpdateBorrowerUseCase;
   createCoBorrowerUseCase: CreateCoBorrowerUseCase;
   getCoBorrowerUseCase: GetCoBorrowerUseCase;
+  getBorrowerRiskSummaryUseCase: GetBorrowerRiskSummaryUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture), matching AuthController's shape. */
@@ -88,6 +90,18 @@ export class BorrowerController {
     try {
       const coBorrower = await this.deps.getCoBorrowerUseCase.execute(req.params.id as string);
       res.status(200).json(presentCoBorrower(coBorrower));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  riskSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const summary = await this.deps.getBorrowerRiskSummaryUseCase.execute(req.params.id as string);
+      res.status(200).json(summary);
     } catch (error) {
       next(error);
     }

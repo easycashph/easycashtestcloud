@@ -48,6 +48,7 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     controller.create,
   );
   router.get('/loan-accounts/:id', requireAuth, controller.get);
+  router.get('/loan-accounts/:id/risk-assessment', requireAuth, controller.riskAssessment);
   router.get('/loan-accounts', requireAuth, controller.list);
 
   router.post('/loan-accounts/:id/approve', requireAuth, requireRole(...APPROVAL_ROLES), controller.approve);

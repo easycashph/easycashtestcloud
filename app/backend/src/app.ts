@@ -29,6 +29,8 @@ import { ListPsgcOptionsUseCase } from '@modules/psgc/application/use-cases/List
 import { PrismaPsgcRepository } from '@modules/psgc/infrastructure/PrismaPsgcRepository';
 import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateCoBorrowerUseCase';
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
+import { GetBorrowerRiskSummaryUseCase } from '@modules/borrower/application/use-cases/GetBorrowerRiskSummaryUseCase';
+import { BorrowerRiskSummaryService } from '@modules/borrower/application/services/BorrowerRiskSummaryService';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
 import { PrismaCoBorrowerRepository } from '@modules/borrower/infrastructure/PrismaCoBorrowerRepository';
 import { createLoanProductRouter } from '@modules/loan-product/interface/http/loanProductRouter';
@@ -46,6 +48,8 @@ import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
+import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
+import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
@@ -210,6 +214,11 @@ export function createApp(): Express {
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
   const borrowerRepository = new PrismaBorrowerRepository();
   const coBorrowerRepository = new PrismaCoBorrowerRepository();
+  // Hoisted above the loan-account module's own wiring section below (their canonical home) since
+  // the borrower risk-summary use case, wired here, needs them too — same instances, not duplicated.
+  const loanAccountRepositoryForBorrowerRisk = new PrismaLoanAccountRepository();
+  const repaymentInstallmentRepositoryForBorrowerRisk = new PrismaRepaymentInstallmentRepository();
+  const borrowerRiskSummaryService = new BorrowerRiskSummaryService(new LoanRiskAssessmentService());
   const borrowerRouter = createBorrowerRouter(
     {
       createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
@@ -218,6 +227,12 @@ export function createApp(): Express {
       updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository }),
       createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
+      getBorrowerRiskSummaryUseCase: new GetBorrowerRiskSummaryUseCase({
+        borrowerRepository,
+        loanAccountRepository: loanAccountRepositoryForBorrowerRisk,
+        repaymentInstallmentRepository: repaymentInstallmentRepositoryForBorrowerRisk,
+        riskSummaryService: borrowerRiskSummaryService,
+      }),
     },
     tokenService,
   );
@@ -261,6 +276,7 @@ export function createApp(): Express {
   // cases need them too — same repository instances, not duplicated ones.
   const loanTransactionRepository = new PrismaLoanTransactionRepository();
   const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
+  const loanRiskAssessmentService = new LoanRiskAssessmentService();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -285,6 +301,11 @@ export function createApp(): Express {
         loanTransactionRepository,
         financialAuditLogger,
         unitOfWork,
+      }),
+      getLoanRiskAssessmentUseCase: new GetLoanRiskAssessmentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        riskAssessmentService: loanRiskAssessmentService,
       }),
       idempotencyKeyStore,
     },

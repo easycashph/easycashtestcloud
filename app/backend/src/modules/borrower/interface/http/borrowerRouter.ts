@@ -20,6 +20,7 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
 
   router.post('/borrowers', requireAuth, requireRole(...ORIGINATION_ROLES), validateBody(createBorrowerSchema), controller.create);
   router.get('/borrowers/:id', requireAuth, controller.get);
+  router.get('/borrowers/:id/risk-summary', requireAuth, controller.riskSummary);
   router.get('/borrowers', requireAuth, controller.list);
   router.patch(
     '/borrowers/:id',

@@ -28,7 +28,6 @@ import {
   getGeneratedDocumentsForLoan,
   getMockBorrowerForLoan,
   getMockLoan,
-  getMockRiskAssessment,
   logActivity,
   MOCK_ACTIVITY_LOGS,
   MOCK_INSTALLMENTS,
@@ -38,8 +37,8 @@ import {
   REMINDER_TYPE_LABELS,
   type MockLoanTransaction,
   type MockRepaymentInstallment,
-  type MockRiskLevel,
 } from '@/lib/mockData';
+import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { cn, formatDate, formatPeso } from '@/lib/utils';
 
 function getInstallmentSortValue(inst: MockRepaymentInstallment, key: string): string | number | Date | null | undefined {
@@ -74,19 +73,29 @@ function getPaymentHistorySortValue(txn: MockLoanTransaction, key: string): stri
   }
 }
 
-const RISK_BADGE_VARIANT: Record<MockRiskLevel, 'success' | 'warning' | 'destructive'> = {
-  'Low Risk': 'success',
-  'Medium Risk': 'warning',
-  'High Risk': 'destructive',
+const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'destructive',
+};
+
+const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
+  LOW: 'Low Risk',
+  MEDIUM: 'Medium Risk',
+  HIGH: 'High Risk',
 };
 
 /**
- * Static/mock panel only — no real AI/ML API call is made anywhere in this
- * preview. `getMockRiskAssessment()` is a deterministic lookup over
- * hand-written mock data (`src/lib/mockData.ts`), not a model inference.
+ * Deterministic, rule-based assessment computed by the LMS itself (backend's
+ * `LoanRiskAssessmentService`, from real repayment data — days past due, late-payment count) — no
+ * external AI/ML model call. Replaced the earlier mock (`getMockRiskAssessment`) 2026-07-11.
  */
 function AiRiskAssessmentCard({ loanId }: { loanId: string }) {
-  const assessment = getMockRiskAssessment(loanId);
+  const query = useQuery({
+    queryKey: ['loan-risk-assessment', loanId],
+    queryFn: () => apiClient.get<LoanRiskAssessment>(`/loan-accounts/${loanId}/risk-assessment`),
+  });
+  const assessment = query.data;
   if (!assessment) return null;
 
   return (
@@ -94,15 +103,15 @@ function AiRiskAssessmentCard({ loanId }: { loanId: string }) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
-          <CardTitle>AI Risk Assessment</CardTitle>
+          <CardTitle>Risk Assessment</CardTitle>
         </div>
-        <Badge variant={RISK_BADGE_VARIANT[assessment.level]}>{assessment.level}</Badge>
+        <Badge variant={RISK_BADGE_VARIANT[assessment.riskLevel]}>{RISK_LEVEL_LABEL[assessment.riskLevel]}</Badge>
       </CardHeader>
       <CardContent className="space-y-2">
-        <p className="text-sm text-muted-foreground">{assessment.explanation}</p>
+        <p className="text-sm text-muted-foreground">{assessment.recommendation}</p>
         <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-          AI-Assisted — Loan Officer pa rin ang gumagawa ng huling desisyon. Mock output lang ito; walang totoong AI/ML na tumatakbo sa
-          preview build na ito.
+          Computed by the LMS from this loan's own repayment history (days past due, late-payment count) — a deterministic rule-based
+          calculation, not an external AI model. The Loan Officer/Collector still makes the final call.
         </p>
       </CardContent>
     </Card>

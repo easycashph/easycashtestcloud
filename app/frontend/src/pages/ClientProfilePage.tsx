@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Briefcase, Home, Landmark, Mail, Paperclip, Pencil, Phone } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Briefcase, Home, Landmark, Mail, Paperclip, Pencil, Phone, ShieldCheck } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,7 @@ import {
 } from '@/lib/mockData';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanProduct } from '@/lib/loanApiTypes';
+import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
@@ -333,6 +334,67 @@ function RealEditClientDialog({
  * Account (needs a loan application eligibility check the backend doesn't have yet) and
  * Attachments stay mock-only.
  */
+const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'destructive',
+};
+const RISK_LEVEL_LABEL: Record<RiskLevel, string> = { LOW: 'Low Risk', MEDIUM: 'Medium Risk', HIGH: 'High Risk' };
+
+/**
+ * Deterministic, rule-based summary computed by the LMS itself (backend's
+ * `BorrowerRiskSummaryService`) from this client's real loan/repayment history across every loan
+ * they've ever had — no external AI model. Advisory only.
+ */
+function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
+  const query = useQuery({
+    queryKey: ['borrower-risk-summary', borrowerId],
+    queryFn: () => apiClient.get<BorrowerRiskSummary>(`/borrowers/${borrowerId}/risk-summary`),
+  });
+  const summary = query.data;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          <CardTitle>Risk &amp; Payment Summary</CardTitle>
+        </div>
+        {summary && <Badge variant={RISK_BADGE_VARIANT[summary.riskLevel]}>{RISK_LEVEL_LABEL[summary.riskLevel]}</Badge>}
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {query.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading risk summary…</p>
+        ) : !summary ? (
+          <p className="text-sm text-muted-foreground">Could not load the risk summary.</p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-2 gap-y-1.5 text-sm sm:grid-cols-4">
+              <dt className="text-muted-foreground">Active loans</dt>
+              <dd className="text-right font-medium sm:text-left">{summary.activeLoanCount}</dd>
+              <dt className="text-muted-foreground">Total exposure</dt>
+              <dd className="text-right font-medium sm:text-left">{formatPeso(Number(summary.totalExposure))}</dd>
+              <dt className="text-muted-foreground">Worst days past due</dt>
+              <dd className="text-right font-medium sm:text-left">{summary.worstDaysPastDue}</dd>
+              <dt className="text-muted-foreground">Late payments (lifetime)</dt>
+              <dd className="text-right font-medium sm:text-left">{summary.lifetimeLateInstallmentCount}</dd>
+              <dt className="text-muted-foreground">On-time payment rate</dt>
+              <dd className="text-right font-medium sm:text-left">
+                {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
+              </dd>
+            </dl>
+            <p className="text-sm text-muted-foreground">{summary.recommendation}</p>
+            <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
+              Computed by the LMS from this client's real loan/repayment history — a deterministic rule-based calculation, not an
+              external AI model.
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = React.useState(false);
@@ -438,6 +500,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         </Card>
 
         <div className="space-y-4 lg:col-span-2">
+          <RiskPaymentSummaryCard borrowerId={borrowerId} />
+
           <Card>
             <CardHeader>
               <CardTitle>Loan History</CardTitle>
