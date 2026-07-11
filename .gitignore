@@ -74,6 +74,9 @@ legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
 # credentials as the zip above, structurally required for mongodump to connect. Never committed.
 backup-mongodb.bat
 
+# Personal login credentials in plain text — never committed.
+MIS Jomer Login.md
+
 # Build
 dist/
 build/
