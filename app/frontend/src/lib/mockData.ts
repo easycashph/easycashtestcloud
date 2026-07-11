@@ -626,16 +626,18 @@ function nextLoanCode(codePrefix: string): string {
 // Mode of Payment / Collection Methods — ACTIVE vs. DISCONTINUED.
 //
 // ACTIVE (offered today, selectable on the Payment Recording screen): GCash,
-// Cash, Bank Transfer, Post-Dated Check (PDC), Auto Debit.
+// Cash, Bank Transfer, Post-Dated Check (PDC), Auto Debit, DragonPay (re-
+// activated 2026-07-11 per user request — matches the SDevTech system
+// currently in use), Loan Deduct, ATM, Restructured, Unearned Income.
 //
 // DISCONTINUED (no longer offered, but must remain visible on historical
-// transactions and as a Transaction Report filter): DragonPay, plus 4
-// additional real legacy payment channels found in `legacy/mongodb/
-// .../loan_transactions.bson`'s free-text `comment` field (this schema has
-// no dedicated payment-method column — these were identified by searching
-// that field for real channel names, not invented): "ECPAY" (ECPay),
-// "Deposited thru Bayad Center...", "LBC payment"/"...thru LBC", "Paid thru
-// western union", and "Paid thru Palawan Pawnshop...".
+// transactions and as a Transaction Report filter): 5 real legacy payment
+// channels found in `legacy/mongodb/.../loan_transactions.bson`'s free-text
+// `comment` field (this schema has no dedicated payment-method column —
+// these were identified by searching that field for real channel names, not
+// invented): "ECPAY" (ECPay), "Deposited thru Bayad Center...", "LBC
+// payment"/"...thru LBC", "Paid thru western union", and "Paid thru Palawan
+// Pawnshop...".
 // ---------------------------------------------------------------------------
 
 export interface MockPaymentMethod {
@@ -651,13 +653,17 @@ export const ACTIVE_PAYMENT_METHODS: MockPaymentMethod[] = [
   { code: 'BANK_TRANSFER', label: 'Bank Transfer', isActive: true },
   { code: 'PDC', label: 'Post-Dated Check (PDC)', isActive: true },
   { code: 'AUTO_DEBIT', label: 'Auto Debit', isActive: true },
+  { code: 'DRAGONPAY', label: 'DragonPay', isActive: true },
+  { code: 'LOAN_DEDUCT', label: 'Loan Deduct', isActive: true },
+  { code: 'ATM', label: 'ATM', isActive: true },
+  { code: 'RESTRUCTURED', label: 'Restructured', isActive: true },
+  { code: 'UNEARNED_INCOME', label: 'Unearned Income', isActive: true },
 ];
 
 const LEGACY_NOTE =
   'Historical payment channel from the legacy system — retained because past transactions used it; not offered for new payments.';
 
 export const DISCONTINUED_PAYMENT_METHODS: MockPaymentMethod[] = [
-  { code: 'DRAGONPAY', label: 'DragonPay', isActive: false, legacyNote: LEGACY_NOTE },
   { code: 'ECPAY', label: 'ECPay', isActive: false, legacyNote: LEGACY_NOTE },
   { code: 'BAYAD_CENTER', label: 'Bayad Center', isActive: false, legacyNote: LEGACY_NOTE },
   { code: 'LBC', label: 'LBC', isActive: false, legacyNote: LEGACY_NOTE },
