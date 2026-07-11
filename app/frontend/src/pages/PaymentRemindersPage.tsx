@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -37,6 +38,8 @@ function getSortValue(r: PaymentReminder, key: string): string | number | Date |
   }
 }
 
+const PAGE_SIZE = 100;
+
 const STATUS_OPTIONS: { value: PaymentReminderStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'LATE', label: 'Overdue' },
@@ -61,6 +64,7 @@ export function PaymentRemindersPage() {
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<PaymentReminderStatus | 'ALL'>('ALL');
+  const [page, setPage] = React.useState(1);
 
   const remindersQuery = useQuery({
     queryKey: ['payment-reminders'],
@@ -75,7 +79,15 @@ export function PaymentRemindersPage() {
     const matchesStatus = status === 'ALL' || r.status === status;
     return matchesSearch && matchesStatus;
   });
-  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'asc' });
+  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'desc' });
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [search, status]);
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const paged = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const overdueCount = reminders.filter((r) => r.status === 'LATE').length;
 
@@ -146,7 +158,7 @@ export function PaymentRemindersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sorted.map((r) => {
+              {paged.map((r) => {
                 const badge = STATUS_BADGE[r.status];
                 return (
                   <TableRow key={r.installmentId} className="cursor-pointer" onClick={() => navigate(`/loans/${r.loanAccountId}`)}>
@@ -177,6 +189,15 @@ export function PaymentRemindersPage() {
               )}
             </TableBody>
           </Table>
+          <PaginationControls
+            pageNumber={currentPage}
+            hasNext={currentPage < pageCount}
+            hasPrev={currentPage > 1}
+            onNext={() => setPage((p) => p + 1)}
+            onPrev={() => setPage((p) => p - 1)}
+            pageSize={PAGE_SIZE}
+            itemCount={paged.length}
+          />
         </CardContent>
       </Card>
 

@@ -32,7 +32,7 @@ import {
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanProduct } from '@/lib/loanApiTypes';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
-import { formatDate, formatPeso } from '@/lib/utils';
+import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 function getLoanSortValue(loan: MockLoanAccount, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -208,9 +208,11 @@ function RealEditClientDialog({
 
   const existingAddress = borrower.addresses[0];
   const existingAddressLine = existingAddress
-    ? [existingAddress.houseUnitNumber, existingAddress.street, existingAddress.barangay, existingAddress.cityMunicipality, existingAddress.province]
-        .filter(Boolean)
-        .join(', ')
+    ? toProperCase(
+        [existingAddress.houseUnitNumber, existingAddress.street, existingAddress.barangay, existingAddress.cityMunicipality, existingAddress.province]
+          .filter(Boolean)
+          .join(', '),
+      )
     : 'None on file';
 
   const updateMutation = useMutation({
@@ -377,9 +379,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
   const address = borrower.addresses[0];
   const addressLine = address
-    ? [address.houseUnitNumber, address.street, address.barangay, address.cityMunicipality, address.province]
-        .filter(Boolean)
-        .join(', ')
+    ? toProperCase(
+        [address.houseUnitNumber, address.street, address.barangay, address.cityMunicipality, address.province].filter(Boolean).join(', '),
+      )
     : '—';
   const num = (v: string) => Number.parseFloat(v) || 0;
 
@@ -412,7 +414,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" /> {borrower.mobilePhone1 ?? '—'}
+              <Phone className="h-4 w-4 text-muted-foreground" /> {formatMobileNumber(borrower.mobilePhone1)}
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email ?? '—'}
@@ -600,13 +602,13 @@ export function ClientProfilePage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" /> {borrower.contactNumber}
+              <Phone className="h-4 w-4 text-muted-foreground" /> {formatMobileNumber(borrower.contactNumber)}
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email}
             </div>
             <div className="flex items-center gap-2">
-              <Home className="h-4 w-4 text-muted-foreground" /> {borrower.address}
+              <Home className="h-4 w-4 text-muted-foreground" /> {toProperCase(borrower.address)}
             </div>
             <div className="flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-muted-foreground" /> {borrower.position}, {borrower.employer}

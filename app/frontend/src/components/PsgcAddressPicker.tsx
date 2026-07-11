@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/apiClient';
 import type { PsgcOption } from '@/lib/psgcApiTypes';
+import { toProperCase } from '@/lib/utils';
 
 export interface AddressDraft {
   houseUnitNumber: string;
@@ -60,18 +61,18 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
   const pickProvince = (code: string) => {
     setProvinceCode(code);
     setCityCode('');
-    const name = provincesQuery.data?.find((p) => p.code === code)?.name ?? '';
+    const name = toProperCase(provincesQuery.data?.find((p) => p.code === code)?.name ?? '');
     onChange({ province: name, cityMunicipality: '', barangay: '' });
   };
 
   const pickCity = (code: string) => {
     setCityCode(code);
-    const name = citiesQuery.data?.find((c) => c.code === code)?.name ?? '';
+    const name = toProperCase(citiesQuery.data?.find((c) => c.code === code)?.name ?? '');
     onChange({ cityMunicipality: name, barangay: '' });
   };
 
   const pickBarangay = (code: string) => {
-    const name = barangaysQuery.data?.find((b) => b.code === code)?.name ?? '';
+    const name = toProperCase(barangaysQuery.data?.find((b) => b.code === code)?.name ?? '');
     onChange({ barangay: name });
   };
 
@@ -87,7 +88,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
             <SelectContent>
               {(regionsQuery.data ?? []).map((r) => (
                 <SelectItem key={r.code} value={r.code}>
-                  {r.name}
+                  {toProperCase(r.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -102,7 +103,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
             <SelectContent>
               {(provincesQuery.data ?? []).map((p) => (
                 <SelectItem key={p.code} value={p.code}>
-                  {p.name}
+                  {toProperCase(p.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -117,7 +118,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
             <SelectContent>
               {(citiesQuery.data ?? []).map((c) => (
                 <SelectItem key={c.code} value={c.code}>
-                  {c.name}
+                  {toProperCase(c.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -132,7 +133,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
             <SelectContent>
               {(barangaysQuery.data ?? []).map((b) => (
                 <SelectItem key={b.code} value={b.code}>
-                  {b.name}
+                  {toProperCase(b.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -156,7 +157,8 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Selected: {[value.barangay, value.cityMunicipality, value.province].filter(Boolean).join(', ') || 'Nothing selected yet'}
+        Selected:{' '}
+        {[value.barangay, value.cityMunicipality, value.province].filter(Boolean).map(toProperCase).join(', ') || 'Nothing selected yet'}
       </p>
     </div>
   );

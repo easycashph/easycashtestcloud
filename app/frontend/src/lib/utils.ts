@@ -31,3 +31,33 @@ export function formatDateTime(value: string | Date): string {
 export function pesoTooltipFormatter(value: unknown): string {
   return formatPeso(typeof value === 'number' ? value : Number(value ?? 0));
 }
+
+/**
+ * Groups an 11-digit PH mobile number for readability, e.g. "09171234567" → "0917 123 4567".
+ * Numbers are stored as plain digit strings with no formatting (see `loanApiTypes.ts`/
+ * `loanApplicationApiTypes.ts`) — this is display-only, never applied to stored/submitted values.
+ * Anything that isn't exactly 11 digits (missing, partial, or already-formatted input) is returned
+ * as-is rather than guessing a grouping.
+ */
+export function formatMobileNumber(value: string | null | undefined): string {
+  // Guards against non-string runtime values too (e.g. malformed AI-extraction output) — the
+  // `string | null` param type is compile-time only, not enforced at runtime.
+  if (!value || typeof value !== 'string') return value ? String(value) : '—';
+  const digits = value.replace(/\D/g, '');
+  if (digits.length !== 11) return value;
+  return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+}
+
+/**
+ * Proper-cases a name, e.g. address/region/province/city/barangay text — the PSGC reference data
+ * and free-text address fields are stored with inconsistent casing (ALL CAPS, lowercase, mixed),
+ * which reads poorly wherever displayed together. Display-only: lowercases the whole string first,
+ * then capitalizes the first letter of each word (word boundary via `\w`, so hyphens/apostrophes
+ * like "O'Brien" or "Dolores-San Jose" still capitalize correctly on both sides).
+ */
+export function toProperCase(value: string | null | undefined): string {
+  // Guards against non-string runtime values too (e.g. malformed AI-extraction output) — the
+  // `string | null` param type is compile-time only, not enforced at runtime.
+  if (!value || typeof value !== 'string') return value ? String(value) : '';
+  return value.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}

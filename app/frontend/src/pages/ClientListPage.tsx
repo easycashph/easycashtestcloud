@@ -18,6 +18,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
+import { formatMobileNumber } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
 
@@ -214,7 +215,7 @@ export function ClientListPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <p>{c.contactNumber}</p>
+                    <p>{formatMobileNumber(c.contactNumber)}</p>
                     <p className="text-xs text-muted-foreground">{c.email}</p>
                   </TableCell>
                   <TableCell className="text-sm">
