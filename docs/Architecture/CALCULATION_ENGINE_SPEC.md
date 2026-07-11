@@ -827,6 +827,88 @@ investigation of the daily `PENALTY_APPLIED` amount sequence.
 
 ---
 
+## 13. Insurance Fee (Loan Origination)
+
+### Purpose
+Computes the one-time Insurance Fee deducted at loan disbursement (Create Loan Account —
+`OriginationFees.insuranceFee`), distinct from any recurring per-installment fee.
+
+### Inputs
+- `monthlyAmortization: Money` — the loan's level payment amount (§2's `MonthlyPayment`).
+- `numberOfInstallments: number` (Term).
+
+### Outputs
+- `insuranceFee: Money`
+
+### Configuration Required
+None — unlike every other origination fee in this system, this one is not staff-entered by
+default; it is computed, though still staff-editable/zeroable afterward (no separate "waive"
+mechanism is implemented — see Edge Cases).
+
+### Formula
+```
+TotalContract = MonthlyAmortization × NumberOfInstallments
+InsuranceFee  = (TotalContract ÷ 1000) × NumberOfInstallments
+IF TotalContract < 50,000: InsuranceFee += 20
+InsuranceFee = CEILING(InsuranceFee, 1)   — round UP to the nearest whole peso
+```
+
+**Evidence:** transcribed verbatim (2026-07-11) from the `CalculateInsurance()` VBA macro in MIS
+Nomer's own hand-built Excel LMS, `legacy/reports/BETA 1.5.83 LMSv3.xlsm` (source provided
+directly by the user, not reverse-engineered from spreadsheet cells — no formula or dedicated
+table for this fee exists anywhere in the workbook's ~18 sheets, confirmed by an exhaustive
+text search across all of them for "insurance"; the computation lives entirely in VBA). Validated
+exactly against 4 real loans from `Loans_details`:
+
+| Loan | Monthly Amortization | Term | Computed | Actual (`Insurance Fee` column) |
+|---|---|---|---|---|
+| `SML-REG_00365` | 16,220.83 | 4 | 260 | 260 |
+| `SML-REG_00364` | 18,336.88 | 6 | 661 | 661 |
+| `SL-REG_00109` | 8,746.84 | 6 | 315 | 315 |
+| `SML-REG_00350` | 24,881.10 | 2 | 120 | 120 |
+
+**STATUS: CONFIRMED** — sourced from the real macro code itself (not inferred), then independently
+verified against 4 real disbursed loans, all exact.
+
+### Rounding
+`CEILING(x, 1)` — rounds UP to the nearest whole peso (never half-up, never down) — this is the
+macro's own explicit final step, not this project's usual `Decimal(14,2)` half-up convention;
+applied only to this fee.
+
+### Precision
+Intermediate `TotalContract`/pre-ceiling `InsuranceFee` values are not rounded — only the final
+result is, via `CEILING`.
+
+### Examples
+See the Evidence table above — directly reusable as test fixtures.
+
+### Edge Cases
+- **Product/loan-level waiver**: the source macro has a `chkWaiveInsurance` checkbox that zeroes
+  this fee out entirely when checked, per-loan (not a product-level default — real data shows
+  `SL-CORP` loans with both zero and nonzero Insurance Fee values, ruling out a per-product waiver
+  rule). Not implemented as a separate control here; staff can already edit/zero any origination
+  fee field directly in the Create Loan Account form, which covers the same outcome.
+- **`TotalContract` exactly 50,000**: the macro's condition is `< 50000` (strict), so exactly
+  50,000 does NOT get the +20 — not separately evidenced, but follows directly from the
+  transcribed condition.
+
+### Validation Rules
+- `monthlyAmortization` and `numberOfInstallments` must both be positive — not separately
+  evidenced (the macro guards on `IsNumeric`/waiver-checkbox state, not on these being positive),
+  but a non-positive input here would come from an already-invalid §2 result.
+
+### Test Vectors
+See Examples table above.
+
+### Dependencies
+§2 (Level Payment Amortization) — this fee is computed from that formula's `MonthlyPayment`
+output, not from principal directly.
+
+### Referenced ADRs
+None — sourced directly from the VBA macro source, not a legacy-data ADR investigation.
+
+---
+
 ## Summary — What Can Be Implemented Now vs. What Remains Blocked
 
 | Calculation | Status | Implementable in Milestone 9.1? |
@@ -843,8 +925,9 @@ investigation of the daily `PENALTY_APPLIED` amount sequence.
 | §10 Reversals and Adjustments | PARTIALLY CONFIRMED / UNRESOLVED (data modeling, not a formula) | N/A — design question |
 | §11 Overpayment Handling | UNRESOLVED | **No** — blocked, needs evidence |
 | §12 Penalty Calculation | UNRESOLVED | **No** — blocked, needs evidence, and gated by ADR-008 (not produced this milestone) |
+| §13 Insurance Fee (Loan Origination) | CONFIRMED (sourced from real VBA macro, verified against 4 real loans) | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeInsuranceFee()` |
 
 **Correctness over completeness, as instructed**: this document ends with five genuinely
 unresolved calculations (§4, §9's timing, §10's data model, §11, §12) rather than inventing
 formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business
-decision), and §8 are ready to guide real implementation.
+decision), §8, and §13 are ready to guide real implementation.

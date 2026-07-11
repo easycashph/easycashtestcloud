@@ -42,6 +42,22 @@ function defaultFirstRepaymentDate(): string {
 }
 
 /**
+ * Insurance Fee — sourced directly from MIS Nomer's Excel LMS's `CalculateInsurance()` VBA macro
+ * (legacy/reports/BETA 1.5.83 LMSv3.xlsm), transcribed verbatim, not re-derived: `Total Contract =
+ * MonthlyAmortization × Term`; `Insurance = (TotalContract / 1000) × Term`; `+20` when
+ * `TotalContract < 50000`; round UP to the nearest whole peso. Verified exact against 4 real
+ * loans (SML-REG_00365=260, SML-REG_00364=661, SL-REG_00109=315, SML-REG_00350=120) before being
+ * trusted here. The macro's own "Waive Insurance" checkbox isn't reproduced as a separate control
+ * — staff can already zero this field out manually, same as every other fee in this form.
+ */
+function computeInsuranceFee(monthlyAmortization: number, termMonths: number): number {
+  const totalContract = monthlyAmortization * termMonths;
+  let insurance = (totalContract / 1000) * termMonths;
+  if (totalContract < 50000) insurance += 20;
+  return Math.ceil(insurance);
+}
+
+/**
  * Find Client -> Loan Terms -> Schedule Preview -> Create. Scoped to an EXISTING client only
  * (2026-07-11 user decision) — a renewal or any new loan account goes straight here without
  * needing its own reviewed/approved Loan Application first. A brand-new (not-yet-a-client)
@@ -152,12 +168,13 @@ export function LoanAccountCreatePage() {
       ? previewLoanSchedule(principalNum, interestRateNum, installmentCountNum, new Date(firstRepaymentDate))
       : null;
 
-  // Origination fees (2026-07-11) — one-time deductions taken at disbursement. Per
-  // LEGACY_EXCEL_LMS_REFERENCE.md, only Account Management Fee (1% of principal), Notarial Fee,
-  // and Web Fee have confirmed defaults from real data; the rest (Processing Fee, Advance
-  // Interest, Outstanding Balance payoff, Doc Stamp, Insurance, Others) vary too much per loan to
-  // default — staff enters those directly, starting at 0. All nine fields stay freely editable
-  // regardless of whether a default was applied.
+  // Origination fees (2026-07-11) — one-time deductions taken at disbursement. Account Management
+  // Fee (1% of principal), Notarial Fee, Web Fee, and Insurance Fee (see computeInsuranceFee's own
+  // doc comment — sourced from the real CalculateInsurance() VBA macro, verified against 4 real
+  // loans) all have confirmed defaults from real data. Processing Fee, Advance Interest,
+  // Outstanding Balance payoff, Doc Stamp, and Others vary too much per loan (or have no evidence
+  // at all) to default — staff enters those directly, starting at 0. All nine fields stay freely
+  // editable regardless of whether a default was applied.
   // Processing Fee is entered as a percent of principal (matching the Excel's own O=P/I
   // relationship, just entered in the other direction) — no confirmed formula exists for what
   // that percent should be (see the "not reliably confirmed" note above), so it starts blank.
@@ -182,6 +199,15 @@ export function LoanAccountCreatePage() {
     setNotarialFee(isSlCorp ? '300.00' : '500.00');
     setWebFee(isSlCorp ? '0.00' : '500.00');
   }, [selectedProduct]);
+
+  // Insurance Fee: recomputes live from the schedule preview's Monthly Payment and the term,
+  // via computeInsuranceFee() (confirmed formula, see its own doc comment) — still freely
+  // editable/zeroable afterward, same pattern as every other default in this form.
+  React.useEffect(() => {
+    if (preview && installmentCountNum > 0) {
+      setInsuranceFee(computeInsuranceFee(preview.monthlyPayment, installmentCountNum).toFixed(2));
+    }
+  }, [preview?.monthlyPayment, installmentCountNum]);
 
   const processingFeePercentNum = Number.parseFloat(processingFeePercent) || 0;
   const processingFee = ((principalNum * processingFeePercentNum) / 100).toFixed(2);
@@ -579,6 +605,7 @@ export function LoanAccountCreatePage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="insurance-fee">Insurance Fee</Label>
                   <Input id="insurance-fee" type="number" min="0" step="0.01" value={insuranceFee} onChange={(e) => setInsuranceFee(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Auto-computed from Monthly Payment × Term (confirmed formula) — zero it out to waive.</p>
                 </div>
               </div>
 
