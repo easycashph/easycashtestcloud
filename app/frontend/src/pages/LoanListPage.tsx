@@ -113,7 +113,11 @@ export function LoanListPage() {
   const borrowerById = React.useMemo(() => new Map((borrowersQuery.data ?? []).map((b) => [b.id, b])), [borrowersQuery.data]);
 
   const productsQuery = useQuery({
-    queryKey: ['loan-products', 'all'],
+    // Distinct from the plain ['loan-products', 'all'] key used elsewhere (e.g.
+    // LoanAccountCreatePage) — this resolves to a Map, not a LoanProduct[]. Sharing a key across
+    // different result shapes let React Query serve one page's cached value to the other on
+    // navigation, crashing whichever page got a value shaped for the other (2026-07-11 bug).
+    queryKey: ['loan-products', 'version-to-product'],
     queryFn: async () => {
       const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProduct = new Map<string, { name: string; isActive: boolean }>();
