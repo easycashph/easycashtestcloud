@@ -191,13 +191,18 @@ export function AppLayout() {
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} onCollapse={() => setCollapsed(true)} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-        <div className="flex min-h-0 flex-1 flex-col">
+        {/* min-w-0 is required here: a flex child otherwise refuses to shrink below its content's
+            intrinsic width (the flexbox default is min-width: auto), so a wide table anywhere in
+            <Outlet /> was expanding this whole column — and with it the row containing the
+            sidebar — past the viewport, causing a page-level horizontal scrollbar that dragged the
+            (sticky) sidebar along with it instead of staying put while only the table scrolled. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar
             onMenuClick={() => setSidebarOpen((o) => !o)}
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <Outlet />
           </main>
           <PreviewFooterNote />
