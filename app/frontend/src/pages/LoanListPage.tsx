@@ -110,7 +110,11 @@ export function LoanListPage() {
   const borrowerById = React.useMemo(() => new Map((borrowersQuery.data ?? []).map((b) => [b.id, b])), [borrowersQuery.data]);
 
   const productsQuery = useQuery({
-    queryKey: ['loan-products', 'all'],
+    // Deliberately NOT ['loan-products', 'all'] — that key is shared by pages caching the plain
+    // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
+    // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
+    // identical fix for the full explanation.
+    queryKey: ['loan-products', 'all', 'versionToProductMap'],
     queryFn: async () => {
       const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProduct = new Map<string, { name: string; isActive: boolean }>();

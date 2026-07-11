@@ -2,7 +2,6 @@ import * as React from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, ArrowLeft, Lock, Paperclip, RotateCcw, ShieldCheck, UserPlus } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,11 +20,11 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
+import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, fetchAllPages, fetchFileBlob } from '@/lib/apiClient';
+import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, UpdateLoanApplicationRequest } from '@/lib/loanApplicationApiTypes';
-import type { Attachment } from '@/lib/documentApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
 import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
@@ -247,50 +246,6 @@ function findLoanTypeForProductName(productName: string): LoanTypeOption | null 
     if (PRODUCT_CLASS_BY_TYPE[type].some((c) => c.name === productName)) return type;
   }
   return null;
-}
-
-/**
- * Renders the applicant's uploaded Profile Picture attachment (if any) in place of initials — the
- * loan officer's ask is to see the actual document rather than dig through the Attachments panel.
- * The download endpoint requires a Bearer auth header, so a plain `<img src>` can't hit it directly
- * — fetched as a blob (same pattern as `AttachmentPreviewModal`) and rendered via an object URL.
- */
-function ApplicantAvatar({ ownerId, initials }: { ownerId: string; initials: string }) {
-  const attachmentsQuery = useQuery({
-    queryKey: ['attachments', 'LOAN_APPLICATION', ownerId],
-    queryFn: () => apiClient.get<Attachment[]>(`/attachments?ownerType=LOAN_APPLICATION&ownerId=${ownerId}`),
-  });
-  const profilePicture = attachmentsQuery.data?.find((a) => a.documentCategory === 'PROFILE_PICTURE') ?? null;
-  const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!profilePicture) {
-      setObjectUrl(null);
-      return;
-    }
-    let cancelled = false;
-    let localUrl: string | null = null;
-    fetchFileBlob(`/attachments/${profilePicture.id}/download`)
-      .then((blob) => {
-        if (cancelled) return;
-        localUrl = URL.createObjectURL(blob);
-        setObjectUrl(localUrl);
-      })
-      .catch(() => {
-        // Falls back to initials below — not worth a dedicated error state for an avatar.
-      });
-    return () => {
-      cancelled = true;
-      if (localUrl) URL.revokeObjectURL(localUrl);
-    };
-  }, [profilePicture?.id]);
-
-  return (
-    <Avatar className="h-10 w-10">
-      {objectUrl && <AvatarImage src={objectUrl} alt="Applicant profile picture" />}
-      <AvatarFallback>{initials}</AvatarFallback>
-    </Avatar>
-  );
 }
 
 /**

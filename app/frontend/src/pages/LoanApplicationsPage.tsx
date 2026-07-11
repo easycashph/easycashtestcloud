@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, FilePlus2, Lock, Search } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +10,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -217,9 +217,12 @@ export function LoanApplicationsPage() {
                 <TableRow key={app.id}>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-7 w-7">
-                        <AvatarFallback className="text-xs">{applicantInitials(app.applicantName)}</AvatarFallback>
-                      </Avatar>
+                      <ApplicantAvatar
+                        ownerId={app.id}
+                        initials={applicantInitials(app.applicantName)}
+                        className="h-7 w-7"
+                        fallbackClassName="text-xs"
+                      />
                       <span>{app.applicantName}</span>
                     </div>
                   </TableCell>

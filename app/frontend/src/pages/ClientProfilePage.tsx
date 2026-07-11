@@ -411,7 +411,13 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
     queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
   });
   const productsQuery = useQuery({
-    queryKey: ['loan-products', 'all'],
+    // Deliberately NOT ['loan-products', 'all'] — that key is shared by every other page that
+    // caches the plain LoanProduct[] array (LoanApplicationDetailPage, DashboardPage,
+    // LoanListPage, etc.). This query's data shape (a version-id -> product-name Map) is
+    // different, and React Query caches strictly by key — reusing the same key served this
+    // page's Map to those array-shaped consumers on later navigation, crashing them
+    // (`(productsQuery.data ?? []).flatMap is not a function`).
+    queryKey: ['loan-products', 'all', 'versionToProductNameMap'],
     queryFn: async () => {
       const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProductName = new Map<string, string>();

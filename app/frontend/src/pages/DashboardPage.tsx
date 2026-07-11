@@ -330,7 +330,11 @@ export function DashboardPage() {
   const loanAccountsQuery = useQuery({ queryKey: ['loan-accounts', 'all'], queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts') });
   const borrowersQuery = useQuery({ queryKey: ['borrowers', 'all'], queryFn: () => fetchAllPages<Borrower>('/borrowers') });
   const productsQuery = useQuery({
-    queryKey: ['loan-products', 'all'],
+    // Deliberately NOT ['loan-products', 'all'] — that key is shared by pages caching the plain
+    // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
+    // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
+    // identical fix for the full explanation.
+    queryKey: ['loan-products', 'all', 'versionToProductNameMap'],
     queryFn: async () => {
       const products = await fetchAllPages<LoanProduct>('/loan-products');
       const versionToProductName = new Map<string, string>();
