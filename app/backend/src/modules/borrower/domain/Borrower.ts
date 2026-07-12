@@ -64,6 +64,8 @@ export interface BorrowerProps {
   status: BorrowerStatus;
   loanCycle: number;
   legacyId?: string;
+  /** LoanApplication this borrower was created from via "Create Client Profile", if any. */
+  sourceApplicationId?: string;
   createdAt: Date;
   updatedAt: Date;
   incomeDetail?: BorrowerIncomeDetail;
@@ -89,6 +91,7 @@ export interface CreateBorrowerProps {
   dependants?: BorrowerDependant[];
   note?: string;
   legacyId?: string;
+  sourceApplicationId?: string;
   incomeDetail?: BorrowerIncomeDetail;
   governmentId?: BorrowerGovernmentId;
   identificationDocuments?: IdentificationDocument[];
@@ -126,6 +129,7 @@ export class Borrower {
       status: 'ACTIVE',
       loanCycle: 0,
       legacyId: input.legacyId,
+      sourceApplicationId: input.sourceApplicationId,
       createdAt: now,
       updatedAt: now,
       incomeDetail: input.incomeDetail,
@@ -211,6 +215,10 @@ export class Borrower {
 
   get legacyId(): string | undefined {
     return this.props.legacyId;
+  }
+
+  get sourceApplicationId(): string | undefined {
+    return this.props.sourceApplicationId;
   }
 
   get createdAt(): Date {

@@ -21,5 +21,9 @@ export interface FindManyBorrowersOptions {
 export interface IBorrowerRepository {
   findById(id: string, ctx?: TransactionContext): Promise<Borrower | null>;
   findMany(options: FindManyBorrowersOptions, ctx?: TransactionContext): Promise<Borrower[]>;
+  /** Looks up the borrower created from a given LoanApplication via "Create Client Profile", if any. */
+  findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<Borrower | null>;
+  /** Batched form of `findBySourceApplicationId` for list views - one query for N applications. */
+  findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<Borrower[]>;
   save(borrower: Borrower, ctx?: TransactionContext): Promise<void>;
 }

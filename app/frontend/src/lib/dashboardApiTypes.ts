@@ -14,4 +14,12 @@ export interface DashboardSummary {
     count: number;
     outstandingPrincipalBalance: string;
   }>;
+  /** Next 4 months, bottom-up sum of each ACTIVE/ACTIVE_IN_ARREARS loan's own repayment schedule -
+   * not adjusted by a collection-realization rate (no real monthly target exists yet to compute
+   * one against). */
+  collectionsForecast: Array<{
+    month: string;
+    year: number;
+    scheduledAmount: string;
+  }>;
 }

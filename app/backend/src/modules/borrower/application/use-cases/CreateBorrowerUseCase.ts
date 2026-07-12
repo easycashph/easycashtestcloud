@@ -35,6 +35,7 @@ export class CreateBorrowerUseCase {
       dependants: input.dependants,
       note: input.note,
       legacyId: input.legacyId,
+      sourceApplicationId: input.sourceApplicationId,
       incomeDetail: input.incomeDetail,
       governmentId: input.governmentId,
       characterReferences: input.characterReferences?.map((ref) => ({ id: randomUUID(), ...ref, lastName: ref.lastName ?? '' })),

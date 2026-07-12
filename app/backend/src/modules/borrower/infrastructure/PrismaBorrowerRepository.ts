@@ -50,6 +50,7 @@ function toBorrower(row: BorrowerRow, addresses: Address[]): Borrower {
     status: row.status,
     loanCycle: row.loanCycle,
     legacyId: row.legacyId ?? undefined,
+    sourceApplicationId: row.sourceApplicationId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     incomeDetail: row.incomeDetail
@@ -103,6 +104,40 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
 
     const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: id } });
     return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  async findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<Borrower | null> {
+    const client = resolveClient(ctx);
+    const row = await client.borrower.findUnique({ where: { sourceApplicationId: applicationId }, include: BORROWER_INCLUDE });
+    if (!row) {
+      return null;
+    }
+    const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: row.id } });
+    return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  async findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<Borrower[]> {
+    if (applicationIds.length === 0) {
+      return [];
+    }
+    const client = resolveClient(ctx);
+    const rows = await client.borrower.findMany({
+      where: { sourceApplicationId: { in: applicationIds } },
+      include: BORROWER_INCLUDE,
+    });
+    if (rows.length === 0) {
+      return [];
+    }
+    const addressRows = await client.address.findMany({
+      where: { ownerType: 'BORROWER', ownerId: { in: rows.map((row) => row.id) } },
+    });
+    const addressesByOwnerId = new Map<string, Address[]>();
+    for (const addressRow of addressRows) {
+      const list = addressesByOwnerId.get(addressRow.ownerId) ?? [];
+      list.push(toAddress(addressRow));
+      addressesByOwnerId.set(addressRow.ownerId, list);
+    }
+    return rows.map((row) => toBorrower(row, addressesByOwnerId.get(row.id) ?? []));
   }
 
   /**
@@ -187,6 +222,7 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           status: borrower.status,
           loanCycle: borrower.loanCycle,
           legacyId: borrower.legacyId,
+          sourceApplicationId: borrower.sourceApplicationId,
           createdAt: borrower.createdAt,
           updatedAt: borrower.updatedAt,
           incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,

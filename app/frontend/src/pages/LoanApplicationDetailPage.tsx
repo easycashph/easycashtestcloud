@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Lock, Paperclip, RotateCcw, ShieldCheck, UserPlus, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +72,7 @@ function CreateClientProfileDialog({
   application: LoanApplication;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const initialSplit = React.useMemo(() => splitApplicantName(application.applicantName), [application.applicantName]);
   const [firstName, setFirstName] = React.useState(initialSplit.firstName);
   const [middleName, setMiddleName] = React.useState(initialSplit.middleName);
@@ -152,6 +153,7 @@ function CreateClientProfileDialog({
 
       const borrower = await apiClient.post<Borrower>('/borrowers', {
         branchId: application.branchId,
+        sourceApplicationId: application.id,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         middleName: middleName.trim() || undefined,
@@ -193,6 +195,7 @@ function CreateClientProfileDialog({
     },
     onSuccess: (borrower) => {
       onOpenChange(false);
+      queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
       navigate(`/clients/${borrower.id}`);
     },
   });
@@ -837,16 +840,23 @@ export function LoanApplicationDetailPage() {
               )}
             </div>
           </div>
-          {canAccessLoanApplications && (
-            <Button
-              size="sm"
-              disabled={application.status !== 'APPROVED'}
-              onClick={() => setCreateClientOpen(true)}
-              title={application.status !== 'APPROVED' ? 'Only available once the application is Approved' : undefined}
-            >
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client Profile
-            </Button>
-          )}
+          {canAccessLoanApplications &&
+            (application.createdBorrowerId ? (
+              <Button size="sm" variant="outline" asChild>
+                <Link to={`/clients/${application.createdBorrowerId}`} className="inline-flex items-center">
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Client Profile Created
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={application.status !== 'APPROVED'}
+                onClick={() => setCreateClientOpen(true)}
+                title={application.status !== 'APPROVED' ? 'Only available once the application is Approved' : undefined}
+              >
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client Profile
+              </Button>
+            ))}
         </div>
       </div>
 

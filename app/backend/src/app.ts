@@ -376,8 +376,10 @@ export function createApp(): Express {
   app.use('/api/v1', dashboardRouter);
 
   // --- loan-application module wiring (Milestone 9.2: intake/decision workflow, plus the
-  // system-computed PREAPPROVED/PREDECLINED pre-qualification added 2026-07-11 —
-  // approved-application-to-Borrower/LoanAccount conversion is a deliberate follow-up) ---
+  // system-computed PREAPPROVED/PREDECLINED pre-qualification added 2026-07-11 — the
+  // approved-application-to-Borrower/LoanAccount conversion itself lives in the borrower/
+  // loan-account modules' own create flows; this module only reads the resulting linkage back
+  // via Borrower.sourceApplicationId, see LoanApplicationController.buildLinkage) ---
   const loanApplicationRepository = new PrismaLoanApplicationRepository();
   const branchRepository = new PrismaBranchRepository();
   const geocodingService = new NominatimGeocodingService();
@@ -410,6 +412,8 @@ export function createApp(): Express {
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
       preQualificationService,
+      borrowerRepository,
+      loanAccountRepository,
     },
     tokenService,
   );

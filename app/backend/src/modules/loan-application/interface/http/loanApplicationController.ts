@@ -12,13 +12,15 @@ import type { DeclineLoanApplicationUseCase } from '../../application/use-cases/
 import type { RevertLoanApplicationDecisionUseCase } from '../../application/use-cases/RevertLoanApplicationDecisionUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
+import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type {
   AssignLoanApplicationProductRequestBody,
   CreateLoanApplicationRequestBody,
   DecideLoanApplicationRequestBody,
   UpdateLoanApplicationRequestBody,
 } from './loanApplicationSchemas';
-import { presentLoanApplication } from './presenters/LoanApplicationPresenter';
+import { presentLoanApplication, type LoanApplicationLinkage } from './presenters/LoanApplicationPresenter';
 
 export interface LoanApplicationControllerDeps {
   createLoanApplicationUseCase: CreateLoanApplicationUseCase;
@@ -30,6 +32,8 @@ export interface LoanApplicationControllerDeps {
   revertLoanApplicationDecisionUseCase: RevertLoanApplicationDecisionUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
+  borrowerRepository: IBorrowerRepository;
+  loanAccountRepository: ILoanAccountRepository;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -51,8 +55,46 @@ export class LoanApplicationController {
     });
   }
 
-  private present(application: LoanApplication) {
-    return presentLoanApplication(application, this.buildBreakdown(application));
+  private async buildLinkage(applicationId: string): Promise<LoanApplicationLinkage> {
+    const borrower = await this.deps.borrowerRepository.findBySourceApplicationId(applicationId);
+    if (!borrower) {
+      return { createdBorrowerId: null, createdLoanAccountId: null, createdLoanAccountCode: null };
+    }
+    const [loanAccount] = await this.deps.loanAccountRepository.findMany({ borrowerId: borrower.id, limit: 1 });
+    return {
+      createdBorrowerId: borrower.id,
+      createdLoanAccountId: loanAccount?.id ?? null,
+      createdLoanAccountCode: loanAccount?.loanCode ?? null,
+    };
+  }
+
+  private async present(application: LoanApplication): Promise<ReturnType<typeof presentLoanApplication>> {
+    const linkage = await this.buildLinkage(application.id);
+    return presentLoanApplication(application, this.buildBreakdown(application), linkage);
+  }
+
+  /** Batched variant of `present` for list views - one borrower query and one loan-account
+   * query for the whole page instead of N+1. */
+  private async presentMany(applications: LoanApplication[]): Promise<ReturnType<typeof presentLoanApplication>[]> {
+    const borrowers = await this.deps.borrowerRepository.findManyBySourceApplicationIds(applications.map((a) => a.id));
+    const borrowerByApplicationId = new Map(borrowers.map((b) => [b.sourceApplicationId as string, b]));
+    const borrowerIds = borrowers.map((b) => b.id);
+    const loanAccounts =
+      borrowerIds.length > 0
+        ? (await Promise.all(borrowerIds.map((borrowerId) => this.deps.loanAccountRepository.findMany({ borrowerId, limit: 1 })))).flat()
+        : [];
+    const loanAccountByBorrowerId = new Map(loanAccounts.map((la) => [la.borrowerId, la]));
+
+    return applications.map((application) => {
+      const borrower = borrowerByApplicationId.get(application.id);
+      const loanAccount = borrower ? loanAccountByBorrowerId.get(borrower.id) : undefined;
+      const linkage: LoanApplicationLinkage = {
+        createdBorrowerId: borrower?.id ?? null,
+        createdLoanAccountId: loanAccount?.id ?? null,
+        createdLoanAccountCode: loanAccount?.loanCode ?? null,
+      };
+      return presentLoanApplication(application, this.buildBreakdown(application), linkage);
+    });
   }
 
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -66,7 +108,7 @@ export class LoanApplicationController {
         branchId,
         encodedByUserId: currentUser.sub,
       });
-      res.status(201).json(this.present(application));
+      res.status(201).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -77,7 +119,7 @@ export class LoanApplicationController {
       const scope = resolveBranchScope(req);
       const application = await this.deps.getLoanApplicationUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, application.branchId);
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -89,7 +131,8 @@ export class LoanApplicationController {
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
       const applications = await this.deps.listLoanApplicationsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
-      res.status(200).json(toPaginatedResponse(applications.map((a) => this.present(a)), limit, (item) => item.id));
+      const presented = await this.presentMany(applications);
+      res.status(200).json(toPaginatedResponse(presented, limit, (item) => item.id));
     } catch (error) {
       next(error);
     }
@@ -104,7 +147,7 @@ export class LoanApplicationController {
         body.loanProductVersionId,
         currentUser.sub,
       );
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -115,7 +158,7 @@ export class LoanApplicationController {
       const body = req.body as DecideLoanApplicationRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.approveLoanApplicationUseCase.execute(req.params.id as string, currentUser.sub, body.decisionNote);
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -126,7 +169,7 @@ export class LoanApplicationController {
       const body = req.body as DecideLoanApplicationRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.declineLoanApplicationUseCase.execute(req.params.id as string, currentUser.sub, body.decisionNote);
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -136,7 +179,7 @@ export class LoanApplicationController {
     try {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.revertLoanApplicationDecisionUseCase.execute(req.params.id as string, currentUser.sub);
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }
@@ -150,7 +193,7 @@ export class LoanApplicationController {
       const body = req.body as UpdateLoanApplicationRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.updateLoanApplicationUseCase.execute(req.params.id as string, body, currentUser.sub);
-      res.status(200).json(this.present(application));
+      res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
     }

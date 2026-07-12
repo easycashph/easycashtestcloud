@@ -33,7 +33,7 @@ import { useLanguage } from '@/lib/languageContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import { COLLECTIONS_VS_TARGET, SAMPLE_COLLECTIONS_PROJECTION } from '@/lib/mockData';
+import { COLLECTIONS_VS_TARGET } from '@/lib/mockData';
 import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 /** Loan row shape every portfolio widget below reads - assembled once from the real `GET
@@ -735,30 +735,34 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>{t('dashboard.collectionsForecast.title')}</CardTitle>
-              <CardDescription>Next 4 months, from each active loan's own repayment schedule - portfolio-wide, not affected by the Portfolio Filter</CardDescription>
-            </div>
-            <Badge variant="warning">Sample Projection</Badge>
+          <CardHeader>
+            <CardTitle>{t('dashboard.collectionsForecast.title')}</CardTitle>
+            <CardDescription>Next 4 months, from each active loan's own repayment schedule - portfolio-wide, not affected by the Portfolio Filter</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={SAMPLE_COLLECTIONS_PROJECTION}>
+                <LineChart data={summaryQuery.data?.collectionsForecast ?? []}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
-                  <Line type="monotone" dataKey="projected" stroke="hsl(var(--chart-4))" strokeWidth={2} strokeDasharray="6 3" />
+                  <Line
+                    type="monotone"
+                    dataKey={(d: { scheduledAmount: string }) => Number.parseFloat(d.scheduledAmount) || 0}
+                    name="Scheduled"
+                    stroke="hsl(var(--chart-4))"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Bottom-up, not a fitted trend line: sums each active loan's actual scheduled installments due per month, then applies
-              the portfolio's own recent collection-realization rate (average actual ÷ target). Stays portfolio-wide by design - a
-              cash-flow forecast is most useful as a whole-company number. Still a sample-data illustration, not a production
-              forecasting engine.
+              Bottom-up, not a fitted trend line: sums each active loan's own scheduled principal + interest due per month, straight
+              from its repayment schedule. Stays portfolio-wide by design - a cash-flow forecast is most useful as a whole-company
+              number. Not adjusted by a collection-realization rate - that would need a real monthly collection target to compute
+              against, which doesn't exist yet (see "Collections vs. Target" below).
             </p>
           </CardContent>
         </Card>

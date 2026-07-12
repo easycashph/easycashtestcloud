@@ -81,6 +81,13 @@ export interface LoanApplication {
   createdAt: string;
   updatedAt: string;
   preQualificationBreakdown: PreQualificationBreakdown | null;
+  /** Set once "Create Client Profile" has been used on this (Approved) application - the id of
+   * the resulting Borrower, looked up server-side via Borrower.sourceApplicationId. Prevents
+   * creating a duplicate client. */
+  createdBorrowerId: string | null;
+  /** Set once "Create Loan Account" has been used for the client created from this application. */
+  createdLoanAccountId: string | null;
+  createdLoanAccountCode: string | null;
 }
 
 /** Body for `POST /loan-applications`. `branchId` is overridden server-side for non-global roles. */

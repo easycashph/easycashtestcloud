@@ -120,6 +120,8 @@ export interface Borrower {
   status: BorrowerStatus;
   loanCycle: number;
   legacyId: string | null;
+  /** Set when this client was created via "Create Client Profile" from an APPROVED loan application. */
+  sourceApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
   incomeDetail: BorrowerIncomeDetail | null;
@@ -146,6 +148,9 @@ export interface CreateBorrowerRequest {
   email?: string;
   dependants?: BorrowerDependant[];
   note?: string;
+  /** Set by the "Create Client Profile" flow on an APPROVED loan application - links the new
+   * client back to it so the application can't be used to create a duplicate. */
+  sourceApplicationId?: string;
   incomeDetail?: {
     employmentType?: string;
     employerName?: string;

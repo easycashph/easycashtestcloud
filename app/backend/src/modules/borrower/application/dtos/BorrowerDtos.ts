@@ -44,6 +44,7 @@ export interface CreateBorrowerInput {
   dependants?: CreateBorrowerDependantInput[];
   note?: string;
   legacyId?: string;
+  sourceApplicationId?: string;
   incomeDetail?: CreateBorrowerIncomeDetailInput;
   governmentId?: CreateBorrowerGovernmentIdInput;
   characterReferences?: CreateBorrowerCharacterReferenceInput[];

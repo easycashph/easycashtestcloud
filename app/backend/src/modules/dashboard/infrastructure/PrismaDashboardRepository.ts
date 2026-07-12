@@ -13,7 +13,9 @@ export class PrismaDashboardRepository implements IDashboardRepository {
   async getSummary(branchId: string | undefined): Promise<DashboardSummary> {
     const branchFilter = branchId ? { branchId } : {};
 
-    const [activeAgg, overdueAgg, collectionsAgg, byProductGroups] = await Promise.all([
+    const forecastMonths = nextFourMonthRanges();
+
+    const [activeAgg, overdueAgg, collectionsAgg, byProductGroups, forecastAggs] = await Promise.all([
       prisma.loanAccount.aggregate({
         where: { ...branchFilter, status: { in: [...ACTIVE_STATUSES] } },
         _count: true,
@@ -38,6 +40,17 @@ export class PrismaDashboardRepository implements IDashboardRepository {
         _count: true,
         _sum: { principalBalance: true },
       }),
+      Promise.all(
+        forecastMonths.map((range) =>
+          prisma.repaymentSchedule.aggregate({
+            where: {
+              dueDate: { gte: range.start, lt: range.end },
+              loanAccount: { status: { in: [...ACTIVE_STATUSES] }, ...branchFilter },
+            },
+            _sum: { principalDue: true, interestDue: true },
+          }),
+        ),
+      ),
     ]);
 
     const versionIds = byProductGroups.map((g) => g.loanProductVersionId);
@@ -84,9 +97,19 @@ export class PrismaDashboardRepository implements IDashboardRepository {
         ...p,
         outstandingPrincipalBalance: p.outstandingPrincipalBalance.toString(),
       })),
+      collectionsForecast: forecastMonths.map((range, i) => {
+        const agg = forecastAggs[i];
+        return {
+          month: MONTH_ABBREVIATIONS[range.start.getUTCMonth()] as string,
+          year: range.start.getUTCFullYear(),
+          scheduledAmount: (Number(agg?._sum.principalDue ?? 0) + Number(agg?._sum.interestDue ?? 0)).toString(),
+        };
+      }),
     };
   }
 }
+
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function startOfCurrentMonth(): Date {
   const now = new Date();
@@ -96,4 +119,17 @@ function startOfCurrentMonth(): Date {
 function startOfNextMonth(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+}
+
+/** The 4 calendar months following the current one - matches the Dashboard's "Collections
+ * Forecast" card ("Next 4 months"), which starts the count at next month, not the current one. */
+function nextFourMonthRanges(): { start: Date; end: Date }[] {
+  const now = new Date();
+  const ranges: { start: Date; end: Date }[] = [];
+  for (let i = 1; i <= 4; i++) {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i + 1, 1));
+    ranges.push({ start, end });
+  }
+  return ranges;
 }

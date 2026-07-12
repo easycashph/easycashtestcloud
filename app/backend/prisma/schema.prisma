@@ -479,6 +479,13 @@ model Borrower {
   assignedLoanOfficerId String?
   assignedLoanOfficer   User?   @relation("BorrowerLoanOfficer", fields: [assignedLoanOfficerId], references: [id])
 
+  /// Set when this Borrower was created via "Create Client Profile" from an APPROVED
+  /// LoanApplication (see CreateBorrowerUseCase) - lets the application detail page know a
+  /// client already exists for it and prevents creating a duplicate. Null for borrowers created
+  /// any other way (e.g. legacy migration, direct walk-in without an application on file).
+  sourceApplicationId String?         @unique
+  sourceApplication   LoanApplication? @relation(fields: [sourceApplicationId], references: [id])
+
   firstName     String
   middleName    String?
   lastName      String
@@ -1140,6 +1147,10 @@ model LoanApplication {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Reverse side of Borrower.sourceApplicationId - set once "Create Client Profile" has been
+  /// used on this application.
+  createdBorrower Borrower?
 
   @@index([branchId])
   @@index([status])

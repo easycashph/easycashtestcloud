@@ -1,10 +1,22 @@
 import type { LoanApplication } from '../../../domain/LoanApplication';
 import type { PreQualificationBreakdown } from '../../../application/services/LoanApplicationPreQualificationService';
 
+/** Whether/what "Create Client Profile" and "Create Loan Account" have already produced for this
+ * application - looked up separately by the controller (Borrower/LoanAccount live in other
+ * modules) and passed in here, never derived from the LoanApplication aggregate itself. */
+export interface LoanApplicationLinkage {
+  createdBorrowerId: string | null;
+  createdLoanAccountId: string | null;
+  createdLoanAccountCode: string | null;
+}
+
+const NO_LINKAGE: LoanApplicationLinkage = { createdBorrowerId: null, createdLoanAccountId: null, createdLoanAccountCode: null };
+
 /** Milestone 9.2 / D-5 convention: the only place a LoanApplication becomes JSON-safe.
  * `breakdown` is optional purely for callers/tests that don't need the decision-scoring
  * explanation — every real HTTP route passes it (see `LoanApplicationController.present`). */
-export function presentLoanApplication(application: LoanApplication, breakdown?: PreQualificationBreakdown) {
+export function presentLoanApplication(application: LoanApplication, breakdown?: PreQualificationBreakdown, linkage?: LoanApplicationLinkage) {
+  const l = linkage ?? NO_LINKAGE;
   const p = application.toProps();
   return {
     id: p.id,
@@ -53,5 +65,8 @@ export function presentLoanApplication(application: LoanApplication, breakdown?:
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     preQualificationBreakdown: breakdown ?? null,
+    createdBorrowerId: l.createdBorrowerId,
+    createdLoanAccountId: l.createdLoanAccountId,
+    createdLoanAccountCode: l.createdLoanAccountCode,
   };
 }

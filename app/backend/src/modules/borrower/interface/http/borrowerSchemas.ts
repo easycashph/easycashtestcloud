@@ -54,6 +54,10 @@ export const createBorrowerSchema = z.object({
   dependants: z.array(dependantSchema).optional(),
   note: z.string().min(1).optional(),
   legacyId: z.string().min(1).optional(),
+  /** Set by the "Create Client Profile" flow on an APPROVED LoanApplication (Loan Application
+   * Detail page) - links the new borrower back to it so the application can't be used to create
+   * a duplicate client. Omitted for any other creation path (walk-in, migration, etc). */
+  sourceApplicationId: z.string().min(1).optional(),
   incomeDetail: incomeDetailSchema.optional(),
   governmentId: governmentIdSchema.optional(),
   characterReferences: z.array(characterReferenceSchema).optional(),

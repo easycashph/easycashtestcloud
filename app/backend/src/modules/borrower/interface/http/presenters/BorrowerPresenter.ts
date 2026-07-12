@@ -34,6 +34,7 @@ export function presentBorrower(borrower: Borrower) {
     status: borrower.status,
     loanCycle: borrower.loanCycle,
     legacyId: borrower.legacyId ?? null,
+    sourceApplicationId: borrower.sourceApplicationId ?? null,
     createdAt: borrower.createdAt.toISOString(),
     updatedAt: borrower.updatedAt.toISOString(),
     incomeDetail: borrower.incomeDetail ?? null,
