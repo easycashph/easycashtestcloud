@@ -205,6 +205,7 @@ model User {
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
   loanNotesAuthored        LoanNote[]
+  loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
 
   @@map("users")
 }
@@ -756,11 +757,12 @@ model LoanAccount {
   /// `ConcurrencyConflictError`, never a silent overwrite.
   version Int @default(0)
 
-  transactions      LoanTransaction[]
-  repaymentSchedule RepaymentSchedule[]
-  appliedFees       AppliedFee[]
-  coBorrowers       LoanAccountCoBorrower[]
-  notes             LoanNote[]
+  transactions       LoanTransaction[]
+  repaymentSchedule  RepaymentSchedule[]
+  appliedFees        AppliedFee[]
+  coBorrowers        LoanAccountCoBorrower[]
+  notes              LoanNote[]
+  generatedDocuments GeneratedLoanDocument[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -982,29 +984,70 @@ model Attachment {
   @@map("attachments")
 }
 
+/// ADR-051: repurposes the table originally scaffolded (init migration) for the legacy SDevTech
+/// `document_templates` collection (`contentHtml`, HTML-based) — that migration path was
+/// investigated and deliberately NOT taken (ADR-051 §6: 507 rows collapse to 365 sprawling
+/// historical variants, and the per-product mapping references a Mambu-era product catalog that
+/// doesn't join to any currently-migrated `LoanProductVersion.legacyId`). Nothing in `src/` ever
+/// referenced the old shape, so no data migration is needed — this is the first real use of these
+/// two tables.
+///
+/// One row per document type (11 total: 4 required + 7 conditional — see ADR-051 §1). `code` is
+/// the stable identifier the generation code uses to find the matching `.docx` file under
+/// `app/backend/templates/`. Required documents (`isRequired: true`) apply to every loan and have
+/// no `DocumentTemplateMapping` rows; conditional documents are linked to the Loan Products they
+/// apply to via that table.
 model DocumentTemplate {
-  id          String  @id @default(uuid())
-  name        String
-  contentHtml String
-  isActive    Boolean @default(true)
+  id         String  @id @default(uuid())
+  code       String  @unique
+  name       String
+  isRequired Boolean @default(false)
+  sortIndex  Int     @default(0)
 
-  legacyId  String?  @unique
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  productLinks DocumentTemplateMapping[]
+  productLinks       DocumentTemplateMapping[]
+  generatedDocuments GeneratedLoanDocument[]
 
   @@map("document_templates")
 }
 
+/// Only ever holds CONDITIONAL document templates (ADR-051 §1/§3) — required templates apply
+/// universally and never get a row here, so this table's size reflects only the per-product
+/// variation, not every template x every product.
 model DocumentTemplateMapping {
   loanProductId      String
   documentTemplateId String
-  sortIndex          Int              @default(0)
   loanProduct        LoanProduct      @relation(fields: [loanProductId], references: [id], onDelete: Cascade)
   documentTemplate   DocumentTemplate @relation(fields: [documentTemplateId], references: [id], onDelete: Cascade)
 
   @@id([loanProductId, documentTemplateId])
   @@map("document_template_mappings")
+}
+
+/// Append-only (ADR-051 §3) — matches this project's ledger philosophy (TXN-1, `LoanNote`,
+/// `PaymentAllocation`): "Regenerate" in the UI always inserts a new row rather than overwriting,
+/// so a document a borrower has already been shown/signed is never silently erased from the
+/// record, even after a later data correction. The Documents tab shows the latest row per
+/// `documentTemplateId` for a loan, with older ones available as history.
+model GeneratedLoanDocument {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+
+  documentTemplateId String
+  documentTemplate   DocumentTemplate @relation(fields: [documentTemplateId], references: [id])
+
+  /// Key into the existing local storage abstraction (DOC-3, `app/backend/storage/`).
+  storageKey String
+
+  generatedByUserId String
+  generatedBy       User     @relation("LoanDocumentGeneratedBy", fields: [generatedByUserId], references: [id])
+  generatedAt       DateTime @default(now())
+
+  @@index([loanAccountId])
+  @@map("generated_loan_documents")
 }
 
 // ----------------------------------------------------------------------------

@@ -154,6 +154,32 @@ async function apiRequest<T>(path: string, init: ApiRequestInit = {}, allowRefre
   return data as T;
 }
 
+function fileNameFromContentDisposition(header: string | null): string {
+  const match = header?.match(/filename="([^"]+)"/);
+  return match?.[1] ?? 'download';
+}
+
+/**
+ * Binary (non-JSON) download — separate from `apiRequest` because the response body is a Blob
+ * (a PDF, here), not JSON. Same auth-header + one-retry-on-401 behavior as every other call.
+ */
+async function downloadFile(path: string, allowRefreshRetry = true): Promise<{ blob: Blob; fileName: string }> {
+  const res = await rawRequest(path, { method: 'GET' });
+
+  if (res.status === 401 && allowRefreshRetry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return downloadFile(path, false);
+    onSessionExpired?.();
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, 'DOWNLOAD_FAILED', 'Could not download the file. Please try again.');
+  }
+
+  const blob = await res.blob();
+  return { blob, fileName: fileNameFromContentDisposition(res.headers.get('content-disposition')) };
+}
+
 export const apiClient = {
   get: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
@@ -161,6 +187,7 @@ export const apiClient = {
   patch: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
     apiRequest<T>(path, { method: 'PATCH', body, headers }),
   delete: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'DELETE' }),
+  downloadFile,
 };
 
 interface CursorPage<T> {

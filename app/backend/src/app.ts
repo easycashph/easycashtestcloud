@@ -96,6 +96,17 @@ import { PrismaReportingRepository } from '@modules/reporting/infrastructure/Pri
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
+import { LocalFileStorage } from '@shared/infrastructure/LocalFileStorage';
+import { prisma } from '@shared/database/prismaClient';
+import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/loanDocumentRouter';
+import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
+import { ListLoanDocumentsUseCase } from '@modules/loan-document/application/use-cases/ListLoanDocumentsUseCase';
+import { GetGeneratedLoanDocumentFileUseCase } from '@modules/loan-document/application/use-cases/GetGeneratedLoanDocumentFileUseCase';
+import { PrismaDocumentTemplateRepository } from '@modules/loan-document/infrastructure/PrismaDocumentTemplateRepository';
+import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/infrastructure/PrismaGeneratedLoanDocumentRepository';
+import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
+import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
+import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -321,6 +332,54 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanNoteRouter);
+
+  // --- loan-document module wiring (ADR-051, 2026-07-12: Loan Document Generation) ---
+  const documentTemplateRepository = new PrismaDocumentTemplateRepository();
+  const generatedLoanDocumentRepository = new PrismaGeneratedLoanDocumentRepository();
+  // STORAGE_DRIVER=s3 is declared in env validation (ADR-051 §4's storage abstraction) but has no
+  // implementation yet — fail fast rather than silently falling back to local.
+  if (env.STORAGE_DRIVER !== 'local') {
+    throw new Error(`STORAGE_DRIVER=${env.STORAGE_DRIVER} has no implementation yet — only "local" is supported.`);
+  }
+  const fileStorage = new LocalFileStorage(env.STORAGE_LOCAL_PATH);
+  const mergeDataResolver = new LoanDocumentMergeDataResolver({
+    loanAccountRepository,
+    borrowerRepository,
+    loanProductRepository,
+    repaymentInstallmentRepository,
+    prisma,
+  });
+  const documentFiller = new DocxtemplaterDocumentFiller();
+  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter();
+  const loanDocumentRouter = createLoanDocumentRouter(
+    {
+      generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+        mergeDataResolver,
+        documentFiller,
+        docxToPdfConverter,
+        fileStorage,
+      }),
+      listLoanDocumentsUseCase: new ListLoanDocumentsUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+      }),
+      getGeneratedLoanDocumentFileUseCase: new GetGeneratedLoanDocumentFileUseCase({
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+        fileStorage,
+      }),
+      getLoanAccountUseCase,
+      idempotencyKeyStore,
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanDocumentRouter);
 
   // --- ledger module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
   const ledgerRouter = createLedgerRouter(

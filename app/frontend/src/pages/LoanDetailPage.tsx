@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, Circle, Clock, FileCheck2, Mail, MessageSquareText, MonitorSmartphone, Paperclip, Sparkles, Trash2, Upload } from 'lucide-react';
 import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, LoanNote, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, LoanAccount, LoanDocumentListItem, LoanNote, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -425,6 +425,65 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     },
   });
 
+  // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory Note, and
+  // other applicable legal documents, available once the loan is APPROVED.
+  const documentsQuery = useQuery({
+    queryKey: ['loan-documents', loanId],
+    queryFn: () => apiClient.get<{ items: LoanDocumentListItem[] }>(`/loan-accounts/${loanId}/documents`),
+  });
+  const [selectedDocumentCodes, setSelectedDocumentCodes] = React.useState<Set<string>>(new Set());
+  const [docsError, setDocsError] = React.useState<string | null>(null);
+  // Tracks which template is mid-generation so its row/button can show progress — generation runs
+  // one at a time (bulk actions loop sequentially) rather than firing every request in parallel,
+  // since each one shells out to LibreOffice (ADR-051 §4) and doesn't need to race the others.
+  const [generatingCode, setGeneratingCode] = React.useState<string | null>(null);
+
+  const generateDocumentMutation = useMutation({
+    mutationFn: (documentTemplateCode: string) =>
+      apiClient.post(`/loan-accounts/${loanId}/documents`, { documentTemplateCode }, { 'Idempotency-Key': crypto.randomUUID() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['loan-documents', loanId] });
+    },
+  });
+
+  const generateDocuments = async (codes: string[]) => {
+    setDocsError(null);
+    for (const code of codes) {
+      setGeneratingCode(code);
+      try {
+        await generateDocumentMutation.mutateAsync(code);
+      } catch (error) {
+        setDocsError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+        break; // stop the batch on the first failure rather than piling up more errors
+      }
+    }
+    setGeneratingCode(null);
+    setSelectedDocumentCodes(new Set());
+  };
+
+  const downloadDocument = async (generatedDocumentId: string) => {
+    try {
+      const { blob, fileName } = await apiClient.downloadFile(`/loan-accounts/${loanId}/documents/${generatedDocumentId}/download`);
+      const url = URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDocsError('Could not download the file. Please try again.');
+    }
+  };
+
+  const toggleDocumentSelected = (code: string) => {
+    setSelectedDocumentCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
   const onActionSuccess = () => {
     setConfirmAction(null);
     setActionError(null);
@@ -537,6 +596,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const canReversePayment = currentAccount.roles.includes('MIS');
   // 2026-07-11 (user request): only MIS may permanently delete a note.
   const canDeleteNotes = currentAccount.roles.includes('MIS');
+  // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
+  const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const documents = documentsQuery.data?.items ?? [];
+  const requiredDocuments = documents.filter((d) => d.isRequired);
+  const ungeneratedRequiredCodes = requiredDocuments.filter((d) => !d.latestGeneration).map((d) => d.documentTemplateCode);
 
   return (
     <div className="space-y-6">
@@ -802,6 +866,112 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 </li>
               ))}
             </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents</CardTitle>
+          <CardDescription>Disclosure Statement, Promissory Note, and other legal documents applicable to this loan (ADR-051).</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!canGenerateDocuments ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Available once this loan is approved.</p>
+          ) : documentsQuery.isLoading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <>
+              {docsError && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{docsError}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {requiredDocuments.length - ungeneratedRequiredCodes.length} of {requiredDocuments.length} required documents generated
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => generateDocuments(ungeneratedRequiredCodes)}
+                  disabled={ungeneratedRequiredCodes.length === 0 || generatingCode !== null}
+                >
+                  {generatingCode ? 'Generating…' : 'Generate all required'}
+                </Button>
+              </div>
+              <ul className="space-y-2">
+                {documents.map((doc) => {
+                  const isBusy = generatingCode === doc.documentTemplateCode;
+                  return (
+                    <li
+                      key={doc.documentTemplateId}
+                      className={cn('flex items-center justify-between gap-2 rounded-md border p-3', !doc.latestGeneration && 'border-dashed')}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input"
+                          checked={selectedDocumentCodes.has(doc.documentTemplateCode)}
+                          onChange={() => toggleDocumentSelected(doc.documentTemplateCode)}
+                          aria-label={`Select ${doc.documentTemplateName}`}
+                        />
+                        <FileCheck2 className={cn('h-4 w-4', doc.latestGeneration ? 'text-emerald-600' : 'text-muted-foreground')} />
+                        <div>
+                          <p className={cn('text-sm font-medium', !doc.latestGeneration && 'text-muted-foreground')}>{doc.documentTemplateName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.latestGeneration
+                              ? `Generated by ${doc.latestGeneration.generatedByName} · ${formatDate(doc.latestGeneration.generatedAt)}`
+                              : doc.isRequired
+                                ? 'Required · not generated yet'
+                                : 'Optional · not generated yet'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {doc.latestGeneration && (
+                          <Button variant="ghost" size="sm" onClick={() => downloadDocument(doc.latestGeneration!.id)}>
+                            Download
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => generateDocuments([doc.documentTemplateCode])}
+                          disabled={isBusy || generatingCode !== null}
+                        >
+                          {isBusy ? '…' : doc.latestGeneration ? 'Regenerate' : 'Generate'}
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+                {documents.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No documents configured for this loan's product.</p>}
+              </ul>
+              {documents.length > 0 && (
+                <div className="flex items-center justify-between border-t pt-3">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-input"
+                      checked={selectedDocumentCodes.size === documents.length}
+                      onChange={(e) =>
+                        setSelectedDocumentCodes(e.target.checked ? new Set(documents.map((d) => d.documentTemplateCode)) : new Set())
+                      }
+                    />
+                    Select all
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateDocuments([...selectedDocumentCodes])}
+                    disabled={selectedDocumentCodes.size === 0 || generatingCode !== null}
+                  >
+                    Generate selected ({selectedDocumentCodes.size})
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

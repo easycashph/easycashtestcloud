@@ -263,9 +263,34 @@ async function main() {
     });
   }
 
+  // ADR-051 §1: the 11 loan document types in scope (Statement of Account excluded — separate,
+  // on-demand feature). Required documents apply to every loan and have no
+  // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products
+  // separately (ADR-051 §9 — not yet confirmed with the user, so no mapping rows seeded here).
+  const documentTemplateRows = [
+    { code: 'DISCLOSURE_STATEMENT', name: 'Disclosure Statement', isRequired: true, sortIndex: 1 },
+    { code: 'PROMISSORY_NOTE', name: 'Promissory Note', isRequired: true, sortIndex: 2 },
+    { code: 'ACKNOWLEDGEMENT_RECEIPT', name: 'Acknowledgement Receipt', isRequired: true, sortIndex: 3 },
+    { code: 'DATA_PRIVACY_CONSENT', name: 'Data Privacy and Consent Form', isRequired: true, sortIndex: 4 },
+    { code: 'LOAN_AGREEMENT_SALARY', name: 'Loan Agreement - Salary', isRequired: false, sortIndex: 5 },
+    { code: 'LOAN_AGREEMENT_SEAFARER', name: 'Loan Agreement - Seafarer', isRequired: false, sortIndex: 6 },
+    { code: 'DEED_OF_ASSIGNMENT_BORROWER', name: 'Deed of Assignment - Borrower', isRequired: false, sortIndex: 7 },
+    { code: 'DEED_OF_ASSIGNMENT_CO_BORROWER', name: 'Deed of Assignment - Co-Borrower', isRequired: false, sortIndex: 8 },
+    { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 9 },
+    { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 10 },
+    { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 11 },
+  ] as const;
+  for (const row of documentTemplateRows) {
+    await prisma.documentTemplate.upsert({
+      where: { code: row.code },
+      update: { name: row.name, isRequired: row.isRequired, sortIndex: row.sortIndex },
+      create: row,
+    });
+  }
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}.`,
+    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}. Document templates: ${documentTemplateRows.length}.`,
   );
 }
 

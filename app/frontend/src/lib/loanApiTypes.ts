@@ -257,6 +257,20 @@ export interface LoanNote {
   createdAt: string;
 }
 
+/** ADR-051 — one row per applicable document template, with its latest generation (if any). */
+export interface LoanDocumentListItem {
+  documentTemplateId: string;
+  documentTemplateCode: string;
+  documentTemplateName: string;
+  isRequired: boolean;
+  latestGeneration: {
+    id: string;
+    generatedByUserId: string;
+    generatedByName: string;
+    generatedAt: string;
+  } | null;
+}
+
 export interface ProcessPaymentResponse {
   loanAccount: LoanAccount;
   remainder: string;

@@ -58,6 +58,15 @@ legacy/reports/*.xlsx
 # found sitting untracked but NOT gitignored (the *.xlsx rule above doesn't match .xlsm).
 legacy/reports/*.xlsm
 
+# Real client PII (Manual_Checklists PDFs, Saved Loan Documents, Statements of Account — real
+# names, addresses, financial figures) plus the legal document Templates (.docx) used to generate
+# them. 2026-07-11: found untracked but NOT gitignored (same class of gap as legacy/MongoDB dump/
+# and legacy/reports/*.xlsm above — fixed immediately, before any commit). If/when the Templates
+# subfolder is needed as the canonical source for a document-generation feature, copy it
+# deliberately into the app's own source tree (e.g. app/backend/templates/) rather than reading
+# live from this ignored legacy folder or un-ignoring any part of it.
+legacy/Excel LMS Files/
+
 # Local database backups (backup-database.bat output) — never committed.
 backups/
 
