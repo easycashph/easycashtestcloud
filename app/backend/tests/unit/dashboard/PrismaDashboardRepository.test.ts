@@ -80,6 +80,7 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
 
     expect(summary.overdueAccounts.count).toBe(3);
     expect(summary.overdueAccounts.atRiskCollectionsBalance).toBe('33500');
+    expect(summary.overdueAccounts.loanAccountIds).toEqual(['loan-1', 'loan-2', 'loan-3']);
     // The aggregate call for overdue balances must be scoped to exactly the ids the live query found.
     expect(loanAccountOps.aggregate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: { in: ['loan-1', 'loan-2', 'loan-3'] } } }),

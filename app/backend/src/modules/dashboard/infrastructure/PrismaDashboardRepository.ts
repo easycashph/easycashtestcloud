@@ -85,6 +85,7 @@ export class PrismaDashboardRepository implements IDashboardRepository {
       overdueAccounts: {
         count: overdueAgg._count,
         atRiskCollectionsBalance: overdueCollectionsBalance.toString(),
+        loanAccountIds: overdueLoanIds,
       },
       collectionsThisMonth: {
         amount: (collectionsAgg._sum.amount ?? 0).toString(),

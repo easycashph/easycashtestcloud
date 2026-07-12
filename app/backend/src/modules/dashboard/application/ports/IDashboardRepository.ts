@@ -16,6 +16,13 @@ export interface DashboardSummary {
     count: number;
     atRiskCollectionsBalance: string;
     /** 2026-07-12: no trend — see the field's own migration note in `PrismaDashboardRepository`; a reliable 30-days-ago overdue reconstruction needs per-installment payment timing that pre-`PaymentAllocation` (2026-07-11) payments don't have. */
+    /**
+     * 2026-07-12: the full id set behind `count`, so the frontend's Portfolio Quality Metrics /
+     * Loan Portfolio Health / Recommendation cards can bucket loans by this same live definition
+     * instead of the stale `LoanAccount.status === 'ACTIVE_IN_ARREARS'` check they used before —
+     * see `DashboardPage.tsx`'s `buildRealPortfolioHealth`.
+     */
+    loanAccountIds: string[];
   };
   collectionsThisMonth: {
     amount: string;

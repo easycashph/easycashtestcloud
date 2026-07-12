@@ -89,9 +89,18 @@ function categorizeProductName(productName: string): string {
   return 'Other (Legacy)';
 }
 
-function buildRealPortfolioHealth(loans: PortfolioLoanRow[]) {
-  const good = loans.filter((l) => l.status === 'ACTIVE');
-  const arrears = loans.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
+/**
+ * 2026-07-12: `overdueLoanIds` (from `/dashboard/summary`'s live-computed set, not
+ * `LoanAccount.status`) decides the good/arrears split — `status === 'ACTIVE_IN_ARREARS'` alone
+ * undercounts (nothing in this codebase ever transitions a loan into that status going forward,
+ * so it only reflects whatever the legacy migration happened to pre-set) and can't un-flag a loan
+ * that's since been paid current. `status` here is only used to confirm a loan is still open
+ * (ACTIVE or ACTIVE_IN_ARREARS), not to decide which of the two buckets it falls into.
+ */
+function buildRealPortfolioHealth(loans: PortfolioLoanRow[], overdueLoanIds: ReadonlySet<string>) {
+  const openLoans = loans.filter((l) => REAL_ACTIVE_STATUSES.includes(l.status));
+  const arrears = openLoans.filter((l) => overdueLoanIds.has(l.id));
+  const good = openLoans.filter((l) => !overdueLoanIds.has(l.id));
   const matured: PortfolioLoanRow[] = []; // see REAL_ACTIVE_STATUSES note — not tracked by the backend yet
   const writtenOff = loans.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
   const sum = (rows: PortfolioLoanRow[], pick: (l: PortfolioLoanRow) => number) =>
@@ -128,8 +137,8 @@ function buildRealPortfolioByCategory(loans: PortfolioLoanRow[]): PortfolioCateg
   return [...byCategory.values()];
 }
 
-function buildRealQualityMetrics(loans: PortfolioLoanRow[]) {
-  const health = buildRealPortfolioHealth(loans);
+function buildRealQualityMetrics(loans: PortfolioLoanRow[], overdueLoanIds: ReadonlySet<string>) {
+  const health = buildRealPortfolioHealth(loans, overdueLoanIds);
   const delinquentLoans = [...health.activeInArrears.loans, ...health.matured.loans];
   const activePortfolio = [...health.good.loans, ...delinquentLoans];
   const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -453,14 +462,21 @@ export function DashboardPage() {
     });
   }, [allPortfolioLoans, categoryFilter, dateRange]);
 
-  const filteredPortfolioHealth = React.useMemo(() => buildRealPortfolioHealth(portfolioFilteredLoans), [portfolioFilteredLoans]);
+  // Independent of the Portfolio Filter / isFiltered gate below (unlike liveSummary) — the
+  // good/arrears split needs this live id set no matter what the user has filtered to.
+  const overdueLoanIds = React.useMemo(() => new Set(summaryQuery.data?.overdueAccounts.loanAccountIds ?? []), [summaryQuery.data]);
+
+  const filteredPortfolioHealth = React.useMemo(
+    () => buildRealPortfolioHealth(portfolioFilteredLoans, overdueLoanIds),
+    [portfolioFilteredLoans, overdueLoanIds],
+  );
   const filteredPortfolioByCategory = React.useMemo(
     () => buildRealPortfolioByCategory(portfolioFilteredLoans),
     [portfolioFilteredLoans],
   );
   const filteredQualityMetrics = React.useMemo(
-    () => buildRealQualityMetrics(portfolioFilteredLoans),
-    [portfolioFilteredLoans],
+    () => buildRealQualityMetrics(portfolioFilteredLoans, overdueLoanIds),
+    [portfolioFilteredLoans, overdueLoanIds],
   );
   const filteredDisbursementTrend = React.useMemo(
     () => buildRealDisbursementTrend(portfolioFilteredLoans, 6),
