@@ -18,6 +18,7 @@ import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/StatusBadg
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { PaymentMethodBadge } from '@/components/PaymentMethodBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -29,7 +30,6 @@ import {
   getMockBorrowerForLoan,
   getMockLoan,
   logActivity,
-  MOCK_ACTIVITY_LOGS,
   MOCK_INSTALLMENTS,
   MOCK_PAYMENT_REMINDERS,
   MOCK_TIMELINES,
@@ -87,7 +87,7 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
 
 /**
  * Deterministic, rule-based assessment computed by the LMS itself (backend's
- * `LoanRiskAssessmentService`, from real repayment data — days past due, late-payment count) — no
+ * `LoanRiskAssessmentService`, from real repayment data - days past due, late-payment count) - no
  * external AI/ML model call. Replaced the earlier mock (`getMockRiskAssessment`) 2026-07-11.
  */
 function RiskAssessmentCard({ loanId }: { loanId: string }) {
@@ -110,7 +110,7 @@ function RiskAssessmentCard({ loanId }: { loanId: string }) {
       <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">{assessment.recommendation}</p>
         <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-          Computed by the LMS from this loan's own repayment history (days past due, late-payment count) — a deterministic rule-based
+          Computed by the LMS from this loan's own repayment history (days past due, late-payment count) - a deterministic rule-based
           calculation, not an external AI model. The Loan Officer/Collector still makes the final call.
         </p>
       </CardContent>
@@ -127,7 +127,7 @@ function BalanceRow({ label, value, emphasize }: { label: string; value: number;
   );
 }
 
-/** Compact stat tile — replaces `RealLoanDetailView`'s old three separate bordered Cards (Collections
+/** Compact stat tile - replaces `RealLoanDetailView`'s old three separate bordered Cards (Collections
  * Balance / Loan Terms / Accounting Balance) with one dense grid, per this session's "make it
  * compact" request. */
 function MiniStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
@@ -164,7 +164,7 @@ interface LoanNote {
 }
 
 /**
- * Notes are held in local component state only, seeded per loan — added
+ * Notes are held in local component state only, seeded per loan - added
  * notes disappear on page reload. Nothing here is sent anywhere.
  */
 function NotesPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) {
@@ -195,7 +195,7 @@ function NotesPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) 
         <Button size="sm" onClick={addNote} disabled={!draft.trim()}>
           Add Note
         </Button>
-        <p className="text-xs text-muted-foreground">Notes are stored in this browser tab only for this preview — nothing is saved to a database.</p>
+        <p className="text-xs text-muted-foreground">Notes are stored in this browser tab only for this preview - nothing is saved to a database.</p>
       </div>
       <Separator />
       <ul className="space-y-3">
@@ -223,7 +223,7 @@ interface LoanAttachment {
 
 /**
  * Attachment UI flow works for real (pick a file, see it listed, delete it)
- * — only the actual file storage is not implemented, per this checkpoint's
+ * - only the actual file storage is not implemented, per this checkpoint's
  * instruction to mark real storage as Coming Soon rather than fake it.
  */
 function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) {
@@ -257,7 +257,7 @@ function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: stri
         <p className="text-sm font-medium">Generated Loan Documents</p>
         <p className="text-xs text-muted-foreground">
           Official documents generated when this loan account was activated, per the loan product's document templates (see Loan
-          Products). Names and metadata only — downloads are disabled in this preview build.
+          Products). Names and metadata only - downloads are disabled in this preview build.
         </p>
         <ul className="mt-3 space-y-2">
           {generatedDocuments.map((doc) => (
@@ -277,7 +277,7 @@ function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: stri
             </li>
           ))}
           {generatedDocuments.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">No documents generated yet — loan account is not yet activated.</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">No documents generated yet - loan account is not yet activated.</p>
           )}
         </ul>
       </div>
@@ -294,7 +294,7 @@ function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: stri
           <ComingSoonButton size="sm">Actual File Storage</ComingSoonButton>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Picking a file adds it to the list below for this preview session — the file itself is never uploaded or stored anywhere.
+          Picking a file adds it to the list below for this preview session - the file itself is never uploaded or stored anywhere.
         </p>
         <ul className="mt-3 space-y-2">
           {attachments.map((att) => (
@@ -326,7 +326,7 @@ function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: stri
 }
 
 /**
- * Automatic Payment Reminders for this loan only — see
+ * Automatic Payment Reminders for this loan only - see
  * `MOCK_PAYMENT_REMINDERS`/`buildReminderMessage()` in `src/lib/mockData.ts`
  * for the full 5/3/1-days-before, due-date, and weekly-past-due schedule.
  * No real SMS/email is sent from this preview.
@@ -336,7 +336,7 @@ function RemindersPanel({ loanId }: { loanId: string }) {
   const reminders = MOCK_PAYMENT_REMINDERS.filter((r) => r.loanId === loanId);
 
   if (reminders.length === 0) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No reminders scheduled — loan is fully paid or not yet due.</p>;
+    return <p className="py-8 text-center text-sm text-muted-foreground">No reminders scheduled - loan is fully paid or not yet due.</p>;
   }
 
   return (
@@ -395,17 +395,17 @@ function RemindersPanel({ loanId }: { loanId: string }) {
 
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12. `getMockLoan()` only ever knows
- * about hand-authored mock loans — a loan from `LoanListPage`'s now-real list (a UUID, migrated
+ * about hand-authored mock loans - a loan from `LoanListPage`'s now-real list (a UUID, migrated
  * from legacy data) doesn't exist there and would otherwise hit this page's "not found" state.
  * This is a deliberately minimal real-data view (balances, borrower, repayment schedule, risk
  * assessment, payment history) rather than a full rewiring of every tab on this 700+-line page
- * (notes, attachments, reminders, approve/activate actions) — those stay mock-only for now; see
+ * (notes, attachments, reminders, approve/activate actions) - those stay mock-only for now; see
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
-/** Same "was this ever late" logic as the backend's `LoanRiskAssessmentService` — `status` alone
+/** Same "was this ever late" logic as the backend's `LoanRiskAssessmentService` - `status` alone
  * can't tell for a settled installment (it's a live-derived value that resets to PAID), so a
  * currently-LATE row OR a PAID row whose `lastPaidAt` came after its `dueDate` both count. Kept in
- * sync with that service's doc comment intentionally — this is what the Risk Assessment card's
+ * sync with that service's doc comment intentionally - this is what the Risk Assessment card's
  * "late payment" count above is counting, made visible per-row here. */
 function wasInstallmentLate(installment: RepaymentInstallment): boolean {
   if (installment.status === 'LATE') return true;
@@ -471,7 +471,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">{loan.loanCode}</h2>
           <p className="text-sm text-muted-foreground">
-            {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+            {borrower ? (
+              <Link to={`/clients/${loan.borrowerId}`} className="text-primary underline-offset-2 hover:underline">
+                {borrower.firstName} {borrower.lastName}
+              </Link>
+            ) : (
+              'Loading borrower…'
+            )}
           </p>
         </div>
         <LoanStatusBadge status={loan.status} />
@@ -547,7 +553,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 </Table>
               )}
               <p className="mt-2 text-xs text-muted-foreground">
-                Rows shaded red are the installments counted as "late" in the Risk Assessment card above — currently overdue, or
+                Rows shaded red are the installments counted as "late" in the Risk Assessment card above - currently overdue, or
                 paid after their due date.
               </p>
             </TabsContent>
@@ -576,7 +582,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         </TableCell>
                         <TableCell className="text-right">{formatPeso(num(t.amount))}</TableCell>
                         <TableCell className="text-right">{formatPeso(num(t.balanceAfter))}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{t.comment ?? '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{t.comment ?? '-'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -615,7 +621,7 @@ export function LoanDetailPage() {
   );
 
   if (!loan) {
-    // Not a hand-authored mock loan — try the real backend (a UUID from LoanListPage's now-real
+    // Not a hand-authored mock loan - try the real backend (a UUID from LoanListPage's now-real
     // list, migrated via CP12). See RealLoanDetailView's own doc comment for scope.
     return loanId ? <RealLoanDetailView loanId={loanId} /> : (
       <div className="space-y-4">
@@ -682,7 +688,7 @@ export function LoanDetailPage() {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Balance Summary</CardTitle>
-            <CardDescription>Per ADR-007 §3 — two distinct totals, both shown</CardDescription>
+            <CardDescription>Per ADR-007 §3 - two distinct totals, both shown</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border bg-secondary/40 p-3">
@@ -729,7 +735,7 @@ export function LoanDetailPage() {
 
               <TabsContent value="schedule">
                 {installments.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No schedule yet — loan has not been activated.</p>
+                  <p className="py-8 text-center text-sm text-muted-foreground">No schedule yet - loan has not been activated.</p>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -849,9 +855,9 @@ export function LoanDetailPage() {
                   <dt className="text-muted-foreground">Loan officer</dt>
                   <dd className="text-right font-medium">{loan.loanOfficerName}</dd>
                   <dt className="text-muted-foreground">Approved at</dt>
-                  <dd className="text-right font-medium">{loan.approvedAt ? formatDate(loan.approvedAt) : '—'}</dd>
+                  <dd className="text-right font-medium">{loan.approvedAt ? formatDate(loan.approvedAt) : '-'}</dd>
                   <dt className="text-muted-foreground">Activated at</dt>
-                  <dd className="text-right font-medium">{loan.activatedAt ? formatDate(loan.activatedAt) : '—'}</dd>
+                  <dd className="text-right font-medium">{loan.activatedAt ? formatDate(loan.activatedAt) : '-'}</dd>
                   <dt className="text-muted-foreground">Mode of payment</dt>
                   <dd className="text-right">
                     <PaymentMethodBadge code={loan.paymentMethod} />
@@ -926,10 +932,18 @@ export function LoanDetailPage() {
         </Card>
       </div>
 
-      <RecentActivityPanel
-        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityId === loan.loanCode || l.entityId === loan.id)}
-        title="Recent Activity — This Loan Account"
-      />
+      {/* Activity Timeline - ADR-050 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Timeline</CardTitle>
+          <CardDescription>Log of all actions taken on this loan account by loan officers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileActivityTimeline profileType="LOAN_ACCOUNT" profileId={loan.id} />
+        </CardContent>
+      </Card>
+
+      <RecentActivityPanel label="Loan Account" entityId={loan.id} />
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">
@@ -939,8 +953,8 @@ export function LoanDetailPage() {
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'APPROVE'
-                ? `This will approve ${loan.loanCode} — the account moves from Pending Approval to Approved, ready to be activated/disbursed. This is a safety-net confirmation to prevent an accidental click.`
-                : `This will activate ${loan.loanCode} — disbursing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
+                ? `This will approve ${loan.loanCode} - the account moves from Pending Approval to Approved, ready to be activated/disbursed. This is a safety-net confirmation to prevent an accidental click.`
+                : `This will activate ${loan.loanCode} - disbursing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

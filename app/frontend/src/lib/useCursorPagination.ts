@@ -8,7 +8,7 @@ interface CursorPage<T> {
 }
 
 /**
- * Real, cursor-driven Next/Previous pagination — replaces the earlier `fetchAllPages` "load
+ * Real, cursor-driven Next/Previous pagination - replaces the earlier `fetchAllPages` "load
  * everything up front" pattern on list pages, which was the direct cause of frontend lag once a
  * list grew past a couple hundred rows (see `apiClient.ts`'s `fetchAllPages` doc comment, which
  * flagged this as the intended fix once it became a real problem).

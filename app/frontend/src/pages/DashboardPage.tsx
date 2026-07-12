@@ -29,23 +29,22 @@ import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillD
 import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
+import { useLanguage } from '@/lib/languageContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import type { AuditLog } from '@/lib/auditLogApiTypes';
-import type { MockActivityLogEntry } from '@/lib/mockData';
 import { COLLECTIONS_VS_TARGET, SAMPLE_COLLECTIONS_PROJECTION } from '@/lib/mockData';
 import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
-/** Loan row shape every portfolio widget below reads — assembled once from the real `GET
+/** Loan row shape every portfolio widget below reads - assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
 interface PortfolioLoanRow {
   id: string;
   loanCode: string;
   borrowerName: string;
-  /** Real product name (e.g. "SML-Regular") — shown in the drill-down dialog's Product column. */
+  /** Real product name (e.g. "SML-Regular") - shown in the drill-down dialog's Product column. */
   productType: string;
-  /** Product family grouping derived from `productType` (Seafarer Loan / Salary Loan / Business Loan / Other) — used for Portfolio Breakdown. */
+  /** Product family grouping derived from `productType` (Seafarer Loan / Salary Loan / Business Loan / Other) - used for Portfolio Breakdown. */
   category: string;
   status: LoanAccountStatus;
   principalAmount: number;
@@ -59,14 +58,14 @@ interface PortfolioLoanRow {
   principalBalance: number;
 }
 
-/** The real backend has no `MATURED` status yet (`LoanAccountStatus` in `loanApiTypes.ts` — 7
+/** The real backend has no `MATURED` status yet (`LoanAccountStatus` in `loanApiTypes.ts` - 7
  * values, `ACTIVE`/`ACTIVE_IN_ARREARS` are the only "still active and collecting" states). The
- * "Matured" bucket below therefore always reads 0 against live data — left visible, not hidden,
+ * "Matured" bucket below therefore always reads 0 against live data - left visible, not hidden,
  * so the gap is honest rather than silently dropped, until the backend models that concept. */
 const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
 /** Same product-family grouping already approved for the mock dashboard (see the historical
- * `getDashboardLoanCategory` in `mockData.ts`) — every SML-* product is a Seafarer Loan sub-class,
+ * `getDashboardLoanCategory` in `mockData.ts`) - every SML-* product is a Seafarer Loan sub-class,
  * SL-* is Salary Loan, BL-* is Business Loan, everything else (PFL/REL/CL/OFW/...) is legacy.
  * Confirmed against the real `loan_products.name` values in the migrated database. */
 function categorizeProductName(productName: string): string {
@@ -79,7 +78,7 @@ function categorizeProductName(productName: string): string {
 function buildRealPortfolioHealth(loans: PortfolioLoanRow[]) {
   const good = loans.filter((l) => l.status === 'ACTIVE');
   const arrears = loans.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
-  const matured: PortfolioLoanRow[] = []; // see REAL_ACTIVE_STATUSES note — not tracked by the backend yet
+  const matured: PortfolioLoanRow[] = []; // see REAL_ACTIVE_STATUSES note - not tracked by the backend yet
   const writtenOff = loans.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
   const sum = (rows: PortfolioLoanRow[], pick: (l: PortfolioLoanRow) => number) =>
     Math.round(rows.reduce((total, l) => total + pick(l), 0) * 100) / 100;
@@ -157,7 +156,7 @@ function buildRealDisbursementTrend(loans: PortfolioLoanRow[], monthsBack = 6) {
 // four stay fixed across every accent theme, so categories are always visually distinct.
 const CHART_COLORS = ['hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-// Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too — reads
+// Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too - reads
 // as a jarring, low-contrast flash against the rest of the (theme-aware) dashboard. Pulling from
 // the same CSS variables as the surrounding cards keeps it in sync with light/dark mode and the
 // active accent theme.
@@ -181,12 +180,12 @@ const VENN_SEGMENT_META: Record<PortfolioHealthSegment, { title: string; descrip
   activeInArrears: {
     title: 'Active Accounts in Arrears',
     description:
-      'Still active and paying, just sometimes late — the segment where Easycash earns penalty/late-fee income on top of amortization.',
+      'Still active and paying, just sometimes late - the segment where Easycash earns penalty/late-fee income on top of amortization.',
   },
   matured: {
     title: 'Matured Loan Accounts',
     description:
-      'Active accounts past their full maturity date but still unpaid, with an outstanding balance — the highest-risk active segment (distinct from a settled Closed loan).',
+      'Active accounts past their full maturity date but still unpaid, with an outstanding balance - the highest-risk active segment (distinct from a settled Closed loan).',
   },
 };
 
@@ -207,7 +206,7 @@ const PORTFOLIO_HEALTH_PLANS: {
     iconClass: 'text-success',
     badgeVariant: 'success',
     body:
-      'These borrowers pay on schedule with no penalty history. Keep servicing simple — reminders on the standard schedule, no manual follow-up — and prioritize them for renewal/repeat-loan offers first.',
+      'These borrowers pay on schedule with no penalty history. Keep servicing simple - reminders on the standard schedule, no manual follow-up - and prioritize them for renewal/repeat-loan offers first.',
   },
   {
     key: 'activeInArrears',
@@ -217,7 +216,7 @@ const PORTFOLIO_HEALTH_PLANS: {
     iconClass: 'text-warning',
     badgeVariant: 'warning',
     body:
-      'Still active and still paying, just sometimes late — the penalty/late-fee income here is real, confirmed revenue on top of amortization. Keep the reminder cadence that nudges them back on time, but avoid over-aggressive collection tactics that could push a paying borrower into default and remove this income entirely.',
+      'Still active and still paying, just sometimes late - the penalty/late-fee income here is real, confirmed revenue on top of amortization. Keep the reminder cadence that nudges them back on time, but avoid over-aggressive collection tactics that could push a paying borrower into default and remove this income entirely.',
   },
   {
     key: 'matured',
@@ -227,7 +226,7 @@ const PORTFOLIO_HEALTH_PLANS: {
     iconClass: 'text-destructive',
     badgeVariant: 'destructive',
     body:
-      'These loans have run past their full maturity date and are still unpaid — the highest-risk active segment, one step short of write-off. Escalate to intensive collection, and evaluate restructuring or a formal repayment plan to bring the balance back into a payable schedule before the loss is realized. Distinct from a settled Closed loan, which needs no action.',
+      'These loans have run past their full maturity date and are still unpaid - the highest-risk active segment, one step short of write-off. Escalate to intensive collection, and evaluate restructuring or a formal repayment plan to bring the balance back into a payable schedule before the loss is realized. Distinct from a settled Closed loan, which needs no action.',
   },
 ];
 
@@ -314,23 +313,24 @@ const EMPTY_DATE_RANGE: DateRange = { from: '', to: '' };
 
 export function DashboardPage() {
   useLogPageView('Dashboard');
+  const { t } = useLanguage();
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
-  // Live portfolio-wide totals from the real backend (GET /dashboard/summary) — backs the three
+  // Live portfolio-wide totals from the real backend (GET /dashboard/summary) - backs the three
   // Overview cards while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range).
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
   });
 
-  // Full portfolio, fetched once and aggregated client-side — same pattern LoanListPage already
+  // Full portfolio, fetched once and aggregated client-side - same pattern LoanListPage already
   // uses for the borrower/product name join. Every filterable card below (Quality Metrics,
   // Disbursement Trend, Portfolio Breakdown, Portfolio Health, and every drill-down) reacts to
   // this, replacing the former MOCK_LOANS-driven versions.
   const loanAccountsQuery = useQuery({ queryKey: ['loan-accounts', 'all'], queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts') });
   const borrowersQuery = useQuery({ queryKey: ['borrowers', 'all'], queryFn: () => fetchAllPages<Borrower>('/borrowers') });
   const productsQuery = useQuery({
-    // Deliberately NOT ['loan-products', 'all'] — that key is shared by pages caching the plain
+    // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
     // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
     // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
     // identical fix for the full explanation.
@@ -344,22 +344,6 @@ export function DashboardPage() {
       return versionToProductName;
     },
   });
-  const auditLogsQuery = useQuery({ queryKey: ['audit-logs', 'dashboard-recent'], queryFn: () => fetchAllPages<AuditLog>('/audit-logs') });
-  const recentActivityEntries: MockActivityLogEntry[] = React.useMemo(
-    () =>
-      [...(auditLogsQuery.data ?? [])]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 10)
-        .map((log) => ({
-          id: log.id,
-          userName: log.userName ?? log.userEmail ?? 'System',
-          action: log.action,
-          entityType: log.entityType,
-          entityId: log.entityId,
-          at: log.createdAt,
-        })),
-    [auditLogsQuery.data],
-  );
 
   const isPortfolioLoading = loanAccountsQuery.isLoading || borrowersQuery.isLoading || productsQuery.isLoading;
 
@@ -369,7 +353,7 @@ export function DashboardPage() {
     const versionToProductName = productsQuery.data ?? new Map<string, string>();
     return loanAccountsQuery.data.map((l): PortfolioLoanRow => {
       const borrower = borrowerById.get(l.borrowerId);
-      const productName = versionToProductName.get(l.loanProductVersionId) ?? '—';
+      const productName = versionToProductName.get(l.loanProductVersionId) ?? '-';
       return {
         id: l.id,
         loanCode: l.loanCode,
@@ -395,11 +379,11 @@ export function DashboardPage() {
     [allPortfolioLoans],
   );
 
-  // Portfolio Filter — the master filter for the whole Dashboard (loan category + origination
+  // Portfolio Filter - the master filter for the whole Dashboard (loan category + origination
   // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
   // Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health) reacts
   // to it. Two cards are deliberately exempt, by design, not oversight: Collections Forecast
-  // (a bottom-up projection from each active loan's own fixed repayment schedule — filtering it
+  // (a bottom-up projection from each active loan's own fixed repayment schedule - filtering it
   // by category/date would just be a different, narrower forecast, not a clearer one, and the
   // point of a portfolio-wide cash-flow forecast is to answer "how much is coming in overall") and
   // Recommendation (portfolio-wide strategic guidance, not a report figure).
@@ -446,7 +430,7 @@ export function DashboardPage() {
       filteredPortfolioHealth.matured.collectionsBalance;
 
   // Every active loan under the current filter (performing, in arrears, and past-maturity-but-
-  // unpaid) — the denominator/drill-down set behind the filtered Total Active Loans and Average
+  // unpaid) - the denominator/drill-down set behind the filtered Total Active Loans and Average
   // Loan Size figures.
   const filteredActivePortfolioLoans = React.useMemo(
     () => [...filteredPortfolioHealth.good.loans, ...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
@@ -464,7 +448,7 @@ export function DashboardPage() {
   // date available to sum bottom-up (see the Collections Forecast doc comment below for why the
   // Forecast card *can* do this and these two can't). Scaled proportionally to how much of the
   // whole portfolio's outstanding principal the current filter selects, off the real, unfiltered
-  // Collections This Month total from `GET /dashboard/summary` — an honest estimate derived from
+  // Collections This Month total from `GET /dashboard/summary` - an honest estimate derived from
   // real numbers, clearly disclosed as such, not a fabricated figure.
   const totalPortfolioValue = React.useMemo(
     () => allPortfolioLoans.filter((l) => REAL_ACTIVE_STATUSES.includes(l.status)).reduce((sum, l) => sum + l.principalBalance, 0),
@@ -486,7 +470,7 @@ export function DashboardPage() {
     setDrillDown({
       title: 'Delinquent Accounts',
       description:
-        'Overdue but still active — accounts in arrears (overdue within term) plus matured accounts (past the full term, still unpaid). This is the set behind the Delinquency Rate and Portfolio-at-Risk figures.' +
+        'Overdue but still active - accounts in arrears (overdue within term) plus matured accounts (past the full term, still unpaid). This is the set behind the Delinquency Rate and Portfolio-at-Risk figures.' +
         (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
       loans: filteredDelinquentLoans,
     });
@@ -496,7 +480,7 @@ export function DashboardPage() {
 
   const openCategorySlice = (slice: PortfolioCategorySlice) =>
     setDrillDown({
-      title: `${slice.category} — Active Portfolio`,
+      title: `${slice.category} - Active Portfolio`,
       description: `Still-active loan accounts (active, in arrears, or matured) under the ${slice.category} category (${formatPeso(slice.value)} outstanding principal). SML products roll up under Seafarer Loan.${isFiltered ? ' Reflects the Portfolio Filter above.' : ''}`,
       loans: slice.loans,
     });
@@ -523,9 +507,9 @@ export function DashboardPage() {
           <div className="flex items-start gap-2">
             <Filter className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
             <div>
-              <CardTitle className="text-base">Portfolio Filter</CardTitle>
+              <CardTitle className="text-base">{t('dashboard.portfolioFilter.title')}</CardTitle>
               <CardDescription>
-                Drives every portfolio card below — Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target,
+                Drives every portfolio card below - Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target,
                 Portfolio Breakdown, and Loan Portfolio Health all recompute live. Collections Forecast and Recommendation are
                 portfolio-wide by design and stay unaffected.
               </CardDescription>
@@ -569,14 +553,14 @@ export function DashboardPage() {
       </Card>
 
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Overview</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">{t('dashboard.overview.title')}</h2>
         <p className="text-sm text-muted-foreground">
           {liveSummary
             ? 'Live portfolio summary across all branches. '
             : isFiltered
               ? 'Live figures, computed from the loan accounts matching the Portfolio Filter above. '
               : summaryQuery.isError
-                ? 'Could not reach the backend — showing sample data below. '
+                ? 'Could not reach the backend - showing sample data below. '
                 : 'Loading live portfolio summary… '}
           Click a chart segment, bar, or figure to see the loan accounts behind it.
         </p>
@@ -601,7 +585,7 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          title="Total Active Loans"
+          title={t('dashboard.stat.activeLoans')}
           value={liveSummary ? liveSummary.totalActiveLoans.count.toString() : filteredActiveCount.toString()}
           hint={
             liveSummary
@@ -613,20 +597,20 @@ export function DashboardPage() {
             setDrillDown({
               title: 'Total Active Loans',
               description:
-                'All still-active loan accounts — ACTIVE, ACTIVE_IN_ARREARS, and MATURED.' +
+                'All still-active loan accounts - ACTIVE, ACTIVE_IN_ARREARS, and MATURED.' +
                 (isFiltered ? ' Reflects the Portfolio Filter above.' : ' Across all branches.'),
               loans: filteredActivePortfolioLoans,
             })
           }
         />
         <SummaryCard
-          title="Collections This Month"
+          title={t('dashboard.stat.collectionsThisMonth')}
           value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
           hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
           icon={Banknote}
         />
         <SummaryCard
-          title="Overdue Accounts"
+          title={t('dashboard.stat.overdueAccounts')}
           value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
           hint={
             liveSummary
@@ -638,16 +622,16 @@ export function DashboardPage() {
           onClick={() => openVennSegment('activeInArrears')}
         />
         <SummaryCard
-          title="Portfolio Growth"
+          title={t('dashboard.stat.portfolioGrowth')}
           value="+4.8%"
-          hint="Month-over-month disbursement (portfolio-wide) — sample data"
+          hint="Month-over-month disbursement (portfolio-wide) - sample data"
           icon={TrendingUp}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Quality Metrics</CardTitle>
+          <CardTitle>{t('dashboard.portfolioQuality.title')}</CardTitle>
           <CardDescription>
             Industry-standard portfolio quality indicators, computed live{isFiltered ? ' against the Portfolio Filter above' : ''}.
             Hover the ⓘ for each term's definition; click a value to see the accounts behind it.
@@ -688,7 +672,7 @@ export function DashboardPage() {
               setDrillDown({
                 title: 'Written-off Loan Accounts',
                 description:
-                  'CLOSED_WRITTEN_OFF accounts — the realized-loss segment behind the Write-off exposure metric.' +
+                  'CLOSED_WRITTEN_OFF accounts - the realized-loss segment behind the Write-off exposure metric.' +
                   (isFiltered ? ' Reflects the Portfolio Filter above.' : ''),
                 loans: filteredPortfolioHealth.writtenOff.loans,
               })
@@ -700,9 +684,9 @@ export function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Loan Disbursement Trend</CardTitle>
+            <CardTitle>{t('dashboard.disbursementTrend.title')}</CardTitle>
             <CardDescription>
-              Monthly gross disbursement, last 6 months — click a bar for that month's activated accounts
+              Monthly gross disbursement, last 6 months - click a bar for that month's activated accounts
               {isFiltered ? ' · reflects the Portfolio Filter above' : ''}
             </CardDescription>
           </CardHeader>
@@ -730,7 +714,7 @@ export function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Collections vs. Target</CardTitle>
+            <CardTitle>{t('dashboard.collectionsVsTarget.title')}</CardTitle>
             <CardDescription>
               Monthly actual collections against target
               {isFiltered ? ' · estimated for the selected filter, scaled proportionally to outstanding principal' : ''}
@@ -753,8 +737,8 @@ export function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
-              <CardTitle>Collections Forecast</CardTitle>
-              <CardDescription>Next 4 months, from each active loan's own repayment schedule — portfolio-wide, not affected by the Portfolio Filter</CardDescription>
+              <CardTitle>{t('dashboard.collectionsForecast.title')}</CardTitle>
+              <CardDescription>Next 4 months, from each active loan's own repayment schedule - portfolio-wide, not affected by the Portfolio Filter</CardDescription>
             </div>
             <Badge variant="warning">Sample Projection</Badge>
           </CardHeader>
@@ -772,7 +756,7 @@ export function DashboardPage() {
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               Bottom-up, not a fitted trend line: sums each active loan's actual scheduled installments due per month, then applies
-              the portfolio's own recent collection-realization rate (average actual ÷ target). Stays portfolio-wide by design — a
+              the portfolio's own recent collection-realization rate (average actual ÷ target). Stays portfolio-wide by design - a
               cash-flow forecast is most useful as a whole-company number. Still a sample-data illustration, not a production
               forecasting engine.
             </p>
@@ -782,9 +766,9 @@ export function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Breakdown by Loan Category</CardTitle>
+          <CardTitle>{t('dashboard.categoryBreakdown.title')}</CardTitle>
           <CardDescription>
-            Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) — click a slice for its accounts
+            Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) - click a slice for its accounts
             {isFiltered ? ' · reflects the filter above' : ''}
           </CardDescription>
         </CardHeader>
@@ -841,11 +825,11 @@ export function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Loan Portfolio Health</CardTitle>
+          <CardTitle>{t('dashboard.portfolioHealth.title')}</CardTitle>
           <CardDescription>
-            Good vs. Matured loan accounts, with the overlap — Active Accounts in Arrears: still active and paying, just sometimes
+            Good vs. Matured loan accounts, with the overlap - Active Accounts in Arrears: still active and paying, just sometimes
             late, where Easycash earns penalty/late-fee income on top of amortization. Click any region for the accounts behind it.
-            {isFiltered ? ' Reflects the filter above.' : ''} "Matured" always reads 0 for now — the backend does not track that
+            {isFiltered ? ' Reflects the filter above.' : ''} "Matured" always reads 0 for now - the backend does not track that
             status yet.
           </CardDescription>
         </CardHeader>
@@ -863,8 +847,8 @@ export function DashboardPage() {
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Sparkles className="h-4 w-4 text-primary" />
           <div>
-            <CardTitle>Recommendation</CardTitle>
-            <CardDescription>Portfolio-wide strategic guidance — not affected by the Portfolio Filter above.</CardDescription>
+            <CardTitle>{t('dashboard.recommendation.title')}</CardTitle>
+            <CardDescription>Portfolio-wide strategic guidance - not affected by the Portfolio Filter above.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -883,7 +867,7 @@ export function DashboardPage() {
             ))}
           </div>
           <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-            AI-Assisted — these are draft discussion points for management, not automated actions. This output is a static mock; the
+            AI-Assisted - these are draft discussion points for management, not automated actions. This output is a static mock; the
             LMS is not yet connected to an API for a real AI Assist engine.
           </p>
         </CardContent>
@@ -891,7 +875,7 @@ export function DashboardPage() {
 
       <LoanDrillDownDialog drillDown={drillDown} onClose={() => setDrillDown(null)} />
 
-      <RecentActivityPanel entries={recentActivityEntries} title="Recent Activity — Dashboard" />
+      <RecentActivityPanel label="Dashboard" />
     </div>
   );
 }

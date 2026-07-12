@@ -9,7 +9,7 @@ const PREVIEWABLE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'application/
 
 /**
  * Inline preview for an attachment (image or PDF) so reviewing a document no longer requires
- * downloading it first — download remains available inside the modal for a full/offline view.
+ * downloading it first - download remains available inside the modal for a full/offline view.
  */
 export function AttachmentPreviewModal({ attachment, onClose }: { attachment: Attachment | null; onClose: () => void }) {
   const [objectUrl, setObjectUrl] = React.useState<string | null>(null);

@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { RoleAbbr } from '@/components/RoleAbbr';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
@@ -17,7 +18,6 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
@@ -62,9 +62,9 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
  * Wired to the real backend Loan Applications module (`GET /loan-applications`). Every application
  * is system-classified PREAPPROVED/PREDECLINED at creation (and re-classified whenever the Detail
  * page's Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
- * — advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
+ * - advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
  *
- * Real, server-side pagination (100 rows/page — see `useCursorPagination`) replaced loading every
+ * Real, server-side pagination (100 rows/page - see `useCursorPagination`) replaced loading every
  * application up front. Applicant-name search goes to the backend's `?search=` param (debounced);
  * status and category have no backend filter param yet, so those two narrow within the current page
  * only, not across every application.
@@ -118,9 +118,11 @@ export function LoanApplicationsPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <Lock className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
+            <p className="text-sm font-medium">
+              Restricted to <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, and <RoleAbbr role="CRM" /> accounts
+            </p>
             <p className="text-sm text-muted-foreground">
-              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}) — this
+              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}) - this
               role does not have access to Loan Applications.
             </p>
           </CardContent>
@@ -137,7 +139,7 @@ export function LoanApplicationsPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
           <p className="text-sm text-muted-foreground">
-            {applications.length} application{applications.length === 1 ? '' : 's'} on this page ({pendingCount} pending decision) —
+            {applications.length} application{applications.length === 1 ? '' : 's'} on this page ({pendingCount} pending decision) -
             intake, review, and decision workflow, wired to the live backend.
           </p>
         </div>
@@ -264,10 +266,7 @@ export function LoanApplicationsPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel
-        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'LoanApplication' || l.entityType === 'Loan Applications')}
-        title="Recent Activity — Loan Applications"
-      />
+      <RecentActivityPanel label="Loan Applications" entityTypes={['LoanApplication', 'Loan Applications']} />
     </div>
   );
 }

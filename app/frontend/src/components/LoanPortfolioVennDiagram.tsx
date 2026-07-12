@@ -95,7 +95,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           className={shapeClass}
           onClick={() => onSegmentClick?.('good')}
         >
-          <title>Good loan accounts — click to view</title>
+          <title>Good loan accounts - click to view</title>
         </circle>
         <circle
           cx={CIRCLE_B.cx}
@@ -108,7 +108,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           className={shapeClass}
           onClick={() => onSegmentClick?.('matured')}
         >
-          <title>Matured loan accounts — click to view</title>
+          <title>Matured loan accounts - click to view</title>
         </circle>
         {/* Circle A clipped by circle B's bounds = the exact lens-shaped intersection, drawn on top in amber. */}
         <circle
@@ -123,7 +123,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           className={shapeClass}
           onClick={() => onSegmentClick?.('activeInArrears')}
         >
-          <title>Active accounts in Arrears — click to view</title>
+          <title>Active accounts in Arrears - click to view</title>
         </circle>
 
         <g className="pointer-events-none select-none">
@@ -148,7 +148,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
             In Arrears
           </text>
 
-          {/* Two-line titles, each centered over its own circle — kept short per line so the
+          {/* Two-line titles, each centered over its own circle - kept short per line so the
               longer "Matured Loan Accounts" label can't collide with "Good Loan Accounts" the
               way a single wide line did. */}
           <text x={170} y={18} textAnchor="middle" className="fill-success text-sm font-semibold">
@@ -175,7 +175,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           bucket={good}
           metricLabel="Interest Income"
           metricValue={good.interestIncome}
-          detail="Interest revenue collected from performing accounts — paying on schedule, no penalty fees."
+          detail="Interest revenue collected from performing accounts - paying on schedule, no penalty fees."
         />
         <SummaryCard
           segment="activeInArrears"
@@ -185,7 +185,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           bucket={activeInArrears}
           metricLabel="Accrued Revenue"
           metricValue={activeInArrears.accruedRevenue}
-          detail={`Accrued interest earned but not yet remitted. Still active and paying, sometimes late — plus ${formatPeso(activeInArrears.penaltyIncome)} in penalty/late-fee income on top of amortization.`}
+          detail={`Accrued interest earned but not yet remitted. Still active and paying, sometimes late - plus ${formatPeso(activeInArrears.penaltyIncome)} in penalty/late-fee income on top of amortization.`}
         />
         <SummaryCard
           segment="matured"
@@ -195,7 +195,7 @@ export function LoanPortfolioVennDiagram({ good, activeInArrears, matured, onSeg
           bucket={matured}
           metricLabel="Credit Loss"
           metricValue={matured.creditLoss}
-          detail="Unpaid principal at risk of loss — reached the end of the full term but still unpaid. The highest-risk active segment (not the same as a settled Closed loan)."
+          detail="Unpaid principal at risk of loss - reached the end of the full term but still unpaid. The highest-risk active segment (not the same as a settled Closed loan)."
         />
       </div>
     </div>

@@ -1,7 +1,7 @@
 /**
  * Mirrors `app/backend`'s `PaymentReminderPresenter.presentPaymentReminder()` JSON shape exactly
- * — see `apiClient.ts`'s doc comment for why this pilot hand-maintains DTOs instead of generating
- * them. One row per active loan account's next not-fully-paid installment — never a full
+ * - see `apiClient.ts`'s doc comment for why this pilot hand-maintains DTOs instead of generating
+ * them. One row per active loan account's next not-fully-paid installment - never a full
  * multi-trigger reminder history, since no real notification/scheduling service exists yet.
  */
 export interface InstallmentAmountsDto {

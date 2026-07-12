@@ -1,10 +1,10 @@
 /**
  * Mirrors `app/backend`'s `LoanApplicationPresenter.presentLoanApplication()` JSON shape exactly
- * — see `apiClient.ts`'s doc comment for why this pilot hand-maintains DTOs instead of generating
+ * - see `apiClient.ts`'s doc comment for why this pilot hand-maintains DTOs instead of generating
  * them. Unlike loan accounts, application amounts are plain `number` on the wire, not decimal
  * strings (the backend presenter sends them as numbers, not `Money`).
  *
- * PREAPPROVED/PREDECLINED are computed by the backend's LoanApplicationPreQualificationService —
+ * PREAPPROVED/PREDECLINED are computed by the backend's LoanApplicationPreQualificationService -
  * advisory only, the officer still makes the real APPROVED/DECLINED call.
  */
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'APPROVED' | 'DECLINED';
@@ -16,8 +16,8 @@ export interface PreQualificationCheck {
   detail: string;
 }
 
-/** The "why" behind `status` — mirrors the backend's `LoanApplicationPreQualificationService`
- * `evaluateCriteria()` output, re-derived on every read (cheap, no I/O — reuses the cached
+/** The "why" behind `status` - mirrors the backend's `LoanApplicationPreQualificationService`
+ * `evaluateCriteria()` output, re-derived on every read (cheap, no I/O - reuses the cached
  * `distanceFromBranchKm`, never re-geocodes). */
 export interface PreQualificationBreakdown {
   status: 'PREAPPROVED' | 'PREDECLINED';
@@ -82,7 +82,7 @@ export interface CreateLoanApplicationRequest {
   submittedDocuments?: string[];
 }
 
-/** Body for `PATCH /loan-applications/:id` — the Detail page's Risk Management Summary card.
+/** Body for `PATCH /loan-applications/:id` - the Detail page's Risk Management Summary card.
  * Send only what changed; omitted fields are left untouched server-side. */
 export interface UpdateLoanApplicationRequest {
   monthlyIncome?: number;

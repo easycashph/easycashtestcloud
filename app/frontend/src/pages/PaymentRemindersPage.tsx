@@ -14,7 +14,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { PaymentReminder, PaymentReminderStatus } from '@/lib/paymentReminderApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 function remainingDue(r: PaymentReminder): number {
@@ -54,7 +53,7 @@ const STATUS_BADGE: Record<PaymentReminderStatus, { variant: 'destructive' | 'wa
 };
 
 /**
- * Wired to the real backend (`GET /payment-reminders`) — one row per active loan account's next
+ * Wired to the real backend (`GET /payment-reminders`) - one row per active loan account's next
  * not-fully-paid installment. There's no notification/scheduling service in this build yet (no
  * SMS/email actually goes out), so this is an "Upcoming & Overdue Installments" worklist, not a
  * simulated reminder-send history like the earlier mock version.
@@ -98,7 +97,7 @@ export function PaymentRemindersPage() {
         <p className="text-sm text-muted-foreground">
           {reminders.length} active loan account{reminders.length === 1 ? '' : 's'} with an installment due or overdue (
           {overdueCount} overdue). Each row is the next unpaid installment for that loan. No SMS/email notification service is wired
-          up yet — this is a worklist, not a send history.
+          up yet - this is a worklist, not a send history.
         </p>
       </div>
 
@@ -110,7 +109,7 @@ export function PaymentRemindersPage() {
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <CardTitle className="text-base">Upcoming &amp; Overdue Installments — Search &amp; Filter</CardTitle>
+          <CardTitle className="text-base">Upcoming &amp; Overdue Installments - Search &amp; Filter</CardTitle>
           <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -201,7 +200,7 @@ export function PaymentRemindersPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Payment Reminders')} title="Recent Activity — Payment Reminders" />
+      <RecentActivityPanel label="Payment Reminders" />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 /**
  * Mirrors `app/backend`'s `IDashboardRepository.DashboardSummary` / `DashboardPresenter` JSON
- * shape exactly (the presenter is a pass-through — see `apiClient.ts`'s doc comment for why this
+ * shape exactly (the presenter is a pass-through - see `apiClient.ts`'s doc comment for why this
  * pilot hand-maintains DTOs instead of generating them). Money fields are decimal strings, never
  * floats on the wire.
  */

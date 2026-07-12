@@ -5,7 +5,7 @@ import { LoanStatusBadge } from '@/components/StatusBadge';
 import type { LoanAccountStatus } from '@/lib/mockData';
 import { formatPeso } from '@/lib/utils';
 
-/** Minimal shape every drill-down source (real, backend-derived loan rows) must provide — deliberately not `MockLoanAccount`, since this dialog only ever renders these 6 fields. */
+/** Minimal shape every drill-down source (real, backend-derived loan rows) must provide - deliberately not `MockLoanAccount`, since this dialog only ever renders these 6 fields. */
 export interface DrillDownLoan {
   id: string;
   loanCode: string;

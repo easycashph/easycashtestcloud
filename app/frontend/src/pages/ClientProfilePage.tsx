@@ -5,16 +5,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FieldTooltip } from '@/components/FieldTooltip';
+import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { CreateLoanAccountDialog, type CreateLoanAccountParams } from '@/components/CreateLoanAccountDialog';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -25,7 +28,6 @@ import {
   getMockBorrower,
   getMockLoan,
   logActivity,
-  MOCK_ACTIVITY_LOGS,
   type MockBorrowerProfile,
   type MockLoanAccount,
 } from '@/lib/mockData';
@@ -54,7 +56,7 @@ function getLoanSortValue(loan: MockLoanAccount, key: string): string | number |
 
 /**
  * Edits are held in local component state only, seeded from
- * `getMockBorrower()` — saving here never reaches `app/backend` and resets
+ * `getMockBorrower()` - saving here never reaches `app/backend` and resets
  * on page reload. This demonstrates the edit-form flow, not persistence.
  */
 function EditClientDialog({
@@ -79,7 +81,7 @@ function EditClientDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit / Customize Client Details</DialogTitle>
-          <DialogDescription>Preview only — changes are held in this browser tab and are not saved anywhere.</DialogDescription>
+          <DialogDescription>Preview only - changes are held in this browser tab and are not saved anywhere.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
@@ -88,7 +90,7 @@ function EditClientDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Contact Number</Label>
-            <Input value={draft.contactNumber} onChange={(e) => setDraft({ ...draft, contactNumber: e.target.value })} />
+            <Input value={draft.contactNumber} onChange={(e) => setDraft({ ...draft, contactNumber: e.target.value })} placeholder="09XX XXX XXXX" />
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>
@@ -180,10 +182,10 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
 }
 
 /**
- * Real edit dialog for a migrated (CP12) client — wired to `PATCH /borrowers/:id`. Address entry
+ * Real edit dialog for a migrated (CP12) client - wired to `PATCH /borrowers/:id`. Address entry
  * uses the cascading `PsgcAddressPicker` instead of free text, so a saved address can never again
  * end up as a raw PSGC code (see scripts/fix-coded-addresses.ts). The picker can't pre-select the
- * client's existing address into its dropdowns (no name->code reverse lookup — see the picker's own
+ * client's existing address into its dropdowns (no name->code reverse lookup - see the picker's own
  * doc comment), so the current address is shown as read-only context above it; leaving the picker
  * untouched keeps the existing address unchanged.
  */
@@ -255,27 +257,39 @@ function RealEditClientDialog({
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>First Name</Label>
+            <Label className="flex items-center gap-1">
+              First Name <FieldTooltip text="Client's legal first name, as shown on a valid ID." />
+            </Label>
             <Input value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Last Name</Label>
+            <Label className="flex items-center gap-1">
+              Last Name <FieldTooltip text="Client's legal surname, as shown on a valid ID." />
+            </Label>
             <Input value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Middle Name</Label>
+            <Label className="flex items-center gap-1">
+              Middle Name <FieldTooltip text="Client's legal middle name, if any." />
+            </Label>
             <Input value={draft.middleName} onChange={(e) => setDraft({ ...draft, middleName: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Mobile Number</Label>
-            <Input value={draft.mobilePhone1} onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })} />
+            <Label className="flex items-center gap-1">
+              Contact Number <FieldTooltip text="Client's active mobile number for SMS/call follow-ups." />
+            </Label>
+            <Input value={draft.mobilePhone1} onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })} placeholder="09XX XXX XXXX" />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>Email</Label>
+            <Label className="flex items-center gap-1">
+              Email <FieldTooltip text="Client's email, used for document copies or notices." />
+            </Label>
             <Input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label>Civil Status</Label>
+            <Label className="flex items-center gap-1">
+              Civil Status <FieldTooltip text="Client's current civil status." />
+            </Label>
             <Select value={draft.civilStatus} onValueChange={(v) => setDraft({ ...draft, civilStatus: v })}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -291,9 +305,11 @@ function RealEditClientDialog({
         </div>
 
         <div className="space-y-1.5 border-t pt-3">
-          <Label>Address</Label>
+          <Label className="flex items-center gap-1">
+            Address <FieldTooltip text="Replacing this replaces the client's entire address on file - leave untouched to keep the current one." />
+          </Label>
           <p className="text-xs text-muted-foreground">
-            Current on file: <span className="font-medium text-foreground">{existingAddressLine}</span>. Select below to replace it —
+            Current on file: <span className="font-medium text-foreground">{existingAddressLine}</span>. Select below to replace it -
             leave untouched to keep the current address.
           </p>
           <PsgcAddressPicker
@@ -327,7 +343,7 @@ function RealEditClientDialog({
 
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. `getMockBorrower()` only knows
- * hand-authored mock clients — a borrower id from `ClientListPage`'s now-real list (a UUID,
+ * hand-authored mock clients - a borrower id from `ClientListPage`'s now-real list (a UUID,
  * migrated from legacy data) doesn't exist there and would otherwise hit this page's "not found"
  * state. Deliberately minimal, same scope decision as `LoanDetailPage.tsx`'s `RealLoanDetailView`:
  * personal info + real loan history. Editing is now real (`RealEditClientDialog`); Create Loan
@@ -344,7 +360,7 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = { LOW: 'Low Risk', MEDIUM: '
 /**
  * Deterministic, rule-based summary computed by the LMS itself (backend's
  * `BorrowerRiskSummaryService`) from this client's real loan/repayment history across every loan
- * they've ever had — no external AI model. Advisory only.
+ * they've ever had - no external AI model. Advisory only.
  */
 function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
   const query = useQuery({
@@ -385,7 +401,7 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
             </dl>
             <p className="text-sm text-muted-foreground">{summary.recommendation}</p>
             <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-              Computed by the LMS from this client's real loan/repayment history — a deterministic rule-based calculation, not an
+              Computed by the LMS from this client's real loan/repayment history - a deterministic rule-based calculation, not an
               external AI model.
             </p>
           </>
@@ -411,10 +427,10 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
     queryFn: () => fetchAllPages<LoanAccount>('/loan-accounts'),
   });
   const productsQuery = useQuery({
-    // Deliberately NOT ['loan-products', 'all'] — that key is shared by every other page that
+    // Deliberately NOT ['loan-products', 'all'] - that key is shared by every other page that
     // caches the plain LoanProduct[] array (LoanApplicationDetailPage, DashboardPage,
     // LoanListPage, etc.). This query's data shape (a version-id -> product-name Map) is
-    // different, and React Query caches strictly by key — reusing the same key served this
+    // different, and React Query caches strictly by key - reusing the same key served this
     // page's Map to those array-shaped consumers on later navigation, crashing them
     // (`(productsQuery.data ?? []).flatMap is not a function`).
     queryKey: ['loan-products', 'all', 'versionToProductNameMap'],
@@ -450,7 +466,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
     ? toProperCase(
         [address.houseUnitNumber, address.street, address.barangay, address.cityMunicipality, address.province].filter(Boolean).join(', '),
       )
-    : '—';
+    : '-';
   const num = (v: string) => Number.parseFloat(v) || 0;
 
   return (
@@ -460,7 +476,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Button>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real client, migrated from legacy data (CP12) — details and loan history below are live.
+        Real client, migrated from legacy data (CP12) - details and loan history below are live.
         Create Loan Account and Attachments are not yet wired to real data for this screen.
       </div>
 
@@ -485,20 +501,20 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
               <Phone className="h-4 w-4 text-muted-foreground" /> {formatMobileNumber(borrower.mobilePhone1)}
             </div>
             <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email ?? '—'}
+              <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email ?? '-'}
             </div>
             <div className="flex items-center gap-2">
               <Home className="h-4 w-4 text-muted-foreground" /> {addressLine}
             </div>
             <div className="flex items-center gap-2">
               <Briefcase className="h-4 w-4 text-muted-foreground" />
-              {borrower.incomeDetail?.position ?? '—'}, {borrower.incomeDetail?.employerName ?? '—'}
+              {borrower.incomeDetail?.position ?? '-'}, {borrower.incomeDetail?.employerName ?? '-'}
             </div>
             <dl className="grid grid-cols-2 gap-y-2 border-t pt-3">
               <dt className="text-muted-foreground">Civil status</dt>
-              <dd className="text-right font-medium">{borrower.civilStatus ?? '—'}</dd>
+              <dd className="text-right font-medium">{borrower.civilStatus ?? '-'}</dd>
               <dt className="text-muted-foreground">Date of birth</dt>
-              <dd className="text-right font-medium">{borrower.birthDate ? formatDate(borrower.birthDate) : '—'}</dd>
+              <dd className="text-right font-medium">{borrower.birthDate ? formatDate(borrower.birthDate) : '-'}</dd>
               <dt className="text-muted-foreground">Loan cycle</dt>
               <dd className="text-right font-medium">{borrower.loanCycle}</dd>
             </dl>
@@ -530,7 +546,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                   {loans.map((loan) => (
                     <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
                       <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
-                      <TableCell>{productsQuery.data?.get(loan.loanProductVersionId) ?? '—'}</TableCell>
+                      <TableCell>{productsQuery.data?.get(loan.loanProductVersionId) ?? '-'}</TableCell>
                       <TableCell>
                         <LoanStatusBadge status={loan.status} />
                       </TableCell>
@@ -562,6 +578,19 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         </div>
       </div>
 
+      {/* Activity Timeline - ADR-050 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Timeline</CardTitle>
+          <CardDescription>Log of all actions taken on this client profile by loan officers</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileActivityTimeline profileType="BORROWER" profileId={borrowerId} />
+        </CardContent>
+      </Card>
+
+      <RecentActivityPanel label="Client Profile" entityId={borrowerId} />
+
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
     </div>
   );
@@ -592,7 +621,7 @@ export function ClientProfilePage() {
   });
 
   if (!borrower) {
-    // Not a hand-authored mock client — try the real backend (a UUID from ClientListPage's now-real
+    // Not a hand-authored mock client - try the real backend (a UUID from ClientListPage's now-real
     // list, migrated via CP12). See RealClientProfileView's own doc comment for scope.
     return borrowerId ? <RealClientProfileView borrowerId={borrowerId} /> : (
       <div className="space-y-4">
@@ -606,7 +635,7 @@ export function ClientProfilePage() {
 
   const hasActiveLoan = clientHasActiveLoan(borrower.id);
   // A new loan account may only be created from a specific, still-unconverted APPROVED
-  // application — see `findApprovedApplicationForClient()`'s doc comment for why (every loan,
+  // application - see `findApprovedApplicationForClient()`'s doc comment for why (every loan,
   // including a renewal, needs its own reviewed/approved application).
   const eligibleApplication = findApprovedApplicationForClient(borrower.id);
   const canCreateLoanAccountNow = canCreateLoanAccount && !hasActiveLoan && Boolean(eligibleApplication);
@@ -617,8 +646,6 @@ export function ClientProfilePage() {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const clientLogs = MOCK_ACTIVITY_LOGS.filter((l) => l.entityId === borrower.id || borrower.loanIds.includes(l.entityId));
-
   const saveEdit = (next: MockBorrowerProfile) => {
     setBorrower(next);
     logActivity({
@@ -704,7 +731,7 @@ export function ClientProfilePage() {
                 </Button>
               ) : (
                 <Badge variant="outline" className="text-xs">
-                  Only MIS, Loan Operation Manager, or CRM can create loan accounts
+                  Only <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, or <RoleAbbr role="CRM" /> can create loan accounts
                 </Badge>
               )}
             </CardHeader>
@@ -716,7 +743,7 @@ export function ClientProfilePage() {
               )}
               {!hasActiveLoan && canCreateLoanAccount && !eligibleApplication && (
                 <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  This client has no approved loan application on file. Every loan account — including a renewal — must come from its
+                  This client has no approved loan application on file. Every loan account - including a renewal - must come from its
                   own reviewed and approved Loan Application first.
                 </p>
               )}
@@ -790,7 +817,7 @@ export function ClientProfilePage() {
         </div>
       </div>
 
-      <RecentActivityPanel entries={clientLogs} title="Recent Activity — This Client" />
+      <RecentActivityPanel label="Client Profile" entityId={borrowerId} />
 
       <EditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} onSave={saveEdit} />
       <CreateLoanAccountDialog open={createLoanOpen} onOpenChange={setCreateLoanOpen} onCreate={createLoan} />

@@ -1,8 +1,8 @@
 /**
- * Mirrors `app/backend`'s `LoanAccountPresenter`/`RepaymentInstallmentPresenter` JSON shapes —
+ * Mirrors `app/backend`'s `LoanAccountPresenter`/`RepaymentInstallmentPresenter` JSON shapes -
  * see `apiClient.ts`'s doc comment for why this pilot hand-maintains these instead of generating
  * them. All Money fields are decimal strings, exactly as the backend sends them (never floats on
- * the wire) — parsed to numbers only where a specific UI computation needs it (see
+ * the wire) - parsed to numbers only where a specific UI computation needs it (see
  * `PaymentRecordingPage.tsx`), same discipline the backend itself uses internally via `Money`.
  */
 export interface LoanAccountBalances {
@@ -20,7 +20,7 @@ export interface LoanAccountBalances {
   penaltyDue: string;
 }
 
-/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly — note plain `CLOSED`, not `CLOSED_PAID`. */
+/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly - note plain `CLOSED`, not `CLOSED_PAID`. */
 export type LoanAccountStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'
@@ -49,7 +49,7 @@ export interface LoanAccount {
   approvedAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;
-  /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all — NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
+  /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all - NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
   createdAt: string;
 }
@@ -184,7 +184,7 @@ export interface RepaymentInstallment {
   paid: InstallmentAmounts;
   status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
   /** Null until first paid. Compare against `dueDate` to tell a settled (PAID) installment was
-   * paid late — `status` alone can't, since it's a live-derived value that resets to PAID once
+   * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
    * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */
   lastPaidAt: string | null;
 }

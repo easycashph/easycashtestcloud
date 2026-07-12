@@ -5,9 +5,9 @@ import { apiClient, fetchFileBlob } from '@/lib/apiClient';
 import type { Attachment } from '@/lib/documentApiTypes';
 
 /**
- * Renders a loan application's uploaded Profile Picture attachment (if any) in place of initials —
+ * Renders a loan application's uploaded Profile Picture attachment (if any) in place of initials -
  * shared between the applications list (small) and the detail page (larger). The download endpoint
- * requires a Bearer auth header, so a plain `<img src>` can't hit it directly — fetched as a blob
+ * requires a Bearer auth header, so a plain `<img src>` can't hit it directly - fetched as a blob
  * (same pattern as `AttachmentPreviewModal`) and rendered via an object URL.
  */
 export function ApplicantAvatar({
@@ -42,7 +42,7 @@ export function ApplicantAvatar({
         setObjectUrl(localUrl);
       })
       .catch(() => {
-        // Falls back to initials below — not worth a dedicated error state for an avatar.
+        // Falls back to initials below - not worth a dedicated error state for an avatar.
       });
     return () => {
       cancelled = true;

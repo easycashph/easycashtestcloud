@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 /**
  * Wraps any action the preview build does not actually perform (nothing in
  * this app calls app/backend). Always disabled, always visibly labeled, so
- * nobody mistakes it for a working control — per this checkpoint's explicit
+ * nobody mistakes it for a working control - per this checkpoint's explicit
  * requirement to never let a non-functional button pretend to work.
  */
 export function ComingSoonButton({ className, children, ...props }: ButtonProps) {

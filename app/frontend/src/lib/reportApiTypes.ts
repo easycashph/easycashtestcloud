@@ -1,5 +1,5 @@
 /**
- * Mirrors `app/backend`'s reporting module presenters/DTOs exactly — see `apiClient.ts`'s doc
+ * Mirrors `app/backend`'s reporting module presenters/DTOs exactly - see `apiClient.ts`'s doc
  * comment for why this pilot hand-maintains DTOs instead of generating them.
  */
 export type ReportGranularity = 'DAILY' | 'MONTHLY' | 'YEARLY';

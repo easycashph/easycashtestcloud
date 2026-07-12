@@ -13,7 +13,7 @@ export type AttachmentDocumentCategory =
   | 'SEAMANS_BOOK'
   | 'OVERSEAS_EMPLOYMENT_CERTIFICATE';
 
-/** Single source of truth for how each category reads in the UI — reused by the Loan Application
+/** Single source of truth for how each category reads in the UI - reused by the Loan Application
  * create form's upload slots and by `AttachmentsPanel`'s display. */
 export const DOCUMENT_CATEGORY_LABELS: Record<AttachmentDocumentCategory, string> = {
   PROFILE_PICTURE: 'Profile picture',
@@ -40,7 +40,7 @@ export interface Attachment {
   uploadedAt: string;
 }
 
-/** Shared with the Loan Application create form's categorized document slots — same whitelist and
+/** Shared with the Loan Application create form's categorized document slots - same whitelist and
  * limit the backend's `UploadAttachmentUseCase` enforces server-side. */
 export const ATTACHMENT_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png';
 export const ATTACHMENT_ACCEPTED_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png']);

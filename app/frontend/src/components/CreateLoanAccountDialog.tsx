@@ -30,7 +30,7 @@ export interface CreateLoanAccountParams {
   disbursementBank?: MockLoanAccount['disbursementBank'];
 }
 
-/** Matches `Loans_details`'s Bank Name/ATM Card Number/Bank Account Number/Name on Card fields — only collected for bank-based payment methods. */
+/** Matches `Loans_details`'s Bank Name/ATM Card Number/Bank Account Number/Name on Card fields - only collected for bank-based payment methods. */
 const BANK_BASED_PAYMENT_METHODS = new Set(['BANK_TRANSFER', 'AUTO_DEBIT']);
 
 const FEE_WAIVER_LABELS: { key: keyof LoanFeeWaivers; label: string }[] = [
@@ -40,17 +40,17 @@ const FEE_WAIVER_LABELS: { key: keyof LoanFeeWaivers; label: string }[] = [
   { key: 'notarialFee', label: 'Notarial Fee (₱500)' },
   { key: 'insuranceFee', label: 'Insurance Fee' },
   { key: 'advanceInterestFee', label: 'Advance Interest Fee (if disbursed >30 days before first repayment)' },
-  { key: 'documentaryStampTax', label: 'Documentary Stamp Tax (₱150) — waived by default' },
+  { key: 'documentaryStampTax', label: 'Documentary Stamp Tax (₱150) - waived by default' },
 ];
 
-/** Seconds the final confirm button stays disabled — a deliberate speed bump against an accidental double-click on a financial commitment. */
+/** Seconds the final confirm button stays disabled - a deliberate speed bump against an accidental double-click on a financial commitment. */
 const CONFIRM_HOLD_SECONDS = 3;
 
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Matches `createLoanAccountForClient`'s own `firstRepaymentDate` derivation — one month after disbursement. */
+/** Matches `createLoanAccountForClient`'s own `firstRepaymentDate` derivation - one month after disbursement. */
 function addOneMonthIso(isoDate: string): string {
   const d = new Date(isoDate);
   d.setUTCMonth(d.getUTCMonth() + 1);
@@ -62,13 +62,13 @@ function addOneMonthIso(isoDate: string): string {
  * (`legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, `Fill up form` /
  * `manual input for LOAN AMOUNT` sheets): Principal Amount, Term, Add-On Rate (looked up against
  * the `Interest Rate Chart` sheet for the Contractual Rate), Anticipated Disbursement Date,
- * Co-Borrower, Outstanding Balance from a previous loan (renewals) — plus each fee's own Waive
+ * Co-Borrower, Outstanding Balance from a previous loan (renewals) - plus each fee's own Waive
  * toggle (the real form's column `H`: typing `"NO"` zeroes that fee out) and a live Computation
  * Summary (Monthly Amortization, Obligation, Net Proceeds, EIR Monthly/Annual) using
  * `computeLoanOriginationSummary()`.
  *
  * Shared between `ClientProfilePage` (no prefill) and `LoanApplicationDetailPage` (prefilled from
- * the source application's requested product/amount/term) — one form, one set of formulas, no
+ * the source application's requested product/amount/term) - one form, one set of formulas, no
  * duplicated fee logic between the two entry points.
  */
 export function CreateLoanAccountDialog({
@@ -80,7 +80,7 @@ export function CreateLoanAccountDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (params: CreateLoanAccountParams) => void;
-  /** Prefills the form — e.g. from an approved application's requested product/amount/term. */
+  /** Prefills the form - e.g. from an approved application's requested product/amount/term. */
   initialValues?: { productCode?: string; principalAmount?: number; installmentCount?: number };
 }) {
   const [productCode, setProductCode] = React.useState(initialValues?.productCode ?? '');
@@ -136,7 +136,7 @@ export function CreateLoanAccountDialog({
   };
 
   // The 3-second hold counts down only while the safety-net confirm dialog is open, resetting
-  // every time it's reopened — so a hasty officer can't pre-empt it by opening/closing repeatedly.
+  // every time it's reopened - so a hasty officer can't pre-empt it by opening/closing repeatedly.
   React.useEffect(() => {
     if (!confirming) {
       setConfirmHoldRemaining(CONFIRM_HOLD_SECONDS);
@@ -159,7 +159,7 @@ export function CreateLoanAccountDialog({
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Account</DialogTitle>
-            <DialogDescription>Preview only — creates a PENDING_APPROVAL loan account for this client.</DialogDescription>
+            <DialogDescription>Preview only - creates a PENDING_APPROVAL loan account for this client.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
@@ -212,7 +212,7 @@ export function CreateLoanAccountDialog({
               <p className="text-xs text-muted-foreground">
                 {summary?.contractualRateFromChart
                   ? `Contractual Rate (Interest Rate Chart): ${summary.contractualRatePercent}%`
-                  : 'No Interest Rate Chart entry for this term/rate — Contractual Rate not on file, please confirm with MIS.'}
+                  : 'No Interest Rate Chart entry for this term/rate - Contractual Rate not on file, please confirm with MIS.'}
               </p>
             </div>
             <div className="space-y-1.5">
@@ -230,7 +230,7 @@ export function CreateLoanAccountDialog({
                 value={previousLoanOutstandingBalance}
                 onChange={(e) => setPreviousLoanOutstandingBalance(Number(e.target.value))}
               />
-              <p className="text-xs text-muted-foreground">Leave at 0 for a brand-new loan — paid off from this loan's proceeds otherwise.</p>
+              <p className="text-xs text-muted-foreground">Leave at 0 for a brand-new loan - paid off from this loan's proceeds otherwise.</p>
             </div>
           </div>
 

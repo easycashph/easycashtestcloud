@@ -22,7 +22,7 @@ function formatFileSize(bytes: number): string {
 }
 
 /**
- * Reusable attachment list + upload widget — first wired for Loan Application intake
+ * Reusable attachment list + upload widget - first wired for Loan Application intake
  * (`LoanApplicationDetailPage`), built generically against `AttachmentOwnerType` so
  * Borrower/LoanAccount detail pages can adopt it later without change.
  */
@@ -99,7 +99,7 @@ export function AttachmentsPanel({
         <CardTitle className="flex items-center gap-2 text-base">
           <Paperclip className="h-4 w-4 text-muted-foreground" /> Attachments
         </CardTitle>
-        <CardDescription>Supporting documents (valid ID, payslip, CB report, etc.) — PDF, JPEG, or PNG, up to 10 MB each.</CardDescription>
+        <CardDescription>Supporting documents (valid ID, payslip, CB report, etc.) - PDF, JPEG, or PNG, up to 10 MB each.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {error && (

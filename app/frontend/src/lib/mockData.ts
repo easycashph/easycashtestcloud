@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * PREVIEW MODE — SAMPLE DATA ONLY. NOT CONNECTED TO app/backend.
+ * PREVIEW MODE - SAMPLE DATA ONLY. NOT CONNECTED TO app/backend.
  * ============================================================================
  * This entire module is hand-generated mock data for a CEO-facing UI preview
  * (Milestone 9.1, pre-CP13). It exists purely to demonstrate layout and
@@ -9,7 +9,7 @@
  * Borrower names below are REAL customer names, sourced from
  * `legacy/reports/Fields in Google Spreadsheet.xlsx` ("MLR Master List",
  * column A). Every loan/balance/schedule figure attached to those names is
- * entirely FABRICATED for demo purposes — it does not represent any real
+ * entirely FABRICATED for demo purposes - it does not represent any real
  * loan, balance, or transaction. Because real customer names are paired with
  * fabricated financial data, THIS BUILD MUST NOT BE DEPLOYED PUBLICLY OR
  * SHARED OUTSIDE AN INTERNAL PREVIEW AUDIENCE.
@@ -17,7 +17,7 @@
  * Shapes here deliberately mirror the real backend domain types
  * (`LoanAccount`/`RepaymentInstallment`, `app/backend/src/modules/loan-account`
  * `/repayment`) so this mock layer is easy to swap for real `TanStack Query`
- * calls once CP13 (HTTP exposure) exists — same field names, same
+ * calls once CP13 (HTTP exposure) exists - same field names, same
  * `collectionsBalance`/`accountingBalance` split from ADR-007 §3.
  */
 
@@ -29,7 +29,7 @@ export type LoanAccountStatus =
   | 'ACTIVE'
   | 'ACTIVE_IN_ARREARS'
   /**
-   * Active Matured — the loan has passed its full maturity date (end of the entire term) but is
+   * Active Matured - the loan has passed its full maturity date (end of the entire term) but is
    * still unpaid, carrying an outstanding balance; still active, not yet written off. The
    * highest-risk ACTIVE category. Deliberately distinct from `CLOSED` (which reached maturity AND
    * settled successfully) and from `ACTIVE_IN_ARREARS` (overdue on installments but still within
@@ -46,7 +46,7 @@ export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' |
  * The product name a loan was originated under. Loosened to `string` (not a
  * closed union) because it must be able to hold either one of the 3
  * currently-ACTIVE product names OR one of the ~40 DISCONTINUED legacy
- * product names (`MOCK_LOAN_PRODUCTS` below) — a loan originated years ago
+ * product names (`MOCK_LOAN_PRODUCTS` below) - a loan originated years ago
  * under a since-discontinued product is still a real, valid loan today.
  */
 export type LoanProductType = string;
@@ -82,7 +82,7 @@ export interface MockLoanAccount {
   /** FK into `MOCK_LOAN_PRODUCTS`. */
   productId: string;
   productType: LoanProductType;
-  /** True when `productId` refers to a DISCONTINUED product — see `MOCK_LOAN_PRODUCTS`. */
+  /** True when `productId` refers to a DISCONTINUED product - see `MOCK_LOAN_PRODUCTS`. */
   isDiscontinuedProduct: boolean;
   status: LoanAccountStatus;
   principalAmount: number;
@@ -90,24 +90,24 @@ export interface MockLoanAccount {
   installmentCount: number;
   firstRepaymentDate: string;
   balances: MockLoanBalances;
-  /** ADR-007 §3 (RESOLVED, Option B) — penalty-inclusive. */
+  /** ADR-007 §3 (RESOLVED, Option B) - penalty-inclusive. */
   collectionsBalance: number;
-  /** ADR-007 §3 (RESOLVED, Option B) — penalty-exclusive. */
+  /** ADR-007 §3 (RESOLVED, Option B) - penalty-exclusive. */
   accountingBalance: number;
   approvedAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;
   createdAt: string;
-  /** Code into `MOCK_PAYMENT_METHODS` — the mode of payment this loan is set up to collect through. */
+  /** Code into `MOCK_PAYMENT_METHODS` - the mode of payment this loan is set up to collect through. */
   paymentMethod: string;
-  /** Populated only when `paymentMethod === 'CASH'` and `status === 'ACTIVE_IN_ARREARS'` — door-to-door collection assignment. */
+  /** Populated only when `paymentMethod === 'CASH'` and `status === 'ACTIVE_IN_ARREARS'` - door-to-door collection assignment. */
   collectionAgentName?: string;
-  /** Populated only when `paymentMethod === 'AUTO_DEBIT'` — client-consent-based ATM debit authorization on file. */
+  /** Populated only when `paymentMethod === 'AUTO_DEBIT'` - client-consent-based ATM debit authorization on file. */
   atmCardOnFile?: boolean;
-  /** Optional — matches the legacy calculator's "Co-Borrower" field (`Loans_details` sheet). */
+  /** Optional - matches the legacy calculator's "Co-Borrower" field (`Loans_details` sheet). */
   coBorrowerName?: string;
   /**
-   * Disbursement bank details — populated for `BANK_TRANSFER`/`AUTO_DEBIT` loans, matching
+   * Disbursement bank details - populated for `BANK_TRANSFER`/`AUTO_DEBIT` loans, matching
    * `Loans_details` columns `AD`–`AG` (`Bank Name`, `ATM Card Number`, `Bank Account Number`,
    * `Name on Card/Account`) in `OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm`.
    */
@@ -117,7 +117,7 @@ export interface MockLoanAccount {
     bankAccountNumber: string;
     nameOnCardOrAccount: string;
   };
-  /** Set when this loan account was created from a specific approved Loan Application — see `findApprovedApplicationForClient()`. */
+  /** Set when this loan account was created from a specific approved Loan Application - see `findApprovedApplicationForClient()`. */
   sourceApplicationId?: string;
 }
 
@@ -138,7 +138,7 @@ export interface MockStatusEvent {
   actor: string;
 }
 
-// Real borrower names — `legacy/reports/Fields in Google Spreadsheet.xlsx`,
+// Real borrower names - `legacy/reports/Fields in Google Spreadsheet.xlsx`,
 // sheet "MLR Master List", column A ("CLIENT NAME"). 18 distinct rows.
 const BORROWER_NAMES = [
   'Maria Dolores Parinas Rosales',
@@ -162,13 +162,13 @@ const BORROWER_NAMES = [
 ] as const;
 
 const LOAN_OFFICERS = ['J. Villanueva', 'M. Santos', 'R. Cruz', 'P. Ramos'];
-// Easycash currently operates a single branch (see COMPANY_INFO above) —
+// Easycash currently operates a single branch (see COMPANY_INFO above) -
 // this array stays a single-element list (not a hardcoded scalar) so every
 // screen's "branch filter" UI is exercised honestly with one real option,
 // rather than special-cased away.
 const BRANCHES: { id: string; name: string }[] = [{ id: 'branch-manila', name: COMPANY_INFO.branchName }];
 
-/** Deterministic seeded RNG (mulberry32) — mock data must render identically on every load, not shuffle on each refresh. */
+/** Deterministic seeded RNG (mulberry32) - mock data must render identically on every load, not shuffle on each refresh. */
 function mulberry32(seed: number) {
   let a = seed;
   return () => {
@@ -185,18 +185,18 @@ const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(rng() * arr.length)]!;
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 // ---------------------------------------------------------------------------
-// Loan Products — ACTIVE vs. DISCONTINUED.
+// Loan Products - ACTIVE vs. DISCONTINUED.
 //
 // Only 3 loan CATEGORIES are ACTIVE (available for new loan origination
 // today): Salary Loan, Business Loan, Seafarer Loan. Salary Loan currently
 // has 3 selectable sub-types (Corporate tie-up, Regular/standalone, Special
 // repeat-client discount); Business Loan and Seafarer Loan each currently
-// have a single "Regular" sub-type — confirmed business detail, not an
+// have a single "Regular" sub-type - confirmed business detail, not an
 // assumption about future product expansion. Account codes follow the real
 // naming convention: `{CATEGORY}-{SubType}_{4-digit sequence}`, e.g.
 // `SL-Corp_0001`, `SL-Reg_0002`, `BL-Reg_0001`, `SML-Reg_0001`. Every other
 // product name below is a real, historical product code from `legacy/mongodb/.../loan_products
-// .bson` (44 documents in that export; 2 excluded here — a QA "Test Product"
+// .bson` (44 documents in that export; 2 excluded here - a QA "Test Product"
 // entry and one corrupted/malformed record with no real name, neither of
 // which represent an actual retail product). These DISCONTINUED products are
 // deliberately NOT hidden: several still have real client loans open against
@@ -212,11 +212,11 @@ export interface MockFeeRule {
 }
 
 /**
- * A loan document template attached to a product — the merge-field body used to generate that
+ * A loan document template attached to a product - the merge-field body used to generate that
  * product's official loan documents (Promissory Note, Disclosure Statement, etc.) once a loan
  * account under it is activated. Evidence: `legacy/reports/201 Loan Docs Generator/*.docx`, the
  * company's real MS Word mail-merge templates (`{{BorrowerName}}`-style fields). Editable per
- * product in the Loan Products page — preview-only, held in component state, never persisted.
+ * product in the Loan Products page - preview-only, held in component state, never persisted.
  */
 export interface MockDocumentTemplate {
   /** Short code matching the legacy template file naming (PN, DS, LA, DOA, DPCF, SPA). */
@@ -229,7 +229,7 @@ export interface MockDocumentTemplate {
 }
 
 // Two document sets found in `legacy/reports/201 Loan Docs Generator/`: a standard set (DOA/LA)
-// and a "-SL" suffixed set (DOA-SL/LA-SL) used only for seafarer allotment loans — confirmed by
+// and a "-SL" suffixed set (DOA-SL/LA-SL) used only for seafarer allotment loans - confirmed by
 // the SPA template's own text ("restructure the existing allotment loan"), which is seafarer-
 // specific and has no standard-set equivalent.
 const STANDARD_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
@@ -288,8 +288,8 @@ const STANDARD_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
 ];
 
 const SEAFARER_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
-  STANDARD_DOCUMENT_TEMPLATES[0]!, // PN — same across categories
-  STANDARD_DOCUMENT_TEMPLATES[1]!, // DS — same across categories
+  STANDARD_DOCUMENT_TEMPLATES[0]!, // PN - same across categories
+  STANDARD_DOCUMENT_TEMPLATES[1]!, // DS - same across categories
   {
     code: 'LA-SL',
     name: 'Loan Agreement (Seafarer)',
@@ -310,7 +310,7 @@ const SEAFARER_DOCUMENT_TEMPLATES: MockDocumentTemplate[] = [
       '{{BorrowerAddress}}, hereinafter referred to as the "ASSIGNOR"; and EASYCASH LENDING COMPANY, INC. hereby agree that the ' +
       "Assignor irrevocably assigns {{ObligationWords}} out of the Assignor's monthly seafarer allotment.",
   },
-  STANDARD_DOCUMENT_TEMPLATES[4]!, // DPCF — same across categories
+  STANDARD_DOCUMENT_TEMPLATES[4]!, // DPCF - same across categories
   {
     code: 'SPA',
     name: 'Special Power of Attorney',
@@ -346,9 +346,9 @@ export interface MockLoanProduct {
   maxInterestRate: number;
   penaltyRule: { ratePercent: number; gracePeriodDays: number };
   feeRules: MockFeeRule[];
-  /** Set only for discontinued/legacy products — shown as a note in the UI. */
+  /** Set only for discontinued/legacy products - shown as a note in the UI. */
   legacyNote?: string;
-  /** Loan document templates generated when a loan account under this product is activated — editable per product in the Loan Products page. */
+  /** Loan document templates generated when a loan account under this product is activated - editable per product in the Loan Products page. */
   documentTemplates: MockDocumentTemplate[];
 }
 
@@ -361,7 +361,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   {
     id: 'product-sl-corp',
     productCode: 'SL-CORP',
-    productName: 'Salary Loan — Corporate Tie-up',
+    productName: 'Salary Loan - Corporate Tie-up',
     category: 'Salary Loan',
     versionNumber: 3,
     isActive: true,
@@ -388,7 +388,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   {
     id: 'product-sl-regular',
     productCode: 'SL-REGULAR',
-    productName: 'Salary Loan — Regular',
+    productName: 'Salary Loan - Regular',
     category: 'Salary Loan',
     versionNumber: 3,
     isActive: true,
@@ -415,7 +415,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   {
     id: 'product-sl-spec',
     productCode: 'SL-SPEC',
-    productName: 'Salary Loan — Special (Repeat Client)',
+    productName: 'Salary Loan - Special (Repeat Client)',
     category: 'Salary Loan',
     versionNumber: 3,
     isActive: true,
@@ -442,7 +442,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   {
     id: 'product-bl-regular',
     productCode: 'BL-REGULAR',
-    productName: 'Business Loan — Regular',
+    productName: 'Business Loan - Regular',
     category: 'Business Loan',
     versionNumber: 2,
     isActive: true,
@@ -468,7 +468,7 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   {
     id: 'product-sml-regular',
     productCode: 'SML-REGULAR',
-    productName: 'Seafarer Loan — Regular',
+    productName: 'Seafarer Loan - Regular',
     category: 'Seafarer Loan',
     versionNumber: 1,
     isActive: true,
@@ -490,11 +490,11 @@ const ACTIVE_PRODUCTS: MockLoanProduct[] = [
   },
 ];
 
-// Real product names — `legacy/mongodb/07012026_103239/db-easycash/
+// Real product names - `legacy/mongodb/07012026_103239/db-easycash/
 // loan_products.bson`, `name` field (44 documents total; excludes a QA
 // "Test Product" record and one malformed record with no real product name).
 // Exact-name collisions with the 3 active codes above ("SL-Regular",
-// "BL-Regular") are also excluded here — their "(OLD)" suffixed siblings
+// "BL-Regular") are also excluded here - their "(OLD)" suffixed siblings
 // already represent the discontinued/legacy flavor without looking like a
 // duplicate of a current active product in this UI.
 const DISCONTINUED_PRODUCT_NAMES = [
@@ -570,7 +570,7 @@ function buildDiscontinuedProduct(name: string): MockLoanProduct {
     penaltyRule: { ratePercent: pick([3, 4, 5]), gracePeriodDays: pick([0, 3, 5, 10]) },
     feeRules: [],
     legacyNote:
-      'Historical product from the legacy system — retained because existing loan accounts still reference it; not available for new originations.',
+      'Historical product from the legacy system - retained because existing loan accounts still reference it; not available for new originations.',
     // "SML" (Seafarer Loan) legacy codes get the seafarer document set (matches the -SL legacy
     // templates); everything else gets the standard set. Existing loans on these discontinued
     // products still need a document set for their own Attachments tab.
@@ -580,7 +580,7 @@ function buildDiscontinuedProduct(name: string): MockLoanProduct {
 
 const DISCONTINUED_PRODUCTS: MockLoanProduct[] = DISCONTINUED_PRODUCT_NAMES.map(buildDiscontinuedProduct);
 
-/** ACTIVE products first, then every DISCONTINUED legacy product — nothing hidden. */
+/** ACTIVE products first, then every DISCONTINUED legacy product - nothing hidden. */
 export const MOCK_LOAN_PRODUCTS: MockLoanProduct[] = [...ACTIVE_PRODUCTS, ...DISCONTINUED_PRODUCTS];
 
 export function getMockLoanProduct(id: string): MockLoanProduct | undefined {
@@ -589,12 +589,12 @@ export function getMockLoanProduct(id: string): MockLoanProduct | undefined {
 
 /**
  * What `generateLoan()` below actually assigns to loans. Deliberately not
- * "one entry per `MOCK_LOAN_PRODUCTS` row" — most generated loans use one of
+ * "one entry per `MOCK_LOAN_PRODUCTS` row" - most generated loans use one of
  * the 5 active sub-types (the realistic common case), but two discontinued
  * products (`SML-Regular`, `SML-Max`) are included here specifically so
  * `STATUS_PLAN`'s forced overrides (below) can demonstrate a real
  * ACTIVE/ACTIVE_IN_ARREARS client loan still sitting on a discontinued
- * product — the exact scenario this checkpoint asked to make visible.
+ * product - the exact scenario this checkpoint asked to make visible.
  *
  * `codePrefix` here is the real account-code prefix pattern (confirmed):
  * `{CATEGORY}-{SubType}`, e.g. `SL-Corp`, combined in `nextLoanCode()` below
@@ -614,7 +614,7 @@ function findDiscontinuedCatalogEntry(productCode: string): { product: MockLoanP
   return { product, codePrefix: productCode.replace(/[^A-Za-z]/g, '').slice(0, 6).toUpperCase() };
 }
 
-/** Sequential per-prefix counter for account codes — mirrors the real convention (continues from the previous number for that prefix, not reset per loan). */
+/** Sequential per-prefix counter for account codes - mirrors the real convention (continues from the previous number for that prefix, not reset per loan). */
 const loanCodeCounters: Record<string, number> = {};
 function nextLoanCode(codePrefix: string): string {
   const next = (loanCodeCounters[codePrefix] ?? 0) + 1;
@@ -623,7 +623,7 @@ function nextLoanCode(codePrefix: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Mode of Payment / Collection Methods — ACTIVE vs. DISCONTINUED.
+// Mode of Payment / Collection Methods - ACTIVE vs. DISCONTINUED.
 //
 // ACTIVE (offered today, selectable on the Payment Recording screen): GCash,
 // Cash, Bank Transfer, Post-Dated Check (PDC), Auto Debit.
@@ -632,7 +632,7 @@ function nextLoanCode(codePrefix: string): string {
 // transactions and as a Transaction Report filter): DragonPay, plus 4
 // additional real legacy payment channels found in `legacy/mongodb/
 // .../loan_transactions.bson`'s free-text `comment` field (this schema has
-// no dedicated payment-method column — these were identified by searching
+// no dedicated payment-method column - these were identified by searching
 // that field for real channel names, not invented): "ECPAY" (ECPay),
 // "Deposited thru Bayad Center...", "LBC payment"/"...thru LBC", "Paid thru
 // western union", and "Paid thru Palawan Pawnshop...".
@@ -654,7 +654,7 @@ export const ACTIVE_PAYMENT_METHODS: MockPaymentMethod[] = [
 ];
 
 const LEGACY_NOTE =
-  'Historical payment channel from the legacy system — retained because past transactions used it; not offered for new payments.';
+  'Historical payment channel from the legacy system - retained because past transactions used it; not offered for new payments.';
 
 export const DISCONTINUED_PAYMENT_METHODS: MockPaymentMethod[] = [
   { code: 'DRAGONPAY', label: 'DragonPay', isActive: false, legacyNote: LEGACY_NOTE },
@@ -690,11 +690,11 @@ export interface InterestRateChartEntry {
 }
 
 /**
- * The official calculator's Add-On → Contractual rate lookup table — evidence:
+ * The official calculator's Add-On → Contractual rate lookup table - evidence:
  * `legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, sheet `Interest Rate Chart`
  * (`A2:C136`), read by the `Fill up form`/`manual input for LOAN AMOUNT` sheet's `Contractual
  * Interest Rate` cell via
- * `INDEX(C2:C136, MATCH(1, (A2:A136=Term)*(B2:B136=AddOnRate), 0))` — an exact 2D lookup, not a
+ * `INDEX(C2:C136, MATCH(1, (A2:A136=Term)*(B2:B136=AddOnRate), 0))` - an exact 2D lookup, not a
  * formula-derived conversion. This resolves `CALCULATION_ENGINE_SPEC.md` §3's "reverse direction
  * (Add-On → Contractual)... uses a precomputed lookup table" note with the real table contents.
  *
@@ -703,11 +703,11 @@ export interface InterestRateChartEntry {
  * (139 rows). The two copies agree on every tier except two corrections this second copy
  * resolved:
  * - The `Add-On 10.0%` tier (terms 1–3) is real, not stray test data as first assumed from the
- *   Encode.xlsx copy alone — that copy stored it as raw fractions (`0.1`/`0.1307`/`0.1436`)
+ *   Encode.xlsx copy alone - that copy stored it as raw fractions (`0.1`/`0.1307`/`0.1436`)
  *   instead of whole percent like every other row, a unit inconsistency `Rate_details` doesn't
  *   share (`10`/`13.07`/`14.36`). Corrected below to the `Rate_details` values.
  * - `Rate_details` additionally has an `Add-On 5.0%` tier (terms 1–4: `5`/`6.6`/`7.33`/`7.72`,
- *   not present in the Encode.xlsx copy) — added below.
+ *   not present in the Encode.xlsx copy) - added below.
  * Every other value matched exactly between both independent sources, which is why they're
  * trusted as correct rather than further second-guessed.
  */
@@ -844,7 +844,7 @@ export const INTEREST_RATE_CHART: InterestRateChartEntry[] = [
   { term: 10, addOnRate: 3.5, contractualRate: 5.86 },
   { term: 11, addOnRate: 3.5, contractualRate: 5.86 },
   { term: 12, addOnRate: 3.5, contractualRate: 5.86 },
-  // Add-On 5.0% and 10.0% tiers — from `Rate_details` only, see the doc comment above.
+  // Add-On 5.0% and 10.0% tiers - from `Rate_details` only, see the doc comment above.
   { term: 1, addOnRate: 5.0, contractualRate: 5.0 },
   { term: 2, addOnRate: 5.0, contractualRate: 6.6 },
   { term: 3, addOnRate: 5.0, contractualRate: 7.33 },
@@ -857,7 +857,7 @@ export const INTEREST_RATE_CHART: InterestRateChartEntry[] = [
 /** Every distinct Add-On Rate tier on file, for the Create Loan Account form's rate dropdown. */
 export const ADD_ON_RATE_TIERS: number[] = [...new Set(INTEREST_RATE_CHART.map((e) => e.addOnRate))].sort((a, b) => a - b);
 
-/** Exact lookup only — no interpolation, per this project's no-invented-formula rule. `null` when the term/add-on combination isn't on file. */
+/** Exact lookup only - no interpolation, per this project's no-invented-formula rule. `null` when the term/add-on combination isn't on file. */
 export function lookupContractualRate(termMonths: number, addOnRatePercent: number): number | null {
   const entry = INTEREST_RATE_CHART.find((e) => e.term === termMonths && Math.abs(e.addOnRate - addOnRatePercent) < 0.001);
   return entry ? entry.contractualRate : null;
@@ -870,11 +870,11 @@ export interface LoanFeeWaivers {
   notarialFee: boolean;
   insuranceFee: boolean;
   advanceInterestFee: boolean;
-  /** Not part of the official calculator's own toggle set (that fee is product-configured, always-applied there) — added per MIS request, defaulted to waived (see `DEFAULT_FEE_WAIVERS`). */
+  /** Not part of the official calculator's own toggle set (that fee is product-configured, always-applied there) - added per MIS request, defaulted to waived (see `DEFAULT_FEE_WAIVERS`). */
   documentaryStampTax: boolean;
 }
 
-/** "Waive nothing" baseline — every fee charged. */
+/** "Waive nothing" baseline - every fee charged. */
 export const NO_FEES_WAIVED: LoanFeeWaivers = {
   accountManagementFee: false,
   processingFee: false,
@@ -885,30 +885,30 @@ export const NO_FEES_WAIVED: LoanFeeWaivers = {
   documentaryStampTax: false,
 };
 
-/** The Create Loan Account form's actual starting toggle state — Documentary Stamp Tax defaults to waived; every other fee defaults to charged. */
+/** The Create Loan Account form's actual starting toggle state - Documentary Stamp Tax defaults to waived; every other fee defaults to charged. */
 export const DEFAULT_FEE_WAIVERS: LoanFeeWaivers = { ...NO_FEES_WAIVED, documentaryStampTax: true };
 
 export interface LoanOriginationParams {
   principal: number;
-  /** Officer-entered Add-On Rate — looked up against `INTEREST_RATE_CHART` for the Contractual Rate actually used to run the schedule. */
+  /** Officer-entered Add-On Rate - looked up against `INTEREST_RATE_CHART` for the Contractual Rate actually used to run the schedule. */
   addOnRatePercent: number;
   termMonths: number;
-  /** The product's other configured fees (e.g. Documentary Stamp Tax, Credit Investigation Fee) — always applied, no per-fee waive evidenced for these. Its "Processing Fee" entry supplies the processing fee's own rate/flat amount. */
+  /** The product's other configured fees (e.g. Documentary Stamp Tax, Credit Investigation Fee) - always applied, no per-fee waive evidenced for these. Its "Processing Fee" entry supplies the processing fee's own rate/flat amount. */
   productFeeRules: MockFeeRule[];
   disbursementDate: string;
   firstRepaymentDate: string;
-  /** For loan renewals — the prior loan's remaining balance, paid off out of this loan's proceeds. `0` for a brand-new client. */
+  /** For loan renewals - the prior loan's remaining balance, paid off out of this loan's proceeds. `0` for a brand-new client. */
   previousLoanOutstandingBalance: number;
   waive: LoanFeeWaivers;
 }
 
 export interface LoanOriginationSummary {
   contractualRatePercent: number;
-  /** `false` when no exact Interest Rate Chart entry exists for this term/add-on combination and the Add-On Rate was used as a fallback — flagged, never silently guessed. */
+  /** `false` when no exact Interest Rate Chart entry exists for this term/add-on combination and the Add-On Rate was used as a fallback - flagged, never silently guessed. */
   contractualRateFromChart: boolean;
   monthlyPayment: number;
   totalInterest: number;
-  /** Sum of every installment's amortization — matches the legacy `Obligation` field. */
+  /** Sum of every installment's amortization - matches the legacy `Obligation` field. */
   obligation: number;
   fees: {
     accountManagementFee: number;
@@ -918,11 +918,11 @@ export interface LoanOriginationSummary {
     insuranceFee: number;
     advanceInterestFee: number;
   };
-  /** The product's other configured fees (e.g. Documentary Stamp Tax) — see `LoanOriginationParams.productFeeRules`. */
+  /** The product's other configured fees (e.g. Documentary Stamp Tax) - see `LoanOriginationParams.productFeeRules`. */
   otherProductFees: { name: string; amount: number }[];
   totalFees: number;
   previousLoanOutstandingBalance: number;
-  /** `totalFees + previousLoanOutstandingBalance` — matches the legacy `Other Bank Charges/Deductions Collected` field. */
+  /** `totalFees + previousLoanOutstandingBalance` - matches the legacy `Other Bank Charges/Deductions Collected` field. */
   totalDeduction: number;
   netProceeds: number;
   addOnMonthlyRatePercent: number;
@@ -935,31 +935,31 @@ function daysBetweenIso(fromIso: string, toIso: string): number {
 
 /**
  * Live "how much will this loan actually cost/disburse" preview for the Create Loan Account form
- * — reproduces the real official calculator
+ * - reproduces the real official calculator
  * (`legacy/reports/201 Loan Docs Generator/201 Loan Docs Encode.xlsx`, `manual input for LOAN
  * AMOUNT` sheet) field-for-field, including its per-fee Waive toggle (column H: `NO` zeroes the
  * fee out entirely) and its Advance Interest / Insurance Fee formulas, which are otherwise
  * undocumented anywhere in this codebase:
  *
  * - Contractual Rate: exact lookup against `INTEREST_RATE_CHART` (sheet `Interest Rate Chart`),
- *   not a formula — see `lookupContractualRate()`.
- * - Monthly Amortization: `PMT` — `CALCULATION_ENGINE_SPEC.md` §2 (CONFIRMED).
+ *   not a formula - see `lookupContractualRate()`.
+ * - Monthly Amortization: `PMT` - `CALCULATION_ENGINE_SPEC.md` §2 (CONFIRMED).
  * - Account Management Fee = Principal × 1% (cell `G3`, fixed rate, not product-configurable).
- * - Processing Fee = the product's own `Processing Fee` rule (flat or % of principal — `G5`).
+ * - Processing Fee = the product's own `Processing Fee` rule (flat or % of principal - `G5`).
  * - Digital Signature Fee / Notarial Fee = flat ₱500 each (cells `G6`/`G7`). The `Loans_details`
  *   master ledger in `OFFICIAL CALCULATOR OF EASYCASH 1.5.83 LMSv3.xlsm` records the same ₱500
- *   Notarial Fee but under an older name for the Digital Signature Fee — `Web fee` — real
+ *   Notarial Fee but under an older name for the Digital Signature Fee - `Web fee` - real
  *   disbursed loans there show both flat ₱500 charges simultaneously on the same account,
  *   confirming these are two distinct fees, not the same fee double-counted.
- * - Advance Interest Fee (cell `G4`) — a partial-period interest charge, `0` unless the gap
+ * - Advance Interest Fee (cell `G4`) - a partial-period interest charge, `0` unless the gap
  *   between disbursement and the first repayment date exceeds 30 days:
  *   `Principal × (AddOnRate/100) × ((DaysBetween − 30) / 30)`. Same shape as
  *   `CALCULATION_ENGINE_SPEC.md` §8's day-count formula, confirmed independently here against a
  *   second, later-discovered legacy source.
  * - Insurance Fee (cell `G8`) = `(Obligation / 1000) × TermMonths`, `+20` if `Obligation < 50,000`
- *   — `Obligation = MonthlyAmortization × TermMonths` (cell `G17`/`G19`).
+ *   - `Obligation = MonthlyAmortization × TermMonths` (cell `G17`/`G19`).
  * - Net Proceeds = Principal − (all fees + any outstanding balance from a previous loan being
- *   renewed/consolidated) — cells `G9`/`G10`.
+ *   renewed/consolidated) - cells `G9`/`G10`.
  *
  * Every fee toggle mirrors the real form's `H` column: `waive.<fee> = true` reproduces typing
  * `"NO"` in that column, zeroing the fee out entirely (never adjusting the rate to compensate).
@@ -1049,7 +1049,7 @@ function buildSchedule(
   lastInstallmentPartialFraction: number,
 ): MockRepaymentInstallment[] {
   // Simplified level-payment amortization, mirroring CALC-SPEC §2's PMT
-  // formula shape, for presentation purposes only — not a reimplementation
+  // formula shape, for presentation purposes only - not a reimplementation
   // consumed by anything financial.
   const r = monthlyRate / 100;
   const payment = (r * principal) / (1 - Math.pow(1 + r, -installmentCount));
@@ -1114,7 +1114,7 @@ function generateLoan(
   const principal = round2(15000 + rng() * 85000);
   const installmentCount = status === 'MATURED' ? pick([6, 9, 12]) : pick([6, 9, 12, 18, 24]);
   // Spread originations from ~3 weeks to ~23 months ago so recent months are
-  // populated too — the Dashboard's "last 6 months" disbursement bars drill
+  // populated too - the Dashboard's "last 6 months" disbursement bars drill
   // down to accounts activated in the clicked month, which must not be
   // permanently empty (originally 200+ days minimum, i.e. nothing recent).
   // MATURED loans are the exception: they must sit past their full maturity
@@ -1149,7 +1149,7 @@ function generateLoan(
   const principalDue = isActivated ? principal : 0;
   const interestDue = isActivated ? round2(installments.reduce((sum, i) => sum + i.due.interest, 0)) : 0;
   // A fully-closed (paid-in-full) loan must reconcile to an exact zero
-  // balance for this preview's display purposes — using `principalDue`
+  // balance for this preview's display purposes - using `principalDue`
   // directly here (rather than re-summing `installments[].paid.principal`)
   // sidesteps the PMT amortization's well-known few-centavo rounding
   // residue (see `CALCULATION_ENGINE_SPEC.md` §2's own documented
@@ -1199,7 +1199,7 @@ function generateLoan(
   if (status === 'MATURED') {
     timeline.push({
       status: 'MATURED',
-      label: 'Reached maturity date — balance still outstanding',
+      label: 'Reached maturity date - balance still outstanding',
       at: new Date().toISOString(),
       actor: 'System (past maturity)',
     });
@@ -1250,7 +1250,7 @@ const STATUS_PLAN: {
   { status: 'ACTIVE', hasPenalty: false },
   { status: 'ACTIVE', hasPenalty: false },
   // Two Active-Matured accounts (red Venn segment): reached the end of their
-  // full term but still carry an outstanding balance — the highest-risk active
+  // full term but still carry an outstanding balance - the highest-risk active
   // category, distinct from a successfully-settled CLOSED loan.
   { status: 'MATURED', hasPenalty: true },
   { status: 'MATURED', hasPenalty: true, forcedDiscontinuedProductCode: 'SML-Max' },
@@ -1300,13 +1300,13 @@ export function getMockLoan(id: string): MockLoanAccount | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard aggregates — all derived from MOCK_LOANS above, all sample data.
+// Dashboard aggregates - all derived from MOCK_LOANS above, all sample data.
 // ---------------------------------------------------------------------------
 
 /**
- * All still-active (not closed/rejected/written-off) loan statuses — ACTIVE, in arrears, and
+ * All still-active (not closed/rejected/written-off) loan statuses - ACTIVE, in arrears, and
  * past-maturity-but-unpaid. Exported (2026-07-08, F-3 fix) so every "does this client have an
- * active loan" check in the app shares this one definition — `ClientListPage`'s `hasActiveLoan()`
+ * active loan" check in the app shares this one definition - `ClientListPage`'s `hasActiveLoan()`
  * previously hand-rolled its own copy that included `MATURED`, while `clientHasActiveLoan()`
  * below (which actually gates "Create Loan Account") excluded it, so a client with only a
  * past-term, still-unpaid loan showed as "has active loan" on the list but wasn't blocked from
@@ -1323,7 +1323,7 @@ export const DASHBOARD_SUMMARY = {
 
 /**
  * 2026-07-08 (F-1 fix): was a `DASHBOARD_SUMMARY.totalPortfolioValue` field computed once at
- * module load — the same stale-snapshot shape as the `PAYABLE_LOANS` bug fixed earlier the same
+ * module load - the same stale-snapshot shape as the `PAYABLE_LOANS` bug fixed earlier the same
  * day. `DashboardPage`'s Collections-This-Month scaling divides a live-recomputed numerator by
  * this figure, so a frozen denominator silently drifted from reality after any loan was
  * created/activated in the session. Now a function, called fresh wherever it's needed (same fix
@@ -1339,7 +1339,7 @@ const MONTH_LABELS = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
 const MONTH_SHORT_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
- * Loan Disbursement Trend — a real bottom-up sum of `principalAmount` for every loan whose
+ * Loan Disbursement Trend - a real bottom-up sum of `principalAmount` for every loan whose
  * `activatedAt` falls in each of the last `monthsBack` calendar months, not a fabricated series.
  * Exported as a reusable builder so the Dashboard can recompute it against a filtered loan subset
  * (by category and/or origination date range), same as the other portfolio widgets.
@@ -1382,8 +1382,8 @@ export const COLLECTIONS_VS_TARGET = MONTH_LABELS.map((month) => ({
 /**
  * Groups a loan into one of the 3 ACTIVE loan product categories for dashboard
  * analytics: Salary Loan, Seafarer Loan, Business Loan. Every SML-* product
- * (active or discontinued — SML-Regular, SML-Max, etc.) is a sub-class of
- * Seafarer Loan (a.k.a. Seaman Loan), confirmed business detail — the dashboard
+ * (active or discontinued - SML-Regular, SML-Max, etc.) is a sub-class of
+ * Seafarer Loan (a.k.a. Seaman Loan), confirmed business detail - the dashboard
  * must never present SML as its own top-level category. Anything outside the
  * three families (legacy PFL/REL/CL/... products) falls into "Other (Legacy)"
  * so no loan silently disappears from a chart total.
@@ -1397,17 +1397,17 @@ export function getDashboardLoanCategory(loan: MockLoanAccount): string {
 }
 
 /**
- * Collections Forecast — a bottom-up cash-flow projection, not a top-down statistical model.
+ * Collections Forecast - a bottom-up cash-flow projection, not a top-down statistical model.
  * Rather than extrapolating a trend line from past collections (which has no idea what's
  * actually contractually due), this sums the real scheduled installment amounts (principal +
  * interest + fees + penalty, from each active loan's own `MOCK_INSTALLMENTS` schedule) falling
- * due in each of the next 4 months — a number the business can already know exactly, since every
- * active loan's repayment schedule is fixed at origination — then applies the portfolio's own
+ * due in each of the next 4 months - a number the business can already know exactly, since every
+ * active loan's repayment schedule is fixed at origination - then applies the portfolio's own
  * recent collection-realization rate (average actual/target from `COLLECTIONS_VS_TARGET`) to
  * account for the reality that not everything scheduled is actually collected on time. This is
  * the standard approach for a loan portfolio (known future amortization × a realistic collection
  * rate) and is far more defensible than fitting a curve to historical totals alone. Still
- * labeled "Sample Projection" in the UI — real historical collection-rate data, not a fitted
+ * labeled "Sample Projection" in the UI - real historical collection-rate data, not a fitted
  * statistical model, and the realization rate here is a simple average, not a trend/seasonality-
  * aware estimate (see the in-app note for what a further-improved version would add).
  */
@@ -1437,11 +1437,11 @@ function buildCollectionsForecast(monthsAhead = 4): { month: string; projected: 
   return forecast;
 }
 
-/** Clearly labeled as a sample projection in the UI — see `buildCollectionsForecast`'s doc comment for the methodology. */
+/** Clearly labeled as a sample projection in the UI - see `buildCollectionsForecast`'s doc comment for the methodology. */
 export const SAMPLE_COLLECTIONS_PROJECTION = buildCollectionsForecast();
 
 // ---------------------------------------------------------------------------
-// Client Data — borrower profiles. Same 18 real names as MOCK_LOANS, plus
+// Client Data - borrower profiles. Same 18 real names as MOCK_LOANS, plus
 // fabricated contact/employment details so the Client Data screen has
 // something to display. Linked back to MOCK_LOANS by borrowerName.
 // ---------------------------------------------------------------------------
@@ -1449,7 +1449,7 @@ export const SAMPLE_COLLECTIONS_PROJECTION = buildCollectionsForecast();
 export interface MockBorrowerProfile {
   id: string;
   name: string;
-  /** Path under `public/` — a real applicant photo from `legacy/sdevtech/`, cycled across clients for this preview (not necessarily the same real individual as the name — see the Client Data section note in the codebase for why that's an acceptable placeholder choice here). */
+  /** Path under `public/` - a real applicant photo from `legacy/sdevtech/`, cycled across clients for this preview (not necessarily the same real individual as the name - see the Client Data section note in the codebase for why that's an acceptable placeholder choice here). */
   profilePictureUrl?: string;
   contactNumber: string;
   email: string;
@@ -1461,7 +1461,7 @@ export interface MockBorrowerProfile {
   dateOfBirth: string;
   homeBranchName: string;
   loanIds: string[];
-  /** File name/size/type only — same "no real document content shown" rule as Loan Applications above. */
+  /** File name/size/type only - same "no real document content shown" rule as Loan Applications above. */
   attachments: MockUploadedFile[];
 }
 
@@ -1491,7 +1491,7 @@ const EMPLOYERS = [
   'BDO Unibank',
   'San Miguel Corp.',
   'Self-Employed / Sari-Sari Store',
-  'Overseas — Maritime Vessel',
+  'Overseas - Maritime Vessel',
 ];
 const POSITIONS = ['Rank & File', 'Supervisor', 'Team Lead', 'Manager', 'Owner/Proprietor', 'Seafarer (Able Seaman)'];
 const CITIES = ['Makati City', 'Quezon City', 'Cebu City', 'Davao City', 'Pasig City', 'Taguig City'];
@@ -1537,12 +1537,12 @@ export function getMockBorrowerForLoan(loan: MockLoanAccount): MockBorrowerProfi
 }
 
 // ---------------------------------------------------------------------------
-// Repeat-client historical loans — confirmed per this checkpoint: the Loan
+// Repeat-client historical loans - confirmed per this checkpoint: the Loan
 // Application detail page must flag when an applicant is already an
 // existing client, list their previous Easycash loan account(s), and let
 // the AI Risk Assessment summary reference whether that history shows a
 // good payer or a delinquent one (with pattern + reason when delinquent).
-// These two records exist purely to demonstrate both outcomes live —
+// These two records exist purely to demonstrate both outcomes live -
 // Stephanie Salazar Antoy (good payer, paid in full) and Mary Grace Dalapo
 // Gallardo (delinquent, written off) both also appear as fictional-photo
 // Loan Applications above, so opening either application shows this
@@ -1653,18 +1653,18 @@ for (const { loan, installments } of [REPEAT_CLIENT_LOAN_1, REPEAT_CLIENT_LOAN_2
 }
 
 /**
- * Loan Portfolio Health (Dashboard Venn diagram) — three business-defined segments, all
+ * Loan Portfolio Health (Dashboard Venn diagram) - three business-defined segments, all
  * derived from MOCK_LOANS's existing `status`/`balances` fields, no new mock records. Computed
  * here, after every loan has been pushed onto `MOCK_LOANS`, so no bucket is computed against a
  * stale, incomplete array.
  * - Good: `ACTIVE`, paying on schedule, no penalty fees.
- * - Active in Arrears (the Venn overlap): `ACTIVE_IN_ARREARS` — still active and still paying,
+ * - Active in Arrears (the Venn overlap): `ACTIVE_IN_ARREARS` - still active and still paying,
  *   just sometimes late, so the company earns penalty/late-fee income on top of amortization
- *   (confirmed business intent — not a data-quality problem to "fix away"). "In arrears" is the
+ *   (confirmed business intent - not a data-quality problem to "fix away"). "In arrears" is the
  *   industry-standard term: overdue on one or more installments, but not in default.
- * - Matured (red circle): `MATURED` — reached the end of the full term but still unpaid, carrying
+ * - Matured (red circle): `MATURED` - reached the end of the full term but still unpaid, carrying
  *   an outstanding balance; still active, not written off. The highest-risk active segment.
- *   Deliberately NOT the same as `CLOSED` (which reached maturity AND settled successfully — a
+ *   Deliberately NOT the same as `CLOSED` (which reached maturity AND settled successfully - a
  *   separate, healthy outcome that is not shown as a Venn circle).
  * Written-off loans (`CLOSED_WRITTEN_OFF`) are not a Venn segment either, but are carried here as
  * `writtenOff` for the Write-off exposure quality metric and its drill-down.
@@ -1682,7 +1682,7 @@ export interface PortfolioHealthBucket {
 }
 
 /**
- * Builds the Loan Portfolio Health buckets from any given loan array — used both for the
+ * Builds the Loan Portfolio Health buckets from any given loan array - used both for the
  * portfolio-wide baseline (`PORTFOLIO_HEALTH` below) and for the Dashboard's filtered view
  * (by category/date range), so the Venn diagram's totals stay accurate under any filter.
  */
@@ -1695,7 +1695,7 @@ export function buildPortfolioHealth(loans: MockLoanAccount[]) {
     good: {
       count: good.length,
       collectionsBalance: sumLoans(good, (l) => l.collectionsBalance),
-      // Interest Income — the realized interest revenue already collected from these performing
+      // Interest Income - the realized interest revenue already collected from these performing
       // accounts. The primary revenue source of the lending business.
       interestIncome: sumLoans(good, (l) => l.balances.interestPaid),
       loans: good,
@@ -1704,7 +1704,7 @@ export function buildPortfolioHealth(loans: MockLoanAccount[]) {
       count: arrears.length,
       collectionsBalance: sumLoans(arrears, (l) => l.collectionsBalance),
       penaltyIncome: sumLoans(arrears, (l) => l.balances.penaltyPaid + l.balances.penaltyBalance),
-      // Accrued Revenue — interest the loan has earned that the client should have paid but has
+      // Accrued Revenue - interest the loan has earned that the client should have paid but has
       // not yet remitted (accrued interest income, still expected to come in). Penalty/late-fee
       // income is tracked separately as `penaltyIncome`.
       accruedRevenue: sumLoans(arrears, (l) => l.balances.interestBalance),
@@ -1713,7 +1713,7 @@ export function buildPortfolioHealth(loans: MockLoanAccount[]) {
     matured: {
       count: matured.length,
       collectionsBalance: sumLoans(matured, (l) => l.collectionsBalance),
-      // Credit Loss — the unpaid principal at risk of never being recovered now that the loan
+      // Credit Loss - the unpaid principal at risk of never being recovered now that the loan
       // has run past its full maturity date (Loan Loss exposure, one step short of a formal
       // write-off).
       creditLoss: sumLoans(matured, (l) => l.balances.principalBalance),
@@ -1727,12 +1727,12 @@ export function buildPortfolioHealth(loans: MockLoanAccount[]) {
   };
 }
 
-/** Portfolio-wide baseline (no filter applied) — used by the Recommendation card. */
+/** Portfolio-wide baseline (no filter applied) - used by the Recommendation card. */
 export const PORTFOLIO_HEALTH = buildPortfolioHealth(MOCK_LOANS);
 
 /**
- * Portfolio Breakdown by Category — outstanding principal of ACTIVE/ACTIVE_IN_ARREARS loans
- * grouped into the 3 active loan product categories (SML rolls up under Seafarer Loan — see
+ * Portfolio Breakdown by Category - outstanding principal of ACTIVE/ACTIVE_IN_ARREARS loans
+ * grouped into the 3 active loan product categories (SML rolls up under Seafarer Loan - see
  * `getDashboardLoanCategory`). Carries the loans behind each slice for chart drill-down.
  * Computed here (not next to the other dashboard aggregates) so every pushed loan is included.
  */
@@ -1766,14 +1766,14 @@ export const LOAN_CATEGORY_OPTIONS: string[] = PORTFOLIO_BY_CATEGORY.map((slice)
 
 /**
  * Industry-standard portfolio quality metrics (per the standard definitions popularized on
- * Investopedia). "Delinquent/at-risk" here means overdue but still active — both
+ * Investopedia). "Delinquent/at-risk" here means overdue but still active - both
  * `ACTIVE_IN_ARREARS` (overdue within term) and `MATURED` (past the full term, still unpaid):
- * - Delinquency Rate — % of active loan accounts that are overdue (count-based).
- * - Portfolio at Risk (PAR) — outstanding balance of overdue loans ÷ total outstanding balance
+ * - Delinquency Rate - % of active loan accounts that are overdue (count-based).
+ * - Portfolio at Risk (PAR) - outstanding balance of overdue loans ÷ total outstanding balance
  *   of the active portfolio (balance-weighted, the more telling of the two).
- * - Average Loan Size — mean original principal across active accounts.
+ * - Average Loan Size - mean original principal across active accounts.
  * Exported as a reusable builder (not just a fixed constant) so the Dashboard can recompute it
- * against a filtered loan subset — every quality metric is meant to move with the Portfolio
+ * against a filtered loan subset - every quality metric is meant to move with the Portfolio
  * Filter, not just Portfolio Breakdown / Loan Portfolio Health.
  */
 export function buildPortfolioQualityMetrics(loans: MockLoanAccount[]) {
@@ -1796,7 +1796,7 @@ export function buildPortfolioQualityMetrics(loans: MockLoanAccount[]) {
 export const PORTFOLIO_QUALITY_METRICS = buildPortfolioQualityMetrics(MOCK_LOANS);
 
 // ---------------------------------------------------------------------------
-// Generated Documents — no longer a standalone Administration registry.
+// Generated Documents - no longer a standalone Administration registry.
 // Distributed onto each client's own Loan Account instead (see
 // `LoanDetailPage`'s Attachments tab), since that's where a loan officer
 // actually needs them. The document set comes from the loan's own product's
@@ -1806,7 +1806,7 @@ export const PORTFOLIO_QUALITY_METRICS = buildPortfolioQualityMetrics(MOCK_LOANS
 // schedule, not a legal template. These only ever exist for an officially
 // activated loan account, never for a mere application (same rule as the
 // Loan Application attachments cleanup). File contents are NOT included in
-// this preview — names/metadata only.
+// this preview - names/metadata only.
 // ---------------------------------------------------------------------------
 
 export interface MockGeneratedDocument {
@@ -1830,7 +1830,7 @@ function buildGeneratedDocuments(): MockGeneratedDocument[] {
     for (const template of templates) {
       docs.push({
         id: `doc-${loan.id}-${slugify(template.code)}`,
-        documentName: `${template.name} — ${loan.loanCode}`,
+        documentName: `${template.name} - ${loan.loanCode}`,
         documentType: template.code,
         loanId: loan.id,
         loanCode: loan.loanCode,
@@ -1841,7 +1841,7 @@ function buildGeneratedDocuments(): MockGeneratedDocument[] {
     }
     docs.push({
       id: `doc-${loan.id}-as`,
-      documentName: `Amortization Schedule — ${loan.loanCode}`,
+      documentName: `Amortization Schedule - ${loan.loanCode}`,
       documentType: 'AS',
       loanId: loan.id,
       loanCode: loan.loanCode,
@@ -1855,7 +1855,7 @@ function buildGeneratedDocuments(): MockGeneratedDocument[] {
 
 export const MOCK_GENERATED_DOCUMENTS = buildGeneratedDocuments();
 
-/** The generated loan documents for one loan account — used by `LoanDetailPage`'s Attachments tab. */
+/** The generated loan documents for one loan account - used by `LoanDetailPage`'s Attachments tab. */
 export function getGeneratedDocumentsForLoan(loanId: string): MockGeneratedDocument[] {
   return MOCK_GENERATED_DOCUMENTS.filter((d) => d.loanId === loanId);
 }
@@ -1884,7 +1884,7 @@ MOCK_BORROWERS.push(
     contactNumber: '09171234502',
     email: 'mary.grace.dalapo.gallardo@sample-mail.example',
     address: 'Brgy. Ususan, Taguig',
-    employer: 'Self-employed — sari-sari store & rice retailing',
+    employer: 'Self-employed - sari-sari store & rice retailing',
     position: 'Owner/Proprietor',
     monthlyIncome: 45000,
     civilStatus: 'Single',
@@ -1895,13 +1895,13 @@ MOCK_BORROWERS.push(
   },
 );
 
-/** Name-match lookup used by the Loan Application detail page's "Repeat Client" indicator. Real production code would key this off a stable client ID, not name string-matching — acceptable simplification for this mock-data preview. */
+/** Name-match lookup used by the Loan Application detail page's "Repeat Client" indicator. Real production code would key this off a stable client ID, not name string-matching - acceptable simplification for this mock-data preview. */
 export function findRepeatClientBorrower(applicantName: string): MockBorrowerProfile | undefined {
   return MOCK_BORROWERS.find((b) => b.name === applicantName);
 }
 
 // ---------------------------------------------------------------------------
-// Transactions — mirrors `LoanTransaction` (`app/backend/src/modules/ledger/
+// Transactions - mirrors `LoanTransaction` (`app/backend/src/modules/ledger/
 // domain/LoanTransaction.ts`): one DISBURSEMENT per activated loan, one
 // REPAYMENT per installment with a nonzero paid amount, plus a PENALTY_APPLIED
 // entry for in-arrears loans. Derived entirely from MOCK_LOANS/MOCK_INSTALLMENTS
@@ -1929,15 +1929,15 @@ export interface MockLoanTransaction {
   components: { principal: number; interest: number; fees: number; penalty: number };
   entryDate: string;
   postedByUserId: string;
-  /** Only set for REPAYMENT transactions — code into `MOCK_PAYMENT_METHODS`. */
+  /** Only set for REPAYMENT transactions - code into `MOCK_PAYMENT_METHODS`. */
   paymentMethod?: string;
 }
 
 /**
- * A loan's `paymentMethod` reflects its CURRENT/preferred channel — but a
+ * A loan's `paymentMethod` reflects its CURRENT/preferred channel - but a
  * few closed loans' EARLIEST payment demonstrably used a since-discontinued
  * channel before the borrower (or the company) moved to an active one. This
- * is exactly the "still visible as historical reference" requirement — not
+ * is exactly the "still visible as historical reference" requirement - not
  * every past transaction needs to match the loan's current method.
  */
 const HISTORICAL_DISCONTINUED_PAYMENT_OVERRIDE: Record<string, string> = {
@@ -2014,7 +2014,7 @@ function buildTransactions(): MockLoanTransaction[] {
 export const MOCK_TRANSACTIONS: MockLoanTransaction[] = buildTransactions();
 
 // ---------------------------------------------------------------------------
-// Reports — Daily / Monthly / Yearly loan-origination and collections
+// Reports - Daily / Monthly / Yearly loan-origination and collections
 // aggregates. Precomputed once here (not re-randomized on every render) so
 // the Reports screens' date-range/branch filters do real client-side
 // filtering over a fixed dataset, per this checkpoint's interactivity
@@ -2052,7 +2052,7 @@ function buildDailyReportRows(days: number): DailyReportRow[] {
   return rows;
 }
 
-/** Last 45 days, all branches — the Daily tab's date-range picker filters this fixed array client-side. */
+/** Last 45 days, all branches - the Daily tab's date-range picker filters this fixed array client-side. */
 export const DAILY_REPORT_ROWS: DailyReportRow[] = buildDailyReportRows(45);
 
 export interface PeriodReportRow {
@@ -2124,25 +2124,25 @@ export const REPORT_TRANSACTION_TYPES: LoanTransactionType[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// LMS Administration — staff/user accounts and activity logs.
+// LMS Administration - staff/user accounts and activity logs.
 //
 // Access policy previewed here (confirmed business detail, not an
 // assumption):
 //   - MIS            = super user, all access (including add/edit LMS
 //                       members, and the only role that may revert a
-//                       decided Loan Application back to Pending Review —
+//                       decided Loan Application back to Pending Review -
 //                       the "undo an accidental click" safety net).
 //   - Loan Operation Manager, CRM = same base access as the non-admin roles
 //                       below, PLUS the special right to view/assign/approve/
 //                       decline Loan Applications. Neither can revert a
-//                       decision once made — only MIS can.
+//                       decision once made - only MIS can.
 //   - Finance, Accounting, Collection Officer = share one base ("non-admin")
-//                       access tier — cannot manage LMS members, cannot
+//                       access tier - cannot manage LMS members, cannot
 //                       access Loan Applications.
 //   - Activity Logs (full details) are visible only to MIS and Loan
 //                       Operation Manager.
 // `src/lib/roleContext.tsx`'s mock account switcher lets the CEO see this
-// restriction applied live in the UI — it is NOT real authentication/
+// restriction applied live in the UI - it is NOT real authentication/
 // authorization, just a UI-level preview of the intended access-control rule.
 // ---------------------------------------------------------------------------
 
@@ -2239,14 +2239,14 @@ function buildActivityLog(): MockActivityLogEntry[] {
   return entries.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 }
 
-/** Static/mock only — illustrates what a real audit trail would record (user, action, timestamp, affected entity). */
+/** Static/mock only - illustrates what a real audit trail would record (user, action, timestamp, affected entity). */
 export const MOCK_ACTIVITY_LOGS: MockActivityLogEntry[] = buildActivityLog();
 
 // ---------------------------------------------------------------------------
-// AI-Assisted Risk Assessment — mock only, no real AI/ML call. Deliberately
+// AI-Assisted Risk Assessment - mock only, no real AI/ML call. Deliberately
 // deterministic (derived from each loan's own status/payment progress, not
 // randomized) so the same loan always shows the same assessment. Always
-// paired with the disclosure that the Loan Officer makes the final call —
+// paired with the disclosure that the Loan Officer makes the final call -
 // this preview must never imply an autonomous decision-making system.
 // ---------------------------------------------------------------------------
 
@@ -2261,9 +2261,9 @@ const RISK_EXPLANATIONS: Record<MockRiskLevel, string> = {
   'Low Risk':
     'Batay sa employment history at credit background, ang applicant na ito ay may matatag na income source at walang naitalang overdue payment. Mababa ang pagkakataon ng default batay sa sample data na ito.',
   'Medium Risk':
-    'May ilang late o partial payment na naitala sa nakaraang buwan, ngunit steady pa rin ang income source ng borrower. Katamtaman ang antas ng panganib — inirerekomenda ang regular na follow-up.',
+    'May ilang late o partial payment na naitala sa nakaraang buwan, ngunit steady pa rin ang income source ng borrower. Katamtaman ang antas ng panganib - inirerekomenda ang regular na follow-up.',
   'High Risk':
-    'Ang account ay may patuloy na overdue balance at ilang nalagpasang due date. Mataas ang pagkakataon ng default batay sa kasalukuyang sample data — maaaring kailanganin ng agarang aksyon mula sa collections team.',
+    'Ang account ay may patuloy na overdue balance at ilang nalagpasang due date. Mataas ang pagkakataon ng default batay sa kasalukuyang sample data - maaaring kailanganin ng agarang aksyon mula sa collections team.',
 };
 
 function buildRiskAssessment(loan: MockLoanAccount): MockRiskAssessment {
@@ -2276,7 +2276,7 @@ function buildRiskAssessment(loan: MockLoanAccount): MockRiskAssessment {
     const paidFraction = loan.balances.principalDue > 0 ? loan.balances.principalPaid / loan.balances.principalDue : 0;
     level = paidFraction >= 0.4 ? 'Low Risk' : 'Medium Risk';
   } else {
-    // PENDING_APPROVAL / APPROVED — no repayment history yet, assessed from application data only.
+    // PENDING_APPROVAL / APPROVED - no repayment history yet, assessed from application data only.
     level = 'Medium Risk';
   }
   return { level, explanation: RISK_EXPLANATIONS[level] };
@@ -2293,12 +2293,12 @@ export function getMockRiskAssessment(loanId: string): MockRiskAssessment | unde
 export const REPORT_PAYMENT_METHODS = MOCK_PAYMENT_METHODS;
 
 // ---------------------------------------------------------------------------
-// Loan Application Intake — mock only. Represents applications that would
+// Loan Application Intake - mock only. Represents applications that would
 // arrive via API from the future public Easycash loan-application website
-// (not yet built — see PROJECT_HANDOFF.md; this section previews the LMS
+// (not yet built - see PROJECT_HANDOFF.md; this section previews the LMS
 // side of that intake only).
 //
-// Applicant identities and profile photos below are REAL — sourced, per
+// Applicant identities and profile photos below are REAL - sourced, per
 // explicit instruction, from real historical applicant folders under
 // `legacy/sdevtech/` (each folder is one applicant's actual submitted case
 // file). Only the financial figures, dates, AI risk output, and decision
@@ -2307,48 +2307,48 @@ export const REPORT_PAYMENT_METHODS = MOCK_PAYMENT_METHODS;
 // selfie/ID photo, copied into `public/applicants/`.
 //
 // Attachment ENTRIES are deliberately limited to documents an APPLICANT
-// would actually submit at intake — photo, valid IDs (Borrower and
+// would actually submit at intake - photo, valid IDs (Borrower and
 // Co-Borrower), Employee ID, Corporate Payslip, Latest Proof of Billing,
 // Driver's License, Passport, KYC/credit bureau reports, and (Seafarer
 // applicants only) seaman's book / OEC. Confirmed per this checkpoint:
 // documents that only exist for an already-APPROVED official loan account
 // (Promissory Note, Deed of Assignment, Disclosure Statement, Loan
 // Agreement, Special Power of Attorney, Data Privacy and Consent Form,
-// Manulife insurance, etc.) never appear here — those belong on the Loan
+// Manulife insurance, etc.) never appear here - those belong on the Loan
 // Account itself (see `LoanDetailPage`'s Attachments tab), not the
-// application. File names shown are illustrative, not bundled/servable —
+// application. File names shown are illustrative, not bundled/servable -
 // only name/size/type is shown, "Download" stays disabled/Coming Soon, so
 // no actual document content is ever exposed by this preview.
 //
 // The "AI Risk Assessment" on each application is a static, hand-authored
-// mock — no real AI/ML model runs here, and no real underwriting formula is
+// mock - no real AI/ML model runs here, and no real underwriting formula is
 // implied. It qualifies/flags against the exact factors given for this
 // checkpoint (age 18–55, address, monthly income, properties, credit score)
-// and always produces a *recommendation*, never a decision — approval/
+// and always produces a *recommendation*, never a decision - approval/
 // decline is a human action taken by MIS, the Loan Operation Manager, or
 // CRM (see `canAccessLoanApplications` in `roleContext.tsx`). CRM and Loan
 // Operation Manager can approve/decline but can never revert a decision
-// once made — only MIS (super user) can revert a decided application back
+// once made - only MIS (super user) can revert a decided application back
 // to Pending Review, as the safety net for an accidental click.
 //
 // Approving an application does NOT automatically create an official
-// LoanAccount — per this checkpoint's own clarification, an approved
+// LoanAccount - per this checkpoint's own clarification, an approved
 // client may not yet have an official loan account (that's a separate,
 // later step, reflected as a "Coming Soon" action in the detail page).
 //
 // The client only selects a general category when applying (e.g. "Salary
-// Loan") — the specific sub-type/product code (`SL-Reg` vs `SL-Corp` vs
+// Loan") - the specific sub-type/product code (`SL-Reg` vs `SL-Corp` vs
 // `SL-Spec`) is assigned afterward by staff during review, not by the
 // client, so `assignedSubType` starts unset (`undefined`) for every
 // still-pending application below.
 //
-// `reviewState` is a SEPARATE, email-inbox-style read/unread flag — whether
-// staff has opened/looked at this application yet — independent of the
+// `reviewState` is a SEPARATE, email-inbox-style read/unread flag - whether
+// staff has opened/looked at this application yet - independent of the
 // approve/decline decision captured in `status`. Opening the detail page
 // auto-marks it "Reviewed"; the list page supports bulk toggling back and
 // forth (like Gmail's "mark as read/unread").
 //
-// Co-borrower is optional — most sample applications have none.
+// Co-borrower is optional - most sample applications have none.
 // ---------------------------------------------------------------------------
 
 export type LoanApplicationStatus = 'PENDING_REVIEW' | 'APPROVED' | 'DECLINED';
@@ -2360,7 +2360,7 @@ export interface MockQualificationFactor {
   passed: boolean;
 }
 
-/** A file record only — file name/size/type shown, never the actual file content (Download stays Coming Soon everywhere this is used). */
+/** A file record only - file name/size/type shown, never the actual file content (Download stays Coming Soon everywhere this is used). */
 export interface MockUploadedFile {
   id: string;
   fileName: string;
@@ -2371,7 +2371,7 @@ export interface MockUploadedFile {
 export interface MockLoanApplication {
   id: string;
   applicantName: string;
-  /** Path under `public/` — the applicant's own submitted selfie/ID photo (real, per `legacy/sdevtech/`). */
+  /** Path under `public/` - the applicant's own submitted selfie/ID photo (real, per `legacy/sdevtech/`). */
   profilePictureUrl?: string;
   age: number;
   address: string;
@@ -2382,24 +2382,24 @@ export interface MockLoanApplication {
   coBorrowerName?: string;
   /**
    * Set only for applications encoded at the branch by a loan officer (walk-in applicant filling
-   * out the paper form ECLC-LOFN01) — the officer's name. Absent on applications that "arrived"
+   * out the paper form ECLC-LOFN01) - the officer's name. Absent on applications that "arrived"
    * via the future public website intake.
    */
   encodedBy?: string;
-  /** Paper form §1 — "How did you find out about Easycash?" (officer-encoded applications only). */
+  /** Paper form §1 - "How did you find out about Easycash?" (officer-encoded applications only). */
   referralSource?: string;
-  /** Paper form §2 — Type of Account. */
+  /** Paper form §2 - Type of Account. */
   accountType?: 'NEW' | 'RENEWAL';
-  /** Paper form §2 — "What is your loan purpose?" */
+  /** Paper form §2 - "What is your loan purpose?" */
   loanPurpose?: string;
   requestedCategory: string;
-  /** Set by staff during review — never by the client. Undefined until an assigned Loan Officer/Manager picks the sub-type. */
+  /** Set by staff during review - never by the client. Undefined until an assigned Loan Officer/Manager picks the sub-type. */
   assignedSubType?: string;
   requestedAmount: number;
   requestedTermMonths: number;
   submittedAt: string;
   status: LoanApplicationStatus;
-  /** Email-inbox-style "seen" flag — independent of `status`. */
+  /** Email-inbox-style "seen" flag - independent of `status`. */
   reviewState: LoanApplicationReviewState;
   aiRisk: MockRiskLevel;
   aiRecommendation: string;
@@ -2408,15 +2408,15 @@ export interface MockLoanApplication {
   reviewedBy?: string;
   reviewedAt?: string;
   decisionNote?: string;
-  /** Set once "Create Client" has been used on this (Approved) application — prevents creating a duplicate client record. */
+  /** Set once "Create Client" has been used on this (Approved) application - prevents creating a duplicate client record. */
   clientCreated?: boolean;
   createdClientId?: string;
-  /** Set once "Create Loan Account" has been used on this application (after Create Client) — an application converts to at most one loan account. */
+  /** Set once "Create Loan Account" has been used on this application (after Create Client) - an application converts to at most one loan account. */
   loanAccountCreated?: boolean;
   createdLoanAccountId?: string;
 }
 
-/** Application-stage document names only (see section comment above) with fabricated size/upload date — metadata only, never actual file content. */
+/** Application-stage document names only (see section comment above) with fabricated size/upload date - metadata only, never actual file content. */
 function buildApplicationAttachments(id: string, fileNames: string[], submittedAt: string): MockUploadedFile[] {
   const submitted = new Date(submittedAt);
   return fileNames.map((fileName, i) => ({
@@ -2429,9 +2429,9 @@ function buildApplicationAttachments(id: string, fileNames: string[], submittedA
 
 /**
  * Standard intake-stage documents a walk-in applicant can submit with the paper form
- * (ECLC-LOFN01) — the checklist shown on the officer-encoded Create Application form. Matches
+ * (ECLC-LOFN01) - the checklist shown on the officer-encoded Create Application form. Matches
  * the same intake-only document set used by the sample applications above (never
- * approved-loan-stage documents like the Promissory Note — those only exist on a Loan Account).
+ * approved-loan-stage documents like the Promissory Note - those only exist on a Loan Account).
  */
 export const INTAKE_DOCUMENT_OPTIONS: string[] = [
   'Selfie Photo.jpg',
@@ -2473,7 +2473,7 @@ export interface CreateLoanApplicationInput {
  * factors / risk level the sample applications carry (age 18–55, verifiable address, income vs.
  * amortization, credit score ≥ 600, properties on record), prepends the new application to
  * `MOCK_LOAN_APPLICATIONS` (newest first), and returns it. In-memory only, same as every other
- * mutation in this preview build — the AI summary is a rule-based mock, not a real engine, per
+ * mutation in this preview build - the AI summary is a rule-based mock, not a real engine, per
  * the disclosure already shown on the application detail page.
  */
 export function createLoanApplication(input: CreateLoanApplicationInput): MockLoanApplication {
@@ -2489,7 +2489,7 @@ export function createLoanApplication(input: CreateLoanApplicationInput): MockLo
     { label: 'Age (18–55)', value: `${input.age} years old`, passed: agePassed },
     {
       label: 'Verifiable Address',
-      value: addressPassed ? 'Provided — verify against valid ID' : 'Missing',
+      value: addressPassed ? 'Provided - verify against valid ID' : 'Missing',
       passed: addressPassed,
     },
     {
@@ -2508,10 +2508,10 @@ export function createLoanApplication(input: CreateLoanApplicationInput): MockLo
   const aiRisk: MockRiskLevel = failedCount === 0 ? 'Low Risk' : failedCount === 1 ? 'Medium Risk' : 'High Risk';
   const aiRecommendation =
     failedCount === 0
-      ? 'Qualified — all factors within acceptable range. Recommended for approval.'
+      ? 'Qualified - all factors within acceptable range. Recommended for approval.'
       : failedCount === 1
-        ? 'One qualification factor is outside the acceptable range — recommended for manual review before a decision.'
-        : 'Multiple qualification factors are outside the acceptable range — recommended for decline pending manual review.';
+        ? 'One qualification factor is outside the acceptable range - recommended for manual review before a decision.'
+        : 'Multiple qualification factors are outside the acceptable range - recommended for decline pending manual review.';
 
   const application: MockLoanApplication = {
     id,
@@ -2560,11 +2560,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'PENDING_REVIEW',
     reviewState: 'UNREVIEWED',
     aiRisk: 'Low Risk',
-    aiRecommendation: 'Qualified — all factors within acceptable range. Recommended for approval.',
+    aiRecommendation: 'Qualified - all factors within acceptable range. Recommended for approval.',
     aiFactors: [
       { label: 'Age (18–55)', value: '29 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱35,000/mo — sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱35,000/mo - sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '720', passed: true },
       { label: 'Properties Owned', value: 'None on record', passed: true },
     ],
@@ -2592,11 +2592,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'PENDING_REVIEW',
     reviewState: 'UNREVIEWED',
     aiRisk: 'Low Risk',
-    aiRecommendation: 'Qualified — employer is a tied-up agency partner, reducing verification risk. Recommended for approval.',
+    aiRecommendation: 'Qualified - employer is a tied-up agency partner, reducing verification risk. Recommended for approval.',
     aiFactors: [
       { label: 'Age (18–55)', value: '27 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱32,000/mo — sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱32,000/mo - sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '690', passed: true },
       { label: 'Properties Owned', value: 'None on record', passed: true },
     ],
@@ -2613,8 +2613,8 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     age: 34,
     address: 'Brgy. Malate, Manila',
     monthlyIncome: 80000,
-    employer: 'Overseas — Maritime Vessel (allotment)',
-    propertiesOwned: ['Condominium unit — Pasay City'],
+    employer: 'Overseas - Maritime Vessel (allotment)',
+    propertiesOwned: ['Condominium unit - Pasay City'],
     creditScore: 700,
     requestedCategory: 'Seafarer Loan',
     assignedSubType: 'SML-REGULAR',
@@ -2624,11 +2624,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'APPROVED',
     reviewState: 'REVIEWED',
     aiRisk: 'Low Risk',
-    aiRecommendation: 'Qualified — strong income and property ownership. Recommended for approval.',
+    aiRecommendation: 'Qualified - strong income and property ownership. Recommended for approval.',
     aiFactors: [
       { label: 'Age (18–55)', value: '34 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱80,000/mo (allotment) — sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱80,000/mo (allotment) - sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '700', passed: true },
       { label: 'Properties Owned', value: '1 condominium unit', passed: true },
     ],
@@ -2639,7 +2639,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     ),
     reviewedBy: 'Jomer A. Biason',
     reviewedAt: new Date(Date.now() - 8 * 86_400_000).toISOString(),
-    decisionNote: 'Approved as-is — strong profile, no conditions.',
+    decisionNote: 'Approved as-is - strong profile, no conditions.',
   },
   {
     id: 'application-4',
@@ -2659,11 +2659,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'DECLINED',
     reviewState: 'REVIEWED',
     aiRisk: 'High Risk',
-    aiRecommendation: 'Does not meet minimum qualification criteria — income insufficient for requested amount and credit score below threshold. Recommended for decline.',
+    aiRecommendation: 'Does not meet minimum qualification criteria - income insufficient for requested amount and credit score below threshold. Recommended for decline.',
     aiFactors: [
       { label: 'Age (18–55)', value: '23 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱18,000/mo — insufficient for ₱100,000 requested', passed: false },
+      { label: 'Monthly Income vs. Requested Term', value: '₱18,000/mo - insufficient for ₱100,000 requested', passed: false },
       { label: 'Credit Score (≥ 600)', value: '560', passed: false },
       { label: 'Properties Owned', value: 'None on record', passed: false },
     ],
@@ -2674,7 +2674,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     ),
     reviewedBy: 'Liezel Pentecostes',
     reviewedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
-    decisionNote: 'Declined per AI recommendation — income and credit score both below threshold; no property to offset risk.',
+    decisionNote: 'Declined per AI recommendation - income and credit score both below threshold; no property to offset risk.',
   },
   {
     id: 'application-5',
@@ -2684,7 +2684,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     address: 'Brgy. Highway Hills, Mandaluyong',
     monthlyIncome: 42000,
     employer: 'BDO Unibank',
-    propertiesOwned: ['Residential lot — Antipolo City'],
+    propertiesOwned: ['Residential lot - Antipolo City'],
     creditScore: 745,
     coBorrowerName: 'Ferdinand Antoy (spouse)',
     requestedCategory: 'Salary Loan',
@@ -2695,11 +2695,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     reviewState: 'UNREVIEWED',
     aiRisk: 'Low Risk',
     aiRecommendation:
-      'Qualified — all factors within acceptable range, and repeat-client history supports approval: her previous Easycash loan (SL-Reg_0900) was paid in full with no late installments, indicating a good payer. Recommended for approval.',
+      'Qualified - all factors within acceptable range, and repeat-client history supports approval: her previous Easycash loan (SL-Reg_0900) was paid in full with no late installments, indicating a good payer. Recommended for approval.',
     aiFactors: [
       { label: 'Age (18–55)', value: '52 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱42,000/mo — sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱42,000/mo - sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '745', passed: true },
       { label: 'Properties Owned', value: '1 residential lot', passed: true },
     ],
@@ -2716,7 +2716,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     age: 38,
     address: 'Brgy. Ususan, Taguig',
     monthlyIncome: 45000,
-    employer: 'Self-employed — sari-sari store & rice retailing',
+    employer: 'Self-employed - sari-sari store & rice retailing',
     propertiesOwned: [],
     creditScore: 610,
     requestedCategory: 'Business Loan',
@@ -2727,11 +2727,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     reviewState: 'UNREVIEWED',
     aiRisk: 'High Risk',
     aiRecommendation:
-      'Does not meet minimum qualification criteria — self-employed income is harder to verify and credit score is near the minimum threshold. Repeat-client history further weighs against approval: her previous Easycash loan (BL-Reg_0900) was written off delinquent, paid on-time for only 7 of 18 installments before falling behind; reported reason on file was a business slowdown that disrupted her sari-sari store income. Recommended for decline pending manual review.',
+      'Does not meet minimum qualification criteria - self-employed income is harder to verify and credit score is near the minimum threshold. Repeat-client history further weighs against approval: her previous Easycash loan (BL-Reg_0900) was written off delinquent, paid on-time for only 7 of 18 installments before falling behind; reported reason on file was a business slowdown that disrupted her sari-sari store income. Recommended for decline pending manual review.',
     aiFactors: [
       { label: 'Age (18–55)', value: '38 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱45,000/mo (self-declared, unverified) — borderline for requested amount', passed: false },
+      { label: 'Monthly Income vs. Requested Term', value: '₱45,000/mo (self-declared, unverified) - borderline for requested amount', passed: false },
       { label: 'Credit Score (≥ 600)', value: '610', passed: true },
       { label: 'Properties Owned', value: 'None on record', passed: false },
       { label: 'Repeat-Client Payment History', value: 'Previous loan written off delinquent (7 of 18 paid)', passed: false },
@@ -2749,7 +2749,7 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     age: 59,
     address: 'Brgy. Batasan Hills, Quezon City',
     monthlyIncome: 55000,
-    employer: 'Overseas — Maritime Vessel (allotment)',
+    employer: 'Overseas - Maritime Vessel (allotment)',
     propertiesOwned: [],
     creditScore: 580,
     requestedCategory: 'Seafarer Loan',
@@ -2759,11 +2759,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'PENDING_REVIEW',
     reviewState: 'UNREVIEWED',
     aiRisk: 'High Risk',
-    aiRecommendation: 'Does not meet minimum qualification criteria — applicant is above the 55-year age limit, and credit score is below the preferred threshold. Recommended for decline, pending manual review.',
+    aiRecommendation: 'Does not meet minimum qualification criteria - applicant is above the 55-year age limit, and credit score is below the preferred threshold. Recommended for decline, pending manual review.',
     aiFactors: [
-      { label: 'Age (18–55)', value: '59 years old — exceeds age limit', passed: false },
+      { label: 'Age (18–55)', value: '59 years old - exceeds age limit', passed: false },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱55,000/mo (allotment) — sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱55,000/mo (allotment) - sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '580', passed: false },
       { label: 'Properties Owned', value: 'None on record', passed: false },
     ],
@@ -2790,11 +2790,11 @@ export const MOCK_LOAN_APPLICATIONS: MockLoanApplication[] = [
     status: 'PENDING_REVIEW',
     reviewState: 'UNREVIEWED',
     aiRisk: 'Medium Risk',
-    aiRecommendation: 'Borderline — income covers the requested amount tightly and credit score is just above minimum. Recommend standard verification before deciding.',
+    aiRecommendation: 'Borderline - income covers the requested amount tightly and credit score is just above minimum. Recommend standard verification before deciding.',
     aiFactors: [
       { label: 'Age (18–55)', value: '31 years old', passed: true },
       { label: 'Verifiable Address', value: 'Complete, matches valid ID', passed: true },
-      { label: 'Monthly Income vs. Requested Term', value: '₱28,000/mo — tight but sufficient for requested amount', passed: true },
+      { label: 'Monthly Income vs. Requested Term', value: '₱28,000/mo - tight but sufficient for requested amount', passed: true },
       { label: 'Credit Score (≥ 600)', value: '615', passed: true },
       { label: 'Properties Owned', value: 'None on record', passed: false },
     ],
@@ -2812,7 +2812,7 @@ export function getMockLoanApplication(id: string): MockLoanApplication | undefi
 
 /**
  * Generic activity-log append used everywhere in this preview (page views,
- * notes, uploads, decisions, member edits, etc.) — pushes one entry and
+ * notes, uploads, decisions, member edits, etc.) - pushes one entry and
  * re-sorts so `MOCK_ACTIVITY_LOGS` always stays newest-first. Every
  * meaningful user action in the app is expected to call this, per this
  * checkpoint's "all user activity must be logged" instruction.
@@ -2823,20 +2823,20 @@ export function logActivity(entry: Omit<MockActivityLogEntry, 'id'> & { id?: str
 }
 
 /**
- * "Create Client" — converts an APPROVED Loan Application into an official
+ * "Create Client" - converts an APPROVED Loan Application into an official
  * client record (`MockBorrowerProfile`), pulling profile picture, age/DOB,
  * personal/contact info, address, and uploaded attachments straight from
  * the application, per this checkpoint's instruction that Client Details
  * originates from the Loan Application. In-memory only: pushes onto
  * `MOCK_BORROWERS` and marks the application `clientCreated`. Safe to call
- * only once per application — callers must check `clientCreated` first.
+ * only once per application - callers must check `clientCreated` first.
  *
  * 2026-07-08 (F-2 fix): a repeat applicant (same `applicantName` already in
- * `MOCK_BORROWERS`, per `findRepeatClientBorrower()` — the same lookup this
+ * `MOCK_BORROWERS`, per `findRepeatClientBorrower()` - the same lookup this
  * page already uses read-only for its "Repeat Client" indicator) now links
  * to their existing profile instead of always minting a new one. Previously
  * this always created a fresh `MockBorrowerProfile`, splitting a returning
- * client's loan history across two disconnected records — directly
+ * client's loan history across two disconnected records - directly
  * undermining the application→client→loan-account linking feature shipped
  * earlier the same day.
  */
@@ -2891,9 +2891,9 @@ export function createClientFromApplication(application: MockLoanApplication, ac
 }
 
 /**
- * Business rule: a client may never have 2 simultaneously active loan accounts — "active" per the
+ * Business rule: a client may never have 2 simultaneously active loan accounts - "active" per the
  * shared `ACTIVE_LOAN_STATUSES` definition above (ACTIVE, in arrears, or past-maturity-but-unpaid;
- * 2026-07-08 F-3 fix — previously excluded MATURED here while `ClientListPage` counted it, so the
+ * 2026-07-08 F-3 fix - previously excluded MATURED here while `ClientListPage` counted it, so the
  * two disagreed on whether a client with only a matured, unpaid loan could open a new one).
  */
 export function clientHasActiveLoan(borrowerId: string): boolean {
@@ -2903,10 +2903,10 @@ export function clientHasActiveLoan(borrowerId: string): boolean {
 }
 
 /**
- * "Create Loan Account" from a Client profile — creates a new PENDING_APPROVAL
+ * "Create Loan Account" from a Client profile - creates a new PENDING_APPROVAL
  * loan account for that client (in-memory only). Blocked if the client
  * already has an ACTIVE/ACTIVE_IN_ARREARS loan (see `clientHasActiveLoan`).
- * No repayment schedule is generated yet — same convention as every other
+ * No repayment schedule is generated yet - same convention as every other
  * PENDING_APPROVAL loan in this preview, which only gets one upon
  * activation (a separate, not-yet-built step).
  */
@@ -2916,17 +2916,17 @@ export function createLoanAccountForClient(
     productCode: string;
     principalAmount: number;
     installmentCount: number;
-    /** Contractual monthly rate override — defaults to the product's `defaultInterestRate` when omitted. */
+    /** Contractual monthly rate override - defaults to the product's `defaultInterestRate` when omitted. */
     interestRate?: number;
-    /** Matches the legacy calculator's "Co-Borrower" field — optional. */
+    /** Matches the legacy calculator's "Co-Borrower" field - optional. */
     coBorrowerName?: string;
-    /** Matches the legacy calculator's "Anticipated Disbursement Date" field — first repayment is derived as one month after this date. Defaults to today. */
+    /** Matches the legacy calculator's "Anticipated Disbursement Date" field - first repayment is derived as one month after this date. Defaults to today. */
     anticipatedDisbursementDate?: string;
-    /** Code into `MOCK_PAYMENT_METHODS` — defaults to `GCASH` when omitted. */
+    /** Code into `MOCK_PAYMENT_METHODS` - defaults to `GCASH` when omitted. */
     paymentMethod?: string;
-    /** Required (by the UI) only when `paymentMethod` is `BANK_TRANSFER` or `AUTO_DEBIT` — see `MockLoanAccount.disbursementBank`. */
+    /** Required (by the UI) only when `paymentMethod` is `BANK_TRANSFER` or `AUTO_DEBIT` - see `MockLoanAccount.disbursementBank`. */
     disbursementBank?: MockLoanAccount['disbursementBank'];
-    /** The approved Loan Application this loan account is being created from — see `findApprovedApplicationForClient()`. Marks that application as converted so it can't be used again. */
+    /** The approved Loan Application this loan account is being created from - see `findApprovedApplicationForClient()`. Marks that application as converted so it can't be used again. */
     sourceApplicationId?: string;
   },
   actorName: string,
@@ -3002,17 +3002,17 @@ export function createLoanAccountForClient(
 
 /**
  * Business rule: a client may only get a new loan account from a specific, still-unconverted
- * APPROVED loan application (matched via `createdClientId` — the application "Create Client" used
+ * APPROVED loan application (matched via `createdClientId` - the application "Create Client" used
  * to produce this client record). A client with no approved application on file, or whose only
  * approved application already converted to a loan account, cannot have a new loan account
- * created — reflects that every loan (including a renewal) needs its own reviewed/approved
+ * created - reflects that every loan (including a renewal) needs its own reviewed/approved
  * application, not just an existing client relationship.
  */
 export function findApprovedApplicationForClient(borrowerId: string): MockLoanApplication | undefined {
   return MOCK_LOAN_APPLICATIONS.find((a) => a.status === 'APPROVED' && a.createdClientId === borrowerId && !a.loanAccountCreated);
 }
 
-/** `PENDING_APPROVAL` → `APPROVED` — confirmed via a safety-net dialog in the UI (`LoanDetailPage`). */
+/** `PENDING_APPROVAL` → `APPROVED` - confirmed via a safety-net dialog in the UI (`LoanDetailPage`). */
 export function approveLoanAccount(loan: MockLoanAccount, actorName: string): void {
   const at = new Date().toISOString();
   loan.status = 'APPROVED';
@@ -3022,7 +3022,7 @@ export function approveLoanAccount(loan: MockLoanAccount, actorName: string): vo
 }
 
 /**
- * `APPROVED` → `ACTIVE` (disbursement) — generates the repayment schedule (same `PMT`-shaped
+ * `APPROVED` → `ACTIVE` (disbursement) - generates the repayment schedule (same `PMT`-shaped
  * `buildSchedule()` every other active loan in this preview uses) and recomputes balances from
  * scratch, matching a freshly-disbursed loan (nothing paid yet).
  */
@@ -3057,7 +3057,7 @@ export function activateLoanAccount(loan: MockLoanAccount, actorName: string): v
   logActivity({ userName: actorName, action: 'ACTIVATE_LOAN_ACCOUNT', entityType: 'LoanAccount', entityId: loan.loanCode, at });
 }
 
-// Seed activity log entries for every sample application — submission always,
+// Seed activity log entries for every sample application - submission always,
 // plus a decision entry for any application already reviewed above.
 for (const app of MOCK_LOAN_APPLICATIONS) {
   logActivity({
@@ -3081,23 +3081,23 @@ for (const app of MOCK_LOAN_APPLICATIONS) {
 }
 
 // ---------------------------------------------------------------------------
-// Automatic Payment Reminders — mock only. Represents the system-generated
+// Automatic Payment Reminders - mock only. Represents the system-generated
 // reminder schedule confirmed for this checkpoint: 5 days before due date,
 // 3 days before, 1 day before, on the due date itself, and weekly while past
 // due. Each reminder is sent via SMS and Email simultaneously (both real
-// channels today); a 3rd channel — the client's own Easycash account
-// dashboard — is listed but always "Coming Soon", since it depends on the
+// channels today); a 3rd channel - the client's own Easycash account
+// dashboard - is listed but always "Coming Soon", since it depends on the
 // public client portal website, a separate future project not yet built.
 //
 // No real SMS/email is ever sent in this preview. A reminder's "Sent" vs.
 // "Scheduled" status below is purely a function of whether its trigger date
-// has already passed relative to today — this demonstrates the send
+// has already passed relative to today - this demonstrates the send
 // indicator requested for this checkpoint without a real notification
 // service running anywhere.
 //
 // The generated message content includes exactly what was asked: Client
 // Name, Loan Account Name/Code, Loan Amount, and payment-progress (how many
-// installments paid vs. remaining) — a fuller transaction-report-style
+// installments paid vs. remaining) - a fuller transaction-report-style
 // breakdown is explicitly deferred to when the client-facing website exists,
 // per this checkpoint's own instruction. Penalty fees are included only when
 // the installment is past due.
@@ -3143,7 +3143,7 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-/** Only the loan's next unpaid installment gets a reminder set — matches real behavior (no point reminding about an already-paid term). */
+/** Only the loan's next unpaid installment gets a reminder set - matches real behavior (no point reminding about an already-paid term). */
 function buildRemindersForLoan(loan: MockLoanAccount): MockPaymentReminder[] {
   if (loan.status !== 'ACTIVE' && loan.status !== 'ACTIVE_IN_ARREARS') return [];
   const installments = MOCK_INSTALLMENTS[loan.id] ?? [];
@@ -3206,7 +3206,7 @@ export function getMockPaymentReminder(id: string): MockPaymentReminder | undefi
   return MOCK_PAYMENT_REMINDERS.find((r) => r.id === id);
 }
 
-/** The exact system-generated message text (SMS/Email body) for a reminder — Client Name, Loan Account Name, Loan Amount, and payment progress; penalty only when past due. */
+/** The exact system-generated message text (SMS/Email body) for a reminder - Client Name, Loan Account Name, Loan Amount, and payment progress; penalty only when past due. */
 export function buildReminderMessage(reminder: MockPaymentReminder): string {
   const lines = [
     `Hi ${reminder.borrowerName},`,

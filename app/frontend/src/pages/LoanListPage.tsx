@@ -15,7 +15,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
@@ -68,16 +67,16 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
 ];
 
 /**
- * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12 (real legacy data migrated —
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12 (real legacy data migrated -
  * `docs/Architecture/CP12_LEGACY_MIGRATION_DESIGN.md`). Real `GET /loan-accounts`, `/borrowers`,
  * `/loan-products` replace `MOCK_LOANS`. No branch filter/column: the backend has no `GET
  * /branches` endpoint yet, and every migrated record currently belongs to the single seeded "HQ"
  * branch anyway (§5 point 1 of the CP12 design), so a branch dimension has no real value to show
- * right now — removed rather than faked.
+ * right now - removed rather than faked.
  *
- * Real, server-side pagination (100 rows/page, Next/Previous — see `useCursorPagination`) replaced
+ * Real, server-side pagination (100 rows/page, Next/Previous - see `useCursorPagination`) replaced
  * the earlier "load every loan up front" approach that this doc comment used to flag as a temporary
- * stopgap — it became the actual frontend-lag problem it warned about. Borrower/loan-code search
+ * stopgap - it became the actual frontend-lag problem it warned about. Borrower/loan-code search
  * goes to the backend's `?search=` param (debounced); status/product have no backend filter param
  * yet, so those two narrow within the current page only, not across every loan.
  */
@@ -99,7 +98,7 @@ export function LoanListPage() {
     goPrev,
   } = useCursorPagination<LoanAccount>(['loan-accounts'], '/loan-accounts', { search: debouncedSearch }, PAGE_SIZE);
 
-  // Still loaded in full for the name join — there's no batch "GET /borrowers?ids=" endpoint, and
+  // Still loaded in full for the name join - there's no batch "GET /borrowers?ids=" endpoint, and
   // borrower search is already covered server-side via the loan-accounts search param above.
   const borrowerIds = React.useMemo(() => [...new Set(loans.map((l) => l.borrowerId))], [loans]);
   const borrowersQuery = useQuery({
@@ -110,7 +109,7 @@ export function LoanListPage() {
   const borrowerById = React.useMemo(() => new Map((borrowersQuery.data ?? []).map((b) => [b.id, b])), [borrowersQuery.data]);
 
   const productsQuery = useQuery({
-    // Deliberately NOT ['loan-products', 'all'] — that key is shared by pages caching the plain
+    // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
     // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
     // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
     // identical fix for the full explanation.
@@ -139,7 +138,7 @@ export function LoanListPage() {
         loanCode: l.loanCode,
         borrowerId: l.borrowerId,
         borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
-        productName: productInfo?.name ?? '—',
+        productName: productInfo?.name ?? '-',
         productActive: productInfo?.isActive ?? true,
         status: l.status,
         principalAmount: Number.parseFloat(l.principalAmount) || 0,
@@ -290,10 +289,7 @@ export function LoanListPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel
-        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'LoanAccount' || l.entityType === 'Loan Accounts')}
-        title="Recent Activity — Loan Accounts"
-      />
+      <RecentActivityPanel label="Loan Accounts" entityTypes={['LoanAccount', 'Loan Accounts']} />
     </div>
   );
 }

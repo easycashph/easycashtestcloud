@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FieldTooltip } from '@/components/FieldTooltip';
+import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
@@ -41,7 +43,7 @@ const AI_EXTRACTION_ACCEPTED_MIME = new Set([
 ]);
 
 /**
- * The specific documents needed to review an application — separate from the "Documents Submitted"
+ * The specific documents needed to review an application - separate from the "Documents Submitted"
  * paper-form checklist below (§Docs, ticks only, no real file). Uploaded here become real
  * attachments tagged by category once the application exists (see createMutation's onSuccess),
  * feeding a future risk-assessment feature that reads these by category. `showWhen` is evaluated
@@ -62,7 +64,7 @@ const DOCUMENT_SLOTS: {
   { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
 ];
 
-/** Splits a single extracted full name into the form's separate first/middle/last inputs — a
+/** Splits a single extracted full name into the form's separate first/middle/last inputs - a
  * plain heuristic (first token / last token / everything between), not a name-parsing library.
  * Always a suggestion the officer reviews, never submitted as-is without their say. */
 function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
@@ -73,11 +75,11 @@ function splitFullName(fullName: string): { firstName: string; middleName: strin
 }
 
 /**
- * Officer-encoded loan application intake — mirrors the company's real paper
+ * Officer-encoded loan application intake - mirrors the company's real paper
  * form "LOAN APPLICATION" (Form No. ECLC-LOFN01, Rev 02), section for section,
  * so a loan officer can encode a walk-in applicant while the public
  * application website does not exist yet. Wired to the real backend
- * (`POST /loan-applications`) — submitting creates a real record, automatically classified
+ * (`POST /loan-applications`) - submitting creates a real record, automatically classified
  * PREAPPROVED/PREDECLINED by the backend's LoanApplicationPreQualificationService.
  *
  * Only the fields the LMS currently models are persisted onto the record (see
@@ -87,7 +89,7 @@ function splitFullName(fullName: string): { firstName: string; middleName: strin
 
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
 
-/** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate — only the 3 active categories are offered today. */
+/** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate - only the 3 active categories are offered today. */
 const LOAN_TYPE_OPTIONS = [
   { paperLabel: 'Salary', category: 'Salary Loan' },
   { paperLabel: 'Seaman', category: 'Seafarer Loan' },
@@ -104,10 +106,23 @@ interface DependantRow {
   relationship: string;
 }
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({
+  label,
+  children,
+  hint,
+  tooltip,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  tooltip?: string;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
+      <Label className="flex items-center gap-1 text-xs">
+        {label}
+        {tooltip && <FieldTooltip text={tooltip} />}
+      </Label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
@@ -207,16 +222,16 @@ export function LoanApplicationCreatePage() {
   const { canAccessLoanApplications, currentAccount } = useRole();
   useLogPageView('Loan Applications', 'create-application-form');
 
-  // §1 — referral
+  // §1 - referral
   const [referralSource, setReferralSource] = React.useState('Walk-in');
   const [referralDetail, setReferralDetail] = React.useState('');
-  // §2 — loan information
+  // §2 - loan information
   const [accountType, setAccountType] = React.useState<'NEW' | 'RENEWAL'>('NEW');
   const [loanCategory, setLoanCategory] = React.useState('');
   const [requestedAmount, setRequestedAmount] = React.useState('');
   const [requestedTermMonths, setRequestedTermMonths] = React.useState('');
   const [loanPurpose, setLoanPurpose] = React.useState('');
-  // §3 — personal information
+  // §3 - personal information
   const [firstName, setFirstName] = React.useState('');
   const [middleName, setMiddleName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
@@ -231,39 +246,39 @@ export function LoanApplicationCreatePage() {
   const [homeOwnership, setHomeOwnership] = React.useState('');
   const [mobileNo, setMobileNo] = React.useState('');
   const [email, setEmail] = React.useState('');
-  // §4 — employment
+  // §4 - employment
   const [employer, setEmployer] = React.useState('');
   const [occupation, setOccupation] = React.useState('');
   const [officeAddress, setOfficeAddress] = React.useState('');
   const [tin, setTin] = React.useState('');
   const [sss, setSss] = React.useState('');
-  // §5 — dependants
+  // §5 - dependants
   const [dependants, setDependants] = React.useState<DependantRow[]>([]);
-  // §6 — spouse
+  // §6 - spouse
   const [spouseName, setSpouseName] = React.useState('');
   const [spouseEmployer, setSpouseEmployer] = React.useState('');
-  // §7/§8 — co-borrower
+  // §7/§8 - co-borrower
   const [hasCoBorrower, setHasCoBorrower] = React.useState(false);
   const [coBorrowerName, setCoBorrowerName] = React.useState('');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState('');
   const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState('');
-  // §9 — character references
+  // §9 - character references
   const [reference1, setReference1] = React.useState({ name: '', mobile: '' });
   const [reference2, setReference2] = React.useState({ name: '', mobile: '' });
-  // Documents submitted (paper-form checklist — ticks only, see §Docs below)
+  // Documents submitted (paper-form checklist - ticks only, see §Docs below)
   const [documents, setDocuments] = React.useState<Set<string>>(new Set());
-  // Applicant Documents — real files, saved as categorized attachments once the application exists.
+  // Applicant Documents - real files, saved as categorized attachments once the application exists.
   const [documentFiles, setDocumentFiles] = React.useState<Partial<Record<AttachmentDocumentCategory, File>>>({});
   const [documentFileErrors, setDocumentFileErrors] = React.useState<Partial<Record<AttachmentDocumentCategory, string>>>({});
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  // AI auto-fill — local Ollama (moondream) only, never a cloud service. Ephemeral: the uploaded
+  // AI auto-fill - local Ollama (moondream) only, never a cloud service. Ephemeral: the uploaded
   // file is sent for extraction only, never saved here (see aiExtractionRouter.ts's doc comment).
   const aiFileInputRef = React.useRef<HTMLInputElement>(null);
   const [aiError, setAiError] = React.useState<string | null>(null);
   const [aiFilledFieldLabels, setAiFilledFieldLabels] = React.useState<string[]>([]);
   // Retained only after a successful extraction, so it can be auto-saved as a real attachment once
-  // the application record (and a real ownerId) exists — see createMutation's onSuccess below.
+  // the application record (and a real ownerId) exists - see createMutation's onSuccess below.
   const [aiExtractedFile, setAiExtractedFile] = React.useState<File | null>(null);
   const extractMutation = useMutation({
     mutationFn: (file: File) => {
@@ -283,10 +298,10 @@ export function LoanApplicationCreatePage() {
       }
       if (result.address && !presentAddress.trim()) {
         // Free-text from the AI can't be mapped into the cascading region/province/city/barangay
-        // picker below (no reverse PSGC name lookup — same limitation as `PsgcAddressPicker`'s own
-        // doc comment) — surfaced as a suggestion for the officer to select manually instead.
+        // picker below (no reverse PSGC name lookup - same limitation as `PsgcAddressPicker`'s own
+        // doc comment) - surfaced as a suggestion for the officer to select manually instead.
         setAiSuggestedAddress(result.address);
-        filled.push('Present address (as a suggestion below — select it manually)');
+        filled.push('Present address (as a suggestion below - select it manually)');
       }
       if (result.employer && !employer.trim()) {
         setEmployer(result.employer);
@@ -387,7 +402,7 @@ export function LoanApplicationCreatePage() {
         requestedCategory: loanCategory,
         requestedAmount: amount,
         requestedTermMonths: term,
-        referralSource: referralDetail.trim() ? `${referralSource} — ${referralDetail.trim()}` : referralSource,
+        referralSource: referralDetail.trim() ? `${referralSource} - ${referralDetail.trim()}` : referralSource,
         accountType,
         loanPurpose: loanPurpose.trim() || undefined,
         submittedDocuments: [...documents],
@@ -395,7 +410,7 @@ export function LoanApplicationCreatePage() {
     onSuccess: async (application) => {
       // Best-effort: auto-save the AI Auto-fill upload and every Applicant Document slot as real
       // attachments now that a real ownerId exists. Deliberately not allowed to affect
-      // createMutation's own success/error state — the application has already been created and
+      // createMutation's own success/error state - the application has already been created and
       // must not be blocked or rolled back by an attachment-save failure (e.g. a .docx extraction
       // file, which passes the broader AI Auto-fill whitelist but not /attachments' pdf/jpeg/png-only
       // whitelist). `Promise.allSettled` so one failed upload doesn't stop the others.
@@ -432,7 +447,7 @@ export function LoanApplicationCreatePage() {
   const submit = () => createMutation.mutate();
 
   // Access gate placed after every hook above (React Hooks rules: never return early before a
-  // hook call) — was previously above the createMutation useMutation() call, a real
+  // hook call) - was previously above the createMutation useMutation() call, a real
   // rules-of-hooks violation, not just a lint nag.
   if (!canAccessLoanApplications) {
     return (
@@ -443,7 +458,9 @@ export function LoanApplicationCreatePage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <Lock className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
+            <p className="text-sm font-medium">
+              Restricted to <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, and <RoleAbbr role="CRM" /> accounts
+            </p>
             <p className="text-sm text-muted-foreground">
               Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
             </p>
@@ -464,8 +481,8 @@ export function LoanApplicationCreatePage() {
           <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          For walk-in applicants — the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
-          (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only — do not enter real client information
+          For walk-in applicants - the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
+          (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only - do not enter real client information
           in this preview build.
         </p>
       </div>
@@ -476,8 +493,8 @@ export function LoanApplicationCreatePage() {
             <Sparkles className="h-4 w-4 text-primary" /> AI Auto-fill (optional)
           </CardTitle>
           <CardDescription>
-            Upload the applicant&apos;s ID, payslip, or other supporting document — a local AI model reads it and suggests values for
-            the fields below. It only fills fields you haven&apos;t already typed into, and never submits anything on its own — always
+            Upload the applicant&apos;s ID, payslip, or other supporting document - a local AI model reads it and suggests values for
+            the fields below. It only fills fields you haven&apos;t already typed into, and never submits anything on its own - always
             double-check before submitting. PDF/DOCX support requires text-based files (not scanned images).
           </CardDescription>
         </CardHeader>
@@ -494,7 +511,7 @@ export function LoanApplicationCreatePage() {
                 <p className="text-muted-foreground">Extracted age: {extractMutation.data.age} (set the exact Date of Birth below manually).</p>
               )}
               {aiFilledFieldLabels.length > 0 ? (
-                <p className="font-medium text-primary">AI-suggested — please verify: {aiFilledFieldLabels.join(', ')}.</p>
+                <p className="font-medium text-primary">AI-suggested - please verify: {aiFilledFieldLabels.join(', ')}.</p>
               ) : (
                 <p className="text-muted-foreground">No empty fields were filled (either nothing was confidently readable, or the fields were already filled in).</p>
               )}
@@ -536,7 +553,7 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="1" title="How did you find out about Easycash?">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Source">
+          <Field label="Source" tooltip="How the applicant learned about Easycash - used for referral tracking.">
             <Select value={referralSource} onValueChange={setReferralSource}>
               <SelectTrigger>
                 <SelectValue />
@@ -551,7 +568,7 @@ export function LoanApplicationCreatePage() {
             </Select>
           </Field>
           {(referralSource === 'Agent/Referral' || referralSource === 'Others') && (
-            <Field label={referralSource === 'Agent/Referral' ? 'Agent / referrer name' : 'Please specify'}>
+            <Field label={referralSource === 'Agent/Referral' ? 'Agent / referrer name' : 'Please specify'} tooltip="Name of the agent, employee, or person who referred this applicant.">
               <Input value={referralDetail} onChange={(e) => setReferralDetail(e.target.value)} />
             </Field>
           )}
@@ -560,7 +577,7 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="2" title="Loan Information">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Type of account">
+          <Field label="Type of account" tooltip="Is this the applicant's first loan with Easycash, or a renewal/existing account?">
             <Select value={accountType} onValueChange={(v) => setAccountType(v as 'NEW' | 'RENEWAL')}>
               <SelectTrigger>
                 <SelectValue />
@@ -573,7 +590,7 @@ export function LoanApplicationCreatePage() {
           </Field>
           <Field
             label="Type of loan *"
-            hint="The paper form also lists OFW, Car, and Real Estate — not currently offered products."
+            hint="The paper form also lists OFW, Car, and Real Estate - not currently offered products."
           >
             <Select value={loanCategory} onValueChange={setLoanCategory}>
               <SelectTrigger>
@@ -588,15 +605,15 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Desired loan amount (₱) *">
+          <Field label="Desired loan amount (₱) *" tooltip="The peso amount the applicant is requesting to borrow.">
             <Input type="number" min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
           </Field>
-          <Field label="Preferred loan term (months) *">
+          <Field label="Preferred loan term (months) *" tooltip="How many months the applicant wants to repay the loan over.">
             <Input type="number" min="1" max="36" value={requestedTermMonths} onChange={(e) => setRequestedTermMonths(e.target.value)} />
           </Field>
         </div>
         <div className="mt-3">
-          <Field label="What is the loan purpose?">
+          <Field label="What is the loan purpose?" tooltip="Brief reason the applicant is borrowing (e.g. tuition, medical, business capital).">
             <Textarea rows={2} value={loanPurpose} onChange={(e) => setLoanPurpose(e.target.value)} />
           </Field>
         </div>
@@ -604,19 +621,19 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="3" title="Personal Information">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="First name *">
+          <Field label="First name *" tooltip="Applicant's legal first name, as shown on a valid ID.">
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
           </Field>
-          <Field label="Middle name">
+          <Field label="Middle name" tooltip="Applicant's legal middle name, if any.">
             <Input value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
           </Field>
-          <Field label="Last name *">
+          <Field label="Last name *" tooltip="Applicant's legal surname, as shown on a valid ID.">
             <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </Field>
-          <Field label="Nickname">
+          <Field label="Nickname" tooltip="Optional - what the applicant is commonly called.">
             <Input value={nickname} onChange={(e) => setNickname(e.target.value)} />
           </Field>
-          <Field label="Gender">
+          <Field label="Gender" tooltip="Applicant's gender, as shown on a valid ID.">
             <Select value={gender} onValueChange={setGender}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -630,7 +647,7 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Civil status">
+          <Field label="Civil status" tooltip="Applicant's current civil status (Single, Married, Widower, Separated).">
             <Select value={civilStatus} onValueChange={setCivilStatus}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -644,13 +661,13 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Date of birth *" hint={age !== null ? `Age: ${age}` : undefined}>
+          <Field label="Date of birth *" hint={age !== null ? `Age: ${age}` : undefined} tooltip="Used to compute age and check loan eligibility (18-55 years old).">
             <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
           </Field>
-          <Field label="Place of birth">
+          <Field label="Place of birth" tooltip="City/municipality where the applicant was born.">
             <Input value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} />
           </Field>
-          <Field label="Nationality">
+          <Field label="Nationality" tooltip="Applicant's citizenship.">
             <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </Field>
         </div>
@@ -666,7 +683,7 @@ export function LoanApplicationCreatePage() {
           </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="Home ownership">
+          <Field label="Home ownership" tooltip="Whether the applicant owns, rents, or has another arrangement for their home.">
             <Select value={homeOwnership} onValueChange={setHomeOwnership}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -680,11 +697,11 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Mobile no.">
-            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} />
+          <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
+            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Email address">
+            <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
           </div>
@@ -697,21 +714,21 @@ export function LoanApplicationCreatePage() {
         description="Skip if the applicant is unemployed, self-employed, or retired (per the paper form)."
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name of employer *">
+          <Field label="Name of employer *" tooltip="Applicant's current employer or business name.">
             <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
           </Field>
-          <Field label="Occupation">
+          <Field label="Occupation" tooltip="Applicant's job title or role.">
             <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Office address">
+            <Field label="Office address" tooltip="Address of the applicant's workplace.">
               <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
             </Field>
           </div>
-          <Field label="TIN">
+          <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
             <Input value={tin} onChange={(e) => setTin(e.target.value)} />
           </Field>
-          <Field label="SSS no.">
+          <Field label="SSS no." tooltip="Applicant's Social Security System number, if available.">
             <Input value={sss} onChange={(e) => setSss(e.target.value)} />
           </Field>
         </div>
@@ -722,7 +739,7 @@ export function LoanApplicationCreatePage() {
           {dependants.map((row, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2">
               <div className="min-w-40 flex-1">
-                <Field label="Name">
+                <Field label="Name" tooltip="Dependant's full name.">
                   <Input
                     value={row.name}
                     onChange={(e) => setDependants((prev) => prev.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
@@ -730,7 +747,7 @@ export function LoanApplicationCreatePage() {
                 </Field>
               </div>
               <div className="w-20">
-                <Field label="Age">
+                <Field label="Age" tooltip="Dependant's age.">
                   <Input
                     type="number"
                     value={row.age}
@@ -739,7 +756,7 @@ export function LoanApplicationCreatePage() {
                 </Field>
               </div>
               <div className="w-36">
-                <Field label="Relationship">
+                <Field label="Relationship" tooltip="Dependant's relationship to the applicant (e.g. child, parent).">
                   <Input
                     value={row.relationship}
                     onChange={(e) =>
@@ -766,10 +783,10 @@ export function LoanApplicationCreatePage() {
           description="Shown because civil status is Married (the paper form skips this for single/widower/separated)."
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Spouse full name">
+            <Field label="Spouse full name" tooltip="Full name of the applicant's spouse, if married.">
               <Input value={spouseName} onChange={(e) => setSpouseName(e.target.value)} />
             </Field>
-            <Field label="Spouse employer / occupation">
+            <Field label="Spouse employer / occupation" tooltip="Where the applicant's spouse works and their role.">
               <Input value={spouseEmployer} onChange={(e) => setSpouseEmployer(e.target.value)} />
             </Field>
           </div>
@@ -788,13 +805,13 @@ export function LoanApplicationCreatePage() {
         </label>
         {hasCoBorrower && (
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Field label="Co-borrower full name">
+            <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
               <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
             </Field>
-            <Field label="Relationship to applicant">
+            <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
               <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
             </Field>
-            <Field label="Co-borrower employer">
+            <Field label="Co-borrower employer" tooltip="Where the co-borrower works.">
               <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
             </Field>
           </div>
@@ -803,17 +820,17 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="9" title="Character References">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="1st reference — full name">
+          <Field label="1st reference - full name" tooltip="A character reference the branch can contact - not a co-borrower.">
             <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value }))} />
           </Field>
-          <Field label="1st reference — mobile no.">
-            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} />
+          <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
+            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
-          <Field label="2nd reference — full name">
+          <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
             <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value }))} />
           </Field>
-          <Field label="2nd reference — mobile no.">
-            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} />
+          <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
+            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
         </div>
       </SectionCard>
@@ -821,7 +838,7 @@ export function LoanApplicationCreatePage() {
       <SectionCard
         number="Docs"
         title="Applicant Documents"
-        description="Upload the applicant's actual supporting documents — PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
+        description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
       >
         <div className="grid gap-2 sm:grid-cols-2">
           {visibleDocumentSlots.map(({ category }) => (
@@ -840,7 +857,7 @@ export function LoanApplicationCreatePage() {
       <SectionCard
         number="Docs (paper form)"
         title="Documents Submitted"
-        description="Tick the documents the applicant submitted with the paper form. Preview build: file names/metadata only — no real upload happens."
+        description="Tick the documents the applicant submitted with the paper form. Preview build: file names/metadata only - no real upload happens."
       >
         <div className="grid gap-2 sm:grid-cols-2">
           {INTAKE_DOCUMENT_OPTIONS.map((doc) => (
@@ -874,7 +891,7 @@ export function LoanApplicationCreatePage() {
             requested loan, documents) are saved onto the sample application record. Monthly income, credit score, and properties
             owned are now recorded after creation, on the application's Risk Management Summary. Dependants, spouse details,
             TIN/SSS, and character references are captured on the paper form itself and are not yet stored by this preview. The
-            applicant signs the Undertaking on the printed form — no signature is captured here.
+            applicant signs the Undertaking on the printed form - no signature is captured here.
           </p>
           {createMutation.isError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -898,7 +915,7 @@ export function LoanApplicationCreatePage() {
           <DialogHeader>
             <DialogTitle>Create this loan application?</DialogTitle>
             <DialogDescription>
-              {applicantName || 'Applicant'} — {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
+              {applicantName || 'Applicant'} - {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
               {term > 0 ? `${term} months` : 'no term'}. The system will automatically classify this application as pre-approved or
               pre-declined based on age, income, and address once created, encoded by {currentAccount.name}.
             </DialogDescription>

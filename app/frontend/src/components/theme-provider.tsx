@@ -2,10 +2,10 @@ import * as React from 'react';
 
 type Theme = 'light' | 'dark';
 
-/** Theme color presets, selectable from Settings > Theme Color — a personal, per-user preference (2026-07-08). Must match the `[data-accent='...']` blocks in `index.css`. */
+/** Theme color presets, selectable from Settings > Theme Color - a personal, per-user preference (2026-07-08). Must match the `[data-accent='...']` blocks in `index.css`. */
 export type Accent = 'emerald' | 'easycash-blue' | 'violet' | 'amber' | 'rose';
 
-/** The platform's default theme color — business-confirmed as Easycash Emerald (not the legacy brand blue). */
+/** The platform's default theme color - business-confirmed as Easycash Emerald (not the legacy brand blue). */
 export const DEFAULT_ACCENT: Accent = 'emerald';
 
 export const ACCENT_OPTIONS: { value: Accent; label: string; swatch: string }[] = [
@@ -25,7 +25,7 @@ interface ThemeContextValue {
   setAccent: (accent: Accent) => void;
   /**
    * Switches whose saved preference is active. Called by `roleContext.tsx` on bootstrap, login,
-   * and logout — `userId: null` means "no signed-in user," which loads the system-preference/
+   * and logout - `userId: null` means "no signed-in user," which loads the system-preference/
    * default look (used for the Login page itself, so it never leaks the last signed-in user's
    * personal accent to whoever's next at the machine).
    */

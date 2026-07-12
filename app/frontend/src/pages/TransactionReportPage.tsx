@@ -12,7 +12,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanTransactionType, TransactionReportRow } from '@/lib/reportApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -64,7 +63,7 @@ const TYPE_BADGE_VARIANT: Record<LoanTransactionType, 'default' | 'success' | 'w
 
 /**
  * Wired to the real backend (`GET /reports/transactions`). Drops the mock version's "Mode of
- * Payment" filter/column: `LoanTransaction` has no payment-method field in the schema — showing
+ * Payment" filter/column: `LoanTransaction` has no payment-method field in the schema - showing
  * one would be fabricated. Branch scoping is automatic from the signed-in session, matching
  * Dashboard/Payment Reminders, rather than a manual branch picker.
  */
@@ -226,7 +225,7 @@ export function TransactionReportPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Transaction Report')} title="Recent Activity — Transaction Report" />
+      <RecentActivityPanel label="Transaction Report" />
     </div>
   );
 }

@@ -36,10 +36,10 @@ function getRealSortValue(inst: RepaymentInstallment, key: string): string | num
 
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. `getMockLoan()` only knows
- * hand-authored mock loans — a loan id from `LoanListPage`'s now-real list (a UUID, migrated via
+ * hand-authored mock loans - a loan id from `LoanListPage`'s now-real list (a UUID, migrated via
  * CP12) doesn't exist there and would otherwise hit this page's "not found" state. Same scope
  * decision as `RealLoanDetailView`/`RealClientProfileView`: Branch and Loan Officer name are
- * dropped rather than faked — no `GET /branches` or staff/user-lookup endpoint exists yet.
+ * dropped rather than faked - no `GET /branches` or staff/user-lookup endpoint exists yet.
  */
 function RealStatementOfAccountView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
@@ -85,7 +85,7 @@ function RealStatementOfAccountView({ loanId }: { loanId: string }) {
   }
 
   const borrower = borrowerQuery.data;
-  const productName = productsQuery.data?.find((p) => p.versions.some((v) => v.id === loan.loanProductVersionId))?.name ?? '—';
+  const productName = productsQuery.data?.find((p) => p.versions.some((v) => v.id === loan.loanProductVersionId))?.name ?? '-';
   const num = (v: string) => Number.parseFloat(v) || 0;
 
   return (
@@ -107,7 +107,7 @@ function RealStatementOfAccountView({ loanId }: { loanId: string }) {
           <img src="/logo-easycash.png" alt="Easycash logo" className="h-14 w-14 object-contain" />
           <CardTitle>Easycash Lending Company Inc.</CardTitle>
           <p className="text-sm text-muted-foreground">Statement of Account</p>
-          <Badge variant="success">Real Data — Migrated Legacy Loan</Badge>
+          <Badge variant="success">Real Data - Migrated Legacy Loan</Badge>
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -185,7 +185,7 @@ function RealStatementOfAccountView({ loanId }: { loanId: string }) {
                 {!installmentsQuery.isLoading && installments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                      No schedule yet — loan has not been activated.
+                      No schedule yet - loan has not been activated.
                     </TableCell>
                   </TableRow>
                 )}
@@ -229,8 +229,8 @@ function getSortValue(inst: MockRepaymentInstallment, key: string): string | num
 }
 
 /**
- * `window.print()` is a genuine, working browser feature — no backend
- * needed — so "Print" is left real. Actual file export (PDF/CSV) would
+ * `window.print()` is a genuine, working browser feature - no backend
+ * needed - so "Print" is left real. Actual file export (PDF/CSV) would
  * require either a backend endpoint or a heavy client-side PDF library,
  * neither in scope for this preview, so "Export PDF" stays a disabled
  * Coming Soon control per this checkpoint's instructions.
@@ -246,7 +246,7 @@ export function StatementOfAccountPage() {
   const { sorted, sort, toggleSort } = useSortableTable(installments, getSortValue, { key: 'dueDate', direction: 'desc' });
 
   if (!loan) {
-    // Not a hand-authored mock loan — try the real backend (a UUID from LoanListPage's now-real
+    // Not a hand-authored mock loan - try the real backend (a UUID from LoanListPage's now-real
     // list, migrated via CP12). See RealStatementOfAccountView's own doc comment for scope.
     return loanId ? <RealStatementOfAccountView loanId={loanId} /> : (
       <div className="space-y-4">
@@ -277,7 +277,7 @@ export function StatementOfAccountPage() {
           <img src="/logo-easycash.png" alt="Easycash logo" className="h-14 w-14 object-contain" />
           <CardTitle>Easycash Lending Company Inc.</CardTitle>
           <p className="text-sm text-muted-foreground">Statement of Account</p>
-          <Badge variant="warning">Preview Mode — Sample Data</Badge>
+          <Badge variant="warning">Preview Mode - Sample Data</Badge>
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -363,7 +363,7 @@ export function StatementOfAccountPage() {
                 {installments.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
-                      No schedule yet — loan has not been activated.
+                      No schedule yet - loan has not been activated.
                     </TableCell>
                   </TableRow>
                 )}

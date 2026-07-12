@@ -1,16 +1,16 @@
 /**
  * Frontend↔Backend Wiring Pilot, Stage 0a (`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`).
  *
- * Thin `fetch` wrapper for the real `app/backend` HTTP API — the first code in this frontend that
+ * Thin `fetch` wrapper for the real `app/backend` HTTP API - the first code in this frontend that
  * ever calls it. Deliberately NOT a generated client / not axios: the API surface being wired is
  * still small (auth + one pilot screen), so a small hand-written wrapper is easier to reason about
  * than a codegen step.
  *
  * Access token lives in memory only (a module-level variable), never `localStorage`/`sessionStorage`
- * — mirrors the backend's own refresh-token discipline (HttpOnly cookie, never in a JS-readable
+ * - mirrors the backend's own refresh-token discipline (HttpOnly cookie, never in a JS-readable
  * store). This means a hard page reload always starts from `status: 'loading'` and re-derives a
  * fresh access token via `/auth/refresh` (using the HttpOnly cookie), which is intentional, not a
- * bug — see `roleContext.tsx`'s bootstrap effect.
+ * bug - see `roleContext.tsx`'s bootstrap effect.
  */
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
@@ -44,7 +44,7 @@ export function getAccessToken(): string | null {
  * session (i.e. every 401-triggered refresh attempt in `apiRequest`, not the initial bootstrap
  * refresh in `roleContext.tsx`, which has its own try/catch). Without this, a session that goes
  * bad mid-use (refresh token expired, or revoked via the backend's reuse-detection) left
- * `accessToken` permanently `null` with no signal to the rest of the app — every page kept
+ * `accessToken` permanently `null` with no signal to the rest of the app - every page kept
  * rendering as if logged in, but every request 401'd forever with no way to recover except a
  * manual hard reload. `roleContext.tsx`'s `RoleProvider` subscribes to this to bounce the user
  * back to the Login page immediately instead.
@@ -57,7 +57,7 @@ export function setOnSessionExpired(callback: (() => void) | null): void {
 
 /**
  * De-duplicates concurrent refresh attempts: if three requests all get a 401 at the same moment,
- * they must not each independently call `/auth/refresh` — the backend's refresh-token rotation
+ * they must not each independently call `/auth/refresh` - the backend's refresh-token rotation
  * treats a second concurrent use of the same refresh token as reuse (see backend `RefreshTokenUseCase`
  * C-01 handling) and would revoke the session. All concurrent callers await the same in-flight promise.
  */
@@ -107,7 +107,7 @@ async function rawRequest(path: string, init: ApiRequestInit): Promise<Response>
     credentials: 'include',
     // Disables conditional (ETag/If-None-Match) caching. Without this, two identical GETs fired
     // close together (e.g. React StrictMode's dev-mode double-invoke of effects) can surface a raw
-    // 304 response to this code — `res.ok` is false for 304 (only 200-299 is "ok"), and a 304 has
+    // 304 response to this code - `res.ok` is false for 304 (only 200-299 is "ok"), and a 304 has
     // no body, so it was being misread as a generic failure ("Something went wrong").
     cache: 'no-store',
     body: hasBody ? JSON.stringify(init.body) : undefined,
@@ -115,7 +115,7 @@ async function rawRequest(path: string, init: ApiRequestInit): Promise<Response>
 }
 
 /**
- * Runs one API call, transparently refreshing and retrying exactly once on a 401 — the standard
+ * Runs one API call, transparently refreshing and retrying exactly once on a 401 - the standard
  * rotation-aware interceptor pattern this backend's cookie-based refresh flow expects. A second
  * 401 (after a successful refresh) is a real auth failure, not retried again.
  */
@@ -157,9 +157,9 @@ export const apiClient = {
 };
 
 /**
- * Multipart upload — deliberately bypasses `apiRequest`'s `JSON.stringify(init.body)` (a `FormData`
+ * Multipart upload - deliberately bypasses `apiRequest`'s `JSON.stringify(init.body)` (a `FormData`
  * body must reach `fetch` untouched, and its Content-Type, including the multipart boundary, must
- * be left for the browser to set — never set it manually here). Still shares the same
+ * be left for the browser to set - never set it manually here). Still shares the same
  * Authorization/credentials/refresh-retry behavior as every other authenticated call.
  */
 export async function uploadFile<T>(path: string, formData: FormData, allowRefreshRetry = true): Promise<T> {
@@ -198,7 +198,7 @@ export async function uploadFile<T>(path: string, formData: FormData, allowRefre
 
 /**
  * Fetches a binary response (e.g. an attachment) as a `Response`, transparently refreshing and
- * retrying once on a 401 — same pattern as `apiRequest`. Shared by `downloadFile` (save-as) and
+ * retrying once on a 401 - same pattern as `apiRequest`. Shared by `downloadFile` (save-as) and
  * the attachment preview modal (renders the blob inline instead of saving it).
  */
 async function fetchFileResponse(path: string): Promise<Response> {
@@ -223,7 +223,7 @@ async function fetchFileResponse(path: string): Promise<Response> {
   return res;
 }
 
-/** Fetches a binary response body as a `Blob` — e.g. for inline attachment preview. */
+/** Fetches a binary response body as a `Blob` - e.g. for inline attachment preview. */
 export async function fetchFileBlob(path: string): Promise<Blob> {
   const res = await fetchFileResponse(path);
   return res.blob();
@@ -231,7 +231,7 @@ export async function fetchFileBlob(path: string): Promise<Blob> {
 
 /**
  * Fetches a binary response (e.g. an attachment download) as a Blob, then triggers the browser's
- * normal save-file flow — needed because the endpoint requires a Bearer token header, which a
+ * normal save-file flow - needed because the endpoint requires a Bearer token header, which a
  * plain `<a href>` navigation can't send.
  */
 export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
@@ -260,10 +260,10 @@ interface CursorPage<T> {
 /**
  * Loops a cursor-paginated `GET` endpoint (max `limit=200` per page, per `pagination.ts`'s
  * `MAX_LIMIT`) until `nextCursor` is null, returning every item. `basePath` must not already
- * include a `limit`/`cursor` query param — this appends them itself.
+ * include a `limit`/`cursor` query param - this appends them itself.
  *
  * Real datasets here (loan accounts, borrowers, loan products) are in the low thousands, not the
- * 10,000+/100,000+ scale `CLAUDE.md` designs the platform for — looping a handful of 200-row pages
+ * 10,000+/100,000+ scale `CLAUDE.md` designs the platform for - looping a handful of 200-row pages
  * once per page load is a deliberate, honest simplification for now, not a claim this scales
  * indefinitely. A genuinely paginated list UI (cursor-driven Next/Previous, not "load everything")
  * is the right fix once a list actually approaches that scale.

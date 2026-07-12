@@ -46,7 +46,7 @@ const ACTION_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'second
 };
 
 /**
- * Wired to the real backend audit trail (`GET /audit-logs`) — every login and loan-application
+ * Wired to the real backend audit trail (`GET /audit-logs`) - every login and loan-application
  * decision recorded by the backend's `IAuditLogger`. Restricted to MIS, matching the backend
  * route's `requireRole('MIS')` gate (there's no branch dimension on the audit log table to scope
  * by, unlike every other list page in this app).
@@ -69,7 +69,7 @@ export function ActivityLogPage() {
 
   const actionOptions = React.useMemo(() => ['ALL', ...[...new Set(logs.map((l) => l.action))].sort()], [logs]);
   const filtered = logs.filter((log) => action === 'ALL' || log.action === action);
-  // Hooks must run unconditionally on every render — computed before the
+  // Hooks must run unconditionally on every render - computed before the
   // early return below, even though its output is unused on that path.
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
@@ -97,7 +97,7 @@ export function ActivityLogPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Activity Logs</h2>
         <p className="text-sm text-muted-foreground">
-          Real audit trail — user, action, exact date &amp; time, and affected entity. Currently records logins and loan
+          Real audit trail - user, action, exact date &amp; time, and affected entity. Currently records logins and loan
           application decisions; more actions will be logged as their modules are wired.
         </p>
       </div>
@@ -163,7 +163,7 @@ export function ActivityLogPage() {
               {sorted.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</TableCell>
-                  <TableCell className="font-medium">{log.userName ?? '—'}</TableCell>
+                  <TableCell className="font-medium">{log.userName ?? '-'}</TableCell>
                   <TableCell>
                     <Badge variant={ACTION_VARIANT[log.action] ?? 'outline'}>{log.action.replaceAll('_', ' ')}</Badge>
                   </TableCell>

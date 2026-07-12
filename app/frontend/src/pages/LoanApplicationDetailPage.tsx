@@ -19,19 +19,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { RoleAbbr } from '@/components/RoleAbbr';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
+import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, UpdateLoanApplicationRequest } from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 /** Best-effort split of a free-text full name into first/middle/last for the create-client
- * form's initial prefill — staff can still edit every field before submitting, so an imperfect
+ * form's initial prefill - staff can still edit every field before submitting, so an imperfect
  * split (e.g. multi-word surnames) is never silently wrong, just a starting point. */
 function splitApplicantName(fullName: string): { firstName: string; middleName: string; lastName: string } {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -41,12 +42,12 @@ function splitApplicantName(fullName: string): { firstName: string; middleName: 
 }
 
 /**
- * Prefilled from the APPROVED application's own fields — only covers what the real `POST
+ * Prefilled from the APPROVED application's own fields - only covers what the real `POST
  * /borrowers` endpoint (`createBorrowerSchema`) actually accepts today (name parts, gender, civil
  * status, contact info). The application's address/employer/monthly income have no home in that
- * request body yet (no income-detail or address input on create — see `CreateBorrowerUseCase`),
+ * request body yet (no income-detail or address input on create - see `CreateBorrowerUseCase`),
  * so they're surfaced read-only as reference instead of being force-mapped into fields that don't
- * exist, per CLAUDE.md "never fabricate" — staff adds those via "Edit Client Details" after
+ * exist, per CLAUDE.md "never fabricate" - staff adds those via "Edit Client Details" after
  * creation.
  */
 function CreateClientProfileDialog({
@@ -104,7 +105,7 @@ function CreateClientProfileDialog({
         <DialogHeader>
           <DialogTitle>Create Client Profile</DialogTitle>
           <DialogDescription>
-            Prefilled from {application.applicantName}'s approved application. Review before creating — this becomes the
+            Prefilled from {application.applicantName}'s approved application. Review before creating - this becomes the
             client's real record.
           </DialogDescription>
         </DialogHeader>
@@ -149,8 +150,8 @@ function CreateClientProfileDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Mobile Number</Label>
-            <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} />
+            <Label>Contact Number</Label>
+            <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>
@@ -160,17 +161,17 @@ function CreateClientProfileDialog({
 
         <div className="rounded-md border bg-secondary/30 p-3 text-sm">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            From the application (reference only — add via "Edit Client Details" after creating)
+            From the application (reference only - add via "Edit Client Details" after creating)
           </p>
           <dl className="grid grid-cols-2 gap-y-1.5">
             <dt className="text-muted-foreground">Age</dt>
-            <dd className="text-right">{application.age ?? '—'}</dd>
+            <dd className="text-right">{application.age ?? '-'}</dd>
             <dt className="text-muted-foreground">Address</dt>
-            <dd className="text-right">{toProperCase(application.address) || '—'}</dd>
+            <dd className="text-right">{toProperCase(application.address) || '-'}</dd>
             <dt className="text-muted-foreground">Employer</dt>
-            <dd className="text-right">{application.employer ?? '—'}</dd>
+            <dd className="text-right">{application.employer ?? '-'}</dd>
             <dt className="text-muted-foreground">Monthly income</dt>
-            <dd className="text-right">{application.monthlyIncome !== null ? formatPeso(application.monthlyIncome) : '—'}</dd>
+            <dd className="text-right">{application.monthlyIncome !== null ? formatPeso(application.monthlyIncome) : '-'}</dd>
           </dl>
         </div>
 
@@ -198,17 +199,17 @@ function CreateClientProfileDialog({
 }
 
 /**
- * Curated product-class whitelist per loan type, confirmed with the business 2026-07-10 — not
+ * Curated product-class whitelist per loan type, confirmed with the business 2026-07-10 - not
  * every active `LoanProduct` in the database, deliberately: only these are offered through this
  * assignment flow. `discontinued: true` entries are still real, currently-active products (loans
  * already running under them still need to be assignable/visible), but are no longer offered to
- * new applicants going forward — surfaced with a badge, not hidden, so staff can tell the
+ * new applicants going forward - surfaced with a badge, not hidden, so staff can tell the
  * difference at a glance.
  */
 const LOAN_TYPE_OPTIONS = ['Salary Loan', 'Seafarer Loan', 'Business Loan'] as const;
 type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 
-/** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT — kept local since this file doesn't
+/** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT - kept local since this file doesn't
  * otherwise import from that page. */
 const DETAIL_STATUS_BADGE_VARIANT: Record<LoanApplication['status'], 'secondary' | 'warning' | 'success' | 'destructive'> = {
   PREAPPROVED: 'secondary',
@@ -248,7 +249,7 @@ function findLoanTypeForProductName(productName: string): LoanTypeOption | null 
   return null;
 }
 
-/** One pass/fail row of the decision-scoring breakdown — mirrors the backend's
+/** One pass/fail row of the decision-scoring breakdown - mirrors the backend's
  * `PreQualificationCheck` shape exactly (label + detail text already composed server-side). */
 function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label: string; detail: string }) {
   return (
@@ -268,9 +269,9 @@ function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label:
 
 /**
  * Shows both the "why" behind the system's PREAPPROVED/PREDECLINED verdict (a live-recomputed
- * decision-scoring breakdown from the backend's `LoanApplicationPreQualificationService` —
+ * decision-scoring breakdown from the backend's `LoanApplicationPreQualificationService` -
  * age/income/distance, each pass or fail) and the editable inputs that feed it (income, credit
- * score, properties owned) — moved here from the Create form's old "Verification Inputs" section,
+ * score, properties owned) - moved here from the Create form's old "Verification Inputs" section,
  * since these are no longer officer-encoded at intake. Saving re-runs the same classification
  * server-side (see `UpdateLoanApplicationUseCase`), so this card's breakdown always matches the
  * status badge shown at the top of the page.
@@ -317,7 +318,7 @@ function RiskManagementSummaryCard({
           <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Risk Management Summary
         </CardTitle>
         <CardDescription>
-          Computed by the LMS itself from age, income, and address — a deterministic rule-based calculation. Advisory only; the
+          Computed by the LMS itself from age, income, and address - a deterministic rule-based calculation. Advisory only; the
           officer's Approve/Decline decision below is what actually counts.
         </CardDescription>
       </CardHeader>
@@ -359,10 +360,10 @@ function RiskManagementSummaryCard({
           <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
             <dt className="text-muted-foreground">Monthly income</dt>
             <dd className="text-right font-medium">
-              {application.monthlyIncome !== null ? formatPeso(application.monthlyIncome) : '—'}
+              {application.monthlyIncome !== null ? formatPeso(application.monthlyIncome) : '-'}
             </dd>
             <dt className="text-muted-foreground">Credit score</dt>
-            <dd className="text-right font-medium">{application.creditScore ?? '—'}</dd>
+            <dd className="text-right font-medium">{application.creditScore ?? '-'}</dd>
             <dt className="text-muted-foreground">Properties owned</dt>
             <dd className="text-right font-medium">
               {application.propertiesOwned.length === 0 ? 'None on record' : application.propertiesOwned.join(', ')}
@@ -403,14 +404,14 @@ function RiskManagementSummaryCard({
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
  * Every application starts system-classified PREAPPROVED/PREDECLINED (backend's
- * `LoanApplicationPreQualificationService`, added 2026-07-11 — advisory only). Approve/decline
- * work from either system verdict, requiring a product version to be assigned first — mirrors the
+ * `LoanApplicationPreQualificationService`, added 2026-07-11 - advisory only). Approve/decline
+ * work from either system verdict, requiring a product version to be assigned first - mirrors the
  * backend's `ProductNotAssignedError` gate. Only MIS can revert a decided application back to a
  * freshly recomputed system verdict (accidental-click safety net), matching
  * `canRevertLoanApplicationDecision`.
  *
  * The Create-Loan-Account bridge has no backend equivalent yet (converting an APPROVED application
- * into a LoanAccount is a deliberately separate concern — see the backend module's own design
+ * into a LoanAccount is a deliberately separate concern - see the backend module's own design
  * notes) and is intentionally left out here. Create Client Profile is different: `POST /borrowers`
  * is real, so an APPROVED application can create a real client, prefilled from its own fields (see
  * `CreateClientProfileDialog`).
@@ -420,7 +421,7 @@ export function LoanApplicationDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   // Set by LoanApplicationCreatePage when one or more best-effort attachment auto-saves failed
-  // (AI Auto-fill document and/or Applicant Document slots) — the application itself was still
+  // (AI Auto-fill document and/or Applicant Document slots) - the application itself was still
   // created successfully.
   const failedDocumentLabels = (location.state as { failedDocumentLabels?: string[] } | null)?.failedDocumentLabels ?? [];
   const queryClient = useQueryClient();
@@ -466,7 +467,7 @@ export function LoanApplicationDetailPage() {
     ? (productNameByVersionId.get(application.assignedLoanProductVersionId) ?? null)
     : null;
 
-  // Local UI-only step — narrows which product classes the second dropdown offers. Initialized
+  // Local UI-only step - narrows which product classes the second dropdown offers. Initialized
   // from whatever the application is currently assigned to, if it falls under one of the 3 curated
   // types; otherwise starts unset so staff picks a type first.
   const [selectedProductType, setSelectedProductType] = React.useState<LoanTypeOption | ''>('');
@@ -487,7 +488,7 @@ export function LoanApplicationDetailPage() {
   }, [selectedProductType, versionIdByProductName]);
 
   // Resolves encodedByUserId/reviewedByUserId (raw LMS account ids) into display names for the
-  // "encoded by" / "reviewed by" indicators below — same join pattern used elsewhere (e.g.
+  // "encoded by" / "reviewed by" indicators below - same join pattern used elsewhere (e.g.
   // LoanListPage's borrower/product name join).
   const usersQuery = useQuery({ queryKey: ['users', 'all'], queryFn: () => fetchAllPages<User>('/users') });
   const userNameById = React.useMemo(() => new Map((usersQuery.data ?? []).map((u) => [u.id, u.fullName])), [usersQuery.data]);
@@ -534,7 +535,9 @@ export function LoanApplicationDetailPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
             <Lock className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
+            <p className="text-sm font-medium">
+              Restricted to <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, and <RoleAbbr role="CRM" /> accounts
+            </p>
             <p className="text-sm text-muted-foreground">
               Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
             </p>
@@ -577,7 +580,6 @@ export function LoanApplicationDetailPage() {
     .toUpperCase();
 
   const isPending = application.status === 'PREAPPROVED' || application.status === 'PREDECLINED';
-  const applicationLogs = MOCK_ACTIVITY_LOGS.filter((l) => l.entityId === application.id);
   const mutationError = assignProductMutation.error || decideMutation.error || revertMutation.error;
 
   return (
@@ -600,7 +602,7 @@ export function LoanApplicationDetailPage() {
               </p>
               {isPending && (
                 <p className="text-xs text-muted-foreground">
-                  System pre-qualification —{' '}
+                  System pre-qualification -{' '}
                   {application.distanceFromBranchKm !== null
                     ? `${application.distanceFromBranchKm} km from branch`
                     : 'distance from branch could not be verified'}
@@ -641,22 +643,22 @@ export function LoanApplicationDetailPage() {
             <CardTitle>Applicant Details</CardTitle>
             <CardDescription>
               {encodedByName
-                ? `Walk-in applicant — encoded by ${encodedByName} from the paper form (ECLC-LOFN01)`
+                ? `Walk-in applicant - encoded by ${encodedByName} from the paper form (ECLC-LOFN01)`
                 : 'Submitted via the (not yet built) public loan application website'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-y-3 text-sm">
               <dt className="text-muted-foreground">Age</dt>
-              <dd className="text-right font-medium">{application.age ?? '—'}</dd>
+              <dd className="text-right font-medium">{application.age ?? '-'}</dd>
               <dt className="text-muted-foreground">Address</dt>
-              <dd className="text-right font-medium">{toProperCase(application.address) || '—'}</dd>
-              <dt className="text-muted-foreground">Mobile number</dt>
+              <dd className="text-right font-medium">{toProperCase(application.address) || '-'}</dd>
+              <dt className="text-muted-foreground">Contact Number</dt>
               <dd className="text-right font-medium">{formatMobileNumber(application.mobilePhone)}</dd>
               <dt className="text-muted-foreground">Email</dt>
-              <dd className="text-right font-medium">{application.email ?? '—'}</dd>
+              <dd className="text-right font-medium">{application.email ?? '-'}</dd>
               <dt className="text-muted-foreground">Employer</dt>
-              <dd className="text-right font-medium">{application.employer ?? '—'}</dd>
+              <dd className="text-right font-medium">{application.employer ?? '-'}</dd>
               <dt className="text-muted-foreground">Co-borrower</dt>
               <dd className="text-right font-medium">{application.coBorrowerName ?? 'None (optional)'}</dd>
             </dl>
@@ -717,7 +719,7 @@ export function LoanApplicationDetailPage() {
 
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                The client only selects a category when applying — staff assigns the specific product type and class here.
+                The client only selects a category when applying - staff assigns the specific product type and class here.
               </p>
               {isPending ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -758,7 +760,7 @@ export function LoanApplicationDetailPage() {
                                 <Badge
                                   variant="outline"
                                   className="text-[10px]"
-                                  title="Discontinued — no longer offered to new applicants, not selectable here"
+                                  title="Discontinued - no longer offered to new applicants, not selectable here"
                                 >
                                   Discontinued
                                 </Badge>
@@ -847,7 +849,7 @@ export function LoanApplicationDetailPage() {
 
       <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
 
-      <RecentActivityPanel entries={applicationLogs} title="Recent Activity — This Application" />
+      <RecentActivityPanel label="Loan Application" entityId={application.id} />
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">
@@ -878,6 +880,22 @@ export function LoanApplicationDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Activity Timeline - ADR-050 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Timeline</CardTitle>
+          <CardDescription>
+            Log of all actions taken on this application by loan officers
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileActivityTimeline
+            profileType="LOAN_APPLICATION"
+            profileId={application.id}
+          />
+        </CardContent>
+      </Card>
 
       <CreateClientProfileDialog open={createClientOpen} onOpenChange={setCreateClientOpen} application={application} />
     </div>

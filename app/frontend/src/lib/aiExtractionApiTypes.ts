@@ -1,4 +1,4 @@
-/** Mirrors `app/backend`'s `ExtractLoanApplicationFieldsUseCase` output shape. Ephemeral —
+/** Mirrors `app/backend`'s `ExtractLoanApplicationFieldsUseCase` output shape. Ephemeral -
  * this endpoint never persists the uploaded file. */
 export interface ExtractedLoanApplicationFields {
   applicantName?: string;

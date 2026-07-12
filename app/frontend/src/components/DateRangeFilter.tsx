@@ -7,7 +7,7 @@ export interface DateRange {
 }
 
 /**
- * Real, working date-range control — filters an already-precomputed mock
+ * Real, working date-range control - filters an already-precomputed mock
  * dataset client-side (see `src/lib/mockData.ts`'s `DAILY_REPORT_ROWS`).
  * Does not call any backend; the "period" it selects over is fixed sample
  * data, per this checkpoint's interactivity requirement.

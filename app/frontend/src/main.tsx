@@ -6,6 +6,8 @@ import App from './App';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { RoleProvider } from '@/lib/roleContext';
+import { LanguageProvider } from '@/lib/languageContext';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -21,13 +23,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <RoleProvider>
-          <BrowserRouter>
-            <ErrorBoundary>
-              <App />
-            </ErrorBoundary>
-          </BrowserRouter>
-        </RoleProvider>
+        <LanguageProvider>
+          <TooltipProvider>
+            <RoleProvider>
+              <BrowserRouter>
+                <ErrorBoundary>
+                  <App />
+                </ErrorBoundary>
+              </BrowserRouter>
+            </RoleProvider>
+          </TooltipProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>,

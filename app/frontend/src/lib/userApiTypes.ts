@@ -1,7 +1,7 @@
 /**
- * Mirrors `app/backend`'s `UserPresenter.presentUser()` JSON shape exactly — see
+ * Mirrors `app/backend`'s `UserPresenter.presentUser()` JSON shape exactly - see
  * `apiClient.ts`'s doc comment for why this pilot hand-maintains DTOs instead of generating them.
- * Never carries `passwordHash` — the presenter itself enforces that boundary.
+ * Never carries `passwordHash` - the presenter itself enforces that boundary.
  */
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
@@ -15,6 +15,9 @@ export interface User {
   fullName: string;
   status: UserStatus;
   roles: string[];
+  companyId: string | null;
+  roleClassId: string | null;
+  roleClassName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,13 +30,21 @@ export interface CreateUserRequest {
   firstName: string;
   lastName: string;
   roleNames: string[];
+  companyId?: string;
+  roleClassId?: string;
 }
 
-/** Body for `PATCH /users/:id`. All fields optional — send only what changed. */
+/** Body for `PATCH /users/:id`. All fields optional - send only what changed. */
 export interface UpdateUserRequest {
   firstName?: string;
   lastName?: string;
   branchId?: string;
   status?: UserStatus;
   roleNames?: string[];
+  companyId?: string;
+  roleClassId?: string | null;
+  /** Must not already belong to another account - the backend rejects a conflicting email. */
+  email?: string;
+  /** MIS resetting a member's forgotten password - omit to leave the current password unchanged. */
+  password?: string;
 }

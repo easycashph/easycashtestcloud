@@ -23,7 +23,7 @@ function initialsOf(name: string) {
 }
 
 /**
- * Frontend↔Backend Wiring Pilot, Stage 0b. Replaces the old mock "Switch Account" panel — with a
+ * Frontend↔Backend Wiring Pilot, Stage 0b. Replaces the old mock "Switch Account" panel - with a
  * real login/session, there's no "switching" between staff accounts without their password
  * anymore, so this is a normal current-user menu instead: name/role, a link into Settings, and a
  * real Logout (`POST /auth/logout`).

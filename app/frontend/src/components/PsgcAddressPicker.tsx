@@ -30,15 +30,15 @@ function usePsgcOptions(path: string, enabled: boolean) {
 
 /**
  * Region -> Province -> City/Municipality -> Barangay cascading picker, backed by the real PSGC
- * reference data (`GET /psgc/regions|provinces|cities|barangays`) — replaces free-text address
+ * reference data (`GET /psgc/regions|provinces|cities|barangays`) - replaces free-text address
  * entry so a value can never again be saved as a raw PSGC code instead of a name (see
  * scripts/fix-coded-addresses.ts for the data-quality issue this prevents going forward).
  *
  * The cascade is driven by PSGC *codes* internally (each level's children are queried by their
- * parent's code), but `value`/`onChange` only ever carry the resolved *names* — the shape
+ * parent's code), but `value`/`onChange` only ever carry the resolved *names* - the shape
  * `Address`/`Borrower` already store on the wire. Because of that, this component can't pre-select
  * an existing text-only address (e.g. "CAVITE") back into its code-based dropdowns without a
- * reverse name->code lookup this API doesn't offer — the caller is expected to show the current
+ * reverse name->code lookup this API doesn't offer - the caller is expected to show the current
  * address as read-only context alongside this picker, which only ever produces a new selection.
  */
 export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; onChange: (patch: Partial<AddressDraft>) => void }) {
