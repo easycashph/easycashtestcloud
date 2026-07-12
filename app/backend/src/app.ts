@@ -120,13 +120,20 @@ export function createApp(): Express {
   // restart (5173 is frequently already taken), so a fixed allow-list constantly falls
   // out of date. Accept any http(s)://localhost:<port> / 127.0.0.1:<port> origin in dev
   // only — production still enforces the exact CORS_ORIGIN allow-list below.
-  const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  //
+  // 2026-07-11 (user request): also accept private-LAN IPv4 origins (192.168.x.x, 10.x.x.x,
+  // 172.16-31.x.x) so a second device on the same office WiFi can reach this dev server via
+  // http://<this-machine's-LAN-IP>:<port> instead of localhost, which only ever means "this same
+  // device" and can never resolve to another machine. Dev-only, same as the localhost pattern —
+  // production still enforces the exact CORS_ORIGIN allow-list below.
+  const devOriginPattern =
+    /^https?:\/\/(localhost|127\.0\.0\.1|192\.168(?:\.\d{1,3}){2}|10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(:\d+)?$/;
   app.use(
     cors({
       origin:
         env.NODE_ENV === 'development'
           ? (origin, callback) => {
-              if (!origin || localhostOriginPattern.test(origin) || corsOrigins.includes(origin)) {
+              if (!origin || devOriginPattern.test(origin) || corsOrigins.includes(origin)) {
                 callback(null, true);
               } else {
                 callback(new Error('Not allowed by CORS'));
