@@ -23,6 +23,14 @@ export interface DashboardSummary {
      * see `DashboardPage.tsx`'s `buildRealPortfolioHealth`.
      */
     loanAccountIds: string[];
+    /**
+     * 2026-07-12: subset of `loanAccountIds` whose final (highest-`dueDate`) installment has
+     * already passed — the loan's whole scheduled term is over and it's still unpaid, the
+     * "Matured" segment in `DashboardPage.tsx`'s Loan Portfolio Health Venn diagram (previously
+     * always empty — nothing tracked this concept at all). Every other overdue loan (still has an
+     * installment due in the future) stays "in arrears".
+     */
+    maturedLoanAccountIds: string[];
   };
   collectionsThisMonth: {
     amount: string;

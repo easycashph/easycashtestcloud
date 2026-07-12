@@ -6,7 +6,7 @@
  */
 export interface DashboardSummary {
   totalActiveLoans: { count: number; outstandingPrincipalBalance: string };
-  overdueAccounts: { count: number; atRiskCollectionsBalance: string; loanAccountIds: string[] };
+  overdueAccounts: { count: number; atRiskCollectionsBalance: string; loanAccountIds: string[]; maturedLoanAccountIds: string[] };
   collectionsThisMonth: { amount: string; trend: { changePercent: number | null } };
   portfolioByProduct: Array<{
     productId: string;

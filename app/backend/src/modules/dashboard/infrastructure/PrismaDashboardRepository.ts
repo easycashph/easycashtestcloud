@@ -16,13 +16,13 @@ export class PrismaDashboardRepository implements IDashboardRepository {
     const branchFilter = branchId ? { branchId } : {};
     const now = new Date();
 
-    const [activeAgg, overdueLoanIds, collectionsAgg, collectionsSameWindowLastMonthAgg, byProductGroups] = await Promise.all([
+    const [activeAgg, overdueLoans, collectionsAgg, collectionsSameWindowLastMonthAgg, byProductGroups] = await Promise.all([
       prisma.loanAccount.aggregate({
         where: { ...branchFilter, status: { in: [...ACTIVE_STATUSES] } },
         _count: true,
         _sum: { principalBalance: true },
       }),
-      findOverdueLoanAccountIds(now, branchId),
+      findOverdueLoanAccounts(now, branchId),
       prisma.loanTransaction.aggregate({
         where: { ...branchFilter, type: 'REPAYMENT', entryDate: { gte: startOfMonth(now), lt: startOfNextMonth(now) } },
         _sum: { amount: true },
@@ -44,7 +44,7 @@ export class PrismaDashboardRepository implements IDashboardRepository {
     ]);
 
     const overdueAgg = await prisma.loanAccount.aggregate({
-      where: { id: { in: overdueLoanIds } },
+      where: { id: { in: overdueLoans.overdueIds } },
       _count: true,
       _sum: { principalBalance: true, interestBalance: true, feesBalance: true, penaltyBalance: true },
     });
@@ -85,7 +85,8 @@ export class PrismaDashboardRepository implements IDashboardRepository {
       overdueAccounts: {
         count: overdueAgg._count,
         atRiskCollectionsBalance: overdueCollectionsBalance.toString(),
-        loanAccountIds: overdueLoanIds,
+        loanAccountIds: overdueLoans.overdueIds,
+        maturedLoanAccountIds: overdueLoans.maturedIds,
       },
       collectionsThisMonth: {
         amount: (collectionsAgg._sum.amount ?? 0).toString(),
@@ -109,20 +110,38 @@ export class PrismaDashboardRepository implements IDashboardRepository {
  * same way `payment-reminder`'s `PrismaPaymentReminderRepository` already does: a loan is overdue
  * if it has at least one `RepaymentSchedule` row past due with less paid than owed, matching
  * `RepaymentInstallment.status`'s own `LATE` definition exactly (`domain/RepaymentInstallment.ts`).
+ *
+ * Also splits out "matured" — the subset of overdue loans whose LAST installment (`MAX(dueDate)`,
+ * i.e. the loan's own maturity date) has already passed, meaning the whole scheduled term is over
+ * and it's still unpaid. Previously untracked entirely (`DashboardPage.tsx`'s Loan Portfolio
+ * Health Venn diagram's "Matured" segment always read 0 — nothing computed this concept at all).
  */
-async function findOverdueLoanAccountIds(asOf: Date, branchId: string | undefined): Promise<string[]> {
+async function findOverdueLoanAccounts(asOf: Date, branchId: string | undefined): Promise<{ overdueIds: string[]; maturedIds: string[] }> {
   const branchClause = branchId ? Prisma.sql`AND la."branchId" = ${branchId}` : Prisma.empty;
-  const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-    SELECT DISTINCT rs."loanAccountId" AS id
-    FROM repayment_schedules rs
-    JOIN loan_accounts la ON la.id = rs."loanAccountId"
-    WHERE rs."dueDate" < ${asOf}
-      AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
-          < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
-      AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
-      ${branchClause}
+  const rows = await prisma.$queryRaw<{ id: string; isMatured: boolean }[]>(Prisma.sql`
+    WITH overdue AS (
+      SELECT DISTINCT rs."loanAccountId" AS id
+      FROM repayment_schedules rs
+      JOIN loan_accounts la ON la.id = rs."loanAccountId"
+      WHERE rs."dueDate" < ${asOf}
+        AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
+            < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
+        AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
+        ${branchClause}
+    ),
+    maturity AS (
+      SELECT "loanAccountId" AS id, MAX("dueDate") AS maturity_date
+      FROM repayment_schedules
+      GROUP BY "loanAccountId"
+    )
+    SELECT overdue.id, (maturity.maturity_date < ${asOf}) AS "isMatured"
+    FROM overdue
+    JOIN maturity ON maturity.id = overdue.id
   `);
-  return rows.map((r) => r.id);
+  return {
+    overdueIds: rows.map((r) => r.id),
+    maturedIds: rows.filter((r) => r.isMatured).map((r) => r.id),
+  };
 }
 
 /** `null` when `previous` is 0 — a percentage change from zero is undefined, not infinite. */

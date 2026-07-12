@@ -25,7 +25,7 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
     vi.clearAllMocks();
     loanProductVersionOps.findMany.mockResolvedValue([]);
     loanAccountOps.groupBy.mockResolvedValue([]);
-    queryRaw.mockResolvedValue([]); // findOverdueLoanAccountIds -> none, by default
+    queryRaw.mockResolvedValue([]); // findOverdueLoanAccounts -> none, by default
   });
 
   it('Total Active Loans has no trend field (2026-07-12: dropped — 477 of 502 legacy CLOSED loans have no closedAt, making a 30-day reconstruction fabricate a swing)', async () => {
@@ -72,7 +72,11 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
     loanAccountOps.aggregate
       .mockResolvedValueOnce({ _count: 0, _sum: { principalBalance: 0 } })
       .mockResolvedValueOnce({ _count: 3, _sum: { principalBalance: 30000, interestBalance: 3000, feesBalance: 0, penaltyBalance: 500 } });
-    queryRaw.mockResolvedValueOnce([{ id: 'loan-1' }, { id: 'loan-2' }, { id: 'loan-3' }]);
+    queryRaw.mockResolvedValueOnce([
+      { id: 'loan-1', isMatured: false },
+      { id: 'loan-2', isMatured: false },
+      { id: 'loan-3', isMatured: false },
+    ]);
     loanTransactionOps.aggregate.mockResolvedValueOnce({ _sum: { amount: 0 } }).mockResolvedValueOnce({ _sum: { amount: 0 } });
 
     const repo = new PrismaDashboardRepository();
@@ -85,5 +89,22 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
     expect(loanAccountOps.aggregate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: { in: ['loan-1', 'loan-2', 'loan-3'] } } }),
     );
+  });
+
+  it('splits Matured (past its own final installment due date) out of the overdue set, distinct from In Arrears', async () => {
+    loanAccountOps.aggregate
+      .mockResolvedValueOnce({ _count: 0, _sum: { principalBalance: 0 } })
+      .mockResolvedValueOnce({ _count: 2, _sum: { principalBalance: 0, interestBalance: 0, feesBalance: 0, penaltyBalance: 0 } });
+    queryRaw.mockResolvedValueOnce([
+      { id: 'loan-arrears', isMatured: false }, // still has an installment due in the future
+      { id: 'loan-matured', isMatured: true }, // its last installment's due date has already passed
+    ]);
+    loanTransactionOps.aggregate.mockResolvedValueOnce({ _sum: { amount: 0 } }).mockResolvedValueOnce({ _sum: { amount: 0 } });
+
+    const repo = new PrismaDashboardRepository();
+    const summary = await repo.getSummary(undefined);
+
+    expect(summary.overdueAccounts.loanAccountIds).toEqual(['loan-arrears', 'loan-matured']);
+    expect(summary.overdueAccounts.maturedLoanAccountIds).toEqual(['loan-matured']);
   });
 });
