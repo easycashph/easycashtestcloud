@@ -518,3 +518,207 @@ attachments (both from Addendums 2-3).
 constant/type import - worth a quick individual check each, but none looked like a full mock view
 on the earlier skim) and the 4 components (`CreateLoanAccountDialog.tsx`,
 `LoanDrillDownDialog.tsx`, `PaymentMethodBadge.tsx`, `StatusBadge.tsx`).
+
+## Addendum 4 follow-up — remaining `@/lib/mockData` imports individually checked, session close
+
+Checked every remaining hit from the earlier survey individually (not just by grep, per the
+"confirm before migrating" rule stated above):
+
+- `LoginPage.tsx` (`COMPANY_INFO`), `PaymentRecordingPage.tsx` (`ACTIVE_PAYMENT_METHODS`),
+  `LoanDrillDownDialog.tsx`/`StatusBadge.tsx` (`LoanAccountStatus`/`RepaymentInstallmentStatus`
+  types), `MemberListPage.tsx` (`LmsRole` type) - all static UI config or type-only imports, not
+  fake business records standing in for real data. Not migration targets.
+- `PaymentMethodBadge.tsx` (`getPaymentMethodLabel`, `isDiscontinuedPaymentMethod`) - label-lookup
+  helper functions over a static enum, same category.
+- `SettingsPage.tsx` (`logActivity`) - **dead code**, not a rendering-mock-data problem: it pushes
+  onto an in-memory `MOCK_ACTIVITY_LOGS` array that nothing displays anymore.
+  `RecentActivityPanel.tsx` (used on 16 pages including this one) already reads exclusively from
+  the real `/audit-logs` API (`AuditLog` type, `apiClient.get`) - confirmed by reading the
+  component, it has no mock fallback at all. The scattered `logActivity(...)` calls across the
+  codebase are therefore inert leftovers from before that panel was wired to the real audit trail.
+  Worth a follow-up cleanup pass (delete the calls + the mock log array/functions), but that's
+  dead-code removal, not a "replace fake data" fix - lower priority, flagging rather than doing
+  it unprompted this session.
+- `CreateLoanAccountDialog.tsx` - still mock (`MOCK_LOAN_PRODUCTS`/`MockLoanAccount`), per
+  Addendum 2's note; nothing in the real flow imports it anymore after `RealCreateLoanAccountDialog`
+  shipped, but it's not deleted (still used by the old mock `ClientProfilePage()` code path for
+  hand-authored sample clients, which itself is intentionally out of scope - sample-client demo
+  data, not real-client-masquerading-as-mock).
+
+**Conclusion: no further full-page/full-flow mock-to-real migration targets remain from this
+survey.** The substantive gaps found and fixed this session (Application↔Client↔LoanAccount
+linkage, Create Loan Account, Approve/Activate, Collections Forecast) are done. What's left falls
+into three buckets, none of which are "users are shown fake data as if real":
+1. Deliberately-deferred, disclosed sample data pending a business decision (Collections vs.
+   Target - Addendum 3/4).
+2. Not-yet-built real features on otherwise-real pages (notes/attachments/reminders on Loan
+   Account and Client Profile detail pages).
+3. Dead code / unused legacy components that no longer affect what users see (`logActivity`,
+   `CreateLoanAccountDialog.tsx`).
+
+Committed and pushed to `origin/main` this session as `26630e0`.
+
+---
+
+# Addendum 5 — real Attachments on Client Profile and Loan Account (2026-07-12, later same day)
+
+**Trigger:** User: continue the mock-removal effort, after Addendum 4's follow-up concluded no
+further full-page targets remained. Re-examined the "still mock" list from Addendums 2/3
+(Attachments on both pages) with fresh eyes rather than stopping.
+
+## Discovery
+
+`AttachmentsPanel.tsx` (already real, used by `LoanApplicationDetailPage.tsx` since an earlier
+session) is built generically against `AttachmentOwnerType = 'BORROWER' | 'LOAN_ACCOUNT' |
+'LOAN_APPLICATION'` - its own doc comment says as much: "built generically... so Borrower/
+LoanAccount detail pages can adopt it later without change." Backend (`IAttachmentRepository`,
+`ListAttachmentsForOwnerUseCase`, `PrismaAttachmentRepository`) already supports all three owner
+types too. Nobody had actually dropped the component onto those two pages yet - a pure wiring
+gap, zero new backend work needed.
+
+## What shipped
+
+- `RealClientProfileView` (`ClientProfilePage.tsx`): added `<AttachmentsPanel ownerType="BORROWER"
+  ownerId={borrower.id} canUpload />`. `canUpload` is unconditional (`true`), matching this page's
+  existing precedent - "Edit / Customize Details" has no role gate either, so there was no
+  established permission flag to reuse here (unlike Create Loan Account's `canCreateLoanAccount`).
+  Updated the page's real-data banner to drop the "Attachments not yet wired" caveat.
+- `RealLoanDetailView` (`LoanDetailPage.tsx`): added `<AttachmentsPanel ownerType="LOAN_ACCOUNT"
+  ownerId={loan.id} canUpload />`. This file already had its own **mock** `AttachmentsPanel`
+  function (used by the old mock loan page) - the real import was aliased to
+  `RealAttachmentsPanel` to avoid the name collision rather than renaming the mock one (smaller
+  diff; the mock component is still legitimately in use by the mock code path). Updated the
+  `RealLoanDetailView` doc comment.
+
+Typechecked clean. **Not verified live** - same DB/backend constraint as prior addendums.
+
+## Current State (supersedes Addendum 4's)
+
+✅ Both `RealClientProfileView` and `RealLoanDetailView` are now fully real except for
+Notes/Reminders (loan account) - no more "not yet wired" attachments caveat on either page.
+⏳ Still mock: Notes and Reminders tabs on `RealLoanDetailView` (in-browser-only, clearly
+labeled as such - no backend note/reminder storage exists yet, would need its own schema+API
+before it could go real, same shape of gap as the Collections-Target business decision, not a
+pure wiring fix).
+⏳ Collections vs. Target (Addendum 3/4) - still blocked on a business decision.
+⏳ `logActivity`/`MOCK_ACTIVITY_LOGS` dead code (Addendum 4 follow-up) - unchanged, still flagged
+for an optional future cleanup pass, not done this session.
+
+---
+
+# Addendum 6 — real Notes (new backend module) (2026-07-12, later same day)
+
+**Trigger:** User: continue the mock-removal effort. Addendum 5's "Current State" left Notes as
+the one remaining `RealLoanDetailView` gap that wasn't blocked by a business decision (unlike
+Collections vs. Target) - just needed its own schema+API, which didn't exist yet anywhere in the
+backend (confirmed: no `Note`/`Reminder` model in `schema.prisma` before this).
+
+## What shipped
+
+**New `note` backend module**, mirroring the `document` module's flat structure exactly (no rich
+domain class - same simplicity level as `Attachment`, per that module's own precedent):
+
+- Prisma: `Note` model + `NoteOwnerType` enum (`BORROWER` | `LOAN_ACCOUNT` | `LOAN_APPLICATION` -
+  same three values as `AttachmentOwnerType`, kept as a separate enum rather than shared, since
+  Note and Attachment are independent tables). Polymorphic `ownerType`/`ownerId` shape, indexed,
+  `authorUserId` FK to `users`. Migration `20260712060000_add_notes`. Immutable - no edit/delete
+  use case, an append-only log by design ("a running log, not a wiki" - matches how the mock
+  `NotesPanel` behaved).
+- `INoteRepository` / `PrismaNoteRepository`, `CreateNoteUseCase` (trims + rejects blank text),
+  `ListNotesForOwnerUseCase`, `NoteController`/`noteRouter`/`noteSchemas`/`NotePresenter` - all
+  new files under `app/backend/src/modules/note/`, following the identical layering as
+  `app/backend/src/modules/document/`. Wired into `app.ts` right after the document module.
+- **Deliberately no role restriction on `POST /notes`** (unlike Attachments'
+  `ATTACHMENT_WRITE_ROLES`) - any authenticated staff member could add a note in the mock version,
+  and a note is a low-stakes running log, not a financial or decision action.
+
+**Frontend**: new `noteApiTypes.ts` (mirrors the presenter JSON) and a new reusable
+`NotesPanel.tsx` component (`@/components/NotesPanel.tsx`), built generically against
+`NoteOwnerType` the same way `AttachmentsPanel` was - explicitly written so it can be dropped onto
+Borrower/LoanApplication pages later without changes, same reasoning that made Addendum 5's
+Attachments wiring a pure drop-in. Wired into `RealLoanDetailView` (aliased to `RealNotesPanel` -
+`LoanDetailPage.tsx` already has its own same-named mock `NotesPanel` function for the old mock
+page, same collision/alias pattern as Addendum 5's `RealAttachmentsPanel`).
+
+Typechecked clean (backend + frontend, Prisma client regenerated). **Not verified live** - same
+DB/backend constraint as every prior addendum this session; this one in particular needs a real
+DB migration run (`prisma migrate deploy`) before `/notes` will work anywhere.
+
+## Current State (supersedes Addendum 5's)
+
+✅ `RealLoanDetailView` is now real for everything except Reminders.
+✅ Notes is generically reusable - `ClientProfilePage.tsx`/`LoanApplicationDetailPage.tsx` could
+adopt `<NotesPanel ownerType="BORROWER" .../>` or `ownerType="LOAN_APPLICATION"` with zero backend
+work, if wanted later.
+⏳ Reminders tab on `RealLoanDetailView` - same shape of gap Notes just closed (needs its own
+schema+API), not done this session.
+⏳ Collections vs. Target - still blocked on a business decision (Addendum 3/4).
+⏳ `logActivity`/`MOCK_ACTIVITY_LOGS` dead code - still an optional future cleanup, unchanged.
+⏳ **New follow-up for next session:** run the new `20260712060000_add_notes` migration against
+the real database (this machine can't - frontend-only per [infrastructure_hosting_plan] memory).
+
+---
+
+# Addendum 7 — real Reminders panel, closing RealLoanDetailView (2026-07-12, later same day)
+
+**Trigger:** User: continue the mock-removal effort. Before touching Reminders (the one remaining
+`RealLoanDetailView` gap), asked the user two clarifying questions per CLAUDE.md's "never guess,
+never invent business rules":
+
+1. Does the company have an SMS/Email provider to wire up? **Answer: not yet - pending from MIS
+   Nomer.**
+2. Is the mock's 5/3/1-days-before + due-date + weekly-past-due trigger schedule confirmed real
+   business policy? **Answer: confirmed, yes.**
+
+This meant: build the real trigger-schedule computation now (confirmed policy, no external
+dependency), but the actual SMS/Email *sending* stays explicitly "Coming Soon" (no provider to
+call yet) rather than being faked.
+
+## What shipped (frontend only - no backend changes needed)
+
+Realized mid-investigation that a **separate, already-real** `PaymentRemindersPage.tsx`
+(`GET /payment-reminders`) already exists as a portfolio-wide worklist, explicitly disclosed as
+"no SMS/email notification service is wired up yet." What was still missing was a **per-loan**
+Reminders view on `RealLoanDetailView` itself (the old mock `LoanDetailPage()`'s Reminders tab
+was still `MOCK_PAYMENT_REMINDERS`-driven).
+
+Added to `LoanDetailPage.tsx`:
+
+- `computeReminderTriggers(dueDate, isLate)` - pure function reproducing the confirmed schedule
+  exactly (5/3/1 days before, due date, up to 3 weekly past-due occurrences), ported 1:1 from the
+  retired mock's `buildRemindersForLoan()` trigger-generation logic (only the *schedule* was
+  carried over, not that function's fake "Sent" simulation).
+- `buildRealReminderMessage(...)` - same SMS/Email message template as the mock version, now
+  filled from real borrower/loan/installment data instead of mock records.
+- **`RealRemindersPanel`** - computes the next unpaid installment straight from the repayment
+  schedule `RealLoanDetailView` already has loaded (`installmentsQuery.data.items` - no new
+  network call), shows each trigger's date and whether it's `Due` or `Upcoming`. Deliberately
+  **does not label anything "Sent"** - unlike the mock version's `SENT`/`SCHEDULED` status, since
+  no notification actually goes out yet, that would be a fabricated event. SMS/Email rows show a
+  "Coming Soon" badge with the borrower's real phone/email as the would-be recipient, honest about
+  what's missing (provider integration, pending Nomer) rather than simulating a send.
+
+Typechecked clean (name collision with the mock file's own `buildReminderMessage`/local
+`RemindersPanel` resolved by naming the new function/component distinctly, same pattern as
+`RealAttachmentsPanel`/`RealNotesPanel` aliasing in Addendums 5-6).
+
+**Not verified live** - same DB/backend constraint as every prior addendum.
+
+## Current State (supersedes Addendum 6's)
+
+✅ **`RealLoanDetailView` is now fully real on every tab/section** - balances, borrower,
+repayment schedule, risk assessment, payment history, Approve/Activate, Attachments, Notes, and
+Reminders (trigger schedule; sending is honestly "Coming Soon").
+✅ `RealClientProfileView` real on everything except Attachments... wait, Attachments shipped in
+Addendum 5 - `RealClientProfileView` is fully real now too, no known remaining gaps.
+⏳ Collections vs. Target (Dashboard) - still blocked on a business decision (Addendum 3/4).
+⏳ SMS/Email sending itself - blocked on a provider, pending MIS Nomer. Once available: wire
+`RealRemindersPanel`'s "Coming Soon" rows to a real send action, and decide whether to persist a
+send-history record (would need its own schema, similar shape to Notes).
+⏳ `logActivity`/`MOCK_ACTIVITY_LOGS` dead code - still an optional future cleanup, unchanged.
+⏳ Migration `20260712060000_add_notes` still needs to run against the real database (Addendum 6).
+
+**With this addendum, the two main detail pages (Client Profile, Loan Account) touched by this
+session's mock-removal effort are fully real.** Remaining known gaps are either business-decision-
+blocked (Collections Target) or infrastructure-blocked (SMS/Email provider), not further wiring
+work - a good natural stopping point for this thread unless the user opens a new area.

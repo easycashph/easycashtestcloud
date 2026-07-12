@@ -236,6 +236,7 @@ model User {
   loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
   transactionsPosted       LoanTransaction[] @relation("LoanTransactionPostedBy")
   attachmentsUploaded      Attachment[]      @relation("AttachmentUploadedBy")
+  notesAuthored            Note[]            @relation("NoteAuthor")
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
@@ -931,6 +932,28 @@ model Attachment {
 
   @@index([ownerType, ownerId])
   @@map("attachments")
+}
+
+enum NoteOwnerType {
+  BORROWER
+  LOAN_ACCOUNT
+  LOAN_APPLICATION
+}
+
+/// Free-text note attached to a Borrower/LoanAccount/LoanApplication - same polymorphic
+/// ownerType/ownerId shape as `Attachment` (ADR-014), for the same reason: no dedicated FK relation
+/// per owner type. Immutable once created (no edit/delete use case) - a running log, not a wiki.
+model Note {
+  id           String        @id @default(uuid())
+  ownerType    NoteOwnerType
+  ownerId      String
+  text         String
+  authorUserId String
+  author       User          @relation("NoteAuthor", fields: [authorUserId], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([ownerType, ownerId])
+  @@map("notes")
 }
 
 model DocumentTemplate {

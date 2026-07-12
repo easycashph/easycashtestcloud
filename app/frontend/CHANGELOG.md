@@ -8,6 +8,37 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-12 (continued) — Mock Data Removal: Application→Client→Loan Lifecycle
+
+Deliberate, incremental mock-removal initiative (per CLAUDE.md's project objective of replacing
+SDevTech) — full detail in `docs/SESSION_LOG_2026-07-12.md` Addendums 1-7. Summary:
+
+- **Application ↔ Client link (real):** new `Borrower.sourceApplicationId` (migration
+  `20260712050000_add_borrower_source_application`), `GET /loan-applications` now returns
+  `createdBorrowerId`/`createdLoanAccountId`/`createdLoanAccountCode`. `LoanApplicationDetailPage`'s
+  "Create Client Profile" button now correctly disables/relinks once a client exists instead of
+  allowing a duplicate.
+- **`ClientProfilePage.tsx`'s real path (`RealClientProfileView`):** added a real "Create Loan
+  Account" flow (`POST /loan-accounts`, staff-typed `loanCode` — no fabricated numbering rule) and
+  real Attachments (`AttachmentsPanel`, `ownerType="BORROWER"`).
+- **`LoanDetailPage.tsx`'s real path (`RealLoanDetailView`):** added real Approve/Activate
+  (`POST /loan-accounts/:id/approve` and `/activate`, idempotency-key protected), real Attachments
+  (`ownerType="LOAN_ACCOUNT"`), a brand-new real **Notes** feature (new `note` backend module —
+  `Note` model, migration `20260712060000_add_notes`, full port/use-case/repository/controller —
+  mirrors the `document` module's shape), and a real **Reminders** panel (business-confirmed
+  5/3/1-day/due-date/weekly-past-due trigger schedule computed from the real repayment schedule;
+  SMS/Email sending stays "Coming Soon" pending a provider from MIS).
+- **Dashboard:** Collections Forecast chart now sums real `RepaymentSchedule` data (next 4 months,
+  branch-scoped) instead of `SAMPLE_COLLECTIONS_PROJECTION`. Collections vs. Target intentionally
+  left as disclosed sample data — blocked on a business decision (how a real monthly target gets
+  set), not a wiring gap.
+- **Result:** both `RealClientProfileView` and `RealLoanDetailView` are now fully real on every
+  section. Remaining known mock/gaps: Collections vs. Target (business decision), SMS/Email
+  sending (infrastructure/provider), and unused `logActivity()`/`MOCK_ACTIVITY_LOGS` dead code
+  (superseded by the real `/audit-logs`-backed `RecentActivityPanel`, not yet deleted).
+- **Deploy note:** migrations `20260712050000_add_borrower_source_application` and
+  `20260712060000_add_notes` still need to run against the real database.
+
 ## 2026-07-11
 
 ### System-computed PREAPPROVED/PREDECLINED pre-qualification for Loan Applications

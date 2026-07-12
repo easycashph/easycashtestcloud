@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { CreateLoanAccountDialog, type CreateLoanAccountParams } from '@/components/CreateLoanAccountDialog';
 import { LoanStatusBadge } from '@/components/StatusBadge';
+import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
@@ -727,8 +728,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Button>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real client, migrated from legacy data (CP12) - details, loan history, and Create Loan Account below are live.
-        Attachments are not yet wired to real data for this screen.
+        Real client, migrated from legacy data (CP12) - details, loan history, Create Loan Account, and Attachments below are live.
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -848,6 +848,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </Card>
         </div>
       </div>
+
+      <AttachmentsPanel ownerType="BORROWER" ownerId={borrower.id} canUpload />
 
       {/* Activity Timeline - ADR-050 */}
       <Card>

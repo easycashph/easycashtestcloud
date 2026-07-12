@@ -17,6 +17,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/StatusBadge';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { PaymentMethodBadge } from '@/components/PaymentMethodBadge';
+import { AttachmentsPanel as RealAttachmentsPanel } from '@/components/AttachmentsPanel';
+import { NotesPanel as RealNotesPanel } from '@/components/NotesPanel';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
@@ -394,13 +396,16 @@ function RemindersPanel({ loanId }: { loanId: string }) {
 }
 
 /**
- * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12, Approve/Activate added
- * 2026-07-12. `getMockLoan()` only ever knows about hand-authored mock loans - a loan from
- * `LoanListPage`'s now-real list (a UUID, migrated from legacy data) doesn't exist there and
- * would otherwise hit this page's "not found" state. Real: balances, borrower, repayment
- * schedule, risk assessment, payment history, and Approve/Activate actions (`POST
+ * Frontend↔Backend Wiring Pilot, extended 2026-07-08 after CP12, Approve/Activate + Attachments
+ * + Notes + Reminders added 2026-07-12. `getMockLoan()` only ever knows about hand-authored mock
+ * loans - a loan from `LoanListPage`'s now-real list (a UUID, migrated from legacy data) doesn't
+ * exist there and would otherwise hit this page's "not found" state. Real: balances, borrower,
+ * repayment schedule, risk assessment, payment history, Approve/Activate actions (`POST
  * /loan-accounts/:id/approve` and `/activate`, same role tier as loan origination per ADR-038
- * §3.1/§3.6). Still mock-only: notes, attachments, reminders - see
+ * §3.1/§3.6), Attachments (`AttachmentsPanel`, `ownerType="LOAN_ACCOUNT"`), Notes (`NotesPanel`),
+ * and Reminders (`RealRemindersPanel` - real trigger schedule computed from the real repayment
+ * schedule, business-confirmed 2026-07-12; SMS/Email sending itself stays "Coming Soon", no
+ * provider connected yet). Every tab on this page is now real - see
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
 /** Same "was this ever late" logic as the backend's `LoanRiskAssessmentService` - `status` alone
@@ -414,6 +419,184 @@ function wasInstallmentLate(installment: RepaymentInstallment): boolean {
     return new Date(installment.lastPaidAt) > new Date(installment.dueDate);
   }
   return false;
+}
+
+type ReminderTriggerType = 'FIVE_DAYS_BEFORE' | 'THREE_DAYS_BEFORE' | 'ONE_DAY_BEFORE' | 'DUE_DATE' | 'PAST_DUE_WEEKLY';
+
+const REMINDER_TRIGGER_LABELS: Record<ReminderTriggerType, string> = {
+  FIVE_DAYS_BEFORE: '5 Days Before Due',
+  THREE_DAYS_BEFORE: '3 Days Before Due',
+  ONE_DAY_BEFORE: '1 Day Before Due',
+  DUE_DATE: 'Due Date',
+  PAST_DUE_WEEKLY: 'Past Due (Weekly)',
+};
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+/**
+ * Business-confirmed reminder schedule (2026-07-12): 5/3/1 days before the due date, on the due
+ * date itself, and weekly (capped at 3 occurrences, matching the original design) once an
+ * installment is late. Mirrors `buildRemindersForLoan()` in the retired mock reminder system
+ * exactly - only the trigger *schedule* was confirmed as real policy, not that system's "Sent"
+ * simulation (see `RealRemindersPanel` below for why that part is deliberately not carried over).
+ */
+function computeReminderTriggers(dueDate: Date, isLate: boolean): { type: ReminderTriggerType; date: Date }[] {
+  const triggers: { type: ReminderTriggerType; date: Date }[] = [
+    { type: 'FIVE_DAYS_BEFORE', date: addDays(dueDate, -5) },
+    { type: 'THREE_DAYS_BEFORE', date: addDays(dueDate, -3) },
+    { type: 'ONE_DAY_BEFORE', date: addDays(dueDate, -1) },
+    { type: 'DUE_DATE', date: dueDate },
+  ];
+  if (isLate) {
+    const now = new Date();
+    for (let week = 1; week <= 3; week++) {
+      const weekDate = addDays(dueDate, week * 7);
+      if (weekDate <= now) triggers.push({ type: 'PAST_DUE_WEEKLY', date: weekDate });
+    }
+  }
+  return triggers;
+}
+
+function buildRealReminderMessage(params: {
+  borrowerName: string;
+  loanCode: string;
+  installmentNumber: number;
+  installmentsTotalCount: number;
+  installmentsPaidCount: number;
+  amountDue: number;
+  dueDate: string;
+  penaltyDue: number;
+}): string {
+  const lines = [
+    `Hi ${params.borrowerName},`,
+    '',
+    `This is a reminder from Easycash Lending Company Inc. regarding your loan account ${params.loanCode}.`,
+    '',
+    `Installment #${params.installmentNumber} of ${params.installmentsTotalCount}: ${formatPeso(params.amountDue)} due ${formatDate(params.dueDate)}.`,
+    `Payment progress: ${params.installmentsPaidCount} of ${params.installmentsTotalCount} installments paid so far.`,
+  ];
+  if (params.penaltyDue > 0) {
+    lines.push(`Penalty fee for late payment: ${formatPeso(params.penaltyDue)}.`);
+  }
+  lines.push('', 'Please settle at your earliest convenience to avoid additional penalties. Thank you!', '- Easycash Lending Company Inc.');
+  return lines.join('\n');
+}
+
+/**
+ * Real reminder trigger schedule (confirmed business policy, see `computeReminderTriggers`) for
+ * this loan's next unpaid installment, computed from the already-fetched real repayment schedule
+ * - no extra query needed. Deliberately does NOT claim any trigger was "Sent": no SMS/email
+ * provider is connected yet (pending MIS/Nomer, per 2026-07-12 conversation), so every trigger is
+ * shown as "Due" (its date has arrived) or "Upcoming", never as a notification that actually went
+ * out. `PaymentRemindersPage.tsx`'s real worklist uses the same honest framing.
+ */
+function RealRemindersPanel({
+  loanCode,
+  borrower,
+  installments,
+}: {
+  loanCode: string;
+  borrower: RealBorrower | undefined;
+  installments: RepaymentInstallment[];
+}) {
+  const [expandedType, setExpandedType] = React.useState<ReminderTriggerType | null>(null);
+  const now = new Date();
+  const unpaid = installments.filter((i) => i.status !== 'PAID');
+  const nextDue = unpaid.find((i) => new Date(i.dueDate) >= now) ?? unpaid[unpaid.length - 1];
+
+  if (!nextDue) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-4 w-4 text-muted-foreground" /> Reminders
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="py-4 text-center text-sm text-muted-foreground">No reminders scheduled - loan is fully paid or has no repayment schedule yet.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const num = (v: string) => Number.parseFloat(v) || 0;
+  const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
+  const installmentsPaidCount = installments.filter((i) => i.status === 'PAID').length;
+  const triggers = computeReminderTriggers(new Date(nextDue.dueDate), nextDue.status === 'LATE');
+  const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
+  const message = buildRealReminderMessage({
+    borrowerName,
+    loanCode,
+    installmentNumber: nextDue.installmentNumber,
+    installmentsTotalCount: installments.length,
+    installmentsPaidCount,
+    amountDue,
+    dueDate: nextDue.dueDate,
+    penaltyDue: nextDue.status === 'LATE' ? num(nextDue.due.penalty) : 0,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Bell className="h-4 w-4 text-muted-foreground" /> Reminders
+        </CardTitle>
+        <CardDescription>
+          Trigger schedule for installment #{nextDue.installmentNumber} - no SMS/Email provider is connected yet, so nothing below has
+          actually been sent.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {triggers.map((trigger) => {
+          const due = trigger.date <= now;
+          return (
+            <div key={trigger.type} className="rounded-md border">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between p-3 text-left"
+                onClick={() => setExpandedType((cur) => (cur === trigger.type ? null : trigger.type))}
+              >
+                <div className="flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{REMINDER_TRIGGER_LABELS[trigger.type]}</span>
+                  <span className="text-xs text-muted-foreground">{formatDate(trigger.date.toISOString())}</span>
+                </div>
+                <Badge variant={due ? 'warning' : 'outline'}>
+                  <span className="flex items-center gap-1">
+                    {due ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                    {due ? 'Due' : 'Upcoming'}
+                  </span>
+                </Badge>
+              </button>
+              {expandedType === trigger.type && (
+                <div className="space-y-3 border-t p-3">
+                  <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{message}</pre>
+                  <div className="grid gap-1.5 sm:grid-cols-2">
+                    <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-2">
+                        <MessageSquareText className="h-4 w-4" /> SMS ({borrower?.mobilePhone1 ?? 'no number on file'})
+                      </span>
+                      <Badge variant="secondary">Coming Soon</Badge>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" /> Email ({borrower?.email ?? 'no email on file'})
+                      </span>
+                      <Badge variant="secondary">Coming Soon</Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
 }
 
 function RealLoanDetailView({ loanId }: { loanId: string }) {
@@ -648,6 +831,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </CardContent>
         </Tabs>
       </Card>
+
+      <RealRemindersPanel loanCode={loan.loanCode} borrower={borrower} installments={installments} />
+
+      <RealNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
+
+      <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">

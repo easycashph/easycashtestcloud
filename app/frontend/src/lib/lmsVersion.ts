@@ -59,6 +59,20 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.8',
+    date: 'July 12, 2026',
+    highlights: [
+      'The Loan Application page now recognizes when an applicant has already been turned into a client - the "Create Client Profile" button is replaced with a link straight to their existing Client Profile, preventing duplicate client records.',
+      'Client Profile now has a real, working "Create Loan Account" button - loan officers can originate a new loan account directly from an approved client, no longer a preview-only demo.',
+      'Loan Account details gained real Approve and Activate buttons - moving a loan from Pending Approval, to Approved, to Active is now a real action, not a simulation.',
+      'Client Profile and Loan Account pages now have real file Attachments (upload, view, download) - previously only available on Loan Applications.',
+      'Loan Account details gained a real Notes feature - staff can leave a running log of notes on any loan account, visible to everyone with access, saved permanently.',
+      'Loan Account details gained a real Reminders panel showing the confirmed 5/3/1-days-before, due-date, and weekly-past-due reminder schedule for that loan\'s next payment - actual SMS/Email sending is coming soon, pending a messaging provider.',
+      'The Dashboard\'s Collections Forecast chart now shows a real projection - built bottom-up from every active loan\'s actual repayment schedule - instead of a sample illustration.',
+      'Continues this platform\'s ongoing effort to replace remaining preview/sample data with live, real data as Easycash LMS moves toward fully replacing the SDevTech system.',
+    ],
+  },
+  {
     version: '0.9.7',
     date: 'July 12, 2026',
     highlights: [

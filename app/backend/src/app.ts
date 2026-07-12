@@ -80,6 +80,7 @@ import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListA
 import { LogSectionViewUseCase } from '@modules/audit/application/use-cases/LogSectionViewUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
+import { createNoteRouter } from '@modules/note/interface/http/noteRouter';
 import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
 import { ExtractLoanApplicationFieldsUseCase } from '@modules/ai-extraction/application/use-cases/ExtractLoanApplicationFieldsUseCase';
 import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/OllamaVisionModelClient';
@@ -87,6 +88,9 @@ import { UploadAttachmentUseCase } from '@modules/document/application/use-cases
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
+import { PrismaNoteRepository } from '@modules/note/infrastructure/PrismaNoteRepository';
+import { CreateNoteUseCase } from '@modules/note/application/use-cases/CreateNoteUseCase';
+import { ListNotesForOwnerUseCase } from '@modules/note/application/use-cases/ListNotesForOwnerUseCase';
 import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
 import { createRoleClassRouter } from '@modules/role-class/interface/http/RoleClassRouter';
@@ -464,6 +468,18 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', documentRouter);
+
+  // --- note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
+  // polymorphic ownerType/ownerId shape as the document module above ---
+  const noteRepository = new PrismaNoteRepository();
+  const noteRouter = createNoteRouter(
+    {
+      createNoteUseCase: new CreateNoteUseCase({ noteRepository }),
+      listNotesForOwnerUseCase: new ListNotesForOwnerUseCase({ noteRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', noteRouter);
 
   // --- ai-extraction module wiring: local Ollama (moondream) — auto-fill suggestions for the
   // Loan Application intake form from an uploaded ID/payslip/PDF/DOCX, never persisted here ---
