@@ -8,12 +8,12 @@
  * Supports cursor pagination for large histories.
  */
 
+import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import type { ProfileType, ProfileActivityLogRecord } from '@/lib/profileActivityApiTypes';
-import type { GetProfileActivityResponse } from '@/lib/profileActivityApiTypes';
+import { AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import type { GetProfileActivityResponse, ProfileActivityLogRecord, ProfileType } from '@/lib/profileActivityApiTypes';
 import { apiClient } from '@/lib/apiClient';
+import { formatDateTime } from '@/lib/utils';
 
 interface ProfileActivityTimelineProps {
   profileType: ProfileType;
@@ -22,163 +22,151 @@ interface ProfileActivityTimelineProps {
   onError?: (error: Error) => void;
 }
 
-export function ProfileActivityTimeline({
-  profileType,
-  profileId,
-  limit = 50,
-  onError,
-}: ProfileActivityTimelineProps) {
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+function activityBasePath(profileType: ProfileType): string {
+  if (profileType === 'BORROWER') return 'borrowers';
+  if (profileType === 'LOAN_APPLICATION') return 'loan-applications';
+  return 'loan-accounts';
+}
+
+/** Relative time for anything in the last week, absolute date/time beyond that - same convention as `formatDateTime` elsewhere, just with a "just now"/"Xm ago" short form for recent activity. */
+function formatRelativeOrAbsolute(dateString: string): string {
+  const date = new Date(dateString);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatDateTime(dateString);
+}
+
+export function ProfileActivityTimeline({ profileType, profileId, limit = 50, onError }: ProfileActivityTimelineProps) {
+  const [cursor, setCursor] = React.useState<string | undefined>();
+  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+  // Cursor pagination fetches one page per queryKey - accumulated here across "Load more" clicks
+  // so the list grows instead of being replaced by just the newest page. Reset whenever the
+  // profile itself changes, not on every cursor change.
+  const [accumulated, setAccumulated] = React.useState<ProfileActivityLogRecord[]>([]);
+
+  React.useEffect(() => {
+    setCursor(undefined);
+    setAccumulated([]);
+  }, [profileType, profileId]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['profile-activity', profileType, profileId, cursor],
     queryFn: async () => {
-      const basePath =
-        profileType === 'BORROWER'
-          ? 'borrowers'
-          : profileType === 'LOAN_APPLICATION'
-            ? 'loan-applications'
-            : 'loan-accounts';
-
       const params = new URLSearchParams();
       params.set('limit', limit.toString());
       if (cursor) params.set('cursor', cursor);
-
-      const path = `/${basePath}/${profileId}/activity?${params.toString()}`;
-      const response = await apiClient.get<GetProfileActivityResponse>(path);
-      return response;
+      return apiClient.get<GetProfileActivityResponse>(`/${activityBasePath(profileType)}/${profileId}/activity?${params.toString()}`);
     },
   });
 
-  if (error && onError) {
-    onError(error instanceof Error ? error : new Error('Failed to load activity'));
-  }
+  React.useEffect(() => {
+    if (!data) return;
+    setAccumulated((prev) => (cursor ? [...prev, ...data.activities] : data.activities));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
-  const toggleExpanded = useCallback((id: string) => {
+  React.useEffect(() => {
+    if (error) {
+      onError?.(error instanceof Error ? error : new Error('Failed to load activity'));
+    }
+  }, [error, onError]);
+
+  const toggleExpanded = React.useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString('en-PH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  if (isLoading && !data) {
+  if (isLoading && accumulated.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-        <span className="ml-2 text-sm text-gray-500">Loading activity...</span>
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading activity…</span>
       </div>
     );
   }
 
-  const activities = data?.activities || [];
+  if (error && accumulated.length === 0) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-sm text-destructive">
+        <AlertCircle className="h-4 w-4 shrink-0" /> Could not load activity. Please try again.
+      </div>
+    );
+  }
 
-  if (activities.length === 0) {
+  if (accumulated.length === 0) {
     return (
       <div className="py-8 text-center">
-        <p className="text-sm text-gray-500">No activity recorded yet</p>
+        <p className="text-sm text-muted-foreground">No activity recorded yet</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-0 divide-y divide-gray-200">
-      {activities.map((activity: ProfileActivityLogRecord, index: number) => {
+    <div className="space-y-0 divide-y">
+      {accumulated.map((activity, index) => {
         const isExpanded = expandedIds.has(activity.id);
-        const isFirst = index === 0;
+        const hasDetails = Object.keys(activity.details).length > 0;
 
         return (
-          <div
-            key={activity.id}
-            className={`py-4 ${!isFirst && 'pt-6'}`}
-          >
-            {/* Timeline point and connector */}
+          <div key={activity.id} className={index === 0 ? 'py-4' : 'pt-6 pb-4'}>
             <div className="flex gap-4">
-              {/* Timeline marker */}
               <div className="flex flex-col items-center">
-                <div className="h-3 w-3 rounded-full bg-blue-500 ring-2 ring-blue-100" />
-                {index < activities.length - 1 && (
-                  <div className="h-12 w-0.5 bg-gray-200 mt-2" />
-                )}
+                <div className="h-3 w-3 rounded-full bg-primary ring-2 ring-primary/20" />
+                {index < accumulated.length - 1 && <div className="mt-2 h-12 w-0.5 bg-border" />}
               </div>
 
-              {/* Activity content */}
-              <div className="flex-1 min-w-0">
-                {/* Header: Action and timestamp */}
-                <div className="flex items-start justify-between gap-4 mb-2">
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex items-start justify-between gap-4">
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {activity.formattedAction}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="font-medium">{activity.formattedAction}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
                       {activity.user.firstName} {activity.user.lastName}
                     </p>
                   </div>
-                  <span className="text-xs font-medium text-gray-500 whitespace-nowrap">
-                    {formatDate(activity.createdAt)}
+                  <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
+                    {formatRelativeOrAbsolute(activity.createdAt)}
                   </span>
                 </div>
 
-                {/* Expandable details */}
-                {Object.keys(activity.details).length > 0 && (
+                {hasDetails && (
                   <button
+                    type="button"
                     onClick={() => toggleExpanded(activity.id)}
-                    className="mt-2 flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                    className="mt-2 flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                   >
                     {isExpanded ? (
                       <>
-                        <ChevronUp className="h-3 w-3" />
-                        Hide details
+                        <ChevronUp className="h-3 w-3" /> Hide details
                       </>
                     ) : (
                       <>
-                        <ChevronDown className="h-3 w-3" />
-                        Show details
+                        <ChevronDown className="h-3 w-3" /> Show details
                       </>
                     )}
                   </button>
                 )}
 
                 {isExpanded && (
-                  <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-                    <pre className="text-xs text-gray-700 overflow-auto max-h-64 font-mono">
+                  <div className="mt-3 rounded-md border bg-secondary/30 p-3">
+                    <pre className="max-h-64 overflow-auto font-mono text-xs text-muted-foreground">
                       {JSON.stringify(activity.details, null, 2)}
                     </pre>
                   </div>
                 )}
 
-                {/* Soft-deleted indicator */}
                 {activity.deletedByMisAt && (
-                  <p className="mt-2 text-xs text-red-600">
-                    Deleted by MIS at {new Date(activity.deletedByMisAt).toLocaleString('en-PH')}
-                  </p>
+                  <p className="mt-2 text-xs text-destructive">Deleted by MIS at {formatDateTime(activity.deletedByMisAt)}</p>
                 )}
               </div>
             </div>
@@ -186,14 +174,15 @@ export function ProfileActivityTimeline({
         );
       })}
 
-      {/* Pagination controls */}
       {data?.cursor && (
-        <div className="mt-6 pt-4 border-t border-gray-200">
+        <div className="mt-6 border-t pt-4">
           <button
+            type="button"
             onClick={() => setCursor(data.cursor)}
-            className="w-full px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            disabled={isLoading}
+            className="w-full rounded px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
           >
-            Load more activity
+            {isLoading ? 'Loading…' : 'Load more activity'}
           </button>
         </div>
       )}

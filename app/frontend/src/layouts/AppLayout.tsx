@@ -73,7 +73,7 @@ const NAV_GROUPS = [
   },
 ];
 
-function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: boolean; onCollapse: () => void }) {
+function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
   return (
     <div
       className={cn(
@@ -87,23 +87,12 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-sidebar-border px-5">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 shrink-0 rounded bg-white object-contain p-0.5" />
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-sm font-semibold">{COMPANY_INFO.name}</p>
-              <p className="truncate text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
-            </div>
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
+          <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 shrink-0 rounded bg-white object-contain p-0.5" />
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-semibold">{COMPANY_INFO.name}</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground lg:inline-flex"
-            onClick={onCollapse}
-            aria-label="Hide side menu"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </Button>
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           {NAV_GROUPS.map((group) => (
@@ -195,7 +184,7 @@ export function AppLayout() {
     <div className="flex h-screen flex-col bg-background">
       <PreviewBanner />
       <div className="flex min-h-0 flex-1">
-        <Sidebar open={sidebarOpen} collapsed={collapsed} onCollapse={() => setCollapsed(true)} />
+        <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
         <div className="flex min-h-0 flex-1 flex-col">
           <Topbar
