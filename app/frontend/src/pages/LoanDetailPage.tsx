@@ -646,20 +646,34 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {installments.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell>{i.installmentNumber}</TableCell>
-                    <TableCell>{formatDate(i.dueDate)}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.penalty))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
-                    <TableCell>
-                      <InstallmentStatusBadge status={i.status} />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {installments.map((i) => {
+                  // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as of
+                  // today" figure for a prospective (non-migrated) loan — null for a migrated loan,
+                  // which falls back to due.penalty, its real historical (fixed) figure instead.
+                  const isLivePenalty = i.currentPenaltyOwed !== null;
+                  const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
+                  return (
+                    <TableRow key={i.id}>
+                      <TableCell>{i.installmentNumber}</TableCell>
+                      <TableCell>{formatDate(i.dueDate)}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatPeso(penaltyDisplay)}
+                        {isLivePenalty && penaltyDisplay > 0 && (
+                          <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
+                            (as of today)
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
+                      <TableCell>
+                        <InstallmentStatusBadge status={i.status} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
                 <TableRow className="border-t-2 font-semibold">
                   <TableCell colSpan={2}>Total</TableCell>
                   <TableCell className="text-right">

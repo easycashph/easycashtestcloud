@@ -204,6 +204,12 @@ export interface RepaymentInstallment {
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
   status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+  /**
+   * 2026-07-11 (ADR-050 / CALCULATION_ENGINE_SPEC.md §12): live "as of today" penalty — `null` for
+   * a migrated loan (its `due.penalty` is the real historical figure instead) or a fully-paid
+   * installment. Distinct from `due.penalty`, which stays fixed/immutable.
+   */
+  currentPenaltyOwed: string | null;
 }
 
 export type LoanTransactionType =

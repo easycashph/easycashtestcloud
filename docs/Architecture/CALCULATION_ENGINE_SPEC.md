@@ -794,36 +794,99 @@ system was intended to handle this case even if it was rarely/never exercised in
 ## 12. Penalty Calculation
 
 ### Purpose
-Would compute the penalty amount applied to an overdue installment.
+Computes the penalty amount owed on an overdue installment, for loans originated going forward
+through this system (see Scope below — this explicitly does NOT apply to already-migrated loans).
 
-### STATUS: UNRESOLVED
+### Inputs
+- `overdueAmount: Money` — the unpaid Principal + Interest for the installment (not principal alone).
+- `dueDate: Date`
+- `asOfDate: Date` (defaults to "now" — the date penalty is being computed as of).
+- `ratePercent: Percentage` — resolved from the loan's own `principalAmount` (5 or 10, see Formula
+  and Configuration Required — NOT read from a per-`LoanProductVersion` `PenaltyRule` row; see
+  `ADR-050` §4 for why).
+- `gracePeriodDays: number` — 3, fixed, same for every loan (see Configuration Required).
 
-Legacy evidence shows penalty is applied on a **daily** cadence to any account in arrears
-(`PENALTY_APPLIED` is 79.3% of every transaction ever posted in the legacy system — 416,034 of
-524,463 — `docs/Legacy Analysis/...` §7.2), and `loan_accounts.bson` records show fields
-`penalty_calculation_method: "PERCENTAGE_PER_DAY"` and a `penalty_rate` (e.g. `5`) on individual
-accounts. However, **no formula was derived or verified** connecting these fields to the actual
-`PENALTY_APPLIED` amounts observed (e.g. `77.68`, `155.36`, `233.04`, `310.72`, `388.40`,
-`466.08` in the `SML-MAX_K5W8S` sequence) — these amounts step up over time in a pattern that was
-observed but never decomposed into a confirmed `Balance × Rate × Days`-style formula the way §1's
-interest formula was.
+### Outputs
+- `penaltyOwed: Money`
 
-This is explicitly out of scope for Milestone 9's calculation engine per
-`FINANCIAL_INVARIANTS.md §9`'s existing deferral ("nothing that computes a schedule or derives a
-balance from a formula may be built until ADR-007 and ADR-009 are resolved" — penalty calculation
-was never in that initial scope and remains additionally gated by ADR-008, still open per
-`schema.prisma`'s own comment: `"ADR-008 PENDING: capPercent is a mechanism only... not enforced
-by default until the cap policy decision is made"`).
+### Configuration Required
+**A global rule, applied identically to every loan/product** (`ADR-050` §4, 2026-07-11 revision —
+originally proposed as per-`LoanProductVersion` `PenaltyRule` configuration, rejected because a
+single product version's loan-amount range can straddle the ₱10,000 threshold): `gracePeriodDays =
+3`; `ratePercent = 5%` when that specific loan's `principalAmount` ≤ ₱10,000, `10%` otherwise (all
+Easycash loans are unsecured — see `ADR-050` §1). Compounding and whole-months-only counting are
+likewise fixed behavior of the formula itself, not configurable at all. `PenaltyRule`'s schema
+fields remain unused by this feature — available for a future genuinely-per-product policy if one
+is ever confirmed, not built now (YAGNI).
 
-**Do not implement a penalty formula from general lending-industry convention.**
+### Formula
+```
+graceEndDate = dueDate + gracePeriodDays
+if asOfDate <= graceEndDate:
+    penaltyOwed = 0
+else:
+    // Whole months are counted from the ORIGINAL due date, not from graceEndDate — the grace
+    // period is purely a yes/no gate on whether any penalty applies at all, not a shift in the
+    // month-counting anchor. Verified against ADR-050 §1's worked example: due 2026-07-01, paid
+    // 2026-10-01 → wholeCalendarMonthsBetween(2026-07-01, 2026-10-01) = exactly 3, matching the
+    // 3-month compounding table there. (Anchoring at graceEndDate instead would have given only 2
+    // whole months for that same example — graceEndDate is 2026-07-04, and Oct 1 is 3 days short
+    // of completing a 3rd month from that later start point.)
+    monthsLate = floor(wholeCalendarMonthsBetween(dueDate, asOfDate))  — partial months don't count
+    penaltyOwed = overdueAmount × ((1 + ratePercent/100)^monthsLate − 1)
+```
+
+**Evidence:** `ADR-050` — confirmed directly by the user (MIS), 2026-07-11, as a new, going-forward
+policy (explicitly not a claim about historical legacy behavior — see that ADR's §3 for the real,
+contradictory legacy `PENALTY_APPLIED` evidence this formula deliberately does not try to match).
+The 5%/10% tiering by ≤₱10,000 principal exists because of BSP Circular No. 1133 (2021)/SEC
+Memorandum Circular No. 3 (2022)'s penalty ceiling for small unsecured loans — see `ADR-050` §2 for
+why the tier ignores that circular's own 4-month-tenor condition.
+
+**STATUS: CONFIRMED** (formula, rate, grace period, compounding, tiering) — via direct business/MIS
+testimony, same evidentiary standing as other testimony-confirmed rules in this system (e.g.
+`ADR-046`'s Add-On-Rate basis). `capPercent` enforcement (the 100%-of-principal total cost cap)
+remains **UNRESOLVED**, still gated by `ADR-008` (not produced this milestone).
+
+### Rounding
+Not yet specified to the same decimal-place rigor as §1–§9 — `ADR-050` gives the formula in terms
+of exact compounding; whether intermediate monthly steps round to `Decimal(14,2)` before the next
+compounding step (as the worked example in `ADR-050` §1 does) or the whole-period formula is
+applied once without intermediate rounding is not yet distinguished (they can differ by a few
+centavos over several months). Use the step-by-step monthly rounding shown in `ADR-050`'s worked
+example — that is what was actually confirmed with the user.
+
+### Precision
+`Decimal(14,2)`, rounded at each monthly compounding step (see Rounding above).
+
+### Examples
+See `ADR-050` §1's worked example: ₱10,000.00 overdue, 10% rate, 3 whole months late →
+₱1,000.00 + ₱1,100.00 + ₱1,210.00 = ₱3,310.00 total penalty.
+
+### Edge Cases
+- Paid within the grace period (`asOfDate <= dueDate + gracePeriodDays`): zero penalty.
+- Fewer than one whole month past the grace period: zero penalty (no proration) — the first
+  compounding step only fires once a full month has elapsed past `graceEndDate`.
+
+### Validation Rules
+`overdueAmount` must be non-negative; `gracePeriodDays`/`ratePercent` come from an already-valid
+`PenaltyRule` snapshot, not re-validated here.
+
+### Test Vectors
+See Examples above — directly reusable as a test fixture.
+
+### Scope — prospective only (ADR-050 §5)
+**Applies only to loans originated going forward through this system.** Already-migrated loans'
+stored `penaltyDue`/`penaltyPaid`/`penaltyBalance` are never recomputed by this formula and remain
+exactly as migrated (CP12) — including loans still ACTIVE and overdue today. Transitioning an
+already-active migrated loan onto live penalty accrual, if ever wanted, is an explicitly deferred,
+separate decision per `ADR-050` §5.
 
 ### Dependencies
-§6 (Outstanding Balance) — penalty accrual would feed the running balance once its formula is
-resolved.
+§6 (Outstanding Balance) — penalty accrual feeds the running balance once applied/allocated.
 
 ### Referenced ADRs
-None yet — blocked on ADR-008 (not produced this milestone) and further legacy-data
-investigation of the daily `PENALTY_APPLIED` amount sequence.
+`ADR-050` (primary source — formula, rate, tiering, prospective-only scope).
 
 ---
 
@@ -1022,11 +1085,11 @@ None beyond its own inputs — computed independently of §1–§13.
 | §9 Capitalization at Maturity | CONFIRMED (contractual); UNRESOLVED (timing mechanics) | Partially — the arithmetic is simple, but "when" is undetermined |
 | §10 Reversals and Adjustments | PARTIALLY CONFIRMED / UNRESOLVED (data modeling, not a formula) | N/A — design question |
 | §11 Overpayment Handling | UNRESOLVED | **No** — blocked, needs evidence |
-| §12 Penalty Calculation | UNRESOLVED | **No** — blocked, needs evidence, and gated by ADR-008 (not produced this milestone) |
+| §12 Penalty Calculation | CONFIRMED (formula/rate/grace/compounding/tiering, via `ADR-050`, direct business testimony); UNRESOLVED (`capPercent`/`ADR-008`) | Yes, for new loans going forward only — prospective scope per `ADR-050` §5; migrated loans' stored penalty figures are untouched |
 | §13 Insurance Fee (Loan Origination) | CONFIRMED (sourced from real VBA macro, verified against 4 real loans) | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeInsuranceFee()` |
 | §14 Advance Interest Fee (Loan Origination) | CONFIRMED (formula/rate-basis/rounding; per-product eligibility UNRESOLVED, see `ADR-046` §7) — exact match against a live 2026 account across 3 independent sources | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeAdvanceInterestFee()`, as a per-loan suggestion pending the eligibility decision |
 
-**Correctness over completeness, as instructed**: this document ends with five genuinely
-unresolved calculations (§4, §9's timing, §10's data model, §11, §12) rather than inventing
-formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business
-decision), §8, §13, and §14 are ready to guide real implementation.
+**Correctness over completeness, as instructed**: this document ends with four genuinely
+unresolved calculations (§4, §9's timing, §10's data model, §11) rather than inventing formulas for
+them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business decision), §8, §12
+(new loans only), §13, and §14 are ready to guide real implementation.
