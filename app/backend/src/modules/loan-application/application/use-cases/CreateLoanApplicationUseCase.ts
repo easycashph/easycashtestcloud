@@ -1,4 +1,5 @@
 import { LoanApplication } from '../../domain/LoanApplication';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
@@ -6,6 +7,7 @@ import type { LoanApplicationPreQualificationService } from '../services/LoanApp
 export interface CreateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   preQualificationService: LoanApplicationPreQualificationService;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 export class CreateLoanApplicationUseCase {
@@ -28,6 +30,18 @@ export class CreateLoanApplicationUseCase {
       distanceFromBranchKm: classification.distanceFromBranchKm ?? undefined,
     });
     await this.deps.loanApplicationRepository.save(application);
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService && input.encodedByUserId) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'LOAN_APPLICATION',
+        profileId: application.id,
+        userId: input.encodedByUserId,
+        action: 'profile_created',
+        details: {},
+      });
+    }
+
     return application;
   }
 }

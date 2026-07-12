@@ -479,17 +479,25 @@ model Borrower {
   assignedLoanOfficerId String?
   assignedLoanOfficer   User?   @relation("BorrowerLoanOfficer", fields: [assignedLoanOfficerId], references: [id])
 
-  firstName    String
-  middleName   String?
-  lastName     String
-  gender       String?
-  birthDate    DateTime?
-  civilStatus  String?
-  mobilePhone1 String?
-  mobilePhone2 String?
-  email        String?
-  status       BorrowerStatus @default(ACTIVE)
-  loanCycle    Int            @default(0)
+  firstName     String
+  middleName    String?
+  lastName      String
+  gender        String?
+  birthDate     DateTime?
+  placeOfBirth  String?
+  nationality   String?
+  civilStatus   String?
+  homeOwnership String?
+  mobilePhone1  String?
+  mobilePhone2  String?
+  email         String?
+  /// {name, age, relationship}[] - see LoanApplication.dependants doc comment.
+  dependants    Json?
+  /// Free-text catch-all, carried over from the source LoanApplication's own `note` at Client
+  /// Profile creation; also directly editable afterward.
+  note          String?
+  status        BorrowerStatus @default(ACTIVE)
+  loanCycle     Int            @default(0)
 
   legacyId  String?  @unique
   createdAt DateTime @default(now())
@@ -647,6 +655,7 @@ model CoBorrower {
   phoneNumber  String?
   emailAddress String?
   relationship String?
+  employer     String?
 
   legacyId String? @unique
 
@@ -1064,14 +1073,35 @@ model LoanApplication {
 
   applicantName   String
   age             Int?
+  gender          String?
+  civilStatus     String?
+  birthDate       DateTime?
+  placeOfBirth    String?
+  nationality     String?
+  homeOwnership   String?
   address         String?
   monthlyIncome   Decimal? @db.Decimal(14, 2)
   employer        String?
+  occupation      String?
+  officeAddress   String?
+  tinNumber       String?
+  sssNumber       String?
   propertiesOwned String[] @default([])
   creditScore     Int?
-  coBorrowerName  String?
+  coBorrowerName     String?
+  coBorrowerEmployer String?
   mobilePhone     String?
   email           String?
+  /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
+  /// `propertiesOwned`'s "small list, no relational value" reasoning).
+  dependants      Json?
+  reference1Name   String?
+  reference1Mobile String?
+  reference2Name   String?
+  reference2Mobile String?
+  /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
+  /// field - carried over as-is into the Client Profile's own `note` field on creation.
+  note            String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?

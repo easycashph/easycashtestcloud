@@ -1,10 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { Borrower } from '../../domain/Borrower';
 import { PersonName } from '../../domain/valueObjects/PersonName';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { IBorrowerRepository } from '../ports/IBorrowerRepository';
 import type { CreateBorrowerInput } from '../dtos/BorrowerDtos';
 
 export interface CreateBorrowerUseCaseDeps {
   borrowerRepository: IBorrowerRepository;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 /**
@@ -15,21 +18,41 @@ export interface CreateBorrowerUseCaseDeps {
 export class CreateBorrowerUseCase {
   constructor(private readonly deps: CreateBorrowerUseCaseDeps) {}
 
-  async execute(input: CreateBorrowerInput): Promise<Borrower> {
+  async execute(input: CreateBorrowerInput, createdByUserId?: string): Promise<Borrower> {
     const borrower = Borrower.create({
       branchId: input.branchId,
       assignedLoanOfficerId: input.assignedLoanOfficerId,
       name: PersonName.of(input.firstName, input.lastName, input.middleName),
       gender: input.gender,
       birthDate: input.birthDate,
+      placeOfBirth: input.placeOfBirth,
+      nationality: input.nationality,
       civilStatus: input.civilStatus,
+      homeOwnership: input.homeOwnership,
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
+      dependants: input.dependants,
+      note: input.note,
       legacyId: input.legacyId,
+      incomeDetail: input.incomeDetail,
+      governmentId: input.governmentId,
+      characterReferences: input.characterReferences?.map((ref) => ({ id: randomUUID(), ...ref, lastName: ref.lastName ?? '' })),
     });
 
     await this.deps.borrowerRepository.save(borrower);
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService && createdByUserId) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'BORROWER',
+        profileId: borrower.id,
+        userId: createdByUserId,
+        action: 'profile_created',
+        details: {},
+      });
+    }
+
     return borrower;
   }
 }

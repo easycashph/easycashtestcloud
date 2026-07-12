@@ -5,6 +5,37 @@ import { z } from 'zod';
  * name must not be blank after trimming") stays in the domain layer
  * (PersonName.of()), per the existing convention set by authSchemas.ts.
  */
+const incomeDetailSchema = z.object({
+  employmentType: z.string().min(1).optional(),
+  employerName: z.string().min(1).optional(),
+  employerAddress: z.string().min(1).optional(),
+  natureOfBusiness: z.string().min(1).optional(),
+  position: z.string().min(1).optional(),
+  yearsEmployed: z.number().int().nonnegative().optional(),
+});
+
+const governmentIdSchema = z.object({
+  sssNumber: z.string().min(1).optional(),
+  tinNumber: z.string().min(1).optional(),
+});
+
+const characterReferenceSchema = z.object({
+  firstName: z.string().min(1),
+  /** Optional - the form that feeds this only captures one "full name" field, not separate first/
+   * last, so an unsplittable single-word name is common. Defaults to '' (DB column is NOT NULL but
+   * not required to be non-empty) rather than fabricating a value. */
+  lastName: z.string().optional(),
+  relationship: z.string().min(1).optional(),
+  phoneNumber: z.string().min(1).optional(),
+  emailAddress: z.string().email().optional(),
+});
+
+const dependantSchema = z.object({
+  name: z.string().min(1),
+  age: z.string().min(1).optional(),
+  relationship: z.string().min(1).optional(),
+});
+
 export const createBorrowerSchema = z.object({
   branchId: z.string().min(1),
   assignedLoanOfficerId: z.string().min(1).optional(),
@@ -13,11 +44,19 @@ export const createBorrowerSchema = z.object({
   middleName: z.string().min(1).optional(),
   gender: z.string().min(1).optional(),
   birthDate: z.coerce.date().optional(),
+  placeOfBirth: z.string().min(1).optional(),
+  nationality: z.string().min(1).optional(),
   civilStatus: z.string().min(1).optional(),
+  homeOwnership: z.string().min(1).optional(),
   mobilePhone1: z.string().min(1).optional(),
   mobilePhone2: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  dependants: z.array(dependantSchema).optional(),
+  note: z.string().min(1).optional(),
   legacyId: z.string().min(1).optional(),
+  incomeDetail: incomeDetailSchema.optional(),
+  governmentId: governmentIdSchema.optional(),
+  characterReferences: z.array(characterReferenceSchema).optional(),
 });
 
 export type CreateBorrowerRequestBody = z.infer<typeof createBorrowerSchema>;
@@ -59,6 +98,7 @@ export const createCoBorrowerSchema = z.object({
   phoneNumber: z.string().min(1).optional(),
   emailAddress: z.string().email().optional(),
   relationship: z.string().min(1).optional(),
+  employer: z.string().min(1).optional(),
   legacyId: z.string().min(1).optional(),
 });
 

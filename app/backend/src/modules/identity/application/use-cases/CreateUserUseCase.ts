@@ -1,5 +1,6 @@
 import type { IUserRepository, UserRecord } from '../ports/IUserRepository';
 import type { IPasswordHasher } from '../ports/IPasswordHasher';
+import type { IAuditLogger } from '../ports/IAuditLogger';
 import { Email } from '../../domain/Email';
 import { PasswordPolicy } from '../../domain/PasswordPolicy';
 import { EmailAlreadyInUseError, WeakPasswordError } from '../errors/AuthErrors';
@@ -18,9 +19,9 @@ export interface CreateUserUseCaseInput {
 
 /** Same sequence as scripts/create-additional-mis-user.ts, now reusable from HTTP: validate email → duplicate check → password policy → hash → create. */
 export class CreateUserUseCase {
-  constructor(private readonly deps: { userRepository: IUserRepository; passwordHasher: IPasswordHasher }) {}
+  constructor(private readonly deps: { userRepository: IUserRepository; passwordHasher: IPasswordHasher; auditLogger?: IAuditLogger }) {}
 
-  async execute(input: CreateUserUseCaseInput): Promise<UserRecord> {
+  async execute(input: CreateUserUseCaseInput, createdByUserId?: string): Promise<UserRecord> {
     const emailObj = Email.create(input.email);
     if (!emailObj) {
       throw new ValidationError('Invalid email address.');
@@ -39,7 +40,7 @@ export class CreateUserUseCase {
 
     const passwordHash = await this.deps.passwordHasher.hash(input.password);
 
-    return this.deps.userRepository.create({
+    const user = await this.deps.userRepository.create({
       branchId: input.branchId,
       email,
       passwordHash,
@@ -49,5 +50,17 @@ export class CreateUserUseCase {
       companyId: input.companyId,
       roleClassId: input.roleClassId,
     });
+
+    if (this.deps.auditLogger && createdByUserId) {
+      await this.deps.auditLogger.log({
+        userId: createdByUserId,
+        action: 'CREATE_MEMBER',
+        entityType: 'User',
+        entityId: user.id,
+        newValue: { email: user.email, roles: user.roles },
+      });
+    }
+
+    return user;
   }
 }

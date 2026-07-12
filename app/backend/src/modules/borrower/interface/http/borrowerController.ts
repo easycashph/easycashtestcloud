@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
+import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { CreateBorrowerUseCase } from '../../application/use-cases/CreateBorrowerUseCase';
 import type { GetBorrowerUseCase } from '../../application/use-cases/GetBorrowerUseCase';
 import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorrowersUseCase';
@@ -33,7 +34,8 @@ export class BorrowerController {
       // requested branchId is trusted as-is.
       const scope = resolveBranchScope(req);
       const branchId = resolveWriteBranchId(scope, body.branchId);
-      const borrower = await this.deps.createBorrowerUseCase.execute({ ...body, branchId });
+      const currentUser = getCurrentUser(req);
+      const borrower = await this.deps.createBorrowerUseCase.execute({ ...body, branchId }, currentUser.sub);
       res.status(201).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
@@ -79,7 +81,8 @@ export class BorrowerController {
   createCoBorrower = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as CreateCoBorrowerRequestBody;
-      const coBorrower = await this.deps.createCoBorrowerUseCase.execute(body);
+      const currentUser = getCurrentUser(req);
+      const coBorrower = await this.deps.createCoBorrowerUseCase.execute(body, currentUser.sub);
       res.status(201).json(presentCoBorrower(coBorrower));
     } catch (error) {
       next(error);

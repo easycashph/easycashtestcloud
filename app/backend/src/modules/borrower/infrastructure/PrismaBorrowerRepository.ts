@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import { Borrower, type BorrowerProps } from '../domain/Borrower';
+import { Borrower, type BorrowerDependant, type BorrowerProps } from '../domain/Borrower';
 import { PersonName } from '../domain/valueObjects/PersonName';
 import { Address } from '../domain/valueObjects/Address';
 import type { FindManyBorrowersOptions, IBorrowerRepository } from '../application/ports/IBorrowerRepository';
@@ -38,10 +38,15 @@ function toBorrower(row: BorrowerRow, addresses: Address[]): Borrower {
     name: PersonName.of(row.firstName, row.lastName, row.middleName ?? undefined),
     gender: row.gender ?? undefined,
     birthDate: row.birthDate ?? undefined,
+    placeOfBirth: row.placeOfBirth ?? undefined,
+    nationality: row.nationality ?? undefined,
     civilStatus: row.civilStatus ?? undefined,
+    homeOwnership: row.homeOwnership ?? undefined,
     mobilePhone1: row.mobilePhone1 ?? undefined,
     mobilePhone2: row.mobilePhone2 ?? undefined,
     email: row.email ?? undefined,
+    dependants: (row.dependants as BorrowerDependant[] | null) ?? undefined,
+    note: row.note ?? undefined,
     status: row.status,
     loanCycle: row.loanCycle,
     legacyId: row.legacyId ?? undefined,
@@ -170,10 +175,15 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           middleName: borrower.name.middleName,
           gender: borrower.gender,
           birthDate: borrower.birthDate,
+          placeOfBirth: borrower.placeOfBirth,
+          nationality: borrower.nationality,
           civilStatus: borrower.civilStatus,
+          homeOwnership: borrower.homeOwnership,
           mobilePhone1: borrower.mobilePhone1,
           mobilePhone2: borrower.mobilePhone2,
           email: borrower.email,
+          dependants: (borrower.dependants as Prisma.InputJsonValue | undefined) ?? undefined,
+          note: borrower.note,
           status: borrower.status,
           loanCycle: borrower.loanCycle,
           legacyId: borrower.legacyId,
@@ -181,6 +191,10 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           updatedAt: borrower.updatedAt,
           incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,
           governmentId: borrower.governmentId ? { create: borrower.governmentId } : undefined,
+          characterReferences:
+            borrower.characterReferences.length > 0
+              ? { create: borrower.characterReferences.map(({ id: _id, ...rest }) => rest) }
+              : undefined,
         },
         update: {
           assignedLoanOfficerId: borrower.assignedLoanOfficerId,
@@ -189,10 +203,15 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           middleName: borrower.name.middleName,
           gender: borrower.gender,
           birthDate: borrower.birthDate,
+          placeOfBirth: borrower.placeOfBirth,
+          nationality: borrower.nationality,
           civilStatus: borrower.civilStatus,
+          homeOwnership: borrower.homeOwnership,
           mobilePhone1: borrower.mobilePhone1,
           mobilePhone2: borrower.mobilePhone2,
           email: borrower.email,
+          dependants: (borrower.dependants as Prisma.InputJsonValue | undefined) ?? undefined,
+          note: borrower.note,
           status: borrower.status,
           loanCycle: borrower.loanCycle,
           updatedAt: borrower.updatedAt,

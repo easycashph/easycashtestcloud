@@ -1,5 +1,6 @@
 import type { IUserRepository, UpdateUserInput, UserRecord } from '../ports/IUserRepository';
 import type { IPasswordHasher } from '../ports/IPasswordHasher';
+import type { IAuditLogger } from '../ports/IAuditLogger';
 import { Email } from '../../domain/Email';
 import { PasswordPolicy } from '../../domain/PasswordPolicy';
 import { EmailAlreadyInUseError, UserNotFoundError, WeakPasswordError } from '../errors/AuthErrors';
@@ -11,9 +12,11 @@ export interface UpdateUserUseCaseInput extends UpdateUserInput {
 }
 
 export class UpdateUserUseCase {
-  constructor(private readonly deps: { userRepository: IUserRepository; passwordHasher: IPasswordHasher }) {}
+  constructor(
+    private readonly deps: { userRepository: IUserRepository; passwordHasher: IPasswordHasher; auditLogger?: IAuditLogger },
+  ) {}
 
-  async execute(id: string, patch: UpdateUserUseCaseInput): Promise<UserRecord> {
+  async execute(id: string, patch: UpdateUserUseCaseInput, updatedByUserId?: string): Promise<UserRecord> {
     const existing = await this.deps.userRepository.findById(id);
     if (!existing) {
       throw new UserNotFoundError();
@@ -45,10 +48,24 @@ export class UpdateUserUseCase {
       passwordHash = await this.deps.passwordHasher.hash(password);
     }
 
-    return this.deps.userRepository.update(id, {
+    const updated = await this.deps.userRepository.update(id, {
       ...rest,
       ...(normalizedEmail ? { email: normalizedEmail } : {}),
       ...(passwordHash ? { passwordHash } : {}),
     });
+
+    if (this.deps.auditLogger && updatedByUserId) {
+      const action = rest.status === 'INACTIVE' && existing.status !== 'INACTIVE' ? 'DELETE_MEMBER' : 'UPDATE_MEMBER';
+      await this.deps.auditLogger.log({
+        userId: updatedByUserId,
+        action,
+        entityType: 'User',
+        entityId: id,
+        previousValue: { status: existing.status, email: existing.email, roles: existing.roles },
+        newValue: { status: updated.status, email: updated.email, roles: updated.roles, passwordReset: Boolean(passwordHash) },
+      });
+    }
+
+    return updated;
   }
 }

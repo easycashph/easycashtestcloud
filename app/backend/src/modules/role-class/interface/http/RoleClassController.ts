@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { ListRoleClassesUseCase } from '../../application/use-cases/ListRoleClassesUseCase';
 import type { CreateRoleClassUseCase } from '../../application/use-cases/CreateRoleClassUseCase';
 import type { UpdateRoleClassUseCase } from '../../application/use-cases/UpdateRoleClassUseCase';
@@ -26,7 +27,8 @@ export class RoleClassController {
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as { roleId: string; name: string };
-      const roleClass = await this.deps.createRoleClassUseCase.execute(body);
+      const currentUser = getCurrentUser(req);
+      const roleClass = await this.deps.createRoleClassUseCase.execute(body, currentUser.sub);
       res.status(201).json(presentRoleClass(roleClass));
     } catch (error) {
       next(error);
@@ -36,7 +38,8 @@ export class RoleClassController {
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as { name: string };
-      const roleClass = await this.deps.updateRoleClassUseCase.execute(req.params.id as string, body.name);
+      const currentUser = getCurrentUser(req);
+      const roleClass = await this.deps.updateRoleClassUseCase.execute(req.params.id as string, body.name, currentUser.sub);
       res.status(200).json(presentRoleClass(roleClass));
     } catch (error) {
       next(error);

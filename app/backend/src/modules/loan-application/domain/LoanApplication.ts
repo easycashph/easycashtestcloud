@@ -6,20 +6,43 @@ import { InvalidLoanApplicationTransitionError, ProductNotAssignedError } from '
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 
+export interface DependantEntry {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export interface LoanApplicationProps {
   id: string;
   branchId: string;
 
   applicantName: string;
   age?: number;
+  gender?: string;
+  civilStatus?: string;
+  birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
+  homeOwnership?: string;
   address?: string;
   monthlyIncome?: number;
   employer?: string;
+  occupation?: string;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
   propertiesOwned: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerEmployer?: string;
   mobilePhone?: string;
   email?: string;
+  dependants?: DependantEntry[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
+  note?: string;
 
   referralSource?: string;
   accountType?: LoanApplicationAccountType;
@@ -49,14 +72,31 @@ export interface CreateLoanApplicationProps {
   branchId: string;
   applicantName: string;
   age?: number;
+  gender?: string;
+  civilStatus?: string;
+  birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
+  homeOwnership?: string;
   address?: string;
   monthlyIncome?: number;
   employer?: string;
+  occupation?: string;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerEmployer?: string;
   mobilePhone?: string;
   email?: string;
+  dependants?: DependantEntry[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
+  note?: string;
   referralSource?: string;
   accountType?: LoanApplicationAccountType;
   loanPurpose?: string;
@@ -89,14 +129,31 @@ export class LoanApplication {
       branchId: input.branchId,
       applicantName: input.applicantName,
       age: input.age,
+      gender: input.gender,
+      civilStatus: input.civilStatus,
+      birthDate: input.birthDate,
+      placeOfBirth: input.placeOfBirth,
+      nationality: input.nationality,
+      homeOwnership: input.homeOwnership,
       address: input.address,
       monthlyIncome: input.monthlyIncome,
       employer: input.employer,
+      occupation: input.occupation,
+      officeAddress: input.officeAddress,
+      tinNumber: input.tinNumber,
+      sssNumber: input.sssNumber,
       propertiesOwned: input.propertiesOwned ?? [],
       creditScore: input.creditScore,
       coBorrowerName: input.coBorrowerName,
+      coBorrowerEmployer: input.coBorrowerEmployer,
       mobilePhone: input.mobilePhone,
       email: input.email,
+      dependants: input.dependants,
+      reference1Name: input.reference1Name,
+      reference1Mobile: input.reference1Mobile,
+      reference2Name: input.reference2Name,
+      reference2Mobile: input.reference2Mobile,
+      note: input.note,
       referralSource: input.referralSource,
       accountType: input.accountType,
       loanPurpose: input.loanPurpose,

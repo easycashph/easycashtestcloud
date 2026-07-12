@@ -217,8 +217,8 @@ export function createApp(): Express {
   const userRouter = createUserRouter(
     {
       listUsersUseCase: new ListUsersUseCase({ userRepository }),
-      createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher }),
-      updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher }),
+      createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher, auditLogger }),
+      updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher, auditLogger }),
     },
     tokenService,
   );
@@ -228,8 +228,8 @@ export function createApp(): Express {
   const roleClassRepository = new PrismaRoleClassRepository();
   const roleClassController = new RoleClassController({
     listRoleClassesUseCase: new ListRoleClassesUseCase({ roleClassRepository }),
-    createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository }),
-    updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository }),
+    createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository, auditLogger }),
+    updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository, auditLogger }),
   });
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);
@@ -249,11 +249,11 @@ export function createApp(): Express {
   const borrowerRiskSummaryService = new BorrowerRiskSummaryService(new LoanRiskAssessmentService());
   const borrowerRouter = createBorrowerRouter(
     {
-      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
+      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
       updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
-      createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
+      createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository, auditLogger }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
       getBorrowerRiskSummaryUseCase: new GetBorrowerRiskSummaryUseCase({
         borrowerRepository,
@@ -384,7 +384,11 @@ export function createApp(): Express {
   const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
   const loanApplicationRouter = createLoanApplicationRouter(
     {
-      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
+      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
+        loanApplicationRepository,
+        preQualificationService,
+        profileActivityLogService,
+      }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
       assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository, profileActivityLogService }),

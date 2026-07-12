@@ -39,6 +39,12 @@ export interface CharacterReference {
   emailAddress?: string;
 }
 
+export interface BorrowerDependant {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export interface BorrowerProps {
   id: string;
   branchId: string;
@@ -46,10 +52,15 @@ export interface BorrowerProps {
   name: PersonName;
   gender?: string;
   birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
   civilStatus?: string;
+  homeOwnership?: string;
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  dependants?: BorrowerDependant[];
+  note?: string;
   status: BorrowerStatus;
   loanCycle: number;
   legacyId?: string;
@@ -68,10 +79,15 @@ export interface CreateBorrowerProps {
   name: PersonName;
   gender?: string;
   birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
   civilStatus?: string;
+  homeOwnership?: string;
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  dependants?: BorrowerDependant[];
+  note?: string;
   legacyId?: string;
   incomeDetail?: BorrowerIncomeDetail;
   governmentId?: BorrowerGovernmentId;
@@ -98,10 +114,15 @@ export class Borrower {
       name: input.name,
       gender: input.gender,
       birthDate: input.birthDate,
+      placeOfBirth: input.placeOfBirth,
+      nationality: input.nationality,
       civilStatus: input.civilStatus,
+      homeOwnership: input.homeOwnership,
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
+      dependants: input.dependants,
+      note: input.note,
       status: 'ACTIVE',
       loanCycle: 0,
       legacyId: input.legacyId,
@@ -144,8 +165,20 @@ export class Borrower {
     return this.props.birthDate;
   }
 
+  get placeOfBirth(): string | undefined {
+    return this.props.placeOfBirth;
+  }
+
+  get nationality(): string | undefined {
+    return this.props.nationality;
+  }
+
   get civilStatus(): string | undefined {
     return this.props.civilStatus;
+  }
+
+  get homeOwnership(): string | undefined {
+    return this.props.homeOwnership;
   }
 
   get mobilePhone1(): string | undefined {
@@ -158,6 +191,14 @@ export class Borrower {
 
   get email(): string | undefined {
     return this.props.email;
+  }
+
+  get dependants(): readonly BorrowerDependant[] | undefined {
+    return this.props.dependants;
+  }
+
+  get note(): string | undefined {
+    return this.props.note;
   }
 
   get status(): BorrowerStatus {

@@ -1,17 +1,34 @@
-import type { LoanApplicationAccountType } from '../../domain/LoanApplication';
+import type { DependantEntry, LoanApplicationAccountType } from '../../domain/LoanApplication';
 
 export interface CreateLoanApplicationInput {
   branchId: string;
   applicantName: string;
   age?: number;
+  gender?: string;
+  civilStatus?: string;
+  birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
+  homeOwnership?: string;
   address?: string;
   monthlyIncome?: number;
   employer?: string;
+  occupation?: string;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerEmployer?: string;
   mobilePhone?: string;
   email?: string;
+  dependants?: DependantEntry[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
+  note?: string;
   referralSource?: string;
   accountType?: LoanApplicationAccountType;
   loanPurpose?: string;

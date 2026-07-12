@@ -69,6 +69,8 @@ export class ProfileActivityPresenter {
         const amount = details.amount ? `₱${details.amount}` : 'payment';
         return `Recorded ${amount}`;
       }
+      case 'profile_created':
+        return 'Created profile';
       case 'profile_updated':
         return 'Updated profile details';
       case 'product_assigned':
