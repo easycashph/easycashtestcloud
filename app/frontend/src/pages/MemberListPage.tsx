@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Eye, EyeOff, Lock, Pencil, Plus, Search, Trash2, Unlock } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Lock, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { RoleAbbr } from '@/components/RoleAbbr';
+import { FieldLockToggle } from '@/components/FieldLockToggle';
 import { ROLE_GLOSSARY, roleShortLabel } from '@/lib/roleGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
@@ -71,26 +72,6 @@ function emptyDraft(): MemberDraft {
     companyId: '',
     roleClassId: '',
   };
-}
-
-function FieldLockToggle({ unlocked, onToggle }: { unlocked: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-    >
-      {unlocked ? (
-        <>
-          <Unlock className="h-3 w-3" /> Editable
-        </>
-      ) : (
-        <>
-          <Lock className="h-3 w-3" /> Click to edit
-        </>
-      )}
-    </button>
-  );
 }
 
 function MemberForm({

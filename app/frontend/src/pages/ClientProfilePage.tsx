@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
+import { FieldLockToggle } from '@/components/FieldLockToggle';
 import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -201,11 +202,30 @@ function RealEditClientDialog({
   const queryClient = useQueryClient();
   const [draft, setDraft] = React.useState<RealEditDraft>(() => draftFromBorrower(borrower));
   const [addressTouched, setAddressTouched] = React.useState(false);
+  const [unlocked, setUnlocked] = React.useState({
+    firstName: false,
+    lastName: false,
+    middleName: false,
+    mobilePhone1: false,
+    email: false,
+    civilStatus: false,
+    address: false,
+  });
+  const toggleUnlock = (field: keyof typeof unlocked) => setUnlocked((u) => ({ ...u, [field]: !u[field] }));
 
   React.useEffect(() => {
     if (open) {
       setDraft(draftFromBorrower(borrower));
       setAddressTouched(false);
+      setUnlocked({
+        firstName: false,
+        lastName: false,
+        middleName: false,
+        mobilePhone1: false,
+        email: false,
+        civilStatus: false,
+        address: false,
+      });
     }
   }, [open, borrower]);
 
@@ -253,44 +273,85 @@ function RealEditClientDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit Client Details</DialogTitle>
-          <DialogDescription>Updates the real client record.</DialogDescription>
+          <DialogDescription>
+            Updates the real client record. Every field starts locked - click "Click to edit" next to a field to unlock it.
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1">
-              First Name <FieldTooltip text="Client's legal first name, as shown on a valid ID." />
-            </Label>
-            <Input value={draft.firstName} onChange={(e) => setDraft({ ...draft, firstName: e.target.value })} />
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                First Name <FieldTooltip text="Client's legal first name, as shown on a valid ID." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.firstName} onToggle={() => toggleUnlock('firstName')} />
+            </div>
+            <Input
+              value={draft.firstName}
+              onChange={(e) => setDraft({ ...draft, firstName: e.target.value })}
+              disabled={!unlocked.firstName}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1">
-              Last Name <FieldTooltip text="Client's legal surname, as shown on a valid ID." />
-            </Label>
-            <Input value={draft.lastName} onChange={(e) => setDraft({ ...draft, lastName: e.target.value })} />
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Last Name <FieldTooltip text="Client's legal surname, as shown on a valid ID." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.lastName} onToggle={() => toggleUnlock('lastName')} />
+            </div>
+            <Input
+              value={draft.lastName}
+              onChange={(e) => setDraft({ ...draft, lastName: e.target.value })}
+              disabled={!unlocked.lastName}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1">
-              Middle Name <FieldTooltip text="Client's legal middle name, if any." />
-            </Label>
-            <Input value={draft.middleName} onChange={(e) => setDraft({ ...draft, middleName: e.target.value })} />
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Middle Name <FieldTooltip text="Client's legal middle name, if any." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.middleName} onToggle={() => toggleUnlock('middleName')} />
+            </div>
+            <Input
+              value={draft.middleName}
+              onChange={(e) => setDraft({ ...draft, middleName: e.target.value })}
+              disabled={!unlocked.middleName}
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1">
-              Contact Number <FieldTooltip text="Client's active mobile number for SMS/call follow-ups." />
-            </Label>
-            <Input value={draft.mobilePhone1} onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })} placeholder="09XX XXX XXXX" />
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Contact Number <FieldTooltip text="Client's active mobile number for SMS/call follow-ups." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.mobilePhone1} onToggle={() => toggleUnlock('mobilePhone1')} />
+            </div>
+            <Input
+              value={draft.mobilePhone1}
+              onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })}
+              placeholder="09XX XXX XXXX"
+              disabled={!unlocked.mobilePhone1}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label className="flex items-center gap-1">
-              Email <FieldTooltip text="Client's email, used for document copies or notices." />
-            </Label>
-            <Input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Email <FieldTooltip text="Client's email, used for document copies or notices." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.email} onToggle={() => toggleUnlock('email')} />
+            </div>
+            <Input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} disabled={!unlocked.email} />
           </div>
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1">
-              Civil Status <FieldTooltip text="Client's current civil status." />
-            </Label>
-            <Select value={draft.civilStatus} onValueChange={(v) => setDraft({ ...draft, civilStatus: v })}>
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Civil Status <FieldTooltip text="Client's current civil status." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.civilStatus} onToggle={() => toggleUnlock('civilStatus')} />
+            </div>
+            <Select
+              value={draft.civilStatus}
+              onValueChange={(v) => setDraft({ ...draft, civilStatus: v })}
+              disabled={!unlocked.civilStatus}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
@@ -305,20 +366,25 @@ function RealEditClientDialog({
         </div>
 
         <div className="space-y-1.5 border-t pt-3">
-          <Label className="flex items-center gap-1">
-            Address <FieldTooltip text="Replacing this replaces the client's entire address on file - leave untouched to keep the current one." />
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-1">
+              Address <FieldTooltip text="Replacing this replaces the client's entire address on file - leave untouched to keep the current one." />
+            </Label>
+            <FieldLockToggle unlocked={unlocked.address} onToggle={() => toggleUnlock('address')} />
+          </div>
           <p className="text-xs text-muted-foreground">
             Current on file: <span className="font-medium text-foreground">{existingAddressLine}</span>. Select below to replace it -
             leave untouched to keep the current address.
           </p>
-          <PsgcAddressPicker
-            value={draft.address}
-            onChange={(patch) => {
-              setAddressTouched(true);
-              setDraft((prev) => ({ ...prev, address: { ...prev.address, ...patch } }));
-            }}
-          />
+          <fieldset disabled={!unlocked.address} className="disabled:opacity-50">
+            <PsgcAddressPicker
+              value={draft.address}
+              onChange={(patch) => {
+                setAddressTouched(true);
+                setDraft((prev) => ({ ...prev, address: { ...prev.address, ...patch } }));
+              }}
+            />
+          </fieldset>
         </div>
 
         {updateMutation.isError && (

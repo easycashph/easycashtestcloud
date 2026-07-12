@@ -41,14 +41,26 @@ function splitApplicantName(fullName: string): { firstName: string; middleName: 
   return { firstName: parts[0], middleName: parts.slice(1, -1).join(' '), lastName: parts[parts.length - 1] };
 }
 
+/** The intake form stores the co-borrower as one combined string, e.g. "Jane Doe (spouse)" - this
+ * splits it back into a name and relationship for the Create Client Profile review form. */
+function parseCoBorrowerName(coBorrowerName: string): { name: string; relationship: string } {
+  const match = coBorrowerName.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (match) return { name: match[1].trim(), relationship: match[2].trim() };
+  return { name: coBorrowerName.trim(), relationship: '' };
+}
+
 /**
- * Prefilled from the APPROVED application's own fields - only covers what the real `POST
- * /borrowers` endpoint (`createBorrowerSchema`) actually accepts today (name parts, gender, civil
- * status, contact info). The application's address/employer/monthly income have no home in that
+ * Prefilled from the APPROVED application's own fields, including gender and civil status
+ * (captured at intake, added 2026-07-12 after both were found to be silently dropped between
+ * intake and here) - covers what the real `POST /borrowers` endpoint (`createBorrowerSchema`)
+ * actually accepts today. The application's address/employer/monthly income have no home in that
  * request body yet (no income-detail or address input on create - see `CreateBorrowerUseCase`),
  * so they're surfaced read-only as reference instead of being force-mapped into fields that don't
  * exist, per CLAUDE.md "never fabricate" - staff adds those via "Edit Client Details" after
- * creation.
+ * creation. If the application recorded a co-borrower, offers to also create that person's real
+ * `CoBorrower` record via `POST /co-borrowers` (ADR-015 leaves the borrower<->co-borrower linking
+ * mechanism open, so this only creates the standalone person record, same as that endpoint always
+ * has).
  */
 function CreateClientProfileDialog({
   open,
@@ -64,10 +76,38 @@ function CreateClientProfileDialog({
   const [firstName, setFirstName] = React.useState(initialSplit.firstName);
   const [middleName, setMiddleName] = React.useState(initialSplit.middleName);
   const [lastName, setLastName] = React.useState(initialSplit.lastName);
-  const [gender, setGender] = React.useState('');
-  const [civilStatus, setCivilStatus] = React.useState('');
+  const [gender, setGender] = React.useState(application.gender ?? '');
+  const [civilStatus, setCivilStatus] = React.useState(application.civilStatus ?? '');
+  const [birthDate, setBirthDate] = React.useState(application.birthDate ? application.birthDate.slice(0, 10) : '');
+  const [placeOfBirth, setPlaceOfBirth] = React.useState(application.placeOfBirth ?? '');
+  const [nationality, setNationality] = React.useState(application.nationality ?? '');
+  const [homeOwnership, setHomeOwnership] = React.useState(application.homeOwnership ?? '');
   const [mobilePhone1, setMobilePhone1] = React.useState(application.mobilePhone ?? '');
   const [email, setEmail] = React.useState(application.email ?? '');
+  const [occupation, setOccupation] = React.useState(application.occupation ?? '');
+  const [officeAddress, setOfficeAddress] = React.useState(application.officeAddress ?? '');
+  const [tinNumber, setTinNumber] = React.useState(application.tinNumber ?? '');
+  const [sssNumber, setSssNumber] = React.useState(application.sssNumber ?? '');
+  const [dependants, setDependants] = React.useState(application.dependants);
+  const [reference1Name, setReference1Name] = React.useState(application.reference1Name ?? '');
+  const [reference1Mobile, setReference1Mobile] = React.useState(application.reference1Mobile ?? '');
+  const [reference2Name, setReference2Name] = React.useState(application.reference2Name ?? '');
+  const [reference2Mobile, setReference2Mobile] = React.useState(application.reference2Mobile ?? '');
+  const [note, setNote] = React.useState(application.note ?? '');
+
+  const coBorrowerParsed = React.useMemo(
+    () => (application.coBorrowerName ? parseCoBorrowerName(application.coBorrowerName) : null),
+    [application.coBorrowerName],
+  );
+  const coBorrowerSplit = React.useMemo(
+    () => (coBorrowerParsed ? splitApplicantName(coBorrowerParsed.name) : null),
+    [coBorrowerParsed],
+  );
+  const [includeCoBorrower, setIncludeCoBorrower] = React.useState(Boolean(application.coBorrowerName));
+  const [coBorrowerFirstName, setCoBorrowerFirstName] = React.useState(coBorrowerSplit?.firstName ?? '');
+  const [coBorrowerLastName, setCoBorrowerLastName] = React.useState(coBorrowerSplit?.lastName ?? '');
+  const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(coBorrowerParsed?.relationship ?? '');
+  const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState(application.coBorrowerEmployer ?? '');
 
   React.useEffect(() => {
     if (!open) return;
@@ -75,24 +115,82 @@ function CreateClientProfileDialog({
     setFirstName(split.firstName);
     setMiddleName(split.middleName);
     setLastName(split.lastName);
-    setGender('');
-    setCivilStatus('');
+    setGender(application.gender ?? '');
+    setCivilStatus(application.civilStatus ?? '');
+    setBirthDate(application.birthDate ? application.birthDate.slice(0, 10) : '');
+    setPlaceOfBirth(application.placeOfBirth ?? '');
+    setNationality(application.nationality ?? '');
+    setHomeOwnership(application.homeOwnership ?? '');
     setMobilePhone1(application.mobilePhone ?? '');
     setEmail(application.email ?? '');
-  }, [open, application.applicantName, application.mobilePhone, application.email]);
+    setOccupation(application.occupation ?? '');
+    setOfficeAddress(application.officeAddress ?? '');
+    setTinNumber(application.tinNumber ?? '');
+    setSssNumber(application.sssNumber ?? '');
+    setDependants(application.dependants);
+    setReference1Name(application.reference1Name ?? '');
+    setReference1Mobile(application.reference1Mobile ?? '');
+    setReference2Name(application.reference2Name ?? '');
+    setReference2Mobile(application.reference2Mobile ?? '');
+    setNote(application.note ?? '');
+
+    const parsed = application.coBorrowerName ? parseCoBorrowerName(application.coBorrowerName) : null;
+    const coSplit = parsed ? splitApplicantName(parsed.name) : null;
+    setIncludeCoBorrower(Boolean(application.coBorrowerName));
+    setCoBorrowerFirstName(coSplit?.firstName ?? '');
+    setCoBorrowerLastName(coSplit?.lastName ?? '');
+    setCoBorrowerRelationship(parsed?.relationship ?? '');
+    setCoBorrowerEmployer(application.coBorrowerEmployer ?? '');
+  }, [open, application]);
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post<Borrower>('/borrowers', {
+    mutationFn: async () => {
+      const references = [
+        reference1Name.trim() ? { firstName: reference1Name.trim(), phoneNumber: reference1Mobile.trim() || undefined } : null,
+        reference2Name.trim() ? { firstName: reference2Name.trim(), phoneNumber: reference2Mobile.trim() || undefined } : null,
+      ].filter((r): r is { firstName: string; phoneNumber: string | undefined } => r !== null);
+
+      const borrower = await apiClient.post<Borrower>('/borrowers', {
         branchId: application.branchId,
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         middleName: middleName.trim() || undefined,
         gender: gender || undefined,
         civilStatus: civilStatus || undefined,
+        birthDate: birthDate || undefined,
+        placeOfBirth: placeOfBirth.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        homeOwnership: homeOwnership || undefined,
         mobilePhone1: mobilePhone1.trim() || undefined,
         email: email.trim() || undefined,
-      }),
+        dependants: dependants && dependants.length > 0 ? dependants : undefined,
+        note: note.trim() || undefined,
+        incomeDetail:
+          occupation.trim() || officeAddress.trim()
+            ? { position: occupation.trim() || undefined, employerAddress: officeAddress.trim() || undefined }
+            : undefined,
+        governmentId:
+          tinNumber.trim() || sssNumber.trim() ? { tinNumber: tinNumber.trim() || undefined, sssNumber: sssNumber.trim() || undefined } : undefined,
+        characterReferences: references.length > 0 ? references : undefined,
+      });
+
+      // Best-effort: capturing the co-borrower is a separate write from creating the client
+      // profile itself - a failure here must never block navigation to the newly-created client.
+      if (includeCoBorrower && coBorrowerFirstName.trim() && coBorrowerLastName.trim()) {
+        try {
+          await apiClient.post('/co-borrowers', {
+            firstName: coBorrowerFirstName.trim(),
+            lastName: coBorrowerLastName.trim(),
+            relationship: coBorrowerRelationship.trim() || undefined,
+            employer: coBorrowerEmployer.trim() || undefined,
+          });
+        } catch {
+          // Swallowed - see comment above.
+        }
+      }
+
+      return borrower;
+    },
     onSuccess: (borrower) => {
       onOpenChange(false);
       navigate(`/clients/${borrower.id}`);
@@ -150,6 +248,31 @@ function CreateClientProfileDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
+            <Label>Date of Birth</Label>
+            <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Place of Birth</Label>
+            <Input value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nationality</Label>
+            <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Home Ownership</Label>
+            <Select value={homeOwnership} onValueChange={setHomeOwnership}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Owned">Owned</SelectItem>
+                <SelectItem value="Rented">Rented</SelectItem>
+                <SelectItem value="Others">Others</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
             <Label>Contact Number</Label>
             <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
           </div>
@@ -158,6 +281,109 @@ function CreateClientProfileDialog({
             <Input value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 border-t pt-3">
+          <div className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Employment</div>
+          <div className="space-y-1.5">
+            <Label>Occupation</Label>
+            <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Office Address</Label>
+            <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>TIN</Label>
+            <Input value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>SSS No.</Label>
+            <Input value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
+          </div>
+        </div>
+
+        {dependants && dependants.length > 0 && (
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dependants</p>
+            {dependants.map((dep, i) => (
+              <div key={i} className="grid grid-cols-3 gap-2">
+                <Input
+                  value={dep.name}
+                  onChange={(e) => setDependants((prev) => (prev ?? []).map((d, j) => (j === i ? { ...d, name: e.target.value } : d)))}
+                  placeholder="Name"
+                />
+                <Input
+                  value={dep.age ?? ''}
+                  onChange={(e) => setDependants((prev) => (prev ?? []).map((d, j) => (j === i ? { ...d, age: e.target.value } : d)))}
+                  placeholder="Age"
+                />
+                <Input
+                  value={dep.relationship ?? ''}
+                  onChange={(e) =>
+                    setDependants((prev) => (prev ?? []).map((d, j) => (j === i ? { ...d, relationship: e.target.value } : d)))
+                  }
+                  placeholder="Relationship"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(reference1Name || reference2Name) && (
+          <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
+            <p className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Character References</p>
+            <div className="space-y-1.5">
+              <Label>1st Reference Name</Label>
+              <Input value={reference1Name} onChange={(e) => setReference1Name(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>1st Reference Contact Number</Label>
+              <Input value={reference1Mobile} onChange={(e) => setReference1Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>2nd Reference Name</Label>
+              <Input value={reference2Name} onChange={(e) => setReference2Name(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>2nd Reference Contact Number</Label>
+              <Input value={reference2Mobile} onChange={(e) => setReference2Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label>Note</Label>
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+        </div>
+
+        {coBorrowerParsed && (
+          <div className="space-y-3 rounded-md border p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={includeCoBorrower} onChange={(e) => setIncludeCoBorrower(e.target.checked)} />
+              Also create this application's co-borrower ({coBorrowerParsed.name})
+            </label>
+            {includeCoBorrower && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Co-Borrower First Name</Label>
+                  <Input value={coBorrowerFirstName} onChange={(e) => setCoBorrowerFirstName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Co-Borrower Last Name</Label>
+                  <Input value={coBorrowerLastName} onChange={(e) => setCoBorrowerLastName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Relationship to Applicant</Label>
+                  <Input value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Co-Borrower Employer</Label>
+                  <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="rounded-md border bg-secondary/30 p-3 text-sm">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

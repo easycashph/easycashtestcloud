@@ -12,6 +12,7 @@ import { useRole } from '@/lib/roleContext';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
+import { useLogPageView } from '@/lib/activityLog';
 import { formatDateTime } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
@@ -52,6 +53,7 @@ const ACTION_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'second
  * by, unlike every other list page in this app).
  */
 export function ActivityLogPage() {
+  useLogPageView('Activity Logs');
   const { canViewActivityLogs, currentAccount } = useRole();
   const [action, setAction] = React.useState<string>('ALL');
   const [search, setSearch] = React.useState('');

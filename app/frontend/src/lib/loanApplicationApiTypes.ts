@@ -28,19 +28,42 @@ export interface PreQualificationBreakdown {
   };
 }
 
+export interface LoanApplicationDependant {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export interface LoanApplication {
   id: string;
   branchId: string;
   applicantName: string;
   age: number | null;
+  gender: string | null;
+  civilStatus: string | null;
+  birthDate: string | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
+  homeOwnership: string | null;
   address: string | null;
   monthlyIncome: number | null;
   employer: string | null;
+  occupation: string | null;
+  officeAddress: string | null;
+  tinNumber: string | null;
+  sssNumber: string | null;
   propertiesOwned: string[];
   creditScore: number | null;
   coBorrowerName: string | null;
+  coBorrowerEmployer: string | null;
   mobilePhone: string | null;
   email: string | null;
+  dependants: LoanApplicationDependant[];
+  reference1Name: string | null;
+  reference1Mobile: string | null;
+  reference2Name: string | null;
+  reference2Mobile: string | null;
+  note: string | null;
   referralSource: string | null;
   accountType: LoanApplicationAccountType | null;
   loanPurpose: string | null;
@@ -65,14 +88,31 @@ export interface CreateLoanApplicationRequest {
   branchId: string;
   applicantName: string;
   age?: number;
+  gender?: string;
+  civilStatus?: string;
+  birthDate?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  homeOwnership?: string;
   address?: string;
   monthlyIncome?: number;
   employer?: string;
+  occupation?: string;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerEmployer?: string;
   mobilePhone?: string;
   email?: string;
+  dependants?: LoanApplicationDependant[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
+  note?: string;
   referralSource?: string;
   accountType?: LoanApplicationAccountType;
   loanPurpose?: string;

@@ -80,6 +80,21 @@ export interface BorrowerAddress {
   ownershipStatus: string | null;
 }
 
+export interface BorrowerCharacterReference {
+  id: string;
+  firstName: string;
+  lastName: string;
+  relationship: string | null;
+  phoneNumber: string | null;
+  emailAddress: string | null;
+}
+
+export interface BorrowerDependant {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export type BorrowerStatus = 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
 
 /** Mirrors `BorrowerPresenter.presentBorrower()` in app/backend exactly. */
@@ -93,10 +108,15 @@ export interface Borrower {
   fullName: string;
   gender: string | null;
   birthDate: string | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
   civilStatus: string | null;
+  homeOwnership: string | null;
   mobilePhone1: string | null;
   mobilePhone2: string | null;
   email: string | null;
+  dependants: BorrowerDependant[];
+  note: string | null;
   status: BorrowerStatus;
   loanCycle: number;
   legacyId: string | null;
@@ -104,7 +124,56 @@ export interface Borrower {
   updatedAt: string;
   incomeDetail: BorrowerIncomeDetail | null;
   governmentId: BorrowerGovernmentId | null;
+  characterReferences: BorrowerCharacterReference[];
   addresses: BorrowerAddress[];
+}
+
+/** Body for `POST /borrowers`. */
+export interface CreateBorrowerRequest {
+  branchId: string;
+  assignedLoanOfficerId?: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  gender?: string;
+  birthDate?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  civilStatus?: string;
+  homeOwnership?: string;
+  mobilePhone1?: string;
+  mobilePhone2?: string;
+  email?: string;
+  dependants?: BorrowerDependant[];
+  note?: string;
+  incomeDetail?: {
+    employmentType?: string;
+    employerName?: string;
+    employerAddress?: string;
+    natureOfBusiness?: string;
+    position?: string;
+    yearsEmployed?: number;
+  };
+  governmentId?: {
+    sssNumber?: string;
+    tinNumber?: string;
+  };
+  characterReferences?: {
+    firstName: string;
+    lastName?: string;
+    relationship?: string;
+    phoneNumber?: string;
+    emailAddress?: string;
+  }[];
+}
+
+/** Body for `POST /co-borrowers`. */
+export interface CreateCoBorrowerRequest {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  relationship?: string;
+  employer?: string;
 }
 
 export type PenaltyCalculationMethod = 'NONE' | 'OVERDUE_BALANCE_AND_INTEREST' | 'ON_REPAYMENT';

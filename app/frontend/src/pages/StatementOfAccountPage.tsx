@@ -12,6 +12,7 @@ import { InstallmentStatusBadge } from '@/components/StatusBadge';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { getMockLoan, MOCK_INSTALLMENTS, type MockRepaymentInstallment } from '@/lib/mockData';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { useLogPageView } from '@/lib/activityLog';
 import type { Borrower as RealBorrower, LoanAccount, LoanProduct, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { formatDate, formatPeso } from '@/lib/utils';
 
@@ -238,6 +239,7 @@ function getSortValue(inst: MockRepaymentInstallment, key: string): string | num
 export function StatementOfAccountPage() {
   const { loanId } = useParams<{ loanId: string }>();
   const navigate = useNavigate();
+  useLogPageView('Statement of Account', loanId);
   const loan = loanId ? getMockLoan(loanId) : undefined;
 
   // Computed unconditionally, before the early return below, so

@@ -265,6 +265,7 @@ export function LoanApplicationCreatePage() {
   // §9 - character references
   const [reference1, setReference1] = React.useState({ name: '', mobile: '' });
   const [reference2, setReference2] = React.useState({ name: '', mobile: '' });
+  const [note, setNote] = React.useState('');
   // Documents submitted (paper-form checklist - ticks only, see §Docs below)
   const [documents, setDocuments] = React.useState<Set<string>>(new Set());
   // Applicant Documents - real files, saved as categorized attachments once the application exists.
@@ -391,14 +392,33 @@ export function LoanApplicationCreatePage() {
         branchId: currentAccount.branchId,
         applicantName,
         age: age ?? undefined,
+        gender: gender || undefined,
+        civilStatus: civilStatus || undefined,
+        birthDate: dateOfBirth || undefined,
+        placeOfBirth: placeOfBirth.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        homeOwnership: homeOwnership || undefined,
         address: presentAddress.trim() || undefined,
         employer: employer.trim() || undefined,
+        occupation: occupation.trim() || undefined,
+        officeAddress: officeAddress.trim() || undefined,
+        tinNumber: tin.trim() || undefined,
+        sssNumber: sss.trim() || undefined,
         mobilePhone: mobileNo.trim() || undefined,
         email: email.trim() || undefined,
+        dependants: dependants
+          .filter((d) => d.name.trim())
+          .map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined })),
         coBorrowerName:
           hasCoBorrower && coBorrowerName.trim()
             ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
             : undefined,
+        coBorrowerEmployer: hasCoBorrower && coBorrowerEmployer.trim() ? coBorrowerEmployer.trim() : undefined,
+        reference1Name: reference1.name.trim() || undefined,
+        reference1Mobile: reference1.mobile.trim() || undefined,
+        reference2Name: reference2.name.trim() || undefined,
+        reference2Mobile: reference2.mobile.trim() || undefined,
+        note: note.trim() || undefined,
         requestedCategory: loanCategory,
         requestedAmount: amount,
         requestedTermMonths: term,
@@ -833,6 +853,12 @@ export function LoanApplicationCreatePage() {
             <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
         </div>
+      </SectionCard>
+
+      <SectionCard number="10" title="Note" description="Anything else worth recording that doesn't have its own field above - carried over to the Client Profile if this application is later approved and converted.">
+        <Field label="Note">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Optional - extra information for this application/client" />
+        </Field>
       </SectionCard>
 
       <SectionCard
