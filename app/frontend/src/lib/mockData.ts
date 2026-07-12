@@ -2750,60 +2750,6 @@ export function getMockLoanApplication(id: string): MockLoanApplication | undefi
 }
 
 /**
- * "Create Client" - converts an APPROVED Loan Application into an official
- * client record (`MockBorrowerProfile`), pulling profile picture, age/DOB,
- * personal/contact info, address, and uploaded attachments straight from
- * the application, per this checkpoint's instruction that Client Details
- * originates from the Loan Application. In-memory only: pushes onto
- * `MOCK_BORROWERS` and marks the application `clientCreated`. Safe to call
- * only once per application - callers must check `clientCreated` first.
- *
- * 2026-07-08 (F-2 fix): a repeat applicant (same `applicantName` already in
- * `MOCK_BORROWERS`, per `findRepeatClientBorrower()` - the same lookup this
- * page already uses read-only for its "Repeat Client" indicator) now links
- * to their existing profile instead of always minting a new one. Previously
- * this always created a fresh `MockBorrowerProfile`, splitting a returning
- * client's loan history across two disconnected records - directly
- * undermining the application→client→loan-account linking feature shipped
- * earlier the same day.
- */
-export function createClientFromApplication(application: MockLoanApplication): MockBorrowerProfile {
-  const existingClient = findRepeatClientBorrower(application.applicantName);
-  if (existingClient) {
-    application.clientCreated = true;
-    application.createdClientId = existingClient.id;
-    return existingClient;
-  }
-
-  const id = `borrower-app-${application.id}`;
-  const approxBirthYear = new Date().getUTCFullYear() - application.age;
-  const client: MockBorrowerProfile = {
-    id,
-    name: application.applicantName,
-    profilePictureUrl: application.profilePictureUrl,
-    contactNumber: `09${Math.floor(100000000 + rng() * 800000000)}`,
-    email: `${application.applicantName
-      .toLowerCase()
-      .replace(/[^a-z ]/g, '')
-      .trim()
-      .replace(/\s+/g, '.')}@sample-mail.example`,
-    address: application.address,
-    employer: application.employer,
-    position: 'Rank & File',
-    monthlyIncome: application.monthlyIncome,
-    civilStatus: application.coBorrowerName ? 'Married' : 'Single',
-    dateOfBirth: new Date(Date.UTC(approxBirthYear, 0, 1)).toISOString(),
-    homeBranchName: COMPANY_INFO.branchName,
-    loanIds: [],
-    attachments: application.attachments,
-  };
-  MOCK_BORROWERS.push(client);
-  application.clientCreated = true;
-  application.createdClientId = id;
-  return client;
-}
-
-/**
  * Business rule: a client may never have 2 simultaneously active loan accounts - "active" per the
  * shared `ACTIVE_LOAN_STATUSES` definition above (ACTIVE, in arrears, or past-maturity-but-unpaid;
  * 2026-07-08 F-3 fix - previously excluded MATURED here while `ClientListPage` counted it, so the

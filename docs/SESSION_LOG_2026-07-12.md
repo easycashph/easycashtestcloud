@@ -790,3 +790,86 @@ callers); not removed this session, flagged for a future pass.
 still need to run against the real database.
 
 Committed and pushed to `origin/main` this session (see commit for hash).
+
+---
+
+# Addendum 9 — Activity Timeline fixes, sidebar cleanup, test-data script, final survey (2026-07-12)
+
+**Trigger:** User: (1) fix the Activity Timeline everywhere; (2) remove the in-sidebar "hide side
+panel" button; (3) provide a way to delete TEST loan applicant/client records so intake can be
+retested; (4) continue the mock-removal effort; (5) save and sync; (6) "clean up."
+
+## 1. `ProfileActivityTimeline.tsx` bug fixes (used by all 3 detail pages)
+
+Three real bugs found and fixed:
+- **Pagination replaced instead of accumulated**: `cursor` was part of the React Query `queryKey`,
+  so each "Load more" fetch returned only its own page and the component rendered `data.activities`
+  directly - the previously-loaded rows disappeared. Now accumulates into local state, appending
+  new pages and resetting only when `profileType`/`profileId` actually changes.
+- **Render-time side effect**: `if (error && onError) onError(...)` ran directly in the render
+  body - a React rules-of-hooks violation, and would re-fire on every re-render. Moved into a
+  `useEffect`.
+- **Silent failure**: a fetch error fell through to the empty `activities.length === 0` state
+  ("No activity recorded yet"), indistinguishable from a genuinely empty history. Added a real
+  error message state.
+- Also replaced hardcoded `gray-*`/`blue-*` Tailwind colors with the app's theme tokens
+  (`text-muted-foreground`, `text-primary`, `bg-secondary/30`, `text-destructive`, etc.) - the
+  component didn't respect dark mode before, unlike every other component in the app.
+
+## 2. Sidebar cleanup
+
+Removed the "Hide side menu" button that lived inside `Sidebar` itself
+(`AppLayout.tsx`) - confirmed the `Topbar`'s own collapse/expand toggle already covers both
+directions and was the *only* way to re-expand the sidebar once collapsed (the in-sidebar button
+was one-way and disappeared along with the sidebar). No functionality lost.
+
+## 3. TEST-record cleanup script
+
+Wrote `app/backend/scripts/delete-test-records.ts` (dry-run by default, `--apply` to execute) -
+matches any `LoanApplication.applicantName` or `Borrower.firstName`/`lastName` containing "TEST",
+pulls in anything linked (the client an application produced, the loan account a client produced),
+and deletes in FK-safe order (`LoanTransaction`/`RepaymentSchedule`/`AppliedFee` first - no cascade
+on those - then `LoanAccount`, then polymorphic `Attachment`/`Note`/`Address` rows, then
+`Borrower`, then `LoanApplication`). Deliberately leaves `AuditLog`/`ProfileActivityLog` alone.
+**Not run from this session** - no DB access on this machine; user needs to run it (dry-run first)
+wherever the real database lives.
+
+Typechecked by temporarily including `scripts/**` in a copy of `tsconfig.json` (scripts aren't
+covered by the normal `tsc -p .` check - confirmed this is true for every existing script in that
+folder, not new to this one) - clean, then the temp config was discarded.
+
+## 4. Final mock-data survey ("clean up" + continue)
+
+Re-ran `grep -rl "from '@/lib/mockData'"` across the whole `src/` tree post-cleanup and cross-
+checked every new hit not seen in earlier addendums:
+- `ClientListPage.tsx`, `LoanListPage.tsx`, `LoanProductsPage.tsx` - each has exactly one hit, and
+  it's a **past-tense doc comment** ("...replace `MOCK_BORROWERS`/`MOCK_LOANS`") documenting that
+  the page *was already* migrated to real data in an earlier session - not an active mock
+  dependency.
+- `AppLayout.tsx` - `COMPANY_INFO` (static branch/company name), same category as `LoginPage`'s
+  earlier-cleared hit - config, not fake business data.
+
+**Conclusion: no further mock-to-real migration targets exist in the codebase right now.**
+Everything remaining is one of: (a) intentional sample-data demo scaffolding for hand-authored
+mock records (`ClientProfilePage`'s and `LoanDetailPage`'s mock code paths, `CreateLoanAccountDialog.tsx`,
+`LoanDrillDownDialog.tsx`, `StatusBadge.tsx`, `PaymentMethodBadge.tsx` type/label imports) - removing
+this entirely would be a deliberate design decision (drop the demo mode), not a bug fix, and hasn't
+been asked for; (b) business-decision-blocked (Collections vs. Target); or (c) infrastructure-
+blocked (SMS/Email provider). Also found and removed one more piece of confirmed dead code while
+here: `createClientFromApplication()` in `mockData.ts` (flagged unused in Addendum 8, now deleted
+outright along with its doc comment - zero callers anywhere).
+
+Typechecked clean (frontend). Committed and pushed to `origin/main`.
+
+## Current State
+
+✅ Activity Timeline correct on all 3 pages that use it (Loan Application, Client Profile, Loan
+Account).
+✅ Sidebar has one working collapse control, not two.
+✅ Cleanup script ready for MIS/Nomer to run against the real database.
+✅ Confirmed via fresh full-codebase survey: mock-removal initiative has no further active targets
+- remaining "mock" references are either intentional demo scaffolding, business-decision-blocked,
+or infrastructure-blocked, not oversights.
+⏳ If the intentional sample-data demo mode should eventually be removed entirely (not just have a
+real path alongside it), that's a product decision for the user to make explicitly - flagged here,
+not assumed.
