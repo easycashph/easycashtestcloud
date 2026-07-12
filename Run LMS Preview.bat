@@ -32,7 +32,7 @@ if /I "%BACKEND_ALREADY_RUNNING%"=="True" (
 )
 
 echo [3/4] Sinisimulan ang frontend hot-reload dev server sa PORT 5173...
-start "Easycash LMS Frontend Server [HOT RELOAD - localhost:5173]" cmd /k "cd /d "%FRONTEND_DIR%" && echo. && echo ============================================== && echo   HOT RELOAD MODE -- http://localhost:5173 && echo   Live-reloading local dev server, hindi Docker. && echo   I-edit ang code, automatic na mag-re-refresh && echo   ang browser. && echo ============================================== && echo. && npm run dev -- --port 5173 --strictPort"
+start "Easycash LMS Frontend Server [HOT RELOAD - localhost:5173]" cmd /k "cd /d "%FRONTEND_DIR%" && echo. && echo ============================================== && echo   HOT RELOAD MODE -- http://localhost:5173 && echo   Live-reloading local dev server, hindi Docker. && echo   I-edit ang code, automatic na mag-re-refresh && echo   ang browser. && echo ============================================== && echo. && npm run dev -- --host --port 5173 --strictPort"
 
 echo [4/4] Naghihintay habang nagsi-start ang frontend ^(8 segundo^)...
 timeout /t 8 /nobreak >nul
