@@ -31,7 +31,6 @@ import {
   getGeneratedDocumentsForLoan,
   getMockBorrowerForLoan,
   getMockLoan,
-  logActivity,
   MOCK_INSTALLMENTS,
   MOCK_PAYMENT_REMINDERS,
   MOCK_TIMELINES,
@@ -169,7 +168,7 @@ interface LoanNote {
  * Notes are held in local component state only, seeded per loan - added
  * notes disappear on page reload. Nothing here is sent anywhere.
  */
-function NotesPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) {
+function NotesPanel({ loanId }: { loanId: string }) {
   const { currentAccount } = useRole();
   const [notes, setNotes] = React.useState<LoanNote[]>(() => [
     {
@@ -186,7 +185,6 @@ function NotesPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) 
     if (!text) return;
     setNotes((prev) => [{ id: `note-${Date.now()}`, author: currentAccount.name, text, at: new Date().toISOString() }, ...prev]);
     setDraft('');
-    logActivity({ userName: currentAccount.name, action: 'ADD_NOTE', entityType: 'LoanAccount', entityId: loanCode, at: new Date().toISOString() });
   };
 
   return (
@@ -228,8 +226,7 @@ interface LoanAttachment {
  * - only the actual file storage is not implemented, per this checkpoint's
  * instruction to mark real storage as Coming Soon rather than fake it.
  */
-function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: string }) {
-  const { currentAccount } = useRole();
+function AttachmentsPanel({ loanId }: { loanId: string }) {
   const generatedDocuments = getGeneratedDocumentsForLoan(loanId);
   const [attachments, setAttachments] = React.useState<LoanAttachment[]>(() => [
     { id: `${loanId}-att-seed`, fileName: 'Signed_Promissory_Note.pdf', sizeKb: 482, uploadedAt: new Date(Date.now() - 30 * 86_400_000).toISOString() },
@@ -245,12 +242,10 @@ function AttachmentsPanel({ loanId, loanCode }: { loanId: string; loanCode: stri
       ...prev,
     ]);
     e.target.value = '';
-    logActivity({ userName: currentAccount.name, action: 'UPLOAD_ATTACHMENT', entityType: 'LoanAccount', entityId: loanCode, at: new Date().toISOString() });
   };
 
   const removeAttachment = (id: string) => {
     setAttachments((prev) => prev.filter((a) => a.id !== id));
-    logActivity({ userName: currentAccount.name, action: 'DELETE_ATTACHMENT', entityType: 'LoanAccount', entityId: loanCode, at: new Date().toISOString() });
   };
 
   return (
@@ -1188,11 +1183,11 @@ export function LoanDetailPage() {
               </TabsContent>
 
               <TabsContent value="notes">
-                <NotesPanel loanId={loan.id} loanCode={loan.loanCode} />
+                <NotesPanel loanId={loan.id} />
               </TabsContent>
 
               <TabsContent value="attachments">
-                <AttachmentsPanel loanId={loan.id} loanCode={loan.loanCode} />
+                <AttachmentsPanel loanId={loan.id} />
               </TabsContent>
 
               <TabsContent value="reminders">

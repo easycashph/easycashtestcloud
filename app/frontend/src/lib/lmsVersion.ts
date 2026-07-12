@@ -59,7 +59,7 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.8',
+    version: '0.9.7',
     date: 'July 12, 2026',
     highlights: [
       'The Loan Application page now recognizes when an applicant has already been turned into a client - the "Create Client Profile" button is replaced with a link straight to their existing Client Profile, preventing duplicate client records.',
@@ -73,7 +73,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.7',
+    version: '0.9.6',
     date: 'July 12, 2026',
     highlights: [
       'New Activity Timeline on Loan Applications, Client Profiles, and Loan Accounts - shows exactly who did what and when on that specific record (documents uploaded, decisions made, payments recorded), visible to every staff member.',
@@ -87,7 +87,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.6',
+    version: '0.9.5',
     date: 'July 11, 2026',
     highlights: [
       'Loan applications are now automatically pre-classified Pre-approved or Pre-declined by the system itself - based on the applicant\'s age, whether income covers the loan\'s estimated payment, and how far their home address is from the branch - replacing the old "Pending Review" step. The loan officer still makes the real, final Approved/Declined decision; the system\'s classification is advisory only.',
@@ -101,7 +101,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.5',
+    version: '0.9.4',
     date: 'July 10, 2026',
     highlights: [
       'Dashboard, Loan Applications, Activity Logs, Member Details, Payment Reminders, and Loan/Collection/Transaction Reports are now wired to the real backend, replacing sample data - the platform has no remaining mock-only pages except Settings and About.',
@@ -114,7 +114,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.4',
+    version: '0.9.3',
     date: 'July 9, 2026',
     highlights: [
       'Migrated the company\'s real production data into the platform\'s own database for the first time: 4,604 borrowers, 44 loan products (with their versions), 1,790 loan accounts, 280,172 transactions, 251 co-borrowers, 2,372 addresses, 440 ID documents, and 334 income records - sourced from the legacy system export, not sample data.',
@@ -126,7 +126,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.3',
+    version: '0.9.2',
     date: 'July 8, 2026',
     highlights: [
       'Removed the standalone Generated Documents page - a loan account\'s generated documents (Promissory Note, Disclosure Statement, Loan Agreement, Deed of Assignment, Data Privacy Consent Form, Amortization Schedule, and more) now live on that loan account\'s own Attachments tab, alongside manually-uploaded files.',
@@ -142,18 +142,6 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.2',
-    date: 'July 7, 2026',
-    highlights: [
-      'New "Create Application" button on Loan Applications: a loan officer can now encode a walk-in applicant\'s application, following the company\'s official paper form (ECLC-LOFN01) section for section.',
-      'Search and filter added to Client Data (by branch and loan status), Payment Recording (find a loan account by borrower or code), and Payment Reminders (search by borrower or loan account).',
-      'Client names are now clickable throughout - on Loan Accounts and on a Loan Application (when the applicant is already an official client) - linking straight to their Client Profile.',
-      'Portfolio Filter moved to the top of the Dashboard and now drives every portfolio card (Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health), not just two of them.',
-      'Collections Forecast and Loan Disbursement Trend now compute from each loan\'s own real repayment schedule instead of an illustrative random trend.',
-      'This About page\'s version and "Updated on" date now update automatically from the changelog below, instead of being maintained separately.',
-    ],
-  },
-  {
     version: '0.9.1',
     date: 'July 7, 2026',
     highlights: [
@@ -166,6 +154,12 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Portfolio Breakdown by Loan Category and Loan Portfolio Health can now be filtered by loan category and date range, with every total recomputing live.',
       'Dashboard recommendations renamed from "AI Portfolio Assist" to "Recommendation".',
       '"Back" buttons now return to wherever you actually came from, instead of always resetting to a blank list.',
+      'New "Create Application" button on Loan Applications: a loan officer can now encode a walk-in applicant\'s application, following the company\'s official paper form (ECLC-LOFN01) section for section.',
+      'Search and filter added to Client Data (by branch and loan status), Payment Recording (find a loan account by borrower or code), and Payment Reminders (search by borrower or loan account).',
+      'Client names are now clickable throughout - on Loan Accounts and on a Loan Application (when the applicant is already an official client) - linking straight to their Client Profile.',
+      'Portfolio Filter moved to the top of the Dashboard and now drives every portfolio card (Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health), not just two of them.',
+      'Collections Forecast and Loan Disbursement Trend now compute from each loan\'s own real repayment schedule instead of an illustrative random trend.',
+      'This About page\'s version and "Updated on" date now update automatically from the changelog below, instead of being maintained separately.',
     ],
   },
   {

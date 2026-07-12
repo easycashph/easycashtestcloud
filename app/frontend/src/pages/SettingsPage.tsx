@@ -15,7 +15,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
 import type { Language } from '@/lib/translations';
-import { logActivity } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 
 /**
@@ -68,18 +67,10 @@ export function SettingsPage() {
 }
 
 function LanguageTab() {
-  const { currentAccount } = useRole();
   const { language, setLanguage, t } = useLanguage();
 
   const handleChange = (next: Language) => {
     setLanguage(next);
-    logActivity({
-      userName: currentAccount.name,
-      action: 'CHANGE_LANGUAGE',
-      entityType: 'Settings',
-      entityId: next,
-      at: new Date().toISOString(),
-    });
   };
 
   return (
@@ -133,7 +124,6 @@ function UserProfileTab() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    logActivity({ userName: currentAccount.name, action: 'UPDATE_USER_PROFILE', entityType: 'Settings', entityId: currentAccount.id, at: new Date().toISOString() });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 3000);
   };
@@ -230,7 +220,6 @@ function SecurityTab() {
       setMessage({ tone: 'error', text: 'New password and confirmation do not match.' });
       return;
     }
-    logActivity({ userName: currentAccount.name, action: 'CHANGE_PASSWORD', entityType: 'Settings', entityId: currentAccount.id, at: new Date().toISOString() });
     setMessage({ tone: 'success', text: 'Password changed for this session (not yet saved to the server).' });
     setCurrentPassword('');
     setNewPassword('');
@@ -288,24 +277,15 @@ function SecurityTab() {
 }
 
 function AppearanceTab() {
-  const { currentAccount } = useRole();
   const { theme, toggleTheme, accent, setAccent } = useTheme();
 
   const handleToggle = () => {
     toggleTheme();
-    logActivity({
-      userName: currentAccount.name,
-      action: 'CHANGE_APPEARANCE',
-      entityType: 'Settings',
-      entityId: theme === 'dark' ? 'light' : 'dark',
-      at: new Date().toISOString(),
-    });
   };
 
   const applyAccent = (next: Accent) => {
     if (next === accent) return;
     setAccent(next);
-    logActivity({ userName: currentAccount.name, action: 'CHANGE_THEME_COLOR', entityType: 'Settings', entityId: next, at: new Date().toISOString() });
   };
 
   return (

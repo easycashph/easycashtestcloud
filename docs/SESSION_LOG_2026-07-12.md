@@ -722,3 +722,71 @@ send-history record (would need its own schema, similar shape to Notes).
 session's mock-removal effort are fully real.** Remaining known gaps are either business-decision-
 blocked (Collections Target) or infrastructure-blocked (SMS/Email provider), not further wiring
 work - a good natural stopping point for this thread unless the user opens a new area.
+
+---
+
+# Addendum 8 — changelog cleanup + dead-code removal (2026-07-12, later same day)
+
+**Trigger:** User: (1) fix the About page - consolidate the two "July 7, 2026" changelog entries
+into one, and re-sequence the version numbers; (2) continue the mock-removal effort; (3) save and
+sync.
+
+## 1. About page / changelog cleanup
+
+`lmsVersion.ts`'s `LMS_CHANGELOG` had two separate entries both dated "July 7, 2026" (`0.9.1` and
+`0.9.2`). Merged them into a single `0.9.1` entry (all highlights combined, `0.9.1`'s items first
+since it was chronologically first-numbered), then renumbered every subsequent entry down by one
+patch version to keep the sequence contiguous:
+
+| Before | After | Date |
+|---|---|---|
+| 0.9.8 | 0.9.7 | Jul 12 (today's session) |
+| 0.9.7 | 0.9.6 | Jul 12 (earlier that day - Activity Timeline, Roles admin) |
+| 0.9.6 | 0.9.5 | Jul 11 |
+| 0.9.5 | 0.9.4 | Jul 10 |
+| 0.9.4 | 0.9.3 | Jul 9 |
+| 0.9.3 | 0.9.2 | Jul 8 |
+| 0.9.2 + 0.9.1 | 0.9.1 (merged) | Jul 7 |
+| 0.9.0 | 0.9.0 | Jul 6 (unchanged) |
+| 0.8.0 | 0.8.0 | Jul 5 (unchanged) |
+
+`LMS_VERSION`/`LMS_UPDATED_ON`/the About page's "Current" badge all derive from
+`LMS_CHANGELOG[0]` automatically (per that file's own doc comment) - no other file needed
+updating. The two genuine July 12 entries were deliberately left as two separate entries (per the
+user's instruction, scoped only to July 7) - they really are two distinct work sessions that day.
+
+## 2. Dead-code cleanup: `logActivity`/`MOCK_ACTIVITY_LOGS`
+
+Flagged in Addendum 4 as an optional future cleanup, done now. Confirmed (again) that
+`RecentActivityPanel.tsx` (used on 16+ pages) reads exclusively from the real `/audit-logs` API -
+nothing anywhere reads `MOCK_ACTIVITY_LOGS`. Removed:
+
+- `MockActivityLogEntry` interface, `buildActivityLog()`, `MOCK_ACTIVITY_LOGS`, and the
+  `logActivity()` writer function from `mockData.ts`.
+- Every call site: `ClientProfilePage.tsx` (mock `saveEdit`), `LoanDetailPage.tsx` (mock
+  `NotesPanel`/`AttachmentsPanel` - both lost their now-unused `loanCode` prop too, since it only
+  existed to feed `logActivity`), `SettingsPage.tsx` (`LanguageTab`/`AppearanceTab` lost their
+  now-unused `useRole()` call), and 6 internal call sites inside `mockData.ts` itself
+  (`createClientFromApplication`, `createLoanAccountForClient`, `approveLoanAccount`,
+  `activateLoanAccount`, and the module-level seed loop for sample applications).
+- Bonus find while there: `createClientFromApplication()` itself turned out to be entirely dead
+  (zero callers anywhere in the codebase, not even in `mockData.ts`) - left the function in place
+  but dropped its now-unused `actorName` parameter to satisfy `noUnusedParameters`; a deeper look
+  at whether the function should be deleted outright is future cleanup, out of scope here.
+
+Typechecked clean (`noUnusedParameters`/`noUnusedLocals` caught every fallout immediately -
+useful confirmation that nothing else silently depended on the removed code).
+
+## Current State (supersedes Addendum 7's)
+
+✅ About page changelog is now contiguous, one entry per release, current version `0.9.7`.
+✅ `logActivity`/`MOCK_ACTIVITY_LOGS` dead code fully removed (was the last item on the mock-
+removal punch list from Addendum 4).
+⏳ Collections vs. Target (Dashboard) - still blocked on a business decision.
+⏳ SMS/Email sending - still blocked on a provider, pending MIS Nomer.
+⏳ `createClientFromApplication()` in `mockData.ts` - noticed to be fully dead code (zero
+callers); not removed this session, flagged for a future pass.
+⏳ Migrations `20260712050000_add_borrower_source_application` and `20260712060000_add_notes`
+still need to run against the real database.
+
+Committed and pushed to `origin/main` this session (see commit for hash).

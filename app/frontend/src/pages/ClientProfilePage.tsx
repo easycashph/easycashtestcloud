@@ -29,7 +29,6 @@ import {
   findApprovedApplicationForClient,
   getMockBorrower,
   getMockLoan,
-  logActivity,
   type MockBorrowerProfile,
   type MockLoanAccount,
 } from '@/lib/mockData';
@@ -930,13 +929,6 @@ export function ClientProfilePage() {
     .toUpperCase();
   const saveEdit = (next: MockBorrowerProfile) => {
     setBorrower(next);
-    logActivity({
-      userName: currentAccount.name,
-      action: 'EDIT_CLIENT',
-      entityType: 'Client',
-      entityId: next.id,
-      at: new Date().toISOString(),
-    });
   };
 
   const createLoan = (params: CreateLoanAccountParams) => {

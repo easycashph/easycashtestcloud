@@ -2181,67 +2181,6 @@ export function emptyDraftMember(): MockLmsMember {
   };
 }
 
-export interface MockActivityLogEntry {
-  id: string;
-  userName: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  at: string;
-}
-
-function buildActivityLog(): MockActivityLogEntry[] {
-  const entries: MockActivityLogEntry[] = [];
-  for (const member of MOCK_LMS_MEMBERS) {
-    if (member.lastLoginAt) {
-      entries.push({
-        id: `log-login-${member.id}`,
-        userName: member.name,
-        action: 'LOGIN',
-        entityType: 'User',
-        entityId: member.id,
-        at: member.lastLoginAt,
-      });
-    }
-  }
-  for (const loan of MOCK_LOANS.slice(0, 12)) {
-    entries.push({
-      id: `log-approve-${loan.id}`,
-      userName: loan.loanOfficerName,
-      action: loan.status === 'PENDING_APPROVAL' ? 'SUBMIT_LOAN_APPLICATION' : 'APPROVE_LOAN',
-      entityType: 'LoanAccount',
-      entityId: loan.loanCode,
-      at: loan.approvedAt ?? loan.createdAt,
-    });
-    if (loan.activatedAt) {
-      entries.push({
-        id: `log-activate-${loan.id}`,
-        userName: loan.loanOfficerName,
-        action: 'ACTIVATE_LOAN',
-        entityType: 'LoanAccount',
-        entityId: loan.loanCode,
-        at: loan.activatedAt,
-      });
-    }
-  }
-  for (const txn of MOCK_TRANSACTIONS.slice(0, 15)) {
-    if (txn.type === 'REPAYMENT') {
-      entries.push({
-        id: `log-payment-${txn.id}`,
-        userName: txn.postedByUserId,
-        action: 'RECORD_PAYMENT',
-        entityType: 'LoanAccount',
-        entityId: txn.loanCode,
-        at: txn.entryDate,
-      });
-    }
-  }
-  return entries.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-}
-
-/** Static/mock only - illustrates what a real audit trail would record (user, action, timestamp, affected entity). */
-export const MOCK_ACTIVITY_LOGS: MockActivityLogEntry[] = buildActivityLog();
-
 // ---------------------------------------------------------------------------
 // AI-Assisted Risk Assessment - mock only, no real AI/ML call. Deliberately
 // deterministic (derived from each loan's own status/payment progress, not
@@ -2811,18 +2750,6 @@ export function getMockLoanApplication(id: string): MockLoanApplication | undefi
 }
 
 /**
- * Generic activity-log append used everywhere in this preview (page views,
- * notes, uploads, decisions, member edits, etc.) - pushes one entry and
- * re-sorts so `MOCK_ACTIVITY_LOGS` always stays newest-first. Every
- * meaningful user action in the app is expected to call this, per this
- * checkpoint's "all user activity must be logged" instruction.
- */
-export function logActivity(entry: Omit<MockActivityLogEntry, 'id'> & { id?: string }): void {
-  MOCK_ACTIVITY_LOGS.push({ id: entry.id ?? `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ...entry });
-  MOCK_ACTIVITY_LOGS.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-}
-
-/**
  * "Create Client" - converts an APPROVED Loan Application into an official
  * client record (`MockBorrowerProfile`), pulling profile picture, age/DOB,
  * personal/contact info, address, and uploaded attachments straight from
@@ -2840,18 +2767,11 @@ export function logActivity(entry: Omit<MockActivityLogEntry, 'id'> & { id?: str
  * undermining the application→client→loan-account linking feature shipped
  * earlier the same day.
  */
-export function createClientFromApplication(application: MockLoanApplication, actorName: string): MockBorrowerProfile {
+export function createClientFromApplication(application: MockLoanApplication): MockBorrowerProfile {
   const existingClient = findRepeatClientBorrower(application.applicantName);
   if (existingClient) {
     application.clientCreated = true;
     application.createdClientId = existingClient.id;
-    logActivity({
-      userName: actorName,
-      action: 'LINK_CLIENT',
-      entityType: 'Client',
-      entityId: existingClient.id,
-      at: new Date().toISOString(),
-    });
     return existingClient;
   }
 
@@ -2880,13 +2800,6 @@ export function createClientFromApplication(application: MockLoanApplication, ac
   MOCK_BORROWERS.push(client);
   application.clientCreated = true;
   application.createdClientId = id;
-  logActivity({
-    userName: actorName,
-    action: 'CREATE_CLIENT',
-    entityType: 'Client',
-    entityId: id,
-    at: new Date().toISOString(),
-  });
   return client;
 }
 
@@ -2983,13 +2896,6 @@ export function createLoanAccountForClient(
     { status: 'PENDING_APPROVAL', label: 'Loan account created from Client profile', at: loan.createdAt, actor: actorName },
   ];
   client.loanIds.push(id);
-  logActivity({
-    userName: actorName,
-    action: 'CREATE_LOAN_ACCOUNT',
-    entityType: 'LoanAccount',
-    entityId: loan.loanCode,
-    at: loan.createdAt,
-  });
   if (params.sourceApplicationId) {
     const sourceApplication = MOCK_LOAN_APPLICATIONS.find((a) => a.id === params.sourceApplicationId);
     if (sourceApplication) {
@@ -3018,7 +2924,6 @@ export function approveLoanAccount(loan: MockLoanAccount, actorName: string): vo
   loan.status = 'APPROVED';
   loan.approvedAt = at;
   MOCK_TIMELINES[loan.id] = [...(MOCK_TIMELINES[loan.id] ?? []), { status: 'APPROVED', label: 'Approved', at, actor: actorName }];
-  logActivity({ userName: actorName, action: 'APPROVE_LOAN_ACCOUNT', entityType: 'LoanAccount', entityId: loan.loanCode, at });
 }
 
 /**
@@ -3054,30 +2959,6 @@ export function activateLoanAccount(loan: MockLoanAccount, actorName: string): v
     ...(MOCK_TIMELINES[loan.id] ?? []),
     { status: 'DISBURSED', label: 'Disbursed / Activated', at, actor: actorName },
   ];
-  logActivity({ userName: actorName, action: 'ACTIVATE_LOAN_ACCOUNT', entityType: 'LoanAccount', entityId: loan.loanCode, at });
-}
-
-// Seed activity log entries for every sample application - submission always,
-// plus a decision entry for any application already reviewed above.
-for (const app of MOCK_LOAN_APPLICATIONS) {
-  logActivity({
-    id: `log-application-submit-${app.id}`,
-    userName: app.applicantName,
-    action: 'SUBMIT_LOAN_APPLICATION',
-    entityType: 'LoanApplication',
-    entityId: app.id,
-    at: app.submittedAt,
-  });
-  if (app.reviewedBy && app.reviewedAt) {
-    logActivity({
-      id: `log-application-decision-${app.id}`,
-      userName: app.reviewedBy,
-      action: app.status === 'APPROVED' ? 'APPROVE_LOAN_APPLICATION' : 'DECLINE_LOAN_APPLICATION',
-      entityType: 'LoanApplication',
-      entityId: app.id,
-      at: app.reviewedAt,
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------
