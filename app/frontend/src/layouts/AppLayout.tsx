@@ -46,7 +46,7 @@ const NAV_GROUPS = [
     label: 'Loan',
     items: [
       { to: '/applications', label: 'Loan Applications', icon: FileCheck2, end: false },
-      { to: '/clients', label: 'Client Data', icon: Users, end: false },
+      { to: '/clients', label: 'Clients', icon: Users, end: false },
       { to: '/loans', label: 'Loan Accounts', icon: Landmark, end: false },
     ],
   },
@@ -64,7 +64,7 @@ const NAV_GROUPS = [
   {
     label: 'Administration',
     items: [
-      { to: '/admin/members', label: 'Member Details', icon: ShieldCheck, end: false },
+      { to: '/admin/members', label: 'User Accounts', icon: ShieldCheck, end: false },
       { to: '/products', label: 'Loan Products', icon: Package, end: false },
       { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
       { to: '/admin/about', label: 'About', icon: Info, end: false },
@@ -116,10 +116,10 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
                     end={item.end}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-md border-l-2 px-[10px] py-2 text-sm font-medium transition-colors',
                         isActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/15 hover:text-sidebar-foreground',
+                          ? 'border-l-sidebar-accent bg-sidebar-accent/15 text-sidebar-accent'
+                          : 'border-l-transparent text-sidebar-foreground/75 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground',
                       )
                     }
                   >
