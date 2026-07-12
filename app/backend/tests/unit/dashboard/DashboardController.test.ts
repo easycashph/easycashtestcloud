@@ -15,7 +15,7 @@ function buildRequest(authUser: { roles: string[]; branchId: string }) {
 const summary: DashboardSummary = {
   totalActiveLoans: { count: 5, outstandingPrincipalBalance: '100.00' },
   overdueAccounts: { count: 1, atRiskCollectionsBalance: '10.00' },
-  collectionsThisMonth: { amount: '20.00' },
+  collectionsThisMonth: { amount: '20.00', trend: { changePercent: -2.1 } },
   portfolioByProduct: [],
 };
 

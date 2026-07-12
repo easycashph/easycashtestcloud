@@ -15,7 +15,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, AlertOctagon, AlertTriangle, Banknote, Filter, Landmark, RotateCcw, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertOctagon,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  Filter,
+  Landmark,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +48,7 @@ import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/li
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import type { MockActivityLogEntry } from '@/lib/mockData';
 import { COLLECTIONS_VS_TARGET, SAMPLE_COLLECTIONS_PROJECTION } from '@/lib/mockData';
-import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 /** Loan row shape every portfolio widget below reads — assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
@@ -238,6 +251,7 @@ function SummaryCard({
   icon: Icon,
   tone = 'default',
   onClick,
+  trend,
 }: {
   title: string;
   value: string;
@@ -245,6 +259,8 @@ function SummaryCard({
   icon: ComponentType<{ className?: string }>;
   tone?: 'default' | 'destructive';
   onClick?: () => void;
+  /** 2026-07-12: rolling 30-day (Total Active Loans) / vs-last-month (Collections) — omitted entirely, not shown as "0%", when the backend can't compute a reliable baseline (`changePercent: null`, e.g. Overdue Accounts, or a zero previous-period baseline). */
+  trend?: { changePercent: number | null; label: string };
 }) {
   return (
     <Card
@@ -269,8 +285,22 @@ function SummaryCard({
         <Icon className={tone === 'destructive' ? 'h-4 w-4 text-destructive' : 'h-4 w-4 text-primary'} />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="flex items-baseline gap-2">
+          <div className="text-2xl font-bold">{value}</div>
+          {trend && trend.changePercent !== null && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 text-xs font-medium',
+                trend.changePercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
+              )}
+            >
+              {trend.changePercent >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {Math.abs(trend.changePercent).toFixed(1)}%
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+        {trend && trend.changePercent !== null && <p className="text-[11px] text-muted-foreground">{trend.label}</p>}
       </CardContent>
     </Card>
   );
@@ -624,6 +654,7 @@ export function DashboardPage() {
           value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
           hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
           icon={Banknote}
+          trend={liveSummary ? { changePercent: liveSummary.collectionsThisMonth.trend.changePercent, label: 'vs same days last month, portfolio-wide' } : undefined}
         />
         <SummaryCard
           title="Overdue Accounts"
