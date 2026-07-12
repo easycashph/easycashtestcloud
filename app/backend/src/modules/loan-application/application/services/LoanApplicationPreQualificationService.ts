@@ -15,7 +15,7 @@ export interface PreQualificationInput {
   requestedTermMonths: number;
   requestedCategory: string;
   /** The applicant's already-joined address string (same shape the intake form submits as
-   * `address`) — geocoded fresh each time this runs (no per-application caching of the applicant's
+   * `address`) - geocoded fresh each time this runs (no per-application caching of the applicant's
    * own coordinates; only the resulting `distanceFromBranchKm` is cached on the entity). */
   applicantAddressText: string | undefined;
 }
@@ -28,7 +28,7 @@ export interface PreQualificationResult {
 export interface PreQualificationCheck {
   passed: boolean;
   label: string;
-  /** Human-readable explanation of the actual numbers behind the pass/fail — shown on the Detail
+  /** Human-readable explanation of the actual numbers behind the pass/fail - shown on the Detail
    * page's decision-scoring breakdown so the officer can see exactly why the system landed on
    * PREAPPROVED/PREDECLINED, not just the final verdict. */
   detail: string;
@@ -44,7 +44,7 @@ export interface PreQualificationBreakdown {
 }
 
 /**
- * Advisory-only system pre-classification — never an autonomous approval/decline. All three rules
+ * Advisory-only system pre-classification - never an autonomous approval/decline. All three rules
  * must pass for PREAPPROVED; any failure (including missing/unknown data) is PREDECLINED, except
  * the distance rule, which fails OPEN (treated as passing) when geocoding can't resolve an address,
  * since granular Philippine barangay addresses are often unresolvable by free geocoding data and
@@ -65,7 +65,7 @@ export class LoanApplicationPreQualificationService {
   }
 
   /**
-   * Pure, no I/O — re-evaluates the same three rules from already-known inputs (reusing a
+   * Pure, no I/O - re-evaluates the same three rules from already-known inputs (reusing a
    * previously-resolved `distanceFromBranchKm` rather than re-geocoding) so the Detail page can
    * show a live "why" breakdown on every read without an extra network call.
    */
@@ -84,7 +84,7 @@ export class LoanApplicationPreQualificationService {
       detail:
         input.age === undefined
           ? 'Age not on record.'
-          : `Age ${input.age} — requires ${MIN_AGE}–${MAX_AGE}.`,
+          : `Age ${input.age} - requires ${MIN_AGE}–${MAX_AGE}.`,
     };
 
     const amortization = computeFlatRateAmortization(input.requestedAmount, input.requestedTermMonths, input.requestedCategory);
@@ -95,7 +95,7 @@ export class LoanApplicationPreQualificationService {
       label: 'Monthly income vs. loan amount',
       detail:
         input.monthlyIncome === undefined
-          ? `Monthly income not yet recorded — needs to exceed the estimated ₱${amortization.toFixed(2)}/month amortization (${monthlyFlatRatePercent}% flat rate).`
+          ? `Monthly income not yet recorded - needs to exceed the estimated ₱${amortization.toFixed(2)}/month amortization (${monthlyFlatRatePercent}% flat rate).`
           : `Monthly income ₱${input.monthlyIncome.toFixed(2)} vs. estimated ₱${amortization.toFixed(2)}/month amortization.`,
     };
 
@@ -105,8 +105,8 @@ export class LoanApplicationPreQualificationService {
       label: 'Address proximity to branch',
       detail:
         input.distanceFromBranchKm === null
-          ? 'Distance from branch could not be verified — treated as passing.'
-          : `${input.distanceFromBranchKm} km from branch — requires ${MAX_DISTANCE_KM} km or less.`,
+          ? 'Distance from branch could not be verified - treated as passing.'
+          : `${input.distanceFromBranchKm} km from branch - requires ${MAX_DISTANCE_KM} km or less.`,
     };
 
     return {

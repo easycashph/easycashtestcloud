@@ -28,7 +28,7 @@ function worse(a: RiskLevel, b: RiskLevel): RiskLevel {
 }
 
 /**
- * Deterministic, rule-based client-level risk summary — aggregates
+ * Deterministic, rule-based client-level risk summary - aggregates
  * LoanRiskAssessmentService's per-loan output across a borrower's whole loan history. Combines two
  * signals per this session's decision: the worst risk level among currently active loans, and the
  * borrower's lifetime on-time-payment track record (including closed loans). Thresholds below are
@@ -92,10 +92,10 @@ function buildRecommendation(
 ): string {
   const rateText = ctx.onTimePaymentRate === null ? 'wala pang kasaysayan ng bayaran' : `${Math.round(ctx.onTimePaymentRate * 100)}% on-time`;
   if (level === 'HIGH') {
-    return `${ctx.activeLoanCount} aktibong loan na may ₱${ctx.totalExposure} na exposure; ${rateText} sa track record. Mataas ang panganib — irekomenda ang malapit na pagsubaybay ng collections team.`;
+    return `${ctx.activeLoanCount} aktibong loan na may ₱${ctx.totalExposure} na exposure; ${rateText} sa track record. Mataas ang panganib - irekomenda ang malapit na pagsubaybay ng collections team.`;
   }
   if (level === 'MEDIUM') {
-    return `${ctx.activeLoanCount} aktibong loan (₱${ctx.totalExposure} exposure), ${rateText}. Katamtaman ang panganib — regular na follow-up.`;
+    return `${ctx.activeLoanCount} aktibong loan (₱${ctx.totalExposure} exposure), ${rateText}. Katamtaman ang panganib - regular na follow-up.`;
   }
   return `${ctx.activeLoanCount} aktibong loan (₱${ctx.totalExposure} exposure), ${rateText}. Mababa ang panganib batay sa kasalukuyang datos.`;
 }

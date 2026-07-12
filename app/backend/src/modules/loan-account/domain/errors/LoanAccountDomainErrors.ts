@@ -3,7 +3,7 @@ import { DomainError } from '@shared/errors/DomainError';
 /**
  * LA-2 / ADR-011: the LoanAccountStatus lifecycle is a lean, legacy-observed
  * state set. This error guards every transition against the allowed-moves
- * table in LoanAccount.ts — the entity is the single place that decides
+ * table in LoanAccount.ts - the entity is the single place that decides
  * what a legal transition is, never a use case.
  */
 export class InvalidStatusTransitionError extends DomainError {
@@ -15,7 +15,7 @@ export class InvalidStatusTransitionError extends DomainError {
 
 /**
  * Milestone 8 / D-3: configuration validation, not financial calculation
- * — the loan's requested principal must fall within its LoanProductVersion's
+ * - the loan's requested principal must fall within its LoanProductVersion's
  * configured `loanAmountMin`/`loanAmountMax`. No interest/amortization math
  * is involved.
  */
@@ -49,7 +49,7 @@ export class InstallmentCountOutOfRangeError extends DomainError {
 /**
  * Milestone 9.1 checkpoint 8 / `CALCULATION_ENGINE_SPEC.md` §4: only
  * `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` are `STATUS: CONFIRMED`
- * and implemented (`AmortizationScheduleGenerator`, CP3) — both are
+ * and implemented (`AmortizationScheduleGenerator`, CP3) - both are
  * calculation-identical per `ADR-010` §5. `FLAT` has no evidenced formula
  * anywhere in this project's evidence base and is explicitly
  * `STATUS: UNRESOLVED`; `ActivateLoanUseCase` must refuse to activate a
@@ -60,7 +60,7 @@ export class UnsupportedInterestCalculationMethodError extends DomainError {
   constructor(method: string) {
     super(
       'UNSUPPORTED_INTEREST_CALCULATION_METHOD',
-      `Cannot activate a loan whose LoanProductVersion uses interestCalculationMethod "${method}" — only DECLINING_BALANCE/DECLINING_BALANCE_DISCOUNTED are implemented (CALCULATION_ENGINE_SPEC.md §4 UNRESOLVED for FLAT).`,
+      `Cannot activate a loan whose LoanProductVersion uses interestCalculationMethod "${method}" - only DECLINING_BALANCE/DECLINING_BALANCE_DISCOUNTED are implemented (CALCULATION_ENGINE_SPEC.md §4 UNRESOLVED for FLAT).`,
       undefined,
       400,
     );

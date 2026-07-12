@@ -1,4 +1,5 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
@@ -6,6 +7,7 @@ import type { LoanApplicationPreQualificationService } from '../services/LoanApp
 export interface UpdateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   preQualificationService: LoanApplicationPreQualificationService;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 export interface UpdateLoanApplicationInput {
@@ -17,7 +19,7 @@ export interface UpdateLoanApplicationInput {
 export class UpdateLoanApplicationUseCase {
   constructor(private readonly deps: UpdateLoanApplicationUseCaseDeps) {}
 
-  async execute(id: string, input: UpdateLoanApplicationInput): Promise<LoanApplication> {
+  async execute(id: string, input: UpdateLoanApplicationInput, updatedByUserId?: string): Promise<LoanApplication> {
     const application = await this.deps.loanApplicationRepository.findById(id);
     if (!application) {
       throw new NotFoundError('LoanApplication', id);
@@ -39,6 +41,18 @@ export class UpdateLoanApplicationUseCase {
     application.applySystemClassification(classification);
 
     await this.deps.loanApplicationRepository.save(application);
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService && updatedByUserId) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'LOAN_APPLICATION',
+        profileId: application.id,
+        userId: updatedByUserId,
+        action: 'financials_updated',
+        details: { fields: Object.keys(input) },
+      });
+    }
+
     return application;
   }
 }

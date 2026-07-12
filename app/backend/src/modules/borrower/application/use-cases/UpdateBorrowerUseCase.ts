@@ -1,4 +1,5 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { Borrower } from '../../domain/Borrower';
 import { PersonName } from '../../domain/valueObjects/PersonName';
 import { Address, type AddressProps } from '../../domain/valueObjects/Address';
@@ -16,9 +17,11 @@ export interface UpdateBorrowerInput {
 }
 
 export class UpdateBorrowerUseCase {
-  constructor(private readonly deps: { borrowerRepository: IBorrowerRepository }) {}
+  constructor(
+    private readonly deps: { borrowerRepository: IBorrowerRepository; profileActivityLogService?: ProfileActivityLogService },
+  ) {}
 
-  async execute(id: string, input: UpdateBorrowerInput): Promise<Borrower> {
+  async execute(id: string, input: UpdateBorrowerInput, updatedByUserId?: string): Promise<Borrower> {
     const borrower = await this.deps.borrowerRepository.findById(id);
     if (!borrower) {
       throw new NotFoundError('Borrower', id);
@@ -40,6 +43,18 @@ export class UpdateBorrowerUseCase {
     }
 
     await this.deps.borrowerRepository.save(borrower);
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService && updatedByUserId) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'BORROWER',
+        profileId: borrower.id,
+        userId: updatedByUserId,
+        action: 'profile_updated',
+        details: { fields: Object.keys(input) },
+      });
+    }
+
     return borrower;
   }
 }

@@ -69,7 +69,7 @@ export class BorrowerController {
       const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId); // H-1: reject cross-branch writes for non-global roles.
       const body = req.body as UpdateBorrowerRequestBody;
-      const borrower = await this.deps.updateBorrowerUseCase.execute(req.params.id as string, body);
+      const borrower = await this.deps.updateBorrowerUseCase.execute(req.params.id as string, body, req.authUser?.sub);
       res.status(200).json(presentBorrower(borrower));
     } catch (error) {
       next(error);

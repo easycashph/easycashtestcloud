@@ -211,6 +211,16 @@ model User {
   lastName     String
   status       UserStatus @default(ACTIVE)
 
+  /// Internal employee/company ID (HR identifier) - distinct from `id` (the DB primary key) and
+  /// `legacyId` (the migrated-system's own ID). Optional - existing migrated/seeded staff don't
+  /// have one recorded yet.
+  companyId String? @unique
+
+  /// Organizational job-title label under the user's Role (e.g. "MIS Manager") - display/
+  /// organizational only, does not affect access (see RoleClass doc comment).
+  roleClassId String?
+  roleClass   RoleClass? @relation(fields: [roleClassId], references: [id], onDelete: SetNull)
+
   /// Identity traceability only (Mambu `mambu_users` / SDevTech `users`).
   /// Credentials themselves are never migrated — ADR-039.
   legacyId  String?  @unique
@@ -220,6 +230,7 @@ model User {
   roles                    UserRole[]
   refreshTokens            RefreshToken[]
   auditLogs                AuditLog[]
+  profileActivityLogs      ProfileActivityLog[] @relation("ProfileActivityLogUser")
   borrowersAsLoanOfficer   Borrower[]        @relation("BorrowerLoanOfficer")
   loanAccountsAsOfficer    LoanAccount[]     @relation("LoanAccountOfficer")
   loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
@@ -243,6 +254,7 @@ model Role {
 
   users       UserRole[]
   permissions RolePermission[]
+  roleClasses RoleClass[]
 
   @@map("roles")
 }
@@ -255,6 +267,23 @@ model UserRole {
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+/// Organizational job-title label under a Role (e.g. "MIS Manager"/"MIS Assistant" under the MIS
+/// role) - display/organizational only, does NOT affect LMS access; actual permissions remain
+/// governed entirely by Role/Permission above (ADR-043's flat role model is unchanged).
+model RoleClass {
+  id        String   @id @default(uuid())
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@unique([roleId, name])
+  @@map("role_classes")
 }
 
 /// AUDIT-3: permissions must be role-based and configurable in the
@@ -938,6 +967,41 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@map("audit_logs")
+}
+
+// ----------------------------------------------------------------------------
+// Profile Activity Timeline — ADR-050
+// Track loan officer actions on Loan Applications, Borrowers, and Loan Accounts
+// for compliance and auditability. Immutable after creation (soft-delete only).
+// Separate from AuditLog — this is user-visible activity; AuditLog is
+// system-level audit trail.
+// ----------------------------------------------------------------------------
+
+enum ProfileType {
+  LOAN_APPLICATION
+  BORROWER
+  LOAN_ACCOUNT
+}
+
+model ProfileActivityLog {
+  id                   String       @id @default(uuid())
+  profileType          ProfileType
+  profileId            String
+  userId               String
+  user                 User         @relation("ProfileActivityLogUser", fields: [userId], references: [id], onDelete: Restrict)
+  action               String
+  /// JSON object with action-specific details (attachmentId, documentCategory,
+  /// decisionStatus, paymentAmount, etc.). See ADR-050 for examples per action type.
+  details              Json
+  visibilityRestricted Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  deletedByMisAt       DateTime?
+  /// Soft delete: if set, MIS deleted this record at this time.
+
+  @@index([profileType, profileId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("profile_activity_logs")
 }
 
 // ----------------------------------------------------------------------------

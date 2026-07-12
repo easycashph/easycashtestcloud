@@ -98,7 +98,12 @@ export class LoanApplicationController {
   assignProduct = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as AssignLoanApplicationProductRequestBody;
-      const application = await this.deps.assignLoanApplicationProductUseCase.execute(req.params.id as string, body.loanProductVersionId);
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.assignLoanApplicationProductUseCase.execute(
+        req.params.id as string,
+        body.loanProductVersionId,
+        currentUser.sub,
+      );
       res.status(200).json(this.present(application));
     } catch (error) {
       next(error);
@@ -143,7 +148,8 @@ export class LoanApplicationController {
       const existing = await this.deps.getLoanApplicationUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId);
       const body = req.body as UpdateLoanApplicationRequestBody;
-      const application = await this.deps.updateLoanApplicationUseCase.execute(req.params.id as string, body);
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.updateLoanApplicationUseCase.execute(req.params.id as string, body, currentUser.sub);
       res.status(200).json(this.present(application));
     } catch (error) {
       next(error);

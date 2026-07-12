@@ -77,6 +77,7 @@ import { LoanApplicationPreQualificationService } from '@modules/loan-applicatio
 import { NominatimGeocodingService } from '@shared/geo/NominatimGeocodingService';
 import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
 import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
+import { LogSectionViewUseCase } from '@modules/audit/application/use-cases/LogSectionViewUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
 import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
@@ -88,6 +89,12 @@ import { DownloadAttachmentUseCase } from '@modules/document/application/use-cas
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
 import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
+import { createRoleClassRouter } from '@modules/role-class/interface/http/RoleClassRouter';
+import { RoleClassController } from '@modules/role-class/interface/http/RoleClassController';
+import { ListRoleClassesUseCase } from '@modules/role-class/application/use-cases/ListRoleClassesUseCase';
+import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
+import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
+import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/PrismaRoleClassRepository';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
 import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
@@ -102,6 +109,12 @@ import { PrismaReportingRepository } from '@modules/reporting/infrastructure/Pri
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
+import { createProfileActivityLogRouter } from '@modules/profile-activity/interface/http/ProfileActivityLogRouter';
+import { GetProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/GetProfileActivityUseCase';
+import { DeleteProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/DeleteProfileActivityUseCase';
+import { PrismaProfileActivityLogRepository } from '@modules/profile-activity/infrastructure/PrismaProfileActivityLogRepository';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import { ProfileActivityLogController } from '@modules/profile-activity/interface/http/ProfileActivityLogController';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -205,11 +218,26 @@ export function createApp(): Express {
     {
       listUsersUseCase: new ListUsersUseCase({ userRepository }),
       createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher }),
-      updateUserUseCase: new UpdateUserUseCase({ userRepository }),
+      updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher }),
     },
     tokenService,
   );
   app.use('/api/v1', userRouter);
+
+  // --- role-class module wiring: organizational job-title labels under a Role (Administration > Member Details > Roles tab) ---
+  const roleClassRepository = new PrismaRoleClassRepository();
+  const roleClassController = new RoleClassController({
+    listRoleClassesUseCase: new ListRoleClassesUseCase({ roleClassRepository }),
+    createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository }),
+    updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository }),
+  });
+  const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
+  app.use('/api/v1', roleClassRouter);
+
+  // --- profile-activity module wiring: ADR-050 — track loan officer actions on profiles ---
+  // Instantiated here early so it can be injected into borrower, loan-account, and loan-application use cases.
+  const profileActivityLogRepository = new PrismaProfileActivityLogRepository();
+  const profileActivityLogService = new ProfileActivityLogService(profileActivityLogRepository);
 
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
   const borrowerRepository = new PrismaBorrowerRepository();
@@ -224,7 +252,7 @@ export function createApp(): Express {
       createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
-      updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository }),
+      updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
       createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
       getBorrowerRiskSummaryUseCase: new GetBorrowerRiskSummaryUseCase({
@@ -282,8 +310,8 @@ export function createApp(): Express {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
-      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
-      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
+      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
+      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
       // cases (previously built with zero routes, per the D-2 precedent —
       // see ActivateLoanUseCase's/ProcessPaymentUseCase's own doc comments).
@@ -294,9 +322,11 @@ export function createApp(): Express {
         loanTransactionRepository,
         financialAuditLogger,
         unitOfWork,
+        profileActivityLogService,
       }),
       processPaymentUseCase: new ProcessPaymentUseCase({
         loanAccountRepository,
+        profileActivityLogService,
         repaymentInstallmentRepository,
         loanTransactionRepository,
         financialAuditLogger,
@@ -334,6 +364,8 @@ export function createApp(): Express {
   );
   app.use('/api/v1', repaymentRouter);
 
+  // --- profile-activity module router mount (controller instantiated below after dashboard) ---
+
   // --- dashboard module wiring (Milestone 9.2: read-only portfolio aggregates) ---
   const dashboardRouter = createDashboardRouter(
     {
@@ -355,15 +387,24 @@ export function createApp(): Express {
       createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
-      assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository }),
-      approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
-      declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
+      assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository, profileActivityLogService }),
+      approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
+      }),
+      declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
+      }),
       revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
         loanApplicationRepository,
         auditLogger,
         preQualificationService,
+        profileActivityLogService,
       }),
-      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService }),
+      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
       preQualificationService,
     },
     tokenService,
@@ -375,6 +416,7 @@ export function createApp(): Express {
   const auditLogRouter = createAuditLogRouter(
     {
       listAuditLogsUseCase: new ListAuditLogsUseCase({ auditLogRepository: new PrismaAuditLogRepository() }),
+      logSectionViewUseCase: new LogSectionViewUseCase({ auditLogger }),
     },
     tokenService,
   );
@@ -407,7 +449,7 @@ export function createApp(): Express {
   const fileStorage = new LocalFileStorage();
   const documentRouter = createDocumentRouter(
     {
-      uploadAttachmentUseCase: new UploadAttachmentUseCase({ attachmentRepository, fileStorage }),
+      uploadAttachmentUseCase: new UploadAttachmentUseCase({ attachmentRepository, fileStorage, profileActivityLogService }),
       listAttachmentsForOwnerUseCase: new ListAttachmentsForOwnerUseCase({ attachmentRepository }),
       downloadAttachmentUseCase: new DownloadAttachmentUseCase({ attachmentRepository, fileStorage }),
     },
@@ -426,6 +468,14 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', aiExtractionRouter);
+
+  // --- profile-activity module router mount: ADR-050 ---
+  const profileActivityLogController = new ProfileActivityLogController(
+    new GetProfileActivityUseCase(profileActivityLogRepository, userRepository),
+    new DeleteProfileActivityUseCase(profileActivityLogRepository),
+  );
+  const profileActivityLogRouter = createProfileActivityLogRouter(profileActivityLogController, tokenService);
+  app.use('/api/v1', profileActivityLogRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 

@@ -104,8 +104,34 @@ async function main() {
     });
   }
 
+  // Role Class: organizational job-title labels under a Role (Administration > Member Details >
+  // Roles tab) - display/organizational only, does not affect access. Business-confirmed roster.
+  const roleClassesByRoleName: Record<string, string[]> = {
+    MIS: ['MIS Manager', 'MIS Assistant'],
+    'Loan Operation Manager': ['LOM'],
+    CRM: ['CRM'],
+    Accounting: ['Accounting'],
+    Finance: ['Finance'],
+    'Collection Officer': ['Collection Manager', 'Accounts Recovery Officer', 'Field Collector'],
+  };
+  let roleClassCount = 0;
+  for (const [roleName, classNames] of Object.entries(roleClassesByRoleName)) {
+    const role = roles[roleName];
+    if (!role) continue;
+    for (const className of classNames) {
+      await prisma.roleClass.upsert({
+        where: { roleId_name: { roleId: role.id, name: className } },
+        update: {},
+        create: { roleId: role.id, name: className },
+      });
+      roleClassCount += 1;
+    }
+  }
+
   // eslint-disable-next-line no-console
-  console.log(`Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}.`);
+  console.log(
+    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Role Classes: ${roleClassCount}.`,
+  );
 }
 
 main()

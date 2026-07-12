@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { ValidationError } from '@shared/errors/DomainError';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type {
   AttachmentDocumentCategory,
   AttachmentOwnerType,
@@ -30,6 +31,7 @@ export class UploadAttachmentUseCase {
     private readonly deps: {
       attachmentRepository: IAttachmentRepository;
       fileStorage: IFileStorage;
+      profileActivityLogService?: ProfileActivityLogService;
     },
   ) {}
 
@@ -55,7 +57,7 @@ export class UploadAttachmentUseCase {
 
     await this.deps.fileStorage.save(storageKey, input.data);
 
-    return this.deps.attachmentRepository.create({
+    const attachment = await this.deps.attachmentRepository.create({
       ownerType: input.ownerType,
       ownerId: input.ownerId,
       fileName: input.fileName,
@@ -65,5 +67,32 @@ export class UploadAttachmentUseCase {
       documentCategory: input.documentCategory,
       uploadedByUserId: input.uploadedByUserId,
     });
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService && input.uploadedByUserId) {
+      const profileType =
+        input.ownerType === 'LOAN_APPLICATION'
+          ? 'LOAN_APPLICATION'
+          : input.ownerType === 'LOAN_ACCOUNT'
+            ? 'LOAN_ACCOUNT'
+            : input.ownerType === 'BORROWER'
+              ? 'BORROWER'
+              : null;
+
+      if (profileType) {
+        await this.deps.profileActivityLogService.logActivity({
+          profileType,
+          profileId: input.ownerId,
+          userId: input.uploadedByUserId,
+          ...ProfileActivityLogService.actions.attachmentCreated(
+            attachment.id,
+            input.documentCategory || 'GENERIC',
+            input.fileName,
+          ),
+        });
+      }
+    }
+
+    return attachment;
   }
 }

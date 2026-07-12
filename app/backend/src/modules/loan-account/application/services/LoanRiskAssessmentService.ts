@@ -25,14 +25,14 @@ function daysBetween(earlier: Date, later: Date): number {
 }
 
 /**
- * Deterministic, rule-based loan-level risk classification — no external AI model, mirrors
+ * Deterministic, rule-based loan-level risk classification - no external AI model, mirrors
  * LoanApplicationPreQualificationService's philosophy (system computes it, officer/collector still
  * decides what to do about it). Thresholds below are proposed defaults (industry-convention DPD
  * buckets), not yet business-confirmed the way the loan-application age/income/distance numbers
- * were — flagged for review, same as that feature's flat-rate constant was before it was final.
+ * were - flagged for review, same as that feature's flat-rate constant was before it was final.
  *
  * `RepaymentInstallment.status` is a derived, live-computed getter (see that class's own doc
- * comment) — once an installment is fully paid its status becomes PAID regardless of whether it
+ * comment) - once an installment is fully paid its status becomes PAID regardless of whether it
  * was ever late, so "was this ever late" is inferred here by comparing `lastPaidAt` to `dueDate`
  * for settled installments, not read directly off `status`.
  */
@@ -74,7 +74,7 @@ function buildRecommendation(level: RiskLevel, maxDaysPastDue: number, lateInsta
     return `${maxDaysPastDue} araw nang overdue ang pinaka-lumang balanse, ${lateInstallmentCount} late na installment sa kasaysayan ng account na ito. I-eskalate sa collections team para sa agarang follow-up.`;
   }
   if (level === 'MEDIUM') {
-    return `May ${lateInstallmentCount} late na installment sa kasaysayan (${maxDaysPastDue} araw ang kasalukuyang pinaka-mataas na overdue). Katamtaman ang panganib — irekomenda ang regular na follow-up.`;
+    return `May ${lateInstallmentCount} late na installment sa kasaysayan (${maxDaysPastDue} araw ang kasalukuyang pinaka-mataas na overdue). Katamtaman ang panganib - irekomenda ang regular na follow-up.`;
   }
   return 'Walang overdue balance at maayos ang kasaysayan ng bayaran. Mababa ang panganib batay sa kasalukuyang datos.';
 }

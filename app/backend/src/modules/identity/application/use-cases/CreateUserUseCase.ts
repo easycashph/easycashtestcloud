@@ -12,6 +12,8 @@ export interface CreateUserUseCaseInput {
   firstName: string;
   lastName: string;
   roleNames: string[];
+  companyId?: string;
+  roleClassId?: string;
 }
 
 /** Same sequence as scripts/create-additional-mis-user.ts, now reusable from HTTP: validate email → duplicate check → password policy → hash → create. */
@@ -44,6 +46,8 @@ export class CreateUserUseCase {
       firstName: input.firstName,
       lastName: input.lastName,
       roleNames: input.roleNames,
+      companyId: input.companyId,
+      roleClassId: input.roleClassId,
     });
   }
 }
