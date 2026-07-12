@@ -25,7 +25,7 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { apiClient } from '@/lib/apiClient';
 import type { CreateUserRequest, UpdateUserRequest, User, UserStatus } from '@/lib/userApiTypes';
 import type { ListRoleClassesResponse, RoleClass, RoleType } from '@/lib/roleClassApiTypes';
-import type { LmsRole } from '@/lib/mockData';
+import type { LmsRole } from '@/lib/staticConfig';
 import { formatDate } from '@/lib/utils';
 
 const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];

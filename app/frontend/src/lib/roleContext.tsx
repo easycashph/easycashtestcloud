@@ -2,7 +2,7 @@ import * as React from 'react';
 import { apiClient, ApiError, setAccessToken, setOnSessionExpired } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
-import type { LmsRole } from './mockData';
+import type { LmsRole } from './staticConfig';
 import { LoginPage } from '@/pages/LoginPage';
 
 /** Authenticated account shape every existing page already consumes (`currentAccount.id/name/role`) - unchanged from the mock era, now sourced from the real backend. */

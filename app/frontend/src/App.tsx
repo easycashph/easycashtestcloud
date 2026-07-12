@@ -25,17 +25,17 @@ import { AboutPage } from '@/pages/AboutPage';
  * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). `/login` is no longer a route: `RoleProvider` renders
  * `LoginPage` in place of this whole tree whenever there's no active session.
  *
- * Wiring status per route (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for
- * detail):
- * - Real: auth, LoanListPage, LoanApplications* (list/create/detail), ClientListPage,
- *   ClientProfilePage, LoanProductsPage (read-only by design), PaymentRecordingPage,
- *   MemberListPage, ActivityLogPage.
- * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
- *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
- *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
- *   approve/activate actions, and timeline are still mock - risk assessment and payment history
- *   are real).
- * - Mock only: PaymentRemindersPage, all *ReportPage routes, SettingsPage, AboutPage.
+ * Wiring status per route, current as of the 2026-07-12 mock-removal pass (see
+ * `docs/SESSION_LOG_2026-07-12.md` Addendums 1-10 for the full history):
+ * - Real, no mock fallback remaining: every route in this tree - DashboardPage (Collections vs.
+ *   Target chart is the one exception, disclosed sample data pending a business decision on how a
+ *   real monthly target gets set), LoanListPage, LoanApplications* (list/create/detail),
+ *   ClientListPage, ClientProfilePage, LoanDetailPage, StatementOfAccountPage, LoanProductsPage
+ *   (read-only by design), PaymentRecordingPage, PaymentRemindersPage, MemberListPage,
+ *   ActivityLogPage, all *ReportPage routes, SettingsPage, AboutPage.
+ * - `src/lib/mockData.ts` still exists for its genuinely-static config exports (`COMPANY_INFO`,
+ *   payment method labels, intake document checklist) - not fake business data, see that file's
+ *   own top-of-file comment.
  */
 export default function App() {
   return (

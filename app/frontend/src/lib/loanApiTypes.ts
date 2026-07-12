@@ -249,6 +249,8 @@ export interface InstallmentAmounts {
   total: string;
 }
 
+export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+
 export interface RepaymentInstallment {
   id: string;
   loanAccountId: string;
@@ -256,7 +258,7 @@ export interface RepaymentInstallment {
   dueDate: string;
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
-  status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+  status: RepaymentInstallmentStatus;
   /** Null until first paid. Compare against `dueDate` to tell a settled (PAID) installment was
    * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
    * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */

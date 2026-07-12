@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { getPaymentMethodLabel, isDiscontinuedPaymentMethod } from '@/lib/mockData';
+import { getPaymentMethodLabel, isDiscontinuedPaymentMethod } from '@/lib/staticConfig';
 
 export function PaymentMethodBadge({ code }: { code: string }) {
   const discontinued = isDiscontinuedPaymentMethod(code);

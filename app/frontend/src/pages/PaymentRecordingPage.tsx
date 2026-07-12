@@ -24,7 +24,7 @@ import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { ACTIVE_PAYMENT_METHODS } from '@/lib/mockData';
+import { ACTIVE_PAYMENT_METHODS } from '@/lib/staticConfig';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { apiClient, ApiError } from '@/lib/apiClient';

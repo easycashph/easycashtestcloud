@@ -873,3 +873,88 @@ or infrastructure-blocked, not oversights.
 ⏳ If the intentional sample-data demo mode should eventually be removed entirely (not just have a
 real path alongside it), that's a product decision for the user to make explicitly - flagged here,
 not assumed.
+
+---
+
+# Addendum 10 — mockData.ts deleted entirely, Option A executed (2026-07-12)
+
+**Trigger:** User asked what would happen under "Option A" (fully removing the sample-data demo
+mode, not just having a real path alongside it - the deferred decision from the end of Addendum 9).
+Explained the tradeoffs (loses the no-DB-needed preview mode on this machine; doesn't unblock
+Collections vs. Target; some shared components needed their types redirected first) and
+recommended doing it incrementally. User confirmed: "option A... mas gusto ko na connected talaga
+ang LMS sa backend at real data na ang gagamitin."
+
+## What shipped
+
+**Type redirects** (`StatusBadge.tsx`, `LoanDrillDownDialog.tsx`): both imported `LoanAccountStatus`
+from `mockData.ts` instead of the real `loanApiTypes.ts` - and the mock version had a `MATURED`
+status value **the real backend has never had** (`schema.prisma`'s `LoanAccountStatus` enum has
+always been 7 values, no `MATURED`). `DashboardPage.tsx`'s own code already knew this
+("The real backend has no MATURED status yet... not tracked by the backend yet") but the shared
+badge component didn't - a real type-safety gap, now closed. Added a missing exported
+`RepaymentInstallmentStatus` type to `loanApiTypes.ts` (was only inlined before).
+
+**Simplified `ClientProfilePage.tsx`, `LoanDetailPage.tsx`, `StatementOfAccountPage.tsx`** to
+render their real view (`RealClientProfileView`/`RealLoanDetailView`/
+`RealStatementOfAccountView`) unconditionally, deleting the entire mock-record code path each
+page carried since the original Frontend↔Backend Wiring Pilot: `EditClientDialog`,
+`getLoanSortValue`, the mock `NotesPanel`/`AttachmentsPanel`/`RemindersPanel` trio in
+`LoanDetailPage.tsx`, the mock statement-of-account JSX, and every now-dead sort-value helper and
+import. **Found and fixed a real regression in the process**: deleting the mock
+`LoanDetailPage()` wrapper revealed it was the *only* place rendering the Activity Timeline and
+Recent Activity panel for loan accounts - `RealLoanDetailView` never had them. Added both to the
+real view rather than just deleting the dead code, so the feature isn't lost.
+
+**Deleted `CreateLoanAccountDialog.tsx`** outright - confirmed zero importers anywhere once
+`ClientProfilePage.tsx`'s mock path was gone.
+
+**Extracted genuine static config** into a new `src/lib/staticConfig.ts`: `COMPANY_INFO`,
+`ACTIVE_PAYMENT_METHODS`/`DISCONTINUED_PAYMENT_METHODS`/`getPaymentMethodLabel`/
+`isDiscontinuedPaymentMethod`, `INTAKE_DOCUMENT_OPTIONS`, `LmsRole`. These were never fake
+business data - real, fixed reference values (company identity, a fixed payment-method catalog,
+staff role names) that happened to live in the mock file. Updated 7 importers
+(`PaymentMethodBadge.tsx`, `AppLayout.tsx`, `LoginPage.tsx`, `LoanApplicationCreatePage.tsx`,
+`MemberListPage.tsx`, `PaymentRecordingPage.tsx`, and `roleContext.tsx` - found via a build error,
+missed in the initial grep since its import line wrapped differently) to the new file.
+
+**`DashboardPage.tsx`'s Collections vs. Target**: inlined `COLLECTIONS_VS_TARGET` directly into
+the page itself as a clearly-commented placeholder (still blocked on the same business decision as
+Addendum 3/4) rather than migrating it to `staticConfig.ts` - it's disclosed sample data, not real
+config, and moving it to a "config" file would have misrepresented what it is.
+
+**Deleted `src/lib/mockData.ts` entirely** (was ~3,050 lines) once its last real importer was
+migrated. Worth noting why this specific deletion mattered beyond code cleanliness: the file's own
+top-of-file comment disclosed it paired **real customer names** (sourced from the legacy MLR
+Master List) with **entirely fabricated financial figures**, and explicitly warned "THIS BUILD
+MUST NOT BE DEPLOYED PUBLICLY OR SHARED OUTSIDE AN INTERNAL PREVIEW AUDIENCE." With no code path
+left rendering it anywhere, deleting it removes a real name/fake-data privacy liability from the
+repo, not just dead weight.
+
+Also fixed a stale doc comment in `App.tsx` (still claimed several routes were mock-only when they
+were actually real as of earlier addendums this session) and in `DateRangeFilter.tsx` (claimed to
+filter a mock dataset that no longer exists).
+
+Typechecked clean after every step. Booted the dev server and confirmed the login page renders
+correctly (real `COMPANY_INFO` from the new `staticConfig.ts`, no console errors) - full
+authenticated verification still not possible from this machine (no DB access).
+
+## Current State
+
+✅ **`mockData.ts` no longer exists.** Zero sample/demo data code paths remain anywhere in the
+frontend - every page renders exclusively from real backend data.
+✅ Fixed a real type-safety bug (`MATURED` status that never existed on the real backend) and a
+real regression (Activity Timeline missing from the real Loan Account view) discovered while doing
+this cleanup.
+✅ Genuine static config (`staticConfig.ts`) is clearly separated from anything resembling sample
+data.
+⏳ Collections vs. Target (Dashboard) - still explicitly disclosed placeholder data, now inlined
+in `DashboardPage.tsx` itself, still blocked on a business decision (how a real monthly collection
+target gets set).
+⏳ SMS/Email sending - still blocked on a provider, pending MIS Nomer.
+⏳ Migrations `20260712050000_add_borrower_source_application` and `20260712060000_add_notes`
+still need to run against the real database.
+
+**This closes the mock-data-removal initiative that ran through this entire session (Addendums
+1-10).** Every remaining known gap is either a business decision or external infrastructure, not
+a wiring task.

@@ -31,7 +31,7 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   type AttachmentDocumentCategory,
 } from '@/lib/documentApiTypes';
-import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/mockData';
+import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/staticConfig';
 import { formatPeso } from '@/lib/utils';
 
 const AI_EXTRACTION_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.docx';

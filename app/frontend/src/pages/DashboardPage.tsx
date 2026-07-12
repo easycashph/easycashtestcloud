@@ -33,8 +33,25 @@ import { useLanguage } from '@/lib/languageContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import { COLLECTIONS_VS_TARGET } from '@/lib/mockData';
 import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+
+/**
+ * Placeholder pending a business decision on how a real monthly collection target gets set (no
+ * target-setting feature exists yet - see docs/SESSION_LOG_2026-07-12.md Addendum 3/4). Only the
+ * `target` line below is fabricated; the `actual` line this feeds (`scaledCollectionsVsTarget`)
+ * is a real, disclosed-as-estimated figure derived from `GET /dashboard/summary`. Deliberately
+ * inlined here (not in a shared "mock data" module) since this is the one remaining placeholder
+ * left after 2026-07-12's mock-removal pass - moving it would suggest more sample data exists
+ * than actually does.
+ */
+const COLLECTIONS_VS_TARGET: { month: string; target: number; actual: number }[] = [
+  { month: 'Feb', target: 1_128_140, actual: 1_057_320 },
+  { month: 'Mar', target: 1_119_870, actual: 993_450 },
+  { month: 'Apr', target: 1_134_220, actual: 1_142_680 },
+  { month: 'May', target: 1_108_960, actual: 1_021_390 },
+  { month: 'Jun', target: 1_126_500, actual: 1_088_710 },
+  { month: 'Jul', target: 1_121_330, actual: 1_004_260 },
+];
 
 /** Loan row shape every portfolio widget below reads - assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */

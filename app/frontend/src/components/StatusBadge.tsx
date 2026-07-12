@@ -1,12 +1,11 @@
 import { Badge } from '@/components/ui/badge';
-import type { LoanAccountStatus, RepaymentInstallmentStatus } from '@/lib/mockData';
+import type { LoanAccountStatus, RepaymentInstallmentStatus } from '@/lib/loanApiTypes';
 
 const LOAN_STATUS_STYLE: Record<LoanAccountStatus, { label: string; variant: 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline' }> = {
   PENDING_APPROVAL: { label: 'Pending Approval', variant: 'secondary' },
   APPROVED: { label: 'Approved', variant: 'outline' },
   ACTIVE: { label: 'Active', variant: 'success' },
   ACTIVE_IN_ARREARS: { label: 'In Arrears', variant: 'warning' },
-  MATURED: { label: 'Matured', variant: 'destructive' },
   CLOSED: { label: 'Closed', variant: 'secondary' },
   CLOSED_WRITTEN_OFF: { label: 'Written Off', variant: 'destructive' },
   CLOSED_REJECTED: { label: 'Rejected', variant: 'secondary' },

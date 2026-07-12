@@ -22,7 +22,7 @@ import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
 import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
-import { COMPANY_INFO } from '@/lib/mockData';
+import { COMPANY_INFO } from '@/lib/staticConfig';
 import { LMS_VERSION } from '@/lib/lmsVersion';
 import { cn } from '@/lib/utils';
 
