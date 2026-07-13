@@ -139,3 +139,45 @@ document-download button to the shared standalone helper, consistent with the re
     reported to him — not something to fix blind without knowing his intended redesign.
   - User still needs to add `{Placeholder}` fields to 9 of 11 ADR-051 `.docx` templates in Word.
   - Per-Loan-Product `DocumentTemplateMapping` data still needs confirming.
+
+---
+
+## Addendum — reconciling Nomer's pushed merge with Jomer's later local session
+
+**Trigger:** After the above merge was pushed (`bb73665`..`7ce02bd`), Jomer's machine had
+continued working locally (self-service Profile/Password endpoints, Docker cleanup, TEST-record
+cleanup, `PreviewBanner.tsx` correctness fixes) without yet pulling this merge - `git push` from
+that side would have hit the same non-fast-forward situation this session already resolved once.
+
+**What happened:** Jomer's session committed its own local work first (`39d084d`), then ran a
+trial merge (`git merge origin/main --no-commit --no-ff`) the same way this session did. Result:
+**128 files touched, only one real conflict** - `PreviewBanner.tsx`, where both sessions had
+independently corrected the same stale "still mock" disclosure after the `mockData.ts` removal.
+Resolved by combining both versions' accurate points (Collections vs. Target placeholder,
+SMS/Email pending a provider, real customer names throughout) rather than picking one side.
+
+New from Jomer's side, now merged in: `PATCH /users/me` and `POST /users/me/change-password`
+(self-service profile update and password change, the latter requiring the current password per
+standard practice - distinct from the MIS-only admin reset on `PATCH /users/:id`), new
+`User.contactNumber`/`address`/`birthday` columns, and a `scripts/delete-test-records.ts` cleanup
+utility (dry-run by default).
+
+One merge-exposed test failure, fixed: `GetCurrentUserUseCase.test.ts`'s mock user object predated
+the new `contactNumber`/`address`/`birthday` fields, so the returned view no longer matched the
+test's hardcoded expectation - updated both to include the new fields as `null`. The same 16
+pre-existing failures this addendum's parent section already documented (`loan-application`
+domain/use-cases, `BorrowerController`) were re-confirmed unrelated: every affected file is
+byte-identical to `origin/main`.
+
+Both `npm install` (backend + frontend) re-run to pick up dependency changes from both sides;
+`npx prisma migrate deploy` applied 6 further pending migrations (Jomer's 3 +
+Nomer's `add_or_ar_number_to_loan_transaction`/`add_interest_rate_chart`/
+`add_loan_account_origination_fees`/`add_payment_allocation`/`add_loan_note`/
+`add_loan_document_generation` - some of these were already-known pending from this session's own
+merge, re-applied cleanly). Backend Docker image rebuilt and container recreated to run the fully
+reconciled code; verified live via direct `curl` against `/api/v1/auth/me`, `/api/v1/loan-accounts`,
+`/api/v1/notes`, and `/api/v1/loan-accounts/:id/notes` (all `401 Unauthorized`, confirming the
+routes exist and require auth, not `404`).
+
+Merge pushed as `71e4ead`. The two-Note-systems follow-up noted above is unchanged - still needs a
+product decision, not resolved by this second reconciliation either.
