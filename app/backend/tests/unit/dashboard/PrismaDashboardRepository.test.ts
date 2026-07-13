@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const loanAccountOps = { aggregate: vi.fn(), groupBy: vi.fn() };
 const loanTransactionOps = { aggregate: vi.fn() };
 const loanProductVersionOps = { findMany: vi.fn() };
+// Collections Forecast (merged in from a parallel branch, 2026-07-13) - 4 calls per getSummary,
+// one per forecast month; a shared default keeps every other test's setup untouched.
+const repaymentScheduleOps = { aggregate: vi.fn() };
 const queryRaw = vi.fn();
 
 const prismaMock = {
   loanAccount: loanAccountOps,
   loanTransaction: loanTransactionOps,
   loanProductVersion: loanProductVersionOps,
+  repaymentSchedule: repaymentScheduleOps,
   $queryRaw: queryRaw,
 };
 
@@ -26,6 +30,7 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
     loanProductVersionOps.findMany.mockResolvedValue([]);
     loanAccountOps.groupBy.mockResolvedValue([]);
     queryRaw.mockResolvedValue([]); // findOverdueLoanAccounts -> none, by default
+    repaymentScheduleOps.aggregate.mockResolvedValue({ _sum: { principalDue: 0, interestDue: 0 } });
   });
 
   it('Total Active Loans has no trend field (2026-07-12: dropped — 477 of 502 legacy CLOSED loans have no closedAt, making a 30-day reconstruction fabricate a swing)', async () => {
