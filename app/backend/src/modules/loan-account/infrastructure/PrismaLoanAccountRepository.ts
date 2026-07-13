@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
@@ -275,5 +276,37 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
       if (Number.isInteger(n) && n > max) max = n;
     }
     return max;
+  }
+
+  /** Same maturity definition as `PrismaDashboardRepository.findOverdueLoanAccounts` (2026-07-12) -
+   * kept in sync deliberately so the Dashboard's Loan Portfolio Health "Matured" segment and this
+   * per-loan badge never disagree. See that function's own doc comment for the full rationale. */
+  async findMaturedLoanAccountIds(loanAccountIds: string[], ctx?: TransactionContext): Promise<Set<string>> {
+    if (loanAccountIds.length === 0) return new Set();
+    const client = resolveClient(ctx);
+    const now = new Date();
+    const rows = await client.$queryRaw<{ id: string }[]>(Prisma.sql`
+      WITH overdue AS (
+        SELECT DISTINCT rs."loanAccountId" AS id
+        FROM repayment_schedules rs
+        JOIN loan_accounts la ON la.id = rs."loanAccountId"
+        WHERE rs."dueDate" < ${now}
+          AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
+              < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
+          AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
+          AND la.id IN (${Prisma.join(loanAccountIds)})
+      ),
+      maturity AS (
+        SELECT "loanAccountId" AS id, MAX("dueDate") AS maturity_date
+        FROM repayment_schedules
+        WHERE "loanAccountId" IN (${Prisma.join(loanAccountIds)})
+        GROUP BY "loanAccountId"
+      )
+      SELECT overdue.id
+      FROM overdue
+      JOIN maturity ON maturity.id = overdue.id
+      WHERE maturity.maturity_date < ${now}
+    `);
+    return new Set(rows.map((r) => r.id));
   }
 }

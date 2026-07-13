@@ -77,6 +77,7 @@ interface PortfolioLoanRow {
   /** Product family grouping derived from `productType` (Seafarer Loan / Salary Loan / Business Loan / Other) - used for Portfolio Breakdown. */
   category: string;
   status: LoanAccountStatus;
+  isMatured: boolean;
   principalAmount: number;
   collectionsBalance: number;
   activatedAt: string | null;
@@ -424,6 +425,7 @@ export function DashboardPage() {
         productType: productName,
         category: categorizeProductName(productName),
         status: l.status,
+        isMatured: l.isMatured,
         principalAmount: Number.parseFloat(l.principalAmount) || 0,
         collectionsBalance: Number.parseFloat(l.collectionsBalance) || 0,
         activatedAt: l.activatedAt,

@@ -8,6 +8,7 @@ import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotenc
 import type { CreateLoanAccountUseCase } from '../../application/use-cases/CreateLoanAccountUseCase';
 import type { GetLoanAccountUseCase } from '../../application/use-cases/GetLoanAccountUseCase';
 import type { ListLoanAccountsUseCase } from '../../application/use-cases/ListLoanAccountsUseCase';
+import type { ListMaturedLoanAccountIdsUseCase } from '../../application/use-cases/ListMaturedLoanAccountIdsUseCase';
 import type { ApproveLoanUseCase } from '../../application/use-cases/ApproveLoanUseCase';
 import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUseCase';
 import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
@@ -26,6 +27,7 @@ export interface LoanAccountControllerDeps {
   createLoanAccountUseCase: CreateLoanAccountUseCase;
   getLoanAccountUseCase: GetLoanAccountUseCase;
   listLoanAccountsUseCase: ListLoanAccountsUseCase;
+  listMaturedLoanAccountIdsUseCase: ListMaturedLoanAccountIdsUseCase;
   approveLoanUseCase: ApproveLoanUseCase;
   rejectLoanUseCase: RejectLoanUseCase;
   activateLoanUseCase: ActivateLoanUseCase;
@@ -58,7 +60,8 @@ export class LoanAccountController {
       const scope = resolveBranchScope(req);
       const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, loanAccount.branchId); // H-1: reject cross-branch reads for non-global roles.
-      res.status(200).json(presentLoanAccount(loanAccount));
+      const maturedIds = await this.deps.listMaturedLoanAccountIdsUseCase.execute([loanAccount.id]);
+      res.status(200).json(presentLoanAccount(loanAccount, maturedIds.has(loanAccount.id)));
     } catch (error) {
       next(error);
     }
@@ -77,7 +80,14 @@ export class LoanAccountController {
         search,
         borrowerId,
       });
-      res.status(200).json(toPaginatedResponse(loanAccounts.map(presentLoanAccount), limit, (item) => item.id));
+      const maturedIds = await this.deps.listMaturedLoanAccountIdsUseCase.execute(loanAccounts.map((l) => l.id));
+      res.status(200).json(
+        toPaginatedResponse(
+          loanAccounts.map((loanAccount) => presentLoanAccount(loanAccount, maturedIds.has(loanAccount.id))),
+          limit,
+          (item) => item.id,
+        ),
+      );
     } catch (error) {
       next(error);
     }

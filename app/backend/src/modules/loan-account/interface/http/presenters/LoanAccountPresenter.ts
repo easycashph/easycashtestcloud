@@ -13,7 +13,10 @@ function presentAppliedFee(fee: AppliedFee) {
   };
 }
 
-export function presentLoanAccount(loanAccount: LoanAccount) {
+/** `isMatured` - computed separately (see `ListMaturedLoanAccountIdsUseCase`), not a domain field -
+ * defaults to `false` for callers/tests that don't need it. See that use case's own doc comment
+ * for the definition (Investopedia: full scheduled term over, still unpaid). */
+export function presentLoanAccount(loanAccount: LoanAccount, isMatured = false) {
   const balances = loanAccount.balances.toProps();
   const originationFees = loanAccount.originationFees.toProps();
   return {
@@ -73,5 +76,6 @@ export function presentLoanAccount(loanAccount: LoanAccount) {
     updatedAt: loanAccount.updatedAt.toISOString(),
     appliedFees: loanAccount.appliedFees.map(presentAppliedFee),
     coBorrowerIds: [...loanAccount.coBorrowerIds],
+    isMatured,
   };
 }

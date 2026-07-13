@@ -535,7 +535,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <LoanStatusBadge status={loan.status} />
+          <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
           {canRecordPayment && (
             <Button size="sm" onClick={() => navigate(`/payments?loanId=${loan.id}`)}>
               Record Payment

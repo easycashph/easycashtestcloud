@@ -44,6 +44,7 @@ import { createLoanAccountRouter } from '@modules/loan-account/interface/http/lo
 import { CreateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/CreateLoanAccountUseCase';
 import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
+import { ListMaturedLoanAccountIdsUseCase } from '@modules/loan-account/application/use-cases/ListMaturedLoanAccountIdsUseCase';
 import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
@@ -353,6 +354,7 @@ export function createApp(): Express {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
+      listMaturedLoanAccountIdsUseCase: new ListMaturedLoanAccountIdsUseCase({ loanAccountRepository }),
       approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use

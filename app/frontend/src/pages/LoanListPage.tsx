@@ -31,6 +31,7 @@ interface LoanRow {
   productName: string;
   productActive: boolean;
   status: LoanAccountStatus;
+  isMatured: boolean;
   principalAmount: number;
   collectionsBalance: number;
   createdAt: string;
@@ -144,6 +145,7 @@ export function LoanListPage() {
         productName: productInfo?.name ?? '-',
         productActive: productInfo?.isActive ?? true,
         status: l.status,
+        isMatured: l.isMatured,
         principalAmount: Number.parseFloat(l.principalAmount) || 0,
         collectionsBalance: Number.parseFloat(l.collectionsBalance) || 0,
         createdAt: l.createdAt,
@@ -264,7 +266,7 @@ export function LoanListPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <LoanStatusBadge status={loan.status} />
+                    <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(loan.principalAmount)}</TableCell>
                   <TableCell className="text-right">{formatPeso(loan.collectionsBalance)}</TableCell>
