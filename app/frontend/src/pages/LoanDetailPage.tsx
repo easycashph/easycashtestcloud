@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/StatusBadge';
 import { AttachmentsPanel as RealAttachmentsPanel } from '@/components/AttachmentsPanel';
-import { NotesPanel as RealNotesPanel } from '@/components/NotesPanel';
+import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
@@ -105,7 +105,9 @@ function TransactionTypeBadge({ type }: { type: string }) {
  * penalty, ADR-050), risk assessment, full transaction ledger with Reverse Payment (MIS-only,
  * append-only - see `reverseMutation` below), Approve/Activate actions (`POST
  * /loan-accounts/:id/approve` and `/activate`, same role tier as loan origination per ADR-038
- * §3.1/§3.6), Attachments (`RealAttachmentsPanel`), Notes (`RealNotesPanel`), Reminders
+ * §3.1/§3.6), Attachments (`RealAttachmentsPanel`), Notes (`ProfileNotesPanel`, renamed from
+ * `NotesPanel` 2026-07-13 to disambiguate from the separate `loan-note` module's own,
+ * differently-capable notes), Reminders
  * (`RealRemindersPanel` - real trigger schedule computed from the real repayment schedule,
  * business-confirmed 2026-07-12; SMS/Email sending itself stays "Coming Soon", no provider
  * connected yet), and Loan Documents (ADR-051 - Disclosure Statement, Promissory Note, etc.,
@@ -744,7 +746,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
       <RealRemindersPanel loanCode={loan.loanCode} borrower={borrower} installments={installments} />
 
-      <RealNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
+      <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
 
       <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />
 

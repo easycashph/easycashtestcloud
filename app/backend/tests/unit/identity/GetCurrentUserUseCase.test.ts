@@ -12,6 +12,9 @@ const activeUser: UserRecord = {
   lastName: 'Reyes',
   status: 'ACTIVE',
   roles: ['CRM'],
+  contactNumber: null,
+  address: null,
+  birthday: null,
 };
 
 function buildDeps(user: UserRecord | null) {
@@ -37,6 +40,9 @@ describe('GetCurrentUserUseCase (production-readiness review: gap fill — previ
       branchId: activeUser.branchId,
       roles: activeUser.roles,
       status: 'ACTIVE',
+      contactNumber: null,
+      address: null,
+      birthday: null,
     });
     expect(result).not.toHaveProperty('passwordHash');
   });

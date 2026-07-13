@@ -87,7 +87,7 @@ import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListA
 import { LogSectionViewUseCase } from '@modules/audit/application/use-cases/LogSectionViewUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
-import { createNoteRouter } from '@modules/note/interface/http/noteRouter';
+import { createProfileNoteRouter } from '@modules/profile-note/interface/http/profileNoteRouter';
 import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
 import { ExtractLoanApplicationFieldsUseCase } from '@modules/ai-extraction/application/use-cases/ExtractLoanApplicationFieldsUseCase';
 import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/OllamaVisionModelClient';
@@ -95,9 +95,9 @@ import { UploadAttachmentUseCase } from '@modules/document/application/use-cases
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
-import { PrismaNoteRepository } from '@modules/note/infrastructure/PrismaNoteRepository';
-import { CreateNoteUseCase } from '@modules/note/application/use-cases/CreateNoteUseCase';
-import { ListNotesForOwnerUseCase } from '@modules/note/application/use-cases/ListNotesForOwnerUseCase';
+import { PrismaProfileNoteRepository } from '@modules/profile-note/infrastructure/PrismaProfileNoteRepository';
+import { CreateProfileNoteUseCase } from '@modules/profile-note/application/use-cases/CreateProfileNoteUseCase';
+import { ListProfileNotesForOwnerUseCase } from '@modules/profile-note/application/use-cases/ListProfileNotesForOwnerUseCase';
 import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
 import { createRoleClassRouter } from '@modules/role-class/interface/http/RoleClassRouter';
@@ -589,17 +589,19 @@ export function createApp(): Express {
   );
   app.use('/api/v1', documentRouter);
 
-  // --- note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
-  // polymorphic ownerType/ownerId shape as the document module above ---
-  const noteRepository = new PrismaNoteRepository();
-  const noteRouter = createNoteRouter(
+  // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
+  // polymorphic ownerType/ownerId shape as the document module above. Distinct from the loan-note
+  // module above (loan-account-only, MIS-deletable, audit-trailed) - renamed from "note" 2026-07-13
+  // to make that distinction unmistakable. ---
+  const profileNoteRepository = new PrismaProfileNoteRepository();
+  const profileNoteRouter = createProfileNoteRouter(
     {
-      createNoteUseCase: new CreateNoteUseCase({ noteRepository }),
-      listNotesForOwnerUseCase: new ListNotesForOwnerUseCase({ noteRepository }),
+      createProfileNoteUseCase: new CreateProfileNoteUseCase({ profileNoteRepository }),
+      listProfileNotesForOwnerUseCase: new ListProfileNotesForOwnerUseCase({ profileNoteRepository }),
     },
     tokenService,
   );
-  app.use('/api/v1', noteRouter);
+  app.use('/api/v1', profileNoteRouter);
 
   // --- ai-extraction module wiring: local Ollama (moondream) — auto-fill suggestions for the
   // Loan Application intake form from an uploaded ID/payslip/PDF/DOCX, never persisted here ---

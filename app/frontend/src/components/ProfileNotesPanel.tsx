@@ -7,27 +7,29 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/apiClient';
-import type { Note, NoteOwnerType } from '@/lib/noteApiTypes';
+import type { ProfileNote, ProfileNoteOwnerType } from '@/lib/profileNoteApiTypes';
 import { formatDateTime } from '@/lib/utils';
 
 /**
- * Real, persisted running log (`POST/GET /notes`) - built generically against `NoteOwnerType`
- * (`BORROWER` | `LOAN_ACCOUNT` | `LOAN_APPLICATION`), same polymorphic-owner pattern as
- * `AttachmentsPanel`, so it can be dropped onto any of those detail pages. Replaces the
- * in-browser-only mock Notes tab (2026-07-12) - no edit/delete: an append-only log, not a wiki.
+ * Real, persisted running log (`POST/GET /profile-notes`) - built generically against
+ * `ProfileNoteOwnerType` (`BORROWER` | `LOAN_ACCOUNT` | `LOAN_APPLICATION`), same
+ * polymorphic-owner pattern as `AttachmentsPanel`, so it can be dropped onto any of those detail
+ * pages. No edit/delete: an append-only log, not a wiki. Renamed from `NotesPanel.tsx`
+ * (2026-07-13) to disambiguate from the separate `loan-note` module's own, differently-capable
+ * notes (loan-account-only, MIS-deletable, audit-trailed) surfaced elsewhere.
  */
-export function NotesPanel({ ownerType, ownerId }: { ownerType: NoteOwnerType; ownerId: string }) {
+export function ProfileNotesPanel({ ownerType, ownerId }: { ownerType: ProfileNoteOwnerType; ownerId: string }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = React.useState('');
 
-  const queryKey = ['notes', ownerType, ownerId];
+  const queryKey = ['profile-notes', ownerType, ownerId];
   const notesQuery = useQuery({
     queryKey,
-    queryFn: () => apiClient.get<Note[]>(`/notes?ownerType=${ownerType}&ownerId=${ownerId}`),
+    queryFn: () => apiClient.get<ProfileNote[]>(`/profile-notes?ownerType=${ownerType}&ownerId=${ownerId}`),
   });
 
   const createMutation = useMutation({
-    mutationFn: (text: string) => apiClient.post<Note>('/notes', { ownerType, ownerId, text }),
+    mutationFn: (text: string) => apiClient.post<ProfileNote>('/profile-notes', { ownerType, ownerId, text }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       setDraft('');

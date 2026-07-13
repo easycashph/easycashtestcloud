@@ -243,7 +243,7 @@ model User {
   loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
   transactionsPosted       LoanTransaction[] @relation("LoanTransactionPostedBy")
   attachmentsUploaded      Attachment[]      @relation("AttachmentUploadedBy")
-  notesAuthored            Note[]            @relation("NoteAuthor")
+  profileNotesAuthored     ProfileNote[]     @relation("ProfileNoteAuthor")
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
@@ -1065,7 +1065,7 @@ model Attachment {
   @@map("attachments")
 }
 
-enum NoteOwnerType {
+enum ProfileNoteOwnerType {
   BORROWER
   LOAN_ACCOUNT
   LOAN_APPLICATION
@@ -1075,22 +1075,23 @@ enum NoteOwnerType {
 /// ownerType/ownerId shape as `Attachment` (ADR-014), for the same reason: no dedicated FK relation
 /// per owner type. Immutable once created (no edit/delete use case) - a running log, not a wiki.
 ///
-/// 2026-07-13 (merge note): distinct from the pre-existing `LoanNote` model above, added
-/// independently in a parallel branch of work on the same day — both model "a free-text note on a
-/// loan," `LoanNote` scoped to loan accounts only, `Note` generalized to Borrower/LoanApplication
-/// too. Kept both as-is rather than unify them mid-merge (a real product decision, not a merge
-/// mechanic); flagged as a follow-up to resolve deliberately once the merge itself is verified.
-model Note {
-  id           String        @id @default(uuid())
-  ownerType    NoteOwnerType
+/// 2026-07-13 (merge note, renamed same day): distinct from `LoanNote` above, added independently
+/// in a parallel branch of work - both model "a free-text note," `LoanNote` scoped to loan
+/// accounts only (MIS-deletable, audit-trailed), this one generalized to Borrower/LoanApplication
+/// too (no delete). Kept both - genuinely different capabilities, not a duplicate to unify -
+/// renamed `Note` → `ProfileNote` (mirrors the existing `ProfileActivityLog` naming convention for
+/// "spans multiple profile types") so the two are never confused for one another again.
+model ProfileNote {
+  id           String               @id @default(uuid())
+  ownerType    ProfileNoteOwnerType
   ownerId      String
   text         String
   authorUserId String
-  author       User          @relation("NoteAuthor", fields: [authorUserId], references: [id])
-  createdAt    DateTime      @default(now())
+  author       User                 @relation("ProfileNoteAuthor", fields: [authorUserId], references: [id])
+  createdAt    DateTime             @default(now())
 
   @@index([ownerType, ownerId])
-  @@map("notes")
+  @@map("profile_notes")
 }
 
 /// ADR-051: repurposes the table originally scaffolded (init migration) for the legacy SDevTech
