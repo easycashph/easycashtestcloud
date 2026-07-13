@@ -188,7 +188,7 @@ describe('Router-level authorization wiring (H-3)', () => {
   // Milestone 9.1/9.2 CP13, ADR-038 §3.6.
   describe('POST /api/v1/loan-accounts/:id/payments (payment recording roles: MIS, Loan Operation Manager, Accounting, Collection Officer)', () => {
     it('rejects with 401 when unauthenticated', async () => {
-      const res = await request(app).post('/api/v1/loan-accounts/loan-1/payments').send({ paymentAmount: '500.00' });
+      const res = await request(app).post('/api/v1/loan-accounts/loan-1/payments').send({ paymentAmount: '500.00', orNumber: 'OR-TEST-1' });
       expect(res.status).toBe(401);
     });
 
@@ -196,7 +196,7 @@ describe('Router-level authorization wiring (H-3)', () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/payments')
         .set('Authorization', `Bearer ${signToken(['CRM'])}`)
-        .send({ paymentAmount: '500.00' });
+        .send({ paymentAmount: '500.00', orNumber: 'OR-TEST-1' });
       expect(res.status).toBe(403);
     });
 
@@ -204,7 +204,7 @@ describe('Router-level authorization wiring (H-3)', () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/payments')
         .set('Authorization', `Bearer ${signToken(['Collection Officer'])}`)
-        .send({ paymentAmount: '500.00' });
+        .send({ paymentAmount: '500.00', orNumber: 'OR-TEST-1' });
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
       expect(prismaMock.loanAccount.findUnique).toHaveBeenCalled();

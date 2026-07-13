@@ -15,6 +15,7 @@ vi.mock('@shared/database/prismaClient', () => ({ prisma: prismaMock }));
 
 const { PrismaLoanAccountRepository } = await import('@modules/loan-account/infrastructure/PrismaLoanAccountRepository');
 const { LoanAccount } = await import('@modules/loan-account/domain/LoanAccount');
+const { OriginationFees } = await import('@modules/loan-account/domain/valueObjects/OriginationFees');
 const { Money } = await import('@shared/domain/Money');
 const { Percentage } = await import('@shared/domain/Percentage');
 const { ConcurrencyConflictError } = await import('@shared/errors/DomainError');
@@ -49,6 +50,9 @@ function buildExistingLoan(version: number) {
     firstRepaymentDate: new Date('2026-08-15'),
     createdAt: new Date(),
     updatedAt: new Date(),
+    legacyBalanceDataMissing: false,
+    originationFees: OriginationFees.zero(),
+    netProceeds: Money.of('10000.00'),
     appliedFees: [],
     coBorrowerIds: [],
     version,
@@ -186,6 +190,17 @@ describe('PrismaLoanAccountRepository', () => {
         activatedAt: null,
         closedAt: null,
         closedReason: null,
+        legacyBalanceDataMissing: false,
+        processingFee: '0.00',
+        advanceInterestFee: '0.00',
+        outstandingBalancePayoff: '0.00',
+        docStampFee: '0.00',
+        accountManagementFee: '0.00',
+        otherFees: '0.00',
+        notarialFee: '0.00',
+        webFee: '0.00',
+        insuranceFee: '0.00',
+        netProceeds: '10000.00',
         legacyId: null,
         createdAt: now,
         updatedAt: now,
@@ -243,6 +258,39 @@ describe('PrismaLoanAccountRepository', () => {
       const callArgs = loanAccountOps.findMany.mock.calls[0]?.[0];
       expect(callArgs.cursor).toBeUndefined();
       expect(callArgs.skip).toBeUndefined();
+    });
+  });
+
+  describe('findMaxLoanCodeSequenceForPrefix (2026-07-11)', () => {
+    it('returns 0 when no loan code matches the prefix', async () => {
+      loanAccountOps.findMany.mockResolvedValue([]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(0);
+      expect(loanAccountOps.findMany).toHaveBeenCalledWith({
+        where: { loanCode: { startsWith: 'SML-REG_' } },
+        select: { loanCode: true },
+      });
+    });
+
+    it('returns the highest numeric suffix among matching loan codes', async () => {
+      loanAccountOps.findMany.mockResolvedValue([{ loanCode: 'SML-REG_00012' }, { loanCode: 'SML-REG_00059' }, { loanCode: 'SML-REG_00003' }]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(59);
+    });
+
+    it('ignores a non-numeric or malformed suffix rather than throwing', async () => {
+      loanAccountOps.findMany.mockResolvedValue([{ loanCode: 'SML-REG_OLD' }, { loanCode: 'SML-REG_00010' }]);
+      const repo = new PrismaLoanAccountRepository();
+
+      const max = await repo.findMaxLoanCodeSequenceForPrefix('SML-REG');
+
+      expect(max).toBe(10);
     });
   });
 });

@@ -247,6 +247,8 @@ model User {
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
+  loanNotesAuthored        LoanNote[]
+  loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
 
   @@map("users")
 }
@@ -353,6 +355,26 @@ model LoanProduct {
   documentTemplateLinks DocumentTemplateMapping[]
 
   @@map("loan_products")
+}
+
+/// 2026-07-11 (Create Loan Account, Contractual Rate auto-fill): staff enters an Add-On Rate and
+/// Term; the Contractual Rate actually used to run the declining-balance schedule (§1/§2 of
+/// CALCULATION_ENGINE_SPEC.md) is looked up here rather than typed. Sourced directly from MIS
+/// Nomer's own Excel LMS (`legacy/reports/BETA 1.5.83 LMSv3.xlsm`, sheet `Rate_details`) — real
+/// data, not invented; one confirmed typo (Add-On 1.75%, Term 3: "242" -> 2.42) corrected with the
+/// user's explicit confirmation before seeding. Global (not per-product) — no product column
+/// exists in the source table; revisit if a per-product chart is ever needed.
+model InterestRateChart {
+  id                     String  @id @default(uuid())
+  addOnRatePercent       Decimal @db.Decimal(6, 3)
+  termMonths             Int
+  contractualRatePercent Decimal @db.Decimal(6, 3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([addOnRatePercent, termMonths])
+  @@map("interest_rate_chart")
 }
 
 /// LPV-1: every approved LoanAccount references a specific, immutable
@@ -779,6 +801,28 @@ model LoanAccount {
   /// ActivateLoanUseCase/ProcessPaymentUseCase, which always populate real balances.
   legacyBalanceDataMissing Boolean @default(false)
 
+  /// 2026-07-11 (Create Loan Account, origination fees): one-time deductions taken at
+  /// disbursement — distinct from feesBalance/feesPaid/feesDue above, which track recurring
+  /// per-installment fees. Staff-entered amounts, not auto-computed from a fixed formula, per
+  /// `docs/Architecture/LEGACY_EXCEL_LMS_REFERENCE.md` — real data (Loans_details, BETA 1.5.83
+  /// LMSv3.xlsm) shows most of these vary too much per loan to derive a reliable per-product
+  /// formula (confirmed: only Account Management Fee at exactly 1% of principal when charged).
+  /// advanceInterestFee's real formula IS confirmed separately (ADR-046) but is still captured
+  /// here as a plain entered amount, not recomputed by this schema.
+  processingFee            Decimal @default(0) @db.Decimal(14, 2)
+  advanceInterestFee       Decimal @default(0) @db.Decimal(14, 2)
+  /// Previous loan's remaining balance, paid off from this loan's proceeds — the renewal case.
+  outstandingBalancePayoff Decimal @default(0) @db.Decimal(14, 2)
+  docStampFee              Decimal @default(0) @db.Decimal(14, 2)
+  accountManagementFee     Decimal @default(0) @db.Decimal(14, 2)
+  otherFees                Decimal @default(0) @db.Decimal(14, 2)
+  notarialFee              Decimal @default(0) @db.Decimal(14, 2)
+  webFee                   Decimal @default(0) @db.Decimal(14, 2)
+  insuranceFee             Decimal @default(0) @db.Decimal(14, 2)
+  /// = principalAmount - (sum of the 9 fee/payoff fields above). Computed once at creation, never
+  /// recomputed later — matches every other origination snapshot field's LA-4 treatment.
+  netProceeds              Decimal @default(0) @db.Decimal(14, 2)
+
   legacyId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -790,10 +834,12 @@ model LoanAccount {
   /// `ConcurrencyConflictError`, never a silent overwrite.
   version Int @default(0)
 
-  transactions      LoanTransaction[]
-  repaymentSchedule RepaymentSchedule[]
-  appliedFees       AppliedFee[]
-  coBorrowers       LoanAccountCoBorrower[]
+  transactions       LoanTransaction[]
+  repaymentSchedule  RepaymentSchedule[]
+  appliedFees        AppliedFee[]
+  coBorrowers        LoanAccountCoBorrower[]
+  notes              LoanNote[]
+  generatedDocuments GeneratedLoanDocument[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -826,6 +872,19 @@ model LoanTransaction {
   entryDate      DateTime
   comment        String?
 
+  /// Official Receipt number — required on every REPAYMENT posted through
+  /// Payment Recording (2026-07-11 user request), matching the SDevTech
+  /// system's own OR#/AR# fields (also independently found in MIS Nomer's
+  /// own Excel LMS's Payment_History sheet — see
+  /// docs/Architecture/LEGACY_EXCEL_LMS_REFERENCE.md §3.1). Nullable at the
+  /// schema level because non-REPAYMENT transaction types (DISBURSEMENT,
+  /// ADJUSTMENT, etc.) have no receipt to record — requiredness for
+  /// REPAYMENT specifically is enforced by processPaymentSchema, not here.
+  orNumber String?
+  /// Acknowledgment Receipt number — optional; not every payment channel
+  /// issues one.
+  arNumber String?
+
   /// Present on a transaction that IS a reversal — points to the original
   /// transaction it corrects (TXN-1).
   reversesTransactionId String?          @unique
@@ -835,7 +894,12 @@ model LoanTransaction {
   legacyId  String?  @unique
   createdAt DateTime @default(now())
 
-  appliedFees AppliedFee[]
+  appliedFees        AppliedFee[]
+  /// 2026-07-11 (Reverse Payment): per-installment breakdown of this
+  /// transaction's effect — see `PaymentAllocation`'s own doc comment for
+  /// why this exists. Present on REPAYMENT (and, going forward, REVERSAL)
+  /// transactions; empty for every other type.
+  paymentAllocations PaymentAllocation[]
 
   /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
   /// volume table (legacy equivalent: 524k rows) — date-range and
@@ -881,6 +945,8 @@ model RepaymentSchedule {
   /// to scope this to every balance-mutating aggregate, not just one.
   version Int @default(0)
 
+  paymentAllocations PaymentAllocation[]
+
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
   /// all filter on due date and status — previously unindexed beyond
@@ -889,6 +955,64 @@ model RepaymentSchedule {
   @@index([dueDate])
   @@index([status])
   @@map("repayment_schedules")
+}
+
+/// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one
+/// payment across possibly several installments (`ADR-009`'s waterfall, or a
+/// staff-entered manual split) but only ever persisted the AGGREGATE
+/// principal/interest/fees/penalty totals on the resulting `LoanTransaction`
+/// — no record existed of exactly which installment(s), and how much of
+/// each component, that one transaction actually touched. That's fine for
+/// display, but not enough to safely reverse a specific past payment later
+/// (undoing the wrong installment, or the wrong amount, would itself be a
+/// financial error) — especially once other payments have touched the same
+/// loan afterward. This table closes that gap: one row per
+/// (transaction, installment) pair a REPAYMENT transaction affected, with
+/// the exact per-component amounts applied. `ReversePaymentUseCase` reads
+/// these rows back to know precisely what to undo, per installment, then
+/// negates them via the same `RepaymentInstallment.recordPayment()` /
+/// `LoanAccount.applyPayment()` primitives `ProcessPaymentUseCase` itself
+/// uses (Money/InstallmentAmounts/TransactionComponents already support
+/// negative amounts — see `Money`'s own doc comment). Written going forward
+/// only; not backfilled for transactions recorded before this feature
+/// existed — those remain reversible only by the older, coarser workaround
+/// (a manual ADJUSTMENT transaction), same as before this feature.
+model PaymentAllocation {
+  id                     String            @id @default(uuid())
+  loanTransactionId      String
+  loanTransaction        LoanTransaction   @relation(fields: [loanTransactionId], references: [id])
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+
+  principalApplied Decimal @default(0) @db.Decimal(14, 2)
+  interestApplied  Decimal @default(0) @db.Decimal(14, 2)
+  feesApplied      Decimal @default(0) @db.Decimal(14, 2)
+  penaltyApplied   Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([loanTransactionId])
+  @@index([repaymentInstallmentId])
+  @@map("payment_allocations")
+}
+
+/// 2026-07-11 (user request, Collections use case): a free-text note tied to a loan account —
+/// e.g. what was discussed/agreed with the borrower during a collection call. Deliberately simple
+/// (just text + author + timestamp, no structured fields like contact method or outcome code) per
+/// explicit user decision — flexibility over structure. Append-only, like AppliedFee/PaymentAllocation:
+/// no update/delete anywhere in this system: a correction is a new note, not an edit of history.
+model LoanNote {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+  authorUserId  String
+  author        User        @relation(fields: [authorUserId], references: [id])
+  text          String
+
+  createdAt DateTime @default(now())
+
+  @@index([loanAccountId])
+  @@map("loan_notes")
 }
 
 /// FEE-4: once applied to a specific loan, a fee amount is immutable even
@@ -950,6 +1074,12 @@ enum NoteOwnerType {
 /// Free-text note attached to a Borrower/LoanAccount/LoanApplication - same polymorphic
 /// ownerType/ownerId shape as `Attachment` (ADR-014), for the same reason: no dedicated FK relation
 /// per owner type. Immutable once created (no edit/delete use case) - a running log, not a wiki.
+///
+/// 2026-07-13 (merge note): distinct from the pre-existing `LoanNote` model above, added
+/// independently in a parallel branch of work on the same day — both model "a free-text note on a
+/// loan," `LoanNote` scoped to loan accounts only, `Note` generalized to Borrower/LoanApplication
+/// too. Kept both as-is rather than unify them mid-merge (a real product decision, not a merge
+/// mechanic); flagged as a follow-up to resolve deliberately once the merge itself is verified.
 model Note {
   id           String        @id @default(uuid())
   ownerType    NoteOwnerType
@@ -963,29 +1093,70 @@ model Note {
   @@map("notes")
 }
 
+/// ADR-051: repurposes the table originally scaffolded (init migration) for the legacy SDevTech
+/// `document_templates` collection (`contentHtml`, HTML-based) — that migration path was
+/// investigated and deliberately NOT taken (ADR-051 §6: 507 rows collapse to 365 sprawling
+/// historical variants, and the per-product mapping references a Mambu-era product catalog that
+/// doesn't join to any currently-migrated `LoanProductVersion.legacyId`). Nothing in `src/` ever
+/// referenced the old shape, so no data migration is needed — this is the first real use of these
+/// two tables.
+///
+/// One row per document type (11 total: 4 required + 7 conditional — see ADR-051 §1). `code` is
+/// the stable identifier the generation code uses to find the matching `.docx` file under
+/// `app/backend/templates/`. Required documents (`isRequired: true`) apply to every loan and have
+/// no `DocumentTemplateMapping` rows; conditional documents are linked to the Loan Products they
+/// apply to via that table.
 model DocumentTemplate {
-  id          String  @id @default(uuid())
-  name        String
-  contentHtml String
-  isActive    Boolean @default(true)
+  id         String  @id @default(uuid())
+  code       String  @unique
+  name       String
+  isRequired Boolean @default(false)
+  sortIndex  Int     @default(0)
 
-  legacyId  String?  @unique
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  productLinks DocumentTemplateMapping[]
+  productLinks       DocumentTemplateMapping[]
+  generatedDocuments GeneratedLoanDocument[]
 
   @@map("document_templates")
 }
 
+/// Only ever holds CONDITIONAL document templates (ADR-051 §1/§3) — required templates apply
+/// universally and never get a row here, so this table's size reflects only the per-product
+/// variation, not every template x every product.
 model DocumentTemplateMapping {
   loanProductId      String
   documentTemplateId String
-  sortIndex          Int              @default(0)
   loanProduct        LoanProduct      @relation(fields: [loanProductId], references: [id], onDelete: Cascade)
   documentTemplate   DocumentTemplate @relation(fields: [documentTemplateId], references: [id], onDelete: Cascade)
 
   @@id([loanProductId, documentTemplateId])
   @@map("document_template_mappings")
+}
+
+/// Append-only (ADR-051 §3) — matches this project's ledger philosophy (TXN-1, `LoanNote`,
+/// `PaymentAllocation`): "Regenerate" in the UI always inserts a new row rather than overwriting,
+/// so a document a borrower has already been shown/signed is never silently erased from the
+/// record, even after a later data correction. The Documents tab shows the latest row per
+/// `documentTemplateId` for a loan, with older ones available as history.
+model GeneratedLoanDocument {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+
+  documentTemplateId String
+  documentTemplate   DocumentTemplate @relation(fields: [documentTemplateId], references: [id])
+
+  /// Key into the existing local storage abstraction (DOC-3, `app/backend/storage/`).
+  storageKey String
+
+  generatedByUserId String
+  generatedBy       User     @relation("LoanDocumentGeneratedBy", fields: [generatedByUserId], references: [id])
+  generatedAt       DateTime @default(now())
+
+  @@index([loanAccountId])
+  @@map("generated_loan_documents")
 }
 
 // ----------------------------------------------------------------------------

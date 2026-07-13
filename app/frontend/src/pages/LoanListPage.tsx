@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Search } from 'lucide-react';
+import { AlertCircle, Plus, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,6 +13,7 @@ import { LoanStatusBadge } from '@/components/StatusBadge';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -82,6 +84,7 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
  */
 export function LoanListPage() {
   const navigate = useNavigate();
+  const { canCreateLoanAccount } = useRole();
   useLogPageView('Loan Accounts');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -159,11 +162,18 @@ export function LoanListPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Loan Accounts</h2>
-        <p className="text-sm text-muted-foreground">
-          {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
-        </p>
+      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Loan Accounts</h2>
+          <p className="text-sm text-muted-foreground">
+            {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
+          </p>
+        </div>
+        {canCreateLoanAccount && (
+          <Button onClick={() => navigate('/loans/new')}>
+            <Plus className="mr-1.5 h-4 w-4" /> New Loan Account
+          </Button>
+        )}
       </div>
 
       {loansQuery.isError && (

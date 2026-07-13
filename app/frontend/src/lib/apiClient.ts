@@ -13,7 +13,13 @@
  * bug - see `roleContext.tsx`'s bootstrap effect.
  */
 
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+// 2026-07-11 (user request): derived from the page's own hostname, not hardcoded to "localhost" —
+// "localhost" always means "this same device," so a hardcoded value here silently broke every API
+// call when the frontend was loaded from a second device via this machine's LAN IP (e.g.
+// http://192.168.1.23:5173) instead of localhost, since that other device would try reaching its
+// OWN localhost:4000 (nothing there) rather than the machine actually running the backend. Reusing
+// window.location.hostname keeps existing localhost-based dev/testing behavior identical.
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:4000/api/v1`;
 
 export class ApiError extends Error {
   readonly status: number;
@@ -154,6 +160,7 @@ export const apiClient = {
     apiRequest<T>(path, { method: 'POST', body, headers }),
   patch: <T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> =>
     apiRequest<T>(path, { method: 'PATCH', body, headers }),
+  delete: <T>(path: string): Promise<T> => apiRequest<T>(path, { method: 'DELETE' }),
 };
 
 /**

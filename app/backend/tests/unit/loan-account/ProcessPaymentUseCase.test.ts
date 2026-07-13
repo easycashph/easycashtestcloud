@@ -49,11 +49,24 @@ const mockCtx = { __brand: 'TransactionContext' } as TransactionContext;
 function buildDeps() {
   const loanAccountRepository = { findById: vi.fn(), findByLoanCode: vi.fn(), findMany: vi.fn(), save: vi.fn() };
   const repaymentInstallmentRepository = { findById: vi.fn(), findByLoanAccountId: vi.fn(), save: vi.fn(), saveMany: vi.fn() };
-  const loanTransactionRepository = { findById: vi.fn(), findByLoanAccountId: vi.fn(), create: vi.fn() };
+  const loanTransactionRepository = {
+    findById: vi.fn(),
+    findByLoanAccountId: vi.fn(),
+    findByReversesTransactionId: vi.fn(),
+    create: vi.fn(),
+  };
+  const paymentAllocationRepository = { createMany: vi.fn(), findByLoanTransactionId: vi.fn() };
   const financialAuditLogger = { log: vi.fn() };
   const unitOfWork = { run: vi.fn(async (work: (ctx: TransactionContext) => Promise<unknown>) => work(mockCtx)) };
 
-  return { loanAccountRepository, repaymentInstallmentRepository, loanTransactionRepository, financialAuditLogger, unitOfWork };
+  return {
+    loanAccountRepository,
+    repaymentInstallmentRepository,
+    loanTransactionRepository,
+    paymentAllocationRepository,
+    financialAuditLogger,
+    unitOfWork,
+  };
 }
 
 describe('ProcessPaymentUseCase', () => {
@@ -296,6 +309,60 @@ describe('ProcessPaymentUseCase', () => {
     });
   });
 
+  describe('PaymentAllocation persistence (2026-07-11, Reverse Payment feature)', () => {
+    it('writes one PaymentAllocation row per installment actually touched, with the exact per-component amounts applied', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('3000.00', '450.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '1000.00', interest: '200.00' });
+      const inst2 = buildInstallment(2, '2026-09-15', { principal: '1000.00', interest: '150.00' });
+      // A third installment the payment never reaches — must not get a row at all.
+      const inst3 = buildInstallment(3, '2026-10-15', { principal: '1000.00', interest: '100.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1, inst2, inst3]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', Money.of('1300.00'), 'officer-1');
+
+      expect(deps.paymentAllocationRepository.createMany).toHaveBeenCalledTimes(1);
+      const [allocations] = deps.paymentAllocationRepository.createMany.mock.calls[0] ?? [];
+      expect(allocations).toHaveLength(2);
+
+      const transaction = deps.loanTransactionRepository.create.mock.calls[0]?.[0];
+      const forInst1 = allocations.find((a: { repaymentInstallmentId: string }) => a.repaymentInstallmentId === 'installment-1');
+      const forInst2 = allocations.find((a: { repaymentInstallmentId: string }) => a.repaymentInstallmentId === 'installment-2');
+
+      expect(forInst1.loanTransactionId).toBe(transaction.id);
+      expect(forInst1.principalApplied.equals(Money.of('1000.00'))).toBe(true);
+      expect(forInst1.interestApplied.equals(Money.of('200.00'))).toBe(true);
+      expect(forInst2.interestApplied.equals(Money.of('100.00'))).toBe(true);
+      expect(forInst2.principalApplied.isZero()).toBe(true);
+      // inst3 received nothing — no row for it at all, not a zero-amount row.
+      expect(allocations.some((a: { repaymentInstallmentId: string }) => a.repaymentInstallmentId === 'installment-3')).toBe(false);
+      expect(result.remainder.isZero()).toBe(true);
+    });
+
+    it('writes an empty array (not a skipped call) when every installment is fully skipped — createMany is a no-op guard, not a missing call', async () => {
+      // Every installment already PAID -> zero unpaid installments -> allocations is empty, but
+      // execute() still runs and paymentAllocationRepository.createMany still gets invoked (with
+      // []) rather than silently omitted, matching how installmentsToSave.length > 0 gates
+      // saveMany separately from whether the call itself happens.
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      // No unpaid installments at all -> the entire payment is remainder, nothing applied.
+      const result = await useCase.execute('loan-1', Money.of('100.00'), 'officer-1');
+
+      expect(result.remainder.equals(Money.of('100.00'))).toBe(true);
+      expect(deps.paymentAllocationRepository.createMany).toHaveBeenCalledTimes(1);
+      const [allocations] = deps.paymentAllocationRepository.createMany.mock.calls[0] ?? [];
+      expect(allocations).toHaveLength(0);
+    });
+  });
+
   describe('financial audit log entry (CP2, fail-closed) and IUnitOfWork atomicity', () => {
     it('writes a PROCESS_PAYMENT audit entry, sharing the same ctx as every other write', async () => {
       const deps = buildDeps();
@@ -311,6 +378,7 @@ describe('ProcessPaymentUseCase', () => {
       expect(deps.loanAccountRepository.save).toHaveBeenCalledWith(loan, mockCtx);
       expect(deps.repaymentInstallmentRepository.saveMany).toHaveBeenCalledWith(expect.any(Array), mockCtx);
       expect(deps.loanTransactionRepository.create).toHaveBeenCalledWith(expect.anything(), mockCtx);
+      expect(deps.paymentAllocationRepository.createMany).toHaveBeenCalledWith(expect.any(Array), mockCtx);
       expect(deps.financialAuditLogger.log).toHaveBeenCalledWith(expect.anything(), mockCtx);
 
       const [entry] = deps.financialAuditLogger.log.mock.calls[0] ?? [];

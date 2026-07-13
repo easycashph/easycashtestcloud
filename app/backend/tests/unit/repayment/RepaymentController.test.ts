@@ -44,7 +44,11 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     const deps = buildDeps();
     const installment = buildInstallment();
     (deps.listRepaymentInstallmentsForLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([installment]);
-    (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-1' });
+    (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
+      branchId: 'branch-1',
+      principalAmount: Money.of('50000.00'),
+      legacyId: undefined,
+    });
     const controller = new RepaymentController(deps);
     const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();
@@ -62,7 +66,11 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     const deps = buildDeps();
     const installment = buildInstallment();
     (deps.getRepaymentInstallmentUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(installment);
-    (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-1' });
+    (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
+      branchId: 'branch-1',
+      principalAmount: Money.of('50000.00'),
+      legacyId: undefined,
+    });
     const controller = new RepaymentController(deps);
     const req = { params: { id: installment.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
     const res = buildResponse();

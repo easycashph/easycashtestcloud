@@ -51,6 +51,19 @@ export interface LoanAccount {
   closedAt: string | null;
   /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all - NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
+  /** 2026-07-11 (Create Loan Account origination fees) — one-time deductions taken at disbursement, set once at creation. */
+  originationFees: {
+    processingFee: string;
+    advanceInterestFee: string;
+    outstandingBalancePayoff: string;
+    docStampFee: string;
+    accountManagementFee: string;
+    otherFees: string;
+    notarialFee: string;
+    webFee: string;
+    insuranceFee: string;
+  };
+  netProceeds: string;
   createdAt: string;
 }
 
@@ -241,6 +254,14 @@ export interface LoanProduct {
   versions: LoanProductVersion[];
 }
 
+/** `GET /interest-rate-chart` — Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account). See the backend Prisma model's own doc comment for provenance. */
+export interface InterestRateChartEntry {
+  id: string;
+  addOnRatePercent: string;
+  termMonths: number;
+  contractualRatePercent: string;
+}
+
 export interface InstallmentAmounts {
   principal: string;
   interest: string;
@@ -259,6 +280,12 @@ export interface RepaymentInstallment {
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
   status: RepaymentInstallmentStatus;
+  /**
+   * 2026-07-11 (ADR-050 / CALCULATION_ENGINE_SPEC.md §12): live "as of today" penalty — `null` for
+   * a migrated loan (its `due.penalty` is the real historical figure instead) or a fully-paid
+   * installment. Distinct from `due.penalty`, which stays fixed/immutable.
+   */
+  currentPenaltyOwed: string | null;
   /** Null until first paid. Compare against `dueDate` to tell a settled (PAID) installment was
    * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
    * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */
@@ -289,11 +316,39 @@ export interface LoanTransaction {
   balanceAfter: string;
   entryDate: string;
   comment: string | null;
+  orNumber: string | null;
+  arNumber: string | null;
+  /** 2026-07-11 (Reverse Payment feature): set on a REVERSAL transaction, pointing at the REPAYMENT it corrects — used to tell whether a given transaction has already been reversed (see LoanDetailPage's payments tab). */
+  reversesTransactionId: string | null;
 }
 
 export interface PaginatedResponse<T> {
   items: T[];
   nextCursor: string | null;
+}
+
+/** 2026-07-11 (user request, Collections use case): free-text note on a loan account. */
+export interface LoanNote {
+  id: string;
+  loanAccountId: string;
+  authorUserId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+}
+
+/** ADR-051 — one row per applicable document template, with its latest generation (if any). */
+export interface LoanDocumentListItem {
+  documentTemplateId: string;
+  documentTemplateCode: string;
+  documentTemplateName: string;
+  isRequired: boolean;
+  latestGeneration: {
+    id: string;
+    generatedByUserId: string;
+    generatedByName: string;
+    generatedAt: string;
+  } | null;
 }
 
 export interface ProcessPaymentResponse {

@@ -48,6 +48,7 @@ import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
+import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
@@ -55,6 +56,12 @@ import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter'
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
+import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
+import { createLoanNoteRouter } from '@modules/loan-note/interface/http/loanNoteRouter';
+import { CreateLoanNoteUseCase } from '@modules/loan-note/application/use-cases/CreateLoanNoteUseCase';
+import { ListLoanNotesUseCase } from '@modules/loan-note/application/use-cases/ListLoanNotesUseCase';
+import { DeleteLoanNoteUseCase } from '@modules/loan-note/application/use-cases/DeleteLoanNoteUseCase';
+import { PrismaLoanNoteRepository } from '@modules/loan-note/infrastructure/PrismaLoanNoteRepository';
 import { createRepaymentRouter } from '@modules/repayment/interface/http/repaymentRouter';
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
@@ -107,6 +114,9 @@ import { ChangeOwnPasswordUseCase } from '@modules/identity/application/use-case
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
+import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
+import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
+import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
 import { createReportingRouter } from '@modules/reporting/interface/http/reportingRouter';
 import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
@@ -115,6 +125,21 @@ import { PrismaReportingRepository } from '@modules/reporting/infrastructure/Pri
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
+// Naming collision (2026-07-13 merge): Jomer's document module has its own LocalFileStorage
+// (@modules/document/infrastructure/LocalFileStorage, imported above) - aliased here rather than
+// consolidated, since the two were built independently against possibly-different IFileStorage
+// port shapes. Worth reconciling into one canonical implementation later, not as part of this merge.
+import { LocalFileStorage as SharedLocalFileStorage } from '@shared/infrastructure/LocalFileStorage';
+import { prisma } from '@shared/database/prismaClient';
+import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/loanDocumentRouter';
+import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
+import { ListLoanDocumentsUseCase } from '@modules/loan-document/application/use-cases/ListLoanDocumentsUseCase';
+import { GetGeneratedLoanDocumentFileUseCase } from '@modules/loan-document/application/use-cases/GetGeneratedLoanDocumentFileUseCase';
+import { PrismaDocumentTemplateRepository } from '@modules/loan-document/infrastructure/PrismaDocumentTemplateRepository';
+import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/infrastructure/PrismaGeneratedLoanDocumentRepository';
+import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
+import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
+import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
 import { createProfileActivityLogRouter } from '@modules/profile-activity/interface/http/ProfileActivityLogRouter';
 import { GetProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/GetProfileActivityUseCase';
 import { DeleteProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/DeleteProfileActivityUseCase';
@@ -145,13 +170,20 @@ export function createApp(): Express {
   // restart (5173 is frequently already taken), so a fixed allow-list constantly falls
   // out of date. Accept any http(s)://localhost:<port> / 127.0.0.1:<port> origin in dev
   // only — production still enforces the exact CORS_ORIGIN allow-list below.
-  const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+  //
+  // 2026-07-11 (user request): also accept private-LAN IPv4 origins (192.168.x.x, 10.x.x.x,
+  // 172.16-31.x.x) so a second device on the same office WiFi can reach this dev server via
+  // http://<this-machine's-LAN-IP>:<port> instead of localhost, which only ever means "this same
+  // device" and can never resolve to another machine. Dev-only, same as the localhost pattern —
+  // production still enforces the exact CORS_ORIGIN allow-list below.
+  const devOriginPattern =
+    /^https?:\/\/(localhost|127\.0\.0\.1|192\.168(?:\.\d{1,3}){2}|10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(:\d+)?$/;
   app.use(
     cors({
       origin:
         env.NODE_ENV === 'development'
           ? (origin, callback) => {
-              if (!origin || localhostOriginPattern.test(origin) || corsOrigins.includes(origin)) {
+              if (!origin || devOriginPattern.test(origin) || corsOrigins.includes(origin)) {
                 callback(null, true);
               } else {
                 callback(new Error('Not allowed by CORS'));
@@ -312,6 +344,9 @@ export function createApp(): Express {
   // cases need them too — same repository instances, not duplicated ones.
   const loanTransactionRepository = new PrismaLoanTransactionRepository();
   const repaymentInstallmentRepository = new PrismaRepaymentInstallmentRepository();
+  // 2026-07-11 (Reverse Payment feature): shared by ProcessPaymentUseCase (writes the breakdown)
+  // and ReversePaymentUseCase (reads it back) below — see PaymentAllocation's own doc comment.
+  const paymentAllocationRepository = new PrismaPaymentAllocationRepository();
   const loanRiskAssessmentService = new LoanRiskAssessmentService();
   const loanAccountRouter = createLoanAccountRouter(
     {
@@ -337,6 +372,15 @@ export function createApp(): Express {
         profileActivityLogService,
         repaymentInstallmentRepository,
         loanTransactionRepository,
+        paymentAllocationRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      reversePaymentUseCase: new ReversePaymentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        paymentAllocationRepository,
         financialAuditLogger,
         unitOfWork,
       }),
@@ -350,6 +394,67 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanAccountRouter);
+
+  // --- loan-note module wiring (2026-07-11, Collections use case) ---
+  const loanNoteRepository = new PrismaLoanNoteRepository();
+  const loanNoteRouter = createLoanNoteRouter(
+    {
+      createLoanNoteUseCase: new CreateLoanNoteUseCase({ loanNoteRepository, loanAccountRepository }),
+      listLoanNotesUseCase: new ListLoanNotesUseCase({ loanNoteRepository }),
+      deleteLoanNoteUseCase: new DeleteLoanNoteUseCase({ loanNoteRepository, auditLogger }),
+      getLoanAccountUseCase,
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanNoteRouter);
+
+  // --- loan-document module wiring (ADR-051, 2026-07-12: Loan Document Generation) ---
+  const documentTemplateRepository = new PrismaDocumentTemplateRepository();
+  const generatedLoanDocumentRepository = new PrismaGeneratedLoanDocumentRepository();
+  // STORAGE_DRIVER=s3 is declared in env validation (ADR-051 §4's storage abstraction) but has no
+  // implementation yet — fail fast rather than silently falling back to local.
+  if (env.STORAGE_DRIVER !== 'local') {
+    throw new Error(`STORAGE_DRIVER=${env.STORAGE_DRIVER} has no implementation yet — only "local" is supported.`);
+  }
+  const loanDocumentFileStorage = new SharedLocalFileStorage(env.STORAGE_LOCAL_PATH);
+  const mergeDataResolver = new LoanDocumentMergeDataResolver({
+    loanAccountRepository,
+    borrowerRepository,
+    loanProductRepository,
+    repaymentInstallmentRepository,
+    prisma,
+  });
+  const documentFiller = new DocxtemplaterDocumentFiller();
+  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter();
+  const loanDocumentRouter = createLoanDocumentRouter(
+    {
+      generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+        mergeDataResolver,
+        documentFiller,
+        docxToPdfConverter,
+        fileStorage: loanDocumentFileStorage,
+      }),
+      listLoanDocumentsUseCase: new ListLoanDocumentsUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+      }),
+      getGeneratedLoanDocumentFileUseCase: new GetGeneratedLoanDocumentFileUseCase({
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
+      getLoanAccountUseCase,
+      idempotencyKeyStore,
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanDocumentRouter);
 
   // --- ledger module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
   const ledgerRouter = createLedgerRouter(
@@ -446,6 +551,17 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', paymentReminderRouter);
+
+  // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
+  const interestRateChartRouter = createInterestRateChartRouter(
+    {
+      listInterestRateChartUseCase: new ListInterestRateChartUseCase({
+        interestRateChartRepository: new PrismaInterestRateChartRepository(),
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', interestRateChartRouter);
 
   // --- reporting module wiring: Loan/Collection/Transaction Report pages ---
   const reportingRepository = new PrismaReportingRepository();

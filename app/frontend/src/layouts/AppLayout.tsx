@@ -23,7 +23,6 @@ import { AccountMenu } from '@/components/AccountMenu';
 import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/staticConfig';
-import { LMS_VERSION } from '@/lib/lmsVersion';
 import { cn } from '@/lib/utils';
 
 /**
@@ -47,7 +46,7 @@ const NAV_GROUPS = [
     label: 'Loan',
     items: [
       { to: '/applications', label: 'Loan Applications', icon: FileCheck2, end: false },
-      { to: '/clients', label: 'Client Data', icon: Users, end: false },
+      { to: '/clients', label: 'Clients', icon: Users, end: false },
       { to: '/loans', label: 'Loan Accounts', icon: Landmark, end: false },
     ],
   },
@@ -65,7 +64,7 @@ const NAV_GROUPS = [
   {
     label: 'Administration',
     items: [
-      { to: '/admin/members', label: 'Members', icon: ShieldCheck, end: false },
+      { to: '/admin/members', label: 'User Accounts', icon: ShieldCheck, end: false },
       { to: '/products', label: 'Loan Products', icon: Package, end: false },
       { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
       { to: '/admin/about', label: 'About', icon: Info, end: false },
@@ -106,10 +105,10 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
                     end={item.end}
                     className={({ isActive }) =>
                       cn(
-                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                        'flex items-center gap-3 rounded-md border-l-2 px-[10px] py-2 text-sm font-medium transition-colors',
                         isActive
-                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                          : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/15 hover:text-sidebar-foreground',
+                          ? 'border-l-sidebar-accent bg-sidebar-accent/15 text-sidebar-accent'
+                          : 'border-l-transparent text-sidebar-foreground/75 hover:bg-sidebar-accent/10 hover:text-sidebar-foreground',
                       )
                     }
                   >
@@ -121,11 +120,6 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
             </div>
           ))}
         </nav>
-        <div className="shrink-0 p-3">
-          <p className="rounded-md border border-sidebar-border bg-sidebar-accent/10 px-3 py-2 text-[11px] leading-snug text-sidebar-foreground/70">
-            UI Preview build - v{LMS_VERSION}. Sample data only.
-          </p>
-        </div>
       </aside>
     </div>
   );
@@ -150,7 +144,7 @@ function Topbar({
         <Button
           variant="ghost"
           size="icon"
-          className="hidden lg:inline-flex"
+          className="hidden rounded-full bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex"
           onClick={onCollapseToggle}
           aria-label={collapsed ? 'Show side menu' : 'Hide side menu'}
         >
@@ -186,13 +180,18 @@ export function AppLayout() {
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-        <div className="flex min-h-0 flex-1 flex-col">
+        {/* min-w-0 is required here: a flex child otherwise refuses to shrink below its content's
+            intrinsic width (the flexbox default is min-width: auto), so a wide table anywhere in
+            <Outlet /> was expanding this whole column — and with it the row containing the
+            sidebar — past the viewport, causing a page-level horizontal scrollbar that dragged the
+            (sticky) sidebar along with it instead of staying put while only the table scrolled. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar
             onMenuClick={() => setSidebarOpen((o) => !o)}
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
             <Outlet />
           </main>
           <PreviewFooterNote />

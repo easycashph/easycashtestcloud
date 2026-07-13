@@ -7,6 +7,7 @@ import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { LoanAccount, type LoanAccountProps } from '../domain/LoanAccount';
 import { LoanBalances } from '../domain/valueObjects/LoanBalances';
+import { OriginationFees } from '../domain/valueObjects/OriginationFees';
 import { AppliedFee } from '../domain/AppliedFee';
 import type { FindManyLoanAccountsOptions, ILoanAccountRepository } from '../application/ports/ILoanAccountRepository';
 
@@ -55,6 +56,18 @@ function toDomain(row: LoanAccountRow): LoanAccount {
     closedAt: row.closedAt ?? undefined,
     closedReason: row.closedReason ?? undefined,
     legacyBalanceDataMissing: row.legacyBalanceDataMissing,
+    originationFees: OriginationFees.of({
+      processingFee: Money.of(row.processingFee),
+      advanceInterestFee: Money.of(row.advanceInterestFee),
+      outstandingBalancePayoff: Money.of(row.outstandingBalancePayoff),
+      docStampFee: Money.of(row.docStampFee),
+      accountManagementFee: Money.of(row.accountManagementFee),
+      otherFees: Money.of(row.otherFees),
+      notarialFee: Money.of(row.notarialFee),
+      webFee: Money.of(row.webFee),
+      insuranceFee: Money.of(row.insuranceFee),
+    }),
+    netProceeds: Money.of(row.netProceeds),
     legacyId: row.legacyId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -87,6 +100,7 @@ function toDomain(row: LoanAccountRow): LoanAccount {
  */
 async function writeGraph(client: PrismaWriteClient, loanAccount: LoanAccount): Promise<void> {
   const balances = loanAccount.balances.toProps();
+  const originationFees = loanAccount.originationFees.toProps();
 
   if (loanAccount.isNew) {
     await client.loanAccount.create({
@@ -123,6 +137,16 @@ async function writeGraph(client: PrismaWriteClient, loanAccount: LoanAccount): 
         activatedAt: loanAccount.activatedAt,
         closedAt: loanAccount.closedAt,
         closedReason: loanAccount.closedReason,
+        processingFee: originationFees.processingFee.toDecimal(),
+        advanceInterestFee: originationFees.advanceInterestFee.toDecimal(),
+        outstandingBalancePayoff: originationFees.outstandingBalancePayoff.toDecimal(),
+        docStampFee: originationFees.docStampFee.toDecimal(),
+        accountManagementFee: originationFees.accountManagementFee.toDecimal(),
+        otherFees: originationFees.otherFees.toDecimal(),
+        notarialFee: originationFees.notarialFee.toDecimal(),
+        webFee: originationFees.webFee.toDecimal(),
+        insuranceFee: originationFees.insuranceFee.toDecimal(),
+        netProceeds: loanAccount.netProceeds.toDecimal(),
         legacyId: loanAccount.legacyId,
         createdAt: loanAccount.createdAt,
         updatedAt: loanAccount.updatedAt,
@@ -236,5 +260,20 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
       return;
     }
     await prisma.$transaction((tx) => writeGraph(tx, loanAccount));
+  }
+
+  async findMaxLoanCodeSequenceForPrefix(prefix: string, ctx?: TransactionContext): Promise<number> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanAccount.findMany({
+      where: { loanCode: { startsWith: `${prefix}_` } },
+      select: { loanCode: true },
+    });
+    let max = 0;
+    for (const row of rows) {
+      const suffix = row.loanCode.slice(prefix.length + 1);
+      const n = Number.parseInt(suffix, 10);
+      if (Number.isInteger(n) && n > max) max = n;
+    }
+    return max;
   }
 }

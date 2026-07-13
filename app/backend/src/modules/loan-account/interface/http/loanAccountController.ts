@@ -12,8 +12,14 @@ import type { ApproveLoanUseCase } from '../../application/use-cases/ApproveLoan
 import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUseCase';
 import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
 import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
+import type { ReversePaymentUseCase } from '../../application/use-cases/ReversePaymentUseCase';
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
-import type { CreateLoanAccountRequestBody, ProcessPaymentRequestBody, RejectLoanRequestBody } from './loanAccountSchemas';
+import type {
+  CreateLoanAccountRequestBody,
+  ProcessPaymentRequestBody,
+  RejectLoanRequestBody,
+  ReversePaymentRequestBody,
+} from './loanAccountSchemas';
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 
 export interface LoanAccountControllerDeps {
@@ -24,6 +30,7 @@ export interface LoanAccountControllerDeps {
   rejectLoanUseCase: RejectLoanUseCase;
   activateLoanUseCase: ActivateLoanUseCase;
   processPaymentUseCase: ProcessPaymentUseCase;
+  reversePaymentUseCase: ReversePaymentUseCase;
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
@@ -158,11 +165,51 @@ export class LoanAccountController {
           currentUser.sub,
           body.paidAt,
           manualAllocations,
+          body.orNumber,
+          body.arNumber,
         );
         return {
           statusCode: 200,
           body: { loanAccount: presentLoanAccount(loanAccount), remainder: remainder.toString() },
         };
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * 2026-07-11 (Reverse Payment feature). MIS-only (enforced by the router's `requireRole('MIS')`,
+   * not here — same division of concerns as every other route).
+   *
+   * 2026-07-11 follow-up: DOES use `withIdempotency`, unlike this doc comment originally claimed —
+   * real testing surfaced the gap that reasoning missed. `ReversePaymentUseCase`'s own
+   * `TransactionAlreadyReversedError` only catches a duplicate attempt that arrives *after* the
+   * first one has already committed; two requests racing to reverse the same transaction can both
+   * pass that check before either writes, and the loser then fails with a confusing
+   * `ConcurrencyConflictError` ("this loan was just updated by another action") instead of a clear
+   * "already in progress" response. Same shape as `activate`/`processPayment` above, except the
+   * frontend sends a key derived from the transaction id (not a fresh random one per click) — see
+   * `LoanDetailPage.tsx`'s `reverseMutation` — so this specific race is caught deterministically,
+   * not just reduced to "usually fine."
+   */
+  reversePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/:id/transactions/:transactionId/reverse';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as ReversePaymentRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId); // H-1: same as approve()/reject()/processPayment() above.
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const loanAccount = await this.deps.reversePaymentUseCase.execute(
+          req.params.id as string,
+          req.params.transactionId as string,
+          currentUser.sub,
+          body.reason,
+        );
+        return { statusCode: 200, body: presentLoanAccount(loanAccount) };
       });
     } catch (error) {
       next(error);

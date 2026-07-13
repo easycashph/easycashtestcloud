@@ -16,6 +16,8 @@ export function presentLoanTransaction(transaction: LoanTransaction) {
     branchId: transaction.branchId,
     entryDate: transaction.entryDate.toISOString(),
     comment: transaction.comment ?? null,
+    orNumber: transaction.orNumber ?? null,
+    arNumber: transaction.arNumber ?? null,
     reversesTransactionId: transaction.reversesTransactionId ?? null,
     legacyId: transaction.legacyId ?? null,
     createdAt: transaction.createdAt.toISOString(),

@@ -8,7 +8,11 @@ per `CLAUDE.md`'s Decision Log requirement.
 (all sections); `docs/Architecture/ADR-007-outstanding-balance-formula.md`,
 `ADR-009-payment-allocation-order.md`, `ADR-010-addon-vs-contractual-interest.md`,
 `ADR-032-loan-release-vs-disbursement.md`, `ADR-047-financial-audit-isolation.md`,
-`ADR-048-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`.
+`ADR-048-optimistic-concurrency.md`; `docs/Architecture/FINANCIAL_INVARIANTS.md`. As of 2026-07-11,
+also cross-validated against a second, independently-built system: MIS Nomer's own hand-built
+Excel-based LMS, `legacy/reports/BETA 1.5.83 LMSv3.xlsm` (§1, §2) — see those sections for what
+was and wasn't traced (the workbook's ~32MB `vbaProject.bin` macro code was not decompiled; only
+its worked-example output was verified against this spec's formulas).
 **Rule:** every formula below is either cited to verified legacy evidence, a legal loan document,
 or explicitly marked `STATUS: UNRESOLVED`. No formula in this document was filled in from general
 lending-industry convention. Where a formula is `UNRESOLVED`, implementation must not proceed for
@@ -62,7 +66,18 @@ second installment: `15164.97 × 0.0495 = 750.67`) and loan `SL-LAZ_V5N0R`
 (`2000 × 0.2499 = 499.8`, matching the real `INTEREST_APPLIED` transaction exactly). See
 `docs/Architecture/ADR-010-addon-vs-contractual-interest.md` §1–§2.
 
-**STATUS: CONFIRMED.**
+**Second, independent source (2026-07-11):** MIS Nomer's own hand-built Excel-based LMS,
+`legacy/reports/BETA 1.5.83 LMSv3.xlsm` (a separate, personally-maintained tool — not SDevTech/
+Mambu legacy production data, but a second from-scratch implementation of the same lending
+business's rules). Its `TempAmort` sheet's 5-period worked example (₱102,912.36 principal, 5-month
+term) has no live formula for `Interest`/`Principal`/`Balance` (pasted computed values — the sheet's
+`vbaProject.bin`, ~32MB, is presumed to hold the actual macro logic and was not decompiled), but
+reverse-derivation from the pasted values confirms `Interest_n ÷ Balance_(n-1)` is constant at
+`4.85000%` across all 5 periods (`4.85000%` to `4.85001%`, floating-point noise only) — the exact
+same `Interest_n = Balance_(n-1) × Rate` relationship as this formula, and matching the workbook's
+own `Rate_details` lookup table (`TERM=5 → CONTRACTUAL=4.85`).
+
+**STATUS: CONFIRMED** (now by two independently-built systems, not just one legacy source).
 
 ### Rounding
 Not specified by the formula itself. `Money.multiply()` (already implemented) rounds to
@@ -80,6 +95,11 @@ half-up rounding — a fixed, documented arithmetic default for a single multipl
 | 17,782.61 | 4.95% | 880.24 | `SL-REG_U1V1J`, installment 1 |
 | 15,164.97 | 4.95% | 750.67 | `SL-REG_U1V1J`, installment 2 |
 | 2,000.00 | 24.99% | 499.80 | `SL-LAZ_V5N0R`, installment 1 |
+| 102,912.36 | 4.85% | 4,991.25 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 1 |
+| 84,231.92 | 4.85% | 4,085.25 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 2 |
+| 64,645.48 | 4.85% | 3,135.31 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 3 |
+| 44,109.10 | 4.85% | 2,139.29 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 4 |
+| 22,576.70 | 4.85% | 1,094.97 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort`, installment 5 |
 
 ### Edge Cases
 - **Zero balance** (fully paid): `Interest_n = 0 × rate = 0`. Not separately verified against
@@ -96,8 +116,8 @@ half-up rounding — a fixed, documented arithmetic default for a single multipl
   construction rules.
 
 ### Test Vectors
-See Examples table above — these three rows are directly reusable as unit test fixtures, each
-citing its real-loan source.
+See Examples table above — every row is directly reusable as a unit test fixture, each citing its
+source loan/workbook.
 
 ### Dependencies
 None (this is a leaf calculation).
@@ -148,7 +168,17 @@ double-precision Excel calculation, not evidence against the formula) after 8 pe
 independent from-scratch `PMT` reimplementation, tested against 9 real released loans, matching
 each to within a few centavos).
 
-**STATUS: CONFIRMED.**
+**Second, independent source (2026-07-11):** MIS Nomer's own hand-built Excel-based LMS,
+`legacy/reports/BETA 1.5.83 LMSv3.xlsm`, sheet `TempAmort` (see §1's evidence entry above for
+this source's nature/caveats). Recomputing `MonthlyPayment = (Rate × Principal) / (1 − (1 +
+Rate)^−n)` with `Principal = 102,912.36`, `Rate = 4.85%`, `n = 5` gives `23,671.69` — an **exact
+match**, to the centavo, against the workbook's own pasted `Amortization` value for installments
+1–4. Installment 5 shows `23,671.67` (2 centavos less) with `Balance` landing on exactly `0` —
+consistent with this project's own `ROUND_REMAINDER_INTO_LAST_REPAYMENT` behavior (§7), not a
+contradiction of it, though this workbook's own internal logic for *why* it does this was not
+traced (VBA not decompiled — see §1).
+
+**STATUS: CONFIRMED** (now by two independently-built systems, not just one legacy source).
 
 ### Rounding
 `MonthlyPayment` should be rounded to `Decimal(14,2)` once, at computation time — not
@@ -164,11 +194,12 @@ which is exact given both operands are already `Decimal(14,2)`.
 | `principal` | `monthlyContractualRate` | `numberOfInstallments` | `monthlyPayment` | Source |
 |---|---|---|---|---|
 | 80,953.71 | 3.7% | 8 | 11,875.38 | `Sample Computation Sheet` worked example |
+| 102,912.36 | 4.85% | 5 | 23,671.69 | `BETA 1.5.83 LMSv3.xlsm` `TempAmort` worked example |
 
-(Only one full worked example with every period's values was found in the evidence; additional
-test vectors should be constructed once §4's `UNRESOLVED` flat-rate question and real disbursed-
-loan schedules are available for cross-checking against `repayments.bson` schedule rows for
-other products.)
+(Two full worked examples with every period's values are now available, from two independently
+built sources. Additional test vectors should still be constructed once §4's `UNRESOLVED` flat-rate
+question and real disbursed-loan schedules are available for cross-checking against
+`repayments.bson` schedule rows for other products.)
 
 ### Edge Cases
 - **`numberOfInstallments = 1`**: `MonthlyPayment` reduces to `Principal × (1 + MonthlyContractualRate)`
@@ -763,36 +794,279 @@ system was intended to handle this case even if it was rarely/never exercised in
 ## 12. Penalty Calculation
 
 ### Purpose
-Would compute the penalty amount applied to an overdue installment.
+Computes the penalty amount owed on an overdue installment, for loans originated going forward
+through this system (see Scope below — this explicitly does NOT apply to already-migrated loans).
 
-### STATUS: UNRESOLVED
+### Inputs
+- `overdueAmount: Money` — the unpaid Principal + Interest for the installment (not principal alone).
+- `dueDate: Date`
+- `asOfDate: Date` (defaults to "now" — the date penalty is being computed as of).
+- `ratePercent: Percentage` — resolved from the loan's own `principalAmount` (5 or 10, see Formula
+  and Configuration Required — NOT read from a per-`LoanProductVersion` `PenaltyRule` row; see
+  `ADR-050` §4 for why).
+- `gracePeriodDays: number` — 3, fixed, same for every loan (see Configuration Required).
 
-Legacy evidence shows penalty is applied on a **daily** cadence to any account in arrears
-(`PENALTY_APPLIED` is 79.3% of every transaction ever posted in the legacy system — 416,034 of
-524,463 — `docs/Legacy Analysis/...` §7.2), and `loan_accounts.bson` records show fields
-`penalty_calculation_method: "PERCENTAGE_PER_DAY"` and a `penalty_rate` (e.g. `5`) on individual
-accounts. However, **no formula was derived or verified** connecting these fields to the actual
-`PENALTY_APPLIED` amounts observed (e.g. `77.68`, `155.36`, `233.04`, `310.72`, `388.40`,
-`466.08` in the `SML-MAX_K5W8S` sequence) — these amounts step up over time in a pattern that was
-observed but never decomposed into a confirmed `Balance × Rate × Days`-style formula the way §1's
-interest formula was.
+### Outputs
+- `penaltyOwed: Money`
 
-This is explicitly out of scope for Milestone 9's calculation engine per
-`FINANCIAL_INVARIANTS.md §9`'s existing deferral ("nothing that computes a schedule or derives a
-balance from a formula may be built until ADR-007 and ADR-009 are resolved" — penalty calculation
-was never in that initial scope and remains additionally gated by ADR-008, still open per
-`schema.prisma`'s own comment: `"ADR-008 PENDING: capPercent is a mechanism only... not enforced
-by default until the cap policy decision is made"`).
+### Configuration Required
+**A global rule, applied identically to every loan/product** (`ADR-050` §4, 2026-07-11 revision —
+originally proposed as per-`LoanProductVersion` `PenaltyRule` configuration, rejected because a
+single product version's loan-amount range can straddle the ₱10,000 threshold): `gracePeriodDays =
+3`; `ratePercent = 5%` when that specific loan's `principalAmount` ≤ ₱10,000, `10%` otherwise (all
+Easycash loans are unsecured — see `ADR-050` §1). Compounding and whole-months-only counting are
+likewise fixed behavior of the formula itself, not configurable at all. `PenaltyRule`'s schema
+fields remain unused by this feature — available for a future genuinely-per-product policy if one
+is ever confirmed, not built now (YAGNI).
 
-**Do not implement a penalty formula from general lending-industry convention.**
+### Formula
+```
+graceEndDate = dueDate + gracePeriodDays
+if asOfDate <= graceEndDate:
+    penaltyOwed = 0
+else:
+    // Whole months are counted from the ORIGINAL due date, not from graceEndDate — the grace
+    // period is purely a yes/no gate on whether any penalty applies at all, not a shift in the
+    // month-counting anchor. Verified against ADR-050 §1's worked example: due 2026-07-01, paid
+    // 2026-10-01 → wholeCalendarMonthsBetween(2026-07-01, 2026-10-01) = exactly 3, matching the
+    // 3-month compounding table there. (Anchoring at graceEndDate instead would have given only 2
+    // whole months for that same example — graceEndDate is 2026-07-04, and Oct 1 is 3 days short
+    // of completing a 3rd month from that later start point.)
+    monthsLate = floor(wholeCalendarMonthsBetween(dueDate, asOfDate))  — partial months don't count
+    penaltyOwed = overdueAmount × ((1 + ratePercent/100)^monthsLate − 1)
+```
+
+**Evidence:** `ADR-050` — confirmed directly by the user (MIS), 2026-07-11, as a new, going-forward
+policy (explicitly not a claim about historical legacy behavior — see that ADR's §3 for the real,
+contradictory legacy `PENALTY_APPLIED` evidence this formula deliberately does not try to match).
+The 5%/10% tiering by ≤₱10,000 principal exists because of BSP Circular No. 1133 (2021)/SEC
+Memorandum Circular No. 3 (2022)'s penalty ceiling for small unsecured loans — see `ADR-050` §2 for
+why the tier ignores that circular's own 4-month-tenor condition.
+
+**STATUS: CONFIRMED** (formula, rate, grace period, compounding, tiering) — via direct business/MIS
+testimony, same evidentiary standing as other testimony-confirmed rules in this system (e.g.
+`ADR-046`'s Add-On-Rate basis). `capPercent` enforcement (the 100%-of-principal total cost cap)
+remains **UNRESOLVED**, still gated by `ADR-008` (not produced this milestone).
+
+### Rounding
+Not yet specified to the same decimal-place rigor as §1–§9 — `ADR-050` gives the formula in terms
+of exact compounding; whether intermediate monthly steps round to `Decimal(14,2)` before the next
+compounding step (as the worked example in `ADR-050` §1 does) or the whole-period formula is
+applied once without intermediate rounding is not yet distinguished (they can differ by a few
+centavos over several months). Use the step-by-step monthly rounding shown in `ADR-050`'s worked
+example — that is what was actually confirmed with the user.
+
+### Precision
+`Decimal(14,2)`, rounded at each monthly compounding step (see Rounding above).
+
+### Examples
+See `ADR-050` §1's worked example: ₱10,000.00 overdue, 10% rate, 3 whole months late →
+₱1,000.00 + ₱1,100.00 + ₱1,210.00 = ₱3,310.00 total penalty.
+
+### Edge Cases
+- Paid within the grace period (`asOfDate <= dueDate + gracePeriodDays`): zero penalty.
+- Fewer than one whole month past the grace period: zero penalty (no proration) — the first
+  compounding step only fires once a full month has elapsed past `graceEndDate`.
+
+### Validation Rules
+`overdueAmount` must be non-negative; `gracePeriodDays`/`ratePercent` come from an already-valid
+`PenaltyRule` snapshot, not re-validated here.
+
+### Test Vectors
+See Examples above — directly reusable as a test fixture.
+
+### Scope — prospective only (ADR-050 §5)
+**Applies only to loans originated going forward through this system.** Already-migrated loans'
+stored `penaltyDue`/`penaltyPaid`/`penaltyBalance` are never recomputed by this formula and remain
+exactly as migrated (CP12) — including loans still ACTIVE and overdue today. Transitioning an
+already-active migrated loan onto live penalty accrual, if ever wanted, is an explicitly deferred,
+separate decision per `ADR-050` §5.
 
 ### Dependencies
-§6 (Outstanding Balance) — penalty accrual would feed the running balance once its formula is
-resolved.
+§6 (Outstanding Balance) — penalty accrual feeds the running balance once applied/allocated.
 
 ### Referenced ADRs
-None yet — blocked on ADR-008 (not produced this milestone) and further legacy-data
-investigation of the daily `PENALTY_APPLIED` amount sequence.
+`ADR-050` (primary source — formula, rate, tiering, prospective-only scope).
+
+---
+
+## 13. Insurance Fee (Loan Origination)
+
+### Purpose
+Computes the one-time Insurance Fee deducted at loan disbursement (Create Loan Account —
+`OriginationFees.insuranceFee`), distinct from any recurring per-installment fee.
+
+### Inputs
+- `monthlyAmortization: Money` — the loan's level payment amount (§2's `MonthlyPayment`).
+- `numberOfInstallments: number` (Term).
+
+### Outputs
+- `insuranceFee: Money`
+
+### Configuration Required
+None — unlike every other origination fee in this system, this one is not staff-entered by
+default; it is computed, though still staff-editable/zeroable afterward (no separate "waive"
+mechanism is implemented — see Edge Cases).
+
+### Formula
+```
+TotalContract = MonthlyAmortization × NumberOfInstallments
+InsuranceFee  = (TotalContract ÷ 1000) × NumberOfInstallments
+IF TotalContract < 50,000: InsuranceFee += 20
+InsuranceFee = CEILING(InsuranceFee, 1)   — round UP to the nearest whole peso
+```
+
+**Evidence:** transcribed verbatim (2026-07-11) from the `CalculateInsurance()` VBA macro in MIS
+Nomer's own hand-built Excel LMS, `legacy/reports/BETA 1.5.83 LMSv3.xlsm` (source provided
+directly by the user, not reverse-engineered from spreadsheet cells — no formula or dedicated
+table for this fee exists anywhere in the workbook's ~18 sheets, confirmed by an exhaustive
+text search across all of them for "insurance"; the computation lives entirely in VBA). Validated
+exactly against 4 real loans from `Loans_details`:
+
+| Loan | Monthly Amortization | Term | Computed | Actual (`Insurance Fee` column) |
+|---|---|---|---|---|
+| `SML-REG_00365` | 16,220.83 | 4 | 260 | 260 |
+| `SML-REG_00364` | 18,336.88 | 6 | 661 | 661 |
+| `SL-REG_00109` | 8,746.84 | 6 | 315 | 315 |
+| `SML-REG_00350` | 24,881.10 | 2 | 120 | 120 |
+
+**STATUS: CONFIRMED** — sourced from the real macro code itself (not inferred), then independently
+verified against 4 real disbursed loans, all exact.
+
+### Rounding
+`CEILING(x, 1)` — rounds UP to the nearest whole peso (never half-up, never down) — this is the
+macro's own explicit final step, not this project's usual `Decimal(14,2)` half-up convention;
+applied only to this fee.
+
+### Precision
+Intermediate `TotalContract`/pre-ceiling `InsuranceFee` values are not rounded — only the final
+result is, via `CEILING`.
+
+### Examples
+See the Evidence table above — directly reusable as test fixtures.
+
+### Edge Cases
+- **Product/loan-level waiver**: the source macro has a `chkWaiveInsurance` checkbox that zeroes
+  this fee out entirely when checked, per-loan (not a product-level default — real data shows
+  `SL-CORP` loans with both zero and nonzero Insurance Fee values, ruling out a per-product waiver
+  rule). Not implemented as a separate control here; staff can already edit/zero any origination
+  fee field directly in the Create Loan Account form, which covers the same outcome.
+- **`TotalContract` exactly 50,000**: the macro's condition is `< 50000` (strict), so exactly
+  50,000 does NOT get the +20 — not separately evidenced, but follows directly from the
+  transcribed condition.
+
+### Validation Rules
+- `monthlyAmortization` and `numberOfInstallments` must both be positive — not separately
+  evidenced (the macro guards on `IsNumeric`/waiver-checkbox state, not on these being positive),
+  but a non-positive input here would come from an already-invalid §2 result.
+
+### Test Vectors
+See Examples table above.
+
+### Dependencies
+§2 (Level Payment Amortization) — this fee is computed from that formula's `MonthlyPayment`
+output, not from principal directly.
+
+### Referenced ADRs
+None — sourced directly from the VBA macro source, not a legacy-data ADR investigation.
+
+### Open discrepancy (not yet resolved)
+A second, newer live-production Excel calculator, `legacy/reports/Net Amount Auto Computation v3
+with Account Management Fee.xlsx` (`AutoV2` sheet, e.g. cell `D16`:
+`ROUNDUP((Amortization×Term)/1000×Term, 0)`), computes the same core formula **without** the
+`+20 if TotalContract < 50,000` term present in the `CalculateInsurance()` macro above. Not yet
+investigated further or confirmed either way (no real loan with `TotalContract < 50,000` has been
+traced through both sources) — flagged here so it isn't lost, not acted on.
+
+---
+
+## 14. Advance Interest Fee (Loan Origination)
+
+### Purpose
+Computes the one-time Advance Interest Fee deducted at loan disbursement (Create Loan Account —
+`OriginationFees.advanceInterestFee`) when the gap between disbursement and the first scheduled
+repayment exceeds 30 days.
+
+### Inputs
+- `grossLoanAmount: Money` (Principal)
+- `addOnRatePercent: Percentage` — the `LoanProductVersion`/quote's Add-On Rate, **not**
+  Contractual Rate (§3, `ADR-010`).
+- `disbursementDate: Date`
+- `firstRepaymentDate: Date`
+
+### Outputs
+- `advanceInterestFee: Money`
+
+### Configuration Required
+Per-`LoanProductVersion` eligibility (`chargesAdvanceInterestFee`-style flag) — **UNRESOLVED**, see
+`ADR-046` §4/§7. Currently implemented as a per-loan auto-computed suggestion (always populated
+when the >30-day condition holds), freely editable/zeroable by staff, rather than a per-product
+hard rule — a deliberate scope choice pending that business decision.
+
+### Formula
+```
+gapDays = firstRepaymentDate − disbursementDate   (calendar days)
+IF gapDays > 30:
+    excessDays = gapDays − 30
+    advanceInterestFee = CEILING(grossLoanAmount × (addOnRatePercent / 100) × (excessDays / 30), 1)
+ELSE:
+    advanceInterestFee = 0
+```
+
+**Evidence:** `ADR-046` (population-wide statistical fit: 62.6% exact match, 74.6% within 5% across
+449 real loans, 2021 encoding-anomaly cohort excluded) plus, as of 2026-07-11, independent
+corroboration against a live, currently-active account (`SML-REG_00373`) matched exactly across
+three separate sources — see `ADR-046` §3.5:
+
+| Source | Advance Interest Fee |
+|---|---|
+| This formula, hand-computed | ₱1,508.00 |
+| Official Disclosure Statement (R.A. 3765) for this account | ₱1,508.00 |
+| Legacy SDevTech production system's stored value | ₱1,508.00 |
+
+(Inputs: Gross ₱115,926.97, Add-On Rate 3.00%/month, disbursed 2026-07-03, 1st due 2026-08-15 —
+43-day gap, 13 excess days.) The same live-account cross-check also independently reconfirmed the
+Account Management Fee (exactly 1% of Gross) and the §13 Insurance Fee macro formula, both exact.
+
+A second, newer live-production Excel calculator (`Net Amount Auto Computation v3 with Account
+Management Fee.xlsx`, `AutoV2` sheet, cell `D20` and 20+ structurally-identical per-quote copies)
+was independently read and found algebraically identical to this formula, confirming the Add-On
+Rate rate-basis and ceiling-to-whole-peso rounding a second, independent way. That sheet also
+revealed a manual per-quote `"With Advance Interest?"` YES/NO toggle gating the fee even when the
+>30-day condition holds — a plausible real mechanism behind the per-product/per-loan eligibility
+gap `ADR-046` already flags as unresolved, but not itself a confirmed configuration rule.
+
+**STATUS: CONFIRMED** — formula, rate basis, and rounding convention. Per-product eligibility
+remains **UNRESOLVED** (business decision required, see `ADR-046` §7).
+
+### Rounding
+`CEILING(x, 1)` — round UP to the nearest whole peso, same convention as §13 Insurance Fee; departs
+from this document's usual `Decimal(14,2)` precision, intentionally, for this fee only.
+
+### Precision
+Intermediate values are not rounded — only the final result, via `CEILING`.
+
+### Examples
+See the Evidence table above — directly reusable as a test fixture.
+
+### Edge Cases
+- `gapDays ≤ 30`: fee is `0`, no partial credit.
+- No per-product eligibility gate is currently enforced (see Configuration Required) — the fee is
+  suggested for every loan meeting the >30-day condition, regardless of product.
+
+### Validation Rules
+`grossLoanAmount` and `addOnRatePercent` must both be positive; dates must be valid calendar dates
+with `firstRepaymentDate ≥ disbursementDate`.
+
+### Test Vectors
+See Examples table above.
+
+### Dependencies
+None beyond its own inputs — computed independently of §1–§13.
+
+### Referenced ADRs
+`ADR-046` (primary source), `ADR-010` (Add-On vs. Contractual rate distinction), `ADR-045`
+(`firstRepaymentDate` as an explicit input).
 
 ---
 
@@ -811,9 +1085,11 @@ investigation of the daily `PENALTY_APPLIED` amount sequence.
 | §9 Capitalization at Maturity | CONFIRMED (contractual); UNRESOLVED (timing mechanics) | Partially — the arithmetic is simple, but "when" is undetermined |
 | §10 Reversals and Adjustments | PARTIALLY CONFIRMED / UNRESOLVED (data modeling, not a formula) | N/A — design question |
 | §11 Overpayment Handling | UNRESOLVED | **No** — blocked, needs evidence |
-| §12 Penalty Calculation | UNRESOLVED | **No** — blocked, needs evidence, and gated by ADR-008 (not produced this milestone) |
+| §12 Penalty Calculation | CONFIRMED (formula/rate/grace/compounding/tiering, via `ADR-050`, direct business testimony); UNRESOLVED (`capPercent`/`ADR-008`) | Yes, for new loans going forward only — prospective scope per `ADR-050` §5; migrated loans' stored penalty figures are untouched |
+| §13 Insurance Fee (Loan Origination) | CONFIRMED (sourced from real VBA macro, verified against 4 real loans) | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeInsuranceFee()` |
+| §14 Advance Interest Fee (Loan Origination) | CONFIRMED (formula/rate-basis/rounding; per-product eligibility UNRESOLVED, see `ADR-046` §7) — exact match against a live 2026 account across 3 independent sources | Yes — implemented in `LoanAccountCreatePage.tsx`'s `computeAdvanceInterestFee()`, as a per-loan suggestion pending the eligibility decision |
 
-**Correctness over completeness, as instructed**: this document ends with five genuinely
-unresolved calculations (§4, §9's timing, §10's data model, §11, §12) rather than inventing
-formulas for them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business
-decision), and §8 are ready to guide real implementation.
+**Correctness over completeness, as instructed**: this document ends with four genuinely
+unresolved calculations (§4, §9's timing, §10's data model, §11) rather than inventing formulas for
+them. §1, §2, §3, §5 (contractually), §6 (mechanism), §7 (resolved, business decision), §8, §12
+(new loans only), §13, and §14 are ready to guide real implementation.

@@ -15,6 +15,7 @@ function presentAppliedFee(fee: AppliedFee) {
 
 export function presentLoanAccount(loanAccount: LoanAccount) {
   const balances = loanAccount.balances.toProps();
+  const originationFees = loanAccount.originationFees.toProps();
   return {
     id: loanAccount.id,
     loanCode: loanAccount.loanCode,
@@ -55,6 +56,18 @@ export function presentLoanAccount(loanAccount: LoanAccount) {
     closedAt: loanAccount.closedAt?.toISOString() ?? null,
     closedReason: loanAccount.closedReason ?? null,
     legacyBalanceDataMissing: loanAccount.legacyBalanceDataMissing,
+    originationFees: {
+      processingFee: originationFees.processingFee.toString(),
+      advanceInterestFee: originationFees.advanceInterestFee.toString(),
+      outstandingBalancePayoff: originationFees.outstandingBalancePayoff.toString(),
+      docStampFee: originationFees.docStampFee.toString(),
+      accountManagementFee: originationFees.accountManagementFee.toString(),
+      otherFees: originationFees.otherFees.toString(),
+      notarialFee: originationFees.notarialFee.toString(),
+      webFee: originationFees.webFee.toString(),
+      insuranceFee: originationFees.insuranceFee.toString(),
+    },
+    netProceeds: loanAccount.netProceeds.toString(),
     legacyId: loanAccount.legacyId ?? null,
     createdAt: loanAccount.createdAt.toISOString(),
     updatedAt: loanAccount.updatedAt.toISOString(),

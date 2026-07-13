@@ -133,6 +133,23 @@ const PENALTY_CALC_METHOD_MAP: Record<string, string> = {
   ON_REPAYMENT: 'ON_REPAYMENT',
 };
 
+/**
+ * 2026-07-11: the source `loan_products` document for `id: "CM-Car"` (`_id`
+ * `658561a4446af7f39eb85513`) has its `name` field genuinely corrupted at the source — a JSON blob
+ * (apparently `{"description":"Chattel mortgage with impounded car as security","addOnRates":[1.75,
+ * ..., 2.25]}`) got comma-split across the `description`/`name`/`prepaymant_acceptance` fields
+ * (likely a CSV-style import bug in the legacy system, not something this migration introduced).
+ * `name` ended up as the literal string `"addOnRates:[1.75"`. Recovered the real product identity
+ * from the still-legible `description` fragment and confirmed the replacement name with the user
+ * before applying it directly to the DB — recorded here too so a future re-run of this
+ * (idempotent-by-design) script doesn't silently revert that fix back to the corrupted value.
+ * This product has zero real loan accounts/applications, so no historical data is at risk either
+ * way.
+ */
+const KNOWN_CORRUPTED_PRODUCT_NAMES: Record<string, string> = {
+  'CM-Car': 'Chattel Mortgage - Car',
+};
+
 async function migrateLoanProducts(): Promise<{ rec: Reconciliation; productVersionIdByLegacyKey: Map<string, string> }> {
   const products = loadAll<any>('loan_products');
   const rec = newReconciliation('loan_products', products.length);
@@ -147,12 +164,13 @@ async function migrateLoanProducts(): Promise<{ rec: Reconciliation; productVers
       continue;
     }
     const loanAmountMin = p.loan_amount?.minimum ?? p.loan_amount?.default ?? 0;
+    const name = KNOWN_CORRUPTED_PRODUCT_NAMES[code] ?? String(p.name ?? code);
 
     if (APPLY) {
       const product = await prisma.loanProduct.upsert({
         where: { code },
-        update: { name: String(p.name ?? code) },
-        create: { code, name: String(p.name ?? code), description: null },
+        update: { name },
+        create: { code, name, description: null },
       });
 
       const version = await prisma.loanProductVersion.upsert({

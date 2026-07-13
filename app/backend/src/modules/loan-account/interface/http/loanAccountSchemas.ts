@@ -10,7 +10,8 @@ import { decimalStringSchema } from '@shared/http/decimalValidation';
  * decimal.js parse error.
  */
 export const createLoanAccountSchema = z.object({
-  loanCode: z.string().min(1),
+  /** 2026-07-11: optional — omit to auto-generate `{product.code}_{NNNNN}` (see CreateLoanAccountUseCase). */
+  loanCode: z.string().min(1).optional(),
   borrowerId: z.string().min(1),
   loanProductVersionId: z.string().min(1),
   branchId: z.string().min(1),
@@ -23,6 +24,16 @@ export const createLoanAccountSchema = z.object({
   gracePeriodDays: z.coerce.number().int().min(0).optional(),
   /** ADR-045 (Concept 1 — Exact First Repayment Date): required, explicit input, never derived. */
   firstRepaymentDate: z.coerce.date(),
+  /** 2026-07-11 (Create Loan Account origination fees) — each omitted defaults to 0 in the use case. */
+  processingFee: decimalStringSchema.optional(),
+  advanceInterestFee: decimalStringSchema.optional(),
+  outstandingBalancePayoff: decimalStringSchema.optional(),
+  docStampFee: decimalStringSchema.optional(),
+  accountManagementFee: decimalStringSchema.optional(),
+  otherFees: decimalStringSchema.optional(),
+  notarialFee: decimalStringSchema.optional(),
+  webFee: decimalStringSchema.optional(),
+  insuranceFee: decimalStringSchema.optional(),
   legacyId: z.string().min(1).optional(),
 });
 
@@ -54,6 +65,28 @@ export const processPaymentSchema = z.object({
    * `ProcessPaymentUseCase.toManualAllocations` for validation rules.
    */
   allocations: z.array(manualAllocationSchema).optional(),
+  /**
+   * 2026-07-11: Official Receipt number, matching the SDevTech system's own
+   * OR#/AR# fields. No longer required (2026-07-11 follow-up, user
+   * request) — OR# isn't always issued yet at the time of payment; AR# may
+   * be the only receipt number available then, with OR# added later.
+   */
+  orNumber: z.string().min(1).optional(),
+  /** Acknowledgment Receipt number — optional; not every payment channel issues one. */
+  arNumber: z.string().min(1).optional(),
 });
 
 export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;
+
+/**
+ * 2026-07-11 (Reverse Payment feature, user request): POST
+ * /loan-accounts/:id/transactions/:transactionId/reverse request body. `reason` is required
+ * (not `.optional()`, unlike `rejectLoanSchema.reason` above) — a mandatory audit trail for a
+ * financially consequential, irreversible-in-the-other-direction action, per explicit user
+ * decision when this feature was designed.
+ */
+export const reversePaymentSchema = z.object({
+  reason: z.string().min(1),
+});
+
+export type ReversePaymentRequestBody = z.infer<typeof reversePaymentSchema>;

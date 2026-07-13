@@ -15,7 +15,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { AlertCircle, AlertOctagon, AlertTriangle, Banknote, Filter, Landmark, RotateCcw, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertOctagon,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  Filter,
+  Landmark,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,7 +46,7 @@ import { useLanguage } from '@/lib/languageContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import { formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 /**
  * Placeholder pending a business decision on how a real monthly collection target gets set (no
@@ -75,10 +88,10 @@ interface PortfolioLoanRow {
   principalBalance: number;
 }
 
-/** The real backend has no `MATURED` status yet (`LoanAccountStatus` in `loanApiTypes.ts` - 7
- * values, `ACTIVE`/`ACTIVE_IN_ARREARS` are the only "still active and collecting" states). The
- * "Matured" bucket below therefore always reads 0 against live data - left visible, not hidden,
- * so the gap is honest rather than silently dropped, until the backend models that concept. */
+/** `LoanAccountStatus` (`loanApiTypes.ts`, 7 values) has no distinct `MATURED` status —
+ * `ACTIVE`/`ACTIVE_IN_ARREARS` are the only "still active and collecting" states. "Matured" (a
+ * loan whose full term is over but still unpaid — `buildRealPortfolioHealth` below) is derived
+ * from `/dashboard/summary`'s live `maturedLoanAccountIds`, not from status. */
 const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
 /** Same product-family grouping already approved for the mock dashboard (see the historical
@@ -92,10 +105,21 @@ function categorizeProductName(productName: string): string {
   return 'Other (Legacy)';
 }
 
-function buildRealPortfolioHealth(loans: PortfolioLoanRow[]) {
-  const good = loans.filter((l) => l.status === 'ACTIVE');
-  const arrears = loans.filter((l) => l.status === 'ACTIVE_IN_ARREARS');
-  const matured: PortfolioLoanRow[] = []; // see REAL_ACTIVE_STATUSES note - not tracked by the backend yet
+/**
+ * 2026-07-12: `overdueLoanIds`/`maturedLoanIds` (from `/dashboard/summary`'s live-computed sets,
+ * not `LoanAccount.status`) decide the good/arrears/matured split — `status ===
+ * 'ACTIVE_IN_ARREARS'` alone undercounts (nothing in this codebase ever transitions a loan into
+ * that status going forward, so it only reflects whatever the legacy migration happened to
+ * pre-set) and can't un-flag a loan that's since been paid current. `status` here is only used to
+ * confirm a loan is still open (ACTIVE or ACTIVE_IN_ARREARS), not to decide which bucket it falls
+ * into. `maturedLoanIds` is always a subset of `overdueLoanIds` — a loan whose final installment
+ * is unpaid past its own due date is, by definition, also overdue.
+ */
+function buildRealPortfolioHealth(loans: PortfolioLoanRow[], overdueLoanIds: ReadonlySet<string>, maturedLoanIds: ReadonlySet<string>) {
+  const openLoans = loans.filter((l) => REAL_ACTIVE_STATUSES.includes(l.status));
+  const matured = openLoans.filter((l) => maturedLoanIds.has(l.id));
+  const arrears = openLoans.filter((l) => overdueLoanIds.has(l.id) && !maturedLoanIds.has(l.id));
+  const good = openLoans.filter((l) => !overdueLoanIds.has(l.id));
   const writtenOff = loans.filter((l) => l.status === 'CLOSED_WRITTEN_OFF');
   const sum = (rows: PortfolioLoanRow[], pick: (l: PortfolioLoanRow) => number) =>
     Math.round(rows.reduce((total, l) => total + pick(l), 0) * 100) / 100;
@@ -108,7 +132,12 @@ function buildRealPortfolioHealth(loans: PortfolioLoanRow[]) {
       accruedRevenue: sum(arrears, (l) => l.interestBalance),
       loans: arrears,
     },
-    matured: { count: 0, collectionsBalance: 0, creditLoss: 0, loans: matured },
+    matured: {
+      count: matured.length,
+      collectionsBalance: sum(matured, (l) => l.collectionsBalance),
+      creditLoss: sum(matured, (l) => l.principalBalance),
+      loans: matured,
+    },
     writtenOff: { count: writtenOff.length, collectionsBalance: sum(writtenOff, (l) => l.collectionsBalance), loans: writtenOff },
   };
 }
@@ -131,8 +160,8 @@ function buildRealPortfolioByCategory(loans: PortfolioLoanRow[]): PortfolioCateg
   return [...byCategory.values()];
 }
 
-function buildRealQualityMetrics(loans: PortfolioLoanRow[]) {
-  const health = buildRealPortfolioHealth(loans);
+function buildRealQualityMetrics(loans: PortfolioLoanRow[], overdueLoanIds: ReadonlySet<string>, maturedLoanIds: ReadonlySet<string>) {
+  const health = buildRealPortfolioHealth(loans, overdueLoanIds, maturedLoanIds);
   const delinquentLoans = [...health.activeInArrears.loans, ...health.matured.loans];
   const activePortfolio = [...health.good.loans, ...delinquentLoans];
   const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -254,6 +283,7 @@ function SummaryCard({
   icon: Icon,
   tone = 'default',
   onClick,
+  trend,
 }: {
   title: string;
   value: string;
@@ -261,6 +291,8 @@ function SummaryCard({
   icon: ComponentType<{ className?: string }>;
   tone?: 'default' | 'destructive';
   onClick?: () => void;
+  /** 2026-07-12: rolling 30-day (Total Active Loans) / vs-last-month (Collections) — omitted entirely, not shown as "0%", when the backend can't compute a reliable baseline (`changePercent: null`, e.g. Overdue Accounts, or a zero previous-period baseline). */
+  trend?: { changePercent: number | null; label: string };
 }) {
   return (
     <Card
@@ -285,8 +317,22 @@ function SummaryCard({
         <Icon className={tone === 'destructive' ? 'h-4 w-4 text-destructive' : 'h-4 w-4 text-primary'} />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="flex items-baseline gap-2">
+          <div className="text-2xl font-bold">{value}</div>
+          {trend && trend.changePercent !== null && (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 text-xs font-medium',
+                trend.changePercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
+              )}
+            >
+              {trend.changePercent >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+              {Math.abs(trend.changePercent).toFixed(1)}%
+            </span>
+          )}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+        {trend && trend.changePercent !== null && <p className="text-[11px] text-muted-foreground">{trend.label}</p>}
       </CardContent>
     </Card>
   );
@@ -424,14 +470,22 @@ export function DashboardPage() {
     });
   }, [allPortfolioLoans, categoryFilter, dateRange]);
 
-  const filteredPortfolioHealth = React.useMemo(() => buildRealPortfolioHealth(portfolioFilteredLoans), [portfolioFilteredLoans]);
+  // Independent of the Portfolio Filter / isFiltered gate below (unlike liveSummary) — the
+  // good/arrears/matured split needs these live id sets no matter what the user has filtered to.
+  const overdueLoanIds = React.useMemo(() => new Set(summaryQuery.data?.overdueAccounts.loanAccountIds ?? []), [summaryQuery.data]);
+  const maturedLoanIds = React.useMemo(() => new Set(summaryQuery.data?.overdueAccounts.maturedLoanAccountIds ?? []), [summaryQuery.data]);
+
+  const filteredPortfolioHealth = React.useMemo(
+    () => buildRealPortfolioHealth(portfolioFilteredLoans, overdueLoanIds, maturedLoanIds),
+    [portfolioFilteredLoans, overdueLoanIds, maturedLoanIds],
+  );
   const filteredPortfolioByCategory = React.useMemo(
     () => buildRealPortfolioByCategory(portfolioFilteredLoans),
     [portfolioFilteredLoans],
   );
   const filteredQualityMetrics = React.useMemo(
-    () => buildRealQualityMetrics(portfolioFilteredLoans),
-    [portfolioFilteredLoans],
+    () => buildRealQualityMetrics(portfolioFilteredLoans, overdueLoanIds, maturedLoanIds),
+    [portfolioFilteredLoans, overdueLoanIds, maturedLoanIds],
   );
   const filteredDisbursementTrend = React.useMemo(
     () => buildRealDisbursementTrend(portfolioFilteredLoans, 6),
@@ -625,6 +679,7 @@ export function DashboardPage() {
           value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
           hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
           icon={Banknote}
+          trend={liveSummary ? { changePercent: liveSummary.collectionsThisMonth.trend.changePercent, label: 'vs same days last month, portfolio-wide' } : undefined}
         />
         <SummaryCard
           title={t('dashboard.stat.overdueAccounts')}
@@ -848,10 +903,10 @@ export function DashboardPage() {
         <CardHeader>
           <CardTitle>{t('dashboard.portfolioHealth.title')}</CardTitle>
           <CardDescription>
-            Good vs. Matured loan accounts, with the overlap - Active Accounts in Arrears: still active and paying, just sometimes
-            late, where Easycash earns penalty/late-fee income on top of amortization. Click any region for the accounts behind it.
-            {isFiltered ? ' Reflects the filter above.' : ''} "Matured" always reads 0 for now - the backend does not track that
-            status yet.
+            Good vs. Matured loan accounts, with the overlap — Active Accounts in Arrears: still active and paying, just sometimes
+            late, where Easycash earns penalty/late-fee income on top of amortization. "Matured" is a loan whose final installment
+            due date has already passed and is still unpaid. Click any region for the accounts behind it.
+            {isFiltered ? ' Reflects the filter above.' : ''}
           </CardDescription>
         </CardHeader>
         <CardContent>

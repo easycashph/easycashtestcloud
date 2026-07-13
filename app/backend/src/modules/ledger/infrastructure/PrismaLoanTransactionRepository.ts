@@ -25,6 +25,8 @@ function toDomain(row: LoanTransactionRow): LoanTransaction {
     branchId: row.branchId,
     entryDate: row.entryDate,
     comment: row.comment ?? undefined,
+    orNumber: row.orNumber ?? undefined,
+    arNumber: row.arNumber ?? undefined,
     reversesTransactionId: row.reversesTransactionId ?? undefined,
     legacyId: row.legacyId ?? undefined,
     createdAt: row.createdAt,
@@ -59,6 +61,12 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     return rows.map(toDomain);
   }
 
+  async findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanTransaction.findUnique({ where: { reversesTransactionId: transactionId } });
+    return row ? toDomain(row) : null;
+  }
+
   async create(transaction: LoanTransaction, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
     await client.loanTransaction.create({
@@ -76,6 +84,8 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
         branchId: transaction.branchId,
         entryDate: transaction.entryDate,
         comment: transaction.comment,
+        orNumber: transaction.orNumber,
+        arNumber: transaction.arNumber,
         reversesTransactionId: transaction.reversesTransactionId,
         legacyId: transaction.legacyId,
         createdAt: transaction.createdAt,

@@ -20,7 +20,12 @@ function buildVersion(overrides: Partial<{ loanAmountMin: string; loanAmountMax?
 }
 
 function buildRepos(version: LoanProductVersion | null) {
-  const loanAccountRepository: ILoanAccountRepository = { findById: vi.fn(), findByLoanCode: vi.fn(), save: vi.fn() };
+  const loanAccountRepository = {
+    findById: vi.fn(),
+    findByLoanCode: vi.fn(),
+    save: vi.fn(),
+    findMaxLoanCodeSequenceForPrefix: vi.fn().mockResolvedValue(0),
+  } as unknown as ILoanAccountRepository;
   const loanProductRepository = {
     findById: vi.fn(),
     findByCode: vi.fn(),
@@ -185,6 +190,121 @@ describe('CreateLoanAccountUseCase', () => {
           firstRepaymentDate: new Date('2026-08-15'),
         }),
       ).rejects.toThrow(InstallmentCountOutOfRangeError);
+    });
+  });
+
+  describe('2026-07-11: auto-generated loanCode when omitted', () => {
+    it('generates {product.code}_00001 when no loan account exists yet for that product', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      (loanProductRepository.findById as ReturnType<typeof vi.fn>).mockResolvedValue({ code: 'SML-REG' });
+      (loanAccountRepository.findMaxLoanCodeSequenceForPrefix as ReturnType<typeof vi.fn>).mockResolvedValue(0);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('SML-REG_00001');
+      expect(loanAccountRepository.findMaxLoanCodeSequenceForPrefix).toHaveBeenCalledWith('SML-REG');
+    });
+
+    it('increments past the highest existing sequence for that product prefix', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      (loanProductRepository.findById as ReturnType<typeof vi.fn>).mockResolvedValue({ code: 'BL-REG' });
+      (loanAccountRepository.findMaxLoanCodeSequenceForPrefix as ReturnType<typeof vi.fn>).mockResolvedValue(59);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('BL-REG_00060');
+    });
+
+    it('respects an explicitly-supplied loanCode instead of generating one', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        loanCode: 'CUSTOM-CODE-1',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.loanCode).toBe('CUSTOM-CODE-1');
+      expect(loanProductRepository.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('2026-07-11: origination fees / netProceeds', () => {
+    it('defaults every fee to zero and netProceeds to the full principal when none are supplied', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        loanCode: 'LN-0001',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+      });
+
+      expect(loan.originationFees.accountManagementFee.toString()).toBe('0.00');
+      expect(loan.netProceeds.toString()).toBe('10000.00');
+    });
+
+    it('computes netProceeds as principal minus the sum of all nine fee fields', async () => {
+      const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00', installmentCountMin: 6, installmentCountMax: 24 });
+      const { loanAccountRepository, loanProductRepository } = buildRepos(version);
+      const useCase = new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+      const loan = await useCase.execute({
+        loanCode: 'LN-0001',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: version.id,
+        branchId: 'branch-1',
+        principalAmount: '10000.00',
+        interestRate: '2.5',
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+        processingFee: '300.00',
+        advanceInterestFee: '50.00',
+        outstandingBalancePayoff: '0.00',
+        docStampFee: '0.00',
+        accountManagementFee: '100.00',
+        otherFees: '0.00',
+        notarialFee: '500.00',
+        webFee: '500.00',
+        insuranceFee: '50.00',
+      });
+
+      // 10000 - (300+50+0+0+100+0+500+500+50) = 10000 - 1500 = 8500
+      expect(loan.originationFees.processingFee.toString()).toBe('300.00');
+      expect(loan.netProceeds.toString()).toBe('8500.00');
     });
   });
 });

@@ -3,6 +3,7 @@ import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { TransactionComponents } from '@modules/ledger/domain/valueObjects/TransactionComponents';
 import { LoanBalances } from './valueObjects/LoanBalances';
+import { OriginationFees, type OriginationFeesProps } from './valueObjects/OriginationFees';
 import type { AppliedFee } from './AppliedFee';
 import { InvalidStatusTransitionError } from './errors/LoanAccountDomainErrors';
 
@@ -76,6 +77,10 @@ export interface LoanAccountProps {
    * perspective; only ever set via the one-time backfill script.
    */
   legacyBalanceDataMissing: boolean;
+  /** 2026-07-11 (Create Loan Account) — see `OriginationFees`'s own doc comment. */
+  originationFees: OriginationFees;
+  /** = principalAmount - originationFees.total(). Computed once at creation (LA-4 snapshot), never recomputed. */
+  netProceeds: Money;
   legacyId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -105,6 +110,8 @@ export interface CreateLoanAccountProps {
   repaymentPeriodUnit?: RepaymentPeriodUnit;
   gracePeriodDays?: number;
   firstRepaymentDate: Date;
+  /** 2026-07-11 (Create Loan Account) — omit for zero fees (e.g. programmatic/migration creation). */
+  originationFees?: OriginationFeesProps;
   legacyId?: string;
 }
 
@@ -145,6 +152,8 @@ export class LoanAccount {
 
   static create(input: CreateLoanAccountProps): LoanAccount {
     const now = new Date();
+    const originationFees = OriginationFees.of(input.originationFees ?? OriginationFees.zero().toProps());
+    const netProceeds = input.principalAmount.subtract(originationFees.total());
     return new LoanAccount(
       {
         id: randomUUID(),
@@ -164,6 +173,8 @@ export class LoanAccount {
         gracePeriodDays: input.gracePeriodDays ?? 0,
         firstRepaymentDate: input.firstRepaymentDate,
         legacyBalanceDataMissing: false,
+        originationFees,
+        netProceeds,
         legacyId: input.legacyId,
         createdAt: now,
         updatedAt: now,
@@ -296,6 +307,14 @@ export class LoanAccount {
 
   get legacyBalanceDataMissing(): boolean {
     return this.props.legacyBalanceDataMissing;
+  }
+
+  get originationFees(): OriginationFees {
+    return this.props.originationFees;
+  }
+
+  get netProceeds(): Money {
+    return this.props.netProceeds;
   }
 
   get legacyId(): string | undefined {

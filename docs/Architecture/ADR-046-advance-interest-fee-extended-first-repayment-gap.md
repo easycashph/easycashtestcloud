@@ -3,7 +3,9 @@
 **Status:** ACCEPTED — rate basis, trigger condition, day-count granularity, and rounding
 convention all confirmed by evidence and direct MIS operator testimony (62.6% exact match, 74.6%
 within 5%, across 449 population rows once the 2021 encoding-anomaly cohort is excluded — see
-§3.4, §5). Does not block Milestone 9.1 Checkpoint 8 (`ActivateLoanUseCase`) — this is a separate,
+§3.4, §5), and independently reconfirmed on 2026-07-11 by an exact match against a live account
+across three sources (implemented formula, official Disclosure Statement, legacy SDevTech system —
+see §3.5). Does not block Milestone 9.1 Checkpoint 8 (`ActivateLoanUseCase`) — this is a separate,
 origination-time Net Proceeds deduction, not a repayment-schedule concern. Related to, but
 independent of, `ADR-045` (which governs `firstRepaymentDate` as an explicit input; this ADR
 governs a downstream financial consequence of that date's distance from disbursement).
@@ -157,6 +159,51 @@ from this assessment. Full reconciliation of the remaining ~25-38% (varying by y
 recommended as a precondition for implementation — no further secondary pattern was found after
 ruling out whole-month rounding, `New`/`Renew` status, `Nth Loan` number, and outlier gaps (above).
 
+### 3.5 Independent live-system corroboration (2026-07-11) — exact match, three sources
+
+After implementation, the MIS Assistant reported the computed fee "looked wrong" and supplied a
+newer, actively-used Excel calculator — `legacy/reports/Net Amount Auto Computation v3 with
+Account Management Fee.xlsx` (`AutoV2` sheet and 20+ per-quote copies of it) — as a second,
+independent formula source to check against. That workbook's formula, read directly from its cell
+definitions (e.g. `D20`, `D45`, `D70`, all structurally identical):
+
+```
+=IF(D1="YES", IF(ReleasedDate+30 < FirstDueDate,
+     ROUNDUP(GrossAmount * (InterestRate/30) * DATEDIF(ReleasedDate+30, FirstDueDate, "d"), 0),
+   0), 0)
+```
+
+is algebraically identical to the formula already adopted in §4 (`ceil` and Excel `ROUNDUP(x,0)` are
+equivalent for positive non-integer `x`; the sheet's "Interest Rate" cell is confirmed, by its use
+alongside a separately-labeled "Contractual Rate" cell used only for the `PMT` amortization
+formula, to be the Add-On Rate). One structural difference was found: the sheet gates the fee behind
+a manual per-quote `D1` ("With Advance Interest?") YES/NO toggle, i.e. staff can choose not to apply
+the fee even when the >30-day gap condition holds — consistent with, and a plausible mechanism for,
+the per-product/per-loan eligibility gap already flagged as unresolved in §4/§7.
+
+To settle the question with real data rather than a second spreadsheet reading, the same formula was
+checked against a live, currently-active loan (`SML-REG_00373`, disbursed 2026-07-03, first
+repayment 2026-08-15, Gross Amount ₱115,926.97, Add-On Rate 3.00%/month, 43-day gap → 13 excess
+days) across **three independent sources**:
+
+| Source | Advance Interest Fee |
+|---|---|
+| Hand-calculation using the formula in §4 (this ADR) | ₱1,508.00 |
+| The company's official Disclosure Statement (R.A. 3765 Truth-in-Lending form) for this account | ₱1,508.00 |
+| The legacy SDevTech production system's stored value for this account | ₱1,508.00 |
+
+All three agree to the centavo. The same cross-check on this account also reconfirmed the
+Account Management Fee (exactly 1% of Gross) and the Insurance Fee (the `CalculateInsurance()` VBA
+macro formula from §13 of `CALCULATION_ENGINE_SPEC.md`) — both exact matches as well.
+
+**This is the strongest evidence yet obtained for §4's formula** — a live, current-year account
+matched exactly, rather than a statistical fit across a historical population. It does not raise the
+§3.4 exact-match rate (that remains a population-level historical statistic) but it directly
+addresses the "is the currently-implemented formula wrong?" question: **it is not**. No code change
+resulted from this investigation. The `D1`-toggle finding is a new, real lead on the unresolved
+per-product-eligibility question (§4/§7) and should inform, not replace, the business-side decision
+already called for there.
+
 ---
 
 ## 4. Decision
@@ -215,7 +262,7 @@ difference is intentional and specific to this fee, not an inconsistency to reco
 | It is triggered by `firstRepaymentDate − disbursementDate > 30 days` | **CONFIRMED**, for products where the fee applies |
 | Eligibility is per-product, not universal | **CONFIRMED** |
 | Rate basis is Add-On Rate, not Contractual Rate | **CONFIRMED** (data + direct MIS testimony) |
-| Formula: `Gross × AddOnRate% × (excessDays/30)`, ceiling-rounded to whole peso | **CONFIRMED, strong fit** — 62.6% exact match, 74.6% within 5% (2021 encoding-anomaly year excluded, §3.4) |
+| Formula: `Gross × AddOnRate% × (excessDays/30)`, ceiling-rounded to whole peso | **CONFIRMED, strong fit** — 62.6% exact match, 74.6% within 5% (2021 encoding-anomaly year excluded, §3.4); independently corroborated by an exact match against a live 2026 account across 3 sources (§3.5) |
 | Rounding convention: ceiling to whole peso, not 2-decimal rounding | **CONFIRMED** — raised exact-match from 15.6% to 55.1% population-wide, 62.6% excluding 2021 (§3.4) |
 | Exact-day (not whole-month) granularity of `excessDays` | **CONFIRMED** — whole-month rounding tested and ruled out (§3.4) |
 | `New`/`Renew` status or `Nth Loan` number explains any residual mismatch | **DISCONFIRMED** — tested, no correlation found (§3.4) |

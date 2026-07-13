@@ -4,8 +4,8 @@ import type { DashboardSummary } from '@modules/dashboard/application/ports/IDas
 
 const emptySummary: DashboardSummary = {
   totalActiveLoans: { count: 0, outstandingPrincipalBalance: '0' },
-  overdueAccounts: { count: 0, atRiskCollectionsBalance: '0' },
-  collectionsThisMonth: { amount: '0' },
+  overdueAccounts: { count: 0, atRiskCollectionsBalance: '0', loanAccountIds: [], maturedLoanAccountIds: [] },
+  collectionsThisMonth: { amount: '0', trend: { changePercent: null } },
   portfolioByProduct: [],
 };
 

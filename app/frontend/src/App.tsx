@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoanListPage } from '@/pages/LoanListPage';
+import { LoanAccountCreatePage } from '@/pages/LoanAccountCreatePage';
 import { LoanDetailPage } from '@/pages/LoanDetailPage';
 import { LoanApplicationsPage } from '@/pages/LoanApplicationsPage';
 import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
@@ -43,6 +44,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="loans" element={<LoanListPage />} />
+        <Route path="loans/new" element={<LoanAccountCreatePage />} />
         <Route path="loans/:loanId" element={<LoanDetailPage />} />
         <Route path="applications" element={<LoanApplicationsPage />} />
         <Route path="applications/new" element={<LoanApplicationCreatePage />} />
