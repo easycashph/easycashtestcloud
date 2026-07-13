@@ -13,6 +13,7 @@ import { RoleNotFoundError } from '../application/errors/AuthErrors';
 const USER_WITH_ROLES_INCLUDE = {
   roles: { include: { role: true } },
   branch: true,
+  roleClass: true,
 } satisfies Prisma.UserInclude;
 
 type UserWithRoles = Prisma.UserGetPayload<{ include: typeof USER_WITH_ROLES_INCLUDE }>;
@@ -28,6 +29,9 @@ function toUserRecord(row: UserWithRoles): UserRecord {
     lastName: row.lastName,
     status: row.status,
     roles: row.roles.map((userRole) => userRole.role.name),
+    companyId: row.companyId,
+    roleClassId: row.roleClassId,
+    roleClassName: row.roleClass?.name ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -98,6 +102,8 @@ export class PrismaUserRepository implements IUserRepository {
         passwordHash: input.passwordHash,
         firstName: input.firstName,
         lastName: input.lastName,
+        companyId: input.companyId,
+        roleClassId: input.roleClassId,
         roles: {
           create: roleIds.map((roleId) => ({ roleId })),
         },
@@ -118,6 +124,10 @@ export class PrismaUserRepository implements IUserRepository {
         lastName: patch.lastName,
         branchId: patch.branchId,
         status: patch.status,
+        companyId: patch.companyId,
+        roleClassId: patch.roleClassId,
+        email: patch.email,
+        passwordHash: patch.passwordHash,
         ...(roleIds
           ? {
               roles: {

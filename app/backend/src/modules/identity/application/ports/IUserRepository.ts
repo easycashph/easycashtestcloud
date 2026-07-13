@@ -14,6 +14,9 @@ export interface UserRecord {
   lastName: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   roles: string[];
+  companyId: string | null;
+  roleClassId: string | null;
+  roleClassName: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +28,8 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   roleNames: string[];
+  companyId?: string;
+  roleClassId?: string;
 }
 
 export interface FindManyUsersOptions {
@@ -40,6 +45,12 @@ export interface UpdateUserInput {
   branchId?: string;
   status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   roleNames?: string[];
+  companyId?: string;
+  roleClassId?: string | null;
+  /** Already normalized/validated — set by UpdateUserUseCase after the uniqueness check. */
+  email?: string;
+  /** Already-hashed — set by UpdateUserUseCase when MIS resets a member's password. Never plaintext at this layer. */
+  passwordHash?: string;
 }
 
 export interface IUserRepository {

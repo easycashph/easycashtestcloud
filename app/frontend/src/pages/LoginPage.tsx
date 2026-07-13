@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { COMPANY_INFO } from '@/lib/mockData';
+import { COMPANY_INFO } from '@/lib/staticConfig';
 import { ApiError } from '@/lib/apiClient';
 
 interface LoginPageProps {
@@ -13,11 +13,11 @@ interface LoginPageProps {
 
 /**
  * Frontend↔Backend Wiring Pilot, Stage 0b. Real login screen, rendered by `RoleProvider` in place
- * of the app whenever there's no active session — `POST /auth/login` under the hood.
+ * of the app whenever there's no active session - `POST /auth/login` under the hood.
  *
  * The field is labeled "Username" per the approved design (docs/Architecture/
  * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md §6 point 1), but is submitted as the backend's `email`
- * field — the API has no separate username concept.
+ * field - the API has no separate username concept.
  */
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = React.useState('');
@@ -89,7 +89,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="button"
               className="w-full text-center text-xs text-muted-foreground underline-offset-2 hover:underline"
-              onClick={() => setError('Password reset is not available yet — contact your MIS administrator.')}
+              onClick={() => setError('Password reset is not available yet - contact your MIS administrator.')}
             >
               Forgot password?
             </button>

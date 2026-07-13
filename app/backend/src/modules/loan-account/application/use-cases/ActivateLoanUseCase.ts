@@ -3,6 +3,7 @@ import { Money } from '@shared/domain/Money';
 import { AmortizationScheduleGenerator } from '@shared/domain/calculation/AmortizationScheduleGenerator';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -20,6 +21,7 @@ export interface ActivateLoanUseCaseDeps {
   loanTransactionRepository: ILoanTransactionRepository;
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 /**
@@ -163,6 +165,16 @@ export class ActivateLoanUseCase {
         ctx,
       );
     });
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'LOAN_ACCOUNT',
+        profileId: loanAccount.id,
+        userId: activatedByUserId,
+        ...ProfileActivityLogService.actions.decisionUpdated('APPROVED', 'ACTIVE'),
+      });
+    }
 
     return loanAccount;
   }

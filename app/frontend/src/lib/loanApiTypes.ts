@@ -1,8 +1,8 @@
 /**
- * Mirrors `app/backend`'s `LoanAccountPresenter`/`RepaymentInstallmentPresenter` JSON shapes —
+ * Mirrors `app/backend`'s `LoanAccountPresenter`/`RepaymentInstallmentPresenter` JSON shapes -
  * see `apiClient.ts`'s doc comment for why this pilot hand-maintains these instead of generating
  * them. All Money fields are decimal strings, exactly as the backend sends them (never floats on
- * the wire) — parsed to numbers only where a specific UI computation needs it (see
+ * the wire) - parsed to numbers only where a specific UI computation needs it (see
  * `PaymentRecordingPage.tsx`), same discipline the backend itself uses internally via `Money`.
  */
 export interface LoanAccountBalances {
@@ -20,7 +20,7 @@ export interface LoanAccountBalances {
   penaltyDue: string;
 }
 
-/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly — note plain `CLOSED`, not `CLOSED_PAID`. */
+/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly - note plain `CLOSED`, not `CLOSED_PAID`. */
 export type LoanAccountStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'
@@ -49,7 +49,7 @@ export interface LoanAccount {
   approvedAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;
-  /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all — NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
+  /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all - NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
   /** 2026-07-11 (Create Loan Account origination fees) — one-time deductions taken at disbursement, set once at creation. */
   originationFees: {
@@ -93,6 +93,21 @@ export interface BorrowerAddress {
   ownershipStatus: string | null;
 }
 
+export interface BorrowerCharacterReference {
+  id: string;
+  firstName: string;
+  lastName: string;
+  relationship: string | null;
+  phoneNumber: string | null;
+  emailAddress: string | null;
+}
+
+export interface BorrowerDependant {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export type BorrowerStatus = 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
 
 /** Mirrors `BorrowerPresenter.presentBorrower()` in app/backend exactly. */
@@ -106,18 +121,77 @@ export interface Borrower {
   fullName: string;
   gender: string | null;
   birthDate: string | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
   civilStatus: string | null;
+  homeOwnership: string | null;
   mobilePhone1: string | null;
   mobilePhone2: string | null;
   email: string | null;
+  dependants: BorrowerDependant[];
+  note: string | null;
   status: BorrowerStatus;
   loanCycle: number;
   legacyId: string | null;
+  /** Set when this client was created via "Create Client Profile" from an APPROVED loan application. */
+  sourceApplicationId: string | null;
   createdAt: string;
   updatedAt: string;
   incomeDetail: BorrowerIncomeDetail | null;
   governmentId: BorrowerGovernmentId | null;
+  characterReferences: BorrowerCharacterReference[];
   addresses: BorrowerAddress[];
+}
+
+/** Body for `POST /borrowers`. */
+export interface CreateBorrowerRequest {
+  branchId: string;
+  assignedLoanOfficerId?: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  gender?: string;
+  birthDate?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  civilStatus?: string;
+  homeOwnership?: string;
+  mobilePhone1?: string;
+  mobilePhone2?: string;
+  email?: string;
+  dependants?: BorrowerDependant[];
+  note?: string;
+  /** Set by the "Create Client Profile" flow on an APPROVED loan application - links the new
+   * client back to it so the application can't be used to create a duplicate. */
+  sourceApplicationId?: string;
+  incomeDetail?: {
+    employmentType?: string;
+    employerName?: string;
+    employerAddress?: string;
+    natureOfBusiness?: string;
+    position?: string;
+    yearsEmployed?: number;
+  };
+  governmentId?: {
+    sssNumber?: string;
+    tinNumber?: string;
+  };
+  characterReferences?: {
+    firstName: string;
+    lastName?: string;
+    relationship?: string;
+    phoneNumber?: string;
+    emailAddress?: string;
+  }[];
+}
+
+/** Body for `POST /co-borrowers`. */
+export interface CreateCoBorrowerRequest {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  relationship?: string;
+  employer?: string;
 }
 
 export type PenaltyCalculationMethod = 'NONE' | 'OVERDUE_BALANCE_AND_INTEREST' | 'ON_REPAYMENT';
@@ -196,6 +270,8 @@ export interface InstallmentAmounts {
   total: string;
 }
 
+export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+
 export interface RepaymentInstallment {
   id: string;
   loanAccountId: string;
@@ -203,13 +279,17 @@ export interface RepaymentInstallment {
   dueDate: string;
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
-  status: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+  status: RepaymentInstallmentStatus;
   /**
    * 2026-07-11 (ADR-050 / CALCULATION_ENGINE_SPEC.md §12): live "as of today" penalty — `null` for
    * a migrated loan (its `due.penalty` is the real historical figure instead) or a fully-paid
    * installment. Distinct from `due.penalty`, which stays fixed/immutable.
    */
   currentPenaltyOwed: string | null;
+  /** Null until first paid. Compare against `dueDate` to tell a settled (PAID) installment was
+   * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
+   * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */
+  lastPaidAt: string | null;
 }
 
 export type LoanTransactionType =

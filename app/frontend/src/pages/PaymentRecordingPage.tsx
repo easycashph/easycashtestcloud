@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FieldTooltip } from '@/components/FieldTooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
@@ -23,7 +24,7 @@ import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { ACTIVE_PAYMENT_METHODS, MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
+import { ACTIVE_PAYMENT_METHODS } from '@/lib/staticConfig';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { apiClient, ApiError } from '@/lib/apiClient';
@@ -31,7 +32,7 @@ import type { Borrower, LoanAccount, PaginatedResponse, ProcessPaymentResponse, 
 
 type AllocationMode = 'AUTOMATIC' | 'MANUAL';
 
-/** One manual per-installment entry (Payment Recording "Manual" tab) — every field is a raw text input value, parsed on demand. */
+/** One manual per-installment entry (Payment Recording "Manual" tab) - every field is a raw text input value, parsed on demand. */
 interface ManualEntry {
   principal: string;
   interest: string;
@@ -65,7 +66,7 @@ function parseAmount(value: string): number {
 }
 
 /**
- * Column sort here is DISPLAY-ONLY — it never changes which installments
+ * Column sort here is DISPLAY-ONLY - it never changes which installments
  * were actually offered a share of the payment. `previewCrossInstallmentAllocation`
  * must keep computing over `unpaidInstallments` in oldest-due-first order
  * (ADR-009 §2); re-sorting the underlying installments to match a column
@@ -100,7 +101,7 @@ function getPreviewRowSortValue(
  * (`docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). Real loan/installment data via
  * `GET /loan-accounts`, `/repayment-schedule`, `/borrowers/:id`; real payment submission via
  * `POST /loan-accounts/:id/payments` (idempotency-key protected). The allocation preview table
- * itself is unchanged — `previewCrossInstallmentAllocation()` is a legitimate client-side preview
+ * itself is unchanged - `previewCrossInstallmentAllocation()` is a legitimate client-side preview
  * of the same fees→penalty→interest→principal rule the backend enforces authoritatively; only its
  * data source changed, from mock installments to real ones.
  *
@@ -155,7 +156,7 @@ export function PaymentRecordingPage() {
     setClientSearch('');
   };
 
-  // Step 2: that client's own active loans only — never the whole company's ~1,300 payable loans.
+  // Step 2: that client's own active loans only - never the whole company's ~1,300 payable loans.
   const clientLoansQuery = useQuery({
     queryKey: ['loan-accounts', 'by-borrower', selectedBorrower?.id],
     queryFn: () => apiClient.get<PaginatedResponse<LoanAccount>>(`/loan-accounts?borrowerId=${selectedBorrower!.id}&limit=50`),
@@ -185,7 +186,7 @@ export function PaymentRecordingPage() {
 
   // Manual mode (2026-07-10): staff picks specific unpaid installments and types the exact
   // Principal/Interest/Penalty/Fees split for each, overriding the automatic waterfall. Keyed by
-  // installmentId — an installment only appears here once staff has explicitly included it.
+  // installmentId - an installment only appears here once staff has explicitly included it.
   const [manualEntries, setManualEntries] = React.useState<Record<string, ManualEntry>>({});
   React.useEffect(() => {
     setManualEntries({});
@@ -268,7 +269,7 @@ export function PaymentRecordingPage() {
   );
 
   const manualInstallmentCount = Object.keys(manualEntries).length;
-  // Cent-level float comparison — same epsilon the automatic Remainder box's peso display already
+  // Cent-level float comparison - same epsilon the automatic Remainder box's peso display already
   // rounds to, so "matches" here agrees with what staff sees on screen.
   const manualMismatch = manualInstallmentCount === 0 || Math.abs(manualTotal - paymentAmount) > 0.005;
 
@@ -328,7 +329,7 @@ export function PaymentRecordingPage() {
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
         <p className="text-sm text-muted-foreground">
-          Live — posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
+          Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
           oldest installment first (ADR-009).
         </p>
       </div>
@@ -442,7 +443,7 @@ export function PaymentRecordingPage() {
                 {selectedLoan && (
                   <div className="rounded-md border bg-secondary/40 p-3 text-xs text-muted-foreground">
                     <p>
-                      <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> — {selectedLoan.loanCode}
+                      <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> - {selectedLoan.loanCode}
                     </p>
                     <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
                     <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
@@ -450,7 +451,9 @@ export function PaymentRecordingPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="amount">Payment amount</Label>
+                  <Label htmlFor="amount" className="flex items-center gap-1">
+                    Payment amount <FieldTooltip text="Total peso amount the borrower is paying today." />
+                  </Label>
                   <Input id="amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 </div>
 
@@ -473,7 +476,10 @@ export function PaymentRecordingPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Allocation</Label>
+                  <Label className="flex items-center gap-1">
+                    Allocation{' '}
+                    <FieldTooltip text="Automatic lets the system split the payment across fees, penalty, interest, and principal. Manual lets you choose exact amounts per installment." />
+                  </Label>
                   <Tabs value={allocationMode} onValueChange={(v) => setAllocationMode(v as AllocationMode)}>
                     <TabsList className="grid w-full grid-cols-2">
                       <TabsTrigger value="AUTOMATIC">Automatic</TabsTrigger>
@@ -578,13 +584,15 @@ export function PaymentRecordingPage() {
                       }`}
                     >
                       Entered total: {formatPeso(manualTotal)} / Payment amount: {formatPeso(paymentAmount)}
-                      {manualMismatch && ' — must match before submitting.'}
+                      {manualMismatch && ' - must match before submitting.'}
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="payment-method">Mode of payment</Label>
+                  <Label htmlFor="payment-method" className="flex items-center gap-1">
+                    Mode of payment <FieldTooltip text="How the borrower is paying - cash, bank transfer, over-the-counter, etc." />
+                  </Label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                     <SelectTrigger id="payment-method">
                       <SelectValue />
@@ -597,7 +605,7 @@ export function PaymentRecordingPage() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Recorded for staff reference only — not yet a field on the backend loan account.</p>
+                  <p className="text-xs text-muted-foreground">Recorded for staff reference only - not yet a field on the backend loan account.</p>
                 </div>
 
                 <Button
@@ -618,7 +626,7 @@ export function PaymentRecordingPage() {
               <CardTitle>Allocation Preview</CardTitle>
               <CardDescription>Per-installment split for the entered amount, dated {formatDate(paidAt)}</CardDescription>
             </div>
-            <Badge variant="outline">Preview — final split is computed by the server on submit</Badge>
+            <Badge variant="outline">Preview - final split is computed by the server on submit</Badge>
           </CardHeader>
           <CardContent>
             {installmentsQuery.isLoading ? (
@@ -704,7 +712,7 @@ export function PaymentRecordingPage() {
         </Card>
       </div>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Payment Recording')} title="Recent Activity — Payment Recording" />
+      <RecentActivityPanel label="Payment Recording" />
 
       <Dialog open={confirmOpen} onOpenChange={(open) => !paymentMutation.isPending && setConfirmOpen(open)}>
         <DialogContent>

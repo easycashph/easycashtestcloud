@@ -5,17 +5,21 @@ import type { AuditLogRecord, FindManyAuditLogsOptions, IAuditLogRepository } fr
 export class PrismaAuditLogRepository implements IAuditLogRepository {
   /** Mirrors PrismaLoanApplicationRepository.findMany: cursor pagination, newest first. No branch dimension — see IAuditLogRepository doc. */
   async findMany(options: FindManyAuditLogsOptions): Promise<AuditLogRecord[]> {
-    const where: Prisma.AuditLogWhereInput = options.search
-      ? {
-          OR: [
-            { action: { contains: options.search, mode: 'insensitive' } },
-            { entityType: { contains: options.search, mode: 'insensitive' } },
-            { entityId: { contains: options.search, mode: 'insensitive' } },
-            { user: { firstName: { contains: options.search, mode: 'insensitive' } } },
-            { user: { lastName: { contains: options.search, mode: 'insensitive' } } },
-          ],
-        }
-      : {};
+    const where: Prisma.AuditLogWhereInput = {
+      ...(options.entityTypes && options.entityTypes.length > 0 ? { entityType: { in: options.entityTypes } } : {}),
+      ...(options.entityId ? { entityId: options.entityId } : {}),
+      ...(options.search
+        ? {
+            OR: [
+              { action: { contains: options.search, mode: 'insensitive' } },
+              { entityType: { contains: options.search, mode: 'insensitive' } },
+              { entityId: { contains: options.search, mode: 'insensitive' } },
+              { user: { firstName: { contains: options.search, mode: 'insensitive' } } },
+              { user: { lastName: { contains: options.search, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    };
     const rows = await prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },

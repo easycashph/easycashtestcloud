@@ -1,11 +1,13 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 
 export interface ApproveLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   auditLogger: IAuditLogger;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 export class ApproveLoanApplicationUseCase {
@@ -17,6 +19,7 @@ export class ApproveLoanApplicationUseCase {
       throw new NotFoundError('LoanApplication', id);
     }
 
+    const previousStatus = application.status;
     application.approve(reviewedByUserId, decisionNote);
     await this.deps.loanApplicationRepository.save(application);
     await this.deps.auditLogger.log({
@@ -24,9 +27,19 @@ export class ApproveLoanApplicationUseCase {
       action: 'APPROVE_LOAN_APPLICATION',
       entityType: 'LoanApplication',
       entityId: application.id,
-      previousValue: { status: 'PENDING_REVIEW' },
+      previousValue: { status: previousStatus },
       newValue: { status: 'APPROVED', decisionNote },
     });
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'LOAN_APPLICATION',
+        profileId: application.id,
+        userId: reviewedByUserId,
+        ...ProfileActivityLogService.actions.decisionUpdated(previousStatus, 'APPROVED', decisionNote),
+      });
+    }
 
     return application;
   }

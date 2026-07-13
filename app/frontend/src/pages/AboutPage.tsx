@@ -17,9 +17,9 @@ import {
 
 const HELPS_YOU = [
   'Originate and service loans with configurable products, interest, fees, and penalties',
-  'Review online loan applications with an AI-assisted risk summary',
+  'Review online loan applications with a system-computed risk summary and decision scoring',
   'Record payments and run automated collection reminders',
-  'Track portfolio health — good, in-arrears, and matured accounts',
+  'Track portfolio health - good, in-arrears, and matured accounts',
   'Read income and credit-loss figures, delinquency rate, and portfolio at risk at a glance',
   'Drill from any chart or metric down to the exact loan accounts behind it',
   'Generate and organize the official loan documents per account',
@@ -36,7 +36,7 @@ export function AboutPage() {
         <p className="text-sm text-muted-foreground">Version information and release history for the {LMS_APP_NAME}.</p>
       </div>
 
-      {/* Header — app identity */}
+      {/* Header - app identity */}
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-8 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
           <img
@@ -62,7 +62,7 @@ export function AboutPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            The {LMS_APP_NAME} is {LMS_COMPANY}&apos;s enterprise Loan Management System — one place to originate and service loans,
+            The {LMS_APP_NAME} is {LMS_COMPANY}&apos;s enterprise Loan Management System - one place to originate and service loans,
             review online applications, record payments, drive collections, and see the health of the whole portfolio. It is built to
             preserve the company&apos;s validated business rules while improving security, performance, and day-to-day operation, and to
             grow into the customer self-service portal and mobile app in the future.
@@ -112,7 +112,7 @@ export function AboutPage() {
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Code2 className="h-4 w-4 text-primary" />
-          <CardTitle>Developer Team — {LMS_DEVELOPER_TEAM}</CardTitle>
+          <CardTitle>Developer Team - {LMS_DEVELOPER_TEAM}</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="grid gap-3 sm:grid-cols-2">
@@ -127,7 +127,7 @@ export function AboutPage() {
         </CardContent>
       </Card>
 
-      {/* Future client portal — informational only, not part of this build */}
+      {/* Future client portal - informational only, not part of this build */}
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Smartphone className="h-4 w-4 text-primary" />
@@ -150,7 +150,7 @@ export function AboutPage() {
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Sparkles className="h-4 w-4 text-primary" />
-          <CardTitle>What&apos;s New — Changelog</CardTitle>
+          <CardTitle>What&apos;s New - Changelog</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           {LMS_CHANGELOG.map((entry, index) => (
@@ -173,7 +173,7 @@ export function AboutPage() {
       </Card>
 
       <p className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
-        Preview build — displays sample data and is not connected to live systems. © 2026 {LMS_COMPANY}. For internal review only.
+        Preview build - displays sample data and is not connected to live systems. © 2026 {LMS_COMPANY}. For internal review only.
       </p>
     </div>
   );

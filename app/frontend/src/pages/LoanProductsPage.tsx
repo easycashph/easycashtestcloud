@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable, type SortState } from '@/lib/useSortableTable';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
 import { formatPeso } from '@/lib/utils';
@@ -49,11 +48,11 @@ function num(v: string | null): number {
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. Real `GET /loan-products` replaces
  * `MOCK_LOAN_PRODUCTS`. Deliberately read-only: the real backend's `LoanProductVersion` is
- * immutable by design (LPV-2/LPV-3 in `schema.prisma` — editing a product must never affect
+ * immutable by design (LPV-2/LPV-3 in `schema.prisma` - editing a product must never affect
  * historical loans), so the mock UI's "Customize"/"Add New Product" in-place-edit dialogs don't
  * correspond to any real mutation. A correct implementation would be a create-version +
  * activate-version workflow (endpoints already exist:
- * `POST /loan-products/:id/versions`, `POST /loan-products/:id/versions/:versionId/activate`) —
+ * `POST /loan-products/:id/versions`, `POST /loan-products/:id/versions/:versionId/activate`) -
  * out of scope for this pass; see the 2026-07-09 CHANGELOG entry. Document templates also have no
  * backend endpoint yet, so that section is dropped rather than faked.
  */
@@ -105,18 +104,18 @@ export function LoanProductsPage() {
           <TableCell>
             <p className="font-medium">{p.name}</p>
             <p className="font-mono text-xs text-muted-foreground">
-              {p.code} · v{v?.versionNumber ?? '—'}
+              {p.code} · v{v?.versionNumber ?? '-'}
             </p>
           </TableCell>
-          <TableCell className="text-sm">{v?.interestCalculationMethod.replaceAll('_', ' ') ?? '—'}</TableCell>
+          <TableCell className="text-sm">{v?.interestCalculationMethod.replaceAll('_', ' ') ?? '-'}</TableCell>
           <TableCell className="text-right text-sm">
-            {v ? `${formatPeso(num(v.loanAmountMin))} – ${v.loanAmountMax ? formatPeso(num(v.loanAmountMax)) : '—'}` : '—'}
+            {v ? `${formatPeso(num(v.loanAmountMin))} – ${v.loanAmountMax ? formatPeso(num(v.loanAmountMax)) : '-'}` : '-'}
           </TableCell>
           <TableCell className="text-right text-sm">
-            {v ? `${v.installmentCountMin}–${v.installmentCountMax ?? '—'} mos` : '—'}
+            {v ? `${v.installmentCountMin}–${v.installmentCountMax ?? '-'} mos` : '-'}
           </TableCell>
           <TableCell className="text-right text-sm">
-            {v?.minInterestRate ? `${v.minInterestRate}%` : '—'} – {v?.maxInterestRate ? `${v.maxInterestRate}%` : '—'}
+            {v?.minInterestRate ? `${v.minInterestRate}%` : '-'} – {v?.maxInterestRate ? `${v.maxInterestRate}%` : '-'}
           </TableCell>
           <TableCell>
             <Badge variant={p.activeVersion ? 'success' : 'secondary'}>{p.activeVersion ? 'Active' : 'Discontinued'}</Badge>
@@ -128,7 +127,7 @@ export function LoanProductsPage() {
               <div className="grid gap-4 p-2 sm:grid-cols-3">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Default Rate</p>
-                  <p className="text-sm font-semibold">{v.defaultInterestRate ? `${v.defaultInterestRate}% monthly` : '—'}</p>
+                  <p className="text-sm font-semibold">{v.defaultInterestRate ? `${v.defaultInterestRate}% monthly` : '-'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Grace Period</p>
@@ -222,7 +221,7 @@ export function LoanProductsPage() {
         <p className="text-sm text-muted-foreground">
           {isLoading
             ? 'Loading…'
-            : `${activeProducts.length} active, ${discontinuedProducts.length} discontinued (real product catalog, migrated legacy data — read-only, click a row to expand fee/penalty rules).`}
+            : `${activeProducts.length} active, ${discontinuedProducts.length} discontinued (real product catalog, migrated legacy data - read-only, click a row to expand fee/penalty rules).`}
         </p>
       </div>
 
@@ -233,9 +232,9 @@ export function LoanProductsPage() {
       )}
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real product catalog, migrated from legacy data (CP12) — read-only. Loan product versions are
+        Real product catalog, migrated from legacy data (CP12) - read-only. Loan product versions are
         immutable by design (editing a product must never affect historical loans), so adding or
-        customizing a product here would need a proper create-version + activate workflow — not yet
+        customizing a product here would need a proper create-version + activate workflow - not yet
         built. Document templates are not yet wired to real data.
       </div>
 
@@ -266,7 +265,7 @@ export function LoanProductsPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Loan Products')} title="Recent Activity — Loan Products" />
+      <RecentActivityPanel label="Loan Products" />
     </div>
   );
 }

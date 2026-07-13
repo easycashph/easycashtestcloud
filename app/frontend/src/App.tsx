@@ -26,19 +26,17 @@ import { AboutPage } from '@/pages/AboutPage';
  * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`). `/login` is no longer a route: `RoleProvider` renders
  * `LoginPage` in place of this whole tree whenever there's no active session.
  *
- * Wiring status per route (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for
- * detail; last verified 2026-07-11 — this list drifted stale before, double-check against the
- * actual page before trusting it blindly):
- * - Real: auth, LoanListPage, LoanAccountCreatePage, LoanApplications* (list/create/detail),
- *   ClientListPage, ClientProfilePage, LoanProductsPage (read-only by design),
- *   PaymentRecordingPage, MemberListPage, ActivityLogPage, PaymentRemindersPage, LoanReportPage,
- *   CollectionReportPage, TransactionReportPage.
- * - Partial (real data, some sub-features still mock): DashboardPage (summary cards real; loan
- *   list + Recent Activity mock), LoanDetailPage and StatementOfAccountPage (real for real UUIDs
- *   via `getMockLoan()` fallback for legacy demo IDs; even on the real path, notes, attachments,
- *   AI risk assessment, and timeline are still mock — payment history, approve/activate, and
- *   Record Payment are real as of 2026-07-11).
- * - Mock only: SettingsPage, AboutPage.
+ * Wiring status per route, current as of the 2026-07-12 mock-removal pass (see
+ * `docs/SESSION_LOG_2026-07-12.md` Addendums 1-10 for the full history):
+ * - Real, no mock fallback remaining: every route in this tree - DashboardPage (Collections vs.
+ *   Target chart is the one exception, disclosed sample data pending a business decision on how a
+ *   real monthly target gets set), LoanListPage, LoanApplications* (list/create/detail),
+ *   ClientListPage, ClientProfilePage, LoanDetailPage, StatementOfAccountPage, LoanProductsPage
+ *   (read-only by design), PaymentRecordingPage, PaymentRemindersPage, MemberListPage,
+ *   ActivityLogPage, all *ReportPage routes, SettingsPage, AboutPage.
+ * - `src/lib/mockData.ts` still exists for its genuinely-static config exports (`COMPANY_INFO`,
+ *   payment method labels, intake document checklist) - not fake business data, see that file's
+ *   own top-of-file comment.
  */
 export default function App() {
   return (

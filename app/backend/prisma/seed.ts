@@ -15,13 +15,18 @@ async function main() {
   // list exists. This seed creates exactly one placeholder branch. Adding
   // the real branch list later is a data change only — the schema does not
   // need to change.
+  // Address confirmed 2026-07-11 for the loan-application pre-qualification distance rule
+  // (LoanApplicationPreQualificationService) — latitude/longitude are left null here and geocoded
+  // lazily on first use, so seeding never makes a network call.
+  const headOfficeAddress = 'Unit 9 G/F The Midland Plaza, M Adriatico, Barangay 669, Ermita, Manila';
   const headOffice = await prisma.branch.upsert({
     where: { code: 'HQ' },
-    update: {},
+    update: { address: headOfficeAddress },
     create: {
       code: 'HQ',
       name: 'Head Office (provisional — pending ADR-005)',
       isActive: true,
+      address: headOfficeAddress,
     },
   });
 
@@ -288,9 +293,33 @@ async function main() {
     });
   }
 
+  // Role Class: organizational job-title labels under a Role (Administration > Member Details >
+  // Roles tab) - display/organizational only, does not affect access. Business-confirmed roster.
+  const roleClassesByRoleName: Record<string, string[]> = {
+    MIS: ['MIS Manager', 'MIS Assistant'],
+    'Loan Operation Manager': ['LOM'],
+    CRM: ['CRM'],
+    Accounting: ['Accounting'],
+    Finance: ['Finance'],
+    'Collection Officer': ['Collection Manager', 'Accounts Recovery Officer', 'Field Collector'],
+  };
+  let roleClassCount = 0;
+  for (const [roleName, classNames] of Object.entries(roleClassesByRoleName)) {
+    const role = roles[roleName];
+    if (!role) continue;
+    for (const className of classNames) {
+      await prisma.roleClass.upsert({
+        where: { roleId_name: { roleId: role.id, name: className } },
+        update: {},
+        create: { roleId: role.id, name: className },
+      });
+      roleClassCount += 1;
+    }
+  }
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}. Document templates: ${documentTemplateRows.length}.`,
+    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}. Document templates: ${documentTemplateRows.length}. Role Classes: ${roleClassCount}.`,
   );
 }
 

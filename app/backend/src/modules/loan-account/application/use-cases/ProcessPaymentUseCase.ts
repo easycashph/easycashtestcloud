@@ -8,6 +8,7 @@ import {
 import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/errors/CalculationDomainErrors';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import type { IPaymentAllocationRepository } from '@modules/ledger/application/ports/IPaymentAllocationRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -27,6 +28,7 @@ export interface ProcessPaymentUseCaseDeps {
   paymentAllocationRepository: IPaymentAllocationRepository;
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
+  profileActivityLogService?: ProfileActivityLogService;
 }
 
 export interface ProcessPaymentResult {
@@ -336,6 +338,33 @@ export class ProcessPaymentUseCase {
         ctx,
       );
     });
+
+    // ADR-050: Log activity for profile timeline
+    if (this.deps.profileActivityLogService) {
+      await this.deps.profileActivityLogService.logActivity({
+        profileType: 'LOAN_ACCOUNT',
+        profileId: loanAccount.id,
+        userId: postedByUserId,
+        ...ProfileActivityLogService.actions.paymentRecorded(
+          repaymentTransaction.id,
+          Number(appliedAmount.toString()),
+          Number(totalPrincipalApplied.toString()),
+          Number(totalInterestApplied.toString()),
+          Number(totalFeesApplied.toString()),
+          allocations[0]?.installmentId,
+          {
+            allocations: allocations.map((a) => ({
+              installmentId: a.installmentId,
+              principal: a.principalApplied.toString(),
+              interest: a.interestApplied.toString(),
+              fees: a.feesApplied.toString(),
+              penalty: a.penaltyApplied.toString(),
+            })),
+            remainder: remainder.toString(),
+          },
+        ),
+      });
+    }
 
     return { loanAccount, remainder };
   }

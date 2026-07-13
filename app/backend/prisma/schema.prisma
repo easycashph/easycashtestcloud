@@ -55,6 +55,25 @@ enum AddressOwnerType {
 enum AttachmentOwnerType {
   BORROWER
   LOAN_ACCOUNT
+  /// Added 2026-07-10 for the Loan Application intake attachment-upload feature — a scanned
+  /// supporting document (payslip, valid ID, etc.) attached before a Borrower/LoanAccount exists.
+  LOAN_APPLICATION
+}
+
+/// Tags a Loan Application intake attachment by what it actually is (valid ID vs. payslip vs.
+/// profile picture, etc.) so a future risk-scoring feature can look up specific documents by type
+/// instead of an undifferentiated attachment list. Nullable on Attachment — manual uploads via the
+/// generic Attachments panel have no category.
+enum AttachmentDocumentCategory {
+  PROFILE_PICTURE
+  VALID_ID_BORROWER
+  VALID_ID_CO_BORROWER
+  PROOF_OF_BILLING
+  EMPLOYEE_ID
+  BUSINESS_CLEARANCE
+  CORPORATE_PAYSLIP
+  SEAMANS_BOOK
+  OVERSEAS_EMPLOYMENT_CERTIFICATE
 }
 
 /// LP-1: a Loan Product Version has exactly one interest calculation method.
@@ -165,6 +184,11 @@ model Branch {
   code      String   @unique
   name      String
   isActive  Boolean  @default(true)
+  /// Physical office address — used to geocode the branch once (see
+  /// LoanApplicationPreQualificationService) for the loan-application distance rule.
+  address   String?
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -187,6 +211,16 @@ model User {
   lastName     String
   status       UserStatus @default(ACTIVE)
 
+  /// Internal employee/company ID (HR identifier) - distinct from `id` (the DB primary key) and
+  /// `legacyId` (the migrated-system's own ID). Optional - existing migrated/seeded staff don't
+  /// have one recorded yet.
+  companyId String? @unique
+
+  /// Organizational job-title label under the user's Role (e.g. "MIS Manager") - display/
+  /// organizational only, does not affect access (see RoleClass doc comment).
+  roleClassId String?
+  roleClass   RoleClass? @relation(fields: [roleClassId], references: [id], onDelete: SetNull)
+
   /// Identity traceability only (Mambu `mambu_users` / SDevTech `users`).
   /// Credentials themselves are never migrated — ADR-039.
   legacyId  String?  @unique
@@ -196,11 +230,13 @@ model User {
   roles                    UserRole[]
   refreshTokens            RefreshToken[]
   auditLogs                AuditLog[]
+  profileActivityLogs      ProfileActivityLog[] @relation("ProfileActivityLogUser")
   borrowersAsLoanOfficer   Borrower[]        @relation("BorrowerLoanOfficer")
   loanAccountsAsOfficer    LoanAccount[]     @relation("LoanAccountOfficer")
   loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
   transactionsPosted       LoanTransaction[] @relation("LoanTransactionPostedBy")
   attachmentsUploaded      Attachment[]      @relation("AttachmentUploadedBy")
+  notesAuthored            Note[]            @relation("NoteAuthor")
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
@@ -221,6 +257,7 @@ model Role {
 
   users       UserRole[]
   permissions RolePermission[]
+  roleClasses RoleClass[]
 
   @@map("roles")
 }
@@ -233,6 +270,23 @@ model UserRole {
 
   @@id([userId, roleId])
   @@map("user_roles")
+}
+
+/// Organizational job-title label under a Role (e.g. "MIS Manager"/"MIS Assistant" under the MIS
+/// role) - display/organizational only, does NOT affect LMS access; actual permissions remain
+/// governed entirely by Role/Permission above (ADR-043's flat role model is unchanged).
+model RoleClass {
+  id        String   @id @default(uuid())
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+
+  @@unique([roleId, name])
+  @@map("role_classes")
 }
 
 /// AUDIT-3: permissions must be role-based and configurable in the
@@ -448,17 +502,32 @@ model Borrower {
   assignedLoanOfficerId String?
   assignedLoanOfficer   User?   @relation("BorrowerLoanOfficer", fields: [assignedLoanOfficerId], references: [id])
 
-  firstName    String
-  middleName   String?
-  lastName     String
-  gender       String?
-  birthDate    DateTime?
-  civilStatus  String?
-  mobilePhone1 String?
-  mobilePhone2 String?
-  email        String?
-  status       BorrowerStatus @default(ACTIVE)
-  loanCycle    Int            @default(0)
+  /// Set when this Borrower was created via "Create Client Profile" from an APPROVED
+  /// LoanApplication (see CreateBorrowerUseCase) - lets the application detail page know a
+  /// client already exists for it and prevents creating a duplicate. Null for borrowers created
+  /// any other way (e.g. legacy migration, direct walk-in without an application on file).
+  sourceApplicationId String?         @unique
+  sourceApplication   LoanApplication? @relation(fields: [sourceApplicationId], references: [id])
+
+  firstName     String
+  middleName    String?
+  lastName      String
+  gender        String?
+  birthDate     DateTime?
+  placeOfBirth  String?
+  nationality   String?
+  civilStatus   String?
+  homeOwnership String?
+  mobilePhone1  String?
+  mobilePhone2  String?
+  email         String?
+  /// {name, age, relationship}[] - see LoanApplication.dependants doc comment.
+  dependants    Json?
+  /// Free-text catch-all, carried over from the source LoanApplication's own `note` at Client
+  /// Profile creation; also directly editable afterward.
+  note          String?
+  status        BorrowerStatus @default(ACTIVE)
+  loanCycle     Int            @default(0)
 
   legacyId  String?  @unique
   createdAt DateTime @default(now())
@@ -616,6 +685,7 @@ model CoBorrower {
   phoneNumber  String?
   emailAddress String?
   relationship String?
+  employer     String?
 
   legacyId String? @unique
 
@@ -973,7 +1043,11 @@ model Attachment {
   ownerId          String
   fileName         String
   fileType         String
+  /// Bytes on disk — absent for pre-existing legacy-migrated rows (nullable), always set for
+  /// uploads through the new attachment-upload feature (2026-07-10).
+  fileSize         Int?
   storageKey       String
+  documentCategory AttachmentDocumentCategory?
   uploadedByUserId String?
   uploadedBy       User?               @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
   uploadedAt       DateTime            @default(now())
@@ -982,6 +1056,34 @@ model Attachment {
 
   @@index([ownerType, ownerId])
   @@map("attachments")
+}
+
+enum NoteOwnerType {
+  BORROWER
+  LOAN_ACCOUNT
+  LOAN_APPLICATION
+}
+
+/// Free-text note attached to a Borrower/LoanAccount/LoanApplication - same polymorphic
+/// ownerType/ownerId shape as `Attachment` (ADR-014), for the same reason: no dedicated FK relation
+/// per owner type. Immutable once created (no edit/delete use case) - a running log, not a wiki.
+///
+/// 2026-07-13 (merge note): distinct from the pre-existing `LoanNote` model above, added
+/// independently in a parallel branch of work on the same day — both model "a free-text note on a
+/// loan," `LoanNote` scoped to loan accounts only, `Note` generalized to Borrower/LoanApplication
+/// too. Kept both as-is rather than unify them mid-merge (a real product decision, not a merge
+/// mechanic); flagged as a follow-up to resolve deliberately once the merge itself is verified.
+model Note {
+  id           String        @id @default(uuid())
+  ownerType    NoteOwnerType
+  ownerId      String
+  text         String
+  authorUserId String
+  author       User          @relation("NoteAuthor", fields: [authorUserId], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([ownerType, ownerId])
+  @@map("notes")
 }
 
 /// ADR-051: repurposes the table originally scaffolded (init migration) for the legacy SDevTech
@@ -1078,6 +1180,41 @@ model AuditLog {
 }
 
 // ----------------------------------------------------------------------------
+// Profile Activity Timeline — ADR-050
+// Track loan officer actions on Loan Applications, Borrowers, and Loan Accounts
+// for compliance and auditability. Immutable after creation (soft-delete only).
+// Separate from AuditLog — this is user-visible activity; AuditLog is
+// system-level audit trail.
+// ----------------------------------------------------------------------------
+
+enum ProfileType {
+  LOAN_APPLICATION
+  BORROWER
+  LOAN_ACCOUNT
+}
+
+model ProfileActivityLog {
+  id                   String       @id @default(uuid())
+  profileType          ProfileType
+  profileId            String
+  userId               String
+  user                 User         @relation("ProfileActivityLogUser", fields: [userId], references: [id], onDelete: Restrict)
+  action               String
+  /// JSON object with action-specific details (attachmentId, documentCategory,
+  /// decisionStatus, paymentAmount, etc.). See ADR-050 for examples per action type.
+  details              Json
+  visibilityRestricted Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  deletedByMisAt       DateTime?
+  /// Soft delete: if set, MIS deleted this record at this time.
+
+  @@index([profileType, profileId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("profile_activity_logs")
+}
+
+// ----------------------------------------------------------------------------
 // Idempotency — Milestone 9.1/9.2 CP13
 // (docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md, Decision Log
 // #9): a client-supplied Idempotency-Key header, checked via this small,
@@ -1115,15 +1252,14 @@ model AuditLog {
 // today; not modeled here either pending a real requirement to store them.
 // AI risk/recommendation is explicitly a frontend-only rule-based demo, never
 // a real ML engine — not modeled backend-side at all.
+/// PREAPPROVED/PREDECLINED are computed by LoanApplicationPreQualificationService at creation and
+/// re-computed whenever the AI Risk Management Summary is saved (advisory only — the officer makes
+/// the real, final APPROVED/DECLINED call; system verdicts never auto-approve or auto-decline).
 enum LoanApplicationStatus {
-  PENDING_REVIEW
+  PREAPPROVED
+  PREDECLINED
   APPROVED
   DECLINED
-}
-
-enum LoanApplicationReviewState {
-  UNREVIEWED
-  REVIEWED
 }
 
 enum LoanApplicationAccountType {
@@ -1138,12 +1274,35 @@ model LoanApplication {
 
   applicantName   String
   age             Int?
+  gender          String?
+  civilStatus     String?
+  birthDate       DateTime?
+  placeOfBirth    String?
+  nationality     String?
+  homeOwnership   String?
   address         String?
   monthlyIncome   Decimal? @db.Decimal(14, 2)
   employer        String?
+  occupation      String?
+  officeAddress   String?
+  tinNumber       String?
+  sssNumber       String?
   propertiesOwned String[] @default([])
   creditScore     Int?
-  coBorrowerName  String?
+  coBorrowerName     String?
+  coBorrowerEmployer String?
+  mobilePhone     String?
+  email           String?
+  /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
+  /// `propertiesOwned`'s "small list, no relational value" reasoning).
+  dependants      Json?
+  reference1Name   String?
+  reference1Mobile String?
+  reference2Name   String?
+  reference2Mobile String?
+  /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
+  /// field - carried over as-is into the Client Profile's own `note` field on creation.
+  note            String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?
@@ -1161,10 +1320,11 @@ model LoanApplication {
   /// paper form on the applicant's behalf) — null for a self-service intake.
   encodedBy       User?   @relation("LoanApplicationEncodedBy", fields: [encodedByUserId], references: [id])
 
-  status      LoanApplicationStatus      @default(PENDING_REVIEW)
-  /// Independent "seen it" inbox flag — orthogonal to `status`; flips to
-  /// REVIEWED when a reviewer opens the application, regardless of decision.
-  reviewState LoanApplicationReviewState @default(UNREVIEWED)
+  status LoanApplicationStatus @default(PREDECLINED)
+  /// Cached at creation from geocoding the applicant's address against the assigned branch's
+  /// coordinates — null if geocoding failed/was inconclusive (the distance rule fails open in that
+  /// case; see LoanApplicationPreQualificationService).
+  distanceFromBranchKm Decimal? @db.Decimal(6, 2)
 
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).
@@ -1181,6 +1341,10 @@ model LoanApplication {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// Reverse side of Borrower.sourceApplicationId - set once "Create Client Profile" has been
+  /// used on this application.
+  createdBorrower Borrower?
 
   @@index([branchId])
   @@index([status])

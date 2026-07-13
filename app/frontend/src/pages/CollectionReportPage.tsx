@@ -12,7 +12,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { CollectionReportRow, ReportGranularity } from '@/lib/reportApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 function getSortValue(row: CollectionReportRow, key: string): string | number | Date | null | undefined {
@@ -177,9 +176,9 @@ function PeriodCollectionReport({ granularity, from }: { granularity: 'MONTHLY' 
 }
 
 /**
- * Wired to the real backend (`GET /reports/collections`) — sums `REPAYMENT` transactions per
+ * Wired to the real backend (`GET /reports/collections`) - sums `REPAYMENT` transactions per
  * period. Drops the mock version's Target/% of Target columns: there's no collection-target/quota
- * concept anywhere in the backend (no config table, no field) — showing a fabricated target would
+ * concept anywhere in the backend (no config table, no field) - showing a fabricated target would
  * violate CLAUDE.md's "never invent business rules." Branch scoping is automatic from the
  * signed-in session, matching Dashboard/Payment Reminders.
  */
@@ -220,7 +219,7 @@ export function CollectionReportPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Collection Report')} title="Recent Activity — Collection Report" />
+      <RecentActivityPanel label="Collection Report" />
     </div>
   );
 }

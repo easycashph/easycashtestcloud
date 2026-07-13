@@ -3,7 +3,7 @@
  * `docs/Architecture/ADR-009-payment-allocation-order.md` and
  * `CALCULATION_ENGINE_SPEC.md` §5 (fees -> penalty -> interest -> principal).
  * This exists purely so the Payment Recording screen can show a live
- * allocation preview against mock installment data — it is NOT the real
+ * allocation preview against mock installment data - it is NOT the real
  * `PaymentAllocationService` (`app/backend/src/shared/domain/calculation/
  * PaymentAllocationService.ts`) and must not be treated as financially
  * authoritative. The real engine is what actually posts a payment once
@@ -51,7 +51,7 @@ export interface InstallmentAllocationPreviewRow extends AllocationPreviewResult
 
 /**
  * Cross-installment preview, oldest-due-first (mirrors `ADR-009` §2 /
- * `ProcessPaymentUseCase`'s loop) — for display only. `installments` must
+ * `ProcessPaymentUseCase`'s loop) - for display only. `installments` must
  * already be pre-sorted oldest-due-first and pre-filtered to unpaid rows;
  * this function does not sort or filter.
  */

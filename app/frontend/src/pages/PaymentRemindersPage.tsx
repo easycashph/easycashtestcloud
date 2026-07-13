@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, ChevronLeft, ChevronRight, Clock, Columns3, Search } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Clock, Columns3, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,12 +17,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { PaymentReminder, PaymentReminderStatus } from '@/lib/paymentReminderApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 /**
@@ -95,7 +95,7 @@ function getSortValue(r: PaymentReminder, key: string): string | number | Date |
   }
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 const STATUS_OPTIONS: { value: PaymentReminderStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
@@ -111,7 +111,7 @@ const STATUS_BADGE: Record<PaymentReminderStatus, { variant: 'destructive' | 'wa
 };
 
 /**
- * Wired to the real backend (`GET /payment-reminders`) — one row per active loan account's next
+ * Wired to the real backend (`GET /payment-reminders`) - one row per active loan account's next
  * not-fully-paid installment. There's no notification/scheduling service in this build yet (no
  * SMS/email actually goes out), so this is an "Upcoming & Overdue Installments" worklist, not a
  * simulated reminder-send history like the earlier mock version.
@@ -310,39 +310,19 @@ export function PaymentRemindersPage() {
               )}
             </TableBody>
           </Table>
-
-          {sorted.length > 0 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-              <p>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, sorted.length)} of {sorted.length}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" /> Previous
-                </Button>
-                <span>
-                  Page {currentPage} of {pageCount}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentPage >= pageCount}
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                >
-                  Next <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+          <PaginationControls
+            pageNumber={currentPage}
+            hasNext={currentPage < pageCount}
+            hasPrev={currentPage > 1}
+            onNext={() => setPage((p) => p + 1)}
+            onPrev={() => setPage((p) => p - 1)}
+            pageSize={PAGE_SIZE}
+            itemCount={pageRows.length}
+          />
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Payment Reminders')} title="Recent Activity — Payment Reminders" />
+      <RecentActivityPanel label="Payment Reminders" />
     </div>
   );
 }

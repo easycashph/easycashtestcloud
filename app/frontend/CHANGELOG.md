@@ -8,6 +8,130 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-12 (continued) — Mock Data Removal: Application→Client→Loan Lifecycle
+
+Deliberate, incremental mock-removal initiative (per CLAUDE.md's project objective of replacing
+SDevTech) — full detail in `docs/SESSION_LOG_2026-07-12.md` Addendums 1-7. Summary:
+
+- **Application ↔ Client link (real):** new `Borrower.sourceApplicationId` (migration
+  `20260712050000_add_borrower_source_application`), `GET /loan-applications` now returns
+  `createdBorrowerId`/`createdLoanAccountId`/`createdLoanAccountCode`. `LoanApplicationDetailPage`'s
+  "Create Client Profile" button now correctly disables/relinks once a client exists instead of
+  allowing a duplicate.
+- **`ClientProfilePage.tsx`'s real path (`RealClientProfileView`):** added a real "Create Loan
+  Account" flow (`POST /loan-accounts`, staff-typed `loanCode` — no fabricated numbering rule) and
+  real Attachments (`AttachmentsPanel`, `ownerType="BORROWER"`).
+- **`LoanDetailPage.tsx`'s real path (`RealLoanDetailView`):** added real Approve/Activate
+  (`POST /loan-accounts/:id/approve` and `/activate`, idempotency-key protected), real Attachments
+  (`ownerType="LOAN_ACCOUNT"`), a brand-new real **Notes** feature (new `note` backend module —
+  `Note` model, migration `20260712060000_add_notes`, full port/use-case/repository/controller —
+  mirrors the `document` module's shape), and a real **Reminders** panel (business-confirmed
+  5/3/1-day/due-date/weekly-past-due trigger schedule computed from the real repayment schedule;
+  SMS/Email sending stays "Coming Soon" pending a provider from MIS).
+- **Dashboard:** Collections Forecast chart now sums real `RepaymentSchedule` data (next 4 months,
+  branch-scoped) instead of `SAMPLE_COLLECTIONS_PROJECTION`. Collections vs. Target intentionally
+  left as disclosed sample data — blocked on a business decision (how a real monthly target gets
+  set), not a wiring gap.
+- **Result:** both `RealClientProfileView` and `RealLoanDetailView` are now fully real on every
+  section. Remaining known mock/gaps: Collections vs. Target (business decision), SMS/Email
+  sending (infrastructure/provider), and unused `logActivity()`/`MOCK_ACTIVITY_LOGS` dead code
+  (superseded by the real `/audit-logs`-backed `RecentActivityPanel`, not yet deleted).
+- **Deploy note:** migrations `20260712050000_add_borrower_source_application` and
+  `20260712060000_add_notes` still need to run against the real database.
+
+## 2026-07-11
+
+### System-computed PREAPPROVED/PREDECLINED pre-qualification for Loan Applications
+- Replaces `PENDING_REVIEW` and the separate manual "reviewed" inbox flag with an automatic,
+  rule-based classification (`LoanApplicationPreQualificationService`) — advisory only, the officer's
+  `APPROVED`/`DECLINED` decision still overrides it. Three rules, all confirmed business numbers:
+  age 18–55, monthly income above a flat-rate amortization estimate (3.0%/month, the dominant rate
+  across SL/SML/BL-Regular per the real ledger), and home address within 50km of the branch
+  (OpenStreetMap Nominatim geocoding — free/open-source, fails open if unresolved).
+- New `PATCH /loan-applications/:id` (Risk Management Summary on the Detail page) — moved
+  monthly income/credit score/properties-owned off the intake form, since a fresh application no
+  longer has income at creation time and needs re-classifying once the officer records it.
+- `LoanApplicationsPage`'s "Review" column and mark-reviewed bulk action are removed entirely — no
+  longer meaningful once every application is system-classified.
+
+### Real, rule-based Risk Assessment (Loan Account + Client Profile)
+- Replaces the mock "AI Risk Assessment" card on the Loan Account detail page — renamed "Risk
+  Assessment", since it's the LMS's own computation, not an AI model — with a real one
+  (`LoanRiskAssessmentService`): deterministic rules over the loan's own repayment history, days
+  past due and late-installment count (inferred by comparing `lastPaidAt` to `dueDate`, since
+  `RepaymentInstallment.status` is a live-derived getter that loses the "was late" signal once an
+  installment is paid).
+- New "Risk & Payment Summary" card on the Client Profile page (`BorrowerRiskSummaryService`),
+  combining the worst risk among a borrower's active loans with their lifetime on-time-payment
+  track record across every loan they've ever had.
+- Loan Account detail's Repayment Schedule now visually flags every installment counted as "late"
+  by the Risk Assessment card (currently overdue, or a "Paid late" badge for settled installments
+  paid after their due date), and gained a Payment History tab (`GET /loan-accounts/:id/transactions`,
+  already existed backend-side) listing every ledger transaction — disbursement, repayments, fees.
+  Both now live inside one compact tabbed card instead of two separate always-expanded sections;
+  the balance/terms summary above them was condensed from three bordered cards into one dense
+  stat-tile grid.
+- Thresholds (DPD/late-count/on-time-rate buckets) are proposed defaults pending business
+  confirmation, same posture as the loan-application pre-qualification's flat-rate constant before
+  it was finalized.
+
+### AI document auto-fill, categorized attachments, and preview
+- New `ai-extraction` module: a local Ollama vision model reads an uploaded ID/payslip/PDF/DOCX to
+  suggest Loan Application form values — ephemeral, never persisted, never a cloud AI call.
+- Attachments gain a `documentCategory` (profile picture, valid ID, proof of billing,
+  employee ID, business clearance, corporate payslip, seaman's book, OEC, etc.) so specific
+  application documents are distinguishable, with conditional upload slots on the intake form based
+  on loan type/co-borrower — plus an in-app preview modal (image/PDF) so reviewing no longer
+  requires downloading first. The AI Auto-fill upload is now auto-saved as a real attachment once
+  the application is created (best-effort, never blocks/rolls back the application).
+- The applicant's uploaded Profile Picture attachment now renders as their avatar throughout the
+  Loan Applications list and detail page (falls back to initials).
+
+### Fixes
+- Proper-case formatting for cascading PSGC addresses and PH mobile numbers across Loan
+  Application and Client pages — was previously a mix of ALL CAPS/lowercase and raw digit strings.
+- Added a top-level `ErrorBoundary` — without one, a render crash unmounted `RoleProvider` and was
+  indistinguishable from being logged out, when the session itself was never touched.
+- Fixed a real React Query cache-key collision: three pages (`ClientProfilePage`, `DashboardPage`,
+  `LoanListPage`) cached a `Map` under the same key (`['loan-products', 'all']`) that
+  `LoanApplicationDetailPage`, `LoanProductsPage`, and `StatementOfAccountPage` expect to hold a
+  plain array — visiting a Map-caching page before an array-expecting one served the wrong shape
+  from cache and crashed with `(productsQuery.data ?? []).flatMap is not a function`. This was the
+  actual cause of an intermittent "Something went wrong loading this page" report this session, not
+  a session/auth issue as it first appeared. Gave the three Map queries their own distinct keys.
+
+### Decision scoring breakdown for Loan Applications
+- The Risk Management Summary card now shows a "Decision scoring" breakdown — age, income vs. loan
+  amount, and address proximity to branch, each as its own pass/fail row with the actual numbers
+  behind it, not just the final PREAPPROVED/PREDECLINED badge. `LoanApplicationPreQualificationService`
+  gains `evaluateCriteria()`, a pure/no-I/O method that re-derives the same breakdown from
+  already-known fields (reusing the cached `distanceFromBranchKm` rather than re-geocoding), called
+  on every read/mutation so it never goes stale relative to the status badge.
+- Fixed the card's description, left over from before this feature existed ("Feeds a future AI
+  risk-assessment feature (not yet built)").
+
+### Terminology cleanup: "LMS", not "AI", for the platform's own computations
+- Renamed every UI label/description that called the platform's own deterministic, rule-based
+  computations "AI" — "AI Risk Management Summary" → "Risk Management Summary", "AI Risk
+  Assessment" → "Risk Assessment" (Loan Account detail's card and function name), the About page's
+  "AI-assisted risk summary" copy → "system-computed risk summary and decision scoring". These are
+  the LMS computing its own results from real data (age/income/address, repayment history) — not an
+  external AI model, and the wording now says so plainly rather than implying otherwise.
+- The genuine AI feature (a local Ollama vision model reading uploaded documents to suggest
+  Loan Application form values — "AI Auto-fill") is unaffected and keeps its name, since it
+  actually is AI.
+- Also refreshed two stale doc comments (`App.tsx`'s routing overview, `LoanDetailPage.tsx`'s
+  `RealLoanDetailView` doc comment) that still said risk assessment/payment history were mock-only
+  — both have been real since earlier today.
+
+### Backfilled the missing July 9 entry in the About page's changelog
+- The in-app About page changelog (`lmsVersion.ts`'s `LMS_CHANGELOG`, distinct from this file —
+  see this file's own header note) had a gap: `0.9.3` was dated July 8 and the next entry jumped
+  straight to July 10, with nothing for July 9 even though that was a full migration + wiring day
+  (see the four "2026-07-09" entries below). Inserted the missing entry and renumbered everything
+  after it forward by one (`0.9.4`→`0.9.5`, `0.9.5`→`0.9.6`) — this changelog file's own July 9
+  entries were already complete and needed no changes.
+
 ## 2026-07-09 (4)
 
 ### Statement of Account now real, for migrated loans

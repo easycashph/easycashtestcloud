@@ -24,6 +24,7 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
       phoneNumber: row.phoneNumber ?? undefined,
       emailAddress: row.emailAddress ?? undefined,
       relationship: row.relationship ?? undefined,
+      employer: row.employer ?? undefined,
       legacyId: row.legacyId ?? undefined,
       addresses: addressRows.map((addressRow) =>
         Address.of({
@@ -57,6 +58,7 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
           phoneNumber: coBorrower.phoneNumber,
           emailAddress: coBorrower.emailAddress,
           relationship: coBorrower.relationship,
+          employer: coBorrower.employer,
           legacyId: coBorrower.legacyId,
         },
         update: {
@@ -68,6 +70,7 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
           phoneNumber: coBorrower.phoneNumber,
           emailAddress: coBorrower.emailAddress,
           relationship: coBorrower.relationship,
+          employer: coBorrower.employer,
         },
       });
 

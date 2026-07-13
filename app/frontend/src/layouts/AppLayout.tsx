@@ -22,12 +22,12 @@ import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
 import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
-import { COMPANY_INFO } from '@/lib/mockData';
+import { COMPANY_INFO } from '@/lib/staticConfig';
 import { cn } from '@/lib/utils';
 
 /**
  * Section/tab order confirmed by the business: Home → Loan → Collection → Configuration →
- * Administration (2026-07-08 — `Configuration` inserted before `Administration` as part of the
+ * Administration (2026-07-08 - `Configuration` inserted before `Administration` as part of the
  * frontend↔backend wiring pilot's Stage 0c, see `docs/Architecture/
  * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` §8.1; previous order, confirmed 2026-07-06, had no
  * `Configuration` group).
@@ -72,7 +72,7 @@ const NAV_GROUPS = [
   },
 ];
 
-function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: boolean; onCollapse: () => void }) {
+function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
   return (
     <div
       className={cn(
@@ -86,23 +86,12 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-sidebar-border px-5">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 shrink-0 rounded bg-white object-contain p-0.5" />
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-sm font-semibold">{COMPANY_INFO.name}</p>
-              <p className="truncate text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
-            </div>
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
+          <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 shrink-0 rounded bg-white object-contain p-0.5" />
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-semibold">{COMPANY_INFO.name}</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden shrink-0 rounded-full bg-sidebar-accent/10 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/20 hover:text-sidebar-foreground lg:inline-flex"
-            onClick={onCollapse}
-            aria-label="Hide side menu"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </Button>
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           {NAV_GROUPS.map((group) => (
@@ -136,7 +125,7 @@ function Sidebar({ open, collapsed, onCollapse }: { open: boolean; collapsed: bo
   );
 }
 
-/** Appearance now has exactly one control surface — Settings > Appearance (see SettingsPage) — the standalone toggle formerly here was removed 2026-07-08. */
+/** Appearance now has exactly one control surface - Settings > Appearance (see SettingsPage) - the standalone toggle formerly here was removed 2026-07-08. */
 function Topbar({
   onMenuClick,
   collapsed,
@@ -189,7 +178,7 @@ export function AppLayout() {
     <div className="flex h-screen flex-col bg-background">
       <PreviewBanner />
       <div className="flex min-h-0 flex-1">
-        <Sidebar open={sidebarOpen} collapsed={collapsed} onCollapse={() => setCollapsed(true)} />
+        <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
         {/* min-w-0 is required here: a flex child otherwise refuses to shrink below its content's
             intrinsic width (the flexbox default is min-width: auto), so a wide table anywhere in

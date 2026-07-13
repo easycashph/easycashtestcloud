@@ -8,12 +8,12 @@ interface SortableTableHeadProps extends React.ThHTMLAttributes<HTMLTableCellEle
   sortKey: string;
   currentSort: SortState;
   onSort: (key: string, isDateColumn?: boolean) => void;
-  /** Marks this column as a Date column — clicking it the first time defaults to recent-to-oldest (desc), per the standing column-filter requirement. */
+  /** Marks this column as a Date column - clicking it the first time defaults to recent-to-oldest (desc), per the standing column-filter requirement. */
   isDateColumn?: boolean;
   children: React.ReactNode;
 }
 
-/** Clickable `TableHead` with a sort-direction indicator — the shared building block for every sortable table column across the LMS preview. */
+/** Clickable `TableHead` with a sort-direction indicator - the shared building block for every sortable table column across the LMS preview. */
 export function SortableTableHead({ sortKey, currentSort, onSort, isDateColumn, className, children, ...props }: SortableTableHeadProps) {
   const isActive = currentSort.key === sortKey;
   const Icon = isActive ? (currentSort.direction === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;

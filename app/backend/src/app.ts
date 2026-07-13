@@ -29,6 +29,8 @@ import { ListPsgcOptionsUseCase } from '@modules/psgc/application/use-cases/List
 import { PrismaPsgcRepository } from '@modules/psgc/infrastructure/PrismaPsgcRepository';
 import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateCoBorrowerUseCase';
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
+import { GetBorrowerRiskSummaryUseCase } from '@modules/borrower/application/use-cases/GetBorrowerRiskSummaryUseCase';
+import { BorrowerRiskSummaryService } from '@modules/borrower/application/services/BorrowerRiskSummaryService';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
 import { PrismaCoBorrowerRepository } from '@modules/borrower/infrastructure/PrismaCoBorrowerRepository';
 import { createLoanProductRouter } from '@modules/loan-product/interface/http/loanProductRouter';
@@ -47,6 +49,8 @@ import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/R
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
 import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
+import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
+import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
@@ -69,16 +73,39 @@ import { createLoanApplicationRouter } from '@modules/loan-application/interface
 import { CreateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/CreateLoanApplicationUseCase';
 import { GetLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/GetLoanApplicationUseCase';
 import { ListLoanApplicationsUseCase } from '@modules/loan-application/application/use-cases/ListLoanApplicationsUseCase';
-import { MarkLoanApplicationReviewedUseCase } from '@modules/loan-application/application/use-cases/MarkLoanApplicationReviewedUseCase';
 import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/application/use-cases/AssignLoanApplicationProductUseCase';
 import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
+import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
+import { LoanApplicationPreQualificationService } from '@modules/loan-application/application/services/LoanApplicationPreQualificationService';
+import { NominatimGeocodingService } from '@shared/geo/NominatimGeocodingService';
 import { createAuditLogRouter } from '@modules/audit/interface/http/auditLogRouter';
 import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListAuditLogsUseCase';
+import { LogSectionViewUseCase } from '@modules/audit/application/use-cases/LogSectionViewUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
+import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
+import { createNoteRouter } from '@modules/note/interface/http/noteRouter';
+import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
+import { ExtractLoanApplicationFieldsUseCase } from '@modules/ai-extraction/application/use-cases/ExtractLoanApplicationFieldsUseCase';
+import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/OllamaVisionModelClient';
+import { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
+import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
+import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
+import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
+import { PrismaNoteRepository } from '@modules/note/infrastructure/PrismaNoteRepository';
+import { CreateNoteUseCase } from '@modules/note/application/use-cases/CreateNoteUseCase';
+import { ListNotesForOwnerUseCase } from '@modules/note/application/use-cases/ListNotesForOwnerUseCase';
+import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
+import { createRoleClassRouter } from '@modules/role-class/interface/http/RoleClassRouter';
+import { RoleClassController } from '@modules/role-class/interface/http/RoleClassController';
+import { ListRoleClassesUseCase } from '@modules/role-class/application/use-cases/ListRoleClassesUseCase';
+import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
+import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
+import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/PrismaRoleClassRepository';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
 import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
@@ -96,7 +123,11 @@ import { PrismaReportingRepository } from '@modules/reporting/infrastructure/Pri
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
-import { LocalFileStorage } from '@shared/infrastructure/LocalFileStorage';
+// Naming collision (2026-07-13 merge): Jomer's document module has its own LocalFileStorage
+// (@modules/document/infrastructure/LocalFileStorage, imported above) - aliased here rather than
+// consolidated, since the two were built independently against possibly-different IFileStorage
+// port shapes. Worth reconciling into one canonical implementation later, not as part of this merge.
+import { LocalFileStorage as SharedLocalFileStorage } from '@shared/infrastructure/LocalFileStorage';
 import { prisma } from '@shared/database/prismaClient';
 import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/loanDocumentRouter';
 import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
@@ -107,6 +138,12 @@ import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/in
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
 import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
 import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
+import { createProfileActivityLogRouter } from '@modules/profile-activity/interface/http/ProfileActivityLogRouter';
+import { GetProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/GetProfileActivityUseCase';
+import { DeleteProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/DeleteProfileActivityUseCase';
+import { PrismaProfileActivityLogRepository } from '@modules/profile-activity/infrastructure/PrismaProfileActivityLogRepository';
+import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import { ProfileActivityLogController } from '@modules/profile-activity/interface/http/ProfileActivityLogController';
 
 /**
  * Composition root. Module routers are mounted here as they're built out
@@ -216,24 +253,50 @@ export function createApp(): Express {
   const userRouter = createUserRouter(
     {
       listUsersUseCase: new ListUsersUseCase({ userRepository }),
-      createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher }),
-      updateUserUseCase: new UpdateUserUseCase({ userRepository }),
+      createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher, auditLogger }),
+      updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher, auditLogger }),
     },
     tokenService,
   );
   app.use('/api/v1', userRouter);
 
+  // --- role-class module wiring: organizational job-title labels under a Role (Administration > Member Details > Roles tab) ---
+  const roleClassRepository = new PrismaRoleClassRepository();
+  const roleClassController = new RoleClassController({
+    listRoleClassesUseCase: new ListRoleClassesUseCase({ roleClassRepository }),
+    createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository, auditLogger }),
+    updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository, auditLogger }),
+  });
+  const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
+  app.use('/api/v1', roleClassRouter);
+
+  // --- profile-activity module wiring: ADR-050 — track loan officer actions on profiles ---
+  // Instantiated here early so it can be injected into borrower, loan-account, and loan-application use cases.
+  const profileActivityLogRepository = new PrismaProfileActivityLogRepository();
+  const profileActivityLogService = new ProfileActivityLogService(profileActivityLogRepository);
+
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
   const borrowerRepository = new PrismaBorrowerRepository();
   const coBorrowerRepository = new PrismaCoBorrowerRepository();
+  // Hoisted above the loan-account module's own wiring section below (their canonical home) since
+  // the borrower risk-summary use case, wired here, needs them too — same instances, not duplicated.
+  const loanAccountRepositoryForBorrowerRisk = new PrismaLoanAccountRepository();
+  const repaymentInstallmentRepositoryForBorrowerRisk = new PrismaRepaymentInstallmentRepository();
+  const borrowerRiskSummaryService = new BorrowerRiskSummaryService(new LoanRiskAssessmentService());
   const borrowerRouter = createBorrowerRouter(
     {
-      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository }),
+      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
-      updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository }),
-      createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository }),
+      updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+      createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository, auditLogger }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
+      getBorrowerRiskSummaryUseCase: new GetBorrowerRiskSummaryUseCase({
+        borrowerRepository,
+        loanAccountRepository: loanAccountRepositoryForBorrowerRisk,
+        repaymentInstallmentRepository: repaymentInstallmentRepositoryForBorrowerRisk,
+        riskSummaryService: borrowerRiskSummaryService,
+      }),
     },
     tokenService,
   );
@@ -280,13 +343,14 @@ export function createApp(): Express {
   // 2026-07-11 (Reverse Payment feature): shared by ProcessPaymentUseCase (writes the breakdown)
   // and ReversePaymentUseCase (reads it back) below — see PaymentAllocation's own doc comment.
   const paymentAllocationRepository = new PrismaPaymentAllocationRepository();
+  const loanRiskAssessmentService = new LoanRiskAssessmentService();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
-      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
-      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork }),
+      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
+      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
       // cases (previously built with zero routes, per the D-2 precedent —
       // see ActivateLoanUseCase's/ProcessPaymentUseCase's own doc comments).
@@ -297,9 +361,11 @@ export function createApp(): Express {
         loanTransactionRepository,
         financialAuditLogger,
         unitOfWork,
+        profileActivityLogService,
       }),
       processPaymentUseCase: new ProcessPaymentUseCase({
         loanAccountRepository,
+        profileActivityLogService,
         repaymentInstallmentRepository,
         loanTransactionRepository,
         paymentAllocationRepository,
@@ -313,6 +379,11 @@ export function createApp(): Express {
         paymentAllocationRepository,
         financialAuditLogger,
         unitOfWork,
+      }),
+      getLoanRiskAssessmentUseCase: new GetLoanRiskAssessmentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        riskAssessmentService: loanRiskAssessmentService,
       }),
       idempotencyKeyStore,
     },
@@ -341,7 +412,7 @@ export function createApp(): Express {
   if (env.STORAGE_DRIVER !== 'local') {
     throw new Error(`STORAGE_DRIVER=${env.STORAGE_DRIVER} has no implementation yet — only "local" is supported.`);
   }
-  const fileStorage = new LocalFileStorage(env.STORAGE_LOCAL_PATH);
+  const loanDocumentFileStorage = new SharedLocalFileStorage(env.STORAGE_LOCAL_PATH);
   const mergeDataResolver = new LoanDocumentMergeDataResolver({
     loanAccountRepository,
     borrowerRepository,
@@ -361,7 +432,7 @@ export function createApp(): Express {
         mergeDataResolver,
         documentFiller,
         docxToPdfConverter,
-        fileStorage,
+        fileStorage: loanDocumentFileStorage,
       }),
       listLoanDocumentsUseCase: new ListLoanDocumentsUseCase({
         loanAccountRepository,
@@ -372,7 +443,7 @@ export function createApp(): Express {
       getGeneratedLoanDocumentFileUseCase: new GetGeneratedLoanDocumentFileUseCase({
         generatedLoanDocumentRepository,
         documentTemplateRepository,
-        fileStorage,
+        fileStorage: loanDocumentFileStorage,
       }),
       getLoanAccountUseCase,
       idempotencyKeyStore,
@@ -402,6 +473,8 @@ export function createApp(): Express {
   );
   app.use('/api/v1', repaymentRouter);
 
+  // --- profile-activity module router mount (controller instantiated below after dashboard) ---
+
   // --- dashboard module wiring (Milestone 9.2: read-only portfolio aggregates) ---
   const dashboardRouter = createDashboardRouter(
     {
@@ -411,19 +484,45 @@ export function createApp(): Express {
   );
   app.use('/api/v1', dashboardRouter);
 
-  // --- loan-application module wiring (Milestone 9.2: intake/review/decision workflow only —
-  // approved-application-to-Borrower/LoanAccount conversion is a deliberate follow-up) ---
+  // --- loan-application module wiring (Milestone 9.2: intake/decision workflow, plus the
+  // system-computed PREAPPROVED/PREDECLINED pre-qualification added 2026-07-11 — the
+  // approved-application-to-Borrower/LoanAccount conversion itself lives in the borrower/
+  // loan-account modules' own create flows; this module only reads the resulting linkage back
+  // via Borrower.sourceApplicationId, see LoanApplicationController.buildLinkage) ---
   const loanApplicationRepository = new PrismaLoanApplicationRepository();
+  const branchRepository = new PrismaBranchRepository();
+  const geocodingService = new NominatimGeocodingService();
+  const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
   const loanApplicationRouter = createLoanApplicationRouter(
     {
-      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository }),
+      createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
+        loanApplicationRepository,
+        preQualificationService,
+        profileActivityLogService,
+      }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
-      markLoanApplicationReviewedUseCase: new MarkLoanApplicationReviewedUseCase({ loanApplicationRepository }),
-      assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository }),
-      approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
-      declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
-      revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({ loanApplicationRepository, auditLogger }),
+      assignLoanApplicationProductUseCase: new AssignLoanApplicationProductUseCase({ loanApplicationRepository, profileActivityLogService }),
+      approveLoanApplicationUseCase: new ApproveLoanApplicationUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
+      }),
+      declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
+      }),
+      revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        preQualificationService,
+        profileActivityLogService,
+      }),
+      updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
+      preQualificationService,
+      borrowerRepository,
+      loanAccountRepository,
     },
     tokenService,
   );
@@ -434,6 +533,7 @@ export function createApp(): Express {
   const auditLogRouter = createAuditLogRouter(
     {
       listAuditLogsUseCase: new ListAuditLogsUseCase({ auditLogRepository: new PrismaAuditLogRepository() }),
+      logSectionViewUseCase: new LogSectionViewUseCase({ auditLogger }),
     },
     tokenService,
   );
@@ -470,6 +570,52 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', reportingRouter);
+
+  // --- document module wiring: attachment upload/list/download (Loan Application intake, and the
+  // pre-existing legacy-migrated Borrower/LoanAccount attachment rows) ---
+  const attachmentRepository = new PrismaAttachmentRepository();
+  const fileStorage = new LocalFileStorage();
+  const documentRouter = createDocumentRouter(
+    {
+      uploadAttachmentUseCase: new UploadAttachmentUseCase({ attachmentRepository, fileStorage, profileActivityLogService }),
+      listAttachmentsForOwnerUseCase: new ListAttachmentsForOwnerUseCase({ attachmentRepository }),
+      downloadAttachmentUseCase: new DownloadAttachmentUseCase({ attachmentRepository, fileStorage }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', documentRouter);
+
+  // --- note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
+  // polymorphic ownerType/ownerId shape as the document module above ---
+  const noteRepository = new PrismaNoteRepository();
+  const noteRouter = createNoteRouter(
+    {
+      createNoteUseCase: new CreateNoteUseCase({ noteRepository }),
+      listNotesForOwnerUseCase: new ListNotesForOwnerUseCase({ noteRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', noteRouter);
+
+  // --- ai-extraction module wiring: local Ollama (moondream) — auto-fill suggestions for the
+  // Loan Application intake form from an uploaded ID/payslip/PDF/DOCX, never persisted here ---
+  const aiExtractionRouter = createAiExtractionRouter(
+    {
+      extractLoanApplicationFieldsUseCase: new ExtractLoanApplicationFieldsUseCase({
+        visionModelClient: new OllamaVisionModelClient(),
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', aiExtractionRouter);
+
+  // --- profile-activity module router mount: ADR-050 ---
+  const profileActivityLogController = new ProfileActivityLogController(
+    new GetProfileActivityUseCase(profileActivityLogRepository, userRepository),
+    new DeleteProfileActivityUseCase(profileActivityLogRepository),
+  );
+  const profileActivityLogRouter = createProfileActivityLogRouter(profileActivityLogController, tokenService);
+  app.use('/api/v1', profileActivityLogRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 

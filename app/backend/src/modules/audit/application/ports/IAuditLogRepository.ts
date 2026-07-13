@@ -24,6 +24,10 @@ export interface FindManyAuditLogsOptions {
   cursor?: string;
   /** Case-insensitive match against action/entityType/entityId or the acting user's first/last name. */
   search?: string;
+  /** Exact match against one or more entityType values (e.g. ["Dashboard"] for a page's own view events, or ["LoanApplication", "Loan Applications"] to combine write and view events for one section). */
+  entityTypes?: string[];
+  /** Exact match — scopes results to a single record (e.g. one loan application's id), across both view and write events that share it. */
+  entityId?: string;
 }
 
 export interface IAuditLogRepository {

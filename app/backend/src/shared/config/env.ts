@@ -28,6 +28,13 @@ const envSchema = z.object({
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./storage'),
+
+  // AI-assisted attachment extraction (2026-07-10) — local Ollama only, no cloud AI service, per
+  // CLAUDE.md "avoid unnecessary paid cloud services". `host.docker.internal` is the Docker
+  // Desktop DNS name for reaching the Windows/Mac host from inside a container; on native Linux
+  // Docker this would need `--add-host=host.docker.internal:host-gateway` or a real host IP.
+  OLLAMA_BASE_URL: z.string().default('http://host.docker.internal:11434'),
+  OLLAMA_VISION_MODEL: z.string().default('moondream'),
 });
 
 export type Env = z.infer<typeof envSchema> & {

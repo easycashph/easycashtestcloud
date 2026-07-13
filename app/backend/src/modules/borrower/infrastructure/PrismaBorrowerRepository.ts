@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { resolveClient, withTransaction } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import { Borrower, type BorrowerProps } from '../domain/Borrower';
+import { Borrower, type BorrowerDependant, type BorrowerProps } from '../domain/Borrower';
 import { PersonName } from '../domain/valueObjects/PersonName';
 import { Address } from '../domain/valueObjects/Address';
 import type { FindManyBorrowersOptions, IBorrowerRepository } from '../application/ports/IBorrowerRepository';
@@ -38,13 +38,19 @@ function toBorrower(row: BorrowerRow, addresses: Address[]): Borrower {
     name: PersonName.of(row.firstName, row.lastName, row.middleName ?? undefined),
     gender: row.gender ?? undefined,
     birthDate: row.birthDate ?? undefined,
+    placeOfBirth: row.placeOfBirth ?? undefined,
+    nationality: row.nationality ?? undefined,
     civilStatus: row.civilStatus ?? undefined,
+    homeOwnership: row.homeOwnership ?? undefined,
     mobilePhone1: row.mobilePhone1 ?? undefined,
     mobilePhone2: row.mobilePhone2 ?? undefined,
     email: row.email ?? undefined,
+    dependants: (row.dependants as BorrowerDependant[] | null) ?? undefined,
+    note: row.note ?? undefined,
     status: row.status,
     loanCycle: row.loanCycle,
     legacyId: row.legacyId ?? undefined,
+    sourceApplicationId: row.sourceApplicationId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     incomeDetail: row.incomeDetail
@@ -98,6 +104,40 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
 
     const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: id } });
     return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  async findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<Borrower | null> {
+    const client = resolveClient(ctx);
+    const row = await client.borrower.findUnique({ where: { sourceApplicationId: applicationId }, include: BORROWER_INCLUDE });
+    if (!row) {
+      return null;
+    }
+    const addressRows = await client.address.findMany({ where: { ownerType: 'BORROWER', ownerId: row.id } });
+    return toBorrower(row, addressRows.map(toAddress));
+  }
+
+  async findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<Borrower[]> {
+    if (applicationIds.length === 0) {
+      return [];
+    }
+    const client = resolveClient(ctx);
+    const rows = await client.borrower.findMany({
+      where: { sourceApplicationId: { in: applicationIds } },
+      include: BORROWER_INCLUDE,
+    });
+    if (rows.length === 0) {
+      return [];
+    }
+    const addressRows = await client.address.findMany({
+      where: { ownerType: 'BORROWER', ownerId: { in: rows.map((row) => row.id) } },
+    });
+    const addressesByOwnerId = new Map<string, Address[]>();
+    for (const addressRow of addressRows) {
+      const list = addressesByOwnerId.get(addressRow.ownerId) ?? [];
+      list.push(toAddress(addressRow));
+      addressesByOwnerId.set(addressRow.ownerId, list);
+    }
+    return rows.map((row) => toBorrower(row, addressesByOwnerId.get(row.id) ?? []));
   }
 
   /**
@@ -170,17 +210,27 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           middleName: borrower.name.middleName,
           gender: borrower.gender,
           birthDate: borrower.birthDate,
+          placeOfBirth: borrower.placeOfBirth,
+          nationality: borrower.nationality,
           civilStatus: borrower.civilStatus,
+          homeOwnership: borrower.homeOwnership,
           mobilePhone1: borrower.mobilePhone1,
           mobilePhone2: borrower.mobilePhone2,
           email: borrower.email,
+          dependants: (borrower.dependants as Prisma.InputJsonValue | undefined) ?? undefined,
+          note: borrower.note,
           status: borrower.status,
           loanCycle: borrower.loanCycle,
           legacyId: borrower.legacyId,
+          sourceApplicationId: borrower.sourceApplicationId,
           createdAt: borrower.createdAt,
           updatedAt: borrower.updatedAt,
           incomeDetail: borrower.incomeDetail ? { create: borrower.incomeDetail } : undefined,
           governmentId: borrower.governmentId ? { create: borrower.governmentId } : undefined,
+          characterReferences:
+            borrower.characterReferences.length > 0
+              ? { create: borrower.characterReferences.map(({ id: _id, ...rest }) => rest) }
+              : undefined,
         },
         update: {
           assignedLoanOfficerId: borrower.assignedLoanOfficerId,
@@ -189,10 +239,15 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           middleName: borrower.name.middleName,
           gender: borrower.gender,
           birthDate: borrower.birthDate,
+          placeOfBirth: borrower.placeOfBirth,
+          nationality: borrower.nationality,
           civilStatus: borrower.civilStatus,
+          homeOwnership: borrower.homeOwnership,
           mobilePhone1: borrower.mobilePhone1,
           mobilePhone2: borrower.mobilePhone2,
           email: borrower.email,
+          dependants: (borrower.dependants as Prisma.InputJsonValue | undefined) ?? undefined,
+          note: borrower.note,
           status: borrower.status,
           loanCycle: borrower.loanCycle,
           updatedAt: borrower.updatedAt,

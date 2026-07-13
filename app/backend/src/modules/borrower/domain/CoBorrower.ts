@@ -11,6 +11,7 @@ export interface CoBorrowerProps {
   phoneNumber?: string;
   emailAddress?: string;
   relationship?: string;
+  employer?: string;
   legacyId?: string;
   addresses: Address[];
 }
@@ -23,6 +24,7 @@ export interface CreateCoBorrowerProps {
   phoneNumber?: string;
   emailAddress?: string;
   relationship?: string;
+  employer?: string;
   legacyId?: string;
   addresses?: Address[];
 }
@@ -47,6 +49,7 @@ export class CoBorrower {
       phoneNumber: input.phoneNumber,
       emailAddress: input.emailAddress,
       relationship: input.relationship,
+      employer: input.employer,
       legacyId: input.legacyId,
       addresses: input.addresses ?? [],
     });
@@ -86,6 +89,10 @@ export class CoBorrower {
 
   get relationship(): string | undefined {
     return this.props.relationship;
+  }
+
+  get employer(): string | undefined {
+    return this.props.employer;
   }
 
   get legacyId(): string | undefined {

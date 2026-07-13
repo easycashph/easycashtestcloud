@@ -15,13 +15,13 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
+import { formatMobileNumber } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
 
-/** Matches LoanListPage's real status set — the mock data's extra 'MATURED' status doesn't exist in the real API. */
+/** Matches LoanListPage's real status set - the mock data's extra 'MATURED' status doesn't exist in the real API. */
 const REAL_ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
 type LoanPresenceFilter = 'ALL' | 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
@@ -70,11 +70,11 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  * as `LoanListPage.tsx`: no `GET /branches` endpoint yet, and every migrated record currently
  * belongs to the single seeded "HQ" branch anyway.
  *
- * Real, server-side pagination (100 rows/page, Next/Previous — see `useCursorPagination`) replaced
+ * Real, server-side pagination (100 rows/page, Next/Previous - see `useCursorPagination`) replaced
  * the earlier "load every borrower up front" approach, which was the direct cause of frontend lag.
  * Search now goes to the backend's `?search=` param (debounced) instead of filtering an
  * already-fully-loaded array. The "Loan presence" filter is the one thing that still only sees the
- * current page — it can't be pushed server-side without a new backend filter param, so it narrows
+ * current page - it can't be pushed server-side without a new backend filter param, so it narrows
  * within the 100 loaded rows rather than across the whole client base.
  */
 export function ClientListPage() {
@@ -94,7 +94,7 @@ export function ClientListPage() {
     goPrev,
   } = useCursorPagination<Borrower>(['borrowers'], '/borrowers', { search: debouncedSearch }, PAGE_SIZE);
 
-  // Still loaded in full — needed to compute the "Loans" column/filter for whichever borrowers are
+  // Still loaded in full - needed to compute the "Loans" column/filter for whichever borrowers are
   // on the current page. Loan accounts aren't yet searchable/filterable by borrowerId server-side,
   // so this stays a `fetchAllPages` call rather than being paginated itself.
   const loansQuery = useQuery({
@@ -120,10 +120,10 @@ export function ClientListPage() {
         return {
           id: b.id,
           name: b.fullName,
-          contactNumber: b.mobilePhone1 ?? '—',
-          email: b.email ?? '—',
-          employer: b.incomeDetail?.employerName ?? '—',
-          position: b.incomeDetail?.position ?? '—',
+          contactNumber: b.mobilePhone1 ?? '-',
+          email: b.email ?? '-',
+          employer: b.incomeDetail?.employerName ?? '-',
+          position: b.incomeDetail?.position ?? '-',
           loanCount: loans.length,
           hasActiveLoan: loans.some((l) => REAL_ACTIVE_LOAN_STATUSES.includes(l.status)),
         };
@@ -214,7 +214,7 @@ export function ClientListPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <p>{c.contactNumber}</p>
+                    <p>{formatMobileNumber(c.contactNumber)}</p>
                     <p className="text-xs text-muted-foreground">{c.email}</p>
                   </TableCell>
                   <TableCell className="text-sm">
@@ -254,12 +254,7 @@ export function ClientListPage() {
         </CardContent>
       </Card>
 
-      {/* 2026-07-08 (F-5 fix): real client actions (Create Client, Edit) log entityType 'Client'
-          (singular) — the page-view-only 'Client Data' filter never matched them. */}
-      <RecentActivityPanel
-        entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Client' || l.entityType === 'Client Data')}
-        title="Recent Activity — Client Data"
-      />
+      <RecentActivityPanel label="Client Data" />
     </div>
   );
 }

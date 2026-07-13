@@ -1,8 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Trash2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -15,21 +14,73 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { FieldTooltip } from '@/components/FieldTooltip';
+import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient } from '@/lib/apiClient';
+import { apiClient, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
-import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/mockData';
+import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
+import {
+  ATTACHMENT_ACCEPTED_MIME,
+  ATTACHMENT_ACCEPTED_TYPES,
+  ATTACHMENT_MAX_FILE_SIZE_BYTES,
+  DOCUMENT_CATEGORY_LABELS,
+  type AttachmentDocumentCategory,
+} from '@/lib/documentApiTypes';
+import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/staticConfig';
 import { formatPeso } from '@/lib/utils';
 
+const AI_EXTRACTION_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.docx';
+const AI_EXTRACTION_ACCEPTED_MIME = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+
 /**
- * Officer-encoded loan application intake — mirrors the company's real paper
+ * The specific documents needed to review an application - separate from the "Documents Submitted"
+ * paper-form checklist below (§Docs, ticks only, no real file). Uploaded here become real
+ * attachments tagged by category once the application exists (see createMutation's onSuccess),
+ * feeding a future risk-assessment feature that reads these by category. `showWhen` is evaluated
+ * live against the current loan type / co-borrower selection so only relevant slots are shown.
+ */
+const DOCUMENT_SLOTS: {
+  category: AttachmentDocumentCategory;
+  showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean;
+}[] = [
+  { category: 'PROFILE_PICTURE' },
+  { category: 'VALID_ID_BORROWER' },
+  { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower },
+  { category: 'PROOF_OF_BILLING' },
+  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
+  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
+  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+];
+
+/** Splits a single extracted full name into the form's separate first/middle/last inputs - a
+ * plain heuristic (first token / last token / everything between), not a name-parsing library.
+ * Always a suggestion the officer reviews, never submitted as-is without their say. */
+function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] ?? '', middleName: '', lastName: '' };
+  if (parts.length === 2) return { firstName: parts[0]!, middleName: '', lastName: parts[1]! };
+  return { firstName: parts[0]!, middleName: parts.slice(1, -1).join(' '), lastName: parts[parts.length - 1]! };
+}
+
+/**
+ * Officer-encoded loan application intake - mirrors the company's real paper
  * form "LOAN APPLICATION" (Form No. ECLC-LOFN01, Rev 02), section for section,
  * so a loan officer can encode a walk-in applicant while the public
  * application website does not exist yet. Wired to the real backend
- * (`POST /loan-applications`) — submitting creates a real PENDING_REVIEW record.
+ * (`POST /loan-applications`) - submitting creates a real record, automatically classified
+ * PREAPPROVED/PREDECLINED by the backend's LoanApplicationPreQualificationService.
  *
  * Only the fields the LMS currently models are persisted onto the record (see
  * `CreateLoanApplicationRequest`); the remaining paper-form fields are shown for
@@ -38,7 +89,7 @@ import { formatPeso } from '@/lib/utils';
 
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
 
-/** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate — only the 3 active categories are offered today. */
+/** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate - only the 3 active categories are offered today. */
 const LOAN_TYPE_OPTIONS = [
   { paperLabel: 'Salary', category: 'Salary Loan' },
   { paperLabel: 'Seaman', category: 'Seafarer Loan' },
@@ -55,10 +106,23 @@ interface DependantRow {
   relationship: string;
 }
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({
+  label,
+  children,
+  hint,
+  tooltip,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  tooltip?: string;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
+      <Label className="flex items-center gap-1 text-xs">
+        {label}
+        {tooltip && <FieldTooltip text={tooltip} />}
+      </Label>
       {children}
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
@@ -90,6 +154,58 @@ function SectionCard({
   );
 }
 
+function DocumentUploadSlot({
+  label,
+  file,
+  error,
+  onSelect,
+  onRemove,
+}: {
+  label: string;
+  file: File | null;
+  error?: string;
+  onSelect: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  return (
+    <div className="space-y-1">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ATTACHMENT_ACCEPTED_TYPES}
+        className="hidden"
+        onChange={(e) => {
+          const selected = e.target.files?.[0];
+          if (selected) onSelect(selected);
+          e.target.value = '';
+        }}
+      />
+      <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
+        <div className="min-w-0">
+          <p className="font-medium">{label}</p>
+          {file ? (
+            <p className="truncate text-muted-foreground">{file.name}</p>
+          ) : (
+            <p className="text-muted-foreground">No file selected</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {file && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={onRemove}>
+              Remove
+            </Button>
+          )}
+          <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => inputRef.current?.click()}>
+            <Upload className="mr-1.5 h-3 w-3" /> {file ? 'Replace' : 'Upload'}
+          </Button>
+        </div>
+      </div>
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function computeAge(dateOfBirth: string): number | null {
   if (!dateOfBirth) return null;
   const dob = new Date(dateOfBirth);
@@ -106,16 +222,16 @@ export function LoanApplicationCreatePage() {
   const { canAccessLoanApplications, currentAccount } = useRole();
   useLogPageView('Loan Applications', 'create-application-form');
 
-  // §1 — referral
+  // §1 - referral
   const [referralSource, setReferralSource] = React.useState('Walk-in');
   const [referralDetail, setReferralDetail] = React.useState('');
-  // §2 — loan information
+  // §2 - loan information
   const [accountType, setAccountType] = React.useState<'NEW' | 'RENEWAL'>('NEW');
   const [loanCategory, setLoanCategory] = React.useState('');
   const [requestedAmount, setRequestedAmount] = React.useState('');
   const [requestedTermMonths, setRequestedTermMonths] = React.useState('');
   const [loanPurpose, setLoanPurpose] = React.useState('');
-  // §3 — personal information
+  // §3 - personal information
   const [firstName, setFirstName] = React.useState('');
   const [middleName, setMiddleName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
@@ -125,61 +241,129 @@ export function LoanApplicationCreatePage() {
   const [nationality, setNationality] = React.useState('Filipino');
   const [dateOfBirth, setDateOfBirth] = React.useState('');
   const [placeOfBirth, setPlaceOfBirth] = React.useState('');
-  const [presentAddress, setPresentAddress] = React.useState('');
+  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
+  const [aiSuggestedAddress, setAiSuggestedAddress] = React.useState<string | null>(null);
   const [homeOwnership, setHomeOwnership] = React.useState('');
   const [mobileNo, setMobileNo] = React.useState('');
   const [email, setEmail] = React.useState('');
-  // §4 — employment
+  // §4 - employment
   const [employer, setEmployer] = React.useState('');
   const [occupation, setOccupation] = React.useState('');
   const [officeAddress, setOfficeAddress] = React.useState('');
   const [tin, setTin] = React.useState('');
   const [sss, setSss] = React.useState('');
-  // §5 — dependants
+  // §5 - dependants
   const [dependants, setDependants] = React.useState<DependantRow[]>([]);
-  // §6 — spouse
+  // §6 - spouse
   const [spouseName, setSpouseName] = React.useState('');
   const [spouseEmployer, setSpouseEmployer] = React.useState('');
-  // §7/§8 — co-borrower
+  // §7/§8 - co-borrower
   const [hasCoBorrower, setHasCoBorrower] = React.useState(false);
   const [coBorrowerName, setCoBorrowerName] = React.useState('');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState('');
   const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState('');
-  // §9 — character references
+  // §9 - character references
   const [reference1, setReference1] = React.useState({ name: '', mobile: '' });
   const [reference2, setReference2] = React.useState({ name: '', mobile: '' });
-  // LMS verification inputs (not on the paper form)
-  const [monthlyIncome, setMonthlyIncome] = React.useState('');
-  const [creditScore, setCreditScore] = React.useState('');
-  const [propertiesOwned, setPropertiesOwned] = React.useState('');
-  // Documents submitted
+  const [note, setNote] = React.useState('');
+  // Documents submitted (paper-form checklist - ticks only, see §Docs below)
   const [documents, setDocuments] = React.useState<Set<string>>(new Set());
+  // Applicant Documents - real files, saved as categorized attachments once the application exists.
+  const [documentFiles, setDocumentFiles] = React.useState<Partial<Record<AttachmentDocumentCategory, File>>>({});
+  const [documentFileErrors, setDocumentFileErrors] = React.useState<Partial<Record<AttachmentDocumentCategory, string>>>({});
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  if (!canAccessLoanApplications) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Create Loan Application</h2>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <Lock className="h-6 w-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Restricted to MIS, Loan Operation Manager, and CRM accounts</p>
-            <p className="text-sm text-muted-foreground">
-              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  // AI auto-fill - local Ollama (moondream) only, never a cloud service. Ephemeral: the uploaded
+  // file is sent for extraction only, never saved here (see aiExtractionRouter.ts's doc comment).
+  const aiFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [aiError, setAiError] = React.useState<string | null>(null);
+  const [aiFilledFieldLabels, setAiFilledFieldLabels] = React.useState<string[]>([]);
+  // Retained only after a successful extraction, so it can be auto-saved as a real attachment once
+  // the application record (and a real ownerId) exists - see createMutation's onSuccess below.
+  const [aiExtractedFile, setAiExtractedFile] = React.useState<File | null>(null);
+  const extractMutation = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return uploadFile<ExtractedLoanApplicationFields>('/ai-extraction/loan-application-fields', formData);
+    },
+    onSuccess: (result, file) => {
+      setAiExtractedFile(file);
+      const filled: string[] = [];
+      if (result.applicantName && !firstName.trim() && !lastName.trim()) {
+        const parsed = splitFullName(result.applicantName);
+        setFirstName(parsed.firstName);
+        setMiddleName(parsed.middleName);
+        setLastName(parsed.lastName);
+        filled.push('Name');
+      }
+      if (result.address && !presentAddress.trim()) {
+        // Free-text from the AI can't be mapped into the cascading region/province/city/barangay
+        // picker below (no reverse PSGC name lookup - same limitation as `PsgcAddressPicker`'s own
+        // doc comment) - surfaced as a suggestion for the officer to select manually instead.
+        setAiSuggestedAddress(result.address);
+        filled.push('Present address (as a suggestion below - select it manually)');
+      }
+      if (result.employer && !employer.trim()) {
+        setEmployer(result.employer);
+        filled.push('Employer');
+      }
+      setAiFilledFieldLabels(filled);
+      setAiError(null);
+    },
+    onError: (error) => {
+      setAiExtractedFile(null);
+      setAiError(error instanceof Error ? error.message : 'Could not process this file.');
+      setAiFilledFieldLabels([]);
+    },
+  });
+
+  const handleAiFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAiError(null);
+    setAiExtractedFile(null);
+    if (!AI_EXTRACTION_ACCEPTED_MIME.has(file.type)) {
+      setAiError('Unsupported file type. Allowed: PDF, JPEG, PNG, DOCX.');
+      if (aiFileInputRef.current) aiFileInputRef.current.value = '';
+      return;
+    }
+    extractMutation.mutate(file);
+  };
+
+  const handleDocumentFileSelected = (category: AttachmentDocumentCategory, file: File) => {
+    if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
+      setDocumentFileErrors((prev) => ({ ...prev, [category]: 'Unsupported file type. Allowed: PDF, JPEG, PNG.' }));
+      return;
+    }
+    if (file.size > ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+      setDocumentFileErrors((prev) => ({
+        ...prev,
+        [category]: `File exceeds the ${ATTACHMENT_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit.`,
+      }));
+      return;
+    }
+    setDocumentFileErrors((prev) => ({ ...prev, [category]: undefined }));
+    setDocumentFiles((prev) => ({ ...prev, [category]: file }));
+  };
+
+  const handleRemoveDocumentFile = (category: AttachmentDocumentCategory) => {
+    setDocumentFiles((prev) => {
+      const next = { ...prev };
+      delete next[category];
+      return next;
+    });
+    setDocumentFileErrors((prev) => ({ ...prev, [category]: undefined }));
+  };
 
   const age = computeAge(dateOfBirth);
+  const presentAddress = [addressDraft.houseUnitNumber, addressDraft.street, addressDraft.barangay, addressDraft.cityMunicipality, addressDraft.province]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(', ');
   const applicantName = [firstName, middleName, lastName].map((p) => p.trim()).filter(Boolean).join(' ');
   const amount = Number(requestedAmount);
   const term = Number(requestedTermMonths);
-  const income = Number(monthlyIncome);
 
   const missing: string[] = [];
   if (!firstName.trim() || !lastName.trim()) missing.push('Applicant first and last name (§3)');
@@ -189,8 +373,9 @@ export function LoanApplicationCreatePage() {
   if (!(amount > 0)) missing.push('Desired loan amount (§2)');
   if (!(term > 0)) missing.push('Loan term in months (§2)');
   if (!employer.trim()) missing.push('Name of employer (§4)');
-  if (!(income > 0)) missing.push('Monthly income (LMS verification)');
   const canSubmit = missing.length === 0;
+
+  const visibleDocumentSlots = DOCUMENT_SLOTS.filter((slot) => !slot.showWhen || slot.showWhen({ loanCategory, hasCoBorrower }));
 
   const toggleDocument = (name: string) => {
     setDocuments((prev) => {
@@ -207,32 +392,103 @@ export function LoanApplicationCreatePage() {
         branchId: currentAccount.branchId,
         applicantName,
         age: age ?? undefined,
+        gender: gender || undefined,
+        civilStatus: civilStatus || undefined,
+        birthDate: dateOfBirth || undefined,
+        placeOfBirth: placeOfBirth.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        homeOwnership: homeOwnership || undefined,
         address: presentAddress.trim() || undefined,
-        monthlyIncome: income > 0 ? income : undefined,
         employer: employer.trim() || undefined,
-        propertiesOwned: propertiesOwned
-          .split(',')
-          .map((p) => p.trim())
-          .filter(Boolean),
-        creditScore: Number(creditScore) || undefined,
+        occupation: occupation.trim() || undefined,
+        officeAddress: officeAddress.trim() || undefined,
+        tinNumber: tin.trim() || undefined,
+        sssNumber: sss.trim() || undefined,
+        mobilePhone: mobileNo.trim() || undefined,
+        email: email.trim() || undefined,
+        dependants: dependants
+          .filter((d) => d.name.trim())
+          .map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined })),
         coBorrowerName:
           hasCoBorrower && coBorrowerName.trim()
             ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
             : undefined,
+        coBorrowerEmployer: hasCoBorrower && coBorrowerEmployer.trim() ? coBorrowerEmployer.trim() : undefined,
+        reference1Name: reference1.name.trim() || undefined,
+        reference1Mobile: reference1.mobile.trim() || undefined,
+        reference2Name: reference2.name.trim() || undefined,
+        reference2Mobile: reference2.mobile.trim() || undefined,
+        note: note.trim() || undefined,
         requestedCategory: loanCategory,
         requestedAmount: amount,
         requestedTermMonths: term,
-        referralSource: referralDetail.trim() ? `${referralSource} — ${referralDetail.trim()}` : referralSource,
+        referralSource: referralDetail.trim() ? `${referralSource} - ${referralDetail.trim()}` : referralSource,
         accountType,
         loanPurpose: loanPurpose.trim() || undefined,
         submittedDocuments: [...documents],
       } satisfies CreateLoanApplicationRequest),
-    onSuccess: (application) => {
-      navigate(`/applications/${application.id}`, { replace: true });
+    onSuccess: async (application) => {
+      // Best-effort: auto-save the AI Auto-fill upload and every Applicant Document slot as real
+      // attachments now that a real ownerId exists. Deliberately not allowed to affect
+      // createMutation's own success/error state - the application has already been created and
+      // must not be blocked or rolled back by an attachment-save failure (e.g. a .docx extraction
+      // file, which passes the broader AI Auto-fill whitelist but not /attachments' pdf/jpeg/png-only
+      // whitelist). `Promise.allSettled` so one failed upload doesn't stop the others.
+      const pendingUploads: { file: File; category?: AttachmentDocumentCategory; label: string }[] = [];
+      if (aiExtractedFile) pendingUploads.push({ file: aiExtractedFile, label: 'AI Auto-fill document' });
+      for (const [category, file] of Object.entries(documentFiles) as [AttachmentDocumentCategory, File][]) {
+        pendingUploads.push({ file, category, label: DOCUMENT_CATEGORY_LABELS[category] });
+      }
+
+      if (pendingUploads.length === 0) {
+        navigate(`/applications/${application.id}`, { replace: true });
+        return;
+      }
+
+      const results = await Promise.allSettled(
+        pendingUploads.map(({ file, category }) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('ownerType', 'LOAN_APPLICATION');
+          formData.append('ownerId', application.id);
+          if (category) formData.append('documentCategory', category);
+          return uploadFile('/attachments', formData);
+        }),
+      );
+      const failedLabels = pendingUploads.filter((_, i) => results[i]!.status === 'rejected').map((u) => u.label);
+
+      navigate(`/applications/${application.id}`, {
+        replace: true,
+        state: failedLabels.length > 0 ? { failedDocumentLabels: failedLabels } : undefined,
+      });
     },
   });
 
   const submit = () => createMutation.mutate();
+
+  // Access gate placed after every hook above (React Hooks rules: never return early before a
+  // hook call) - was previously above the createMutation useMutation() call, a real
+  // rules-of-hooks violation, not just a lint nag.
+  if (!canAccessLoanApplications) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <Lock className="h-6 w-6 text-muted-foreground" />
+            <p className="text-sm font-medium">
+              Restricted to <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, and <RoleAbbr role="CRM" /> accounts
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -242,18 +498,82 @@ export function LoanApplicationCreatePage() {
         </Button>
         <div className="flex items-center gap-2">
           <FilePlus2 className="h-5 w-5 text-primary" />
-          <h2 className="text-2xl font-semibold tracking-tight">Create Loan Application</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          For walk-in applicants — the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
-          (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only — do not enter real client information
+          For walk-in applicants - the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
+          (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only - do not enter real client information
           in this preview build.
         </p>
       </div>
 
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="h-4 w-4 text-primary" /> AI Auto-fill (optional)
+          </CardTitle>
+          <CardDescription>
+            Upload the applicant&apos;s ID, payslip, or other supporting document - a local AI model reads it and suggests values for
+            the fields below. It only fills fields you haven&apos;t already typed into, and never submits anything on its own - always
+            double-check before submitting. PDF/DOCX support requires text-based files (not scanned images).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {aiError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {aiError}
+            </div>
+          )}
+          {extractMutation.isSuccess && !aiError && (
+            <div className="space-y-1.5 rounded-md border border-primary/30 bg-background p-3 text-xs">
+              <p className="text-muted-foreground">{extractMutation.data.summary}</p>
+              {extractMutation.data.age !== undefined && (
+                <p className="text-muted-foreground">Extracted age: {extractMutation.data.age} (set the exact Date of Birth below manually).</p>
+              )}
+              {aiFilledFieldLabels.length > 0 ? (
+                <p className="font-medium text-primary">AI-suggested - please verify: {aiFilledFieldLabels.join(', ')}.</p>
+              ) : (
+                <p className="text-muted-foreground">No empty fields were filled (either nothing was confidently readable, or the fields were already filled in).</p>
+              )}
+              {extractMutation.data.warnings.map((w) => (
+                <p key={w} className="text-warning">{w}</p>
+              ))}
+              {aiExtractedFile && (
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <p className="text-muted-foreground">
+                    This document will be saved as an attachment once the application is created.
+                  </p>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setAiExtractedFile(null)}>
+                    Remove
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+          <input
+            ref={aiFileInputRef}
+            type="file"
+            accept={AI_EXTRACTION_ACCEPTED_TYPES}
+            className="hidden"
+            onChange={handleAiFileSelected}
+            disabled={extractMutation.isPending}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={extractMutation.isPending}
+            onClick={() => aiFileInputRef.current?.click()}
+          >
+            {extractMutation.isPending ? <Sparkles className="mr-2 h-3.5 w-3.5 animate-pulse" /> : <Upload className="mr-2 h-3.5 w-3.5" />}
+            {extractMutation.isPending ? 'Reading document…' : 'Upload & auto-fill'}
+          </Button>
+        </CardContent>
+      </Card>
+
       <SectionCard number="1" title="How did you find out about Easycash?">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Source">
+          <Field label="Source" tooltip="How the applicant learned about Easycash - used for referral tracking.">
             <Select value={referralSource} onValueChange={setReferralSource}>
               <SelectTrigger>
                 <SelectValue />
@@ -268,7 +588,7 @@ export function LoanApplicationCreatePage() {
             </Select>
           </Field>
           {(referralSource === 'Agent/Referral' || referralSource === 'Others') && (
-            <Field label={referralSource === 'Agent/Referral' ? 'Agent / referrer name' : 'Please specify'}>
+            <Field label={referralSource === 'Agent/Referral' ? 'Agent / referrer name' : 'Please specify'} tooltip="Name of the agent, employee, or person who referred this applicant.">
               <Input value={referralDetail} onChange={(e) => setReferralDetail(e.target.value)} />
             </Field>
           )}
@@ -277,7 +597,7 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="2" title="Loan Information">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Type of account">
+          <Field label="Type of account" tooltip="Is this the applicant's first loan with Easycash, or a renewal/existing account?">
             <Select value={accountType} onValueChange={(v) => setAccountType(v as 'NEW' | 'RENEWAL')}>
               <SelectTrigger>
                 <SelectValue />
@@ -290,7 +610,7 @@ export function LoanApplicationCreatePage() {
           </Field>
           <Field
             label="Type of loan *"
-            hint="The paper form also lists OFW, Car, and Real Estate — not currently offered products."
+            hint="The paper form also lists OFW, Car, and Real Estate - not currently offered products."
           >
             <Select value={loanCategory} onValueChange={setLoanCategory}>
               <SelectTrigger>
@@ -305,15 +625,15 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Desired loan amount (₱) *">
+          <Field label="Desired loan amount (₱) *" tooltip="The peso amount the applicant is requesting to borrow.">
             <Input type="number" min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
           </Field>
-          <Field label="Preferred loan term (months) *">
+          <Field label="Preferred loan term (months) *" tooltip="How many months the applicant wants to repay the loan over.">
             <Input type="number" min="1" max="36" value={requestedTermMonths} onChange={(e) => setRequestedTermMonths(e.target.value)} />
           </Field>
         </div>
         <div className="mt-3">
-          <Field label="What is the loan purpose?">
+          <Field label="What is the loan purpose?" tooltip="Brief reason the applicant is borrowing (e.g. tuition, medical, business capital).">
             <Textarea rows={2} value={loanPurpose} onChange={(e) => setLoanPurpose(e.target.value)} />
           </Field>
         </div>
@@ -321,19 +641,19 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="3" title="Personal Information">
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="First name *">
+          <Field label="First name *" tooltip="Applicant's legal first name, as shown on a valid ID.">
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
           </Field>
-          <Field label="Middle name">
+          <Field label="Middle name" tooltip="Applicant's legal middle name, if any.">
             <Input value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
           </Field>
-          <Field label="Last name *">
+          <Field label="Last name *" tooltip="Applicant's legal surname, as shown on a valid ID.">
             <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </Field>
-          <Field label="Nickname">
+          <Field label="Nickname" tooltip="Optional - what the applicant is commonly called.">
             <Input value={nickname} onChange={(e) => setNickname(e.target.value)} />
           </Field>
-          <Field label="Gender">
+          <Field label="Gender" tooltip="Applicant's gender, as shown on a valid ID.">
             <Select value={gender} onValueChange={setGender}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -347,7 +667,7 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Civil status">
+          <Field label="Civil status" tooltip="Applicant's current civil status (Single, Married, Widower, Separated).">
             <Select value={civilStatus} onValueChange={setCivilStatus}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -361,27 +681,29 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Date of birth *" hint={age !== null ? `Age: ${age}` : undefined}>
+          <Field label="Date of birth *" hint={age !== null ? `Age: ${age}` : undefined} tooltip="Used to compute age and check loan eligibility (18-55 years old).">
             <Input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
           </Field>
-          <Field label="Place of birth">
+          <Field label="Place of birth" tooltip="City/municipality where the applicant was born.">
             <Input value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} />
           </Field>
-          <Field label="Nationality">
+          <Field label="Nationality" tooltip="Applicant's citizenship.">
             <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </Field>
         </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Field label="Present address *">
-              <Input
-                placeholder="House/Unit No., Street, Barangay, City/Municipality"
-                value={presentAddress}
-                onChange={(e) => setPresentAddress(e.target.value)}
-              />
-            </Field>
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Present address *</Label>
+            {aiSuggestedAddress && (
+              <p className="text-[11px] text-primary">
+                AI-suggested (from the uploaded document, verify and select manually): {aiSuggestedAddress}
+              </p>
+            )}
+            <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
           </div>
-          <Field label="Home ownership">
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Home ownership" tooltip="Whether the applicant owns, rents, or has another arrangement for their home.">
             <Select value={homeOwnership} onValueChange={setHomeOwnership}>
               <SelectTrigger>
                 <SelectValue placeholder="Select" />
@@ -395,11 +717,11 @@ export function LoanApplicationCreatePage() {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Mobile no.">
-            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} />
+          <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
+            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Email address">
+            <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
           </div>
@@ -412,21 +734,21 @@ export function LoanApplicationCreatePage() {
         description="Skip if the applicant is unemployed, self-employed, or retired (per the paper form)."
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name of employer *">
+          <Field label="Name of employer *" tooltip="Applicant's current employer or business name.">
             <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
           </Field>
-          <Field label="Occupation">
+          <Field label="Occupation" tooltip="Applicant's job title or role.">
             <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Office address">
+            <Field label="Office address" tooltip="Address of the applicant's workplace.">
               <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
             </Field>
           </div>
-          <Field label="TIN">
+          <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
             <Input value={tin} onChange={(e) => setTin(e.target.value)} />
           </Field>
-          <Field label="SSS no.">
+          <Field label="SSS no." tooltip="Applicant's Social Security System number, if available.">
             <Input value={sss} onChange={(e) => setSss(e.target.value)} />
           </Field>
         </div>
@@ -437,7 +759,7 @@ export function LoanApplicationCreatePage() {
           {dependants.map((row, i) => (
             <div key={i} className="flex flex-wrap items-end gap-2">
               <div className="min-w-40 flex-1">
-                <Field label="Name">
+                <Field label="Name" tooltip="Dependant's full name.">
                   <Input
                     value={row.name}
                     onChange={(e) => setDependants((prev) => prev.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
@@ -445,7 +767,7 @@ export function LoanApplicationCreatePage() {
                 </Field>
               </div>
               <div className="w-20">
-                <Field label="Age">
+                <Field label="Age" tooltip="Dependant's age.">
                   <Input
                     type="number"
                     value={row.age}
@@ -454,7 +776,7 @@ export function LoanApplicationCreatePage() {
                 </Field>
               </div>
               <div className="w-36">
-                <Field label="Relationship">
+                <Field label="Relationship" tooltip="Dependant's relationship to the applicant (e.g. child, parent).">
                   <Input
                     value={row.relationship}
                     onChange={(e) =>
@@ -481,10 +803,10 @@ export function LoanApplicationCreatePage() {
           description="Shown because civil status is Married (the paper form skips this for single/widower/separated)."
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Spouse full name">
+            <Field label="Spouse full name" tooltip="Full name of the applicant's spouse, if married.">
               <Input value={spouseName} onChange={(e) => setSpouseName(e.target.value)} />
             </Field>
-            <Field label="Spouse employer / occupation">
+            <Field label="Spouse employer / occupation" tooltip="Where the applicant's spouse works and their role.">
               <Input value={spouseEmployer} onChange={(e) => setSpouseEmployer(e.target.value)} />
             </Field>
           </div>
@@ -503,13 +825,13 @@ export function LoanApplicationCreatePage() {
         </label>
         {hasCoBorrower && (
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Field label="Co-borrower full name">
+            <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
               <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
             </Field>
-            <Field label="Relationship to applicant">
+            <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
               <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
             </Field>
-            <Field label="Co-borrower employer">
+            <Field label="Co-borrower employer" tooltip="Where the co-borrower works.">
               <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
             </Field>
           </div>
@@ -518,43 +840,50 @@ export function LoanApplicationCreatePage() {
 
       <SectionCard number="9" title="Character References">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="1st reference — full name">
+          <Field label="1st reference - full name" tooltip="A character reference the branch can contact - not a co-borrower.">
             <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value }))} />
           </Field>
-          <Field label="1st reference — mobile no.">
-            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} />
+          <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
+            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
-          <Field label="2nd reference — full name">
+          <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
             <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value }))} />
           </Field>
-          <Field label="2nd reference — mobile no.">
-            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} />
+          <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
+            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
         </div>
       </SectionCard>
 
-      <SectionCard
-        number="LMS"
-        title="Verification Inputs"
-        description="Not part of the paper form — encoded by the officer from supporting documents (payslip, CB Credit Bureau Report) to feed the LMS qualification factors."
-      >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Monthly income (₱) *">
-            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
-          </Field>
-          <Field label="Credit score (from CB report)">
-            <Input type="number" min="0" max="1000" value={creditScore} onChange={(e) => setCreditScore(e.target.value)} />
-          </Field>
-          <Field label="Properties owned" hint="Comma-separated, e.g. Residential lot — Antipolo City">
-            <Input value={propertiesOwned} onChange={(e) => setPropertiesOwned(e.target.value)} />
-          </Field>
-        </div>
+      <SectionCard number="10" title="Note" description="Anything else worth recording that doesn't have its own field above - carried over to the Client Profile if this application is later approved and converted.">
+        <Field label="Note">
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Optional - extra information for this application/client" />
+        </Field>
       </SectionCard>
 
       <SectionCard
         number="Docs"
+        title="Applicant Documents"
+        description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          {visibleDocumentSlots.map(({ category }) => (
+            <DocumentUploadSlot
+              key={category}
+              label={DOCUMENT_CATEGORY_LABELS[category]}
+              file={documentFiles[category] ?? null}
+              error={documentFileErrors[category]}
+              onSelect={(file) => handleDocumentFileSelected(category, file)}
+              onRemove={() => handleRemoveDocumentFile(category)}
+            />
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        number="Docs (paper form)"
         title="Documents Submitted"
-        description="Tick the documents the applicant submitted with the paper form. Preview build: file names/metadata only — no real upload happens."
+        description="Tick the documents the applicant submitted with the paper form. Preview build: file names/metadata only - no real upload happens."
       >
         <div className="grid gap-2 sm:grid-cols-2">
           {INTAKE_DOCUMENT_OPTIONS.map((doc) => (
@@ -584,10 +913,11 @@ export function LoanApplicationCreatePage() {
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Preview build: only the fields the LMS models today (name, age, address, employment, income, credit score, properties,
-            co-borrower, requested loan, documents) are saved onto the sample application record. Dependants, spouse details, TIN/SSS,
-            and character references are captured on the paper form itself and are not yet stored by this preview. The applicant signs
-            the Undertaking on the printed form — no signature is captured here.
+            Preview build: only the fields the LMS models today (name, age, address, mobile no., email, employment, co-borrower,
+            requested loan, documents) are saved onto the sample application record. Monthly income, credit score, and properties
+            owned are now recorded after creation, on the application's Risk Management Summary. Dependants, spouse details,
+            TIN/SSS, and character references are captured on the paper form itself and are not yet stored by this preview. The
+            applicant signs the Undertaking on the printed form - no signature is captured here.
           </p>
           {createMutation.isError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -597,7 +927,7 @@ export function LoanApplicationCreatePage() {
           )}
           <div className="flex items-center gap-2">
             <Button disabled={!canSubmit || createMutation.isPending} onClick={() => setConfirmOpen(true)}>
-              <FilePlus2 className="mr-2 h-4 w-4" /> Create Application
+              <FilePlus2 className="mr-2 h-4 w-4" /> Confirm
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
               Cancel
@@ -611,12 +941,9 @@ export function LoanApplicationCreatePage() {
           <DialogHeader>
             <DialogTitle>Create this loan application?</DialogTitle>
             <DialogDescription>
-              {applicantName || 'Applicant'} — {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
-              {term > 0 ? `${term} months` : 'no term'}. It will enter the queue as{' '}
-              <Badge variant="warning" className="align-middle">
-                PENDING REVIEW
-              </Badge>{' '}
-              encoded by {currentAccount.name}.
+              {applicantName || 'Applicant'} - {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
+              {term > 0 ? `${term} months` : 'no term'}. The system will automatically classify this application as pre-approved or
+              pre-declined based on age, income, and address once created, encoded by {currentAccount.name}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -629,7 +956,7 @@ export function LoanApplicationCreatePage() {
                 submit();
               }}
             >
-              Confirm — Create Application
+              Create Loan Applicant Profile
             </Button>
           </DialogFooter>
         </DialogContent>

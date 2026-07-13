@@ -10,7 +10,7 @@ export interface SortState {
 /**
  * Generic client-side column sort for the mock LMS tables. Not a real
  * server-side sort (there is no backend HTTP API exposed to these preview
- * screens yet — see CP13's own scope note) — this sorts whatever
+ * screens yet - see CP13's own scope note) - this sorts whatever
  * already-filtered array the page passes in.
  *
  * Date columns (per the standing requirement: any Date column always

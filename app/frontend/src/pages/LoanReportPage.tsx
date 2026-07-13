@@ -12,7 +12,6 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { OriginationReportRow, ReportGranularity } from '@/lib/reportApiTypes';
-import { MOCK_ACTIVITY_LOGS } from '@/lib/mockData';
 import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
 function getSortValue(row: OriginationReportRow, key: string): string | number | Date | null | undefined {
@@ -185,7 +184,7 @@ function PeriodLoanReport({ granularity, from }: { granularity: 'MONTHLY' | 'YEA
   );
 }
 
-/** Wired to the real backend (`GET /reports/loan-origination`) — branch scoping is automatic from the signed-in session (MIS sees every branch, everyone else sees their own), matching Dashboard/Payment Reminders rather than offering a manual branch picker. */
+/** Wired to the real backend (`GET /reports/loan-origination`) - branch scoping is automatic from the signed-in session (MIS sees every branch, everyone else sees their own), matching Dashboard/Payment Reminders rather than offering a manual branch picker. */
 export function LoanReportPage() {
   useLogPageView('Loan Report');
   const twelveMonthsAgo = React.useMemo(() => isoDate(new Date(Date.now() - 365 * 86_400_000)), []);
@@ -223,7 +222,7 @@ export function LoanReportPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel entries={MOCK_ACTIVITY_LOGS.filter((l) => l.entityType === 'Loan Report')} title="Recent Activity — Loan Report" />
+      <RecentActivityPanel label="Loan Report" />
     </div>
   );
 }

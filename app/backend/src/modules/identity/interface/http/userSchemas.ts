@@ -10,6 +10,8 @@ export const createUserSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   roleNames: z.array(z.enum(LMS_ROLE_NAMES)).min(1),
+  companyId: z.string().min(1).optional(),
+  roleClassId: z.string().uuid().optional(),
 });
 
 export type CreateUserRequestBody = z.infer<typeof createUserSchema>;
@@ -20,6 +22,10 @@ export const updateUserSchema = z.object({
   branchId: z.string().uuid().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'SUSPENDED']).optional(),
   roleNames: z.array(z.enum(LMS_ROLE_NAMES)).min(1).optional(),
+  companyId: z.string().min(1).optional(),
+  roleClassId: z.string().uuid().nullable().optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(1).optional(),
 });
 
 export type UpdateUserRequestBody = z.infer<typeof updateUserSchema>;

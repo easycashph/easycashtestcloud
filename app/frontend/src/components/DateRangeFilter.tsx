@@ -6,12 +6,7 @@ export interface DateRange {
   to: string;
 }
 
-/**
- * Real, working date-range control — filters an already-precomputed mock
- * dataset client-side (see `src/lib/mockData.ts`'s `DAILY_REPORT_ROWS`).
- * Does not call any backend; the "period" it selects over is fixed sample
- * data, per this checkpoint's interactivity requirement.
- */
+/** Real, working date-range control, used by the Dashboard and Loan/Collection/Transaction report pages. */
 export function DateRangeFilter({ value, onChange }: { value: DateRange; onChange: (next: DateRange) => void }) {
   return (
     <div className="flex flex-wrap items-end gap-3">

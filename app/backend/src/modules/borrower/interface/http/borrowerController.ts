@@ -1,12 +1,14 @@
 import type { NextFunction, Request, Response } from 'express';
 import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
+import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { CreateBorrowerUseCase } from '../../application/use-cases/CreateBorrowerUseCase';
 import type { GetBorrowerUseCase } from '../../application/use-cases/GetBorrowerUseCase';
 import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorrowersUseCase';
 import type { UpdateBorrowerUseCase } from '../../application/use-cases/UpdateBorrowerUseCase';
 import type { CreateCoBorrowerUseCase } from '../../application/use-cases/CreateCoBorrowerUseCase';
 import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorrowerUseCase';
+import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
 import type { CreateBorrowerRequestBody, CreateCoBorrowerRequestBody, UpdateBorrowerRequestBody } from './borrowerSchemas';
 import { presentBorrower, presentCoBorrower } from './presenters/BorrowerPresenter';
 
@@ -17,6 +19,7 @@ export interface BorrowerControllerDeps {
   updateBorrowerUseCase: UpdateBorrowerUseCase;
   createCoBorrowerUseCase: CreateCoBorrowerUseCase;
   getCoBorrowerUseCase: GetCoBorrowerUseCase;
+  getBorrowerRiskSummaryUseCase: GetBorrowerRiskSummaryUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture), matching AuthController's shape. */
@@ -31,7 +34,8 @@ export class BorrowerController {
       // requested branchId is trusted as-is.
       const scope = resolveBranchScope(req);
       const branchId = resolveWriteBranchId(scope, body.branchId);
-      const borrower = await this.deps.createBorrowerUseCase.execute({ ...body, branchId });
+      const currentUser = getCurrentUser(req);
+      const borrower = await this.deps.createBorrowerUseCase.execute({ ...body, branchId }, currentUser.sub);
       res.status(201).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
@@ -67,7 +71,7 @@ export class BorrowerController {
       const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId); // H-1: reject cross-branch writes for non-global roles.
       const body = req.body as UpdateBorrowerRequestBody;
-      const borrower = await this.deps.updateBorrowerUseCase.execute(req.params.id as string, body);
+      const borrower = await this.deps.updateBorrowerUseCase.execute(req.params.id as string, body, req.authUser?.sub);
       res.status(200).json(presentBorrower(borrower));
     } catch (error) {
       next(error);
@@ -77,7 +81,8 @@ export class BorrowerController {
   createCoBorrower = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as CreateCoBorrowerRequestBody;
-      const coBorrower = await this.deps.createCoBorrowerUseCase.execute(body);
+      const currentUser = getCurrentUser(req);
+      const coBorrower = await this.deps.createCoBorrowerUseCase.execute(body, currentUser.sub);
       res.status(201).json(presentCoBorrower(coBorrower));
     } catch (error) {
       next(error);
@@ -88,6 +93,18 @@ export class BorrowerController {
     try {
       const coBorrower = await this.deps.getCoBorrowerUseCase.execute(req.params.id as string);
       res.status(200).json(presentCoBorrower(coBorrower));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  riskSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const summary = await this.deps.getBorrowerRiskSummaryUseCase.execute(req.params.id as string);
+      res.status(200).json(summary);
     } catch (error) {
       next(error);
     }

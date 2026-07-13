@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@shared/http/pagination';
+import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { ListUsersUseCase } from '../../application/use-cases/ListUsersUseCase';
 import type { CreateUserUseCase } from '../../application/use-cases/CreateUserUseCase';
 import type { UpdateUserUseCase } from '../../application/use-cases/UpdateUserUseCase';
@@ -30,7 +31,8 @@ export class UserController {
   create = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as CreateUserRequestBody;
-      const user = await this.deps.createUserUseCase.execute(body);
+      const currentUser = getCurrentUser(req);
+      const user = await this.deps.createUserUseCase.execute(body, currentUser.sub);
       res.status(201).json(presentUser(user));
     } catch (error) {
       next(error);
@@ -40,7 +42,8 @@ export class UserController {
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = req.body as UpdateUserRequestBody;
-      const user = await this.deps.updateUserUseCase.execute(req.params.id as string, body);
+      const currentUser = getCurrentUser(req);
+      const user = await this.deps.updateUserUseCase.execute(req.params.id as string, body, currentUser.sub);
       res.status(200).json(presentUser(user));
     } catch (error) {
       next(error);

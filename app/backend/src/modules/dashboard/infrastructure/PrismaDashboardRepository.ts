@@ -15,8 +15,9 @@ export class PrismaDashboardRepository implements IDashboardRepository {
   async getSummary(branchId: string | undefined): Promise<DashboardSummary> {
     const branchFilter = branchId ? { branchId } : {};
     const now = new Date();
+    const forecastMonths = nextFourMonthRanges();
 
-    const [activeAgg, overdueLoans, collectionsAgg, collectionsSameWindowLastMonthAgg, byProductGroups] = await Promise.all([
+    const [activeAgg, overdueLoans, collectionsAgg, collectionsSameWindowLastMonthAgg, byProductGroups, forecastAggs] = await Promise.all([
       prisma.loanAccount.aggregate({
         where: { ...branchFilter, status: { in: [...ACTIVE_STATUSES] } },
         _count: true,
@@ -41,6 +42,17 @@ export class PrismaDashboardRepository implements IDashboardRepository {
         _count: true,
         _sum: { principalBalance: true },
       }),
+      Promise.all(
+        forecastMonths.map((range) =>
+          prisma.repaymentSchedule.aggregate({
+            where: {
+              dueDate: { gte: range.start, lt: range.end },
+              loanAccount: { status: { in: [...ACTIVE_STATUSES] }, ...branchFilter },
+            },
+            _sum: { principalDue: true, interestDue: true },
+          }),
+        ),
+      ),
     ]);
 
     const overdueAgg = await prisma.loanAccount.aggregate({
@@ -98,6 +110,14 @@ export class PrismaDashboardRepository implements IDashboardRepository {
         ...p,
         outstandingPrincipalBalance: p.outstandingPrincipalBalance.toString(),
       })),
+      collectionsForecast: forecastMonths.map((range, i) => {
+        const agg = forecastAggs[i];
+        return {
+          month: MONTH_ABBREVIATIONS[range.start.getUTCMonth()] as string,
+          year: range.start.getUTCFullYear(),
+          scheduledAmount: (Number(agg?._sum.principalDue ?? 0) + Number(agg?._sum.interestDue ?? 0)).toString(),
+        };
+      }),
     };
   }
 }
@@ -144,6 +164,8 @@ async function findOverdueLoanAccounts(asOf: Date, branchId: string | undefined)
   };
 }
 
+const MONTH_ABBREVIATIONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /** `null` when `previous` is 0 — a percentage change from zero is undefined, not infinite. */
 function changePercent(current: number, previous: number): number | null {
   if (previous === 0) return null;
@@ -172,4 +194,17 @@ function startOfLastMonth(reference: Date): Date {
 function sameElapsedPointLastMonth(reference: Date): Date {
   const last = startOfLastMonth(reference);
   return new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), reference.getUTCDate()));
+}
+
+/** The 4 calendar months following the current one - matches the Dashboard's "Collections
+ * Forecast" card ("Next 4 months"), which starts the count at next month, not the current one. */
+function nextFourMonthRanges(): { start: Date; end: Date }[] {
+  const now = new Date();
+  const ranges: { start: Date; end: Date }[] = [];
+  for (let i = 1; i <= 4; i++) {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i + 1, 1));
+    ranges.push({ start, end });
+  }
+  return ranges;
 }

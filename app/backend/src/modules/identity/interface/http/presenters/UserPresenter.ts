@@ -10,6 +10,9 @@ export interface UserResponse {
   fullName: string;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   roles: string[];
+  companyId: string | null;
+  roleClassId: string | null;
+  roleClassName: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,6 +29,9 @@ export function presentUser(record: UserRecord): UserResponse {
     fullName: `${record.firstName} ${record.lastName}`,
     status: record.status,
     roles: record.roles,
+    companyId: record.companyId,
+    roleClassId: record.roleClassId,
+    roleClassName: record.roleClassName,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

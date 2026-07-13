@@ -26,6 +26,11 @@ app/backend/storage/
 .DS_Store
 Thumbs.db
 
+# Old EasyCash marketing website/dashboard HTML export — no engineering reference value, unlike
+# legacy/reports/201 Loan Docs Generator/ (kept tracked, see below). Untracked 2026-07-11 to shrink
+# repo size; files remain on disk locally, just no longer pushed going forward.
+legacy/website/
+
 # Database
 legacy/mongodb/
 
@@ -77,6 +82,9 @@ legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
 # Reverse-engineered MongoDB remote backup script (2026-07-10) — same hardcoded remote
 # credentials as the zip above, structurally required for mongodump to connect. Never committed.
 backup-mongodb.bat
+
+# Personal login credentials in plain text — never committed.
+MIS Jomer Login.md
 
 # Build
 dist/

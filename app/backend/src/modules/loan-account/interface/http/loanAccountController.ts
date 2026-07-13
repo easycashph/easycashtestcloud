@@ -13,6 +13,7 @@ import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUs
 import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
 import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
 import type { ReversePaymentUseCase } from '../../application/use-cases/ReversePaymentUseCase';
+import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
 import type {
   CreateLoanAccountRequestBody,
   ProcessPaymentRequestBody,
@@ -30,6 +31,7 @@ export interface LoanAccountControllerDeps {
   activateLoanUseCase: ActivateLoanUseCase;
   processPaymentUseCase: ProcessPaymentUseCase;
   reversePaymentUseCase: ReversePaymentUseCase;
+  getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
 
@@ -209,6 +211,18 @@ export class LoanAccountController {
         );
         return { statusCode: 200, body: presentLoanAccount(loanAccount) };
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  riskAssessment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const assessment = await this.deps.getLoanRiskAssessmentUseCase.execute(req.params.id as string);
+      res.status(200).json(assessment);
     } catch (error) {
       next(error);
     }
