@@ -211,6 +211,13 @@ model User {
   lastName     String
   status       UserStatus @default(ACTIVE)
 
+  /// Self-service profile fields (2026-07-12) - editable by the user themselves via
+  /// `PATCH /users/me`, distinct from the MIS-only admin fields above (email/status/roles/
+  /// companyId), which stay behind `PATCH /users/:id`.
+  contactNumber String?
+  address       String?
+  birthday      DateTime?
+
   /// Internal employee/company ID (HR identifier) - distinct from `id` (the DB primary key) and
   /// `legacyId` (the migrated-system's own ID). Optional - existing migrated/seeded staff don't
   /// have one recorded yet.

@@ -31,6 +31,9 @@ export class GetCurrentUserUseCase {
       branchId: user.branchId,
       roles: user.roles,
       status: user.status,
+      contactNumber: user.contactNumber,
+      address: user.address,
+      birthday: user.birthday ? user.birthday.toISOString() : null,
     };
   }
 }

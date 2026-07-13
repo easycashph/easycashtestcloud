@@ -32,6 +32,9 @@ function toUserRecord(row: UserWithRoles): UserRecord {
     companyId: row.companyId,
     roleClassId: row.roleClassId,
     roleClassName: row.roleClass?.name ?? null,
+    contactNumber: row.contactNumber,
+    address: row.address,
+    birthday: row.birthday,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -128,6 +131,9 @@ export class PrismaUserRepository implements IUserRepository {
         roleClassId: patch.roleClassId,
         email: patch.email,
         passwordHash: patch.passwordHash,
+        contactNumber: patch.contactNumber,
+        address: patch.address,
+        birthday: patch.birthday,
         ...(roleIds
           ? {
               roles: {

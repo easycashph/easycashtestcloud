@@ -4,13 +4,17 @@ import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { ListUsersUseCase } from '../../application/use-cases/ListUsersUseCase';
 import type { CreateUserUseCase } from '../../application/use-cases/CreateUserUseCase';
 import type { UpdateUserUseCase } from '../../application/use-cases/UpdateUserUseCase';
-import type { CreateUserRequestBody, UpdateUserRequestBody } from './userSchemas';
+import type { UpdateOwnProfileUseCase } from '../../application/use-cases/UpdateOwnProfileUseCase';
+import type { ChangeOwnPasswordUseCase } from '../../application/use-cases/ChangeOwnPasswordUseCase';
+import type { ChangeOwnPasswordRequestBody, CreateUserRequestBody, UpdateOwnProfileRequestBody, UpdateUserRequestBody } from './userSchemas';
 import { presentUser } from './presenters/UserPresenter';
 
 export interface UserControllerDeps {
   listUsersUseCase: ListUsersUseCase;
   createUserUseCase: CreateUserUseCase;
   updateUserUseCase: UpdateUserUseCase;
+  updateOwnProfileUseCase: UpdateOwnProfileUseCase;
+  changeOwnPasswordUseCase: ChangeOwnPasswordUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -45,6 +49,28 @@ export class UserController {
       const currentUser = getCurrentUser(req);
       const user = await this.deps.updateUserUseCase.execute(req.params.id as string, body, currentUser.sub);
       res.status(200).json(presentUser(user));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateOwnProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as UpdateOwnProfileRequestBody;
+      const currentUser = getCurrentUser(req);
+      const user = await this.deps.updateOwnProfileUseCase.execute(currentUser.sub, body);
+      res.status(200).json(presentUser(user));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changeOwnPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as ChangeOwnPasswordRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.changeOwnPasswordUseCase.execute(currentUser.sub, body);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

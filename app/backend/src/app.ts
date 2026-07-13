@@ -102,6 +102,8 @@ import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/Pr
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
 import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
+import { UpdateOwnProfileUseCase } from '@modules/identity/application/use-cases/UpdateOwnProfileUseCase';
+import { ChangeOwnPasswordUseCase } from '@modules/identity/application/use-cases/ChangeOwnPasswordUseCase';
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
@@ -223,6 +225,8 @@ export function createApp(): Express {
       listUsersUseCase: new ListUsersUseCase({ userRepository }),
       createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher, auditLogger }),
       updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher, auditLogger }),
+      updateOwnProfileUseCase: new UpdateOwnProfileUseCase({ userRepository }),
+      changeOwnPasswordUseCase: new ChangeOwnPasswordUseCase({ userRepository, passwordHasher, auditLogger }),
     },
     tokenService,
   );

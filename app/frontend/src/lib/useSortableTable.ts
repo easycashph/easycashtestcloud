@@ -8,10 +8,8 @@ export interface SortState {
 }
 
 /**
- * Generic client-side column sort for the mock LMS tables. Not a real
- * server-side sort (there is no backend HTTP API exposed to these preview
- * screens yet - see CP13's own scope note) - this sorts whatever
- * already-filtered array the page passes in.
+ * Generic client-side column sort, used across the app's tables. Deliberately client-side, not a
+ * server-side sort - it sorts whatever already-fetched/already-filtered array the page passes in.
  *
  * Date columns (per the standing requirement: any Date column always
  * starts sorted recent-to-oldest) should pass `isDateColumn: true` the
