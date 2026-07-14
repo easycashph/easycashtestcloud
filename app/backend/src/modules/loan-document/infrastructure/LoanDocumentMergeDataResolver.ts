@@ -2,6 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import { Money } from '@shared/domain/Money';
@@ -48,6 +49,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
     private readonly deps: {
       loanAccountRepository: ILoanAccountRepository;
       borrowerRepository: IBorrowerRepository;
+      coBorrowerRepository: ICoBorrowerRepository;
       loanProductRepository: ILoanProductRepository;
       repaymentInstallmentRepository: IRepaymentInstallmentRepository;
       prisma: PrismaClient;
@@ -66,6 +68,12 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
     ]);
     if (!borrower) throw new NotFoundError('Borrower', loanAccount.borrowerId);
     if (!loanProductVersion) throw new NotFoundError('LoanProductVersion', loanAccount.loanProductVersionId);
+
+    // Loan Agreement templates (Salary/Seafarer) reference a Co-Borrower — most loans don't have
+    // one, so this is optional (blank placeholders), not a NotFoundError like Borrower above.
+    const coBorrower = loanAccount.coBorrowerIds[0]
+      ? await this.deps.coBorrowerRepository.findById(loanAccount.coBorrowerIds[0])
+      : null;
 
     const loanProduct = await this.deps.loanProductRepository.findById(loanProductVersion.loanProductId);
     if (!loanProduct) throw new NotFoundError('LoanProduct', loanProductVersion.loanProductId);
@@ -129,7 +137,24 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
 
     return {
       BorrowerName: borrower.name.fullName(),
+      FirstName: borrower.name.firstName,
+      MiddleName: borrower.name.middleName ?? '',
+      LastName: borrower.name.lastName,
+      DateOfBirth: borrower.birthDate ? formatDate(borrower.birthDate) : '',
+      Gender: borrower.gender ?? '',
+      CivilStatus: borrower.civilStatus ?? '',
+      Nationality: borrower.nationality ?? '',
+      // Closest available field to "Occupation" — the borrower's job title, not a separate concept.
+      Occupation: borrower.incomeDetail?.position ?? '',
+      Email: borrower.email ?? '',
+      ContactNumber: borrower.mobilePhone1 ?? '',
       Address: formatAddress(borrower.addresses[0]?.toProps()),
+      CoBorrowerName: coBorrower?.name.fullName() ?? '',
+      CoBorrowerAddress: formatAddress(coBorrower?.addresses[0]?.toProps()),
+      // Loan Agreement (Salary/Seafarer) "enter into this Loan Agreement this ___" signing date —
+      // reuses ApprovalDate's convention rather than a new field, since documents are generated at
+      // APPROVED.
+      AgreementDate: loanAccount.approvedAt ? formatDate(loanAccount.approvedAt) : '',
       LoanAccountId: loanAccount.loanCode,
       LoanProductName: loanProduct.name,
       ApprovalDate: loanAccount.approvedAt ? formatDate(loanAccount.approvedAt) : '',
