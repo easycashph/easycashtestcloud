@@ -21,7 +21,7 @@ import { formatDate, formatPeso } from '@/lib/utils';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 25;
 
 interface LoanRow {
   id: string;
@@ -86,7 +86,7 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
 export function LoanListPage() {
   const navigate = useNavigate();
   const { canCreateLoanAccount } = useRole();
-  useLogPageView('Loan Accounts');
+  useLogPageView('List of Loan Accounts');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanAccountStatus | 'ALL'>('ALL');
@@ -166,7 +166,7 @@ export function LoanListPage() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Loan Accounts</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">List of Loan Accounts</h2>
           <p className="text-sm text-muted-foreground">
             {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
           </p>
@@ -301,7 +301,7 @@ export function LoanListPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="Loan Accounts" entityTypes={['LoanAccount', 'Loan Accounts']} />
+      <RecentActivityPanel label="List of Loan Accounts" entityTypes={['LoanAccount', 'Loan Accounts']} />
     </div>
   );
 }

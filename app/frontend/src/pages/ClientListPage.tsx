@@ -2,8 +2,8 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,7 +19,7 @@ import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
 import { formatMobileNumber } from '@/lib/utils';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 25;
 
 /** Matches LoanListPage's real status set - the mock data's extra 'MATURED' status doesn't exist in the real API. */
 const REAL_ACTIVE_LOAN_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
@@ -79,7 +79,7 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  */
 export function ClientListPage() {
   const navigate = useNavigate();
-  useLogPageView('Client Data');
+  useLogPageView('List of Clients');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [loanPresence, setLoanPresence] = React.useState<LoanPresenceFilter>('ALL');
@@ -144,7 +144,7 @@ export function ClientListPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Client Data</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
         <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
       </div>
 
@@ -207,9 +207,13 @@ export function ClientListPage() {
                 <TableRow key={c.id} className="cursor-pointer" onClick={() => navigate(`/clients/${c.id}`)}>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback>{initials(c.name)}</AvatarFallback>
-                      </Avatar>
+                      <ApplicantAvatar
+                        ownerType="BORROWER"
+                        ownerId={c.id}
+                        initials={initials(c.name)}
+                        className="h-8 w-8"
+                        fallbackClassName="text-xs"
+                      />
                       <p className="font-medium">{c.name}</p>
                     </div>
                   </TableCell>
@@ -254,7 +258,7 @@ export function ClientListPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="Client Data" />
+      <RecentActivityPanel label="List of Clients" />
     </div>
   );
 }

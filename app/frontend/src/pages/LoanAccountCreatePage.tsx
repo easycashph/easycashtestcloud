@@ -204,8 +204,8 @@ export function LoanAccountCreatePage() {
  * Scoped to an EXISTING client only (2026-07-11 user decision) — a renewal or any new loan account
  * goes straight here without needing its own reviewed/approved Loan Application first (except when
  * opened from the Loan Applicant Profile flow, which does require one). A brand-new (not-yet-a-
- * client) borrower isn't supported by this first version; add them via Client Data, then come back
- * here.
+ * client) borrower isn't supported by this first version; add them via List of Clients, then come
+ * back here.
  *
  * Schedule computation itself is NOT done here — `previewLoanSchedule()` is a client-side preview
  * only (see its own doc comment). The real, authoritative schedule is generated server-side by
@@ -533,7 +533,7 @@ export function LoanAccountForm({
       {showChrome && (
         <>
           <Button variant="ghost" size="sm" onClick={onCancel}>
-            <ChevronLeft className="mr-1 h-4 w-4" /> Back to Loan Accounts
+            <ChevronLeft className="mr-1 h-4 w-4" /> Back to List of Loan Accounts
           </Button>
 
           <div>
@@ -588,7 +588,7 @@ export function LoanAccountForm({
                   <p className="py-6 text-center text-sm text-muted-foreground">Start typing to find a client.</p>
                 )}
                 <p className="rounded-md border bg-secondary/40 p-2.5 text-xs text-muted-foreground">
-                  New to the company (not a client yet)? Add them under Client Data first, then come back here.
+                  New to the company (not a client yet)? Add them under List of Clients first, then come back here.
                 </p>
               </CardContent>
             </>

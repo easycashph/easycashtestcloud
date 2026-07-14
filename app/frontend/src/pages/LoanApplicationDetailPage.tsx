@@ -922,7 +922,16 @@ export function LoanApplicationDetailPage() {
             <ApplicantAvatar ownerType="LOAN_APPLICATION" ownerId={application.id} initials={initials} />
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
+                {application.createdBorrowerId ? (
+                  <Link
+                    to={`/clients/${application.createdBorrowerId}`}
+                    className="text-2xl font-semibold tracking-tight text-primary underline-offset-4 hover:underline"
+                  >
+                    {application.applicantName}
+                  </Link>
+                ) : (
+                  <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
+                )}
                 <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>{application.status.replaceAll('_', ' ')}</Badge>
               </div>
               <p className="font-mono text-xs text-muted-foreground">
@@ -942,13 +951,7 @@ export function LoanApplicationDetailPage() {
           </div>
           {canAccessLoanApplications && (
             <div className="flex flex-col items-end gap-2">
-              {application.createdBorrowerId ? (
-                <Button size="sm" variant="outline" asChild>
-                  <Link to={`/clients/${application.createdBorrowerId}`} className="inline-flex items-center">
-                    <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Client Profile Created
-                  </Link>
-                </Button>
-              ) : (
+              {!application.createdBorrowerId && (
                 <Button
                   size="sm"
                   disabled={application.status !== 'APPROVED'}

@@ -483,10 +483,12 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   // CreateLoanApplicationUseCase (belt-and-suspenders: this is just the UI gate).
   const hasPendingApplication = myApplications.some((a) => a.status !== 'DECLINED' && !a.createdLoanAccountId);
   const canCreateLoanApplicationNow = canAccessLoanApplications && !hasActiveLoan && !hasPendingApplication;
-  // Clickable only once the client has no active/in-arrears loan account AND already has at least
-  // one loan application on file (mirrors the "Create Loan Account" dialog gating on the Loan
-  // Application Detail page, just keyed off the client instead of a single application).
-  const canCreateLoanAccountNow = !hasActiveLoan && myApplications.length > 0;
+  // Clickable only once the client has no active/in-arrears loan account AND has an Approved
+  // application that hasn't already produced a loan account (mirrors the "Create Loan Account"
+  // dialog gating on the Loan Application Detail page, just keyed off the client instead of a
+  // single application).
+  const hasApprovedApplicationAwaitingLoanAccount = myApplications.some((a) => a.status === 'APPROVED' && !a.createdLoanAccountId);
+  const canCreateLoanAccountNow = !hasActiveLoan && hasApprovedApplicationAwaitingLoanAccount;
 
   if (borrowerQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading client…</p>;
@@ -665,7 +667,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                 ? 'Ready to originate - the client has an approved application and no active loan.'
                 : hasActiveLoan
                   ? "This client still has an active (or in-arrears) loan account."
-                  : 'This client has no loan application on record yet.'}
+                  : myApplications.length === 0
+                    ? 'This client has no loan application on record yet.'
+                    : 'This client has no Approved loan application awaiting a loan account.'}
             </CardDescription>
           </div>
           <Button size="sm" disabled={!canCreateLoanAccountNow} onClick={() => setCreateLoanAccountOpen(true)}>
