@@ -6,8 +6,15 @@
  *
  * Reads the legacy Mambu-era `mongodump` export directly from its `.bson` files (never connects
  * to a live MongoDB, never writes back to the dump — CLAUDE.md's "never modify legacy data during
- * migration"). Idempotent: every row upserts on `legacyId`, so re-running this script is always
- * safe and produces the same end state, never duplicates.
+ * migration"). Idempotent: every row upserts on `legacyId`. The three borrower child tables that
+ * have no natural unique key of their own (Address, IdentificationDocument, CharacterReference)
+ * are made idempotent via delete-then-recreate per borrower (2026-07-14 fix — a plain `.create()`
+ * here used to duplicate these three tables' rows on every re-run against an already-migrated DB;
+ * caught before re-running against the 07142026 snapshot).
+ *
+ * DUMP_DIR points at a specific dated mongodump snapshot — update it (and the doc comment date
+ * below) whenever migrating against a newer snapshot; the previous snapshot directory is not kept
+ * around once superseded.
  *
  * Usage:
  *   npx tsx scripts/migrate-legacy-data.ts            # dry run — reports counts, writes nothing
@@ -24,7 +31,7 @@ import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
 
 const APPLY = process.argv.includes('--apply');
-const DUMP_DIR = path.resolve(__dirname, '../../../legacy/mongodb/07012026_103239/db-easycash');
+const DUMP_DIR = path.resolve(__dirname, '../../../legacy/MongoDB dump/extracted/07142026_ 84746/db-easycash');
 const HQ_BRANCH_CODE = 'HQ';
 
 // ----------------------------------------------------------------------------
@@ -308,6 +315,7 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
         });
       }
 
+      await prisma.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
       for (const addr of addressesByParent.get(String(c._id)) ?? []) {
         await prisma.address.create({
           data: {
@@ -326,6 +334,7 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
         });
       }
 
+      await prisma.identificationDocument.deleteMany({ where: { borrowerId: borrower.id } });
       for (const doc of idDocsByClientKey.get(uid) ?? []) {
         if (!doc.document_id || !doc.document_type) continue;
         await prisma.identificationDocument.create({
@@ -339,6 +348,7 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
         });
       }
 
+      await prisma.characterReference.deleteMany({ where: { borrowerId: borrower.id } });
       for (const ref of charRefsByParent.get(String(c._id)) ?? []) {
         if (!ref.first_name || !ref.last_name) continue;
         await prisma.characterReference.create({
