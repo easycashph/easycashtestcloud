@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/StatusBadge';
 import { AttachmentsPanel as RealAttachmentsPanel } from '@/components/AttachmentsPanel';
+import { LoanDocumentPreviewModal, type LoanDocumentPreviewTarget } from '@/components/LoanDocumentPreviewModal';
 import { NotesPanel as RealNotesPanel } from '@/components/NotesPanel';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
@@ -440,6 +441,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // one at a time (bulk actions loop sequentially) rather than firing every request in parallel,
   // since each one shells out to LibreOffice (ADR-051 §4) and doesn't need to race the others.
   const [generatingCode, setGeneratingCode] = React.useState<string | null>(null);
+  const [previewTarget, setPreviewTarget] = React.useState<LoanDocumentPreviewTarget | null>(null);
 
   const generateDocumentMutation = useMutation({
     mutationFn: (documentTemplateCode: string) =>
@@ -810,13 +812,29 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       </div>
                       <div className="flex items-center gap-1.5">
                         {doc.latestGeneration && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => downloadDocument(doc.latestGeneration!.id, `${doc.documentTemplateName}.pdf`)}
-                          >
-                            Download
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setPreviewTarget({
+                                  loanAccountId: loanId,
+                                  generatedDocumentId: doc.latestGeneration!.id,
+                                  title: doc.documentTemplateName,
+                                  fileName: `${doc.documentTemplateName}.pdf`,
+                                })
+                              }
+                            >
+                              Preview
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => downloadDocument(doc.latestGeneration!.id, `${doc.documentTemplateName}.pdf`)}
+                            >
+                              Download
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="outline"
@@ -952,6 +970,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LoanDocumentPreviewModal target={previewTarget} onClose={() => setPreviewTarget(null)} />
     </div>
   );
 }
