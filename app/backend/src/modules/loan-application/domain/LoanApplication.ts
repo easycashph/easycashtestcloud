@@ -15,6 +15,9 @@ export interface DependantEntry {
 export interface LoanApplicationProps {
   id: string;
   branchId: string;
+  /** Set only when this application was created FROM an existing client's profile (renewal flow)
+   * - see schema.prisma's LoanApplication.borrowerId doc comment for the full explanation. */
+  borrowerId?: string;
 
   applicantName: string;
   age?: number;
@@ -25,6 +28,12 @@ export interface LoanApplicationProps {
   nationality?: string;
   homeOwnership?: string;
   address?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
@@ -70,6 +79,7 @@ export interface LoanApplicationProps {
 
 export interface CreateLoanApplicationProps {
   branchId: string;
+  borrowerId?: string;
   applicantName: string;
   age?: number;
   gender?: string;
@@ -79,6 +89,12 @@ export interface CreateLoanApplicationProps {
   nationality?: string;
   homeOwnership?: string;
   address?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
@@ -127,6 +143,7 @@ export class LoanApplication {
     return new LoanApplication({
       id: randomUUID(),
       branchId: input.branchId,
+      borrowerId: input.borrowerId,
       applicantName: input.applicantName,
       age: input.age,
       gender: input.gender,
@@ -136,6 +153,12 @@ export class LoanApplication {
       nationality: input.nationality,
       homeOwnership: input.homeOwnership,
       address: input.address,
+      houseUnitNumber: input.houseUnitNumber,
+      street: input.street,
+      barangay: input.barangay,
+      cityMunicipality: input.cityMunicipality,
+      province: input.province,
+      zipCode: input.zipCode,
       monthlyIncome: input.monthlyIncome,
       employer: input.employer,
       occupation: input.occupation,
@@ -181,6 +204,10 @@ export class LoanApplication {
     return this.props.branchId;
   }
 
+  get borrowerId(): string | undefined {
+    return this.props.borrowerId;
+  }
+
   get status(): LoanApplicationStatus {
     return this.props.status;
   }
@@ -203,11 +230,15 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
-  /** Risk-input fields (Detail page's AI Risk Management Summary) — editable independent of
-   * status, only the provided fields are touched. Does not itself recompute `status` — the calling
-   * use case re-runs LoanApplicationPreQualificationService and calls `applySystemClassification()`
-   * separately, only while no human decision has been made yet. */
+  /** Risk-input fields (Detail page's AI Risk Management Summary) — editable only while no human
+   * decision has been made yet (2026-07-14: previously had no status guard at all, so these could
+   * still be edited on an already-APPROVED/DECLINED application). Only the provided fields are
+   * touched. Does not itself recompute `status` — the calling use case re-runs
+   * LoanApplicationPreQualificationService and calls `applySystemClassification()` separately. */
   updateApplicantFinancials(patch: { monthlyIncome?: number; creditScore?: number; propertiesOwned?: string[] }): void {
+    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'edit');
+    }
     if (patch.monthlyIncome !== undefined) this.props.monthlyIncome = patch.monthlyIncome;
     if (patch.creditScore !== undefined) this.props.creditScore = patch.creditScore;
     if (patch.propertiesOwned !== undefined) this.props.propertiesOwned = patch.propertiesOwned;

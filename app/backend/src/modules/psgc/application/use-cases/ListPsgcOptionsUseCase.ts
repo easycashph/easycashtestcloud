@@ -1,4 +1,4 @@
-import type { IPsgcRepository, PsgcOption } from '../ports/IPsgcRepository';
+import type { IPsgcRepository, PsgcCityOption, PsgcOption } from '../ports/IPsgcRepository';
 
 /** Single use case for all four PSGC lookup levels — each is a trivial passthrough, no business logic to separate. */
 export class ListPsgcOptionsUseCase {
@@ -12,7 +12,7 @@ export class ListPsgcOptionsUseCase {
     return this.deps.psgcRepository.listProvinces(regionCode);
   }
 
-  listCities(provinceCode: string): Promise<PsgcOption[]> {
+  listCities(provinceCode: string): Promise<PsgcCityOption[]> {
     return this.deps.psgcRepository.listCities(provinceCode);
   }
 

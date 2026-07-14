@@ -12,6 +12,7 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
   const props: LoanApplicationProps = {
     id: row.id,
     branchId: row.branchId,
+    borrowerId: row.borrowerId ?? undefined,
     applicantName: row.applicantName,
     age: row.age ?? undefined,
     gender: row.gender ?? undefined,
@@ -21,6 +22,12 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     nationality: row.nationality ?? undefined,
     homeOwnership: row.homeOwnership ?? undefined,
     address: row.address ?? undefined,
+    houseUnitNumber: row.houseUnitNumber ?? undefined,
+    street: row.street ?? undefined,
+    barangay: row.barangay ?? undefined,
+    cityMunicipality: row.cityMunicipality ?? undefined,
+    province: row.province ?? undefined,
+    zipCode: row.zipCode ?? undefined,
     monthlyIncome: row.monthlyIncome ? Number(row.monthlyIncome) : undefined,
     employer: row.employer ?? undefined,
     occupation: row.occupation ?? undefined,
@@ -66,6 +73,7 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
     create: {
       id: p.id,
       branchId: p.branchId,
+      borrowerId: p.borrowerId,
       applicantName: p.applicantName,
       age: p.age,
       gender: p.gender,
@@ -75,6 +83,12 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       nationality: p.nationality,
       homeOwnership: p.homeOwnership,
       address: p.address,
+      houseUnitNumber: p.houseUnitNumber,
+      street: p.street,
+      barangay: p.barangay,
+      cityMunicipality: p.cityMunicipality,
+      province: p.province,
+      zipCode: p.zipCode,
       monthlyIncome: p.monthlyIncome,
       employer: p.employer,
       occupation: p.occupation,
@@ -147,6 +161,14 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });
+    return rows.map(toDomain);
+  }
+
+  /** Used by CreateLoanApplicationUseCase's duplicate-in-flight-application check (a client
+   * cannot have two loan applications going at once) - see that use case's own doc comment. */
+  async findByBorrowerId(borrowerId: string, ctx?: TransactionContext): Promise<LoanApplication[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanApplication.findMany({ where: { borrowerId }, orderBy: { createdAt: 'desc' } });
     return rows.map(toDomain);
   }
 

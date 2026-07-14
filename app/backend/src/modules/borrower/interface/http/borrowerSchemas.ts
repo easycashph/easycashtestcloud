@@ -12,6 +12,20 @@ const incomeDetailSchema = z.object({
   natureOfBusiness: z.string().min(1).optional(),
   position: z.string().min(1).optional(),
   yearsEmployed: z.number().int().nonnegative().optional(),
+  monthlyIncome: z.coerce.number().nonnegative().optional(),
+});
+
+/** Mirrors the domain `AddressProps` shape exactly - no field-level validation beyond structural typing, same rationale as the domain value object (no documented format rule to enforce). */
+const addressSchema = z.object({
+  addressType: z.string().min(1).optional(),
+  houseUnitNumber: z.string().min(1).optional(),
+  street: z.string().min(1).optional(),
+  barangay: z.string().min(1).optional(),
+  cityMunicipality: z.string().min(1).optional(),
+  province: z.string().min(1).optional(),
+  zipCode: z.string().min(1).optional(),
+  lengthOfStayMonths: z.number().int().nonnegative().optional(),
+  ownershipStatus: z.string().min(1).optional(),
 });
 
 const governmentIdSchema = z.object({
@@ -61,22 +75,10 @@ export const createBorrowerSchema = z.object({
   incomeDetail: incomeDetailSchema.optional(),
   governmentId: governmentIdSchema.optional(),
   characterReferences: z.array(characterReferenceSchema).optional(),
+  addresses: z.array(addressSchema).optional(),
 });
 
 export type CreateBorrowerRequestBody = z.infer<typeof createBorrowerSchema>;
-
-/** Mirrors the domain `AddressProps` shape exactly — no field-level validation beyond structural typing, same rationale as the domain value object (no documented format rule to enforce). */
-export const addressSchema = z.object({
-  addressType: z.string().min(1).optional(),
-  houseUnitNumber: z.string().min(1).optional(),
-  street: z.string().min(1).optional(),
-  barangay: z.string().min(1).optional(),
-  cityMunicipality: z.string().min(1).optional(),
-  province: z.string().min(1).optional(),
-  zipCode: z.string().min(1).optional(),
-  lengthOfStayMonths: z.number().int().nonnegative().optional(),
-  ownershipStatus: z.string().min(1).optional(),
-});
 
 /** All fields optional — PATCH semantics, send only what changed. `addresses`, when present, replaces the borrower's whole address list wholesale (matches the domain's "always replaced as a whole" contract — see Address VO doc comment). */
 export const updateBorrowerSchema = z.object({

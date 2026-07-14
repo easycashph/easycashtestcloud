@@ -55,8 +55,16 @@ export class LoanApplicationController {
     });
   }
 
-  private async buildLinkage(applicationId: string): Promise<LoanApplicationLinkage> {
-    const borrower = await this.deps.borrowerRepository.findBySourceApplicationId(applicationId);
+  /** A client's Borrower comes from one of two directions (see schema.prisma's LoanApplication
+   * doc comments): the original walk-in flow converts an APPROVED application INTO a brand-new
+   * Borrower (`Borrower.sourceApplicationId`, reverse-looked-up here), while the "Create Loan
+   * Application" renewal flow (2026-07-14) is created FROM an already-existing Borrower
+   * (`application.borrowerId`, set directly at creation). Both must resolve to the same linkage
+   * shape so "Loan Account Created" detection works for either kind of application. */
+  private async buildLinkage(application: LoanApplication): Promise<LoanApplicationLinkage> {
+    const borrower =
+      (await this.deps.borrowerRepository.findBySourceApplicationId(application.id)) ??
+      (application.borrowerId ? await this.deps.borrowerRepository.findById(application.borrowerId) : null);
     if (!borrower) {
       return { createdBorrowerId: null, createdLoanAccountId: null, createdLoanAccountCode: null };
     }
@@ -69,16 +77,29 @@ export class LoanApplicationController {
   }
 
   private async present(application: LoanApplication): Promise<ReturnType<typeof presentLoanApplication>> {
-    const linkage = await this.buildLinkage(application.id);
+    const linkage = await this.buildLinkage(application);
     return presentLoanApplication(application, this.buildBreakdown(application), linkage);
   }
 
   /** Batched variant of `present` for list views - one borrower query and one loan-account
-   * query for the whole page instead of N+1. */
+   * query for the whole page instead of N+1 (see `buildLinkage`'s doc comment for the two
+   * directions a Borrower can be resolved from). */
   private async presentMany(applications: LoanApplication[]): Promise<ReturnType<typeof presentLoanApplication>[]> {
-    const borrowers = await this.deps.borrowerRepository.findManyBySourceApplicationIds(applications.map((a) => a.id));
-    const borrowerByApplicationId = new Map(borrowers.map((b) => [b.sourceApplicationId as string, b]));
-    const borrowerIds = borrowers.map((b) => b.id);
+    const convertedBorrowers = await this.deps.borrowerRepository.findManyBySourceApplicationIds(applications.map((a) => a.id));
+    const borrowerByApplicationId = new Map(convertedBorrowers.map((b) => [b.sourceApplicationId as string, b]));
+
+    const directBorrowerIds = [...new Set(applications.map((a) => a.borrowerId).filter((id): id is string => Boolean(id)))];
+    const directBorrowers = await Promise.all(directBorrowerIds.map((id) => this.deps.borrowerRepository.findById(id)));
+    const directBorrowerById = new Map(directBorrowers.filter((b) => b !== null).map((b) => [b!.id, b!]));
+
+    for (const application of applications) {
+      if (!borrowerByApplicationId.has(application.id) && application.borrowerId) {
+        const borrower = directBorrowerById.get(application.borrowerId);
+        if (borrower) borrowerByApplicationId.set(application.id, borrower);
+      }
+    }
+
+    const borrowerIds = [...new Set([...borrowerByApplicationId.values()].map((b) => b.id))];
     const loanAccounts =
       borrowerIds.length > 0
         ? (await Promise.all(borrowerIds.map((borrowerId) => this.deps.loanAccountRepository.findMany({ borrowerId, limit: 1 })))).flat()

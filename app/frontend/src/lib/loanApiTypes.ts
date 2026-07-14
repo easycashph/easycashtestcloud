@@ -80,6 +80,7 @@ export interface BorrowerIncomeDetail {
   natureOfBusiness: string | null;
   position: string | null;
   yearsEmployed: number | null;
+  monthlyIncome: number | null;
 }
 
 export interface BorrowerGovernmentId {
@@ -177,6 +178,7 @@ export interface CreateBorrowerRequest {
     natureOfBusiness?: string;
     position?: string;
     yearsEmployed?: number;
+    monthlyIncome?: number;
   };
   governmentId?: {
     sssNumber?: string;
@@ -188,6 +190,17 @@ export interface CreateBorrowerRequest {
     relationship?: string;
     phoneNumber?: string;
     emailAddress?: string;
+  }[];
+  addresses?: {
+    addressType?: string;
+    houseUnitNumber?: string;
+    street?: string;
+    barangay?: string;
+    cityMunicipality?: string;
+    province?: string;
+    zipCode?: string;
+    lengthOfStayMonths?: number;
+    ownershipStatus?: string;
   }[];
 }
 

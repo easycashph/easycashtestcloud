@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Lock, Paperclip, RotateCcw, ShieldCheck, UserPlus, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Landmark, Lock, RotateCcw, ShieldCheck, UserPlus, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { RoleAbbr } from '@/components/RoleAbbr';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
+import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
+import { type AddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
@@ -50,17 +52,13 @@ function parseCoBorrowerName(coBorrowerName: string): { name: string; relationsh
 }
 
 /**
- * Prefilled from the APPROVED application's own fields, including gender and civil status
- * (captured at intake, added 2026-07-12 after both were found to be silently dropped between
- * intake and here) - covers what the real `POST /borrowers` endpoint (`createBorrowerSchema`)
- * actually accepts today. The application's address/employer/monthly income have no home in that
- * request body yet (no income-detail or address input on create - see `CreateBorrowerUseCase`),
- * so they're surfaced read-only as reference instead of being force-mapped into fields that don't
- * exist, per CLAUDE.md "never fabricate" - staff adds those via "Edit Client Details" after
- * creation. If the application recorded a co-borrower, offers to also create that person's real
- * `CoBorrower` record via `POST /co-borrowers` (ADR-015 leaves the borrower<->co-borrower linking
- * mechanism open, so this only creates the standalone person record, same as that endpoint always
- * has).
+ * Prefilled from the APPROVED application's own fields, including gender, civil status, present
+ * address, employer, and monthly income (2026-07-14: `POST /borrowers` gained `addresses` and
+ * `incomeDetail.monthlyIncome` support specifically so this dialog could stop dropping them).
+ * Everything the application captured is editable here before creating the real record. If the
+ * application recorded a co-borrower, offers to also create that person's real `CoBorrower` record
+ * via `POST /co-borrowers` (ADR-015 leaves the borrower<->co-borrower linking mechanism open, so
+ * this only creates the standalone person record, same as that endpoint always has).
  */
 function CreateClientProfileDialog({
   open,
@@ -85,8 +83,18 @@ function CreateClientProfileDialog({
   const [homeOwnership, setHomeOwnership] = React.useState(application.homeOwnership ?? '');
   const [mobilePhone1, setMobilePhone1] = React.useState(application.mobilePhone ?? '');
   const [email, setEmail] = React.useState(application.email ?? '');
+  const [employer, setEmployer] = React.useState(application.employer ?? '');
   const [occupation, setOccupation] = React.useState(application.occupation ?? '');
   const [officeAddress, setOfficeAddress] = React.useState(application.officeAddress ?? '');
+  const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
+  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>({
+    houseUnitNumber: application.houseUnitNumber ?? '',
+    street: application.street ?? '',
+    barangay: application.barangay ?? '',
+    cityMunicipality: application.cityMunicipality ?? '',
+    province: application.province ?? '',
+    zipCode: application.zipCode ?? '',
+  });
   const [tinNumber, setTinNumber] = React.useState(application.tinNumber ?? '');
   const [sssNumber, setSssNumber] = React.useState(application.sssNumber ?? '');
   const [dependants, setDependants] = React.useState(application.dependants);
@@ -124,8 +132,18 @@ function CreateClientProfileDialog({
     setHomeOwnership(application.homeOwnership ?? '');
     setMobilePhone1(application.mobilePhone ?? '');
     setEmail(application.email ?? '');
+    setEmployer(application.employer ?? '');
     setOccupation(application.occupation ?? '');
     setOfficeAddress(application.officeAddress ?? '');
+    setMonthlyIncome(String(application.monthlyIncome ?? ''));
+    setAddressDraft({
+      houseUnitNumber: application.houseUnitNumber ?? '',
+      street: application.street ?? '',
+      barangay: application.barangay ?? '',
+      cityMunicipality: application.cityMunicipality ?? '',
+      province: application.province ?? '',
+      zipCode: application.zipCode ?? '',
+    });
     setTinNumber(application.tinNumber ?? '');
     setSssNumber(application.sssNumber ?? '');
     setDependants(application.dependants);
@@ -168,12 +186,18 @@ function CreateClientProfileDialog({
         dependants: dependants && dependants.length > 0 ? dependants : undefined,
         note: note.trim() || undefined,
         incomeDetail:
-          occupation.trim() || officeAddress.trim()
-            ? { position: occupation.trim() || undefined, employerAddress: officeAddress.trim() || undefined }
+          employer.trim() || occupation.trim() || officeAddress.trim() || Number(monthlyIncome) > 0
+            ? {
+                employerName: employer.trim() || undefined,
+                position: occupation.trim() || undefined,
+                employerAddress: officeAddress.trim() || undefined,
+                monthlyIncome: Number(monthlyIncome) > 0 ? Number(monthlyIncome) : undefined,
+              }
             : undefined,
         governmentId:
           tinNumber.trim() || sssNumber.trim() ? { tinNumber: tinNumber.trim() || undefined, sssNumber: sssNumber.trim() || undefined } : undefined,
         characterReferences: references.length > 0 ? references : undefined,
+        addresses: Object.values(addressDraft).some((v) => v.trim()) ? [addressDraft] : undefined,
       });
 
       // Best-effort: capturing the co-borrower is a separate write from creating the client
@@ -202,7 +226,7 @@ function CreateClientProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Client Profile</DialogTitle>
           <DialogDescription>
@@ -285,8 +309,17 @@ function CreateClientProfileDialog({
           </div>
         </div>
 
+        <div className="border-t pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Present Address</p>
+          <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2 border-t pt-3">
           <div className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Employment</div>
+          <div className="space-y-1.5">
+            <Label>Employer</Label>
+            <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
+          </div>
           <div className="space-y-1.5">
             <Label>Occupation</Label>
             <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
@@ -294,6 +327,10 @@ function CreateClientProfileDialog({
           <div className="space-y-1.5">
             <Label>Office Address</Label>
             <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Monthly Income</Label>
+            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </div>
           <div className="space-y-1.5">
             <Label>TIN</Label>
@@ -497,6 +534,159 @@ function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label:
 }
 
 /**
+ * Real "Create Loan Account" against `POST /loan-accounts` - moved here from the Client Profile
+ * page (2026-07-14) so it's gated per-application (visible once this application's client exists,
+ * clickable once this specific application is Approved) rather than per-client. `loanCode` is a
+ * required, staff-typed field rather than client-generated: no confirmed loan-code numbering rule
+ * exists yet for the real system, and CLAUDE.md forbids fabricating financial/business logic -
+ * same reasoning as ADR-045's explicit, never-derived `firstRepaymentDate`.
+ */
+function RealCreateLoanAccountDialog({
+  open,
+  onOpenChange,
+  borrower,
+  application,
+  productVersions,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  borrower: Borrower;
+  application: LoanApplication;
+  productVersions: { id: string; label: string; version: LoanProduct['versions'][number] }[];
+}) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [loanProductVersionId, setLoanProductVersionId] = React.useState('');
+  const [loanCode, setLoanCode] = React.useState('');
+  const [principalAmount, setPrincipalAmount] = React.useState('');
+  const [interestRate, setInterestRate] = React.useState('');
+  const [installmentCount, setInstallmentCount] = React.useState('');
+  const [gracePeriodDays, setGracePeriodDays] = React.useState('');
+  const [firstRepaymentDate, setFirstRepaymentDate] = React.useState('');
+
+  const selectedVersion = productVersions.find((v) => v.id === loanProductVersionId)?.version;
+
+  React.useEffect(() => {
+    if (!open) return;
+    setLoanProductVersionId('');
+    setLoanCode('');
+    setPrincipalAmount(String(application.requestedAmount ?? ''));
+    setInterestRate('');
+    setInstallmentCount(String(application.requestedTermMonths ?? ''));
+    setGracePeriodDays('');
+    setFirstRepaymentDate('');
+  }, [open, application]);
+
+  React.useEffect(() => {
+    if (!selectedVersion) return;
+    if (selectedVersion.defaultInterestRate) setInterestRate(selectedVersion.defaultInterestRate);
+    if (selectedVersion.installmentCountDefault) setInstallmentCount(String(selectedVersion.installmentCountDefault));
+    setGracePeriodDays(String(selectedVersion.gracePeriodDefaultDays ?? 0));
+  }, [selectedVersion]);
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<{ id: string }>('/loan-accounts', {
+        loanCode: loanCode.trim(),
+        borrowerId: borrower.id,
+        loanProductVersionId,
+        branchId: borrower.branchId,
+        principalAmount,
+        interestRate,
+        installmentCount: Number(installmentCount),
+        gracePeriodDays: gracePeriodDays ? Number(gracePeriodDays) : undefined,
+        firstRepaymentDate,
+      }),
+    onSuccess: (loan) => {
+      onOpenChange(false);
+      queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
+      navigate(`/loans/${loan.id}`);
+    },
+  });
+
+  const canSubmit =
+    loanProductVersionId.trim() &&
+    loanCode.trim() &&
+    principalAmount.trim() &&
+    interestRate.trim() &&
+    installmentCount.trim() &&
+    firstRepaymentDate.trim() &&
+    !createMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Loan Account</DialogTitle>
+          <DialogDescription>
+            From {borrower.fullName}'s approved application ({application.requestedCategory}). Creates the real loan account record -
+            review before submitting.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Loan Product</Label>
+            <Select value={loanProductVersionId} onValueChange={setLoanProductVersionId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a product" />
+              </SelectTrigger>
+              <SelectContent>
+                {productVersions.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Loan Code</Label>
+            <Input value={loanCode} onChange={(e) => setLoanCode(e.target.value)} placeholder="e.g. BL-REG_00063" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Principal Amount</Label>
+            <Input type="number" value={principalAmount} onChange={(e) => setPrincipalAmount(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Interest Rate (%)</Label>
+            <Input type="number" step="0.001" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Installment Count</Label>
+            <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Grace Period (days)</Label>
+            <Input type="number" value={gracePeriodDays} onChange={(e) => setGracePeriodDays(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>First Repayment Date</Label>
+            <Input type="date" value={firstRepaymentDate} onChange={(e) => setFirstRepaymentDate(e.target.value)} />
+          </div>
+        </div>
+
+        {createMutation.isError && (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the loan account.'}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => createMutation.mutate()} disabled={!canSubmit}>
+            Create Loan Account
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * Shows both the "why" behind the system's PREAPPROVED/PREDECLINED verdict (a live-recomputed
  * decision-scoring breakdown from the backend's `LoanApplicationPreQualificationService` -
  * age/income/distance, each pass or fail) and the editable inputs that feed it (income, credit
@@ -658,6 +848,7 @@ export function LoanApplicationDetailPage() {
   const [decisionNote, setDecisionNote] = React.useState('');
   const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
+  const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
 
   useLogPageView('Loan Application Detail', applicationId);
 
@@ -669,11 +860,36 @@ export function LoanApplicationDetailPage() {
   });
   const application = applicationQuery.data;
 
+  // "Create Loan Account" (moved here from the Client Profile page, 2026-07-14) - only fetched
+  // once this application's client actually exists.
+  const clientBorrowerQuery = useQuery({
+    queryKey: ['borrower', application?.createdBorrowerId],
+    queryFn: () => apiClient.get<Borrower>(`/borrowers/${application!.createdBorrowerId}`),
+    enabled: canAccessLoanApplications && Boolean(application?.createdBorrowerId),
+  });
+  const clientLoansQuery = useQuery({
+    queryKey: ['loan-accounts', 'all'],
+    queryFn: () => fetchAllPages<{ id: string; borrowerId: string; status: string }>('/loan-accounts'),
+    enabled: canAccessLoanApplications && Boolean(application?.createdBorrowerId),
+  });
+  const hasActiveLoan = (clientLoansQuery.data ?? []).some(
+    (l) => l.borrowerId === application?.createdBorrowerId && l.status !== 'CLOSED' && l.status !== 'CLOSED_WRITTEN_OFF' && l.status !== 'CLOSED_REJECTED',
+  );
+
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
     enabled: canAccessLoanApplications,
   });
+  const productVersionOptions = React.useMemo(
+    () =>
+      (productsQuery.data ?? []).flatMap((p) =>
+        (p.versions ?? [])
+          .filter((v) => v.isActive)
+          .map((v) => ({ id: v.id, label: `${p.name} (v${v.versionNumber})`, version: v })),
+      ),
+    [productsQuery.data],
+  );
   const activeVersionOptions = React.useMemo(
     () =>
       (productsQuery.data ?? []).flatMap((product) =>
@@ -840,23 +1056,53 @@ export function LoanApplicationDetailPage() {
               )}
             </div>
           </div>
-          {canAccessLoanApplications &&
-            (application.createdBorrowerId ? (
-              <Button size="sm" variant="outline" asChild>
-                <Link to={`/clients/${application.createdBorrowerId}`} className="inline-flex items-center">
-                  <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Client Profile Created
-                </Link>
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={application.status !== 'APPROVED'}
-                onClick={() => setCreateClientOpen(true)}
-                title={application.status !== 'APPROVED' ? 'Only available once the application is Approved' : undefined}
-              >
-                <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client Profile
-              </Button>
-            ))}
+          {canAccessLoanApplications && (
+            <div className="flex flex-col items-end gap-2">
+              {application.createdBorrowerId ? (
+                <Button size="sm" variant="outline" asChild>
+                  <Link to={`/clients/${application.createdBorrowerId}`} className="inline-flex items-center">
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Client Profile Created
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  disabled={application.status !== 'APPROVED'}
+                  onClick={() => setCreateClientOpen(true)}
+                  title={application.status !== 'APPROVED' ? 'Only available once the application is Approved' : undefined}
+                >
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client Profile
+                </Button>
+              )}
+              {/* Visible only once this application has a real client (createdBorrowerId set) - clickable
+                  only once this specific application is Approved and hasn't already produced a loan
+                  account, and the client has no other active loan open (2026-07-14, moved from the
+                  Client Profile page so it's gated per-application, not per-client). */}
+              {application.createdBorrowerId &&
+                (application.createdLoanAccountId ? (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/loans/${application.createdLoanAccountId}`} className="inline-flex items-center">
+                      <Landmark className="mr-1.5 h-3.5 w-3.5" /> Loan Account Created
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={application.status !== 'APPROVED' || hasActiveLoan}
+                    onClick={() => setCreateLoanOpen(true)}
+                    title={
+                      application.status !== 'APPROVED'
+                        ? 'Only available once the application is Approved'
+                        : hasActiveLoan
+                          ? 'This client already has an active (or in-arrears) loan account'
+                          : undefined
+                    }
+                  >
+                    <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+                  </Button>
+                ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -898,24 +1144,6 @@ export function LoanApplicationDetailPage() {
               <dt className="text-muted-foreground">Co-borrower</dt>
               <dd className="text-right font-medium">{application.coBorrowerName ?? 'None (optional)'}</dd>
             </dl>
-
-            <Separator className="my-4" />
-
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Submitted Documents ({application.submittedDocuments.length})
-            </p>
-            {application.submittedDocuments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">None on record.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {application.submittedDocuments.map((doc) => (
-                  <li key={doc} className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                    <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                    {doc}
-                  </li>
-                ))}
-              </ul>
-            )}
           </CardContent>
         </Card>
 
@@ -1081,7 +1309,89 @@ export function LoanApplicationDetailPage() {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Personal &amp; Household Information</CardTitle>
+          <CardDescription>Everything else captured on the application form - not shown above to keep the summary cards short.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <dl className="grid grid-cols-2 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Gender</dt>
+            <dd className="text-right font-medium">{application.gender ?? '-'}</dd>
+            <dt className="text-muted-foreground">Civil Status</dt>
+            <dd className="text-right font-medium">{application.civilStatus ?? '-'}</dd>
+            <dt className="text-muted-foreground">Birth Date</dt>
+            <dd className="text-right font-medium">{application.birthDate ? formatDate(application.birthDate) : '-'}</dd>
+            <dt className="text-muted-foreground">Place of Birth</dt>
+            <dd className="text-right font-medium">{application.placeOfBirth ?? '-'}</dd>
+            <dt className="text-muted-foreground">Nationality</dt>
+            <dd className="text-right font-medium">{application.nationality ?? '-'}</dd>
+            <dt className="text-muted-foreground">Home Ownership</dt>
+            <dd className="text-right font-medium">{application.homeOwnership ?? '-'}</dd>
+            <dt className="text-muted-foreground">Occupation</dt>
+            <dd className="text-right font-medium">{application.occupation ?? '-'}</dd>
+            <dt className="text-muted-foreground">Office Address</dt>
+            <dd className="text-right font-medium">{application.officeAddress ?? '-'}</dd>
+            <dt className="text-muted-foreground">TIN</dt>
+            <dd className="text-right font-medium">{application.tinNumber ?? '-'}</dd>
+            <dt className="text-muted-foreground">SSS</dt>
+            <dd className="text-right font-medium">{application.sssNumber ?? '-'}</dd>
+          </dl>
+
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Dependants ({application.dependants.length})</p>
+              {application.dependants.length === 0 ? (
+                <p className="text-sm text-muted-foreground">None on record.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {application.dependants.map((d, i) => (
+                    <li key={i} className="text-sm">
+                      {d.name}
+                      {d.age ? ` · ${d.age} yrs old` : ''}
+                      {d.relationship ? ` · ${d.relationship}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Character References</p>
+              {!application.reference1Name && !application.reference2Name ? (
+                <p className="text-sm text-muted-foreground">None on record.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {application.reference1Name && (
+                    <li>
+                      {application.reference1Name}
+                      {application.reference1Mobile ? ` · ${formatMobileNumber(application.reference1Mobile)}` : ''}
+                    </li>
+                  )}
+                  {application.reference2Name && (
+                    <li>
+                      {application.reference2Name}
+                      {application.reference2Mobile ? ` · ${formatMobileNumber(application.reference2Mobile)}` : ''}
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+
+            {application.note && (
+              <div>
+                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Note</p>
+                <p className="text-sm">{application.note}</p>
+                {encodedByName && <p className="mt-1 text-xs text-muted-foreground">Encoded by {encodedByName}</p>}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <RiskManagementSummaryCard application={application} canEdit={canAccessLoanApplications} />
+
+      <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />
 
       <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
 
@@ -1134,6 +1444,15 @@ export function LoanApplicationDetailPage() {
       </Card>
 
       <CreateClientProfileDialog open={createClientOpen} onOpenChange={setCreateClientOpen} application={application} />
+      {clientBorrowerQuery.data && (
+        <RealCreateLoanAccountDialog
+          open={createLoanOpen}
+          onOpenChange={setCreateLoanOpen}
+          borrower={clientBorrowerQuery.data}
+          application={application}
+          productVersions={productVersionOptions}
+        />
+      )}
     </div>
   );
 }

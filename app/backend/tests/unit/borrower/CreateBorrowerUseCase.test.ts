@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
-import { InvalidPersonNameError } from '@modules/borrower/domain/errors/BorrowerDomainErrors';
+import { Borrower } from '@modules/borrower/domain/Borrower';
+import { PersonName } from '@modules/borrower/domain/valueObjects/PersonName';
+import { DuplicateClientProfileError, InvalidPersonNameError } from '@modules/borrower/domain/errors/BorrowerDomainErrors';
 
 function buildRepo(): IBorrowerRepository {
-  return { findById: vi.fn(), save: vi.fn() };
+  return { findById: vi.fn(), save: vi.fn(), findBySourceApplicationId: vi.fn().mockResolvedValue(null) } as unknown as IBorrowerRepository;
 }
 
 describe('CreateBorrowerUseCase', () => {
@@ -25,6 +27,18 @@ describe('CreateBorrowerUseCase', () => {
     await expect(useCase.execute({ branchId: 'branch-1', firstName: '', lastName: 'Dela Cruz' })).rejects.toThrow(
       InvalidPersonNameError,
     );
+    expect(borrowerRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a second Client Profile for an already-converted LoanApplication', async () => {
+    const borrowerRepository = buildRepo();
+    const alreadyConverted = Borrower.create({ branchId: 'branch-1', name: PersonName.of('Juan', 'Dela Cruz'), sourceApplicationId: 'app-1' });
+    (borrowerRepository.findBySourceApplicationId as ReturnType<typeof vi.fn>).mockResolvedValue(alreadyConverted);
+    const useCase = new CreateBorrowerUseCase({ borrowerRepository });
+
+    await expect(
+      useCase.execute({ branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz', sourceApplicationId: 'app-1' }),
+    ).rejects.toThrow(DuplicateClientProfileError);
     expect(borrowerRepository.save).not.toHaveBeenCalled();
   });
 });

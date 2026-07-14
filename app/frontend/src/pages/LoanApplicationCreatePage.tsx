@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 import { FieldTooltip } from '@/components/FieldTooltip';
 import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,7 +32,6 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   type AttachmentDocumentCategory,
 } from '@/lib/documentApiTypes';
-import { INTAKE_DOCUMENT_OPTIONS } from '@/lib/staticConfig';
 import { formatPeso } from '@/lib/utils';
 
 const AI_EXTRACTION_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.docx';
@@ -43,11 +43,10 @@ const AI_EXTRACTION_ACCEPTED_MIME = new Set([
 ]);
 
 /**
- * The specific documents needed to review an application - separate from the "Documents Submitted"
- * paper-form checklist below (§Docs, ticks only, no real file). Uploaded here become real
- * attachments tagged by category once the application exists (see createMutation's onSuccess),
- * feeding a future risk-assessment feature that reads these by category. `showWhen` is evaluated
- * live against the current loan type / co-borrower selection so only relevant slots are shown.
+ * The specific documents needed to review an application. Uploaded here become real attachments
+ * tagged by category once the application exists (see createMutation's onSuccess), feeding a
+ * future risk-assessment feature that reads these by category. `showWhen` is evaluated live
+ * against the current loan type / co-borrower selection so only relevant slots are shown.
  */
 const DOCUMENT_SLOTS: {
   category: AttachmentDocumentCategory;
@@ -72,6 +71,14 @@ function splitFullName(fullName: string): { firstName: string; middleName: strin
   if (parts.length <= 1) return { firstName: parts[0] ?? '', middleName: '', lastName: '' };
   if (parts.length === 2) return { firstName: parts[0]!, middleName: '', lastName: parts[1]! };
   return { firstName: parts[0]!, middleName: parts.slice(1, -1).join(' '), lastName: parts[parts.length - 1]! };
+}
+
+/** The intake form stores the co-borrower as one combined string, e.g. "Jane Doe (spouse)" - this
+ * splits it back into a name and relationship when prefilling a renewal from a prior application. */
+function parseCoBorrowerName(coBorrowerName: string): { name: string; relationship: string } {
+  const match = coBorrowerName.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (match) return { name: match[1]!.trim(), relationship: match[2]!.trim() };
+  return { name: coBorrowerName.trim(), relationship: '' };
 }
 
 /**
@@ -219,58 +226,122 @@ function computeAge(dateOfBirth: string): number | null {
 
 export function LoanApplicationCreatePage() {
   const navigate = useNavigate();
+  return (
+    <LoanApplicationForm
+      onCreated={(application, failedDocumentLabels) =>
+        navigate(`/applications/${application.id}`, {
+          replace: true,
+          state: failedDocumentLabels ? { failedDocumentLabels } : undefined,
+        })
+      }
+      onCancel={() => navigate(-1)}
+    />
+  );
+}
+
+/**
+ * The actual form - extracted from `LoanApplicationCreatePage` (2026-07-14) so it can be reused
+ * inside a "Create Loan Application" dialog on the Client Profile page (a renewal application for
+ * an existing client), not just as the standalone `/applications/new` page. `prefillFrom` seeds
+ * every field from the client's most recent application (accountType forced to RENEWAL in that
+ * case); `showChrome=false` drops the page header/back button/back-navigating Cancel button for
+ * use inside a Dialog, where the caller supplies its own header and `onCancel` (e.g. closing the
+ * dialog) instead.
+ */
+export function LoanApplicationForm({
+  prefillFrom,
+  lockedBorrowerId,
+  showChrome = true,
+  onCreated,
+  onCancel,
+}: {
+  prefillFrom?: LoanApplication;
+  lockedBorrowerId?: string;
+  showChrome?: boolean;
+  onCreated: (application: LoanApplication, failedDocumentLabels?: string[]) => void;
+  onCancel: () => void;
+}) {
   const { canAccessLoanApplications, currentAccount } = useRole();
-  useLogPageView('Loan Applications', 'create-application-form');
+  useLogPageView('Loan Applications', showChrome ? 'create-application-form' : 'create-application-dialog');
+
+  const prefillCoBorrower = React.useMemo(
+    () => (prefillFrom?.coBorrowerName ? parseCoBorrowerName(prefillFrom.coBorrowerName) : null),
+    [prefillFrom],
+  );
 
   // §1 - referral
   const [referralSource, setReferralSource] = React.useState('Walk-in');
   const [referralDetail, setReferralDetail] = React.useState('');
   // §2 - loan information
-  const [accountType, setAccountType] = React.useState<'NEW' | 'RENEWAL'>('NEW');
-  const [loanCategory, setLoanCategory] = React.useState('');
-  const [requestedAmount, setRequestedAmount] = React.useState('');
-  const [requestedTermMonths, setRequestedTermMonths] = React.useState('');
-  const [loanPurpose, setLoanPurpose] = React.useState('');
+  const [accountType, setAccountType] = React.useState<'NEW' | 'RENEWAL'>(lockedBorrowerId ? 'RENEWAL' : 'NEW');
+  const [loanCategory, setLoanCategory] = React.useState(prefillFrom?.requestedCategory ?? '');
+  const [requestedAmount, setRequestedAmount] = React.useState(prefillFrom ? String(prefillFrom.requestedAmount) : '');
+  const [requestedTermMonths, setRequestedTermMonths] = React.useState(prefillFrom ? String(prefillFrom.requestedTermMonths) : '');
+  const [loanPurpose, setLoanPurpose] = React.useState(prefillFrom?.loanPurpose ?? '');
   // §3 - personal information
-  const [firstName, setFirstName] = React.useState('');
-  const [middleName, setMiddleName] = React.useState('');
-  const [lastName, setLastName] = React.useState('');
+  const prefillName = React.useMemo(() => (prefillFrom ? splitFullName(prefillFrom.applicantName) : null), [prefillFrom]);
+  const [firstName, setFirstName] = React.useState(prefillName?.firstName ?? '');
+  const [middleName, setMiddleName] = React.useState(prefillName?.middleName ?? '');
+  const [lastName, setLastName] = React.useState(prefillName?.lastName ?? '');
   const [nickname, setNickname] = React.useState('');
-  const [gender, setGender] = React.useState('');
-  const [civilStatus, setCivilStatus] = React.useState('');
-  const [nationality, setNationality] = React.useState('Filipino');
-  const [dateOfBirth, setDateOfBirth] = React.useState('');
-  const [placeOfBirth, setPlaceOfBirth] = React.useState('');
-  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
+  const [gender, setGender] = React.useState(prefillFrom?.gender ?? '');
+  const [civilStatus, setCivilStatus] = React.useState(prefillFrom?.civilStatus ?? '');
+  const [nationality, setNationality] = React.useState(prefillFrom?.nationality ?? 'Filipino');
+  const [dateOfBirth, setDateOfBirth] = React.useState(prefillFrom?.birthDate ? prefillFrom.birthDate.slice(0, 10) : '');
+  const [placeOfBirth, setPlaceOfBirth] = React.useState(prefillFrom?.placeOfBirth ?? '');
+  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(
+    prefillFrom
+      ? {
+          houseUnitNumber: prefillFrom.houseUnitNumber ?? '',
+          street: prefillFrom.street ?? '',
+          barangay: prefillFrom.barangay ?? '',
+          cityMunicipality: prefillFrom.cityMunicipality ?? '',
+          province: prefillFrom.province ?? '',
+          zipCode: prefillFrom.zipCode ?? '',
+        }
+      : emptyAddressDraft(),
+  );
   const [aiSuggestedAddress, setAiSuggestedAddress] = React.useState<string | null>(null);
-  const [homeOwnership, setHomeOwnership] = React.useState('');
-  const [mobileNo, setMobileNo] = React.useState('');
-  const [email, setEmail] = React.useState('');
+  const [homeOwnership, setHomeOwnership] = React.useState(prefillFrom?.homeOwnership ?? '');
+  const [mobileNo, setMobileNo] = React.useState(prefillFrom?.mobilePhone ?? '');
+  const [email, setEmail] = React.useState(prefillFrom?.email ?? '');
   // §4 - employment
-  const [employer, setEmployer] = React.useState('');
-  const [occupation, setOccupation] = React.useState('');
-  const [officeAddress, setOfficeAddress] = React.useState('');
-  const [tin, setTin] = React.useState('');
-  const [sss, setSss] = React.useState('');
+  const [employer, setEmployer] = React.useState(prefillFrom?.employer ?? '');
+  const [occupation, setOccupation] = React.useState(prefillFrom?.occupation ?? '');
+  const [officeAddress, setOfficeAddress] = React.useState(prefillFrom?.officeAddress ?? '');
+  const [monthlyIncome, setMonthlyIncome] = React.useState(String(prefillFrom?.monthlyIncome ?? ''));
+  const [tin, setTin] = React.useState(prefillFrom?.tinNumber ?? '');
+  const [sss, setSss] = React.useState(prefillFrom?.sssNumber ?? '');
   // §5 - dependants
-  const [dependants, setDependants] = React.useState<DependantRow[]>([]);
+  const [dependants, setDependants] = React.useState<DependantRow[]>(
+    prefillFrom?.dependants.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' })) ?? [],
+  );
   // §6 - spouse
   const [spouseName, setSpouseName] = React.useState('');
   const [spouseEmployer, setSpouseEmployer] = React.useState('');
   // §7/§8 - co-borrower
-  const [hasCoBorrower, setHasCoBorrower] = React.useState(false);
-  const [coBorrowerName, setCoBorrowerName] = React.useState('');
-  const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState('');
-  const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState('');
+  const [hasCoBorrower, setHasCoBorrower] = React.useState(Boolean(prefillFrom?.coBorrowerName));
+  const [coBorrowerName, setCoBorrowerName] = React.useState(prefillCoBorrower?.name ?? '');
+  const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(prefillCoBorrower?.relationship ?? '');
+  const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState(prefillFrom?.coBorrowerEmployer ?? '');
   // §9 - character references
-  const [reference1, setReference1] = React.useState({ name: '', mobile: '' });
-  const [reference2, setReference2] = React.useState({ name: '', mobile: '' });
+  const [reference1, setReference1] = React.useState({
+    name: prefillFrom?.reference1Name ?? '',
+    mobile: prefillFrom?.reference1Mobile ?? '',
+  });
+  const [reference2, setReference2] = React.useState({
+    name: prefillFrom?.reference2Name ?? '',
+    mobile: prefillFrom?.reference2Mobile ?? '',
+  });
   const [note, setNote] = React.useState('');
-  // Documents submitted (paper-form checklist - ticks only, see §Docs below)
-  const [documents, setDocuments] = React.useState<Set<string>>(new Set());
   // Applicant Documents - real files, saved as categorized attachments once the application exists.
   const [documentFiles, setDocumentFiles] = React.useState<Partial<Record<AttachmentDocumentCategory, File>>>({});
   const [documentFileErrors, setDocumentFileErrors] = React.useState<Partial<Record<AttachmentDocumentCategory, string>>>({});
+  // Other Supporting Documents - uncategorized, multi-file upload for anything that doesn't fit
+  // one of the specific slots above (e.g. additional proof of income, extra IDs).
+  const [otherDocumentFiles, setOtherDocumentFiles] = React.useState<File[]>([]);
+  const [otherDocumentFileError, setOtherDocumentFileError] = React.useState<string | null>(null);
+  const otherDocumentsInputRef = React.useRef<HTMLInputElement>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   // AI auto-fill - local Ollama (moondream) only, never a cloud service. Ephemeral: the uploaded
@@ -377,19 +448,31 @@ export function LoanApplicationCreatePage() {
 
   const visibleDocumentSlots = DOCUMENT_SLOTS.filter((slot) => !slot.showWhen || slot.showWhen({ loanCategory, hasCoBorrower }));
 
-  const toggleDocument = (name: string) => {
-    setDocuments((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+  const handleOtherDocumentFilesSelected = (fileList: FileList) => {
+    const files = [...fileList];
+    for (const file of files) {
+      if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
+        setOtherDocumentFileError('Unsupported file type. Allowed: PDF, JPEG, PNG.');
+        return;
+      }
+      if (file.size > ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+        setOtherDocumentFileError(`File exceeds the ${ATTACHMENT_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit.`);
+        return;
+      }
+    }
+    setOtherDocumentFileError(null);
+    setOtherDocumentFiles((prev) => [...prev, ...files]);
+  };
+
+  const handleRemoveOtherDocumentFile = (index: number) => {
+    setOtherDocumentFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const createMutation = useMutation({
     mutationFn: () =>
       apiClient.post<LoanApplication>('/loan-applications', {
         branchId: currentAccount.branchId,
+        borrowerId: lockedBorrowerId,
         applicantName,
         age: age ?? undefined,
         gender: gender || undefined,
@@ -399,9 +482,16 @@ export function LoanApplicationCreatePage() {
         nationality: nationality.trim() || undefined,
         homeOwnership: homeOwnership || undefined,
         address: presentAddress.trim() || undefined,
+        houseUnitNumber: addressDraft.houseUnitNumber.trim() || undefined,
+        street: addressDraft.street.trim() || undefined,
+        barangay: addressDraft.barangay.trim() || undefined,
+        cityMunicipality: addressDraft.cityMunicipality.trim() || undefined,
+        province: addressDraft.province.trim() || undefined,
+        zipCode: addressDraft.zipCode.trim() || undefined,
         employer: employer.trim() || undefined,
         occupation: occupation.trim() || undefined,
         officeAddress: officeAddress.trim() || undefined,
+        monthlyIncome: Number(monthlyIncome) > 0 ? Number(monthlyIncome) : undefined,
         tinNumber: tin.trim() || undefined,
         sssNumber: sss.trim() || undefined,
         mobilePhone: mobileNo.trim() || undefined,
@@ -425,7 +515,6 @@ export function LoanApplicationCreatePage() {
         referralSource: referralDetail.trim() ? `${referralSource} - ${referralDetail.trim()}` : referralSource,
         accountType,
         loanPurpose: loanPurpose.trim() || undefined,
-        submittedDocuments: [...documents],
       } satisfies CreateLoanApplicationRequest),
     onSuccess: async (application) => {
       // Best-effort: auto-save the AI Auto-fill upload and every Applicant Document slot as real
@@ -439,9 +528,12 @@ export function LoanApplicationCreatePage() {
       for (const [category, file] of Object.entries(documentFiles) as [AttachmentDocumentCategory, File][]) {
         pendingUploads.push({ file, category, label: DOCUMENT_CATEGORY_LABELS[category] });
       }
+      for (const file of otherDocumentFiles) {
+        pendingUploads.push({ file, label: file.name });
+      }
 
       if (pendingUploads.length === 0) {
-        navigate(`/applications/${application.id}`, { replace: true });
+        onCreated(application);
         return;
       }
 
@@ -457,10 +549,7 @@ export function LoanApplicationCreatePage() {
       );
       const failedLabels = pendingUploads.filter((_, i) => results[i]!.status === 'rejected').map((u) => u.label);
 
-      navigate(`/applications/${application.id}`, {
-        replace: true,
-        state: failedLabels.length > 0 ? { failedDocumentLabels: failedLabels } : undefined,
-      });
+      onCreated(application, failedLabels.length > 0 ? failedLabels : undefined);
     },
   });
 
@@ -491,21 +580,23 @@ export function LoanApplicationCreatePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div>
-        <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back
-        </Button>
-        <div className="flex items-center gap-2">
-          <FilePlus2 className="h-5 w-5 text-primary" />
-          <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
+    <div className={showChrome ? 'mx-auto max-w-3xl space-y-4' : 'space-y-4'}>
+      {showChrome && (
+        <div>
+          <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={onCancel}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
+          </Button>
+          <div className="flex items-center gap-2">
+            <FilePlus2 className="h-5 w-5 text-primary" />
+            <h2 className="text-2xl font-semibold tracking-tight">Loan Application Form</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            For walk-in applicants - the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
+            (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only - do not enter real client information
+            in this preview build.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          For walk-in applicants - the loan officer fills this out on the applicant&apos;s behalf, following the official paper form
-          (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02). Sample data only - do not enter real client information
-          in this preview build.
-        </p>
-      </div>
+      )}
 
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>
@@ -745,6 +836,9 @@ export function LoanApplicationCreatePage() {
               <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
             </Field>
           </div>
+          <Field label="Monthly income" tooltip="Applicant's gross monthly income - used for the Risk Management pre-qualification assessment.">
+            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+          </Field>
           <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
             <Input value={tin} onChange={(e) => setTin(e.target.value)} />
           </Field>
@@ -862,7 +956,7 @@ export function LoanApplicationCreatePage() {
       </SectionCard>
 
       <SectionCard
-        number="Docs"
+        number="11"
         title="Applicant Documents"
         description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
       >
@@ -878,25 +972,41 @@ export function LoanApplicationCreatePage() {
             />
           ))}
         </div>
-      </SectionCard>
 
-      <SectionCard
-        number="Docs (paper form)"
-        title="Documents Submitted"
-        description="Tick the documents the applicant submitted with the paper form. Preview build: file names/metadata only - no real upload happens."
-      >
-        <div className="grid gap-2 sm:grid-cols-2">
-          {INTAKE_DOCUMENT_OPTIONS.map((doc) => (
-            <label key={doc} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-input"
-                checked={documents.has(doc)}
-                onChange={() => toggleDocument(doc)}
-              />
-              {doc}
-            </label>
-          ))}
+        <Separator className="my-4" />
+
+        <div className="space-y-2">
+          <Label>Other Supporting Documents (optional)</Label>
+          <p className="text-xs text-muted-foreground">
+            Anything that doesn't fit a slot above - select multiple files at once.
+          </p>
+          <input
+            ref={otherDocumentsInputRef}
+            type="file"
+            accept={ATTACHMENT_ACCEPTED_TYPES}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) handleOtherDocumentFilesSelected(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button type="button" variant="outline" size="sm" onClick={() => otherDocumentsInputRef.current?.click()}>
+            <Upload className="mr-1.5 h-3.5 w-3.5" /> Select Files
+          </Button>
+          {otherDocumentFileError && <p className="text-[11px] text-destructive">{otherDocumentFileError}</p>}
+          {otherDocumentFiles.length > 0 && (
+            <ul className="space-y-1.5">
+              {otherDocumentFiles.map((file, i) => (
+                <li key={`${file.name}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
+                  <span className="min-w-0 truncate">{file.name}</span>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={() => handleRemoveOtherDocumentFile(i)}>
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </SectionCard>
 
@@ -913,11 +1023,9 @@ export function LoanApplicationCreatePage() {
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Preview build: only the fields the LMS models today (name, age, address, mobile no., email, employment, co-borrower,
-            requested loan, documents) are saved onto the sample application record. Monthly income, credit score, and properties
-            owned are now recorded after creation, on the application's Risk Management Summary. Dependants, spouse details,
-            TIN/SSS, and character references are captured on the paper form itself and are not yet stored by this preview. The
-            applicant signs the Undertaking on the printed form - no signature is captured here.
+            Monthly income, credit score, and properties owned are recorded after creation, on the application's Risk Management
+            Summary. Spouse details are captured on the paper form itself and not yet stored by this preview. The applicant signs
+            the Undertaking on the printed form - no signature is captured here.
           </p>
           {createMutation.isError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -929,7 +1037,7 @@ export function LoanApplicationCreatePage() {
             <Button disabled={!canSubmit || createMutation.isPending} onClick={() => setConfirmOpen(true)}>
               <FilePlus2 className="mr-2 h-4 w-4" /> Confirm
             </Button>
-            <Button variant="outline" onClick={() => navigate(-1)}>
+            <Button variant="outline" onClick={onCancel}>
               Cancel
             </Button>
           </div>

@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Briefcase, Home, Landmark, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, Briefcase, FilePlus2, Home, Landmark, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
+import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
@@ -284,169 +285,15 @@ function RealEditClientDialog({
   );
 }
 
-/**
- * Real "Create Loan Account" against `POST /loan-accounts` - the first real (non-mock) loan
- * origination flow in the frontend. `loanCode` is a required, staff-typed field rather than
- * client-generated: no confirmed loan-code numbering rule exists yet for the real system (the
- * mock's BL-REG_NNNNN-style codes were never confirmed as the production convention), and
- * CLAUDE.md forbids fabricating financial/business logic - same reasoning as ADR-045's explicit,
- * never-derived `firstRepaymentDate`. Deliberately narrower than the mock `CreateLoanAccountDialog`
- * (no fee waivers, disbursement bank, payment method): those aren't accepted by
- * `createLoanAccountSchema` yet either - this dialog only offers fields the real API can persist.
- */
-function RealCreateLoanAccountDialog({
-  open,
-  onOpenChange,
-  borrower,
-  eligibleApplication,
-  productVersions,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  borrower: RealBorrower;
-  eligibleApplication: LoanApplication;
-  productVersions: { id: string; label: string; version: LoanProduct['versions'][number] }[];
-}) {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [loanProductVersionId, setLoanProductVersionId] = React.useState('');
-  const [loanCode, setLoanCode] = React.useState('');
-  const [principalAmount, setPrincipalAmount] = React.useState('');
-  const [interestRate, setInterestRate] = React.useState('');
-  const [installmentCount, setInstallmentCount] = React.useState('');
-  const [gracePeriodDays, setGracePeriodDays] = React.useState('');
-  const [firstRepaymentDate, setFirstRepaymentDate] = React.useState('');
-
-  const selectedVersion = productVersions.find((v) => v.id === loanProductVersionId)?.version;
-
-  React.useEffect(() => {
-    if (!open) return;
-    setLoanProductVersionId('');
-    setLoanCode('');
-    setPrincipalAmount(String(eligibleApplication.requestedAmount ?? ''));
-    setInterestRate('');
-    setInstallmentCount(String(eligibleApplication.requestedTermMonths ?? ''));
-    setGracePeriodDays('');
-    setFirstRepaymentDate('');
-  }, [open, eligibleApplication]);
-
-  React.useEffect(() => {
-    if (!selectedVersion) return;
-    if (selectedVersion.defaultInterestRate) setInterestRate(selectedVersion.defaultInterestRate);
-    if (selectedVersion.installmentCountDefault) setInstallmentCount(String(selectedVersion.installmentCountDefault));
-    setGracePeriodDays(String(selectedVersion.gracePeriodDefaultDays ?? 0));
-  }, [selectedVersion]);
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post<LoanAccount>('/loan-accounts', {
-        loanCode: loanCode.trim(),
-        borrowerId: borrower.id,
-        loanProductVersionId,
-        branchId: borrower.branchId,
-        principalAmount,
-        interestRate,
-        installmentCount: Number(installmentCount),
-        gracePeriodDays: gracePeriodDays ? Number(gracePeriodDays) : undefined,
-        firstRepaymentDate,
-      }),
-    onSuccess: (loan) => {
-      onOpenChange(false);
-      queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
-      queryClient.invalidateQueries({ queryKey: ['loan-application', eligibleApplication.id] });
-      navigate(`/loans/${loan.id}`);
-    },
-  });
-
-  const canSubmit =
-    loanProductVersionId.trim() &&
-    loanCode.trim() &&
-    principalAmount.trim() &&
-    interestRate.trim() &&
-    installmentCount.trim() &&
-    firstRepaymentDate.trim() &&
-    !createMutation.isPending;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Create Loan Account</DialogTitle>
-          <DialogDescription>
-            From {borrower.fullName}'s approved application ({eligibleApplication.requestedCategory}). Creates the real loan account
-            record - review before submitting.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Loan Product</Label>
-            <Select value={loanProductVersionId} onValueChange={setLoanProductVersionId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a product" />
-              </SelectTrigger>
-              <SelectContent>
-                {productVersions.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Loan Code</Label>
-            <Input value={loanCode} onChange={(e) => setLoanCode(e.target.value)} placeholder="e.g. BL-REG_00063" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Principal Amount</Label>
-            <Input type="number" value={principalAmount} onChange={(e) => setPrincipalAmount(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Interest Rate (%)</Label>
-            <Input type="number" step="0.001" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Installment Count</Label>
-            <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Grace Period (days)</Label>
-            <Input type="number" value={gracePeriodDays} onChange={(e) => setGracePeriodDays(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>First Repayment Date</Label>
-            <Input type="date" value={firstRepaymentDate} onChange={(e) => setFirstRepaymentDate(e.target.value)} />
-          </div>
-        </div>
-
-        {createMutation.isError && (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the loan account.'}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => createMutation.mutate()} disabled={!canSubmit}>
-            Create Loan Account
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. `getMockBorrower()` only knows
  * hand-authored mock clients - a borrower id from `ClientListPage`'s now-real list (a UUID,
  * migrated from legacy data) doesn't exist there and would otherwise hit this page's "not found"
  * state. Deliberately minimal, same scope decision as `LoanDetailPage.tsx`'s `RealLoanDetailView`:
- * personal info + real loan history. Editing is now real (`RealEditClientDialog`). Create Loan
- * Account is now real too (`RealCreateLoanAccountDialog`, gated on a `LoanApplication` whose
- * `createdBorrowerId` matches this client and has no `createdLoanAccountId` yet). Attachments
+ * personal info + real loan history. Editing is now real (`RealEditClientDialog`). "Create Loan
+ * Account" moved to the Loan Applicant Profile page (2026-07-14) - it's gated per-application
+ * there (`application.createdBorrowerId` set + `status === 'APPROVED'`), not per-client. Attachments
  * stay mock-only.
  */
 const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
@@ -515,9 +362,9 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
-  const { canCreateLoanAccount } = useRole();
+  const { canAccessLoanApplications } = useRole();
   const [editOpen, setEditOpen] = React.useState(false);
-  const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
+  const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
 
   const borrowerQuery = useQuery({
     queryKey: ['borrower', borrowerId],
@@ -532,15 +379,10 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   });
   const rawProductsQuery = useQuery({
     // Deliberately NOT ['loan-products', 'all'] - that key is shared by every other page that
-    // caches the plain LoanProduct[] array under different assumptions about shape/freshness. See
-    // this query's original doc comment (now on `productVersionOptions` below) for why a distinct
-    // key matters here.
+    // caches the plain LoanProduct[] array under different assumptions about shape/freshness.
     queryKey: ['loan-products', 'all', 'clientProfilePage'],
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
   });
-  // Deliberately a distinct key from every other page's `['loan-products', 'all']` cache (see
-  // `rawProductsQuery` above) - reusing that key served this page's derived shape to other
-  // array-shaped consumers on later navigation and crashed them.
   const versionToProductName = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const p of rawProductsQuery.data ?? []) {
@@ -548,15 +390,6 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
     }
     return map;
   }, [rawProductsQuery.data]);
-  const productVersionOptions = React.useMemo(
-    () =>
-      (rawProductsQuery.data ?? []).flatMap((p) =>
-        (p.versions ?? [])
-          .filter((v) => v.isActive)
-          .map((v) => ({ id: v.id, label: `${p.name} (v${v.versionNumber})`, version: v })),
-      ),
-    [rawProductsQuery.data],
-  );
 
   const applicationsQuery = useQuery({
     queryKey: ['loan-applications', 'all', 'clientProfilePage'],
@@ -565,13 +398,21 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
   const loans = (loansQuery.data ?? []).filter((l) => l.borrowerId === borrowerId);
   const hasActiveLoan = loans.some((l) => ACTIVE_LOAN_STATUSES.has(l.status));
-  // A new loan account may only be created from a specific, still-unconverted APPROVED
-  // application that produced this client (see LoanApplicationDetailPage's "Create Client
-  // Profile" flow) - every loan, including a renewal, needs its own reviewed/approved application.
-  const eligibleApplication = (applicationsQuery.data ?? []).find(
-    (a) => a.createdBorrowerId === borrowerId && a.status === 'APPROVED' && !a.createdLoanAccountId,
-  );
-  const canCreateLoanAccountNow = canCreateLoanAccount && !hasActiveLoan && Boolean(eligibleApplication);
+  // This client's own applications - either the walk-in flow that later converted INTO this
+  // client (createdBorrowerId, via Borrower.sourceApplicationId), or a renewal application
+  // started directly FROM this client's profile (borrowerId, the "Create Loan Application" flow
+  // added 2026-07-14). Newest first, for prefill and display.
+  const myApplications = (applicationsQuery.data ?? [])
+    .filter((a) => a.createdBorrowerId === borrowerId || a.borrowerId === borrowerId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // A client cannot have 2 loan applications going at once: a new (renewal) application cannot be
+  // started while an earlier one is anything other than DECLINED and hasn't yet produced a loan
+  // account (2026-07-14: previously only blocked on PREAPPROVED/PREDECLINED, which let a second
+  // application be started while an APPROVED-but-not-yet-converted one was still "waiting to
+  // become a loan account" - closed that gap). Mirrors the backend's own check in
+  // CreateLoanApplicationUseCase (belt-and-suspenders: this is just the UI gate).
+  const hasPendingApplication = myApplications.some((a) => a.status !== 'DECLINED' && !a.createdLoanAccountId);
+  const canCreateLoanApplicationNow = canAccessLoanApplications && !hasActiveLoan && !hasPendingApplication;
 
   if (borrowerQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading client…</p>;
@@ -637,6 +478,10 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
               {borrower.incomeDetail?.position ?? '-'}, {borrower.incomeDetail?.employerName ?? '-'}
             </div>
             <dl className="grid grid-cols-2 gap-y-2 border-t pt-3">
+              <dt className="text-muted-foreground">Monthly income</dt>
+              <dd className="text-right font-medium">
+                {borrower.incomeDetail?.monthlyIncome != null ? formatPeso(borrower.incomeDetail.monthlyIncome) : '-'}
+              </dd>
               <dt className="text-muted-foreground">Civil status</dt>
               <dd className="text-right font-medium">{borrower.civilStatus ?? '-'}</dd>
               <dt className="text-muted-foreground">Date of birth</dt>
@@ -652,29 +497,86 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Loan History</CardTitle>
-              {canCreateLoanAccount ? (
-                <Button size="sm" disabled={!canCreateLoanAccountNow} onClick={() => setCreateLoanOpen(true)}>
-                  <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+              <CardTitle>Loan Applications</CardTitle>
+              {canAccessLoanApplications ? (
+                <Button size="sm" disabled={!canCreateLoanApplicationNow} onClick={() => setCreateApplicationOpen(true)}>
+                  <FilePlus2 className="mr-1.5 h-3.5 w-3.5" /> Create Loan Application
                 </Button>
               ) : (
                 <Badge variant="outline" className="text-xs">
-                  Only <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, or <RoleAbbr role="CRM" /> can create loan accounts
+                  Only <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, or <RoleAbbr role="CRM" /> can create loan applications
                 </Badge>
               )}
             </CardHeader>
             <CardContent>
-              {hasActiveLoan && canCreateLoanAccount && (
+              {hasActiveLoan && canAccessLoanApplications && (
                 <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  This client already has an active (or in-arrears) loan account. A client cannot have 2 active loan accounts at once.
+                  This client still has an active (or in-arrears) loan account - a new application can be started once it's closed.
                 </p>
               )}
-              {!hasActiveLoan && canCreateLoanAccount && !eligibleApplication && (
+              {!hasActiveLoan && hasPendingApplication && canAccessLoanApplications && (
                 <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  This client has no approved loan application on file. Every loan account - including a renewal - must come from its
-                  own reviewed and approved Loan Application first.
+                  This client already has a loan application that isn't Declined yet and hasn't produced a loan account - only one can
+                  be open at a time.
                 </p>
               )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Category</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Requested Amount</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Loan Account</TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myApplications.map((application) => (
+                    <TableRow key={application.id} className="cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
+                      <TableCell className="text-xs">{formatDate(application.createdAt)}</TableCell>
+                      <TableCell>{application.requestedCategory}</TableCell>
+                      <TableCell className="text-right">{formatPeso(application.requestedAmount)}</TableCell>
+                      <TableCell>
+                        <Badge variant={application.status === 'APPROVED' ? 'success' : application.status === 'DECLINED' ? 'destructive' : 'outline'}>
+                          {application.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {application.createdLoanAccountId ? (
+                          <Link
+                            to={`/loans/${application.createdLoanAccountId}`}
+                            className="inline-flex items-center gap-1 font-mono text-xs text-primary underline-offset-2 hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Landmark className="h-3 w-3" /> {application.createdLoanAccountCode ?? 'View'}
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {myApplications.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                        No loan applications on record for this client.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Loan History</CardTitle>
+              <CardDescription>
+                To create a new loan account for this client, open the relevant approved Loan Application above - a "Create Loan
+                Account" button appears there once it's Approved.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -740,15 +642,29 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       <RecentActivityPanel label="Client Profile" entityId={borrowerId} />
 
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
-      {eligibleApplication && (
-        <RealCreateLoanAccountDialog
-          open={createLoanOpen}
-          onOpenChange={setCreateLoanOpen}
-          borrower={borrower}
-          eligibleApplication={eligibleApplication}
-          productVersions={productVersionOptions}
-        />
-      )}
+
+      <Dialog open={createApplicationOpen} onOpenChange={setCreateApplicationOpen}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Loan Application</DialogTitle>
+            <DialogDescription>
+              Prefilled from {borrower.fullName}&apos;s most recent loan application, as a renewal. Review and edit before submitting.
+            </DialogDescription>
+          </DialogHeader>
+          {createApplicationOpen && (
+            <LoanApplicationForm
+              prefillFrom={myApplications[0]}
+              lockedBorrowerId={borrowerId}
+              showChrome={false}
+              onCreated={(application) => {
+                setCreateApplicationOpen(false);
+                navigate(`/applications/${application.id}`);
+              }}
+              onCancel={() => setCreateApplicationOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

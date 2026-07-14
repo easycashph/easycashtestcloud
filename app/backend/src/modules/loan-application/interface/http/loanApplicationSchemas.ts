@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 export const createLoanApplicationSchema = z.object({
   branchId: z.string().min(1), // Overridden by the caller's own branch for a non-global role — see resolveWriteBranchId.
+  /** Set only for the "Create Loan Application" (renewal) flow from an existing client's Client
+   * Profile page - see schema.prisma's LoanApplication.borrowerId doc comment. */
+  borrowerId: z.string().min(1).optional(),
   applicantName: z.string().min(1),
   age: z.coerce.number().int().positive().optional(),
   gender: z.string().min(1).optional(),
@@ -11,6 +14,12 @@ export const createLoanApplicationSchema = z.object({
   nationality: z.string().min(1).optional(),
   homeOwnership: z.string().min(1).optional(),
   address: z.string().min(1).optional(),
+  houseUnitNumber: z.string().min(1).optional(),
+  street: z.string().min(1).optional(),
+  barangay: z.string().min(1).optional(),
+  cityMunicipality: z.string().min(1).optional(),
+  province: z.string().min(1).optional(),
+  zipCode: z.string().min(1).optional(),
   monthlyIncome: z.coerce.number().nonnegative().optional(),
   employer: z.string().min(1).optional(),
   occupation: z.string().min(1).optional(),

@@ -12,5 +12,6 @@ export interface FindManyLoanApplicationsOptions {
 export interface ILoanApplicationRepository {
   findById(id: string, ctx?: TransactionContext): Promise<LoanApplication | null>;
   findMany(options: FindManyLoanApplicationsOptions, ctx?: TransactionContext): Promise<LoanApplication[]>;
+  findByBorrowerId(borrowerId: string, ctx?: TransactionContext): Promise<LoanApplication[]>;
   save(application: LoanApplication, ctx?: TransactionContext): Promise<void>;
 }
