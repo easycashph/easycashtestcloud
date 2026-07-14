@@ -64,6 +64,13 @@ export interface LoanAccountProps {
    * not generate the schedule itself.
    */
   firstRepaymentDate: Date;
+  /**
+   * 2026-07-14: staff-entered estimate captured at loan account creation, used to compute the
+   * Advance Interest Fee (ADR-046) and reused as the `{AnticipatedDisbursementDate}` merge field
+   * on generated loan documents (ADR-051) — distinct from `activatedAt`, the real disbursement
+   * date, which has no value yet when documents are generated at APPROVED.
+   */
+  anticipatedDisbursementDate?: Date;
   approvedAt?: Date;
   approvedByUserId?: string;
   activatedAt?: Date;
@@ -110,6 +117,7 @@ export interface CreateLoanAccountProps {
   repaymentPeriodUnit?: RepaymentPeriodUnit;
   gracePeriodDays?: number;
   firstRepaymentDate: Date;
+  anticipatedDisbursementDate?: Date;
   /** 2026-07-11 (Create Loan Account) — omit for zero fees (e.g. programmatic/migration creation). */
   originationFees?: OriginationFeesProps;
   legacyId?: string;
@@ -172,6 +180,7 @@ export class LoanAccount {
         repaymentPeriodUnit: input.repaymentPeriodUnit ?? 'MONTHS',
         gracePeriodDays: input.gracePeriodDays ?? 0,
         firstRepaymentDate: input.firstRepaymentDate,
+        anticipatedDisbursementDate: input.anticipatedDisbursementDate,
         legacyBalanceDataMissing: false,
         originationFees,
         netProceeds,
@@ -283,6 +292,10 @@ export class LoanAccount {
 
   get firstRepaymentDate(): Date {
     return this.props.firstRepaymentDate;
+  }
+
+  get anticipatedDisbursementDate(): Date | undefined {
+    return this.props.anticipatedDisbursementDate;
   }
 
   get approvedAt(): Date | undefined {

@@ -17,7 +17,7 @@ const DEFAULT_TEMPLATES_DIR = resolve(process.cwd(), 'templates');
 export class DocxtemplaterDocumentFiller implements IDocumentFiller {
   constructor(private readonly templatesDir: string = DEFAULT_TEMPLATES_DIR) {}
 
-  async fill(templateCode: string, data: Record<string, string>): Promise<Buffer> {
+  async fill(templateCode: string, data: Record<string, unknown>): Promise<Buffer> {
     const filePath = join(this.templatesDir, `${templateCode}.docx`);
     if (!existsSync(filePath)) {
       throw new TemplateFileNotConfiguredError(templateCode);

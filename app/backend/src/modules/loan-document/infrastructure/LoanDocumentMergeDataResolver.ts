@@ -4,6 +4,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
+import { Money } from '@shared/domain/Money';
 import type { ILoanDocumentMergeDataResolver } from '../application/ports/ILoanDocumentMergeDataResolver';
 import { moneyToWords } from '../application/numberToWords';
 
@@ -32,7 +33,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
     },
   ) {}
 
-  async resolve(loanAccountId: string): Promise<Record<string, string>> {
+  async resolve(loanAccountId: string): Promise<Record<string, unknown>> {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) throw new NotFoundError('LoanAccount', loanAccountId);
 
@@ -57,12 +58,29 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
 
     const originationFees = loanAccount.originationFees;
 
+    // ADR-051 (Promissory Note installment schedule table): docxtemplater repeats a table row once
+    // per array entry when the template wraps that row in `{#Schedule}`/`{/Schedule}` tags.
+    const installmentPaymentsDue = sortedInstallments.map((installment) =>
+      installment.due.principal.add(installment.due.interest).add(installment.due.fees),
+    );
+    const schedule = sortedInstallments.map((installment, index) => ({
+      Number: String(index + 1),
+      Date: formatDate(installment.dueDate),
+      PaymentDue: installmentPaymentsDue[index]!.toString(),
+    }));
+    const totalPaymentDue = installmentPaymentsDue.reduce((sum, due) => sum.add(due), Money.ZERO);
+
     return {
       BorrowerName: borrower.name.fullName(),
       LoanAccountId: loanAccount.loanCode,
       LoanProductName: loanProduct.name,
       ApprovalDate: loanAccount.approvedAt ? formatDate(loanAccount.approvedAt) : '',
       DisbursementDate: loanAccount.activatedAt ? formatDate(loanAccount.activatedAt) : '',
+      // Documents are generated at APPROVED, before activatedAt (the real disbursement date) has a
+      // value — this is the staff-entered estimate captured at loan account creation instead.
+      AnticipatedDisbursementDate: loanAccount.anticipatedDisbursementDate
+        ? formatDate(loanAccount.anticipatedDisbursementDate)
+        : '',
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
       BranchName: branch?.name ?? '',
 
@@ -85,6 +103,9 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       InstallmentAmount: firstInstallmentTotal ? firstInstallmentTotal.toString() : '',
       NumberOfInstallments: String(loanAccount.installmentCount),
       FirstDueDate: formatDate(loanAccount.firstRepaymentDate),
+      Schedule: schedule,
+      TotalPaymentDue: totalPaymentDue.toString(),
+      TotalPaymentDueWords: moneyToWords(totalPaymentDue.toDecimal()),
     };
   }
 }

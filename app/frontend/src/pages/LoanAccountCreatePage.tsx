@@ -427,6 +427,7 @@ export function LoanAccountCreatePage() {
         contractualInterestRate: interestRateNum.toFixed(3),
         installmentCount: installmentCountNum,
         firstRepaymentDate,
+        anticipatedDisbursementDate: disbursementDate || undefined,
         processingFee,
         advanceInterestFee,
         outstandingBalancePayoff,

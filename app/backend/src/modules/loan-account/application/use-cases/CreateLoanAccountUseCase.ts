@@ -74,6 +74,7 @@ export class CreateLoanAccountUseCase {
       installmentCount: input.installmentCount,
       gracePeriodDays: input.gracePeriodDays,
       firstRepaymentDate: input.firstRepaymentDate,
+      anticipatedDisbursementDate: input.anticipatedDisbursementDate,
       originationFees: {
         processingFee: Money.of(input.processingFee ?? '0'),
         advanceInterestFee: Money.of(input.advanceInterestFee ?? '0'),

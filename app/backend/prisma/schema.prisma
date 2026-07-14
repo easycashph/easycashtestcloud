@@ -777,6 +777,15 @@ model LoanAccount {
   /// this date by repaymentPeriodUnit.
   firstRepaymentDate DateTime
 
+  /// 2026-07-14 (Promissory Note "Anticipated Disbursement Date"): staff-entered estimate
+  /// captured on the Create Loan Account form, used there to compute the Advance Interest Fee
+  /// (ADR-046) but previously discarded rather than persisted. Now stored so it can be reused as
+  /// the `{AnticipatedDisbursementDate}` merge field on generated loan documents (ADR-051).
+  /// Distinct from `activatedAt`, which is the real disbursement date, only known once the loan is
+  /// actually activated/released — this field exists precisely because documents are generated at
+  /// APPROVED, before `activatedAt` has a value.
+  anticipatedDisbursementDate DateTime?
+
   approvedAt       DateTime?
   approvedByUserId String?
   approvedBy       User?     @relation("LoanAccountApprovedBy", fields: [approvedByUserId], references: [id])
