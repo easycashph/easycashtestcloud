@@ -196,6 +196,54 @@ Committed as `dc5a130` (schema/backend/frontend/template together — one cohere
 `tsc --noEmit` clean on both backend and frontend; backend test suite unaffected (573 passed / 16
 pre-existing failures, unrelated to this work).
 
+## Disclosure Statement: full merge data + a legacy netProceeds data bug
+
+Continued through the rest of the Disclosure Statement's placeholders, live-testing against the
+Docker stack after each backend rebuild:
+
+- `Address` (borrower's first address on file, comma-joined — same convention as
+  `ClientProfilePage.tsx`'s `existingAddressLine`), `InterestRate`/`ContractualRate`.
+- Found and fixed a real display bug along the way: `Percentage.toString()` always returns the
+  fixed 3-decimal storage form ("2.520"), which read wrong once actually generated ("2.520%" and,
+  compounded by a literal "%" the user had also typed in the template, "2.520%%"). Added
+  `formatPercentage()` to trim trailing zeros for display ("2.520" -> "2.52%"); told the user to
+  remove the extra literal "%" from the template since the value already includes one.
+- `MiscellaneousFee` — not its own stored field; per user, defined as Notarial Fee + Web Fee +
+  Insurance Fee combined.
+- **Hide-if-zero line items**: user wants the legacy Excel LMS's behavior (a fee's whole
+  label+amount line disappears when zero, not just a blank/zero amount) replicated. Since
+  docxtemplater has no separate "IF" construct, reused its loop-tag syntax
+  (`{#HasX}...{/HasX}`) with a boolean instead of an array — falsy hides the section entirely,
+  truthy renders it once. Added `HasPrincipalAmount`/`HasProcessingFee`/`HasAdvanceInterest`/
+  `HasAccountManagementFee`/`HasDocStamp`/`HasOutstandingBalance`/`HasOthers`/
+  `HasMiscellaneousFee` gates. Caught via screenshot review that the user's first two attempts put
+  only the tags (no label text) or all-in-one-cell layouts — clarified that the literal label text
+  must sit *inside* the `{#HasX}...{/HasX}` boundary (same cell/row) alongside the value, not just
+  the value alone, otherwise the label survives even when the row's amount is hidden.
+- **AmortizationSchedule**: user shared a real legacy Disclosure Statement PDF
+  (`DS- SL-REG_00114.pdf`) showing a richer 7-column schedule (`#`/Date/Principal/Interest/Fees/
+  Payment Due/running Balance) plus an opening "row 0" at disbursement showing the starting
+  balance — distinct from the Promissory Note's simpler 3-column `Schedule`. Added as a separate
+  merge array (opening row + one entry per installment with a running balance computed via
+  `Money.subtract`), plus `TotalPrincipal`/`TotalInterest`/`TotalFees` for the Totals row (reusing
+  the already-existing `TotalPaymentDue`).
+
+**Legacy `netProceeds` bug**, found while testing: the acknowledgment paragraph's `{NetProceeds}`
+placeholder rendered `₱0.00` for a ₱10,000 loan with zero fees — should have been ₱10,000. Checked
+the database directly: **all 1790 loan accounts**, not just this one, have `netProceeds` stored as
+`0.00` regardless of principal or fees — the CP12 migration never computed it (same class of gap
+as `legacyBalanceDataMissing`/`anticipatedDisbursementDate`, all previously found and documented).
+`LoanAccount.create()` already computes this correctly for any loan created going forward; wrote
+[scripts/backfill-net-proceeds.ts](../app/backend/scripts/backfill-net-proceeds.ts) (idempotent,
+`--dry-run` supported, same pattern as the existing `flag-missing-balance-loans.ts`) to apply that
+formula (`principalAmount - originationFees.total()`) retroactively. Dry-run confirmed all 1790
+rows needed correction; user confirmed applying it; second dry-run afterward confirmed 0 remaining
+corrections (idempotency verified). User confirmed the acknowledgment paragraph should keep using
+`NetProceeds` (not switch to `PrincipalAmount`) — the data was wrong, not the template.
+
+Committed as `a3d088c`. `tsc --noEmit` clean; backend test suite unaffected (573 passed / 16
+pre-existing failures, unrelated).
+
 ## Current state
 
 - Working tree clean as of the commits below; Docker stack (`postgres`, `backend`, `frontend`)
@@ -203,8 +251,9 @@ pre-existing failures, unrelated to this work).
   intentionally.
 - Commits made this session: `5658b3a` (frontend vitest harness), `0152eac` (11 ADR-051 `.docx`
   templates), `c6d9778` (inline PDF preview), `6200500` (nginx SPA fallback fix), `dc5a130`
-  (Promissory Note schedule + Anticipated Disbursement Date). Not yet pushed to `origin/main`
-  (5 commits ahead).
+  (Promissory Note schedule + Anticipated Disbursement Date), `80bbc25` (docs), `a3d088c`
+  (Disclosure Statement merge data + netProceeds backfill). Not yet pushed to `origin/main`
+  (7 commits ahead).
 - Known follow-ups (carried over from 2026-07-13, still unresolved):
   - Two independent Note systems still coexist in the backend (`loan-note` vs `note` module) —
     needs a product decision on which is canonical.
