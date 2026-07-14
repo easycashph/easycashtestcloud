@@ -2,12 +2,12 @@
  * PREVIEW-ONLY reimplementation of the display order documented in
  * `docs/Architecture/ADR-009-payment-allocation-order.md` and
  * `CALCULATION_ENGINE_SPEC.md` §5 (fees -> penalty -> interest -> principal).
- * This exists purely so the Payment Recording screen can show a live
- * allocation preview against mock installment data - it is NOT the real
- * `PaymentAllocationService` (`app/backend/src/shared/domain/calculation/
- * PaymentAllocationService.ts`) and must not be treated as financially
- * authoritative. The real engine is what actually posts a payment once
- * CP13 wires this screen to the backend.
+ * This exists purely so the Payment Recording screen can show a live allocation preview, computed
+ * client-side against the real installment amounts already loaded from the backend, before the
+ * payment is actually submitted - it is NOT the real `PaymentAllocationService`
+ * (`app/backend/src/shared/domain/calculation/PaymentAllocationService.ts`) and must not be
+ * treated as financially authoritative. That real engine is what actually posts the payment
+ * (`POST /loan-accounts/:id/payments`) and is the source of truth if this preview ever disagrees.
  */
 export interface AllocationPreviewInput {
   feesDue: number;

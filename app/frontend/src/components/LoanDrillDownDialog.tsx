@@ -12,6 +12,7 @@ export interface DrillDownLoan {
   borrowerName: string;
   productType: string;
   status: LoanAccountStatus;
+  isMatured: boolean;
   collectionsBalance: number;
 }
 
@@ -60,7 +61,7 @@ export function LoanDrillDownDialog({ drillDown, onClose }: { drillDown: LoanDri
                     <TableCell>{loan.borrowerName}</TableCell>
                     <TableCell className="text-muted-foreground">{loan.productType}</TableCell>
                     <TableCell>
-                      <LoanStatusBadge status={loan.status} />
+                      <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                     </TableCell>
                     <TableCell className="text-right">{formatPeso(loan.collectionsBalance)}</TableCell>
                   </TableRow>

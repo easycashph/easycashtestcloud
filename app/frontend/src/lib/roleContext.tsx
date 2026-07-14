@@ -31,6 +31,9 @@ interface RoleContextValue {
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
   canCreateLoanAccount: boolean;
+  /** Re-fetches `GET /auth/me` and updates `currentAccount` - call after a self-service profile
+   * update so the sidebar/header name updates without requiring a full reload. */
+  refreshCurrentUser: () => Promise<void>;
 }
 
 const RoleContext = React.createContext<RoleContextValue | undefined>(undefined);
@@ -111,6 +114,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [loadPreferenceFor],
   );
 
+  const refreshCurrentUser = React.useCallback(async () => {
+    const me = await apiClient.get<AuthenticatedUserView>('/auth/me');
+    setUser(me);
+  }, []);
+
   const logout = React.useCallback(async () => {
     try {
       await apiClient.post('/auth/logout');
@@ -160,6 +168,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canRevertLoanApplicationDecision: currentAccount.roles.includes('MIS'),
     canViewActivityLogs: currentAccount.roles.includes('MIS'),
     canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+    refreshCurrentUser,
   };
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;

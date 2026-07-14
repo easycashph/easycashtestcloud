@@ -1,9 +1,14 @@
 import { prisma } from '@shared/database/prismaClient';
-import type { CreateNoteInput, INoteRepository, NoteOwnerType, NoteRecord } from '../application/ports/INoteRepository';
+import type {
+  CreateProfileNoteInput,
+  IProfileNoteRepository,
+  ProfileNoteOwnerType,
+  ProfileNoteRecord,
+} from '../application/ports/IProfileNoteRepository';
 
-export class PrismaNoteRepository implements INoteRepository {
-  async create(input: CreateNoteInput): Promise<NoteRecord> {
-    const row = await prisma.note.create({
+export class PrismaProfileNoteRepository implements IProfileNoteRepository {
+  async create(input: CreateProfileNoteInput): Promise<ProfileNoteRecord> {
+    const row = await prisma.profileNote.create({
       data: {
         ownerType: input.ownerType,
         ownerId: input.ownerId,
@@ -15,8 +20,8 @@ export class PrismaNoteRepository implements INoteRepository {
     return this.toRecord(row);
   }
 
-  async listByOwner(ownerType: NoteOwnerType, ownerId: string): Promise<NoteRecord[]> {
-    const rows = await prisma.note.findMany({
+  async listByOwner(ownerType: ProfileNoteOwnerType, ownerId: string): Promise<ProfileNoteRecord[]> {
+    const rows = await prisma.profileNote.findMany({
       where: { ownerType, ownerId },
       orderBy: { createdAt: 'desc' },
       include: { author: { select: { firstName: true, lastName: true } } },
@@ -32,10 +37,10 @@ export class PrismaNoteRepository implements INoteRepository {
     authorUserId: string;
     author: { firstName: string; lastName: string } | null;
     createdAt: Date;
-  }): NoteRecord {
+  }): ProfileNoteRecord {
     return {
       id: row.id,
-      ownerType: row.ownerType as NoteOwnerType,
+      ownerType: row.ownerType as ProfileNoteOwnerType,
       ownerId: row.ownerId,
       text: row.text,
       authorUserId: row.authorUserId,

@@ -694,7 +694,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                       <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
                       <TableCell>{versionToProductName.get(loan.loanProductVersionId) ?? '-'}</TableCell>
                       <TableCell>
-                        <LoanStatusBadge status={loan.status} />
+                        <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                       </TableCell>
                       <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
                       <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>

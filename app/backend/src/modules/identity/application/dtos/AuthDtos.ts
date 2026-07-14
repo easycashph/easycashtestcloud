@@ -13,6 +13,9 @@ export interface AuthenticatedUserView {
   branchId: string;
   roles: string[];
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  contactNumber: string | null;
+  address: string | null;
+  birthday: string | null;
 }
 
 export interface TokenPairOutput {

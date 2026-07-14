@@ -16,6 +16,7 @@ function buildDeps() {
     createLoanAccountUseCase: { execute: vi.fn() },
     getLoanAccountUseCase: { execute: vi.fn() },
     listLoanAccountsUseCase: { execute: vi.fn() },
+    listMaturedLoanAccountIdsUseCase: { execute: vi.fn().mockResolvedValue(new Set()) },
     approveLoanUseCase: { execute: vi.fn() },
     rejectLoanUseCase: { execute: vi.fn() },
     // Milestone 9.1/9.2 CP13.

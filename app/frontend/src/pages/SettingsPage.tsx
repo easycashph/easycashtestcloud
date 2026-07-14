@@ -1,6 +1,7 @@
 import * as React from 'react';
-import { Check, Globe, KeyRound, Moon, Palette, Sun, Upload, UserRound } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertCircle, Check, Globe, KeyRound, Moon, Palette, Sun, UserRound } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,31 +10,30 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ACCENT_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
 import type { Language } from '@/lib/translations';
+import { apiClient, ApiError } from '@/lib/apiClient';
+import type { AuthenticatedUserView } from '@/lib/authTypes';
+import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
 import { cn } from '@/lib/utils';
 
-/**
- * Backend has no `PATCH /users/:id`/`change-password` endpoint yet (see `docs/Architecture/
- * FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` §6 point 5) - cross-referenced against
- * `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real `MIN_LENGTH` so the two
- * don't silently drift once a real change-password endpoint exists.
- */
+/** Cross-referenced against `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real
+ * `MIN_LENGTH` so the two don't silently drift. */
 const PASSWORD_MIN_LENGTH = 12;
 
 type SettingsTab = 'profile' | 'security' | 'appearance' | 'language';
 
 /**
- * Frontend↔Backend Wiring Pilot, Stage 0c. Renamed from "LMS Configuration" and moved under the
- * new Configuration nav group. All four tabs are personal, per-user preferences/details - none are
- * MIS-restricted, unlike the old page this replaces. User Profile and Security are mock-only (no
- * backend endpoint exists to persist them); Theme Color and Appearance are real, functioning
- * per-user preferences (see `theme-provider.tsx`), just still stored in `localStorage` rather than
- * the backend.
+ * Frontend↔Backend Wiring Pilot, Stage 0c, self-service Profile/Password wired to real endpoints
+ * 2026-07-12 (`PATCH /users/me`, `POST /users/me/change-password`). All four tabs are personal,
+ * per-user preferences/details - none are MIS-restricted. Theme Color and Appearance remain
+ * `localStorage`-only by design (see `theme-provider.tsx`) - genuinely local device preferences,
+ * not account data.
  */
 export function SettingsPage() {
   useLogPageView('Settings');
@@ -98,34 +98,54 @@ function LanguageTab() {
 }
 
 function UserProfileTab() {
-  const { currentAccount } = useRole();
-  const [name, setName] = React.useState(currentAccount.name);
-  const [email, setEmail] = React.useState(currentAccount.email);
+  const { currentAccount, refreshCurrentUser } = useRole();
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiClient.get<AuthenticatedUserView>('/auth/me'),
+  });
+  const me = meQuery.data;
+
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
   const [contactNumber, setContactNumber] = React.useState('');
   const [address, setAddress] = React.useState('');
   const [birthday, setBirthday] = React.useState('');
-  const [profilePicture, setProfilePicture] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const initials = name
-    .split(' ')
-    .filter(Boolean)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  React.useEffect(() => {
+    if (!me) return;
+    setFirstName(me.firstName);
+    setLastName(me.lastName);
+    setContactNumber(me.contactNumber ?? '');
+    setAddress(me.address ?? '');
+    setBirthday(me.birthday ? me.birthday.slice(0, 10) : '');
+  }, [me]);
 
-  const handlePictureSelect = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => setProfilePicture(reader.result as string);
-    reader.readAsDataURL(file);
-  };
+  const initials = `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase();
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const body: UpdateOwnProfileRequest = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        contactNumber: contactNumber.trim() || null,
+        address: address.trim() || null,
+        birthday: birthday || null,
+      };
+      return apiClient.patch<AuthenticatedUserView>('/users/me', body);
+    },
+    onSuccess: async () => {
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 3000);
+      queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+      await refreshCurrentUser();
+    },
+  });
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 3000);
+    saveMutation.mutate();
   };
 
   return (
@@ -134,70 +154,72 @@ function UserProfileTab() {
         <UserRound className="h-4 w-4 text-primary" />
         <div>
           <CardTitle>User Profile</CardTitle>
-          <CardDescription>
-            Your personal details. Not yet saved to the server - held for this session only (no backend endpoint exists yet for
-            profile updates).
-          </CardDescription>
+          <CardDescription>Your personal details, saved to your real account.</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        <form className="grid max-w-md gap-4" onSubmit={handleSave}>
-          <div className="space-y-1.5">
-            <Label>Profile Picture</Label>
-            <div className="flex items-center gap-3">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={profilePicture ?? undefined} alt={name} />
-                <AvatarFallback>{initials || <UserRound className="h-6 w-6" />}</AvatarFallback>
-              </Avatar>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handlePictureSelect(file);
-                  e.target.value = '';
-                }}
-              />
-              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="mr-2 h-3.5 w-3.5" /> Upload photo
-              </Button>
+        {meQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <form className="grid max-w-md gap-4" onSubmit={handleSave}>
+            <div className="space-y-1.5">
+              <Label>Profile Picture</Label>
+              <div className="flex items-center gap-3">
+                <Avatar className="h-16 w-16">
+                  <AvatarFallback>{initials || <UserRound className="h-6 w-6" />}</AvatarFallback>
+                </Avatar>
+                <ComingSoonButton type="button" variant="outline" size="sm">
+                  Upload photo
+                </ComingSoonButton>
+              </div>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-name">Full Name</Label>
-            <Input id="profile-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-email">Email</Label>
-            <Input id="profile-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-contact">Contact Number</Label>
-            <Input id="profile-contact" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-address">Address</Label>
-            <Input id="profile-address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-birthday">Birthday</Label>
-            <Input id="profile-birthday" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Role</Label>
-            <p className="text-sm text-muted-foreground">{currentAccount.role} - assigned by MIS, not self-editable.</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit">Save Changes</Button>
-            {saved && (
-              <span className="flex items-center gap-1 text-xs text-success">
-                <Check className="h-3.5 w-3.5" /> Saved
-              </span>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-first-name">First Name</Label>
+              <Input id="profile-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-last-name">Last Name</Label>
+              <Input id="profile-last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-email">Email</Label>
+              <Input id="profile-email" type="email" value={me?.email ?? ''} disabled />
+              <p className="text-xs text-muted-foreground">Set by MIS, not self-editable.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-contact">Contact Number</Label>
+              <Input id="profile-contact" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-address">Address</Label>
+              <Input id="profile-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-birthday">Birthday</Label>
+              <Input id="profile-birthday" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <p className="text-sm text-muted-foreground">{currentAccount.role} - assigned by MIS, not self-editable.</p>
+            </div>
+            {saveMutation.isError && (
+              <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save changes.'}
+              </div>
             )}
-          </div>
-        </form>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={saveMutation.isPending}>
+                Save Changes
+              </Button>
+              {saved && (
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <Check className="h-3.5 w-3.5" /> Saved
+                </span>
+              )}
+            </div>
+          </form>
+        )}
       </CardContent>
     </Card>
   );
@@ -210,6 +232,23 @@ function SecurityTab() {
   const [confirmPassword, setConfirmPassword] = React.useState('');
   const [message, setMessage] = React.useState<{ tone: 'error' | 'success'; text: string } | null>(null);
 
+  const changePasswordMutation = useMutation({
+    mutationFn: () => apiClient.post('/users/me/change-password', { currentPassword, newPassword }),
+    onSuccess: () => {
+      setMessage({ tone: 'success', text: 'Password changed.' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError && error.status === 401) {
+        setMessage({ tone: 'error', text: 'Current password is incorrect.' });
+      } else {
+        setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not change password.' });
+      }
+    },
+  });
+
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < PASSWORD_MIN_LENGTH) {
@@ -220,10 +259,8 @@ function SecurityTab() {
       setMessage({ tone: 'error', text: 'New password and confirmation do not match.' });
       return;
     }
-    setMessage({ tone: 'success', text: 'Password changed for this session (not yet saved to the server).' });
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    setMessage(null);
+    changePasswordMutation.mutate();
   };
 
   return (
@@ -244,10 +281,7 @@ function SecurityTab() {
       <Card>
         <CardHeader>
           <CardTitle>Change Password</CardTitle>
-          <CardDescription>
-            Not yet saved to the server - no backend endpoint exists yet for password changes. Validated against the same minimum
-            length the real system will enforce ({PASSWORD_MIN_LENGTH} characters).
-          </CardDescription>
+          <CardDescription>Requires your current password. Minimum {PASSWORD_MIN_LENGTH} characters.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="grid max-w-md gap-4" onSubmit={handleChangePassword}>
@@ -266,7 +300,7 @@ function SecurityTab() {
             {message && (
               <p className={cn('text-xs', message.tone === 'error' ? 'text-destructive' : 'text-success')}>{message.text}</p>
             )}
-            <Button type="submit" className="w-fit">
+            <Button type="submit" className="w-fit" disabled={changePasswordMutation.isPending}>
               Change Password
             </Button>
           </form>

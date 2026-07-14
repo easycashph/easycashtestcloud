@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Presentation-only PHP currency formatting for the mock-data preview. */
+/** PHP currency formatting, used throughout the app for real money figures. */
 export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);
 }

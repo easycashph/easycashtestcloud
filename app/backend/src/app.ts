@@ -44,6 +44,7 @@ import { createLoanAccountRouter } from '@modules/loan-account/interface/http/lo
 import { CreateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/CreateLoanAccountUseCase';
 import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
+import { ListMaturedLoanAccountIdsUseCase } from '@modules/loan-account/application/use-cases/ListMaturedLoanAccountIdsUseCase';
 import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
@@ -87,7 +88,7 @@ import { ListAuditLogsUseCase } from '@modules/audit/application/use-cases/ListA
 import { LogSectionViewUseCase } from '@modules/audit/application/use-cases/LogSectionViewUseCase';
 import { PrismaAuditLogRepository } from '@modules/audit/infrastructure/PrismaAuditLogRepository';
 import { createDocumentRouter } from '@modules/document/interface/http/documentRouter';
-import { createNoteRouter } from '@modules/note/interface/http/noteRouter';
+import { createProfileNoteRouter } from '@modules/profile-note/interface/http/profileNoteRouter';
 import { createAiExtractionRouter } from '@modules/ai-extraction/interface/http/aiExtractionRouter';
 import { ExtractLoanApplicationFieldsUseCase } from '@modules/ai-extraction/application/use-cases/ExtractLoanApplicationFieldsUseCase';
 import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/OllamaVisionModelClient';
@@ -95,9 +96,9 @@ import { UploadAttachmentUseCase } from '@modules/document/application/use-cases
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
-import { PrismaNoteRepository } from '@modules/note/infrastructure/PrismaNoteRepository';
-import { CreateNoteUseCase } from '@modules/note/application/use-cases/CreateNoteUseCase';
-import { ListNotesForOwnerUseCase } from '@modules/note/application/use-cases/ListNotesForOwnerUseCase';
+import { PrismaProfileNoteRepository } from '@modules/profile-note/infrastructure/PrismaProfileNoteRepository';
+import { CreateProfileNoteUseCase } from '@modules/profile-note/application/use-cases/CreateProfileNoteUseCase';
+import { ListProfileNotesForOwnerUseCase } from '@modules/profile-note/application/use-cases/ListProfileNotesForOwnerUseCase';
 import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 import { createUserRouter } from '@modules/identity/interface/http/userRouter';
 import { createRoleClassRouter } from '@modules/role-class/interface/http/RoleClassRouter';
@@ -109,6 +110,8 @@ import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/Pr
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
 import { UpdateUserUseCase } from '@modules/identity/application/use-cases/UpdateUserUseCase';
+import { UpdateOwnProfileUseCase } from '@modules/identity/application/use-cases/UpdateOwnProfileUseCase';
+import { ChangeOwnPasswordUseCase } from '@modules/identity/application/use-cases/ChangeOwnPasswordUseCase';
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
@@ -255,6 +258,8 @@ export function createApp(): Express {
       listUsersUseCase: new ListUsersUseCase({ userRepository }),
       createUserUseCase: new CreateUserUseCase({ userRepository, passwordHasher, auditLogger }),
       updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher, auditLogger }),
+      updateOwnProfileUseCase: new UpdateOwnProfileUseCase({ userRepository }),
+      changeOwnPasswordUseCase: new ChangeOwnPasswordUseCase({ userRepository, passwordHasher, auditLogger }),
     },
     tokenService,
   );
@@ -349,6 +354,7 @@ export function createApp(): Express {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
+      listMaturedLoanAccountIdsUseCase: new ListMaturedLoanAccountIdsUseCase({ loanAccountRepository }),
       approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
@@ -585,17 +591,19 @@ export function createApp(): Express {
   );
   app.use('/api/v1', documentRouter);
 
-  // --- note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
-  // polymorphic ownerType/ownerId shape as the document module above ---
-  const noteRepository = new PrismaNoteRepository();
-  const noteRouter = createNoteRouter(
+  // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
+  // polymorphic ownerType/ownerId shape as the document module above. Distinct from the loan-note
+  // module above (loan-account-only, MIS-deletable, audit-trailed) - renamed from "note" 2026-07-13
+  // to make that distinction unmistakable. ---
+  const profileNoteRepository = new PrismaProfileNoteRepository();
+  const profileNoteRouter = createProfileNoteRouter(
     {
-      createNoteUseCase: new CreateNoteUseCase({ noteRepository }),
-      listNotesForOwnerUseCase: new ListNotesForOwnerUseCase({ noteRepository }),
+      createProfileNoteUseCase: new CreateProfileNoteUseCase({ profileNoteRepository }),
+      listProfileNotesForOwnerUseCase: new ListProfileNotesForOwnerUseCase({ profileNoteRepository }),
     },
     tokenService,
   );
-  app.use('/api/v1', noteRouter);
+  app.use('/api/v1', profileNoteRouter);
 
   // --- ai-extraction module wiring: local Ollama (moondream) — auto-fill suggestions for the
   // Loan Application intake form from an uploaded ID/payslip/PDF/DOCX, never persisted here ---

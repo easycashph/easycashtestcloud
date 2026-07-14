@@ -17,6 +17,9 @@ export interface UserRecord {
   companyId: string | null;
   roleClassId: string | null;
   roleClassName: string | null;
+  contactNumber: string | null;
+  address: string | null;
+  birthday: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,8 +52,12 @@ export interface UpdateUserInput {
   roleClassId?: string | null;
   /** Already normalized/validated — set by UpdateUserUseCase after the uniqueness check. */
   email?: string;
-  /** Already-hashed — set by UpdateUserUseCase when MIS resets a member's password. Never plaintext at this layer. */
+  /** Already-hashed — set by UpdateUserUseCase/ChangeOwnPasswordUseCase. Never plaintext at this layer. */
   passwordHash?: string;
+  /** Self-service fields — set by UpdateOwnProfileUseCase. */
+  contactNumber?: string | null;
+  address?: string | null;
+  birthday?: Date | null;
 }
 
 export interface IUserRepository {

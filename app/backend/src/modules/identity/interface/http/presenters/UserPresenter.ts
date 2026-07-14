@@ -13,6 +13,9 @@ export interface UserResponse {
   companyId: string | null;
   roleClassId: string | null;
   roleClassName: string | null;
+  contactNumber: string | null;
+  address: string | null;
+  birthday: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,6 +35,9 @@ export function presentUser(record: UserRecord): UserResponse {
     companyId: record.companyId,
     roleClassId: record.roleClassId,
     roleClassName: record.roleClassName,
+    contactNumber: record.contactNumber,
+    address: record.address,
+    birthday: record.birthday ? record.birthday.toISOString() : null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

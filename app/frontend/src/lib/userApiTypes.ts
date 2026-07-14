@@ -18,6 +18,9 @@ export interface User {
   companyId: string | null;
   roleClassId: string | null;
   roleClassName: string | null;
+  contactNumber: string | null;
+  address: string | null;
+  birthday: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,4 +50,19 @@ export interface UpdateUserRequest {
   email?: string;
   /** MIS resetting a member's forgotten password - omit to leave the current password unchanged. */
   password?: string;
+}
+
+/** Body for `PATCH /users/me` - self-service only, excludes email/status/roles/companyId. */
+export interface UpdateOwnProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  contactNumber?: string | null;
+  address?: string | null;
+  birthday?: string | null;
+}
+
+/** Body for `POST /users/me/change-password`. */
+export interface ChangeOwnPasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }

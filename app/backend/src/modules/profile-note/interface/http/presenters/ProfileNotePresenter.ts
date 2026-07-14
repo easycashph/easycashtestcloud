@@ -1,6 +1,6 @@
-import type { NoteRecord } from '../../../application/ports/INoteRepository';
+import type { ProfileNoteRecord } from '../../../application/ports/IProfileNoteRepository';
 
-export interface NoteResponse {
+export interface ProfileNoteResponse {
   id: string;
   ownerType: string;
   ownerId: string;
@@ -10,7 +10,7 @@ export interface NoteResponse {
   createdAt: string;
 }
 
-export function presentNote(record: NoteRecord): NoteResponse {
+export function presentProfileNote(record: ProfileNoteRecord): ProfileNoteResponse {
   return {
     id: record.id,
     ownerType: record.ownerType,

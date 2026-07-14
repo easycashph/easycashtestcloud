@@ -29,3 +29,23 @@ export const updateUserSchema = z.object({
 });
 
 export type UpdateUserRequestBody = z.infer<typeof updateUserSchema>;
+
+/** `PATCH /users/me` - self-service only. Deliberately excludes email/status/roles/companyId,
+ * which stay MIS-controlled via `PATCH /users/:id`. */
+export const updateOwnProfileSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  contactNumber: z.string().min(1).nullable().optional(),
+  address: z.string().min(1).nullable().optional(),
+  birthday: z.coerce.date().nullable().optional(),
+});
+
+export type UpdateOwnProfileRequestBody = z.infer<typeof updateOwnProfileSchema>;
+
+/** `POST /users/me/change-password` - requires the current password, unlike the MIS admin reset. */
+export const changeOwnPasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(1),
+});
+
+export type ChangeOwnPasswordRequestBody = z.infer<typeof changeOwnPasswordSchema>;

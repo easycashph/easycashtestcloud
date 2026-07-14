@@ -52,6 +52,11 @@ export interface LoanAccount {
   closedAt: string | null;
   /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all - NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
+  /** 2026-07-13: "Matured" per Investopedia's definition - the loan's full scheduled term has
+   * ended (last installment's due date passed) and it's still unpaid, distinct from "in arrears"
+   * (still mid-term with a missed payment). Computed server-side, not a `status` enum value - only
+   * meaningful when `status` is `ACTIVE`/`ACTIVE_IN_ARREARS`; always `false` otherwise. */
+  isMatured: boolean;
   /** 2026-07-11 (Create Loan Account origination fees) — one-time deductions taken at disbursement, set once at creation. */
   originationFees: {
     processingFee: string;

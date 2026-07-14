@@ -33,4 +33,13 @@ export interface ILoanAccountRepository {
    * same stale instance — re-fetch and re-apply the intended change.
    */
   save(loanAccount: LoanAccount, ctx?: TransactionContext): Promise<void>;
+  /**
+   * 2026-07-13: "Matured" per Investopedia's definition - the loan's full scheduled term has
+   * ended (its last installment's due date has passed) and it's still unpaid, distinct from
+   * "in arrears" (a still-mid-term loan with a missed payment). Mirrors
+   * `PrismaDashboardRepository.findOverdueLoanAccounts`'s identical maturity computation, scoped
+   * to a specific set of loan ids instead of a branch, so both surfaces agree on the same
+   * definition. Batched (one query for N ids) to avoid N+1 on the loan-accounts list endpoint.
+   */
+  findMaturedLoanAccountIds(loanAccountIds: string[], ctx?: TransactionContext): Promise<Set<string>>;
 }

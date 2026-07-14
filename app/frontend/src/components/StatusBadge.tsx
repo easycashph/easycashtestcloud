@@ -11,7 +11,18 @@ const LOAN_STATUS_STYLE: Record<LoanAccountStatus, { label: string; variant: 'de
   CLOSED_REJECTED: { label: 'Rejected', variant: 'secondary' },
 };
 
-export function LoanStatusBadge({ status }: { status: LoanAccountStatus }) {
+/**
+ * `isMatured` (2026-07-13) - not a `LoanAccountStatus` enum value (the real backend has never
+ * had a `MATURED` status - see `docs/Architecture/CP12-*.md` history), but a server-computed
+ * overlay: per Investopedia's definition, the loan's full scheduled term has ended and it's
+ * still unpaid, distinct from "in arrears" (still mid-term, missed a payment). Takes priority
+ * over the raw `status` label/color when true - red (`destructive`), never green/`success`,
+ * since an unpaid matured loan is higher-risk than one still mid-term and merely late.
+ */
+export function LoanStatusBadge({ status, isMatured }: { status: LoanAccountStatus; isMatured?: boolean }) {
+  if (isMatured) {
+    return <Badge variant="destructive">Matured</Badge>;
+  }
   const config = LOAN_STATUS_STYLE[status];
   return <Badge variant={config.variant}>{config.label}</Badge>;
 }
