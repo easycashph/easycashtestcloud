@@ -25,6 +25,7 @@ import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { type AddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
+import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
@@ -534,153 +535,45 @@ function DecisionScoringRow({ passed, label, detail }: { passed: boolean; label:
 }
 
 /**
- * Real "Create Loan Account" against `POST /loan-accounts` - moved here from the Client Profile
- * page (2026-07-14) so it's gated per-application (visible once this application's client exists,
- * clickable once this specific application is Approved) rather than per-client. `loanCode` is a
- * required, staff-typed field rather than client-generated: no confirmed loan-code numbering rule
- * exists yet for the real system, and CLAUDE.md forbids fabricating financial/business logic -
- * same reasoning as ADR-045's explicit, never-derived `firstRepaymentDate`.
+ * "Create Loan Account" dialog - moved here from the Client Profile page (2026-07-14) so it's
+ * gated per-application (visible once this application's client exists, clickable once this
+ * specific application is Approved) rather than per-client. Wraps the same full `LoanAccountForm`
+ * used by the standalone `/loans/new` page (MIS Nomer's origination-fees/net-proceeds/schedule-
+ * preview build) - copied here as dialog content rather than a stripped-down form, so staff get
+ * the exact same computations regardless of which entry point they used.
  */
-function RealCreateLoanAccountDialog({
+function CreateLoanAccountDialog({
   open,
   onOpenChange,
   borrower,
-  application,
-  productVersions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   borrower: Borrower;
-  application: LoanApplication;
-  productVersions: { id: string; label: string; version: LoanProduct['versions'][number] }[];
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [loanProductVersionId, setLoanProductVersionId] = React.useState('');
-  const [loanCode, setLoanCode] = React.useState('');
-  const [principalAmount, setPrincipalAmount] = React.useState('');
-  const [interestRate, setInterestRate] = React.useState('');
-  const [installmentCount, setInstallmentCount] = React.useState('');
-  const [gracePeriodDays, setGracePeriodDays] = React.useState('');
-  const [firstRepaymentDate, setFirstRepaymentDate] = React.useState('');
-
-  const selectedVersion = productVersions.find((v) => v.id === loanProductVersionId)?.version;
-
-  React.useEffect(() => {
-    if (!open) return;
-    setLoanProductVersionId('');
-    setLoanCode('');
-    setPrincipalAmount(String(application.requestedAmount ?? ''));
-    setInterestRate('');
-    setInstallmentCount(String(application.requestedTermMonths ?? ''));
-    setGracePeriodDays('');
-    setFirstRepaymentDate('');
-  }, [open, application]);
-
-  React.useEffect(() => {
-    if (!selectedVersion) return;
-    if (selectedVersion.defaultInterestRate) setInterestRate(selectedVersion.defaultInterestRate);
-    if (selectedVersion.installmentCountDefault) setInstallmentCount(String(selectedVersion.installmentCountDefault));
-    setGracePeriodDays(String(selectedVersion.gracePeriodDefaultDays ?? 0));
-  }, [selectedVersion]);
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post<{ id: string }>('/loan-accounts', {
-        loanCode: loanCode.trim(),
-        borrowerId: borrower.id,
-        loanProductVersionId,
-        branchId: borrower.branchId,
-        principalAmount,
-        interestRate,
-        installmentCount: Number(installmentCount),
-        gracePeriodDays: gracePeriodDays ? Number(gracePeriodDays) : undefined,
-        firstRepaymentDate,
-      }),
-    onSuccess: (loan) => {
-      onOpenChange(false);
-      queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
-      queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
-      navigate(`/loans/${loan.id}`);
-    },
-  });
-
-  const canSubmit =
-    loanProductVersionId.trim() &&
-    loanCode.trim() &&
-    principalAmount.trim() &&
-    interestRate.trim() &&
-    installmentCount.trim() &&
-    firstRepaymentDate.trim() &&
-    !createMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Loan Account</DialogTitle>
-          <DialogDescription>
-            From {borrower.fullName}'s approved application ({application.requestedCategory}). Creates the real loan account record -
-            review before submitting.
-          </DialogDescription>
+          <DialogDescription>From {borrower.fullName}&apos;s approved application. Review before submitting.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Loan Product</Label>
-            <Select value={loanProductVersionId} onValueChange={setLoanProductVersionId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a product" />
-              </SelectTrigger>
-              <SelectContent>
-                {productVersions.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Loan Code</Label>
-            <Input value={loanCode} onChange={(e) => setLoanCode(e.target.value)} placeholder="e.g. BL-REG_00063" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Principal Amount</Label>
-            <Input type="number" value={principalAmount} onChange={(e) => setPrincipalAmount(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Interest Rate (%)</Label>
-            <Input type="number" step="0.001" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Installment Count</Label>
-            <Input type="number" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Grace Period (days)</Label>
-            <Input type="number" value={gracePeriodDays} onChange={(e) => setGracePeriodDays(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>First Repayment Date</Label>
-            <Input type="date" value={firstRepaymentDate} onChange={(e) => setFirstRepaymentDate(e.target.value)} />
-          </div>
-        </div>
-
-        {createMutation.isError && (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the loan account.'}
-          </div>
+        {open && (
+          <LoanAccountForm
+            lockedBorrower={borrower}
+            showChrome={false}
+            onCreated={(loan) => {
+              onOpenChange(false);
+              queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+              queryClient.invalidateQueries({ queryKey: ['loan-application', 'all'] });
+              navigate(`/loans/${loan.id}`);
+            }}
+            onCancel={() => onOpenChange(false)}
+          />
         )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => createMutation.mutate()} disabled={!canSubmit}>
-            Create Loan Account
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -881,15 +774,6 @@ export function LoanApplicationDetailPage() {
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
     enabled: canAccessLoanApplications,
   });
-  const productVersionOptions = React.useMemo(
-    () =>
-      (productsQuery.data ?? []).flatMap((p) =>
-        (p.versions ?? [])
-          .filter((v) => v.isActive)
-          .map((v) => ({ id: v.id, label: `${p.name} (v${v.versionNumber})`, version: v })),
-      ),
-    [productsQuery.data],
-  );
   const activeVersionOptions = React.useMemo(
     () =>
       (productsQuery.data ?? []).flatMap((product) =>
@@ -1035,7 +919,7 @@ export function LoanApplicationDetailPage() {
         </Button>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <ApplicantAvatar ownerId={application.id} initials={initials} />
+            <ApplicantAvatar ownerType="LOAN_APPLICATION" ownerId={application.id} initials={initials} />
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
@@ -1445,13 +1329,7 @@ export function LoanApplicationDetailPage() {
 
       <CreateClientProfileDialog open={createClientOpen} onOpenChange={setCreateClientOpen} application={application} />
       {clientBorrowerQuery.data && (
-        <RealCreateLoanAccountDialog
-          open={createLoanOpen}
-          onOpenChange={setCreateLoanOpen}
-          borrower={clientBorrowerQuery.data}
-          application={application}
-          productVersions={productVersionOptions}
-        />
+        <CreateLoanAccountDialog open={createLoanOpen} onOpenChange={setCreateLoanOpen} borrower={clientBorrowerQuery.data} />
       )}
     </div>
   );
