@@ -21,7 +21,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatPeso } from '@/lib/utils';
+import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
 
 const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
   LOW: 'success',
@@ -572,7 +572,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <MiniStat label="Penalty" value={formatPeso(num(loan.balances.penaltyBalance))} />
           <MiniStat label="Fees" value={formatPeso(num(loan.balances.feesBalance))} />
           <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
-          <MiniStat label="Interest Rate" value={`${loan.interestRate}%`} />
+          <MiniStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
           <MiniStat label="Installments" value={String(loan.installmentCount)} />
           <MiniStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
         </CardContent>

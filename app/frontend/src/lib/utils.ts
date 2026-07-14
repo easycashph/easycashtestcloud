@@ -49,6 +49,17 @@ export function formatMobileNumber(value: string | null | undefined): string {
 }
 
 /**
+ * Trims trailing zeros from a percentage string as stored/returned by the backend (always a fixed
+ * 3 decimals, e.g. "2.520", matching the `Decimal(6,3)` schema column) - "2.520" -> "2.52%",
+ * "15.000" -> "15%". Display-only; the raw value is never re-parsed or recomputed here.
+ */
+export function formatPercentage(value: string | null | undefined): string {
+  if (!value) return '-';
+  const trimmed = value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+  return `${trimmed}%`;
+}
+
+/**
  * Proper-cases a name, e.g. address/region/province/city/barangay text - the PSGC reference data
  * and free-text address fields are stored with inconsistent casing (ALL CAPS, lowercase, mixed),
  * which reads poorly wherever displayed together. Display-only: lowercases the whole string first,

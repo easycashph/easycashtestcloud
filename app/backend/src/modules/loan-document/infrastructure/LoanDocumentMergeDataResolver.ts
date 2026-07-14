@@ -145,6 +145,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       PrincipalAmount: loanAccount.principalAmount.toString(),
       InterestRate: formatPercentage(loanAccount.interestRate),
       ContractualRate: loanAccount.contractualInterestRate ? formatPercentage(loanAccount.contractualInterestRate) : '',
+      AddOnRate: loanAccount.addOnInterestRate ? formatPercentage(loanAccount.addOnInterestRate) : '',
       ProcessingFee: originationFees.processingFee.toString(),
       AdvanceInterest: originationFees.advanceInterestFee.toString(),
       AccountManagementFee: originationFees.accountManagementFee.toString(),
