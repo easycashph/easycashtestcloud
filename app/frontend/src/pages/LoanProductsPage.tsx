@@ -17,8 +17,42 @@ interface ProductRow {
   id: string;
   code: string;
   name: string;
+  productType: string;
   activeVersion: LoanProductVersion | null;
   latestVersion: LoanProductVersion | null;
+}
+
+/**
+ * Product Type -> Product Class grouping (2026-07-14), keyed off each product's `name` prefix
+ * (e.g. "BL-Regular" -> Business Loan) - not `code`, which doesn't consistently carry the same
+ * prefix (e.g. code "SML_Seacon" vs name "SML-SEACON"). Order here is display order. Any product
+ * whose name doesn't match one of these five prefixes falls into a trailing "Other" group instead
+ * of being silently dropped - e.g. legacy-only lines like Chattel Mortgage, OFW, PL-/CL-/REL-/SP-,
+ * that were never confirmed to belong to one of these five named types.
+ */
+const PRODUCT_TYPE_DEFS: { type: string; prefix: string }[] = [
+  { type: 'Business Loan', prefix: 'BL-' },
+  { type: 'Purchase Financing Loan', prefix: 'PFL-' },
+  { type: 'Salary Loan', prefix: 'SL-' },
+  { type: 'Seafarer Loan', prefix: 'SML-' },
+  { type: 'Small and Medium-sized Enterprises Loan', prefix: 'SME-' },
+];
+const OTHER_PRODUCT_TYPE = 'Other';
+const PRODUCT_TYPE_ORDER = [...PRODUCT_TYPE_DEFS.map((d) => d.type), OTHER_PRODUCT_TYPE];
+
+function classifyProductType(name: string): string {
+  const upper = name.toUpperCase();
+  return PRODUCT_TYPE_DEFS.find((d) => upper.startsWith(d.prefix))?.type ?? OTHER_PRODUCT_TYPE;
+}
+
+function groupByProductType(rows: ProductRow[]): { type: string; rows: ProductRow[] }[] {
+  const byType = new Map<string, ProductRow[]>();
+  for (const row of rows) {
+    const arr = byType.get(row.productType) ?? [];
+    arr.push(row);
+    byType.set(row.productType, arr);
+  }
+  return PRODUCT_TYPE_ORDER.map((type) => ({ type, rows: byType.get(type) ?? [] })).filter((g) => g.rows.length > 0);
 }
 
 function getProductSortValue(p: ProductRow, key: string): string | number | Date | null | undefined {
@@ -73,6 +107,7 @@ export function LoanProductsPage() {
           id: p.id,
           code: p.code,
           name: p.name,
+          productType: classifyProductType(p.name),
           activeVersion: sortedVersions.find((v) => v.isActive) ?? null,
           latestVersion: sortedVersions[0] ?? null,
         };
@@ -172,6 +207,25 @@ export function LoanProductsPage() {
     );
   }
 
+  function renderGroupedTables(rows: ProductRow[], sort: SortState, onSort: (key: string, isDateColumn?: boolean) => void) {
+    const groups = groupByProductType(rows);
+    if (groups.length === 0) {
+      return <p className="py-8 text-center text-sm text-muted-foreground">No products in this category.</p>;
+    }
+    return (
+      <div className="space-y-6">
+        {groups.map((group) => (
+          <div key={group.type}>
+            <h3 className="mb-2 text-sm font-semibold">
+              {group.type} <span className="font-normal text-muted-foreground">({group.rows.length})</span>
+            </h3>
+            {renderTable(group.rows, sort, onSort)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   function renderTable(rows: ProductRow[], sort: SortState, onSort: (key: string, isDateColumn?: boolean) => void) {
     return (
       <Table>
@@ -252,13 +306,13 @@ export function LoanProductsPage() {
                 <TabsTrigger value="discontinued">Discontinued ({discontinuedProducts.length})</TabsTrigger>
               </TabsList>
               <TabsContent value="active">
-                {renderTable(activeSortState.sorted, activeSortState.sort, activeSortState.toggleSort)}
+                {renderGroupedTables(activeSortState.sorted, activeSortState.sort, activeSortState.toggleSort)}
               </TabsContent>
               <TabsContent value="discontinued">
                 <p className="mb-3 text-xs text-muted-foreground">
                   These products have no currently-active version but remain visible because real client loans still reference them.
                 </p>
-                {renderTable(discontinuedSortState.sorted, discontinuedSortState.sort, discontinuedSortState.toggleSort)}
+                {renderGroupedTables(discontinuedSortState.sorted, discontinuedSortState.sort, discontinuedSortState.toggleSort)}
               </TabsContent>
             </Tabs>
           )}

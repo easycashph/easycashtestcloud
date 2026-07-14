@@ -1,5 +1,5 @@
 import { prisma } from '@shared/database/prismaClient';
-import type { IPsgcRepository, PsgcOption } from '../application/ports/IPsgcRepository';
+import type { IPsgcRepository, PsgcCityOption, PsgcOption } from '../application/ports/IPsgcRepository';
 
 /** Static reference data (regions/provinces/cities/barangays) — plain sorted findMany, no branch scoping applies. */
 export class PrismaPsgcRepository implements IPsgcRepository {
@@ -15,10 +15,10 @@ export class PrismaPsgcRepository implements IPsgcRepository {
     });
   }
 
-  async listCities(provinceCode: string): Promise<PsgcOption[]> {
+  async listCities(provinceCode: string): Promise<PsgcCityOption[]> {
     return prisma.psgcCityMunicipality.findMany({
       where: { provinceCode },
-      select: { code: true, name: true },
+      select: { code: true, name: true, zipCode: true },
       orderBy: { name: 'asc' },
     });
   }

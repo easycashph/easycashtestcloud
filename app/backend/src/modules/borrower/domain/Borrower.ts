@@ -12,6 +12,7 @@ export interface BorrowerIncomeDetail {
   natureOfBusiness?: string;
   position?: string;
   yearsEmployed?: number;
+  monthlyIncome?: number;
 }
 
 /** Plain child shape — 1:1 with Borrower. */

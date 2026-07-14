@@ -4,6 +4,7 @@ import { AlertCircle, FilePlus2, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,6 +19,7 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
+import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
 
 const PAGE_SIZE = 100;
@@ -76,6 +78,7 @@ export function LoanApplicationsPage() {
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
+  const [createOpen, setCreateOpen] = React.useState(false);
 
   useLogPageView('Loan Applications');
 
@@ -143,10 +146,34 @@ export function LoanApplicationsPage() {
             intake, review, and decision workflow, wired to the live backend.
           </p>
         </div>
-        <Button className="shrink-0" onClick={() => navigate('/applications/new')} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
+        <Button className="shrink-0" onClick={() => setCreateOpen(true)} title="Encode a walk-in applicant's paper application (Form ECLC-LOFN01)">
           <FilePlus2 className="mr-2 h-4 w-4" /> Create Loan Applicant Profile
         </Button>
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Loan Application Form</DialogTitle>
+            <DialogDescription>
+              For walk-in applicants - the loan officer fills this out on the applicant&apos;s behalf, following the official paper
+              form (Form No. <span className="font-mono">ECLC-LOFN01</span>, Rev 02).
+            </DialogDescription>
+          </DialogHeader>
+          {createOpen && (
+            <LoanApplicationForm
+              showChrome={false}
+              onCreated={(application, failedDocumentLabels) => {
+                setCreateOpen(false);
+                navigate(`/applications/${application.id}`, {
+                  state: failedDocumentLabels ? { failedDocumentLabels } : undefined,
+                });
+              }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {applicationsQuery.isError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">

@@ -61,6 +61,7 @@ function toBorrower(row: BorrowerRow, addresses: Address[]): Borrower {
           natureOfBusiness: row.incomeDetail.natureOfBusiness ?? undefined,
           position: row.incomeDetail.position ?? undefined,
           yearsEmployed: row.incomeDetail.yearsEmployed ?? undefined,
+          monthlyIncome: row.incomeDetail.monthlyIncome ? Number(row.incomeDetail.monthlyIncome) : undefined,
         }
       : undefined,
     governmentId: row.governmentId

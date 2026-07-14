@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/apiClient';
-import type { PsgcOption } from '@/lib/psgcApiTypes';
+import type { PsgcCityOption, PsgcOption } from '@/lib/psgcApiTypes';
 import { toProperCase } from '@/lib/utils';
 
 export interface AddressDraft {
@@ -20,10 +20,10 @@ export function emptyAddressDraft(): AddressDraft {
   return { houseUnitNumber: '', street: '', barangay: '', cityMunicipality: '', province: '', zipCode: '' };
 }
 
-function usePsgcOptions(path: string, enabled: boolean) {
+function usePsgcOptions<T extends PsgcOption = PsgcOption>(path: string, enabled: boolean) {
   return useQuery({
     queryKey: ['psgc', path],
-    queryFn: () => apiClient.get<{ items: PsgcOption[] }>(path).then((r) => r.items),
+    queryFn: () => apiClient.get<{ items: T[] }>(path).then((r) => r.items),
     enabled,
   });
 }
@@ -48,7 +48,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
 
   const regionsQuery = usePsgcOptions('/psgc/regions', true);
   const provincesQuery = usePsgcOptions(`/psgc/provinces?regionCode=${regionCode}`, Boolean(regionCode));
-  const citiesQuery = usePsgcOptions(`/psgc/cities?provinceCode=${provinceCode}`, Boolean(provinceCode));
+  const citiesQuery = usePsgcOptions<PsgcCityOption>(`/psgc/cities?provinceCode=${provinceCode}`, Boolean(provinceCode));
   const barangaysQuery = usePsgcOptions(`/psgc/barangays?cityMunicipalityCode=${cityCode}`, Boolean(cityCode));
 
   const pickRegion = (code: string) => {
@@ -67,8 +67,11 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
 
   const pickCity = (code: string) => {
     setCityCode(code);
-    const name = toProperCase(citiesQuery.data?.find((c) => c.code === code)?.name ?? '');
-    onChange({ cityMunicipality: name, barangay: '' });
+    const city = citiesQuery.data?.find((c) => c.code === code);
+    const name = toProperCase(city?.name ?? '');
+    // Best-effort suggestion (see scripts/import-ph-zip-codes.ts) - still a plain editable Input
+    // below, so staff can correct it (e.g. a city spanning multiple ZIP codes).
+    onChange({ cityMunicipality: name, barangay: '', zipCode: city?.zipCode ?? '' });
   };
 
   const pickBarangay = (code: string) => {

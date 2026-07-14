@@ -505,6 +505,7 @@ export function createApp(): Express {
         loanApplicationRepository,
         preQualificationService,
         profileActivityLogService,
+        loanAccountRepository,
       }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),

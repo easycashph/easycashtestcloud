@@ -514,7 +514,11 @@ model Borrower {
   /// client already exists for it and prevents creating a duplicate. Null for borrowers created
   /// any other way (e.g. legacy migration, direct walk-in without an application on file).
   sourceApplicationId String?         @unique
-  sourceApplication   LoanApplication? @relation(fields: [sourceApplicationId], references: [id])
+  sourceApplication   LoanApplication? @relation("LoanApplicationCreatedBorrower", fields: [sourceApplicationId], references: [id])
+
+  /// Reverse side of LoanApplication.borrowerId (renewal applications started from this client's
+  /// own profile) - see that field's doc comment.
+  loanApplications LoanApplication[] @relation("LoanApplicationBorrower")
 
   firstName     String
   middleName    String?
@@ -567,6 +571,7 @@ model BorrowerIncomeDetail {
   natureOfBusiness String?
   position         String?
   yearsEmployed    Int?
+  monthlyIncome    Decimal? @db.Decimal(14, 2)
 
   @@map("borrower_income_details")
 }
@@ -611,6 +616,12 @@ model PsgcCityMunicipality {
   provinceCode String
   province     PsgcProvince   @relation(fields: [provinceCode], references: [code])
   barangays    PsgcBarangay[]
+  /// 2026-07-14: backfilled from a third-party reference list (see
+  /// scripts/import-ph-zip-codes.ts's own doc comment for source/license/caveats) - null where no
+  /// confident name match was found, never guessed. Used to auto-fill the address picker's ZIP
+  /// Code field once a city/municipality is selected (still a plain editable Input afterward -
+  /// staff can correct it, e.g. for a city that spans multiple ZIP codes).
+  zipCode String?
 
   @@index([provinceCode])
   @@map("psgc_city_municipalities")
@@ -1280,6 +1291,14 @@ model LoanApplication {
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
+  /// 2026-07-14: set only when this application was created FROM an existing client's profile
+  /// ("Create Loan Application" / renewal flow) - distinct from `createdBorrower` (the reverse
+  /// side of `Borrower.sourceApplicationId`, set when a walk-in application is later converted
+  /// INTO a new borrower). This is the other direction: an existing borrower starting a new
+  /// application. Lets "all LoanApplications for Borrower X" be queried directly.
+  borrowerId String?
+  borrower   Borrower? @relation("LoanApplicationBorrower", fields: [borrowerId], references: [id])
+
   applicantName   String
   age             Int?
   gender          String?
@@ -1288,7 +1307,16 @@ model LoanApplication {
   placeOfBirth    String?
   nationality     String?
   homeOwnership   String?
+  /// Flattened, human-readable join of the structured fields below - kept for existing display
+  /// code/history. The structured fields are what "Create Client Profile" copies into a real
+  /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
   address         String?
+  houseUnitNumber String?
+  street          String?
+  barangay        String?
+  cityMunicipality String?
+  province        String?
+  zipCode         String?
   monthlyIncome   Decimal? @db.Decimal(14, 2)
   employer        String?
   occupation      String?
@@ -1352,9 +1380,10 @@ model LoanApplication {
 
   /// Reverse side of Borrower.sourceApplicationId - set once "Create Client Profile" has been
   /// used on this application.
-  createdBorrower Borrower?
+  createdBorrower Borrower? @relation("LoanApplicationCreatedBorrower")
 
   @@index([branchId])
+  @@index([borrowerId])
   @@index([status])
   @@map("loan_applications")
 }

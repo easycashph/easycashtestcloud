@@ -51,22 +51,4 @@ export function isDiscontinuedPaymentMethod(code: string): boolean {
   return ALL_PAYMENT_METHODS.find((m) => m.code === code)?.isActive === false;
 }
 
-/** Checklist of document names shown on Loan Application intake - metadata/checklist only, no
- * file upload/storage tied to these specific labels exists (see `AttachmentsPanel` for the real
- * upload system, which uses its own `AttachmentDocumentCategory` enum instead). */
-export const INTAKE_DOCUMENT_OPTIONS: string[] = [
-  'Selfie Photo.jpg',
-  '2x2 ID Picture.jpg',
-  'Valid ID (Borrower).jpg',
-  'Valid ID (Co-Borrower).jpg',
-  'Employee ID.jpg',
-  'Corporate Payslip.pdf',
-  'Latest Proof of Billing.jpg',
-  "Driver's License.jpg",
-  'Passport.jpg',
-  "Seaman's Book.jpg",
-  'Overseas Employment Certificate (OEC).pdf',
-  'CB Credit Bureau Report.pdf',
-];
-
 export type LmsRole = 'MIS' | 'Loan Operation Manager' | 'CRM' | 'Finance' | 'Accounting' | 'Collection Officer';

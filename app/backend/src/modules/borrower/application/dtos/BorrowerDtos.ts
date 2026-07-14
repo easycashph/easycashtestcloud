@@ -5,6 +5,19 @@ export interface CreateBorrowerIncomeDetailInput {
   natureOfBusiness?: string;
   position?: string;
   yearsEmployed?: number;
+  monthlyIncome?: number;
+}
+
+export interface CreateBorrowerAddressInput {
+  addressType?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
+  lengthOfStayMonths?: number;
+  ownershipStatus?: string;
 }
 
 export interface CreateBorrowerGovernmentIdInput {
@@ -48,6 +61,7 @@ export interface CreateBorrowerInput {
   incomeDetail?: CreateBorrowerIncomeDetailInput;
   governmentId?: CreateBorrowerGovernmentIdInput;
   characterReferences?: CreateBorrowerCharacterReferenceInput[];
+  addresses?: CreateBorrowerAddressInput[];
 }
 
 export interface CreateCoBorrowerInput {

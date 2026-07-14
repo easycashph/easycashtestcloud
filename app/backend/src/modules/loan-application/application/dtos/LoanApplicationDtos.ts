@@ -2,6 +2,7 @@ import type { DependantEntry, LoanApplicationAccountType } from '../../domain/Lo
 
 export interface CreateLoanApplicationInput {
   branchId: string;
+  borrowerId?: string;
   applicantName: string;
   age?: number;
   gender?: string;
@@ -11,6 +12,12 @@ export interface CreateLoanApplicationInput {
   nationality?: string;
   homeOwnership?: string;
   address?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;

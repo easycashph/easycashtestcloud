@@ -37,6 +37,9 @@ export interface LoanApplicationDependant {
 export interface LoanApplication {
   id: string;
   branchId: string;
+  /** Set only when this application was created FROM an existing client's profile ("Create Loan
+   * Application" renewal flow) - null for the original walk-in intake flow (no client yet). */
+  borrowerId: string | null;
   applicantName: string;
   age: number | null;
   gender: string | null;
@@ -46,6 +49,12 @@ export interface LoanApplication {
   nationality: string | null;
   homeOwnership: string | null;
   address: string | null;
+  houseUnitNumber: string | null;
+  street: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+  zipCode: string | null;
   monthlyIncome: number | null;
   employer: string | null;
   occupation: string | null;
@@ -93,6 +102,7 @@ export interface LoanApplication {
 /** Body for `POST /loan-applications`. `branchId` is overridden server-side for non-global roles. */
 export interface CreateLoanApplicationRequest {
   branchId: string;
+  borrowerId?: string;
   applicantName: string;
   age?: number;
   gender?: string;
@@ -102,6 +112,12 @@ export interface CreateLoanApplicationRequest {
   nationality?: string;
   homeOwnership?: string;
   address?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
