@@ -15,6 +15,10 @@ logs/
 # TypeScript build cache
 *.tsbuildinfo
 
+# Word/Office lock files (created while a .docx template is open for editing, e.g.
+# app/backend/templates/~$SOME_TEMPLATE.docx) — never real content, just an open-file marker.
+~$*.doc*
+
 # Local document storage (app/backend — DOC-3 local storage adapter)
 app/backend/storage/
 
