@@ -137,6 +137,17 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
 
     return {
       BorrowerName: borrower.name.fullName(),
+      FirstName: borrower.name.firstName,
+      MiddleName: borrower.name.middleName ?? '',
+      LastName: borrower.name.lastName,
+      DateOfBirth: borrower.birthDate ? formatDate(borrower.birthDate) : '',
+      Gender: borrower.gender ?? '',
+      CivilStatus: borrower.civilStatus ?? '',
+      Nationality: borrower.nationality ?? '',
+      // Closest available field to "Occupation" — the borrower's job title, not a separate concept.
+      Occupation: borrower.incomeDetail?.position ?? '',
+      Email: borrower.email ?? '',
+      ContactNumber: borrower.mobilePhone1 ?? '',
       Address: formatAddress(borrower.addresses[0]?.toProps()),
       CoBorrowerName: coBorrower?.name.fullName() ?? '',
       CoBorrowerAddress: formatAddress(coBorrower?.addresses[0]?.toProps()),

@@ -244,16 +244,132 @@ corrections (idempotency verified). User confirmed the acknowledgment paragraph 
 Committed as `a3d088c`. `tsc --noEmit` clean; backend test suite unaffected (573 passed / 16
 pre-existing failures, unrelated).
 
+## Font fix: every generated PDF was rendering as tofu boxes
+
+User flagged that a freshly-regenerated Acknowledgement Receipt PDF showed blank boxes (□□□)
+instead of text. Root cause: the Alpine `libreoffice` package in `backend.Dockerfile` ships with
+**zero fonts** (`fc-list` returned 0 entries) — LibreOffice had nothing to substitute Word's
+Arial/Times New Roman/Segoe UI with. This was true the whole session, not new — earlier
+"verified working" checks on the Promissory Note/Disclosure Statement only used `pdf-parse` text
+extraction, which reads the underlying text layer correctly even when the visual glyphs fail to
+render, so the bug was invisible until someone actually looked at a rendered page.
+
+Fixed in [backend.Dockerfile](../app/docker/backend.Dockerfile): added `ttf-liberation` (metric
+compatible with Arial/Times New Roman/Courier New) and `font-noto` (broader Unicode, e.g. ₱) plus
+`fc-cache -f`. Verified properly this time — not just text-extracted but actually rendered to an
+image (temporary in-container `poppler-utils` install, `pdftoppm`, viewed via the `Read` tool) for
+all three templates (Acknowledgement Receipt, Promissory Note, Disclosure Statement): all legible.
+Committed as `c750b76`.
+
+Knock-on finding: with real font rendering finally visible, the Disclosure Statement's Amortization
+Schedule table turned out to be styled in Courier New (monospace) while the rest of the document
+used Segoe UI — a visual mismatch that was always there but only became visible once fonts
+actually rendered. User changed the whole document to Arial; committed as `1b4f734`. Also added a
+`.gitignore` rule for Word's `~$*.doc*` lock files (`64b8a47`), found sitting untracked while a
+template was open for editing.
+
+## Two more origin/main merges (colleague's parallel work)
+
+Push was rejected twice more this session by new commits from the colleague's side — same
+"merge, verify, resolve the one real conflict, re-run full verification" pattern as earlier today:
+
+1. **Merge 1** (`e1f54aa`): 8 origin commits (user self-service profile endpoints, `note` module
+   renamed to `profile-note`, Matured loan status indicator, legacy migration idempotency fixes).
+   One real conflict: `LoanDetailPage.tsx`'s import block (our `LoanDocumentPreviewModal` import
+   alongside origin's `NotesPanel` → `ProfileNotesPanel` rename) — resolved by keeping both.
+   Exposed one test-fixture gap the merge itself caused: `LoanAccountController`'s `list()` gained
+   a new required `listMaturedLoanAccountIdsUseCase` dependency from origin's Matured-status work,
+   which the existing test didn't mock — fixed inline (mocked with `new Set()`) before committing
+   the merge, confirmed test suite back to the known 573/16 baseline.
+2. **Merge 2** (`5401d1f`): 2 origin commits (Loan Application ↔ Client Profile lifecycle: borrower
+   monthly income, structured address capture, PH ZIP code import/lookup, renewal flow). No real
+   conflicts — everything auto-merged cleanly, including `backend.Dockerfile` (font packages) and
+   `utils.ts` (`formatPercentage` alongside origin's improved `toProperCase`).
+
+Both merges applied their new Prisma migrations locally (`prisma migrate deploy`) and were
+verified with the full `tsc --noEmit` + test-suite + Docker-rebuild routine before pushing.
+
+## Local database wiped by a new sync script — recovery + root-cause fix
+
+While testing, the user's login started failing (`INVALID_CREDENTIALS`) for an account
+(`nomer.perez@easycash.ph`) that had worked all session. Investigation: the user had run a new
+script the second merge brought in, `Sync Database From Export.bat`, which does
+`pg_restore --clean --if-exists` from the colleague's latest `legacy/db-exports/*.dump` — this
+replaces **both schema and data**, not just data. Confirmed via `loan_accounts` count (1790 → 1783)
+and `netProceeds` reverting to `0.00` for `SL-REG_00114` that this had actually run. Worse: the
+restored dump predated our `anticipatedDisbursementDate` migration, so Prisma queries against that
+column started failing (`P2022: column does not exist`) — the restore had silently dropped it.
+
+No pre-restore backup existed to fully revert to (confirmed: the only `.dump` file present was the
+one that had just been restored). Recovery path, in order:
+1. Re-ran `prisma migrate deploy` to reapply the missing migration.
+2. Re-ran `scripts/backfill-net-proceeds.ts` (all 1783 rows needed correction again).
+3. Created a new MIS user for `nomer.perez@easycash.ph` via `scripts/create-additional-mis-user.ts`
+   — `bootstrap-admin.ts` refuses once an MIS account already exists, which this DB now had
+   (`jomer.biason@easycash.ph`). User ran the command themselves (env vars including
+   `MIS_PASSWORD`) since account creation/passwords are never something Claude enters directly.
+4. Found `document_templates` (0 rows) and `document_template_mappings` (0 rows) were also empty
+   post-restore — re-ran `prisma/seed.ts` (idempotent, upsert-only) to restore the 11 document
+   template rows.
+5. User asked why the optional Loan Agreement documents never appeared in the Documents card even
+   after the seed: `document_template_mappings` was never populated at all (a known ADR-051 §9
+   deferred item, not caused by the restore). User specified the business rule directly: every
+   "SML"-prefixed loan product (15 found) gets the same 5 conditional documents (Loan Agreement -
+   Seafarer, Special Power of Attorney, Deed of Assignment - Borrower/Co-Borrower, Manulife). Wrote
+   [scripts/map-sml-document-templates.ts](../app/backend/scripts/map-sml-document-templates.ts)
+   (idempotent, `createMany({skipDuplicates: true})`, dry-run supported) and applied it (75 rows).
+
+**Root-cause fix**: wrote
+[legacy/Sync Database And Apply Migrations.bat](../legacy/Sync%20Database%20And%20Apply%20Migrations.bat)
+— same restore flow as the existing script, but runs `npx prisma migrate deploy` immediately after
+`pg_restore`, so schema additions survive regardless of how old the colleague's dump snapshot is.
+Also reminds the user (echoed at the end) that they still need to re-run `seed.ts` and the two
+data-backfill scripts after any restore, since those aren't schema and won't self-heal via
+migrations. User moved this script into `legacy/`; fixed its `ROOT_DIR` resolution (`pushd
+"%~dp0.." + %CD%`) so it still finds `app/backend` and `legacy/db-exports` correctly from its new
+location. Committed alongside a batch of new template placeholders as `b9969f4`.
+
+**Verified separately with the actual legacy SDevTech data** (not guessed) whether `netProceeds`
+and `anticipatedDisbursementDate` exist upstream: direct inspection of the legacy `Loans_details`
+Excel sheet (`BETA 1.5.83 LMSv3.xlsm`) confirmed "Anticipated Disbursement Date" is a real,
+100%-populated legacy column (260/260 rows) — validating today's earlier field addition — while
+"Net Proceeds" is **not** a stored per-loan column there; it's computed live in a separate
+standalone calculator workbook ("Net Amount Auto Computation v3...") at origination time, never
+persisted historically. Confirms the `backfill-net-proceeds.ts` approach (recomputing from
+principal − fees) is the correct way to reconstruct it for old loans, not a data-recovery gap.
+
+## Remaining template placeholders
+
+Continued wiring placeholders into the templates, all reusing already-resolved merge fields (no
+further backend changes needed beyond what's noted): `DATA_PRIVACY_CONSENT`,
+`DEED_OF_ASSIGNMENT_BORROWER/CO_BORROWER/SALARY`, `SPECIAL_POWER_OF_ATTORNEY` now use
+`{Address}`, `{AnticipatedDisbursementDate}`, `{PNNumber}`, `{TotalPaymentDue}`/
+`{TotalPaymentDueWords}`, and `{CoBorrowerName}` where applicable. `PROMISSORY_NOTE.docx` also
+picked up `{CoBorrowerName}`/`{AnticipatedDisbursementDate}` while the user was at it. This required
+one small backend addition: `CoBorrowerName`/`CoBorrowerAddress` (blank when the loan has no
+co-borrower) and `AgreementDate` in the merge data resolver, wiring the existing
+`ICoBorrowerRepository` instance through `app.ts` — committed as `ee033a2`, then the template edits
+as `b9969f4`.
+
+User also asked for personal-info placeholders (First/Middle/Last Name, Date of Birth, Gender,
+Civil Status, Nationality, Occupation, Email, Contact Number) — all sourced from the `Borrower`
+domain entity, none previously exposed. Added `FirstName`/`MiddleName`/`LastName` (from
+`PersonName`'s public fields), `DateOfBirth`, `Gender`, `CivilStatus`, `Nationality`, `Occupation`
+(closest available field is `incomeDetail.position`, a job title — flagged to the user as not an
+exact semantic match), `Email`, `ContactNumber` (`mobilePhone1`). **Not yet committed** — user was
+mid-test with this change and a `MANULIFE.docx` template edit when this log entry was written.
+`Term`/`MaturityDate` needed no new work — `{NumberOfInstallments}`/`{MaturityDate}` already
+existed from earlier in the session.
+
 ## Current state
 
-- Working tree clean as of the commits below; Docker stack (`postgres`, `backend`, `frontend`)
-  is running locally at `localhost:5173`/`localhost:4000`/`localhost:5432` and left up
-  intentionally.
-- Commits made this session: `5658b3a` (frontend vitest harness), `0152eac` (11 ADR-051 `.docx`
-  templates), `c6d9778` (inline PDF preview), `6200500` (nginx SPA fallback fix), `dc5a130`
-  (Promissory Note schedule + Anticipated Disbursement Date), `80bbc25` (docs), `a3d088c`
-  (Disclosure Statement merge data + netProceeds backfill). Not yet pushed to `origin/main`
-  (7 commits ahead).
+- Docker stack (`postgres`, `backend`, `frontend`) running locally, backend just rebuilt with the
+  new personal-info merge fields (uncommitted).
+- Commits made this session (chronological): `5658b3a`, `0152eac`, `c6d9778`, `6200500`, `dc5a130`,
+  `80bbc25`, `a3d088c`, `dcccee4`, `e41dae3`, `c750b76`, `1b4f734`, `64b8a47`, `e1f54aa` (merge),
+  `5401d1f` (merge), `ee033a2`, `b9969f4`. All pushed to `origin/main` as of `b9969f4`.
+- Uncommitted: `LoanDocumentMergeDataResolver.ts` (personal-info fields) and `MANULIFE.docx` —
+  user is actively testing, not yet confirmed working.
 - Known follow-ups (carried over from 2026-07-13, still unresolved):
   - Two independent Note systems still coexist in the backend (`loan-note` vs `note` module) —
     needs a product decision on which is canonical.
@@ -261,25 +377,31 @@ pre-existing failures, unrelated).
     `@modules/document/infrastructure`.
   - 16 pre-existing backend test failures in `loan-application`/`borrower` modules — should be
     reported to Jomer, not fixed without knowing his intended redesign.
-  - Per-Loan-Product `DocumentTemplateMapping` data still needs confirming.
-- Updated follow-up: `PROMISSORY_NOTE.docx` is now functionally complete (schedule table, total
-  payment due in figures/words, borrower/PN-number fields) and confirmed working end to end. The
-  other 8 of 11 ADR-051 templates (`ACKNOWLEDGEMENT_RECEIPT`, `DATA_PRIVACY_CONSENT`,
-  `LOAN_AGREEMENT_SALARY`, `LOAN_AGREEMENT_SEAFARER`, `DEED_OF_ASSIGNMENT_BORROWER`,
-  `DEED_OF_ASSIGNMENT_CO_BORROWER`, `DEED_OF_ASSIGNMENT_SALARY`, `SPECIAL_POWER_OF_ATTORNEY`,
-  `MANULIFE`) still need their `{Placeholder}` merge fields added, plus `DISCLOSURE_STATEMENT`'s
-  remaining blank fields (Miscellaneous Fee, Net Proceeds, Effective Interest Rate,
-  Late Charges/Atty's Fee/Litigation Fee rates — the resolver already computes/hardcodes these
-  values, per 2026-07-14 earlier in this log, only the template placeholders are missing). Pipeline
-  confirmed working, so this is pure content work in Word, not an engineering blocker.
-  `DocumentTemplateMapping` seed data (which conditional docs apply to which loan products) is
-  still needed before conditional-document generation is fully usable end-to-end (the 4 required
-  documents don't depend on it).
-- New follow-up: only 2 of ~1790 loan accounts in the dev database have `anticipatedDisbursementDate`
-  populated (both temporarily, for this session's testing, then reverted to `NULL`) — every
-  pre-2026-07-14 loan account will show a blank `{AnticipatedDisbursementDate}` on generated
-  documents until a new loan account is created through the (now-fixed) Create Loan Account form.
-  Not a bug, just worth knowing when testing against old data.
-- New follow-up from this session: the frontend test harness now exists but has exactly one test
-  file covering pure utility functions — no component/page tests yet. Expanding coverage
-  (components, hooks, API type guards) is future work, not attempted here.
+  - ~~Per-Loan-Product `DocumentTemplateMapping` data still needs confirming.~~ **Resolved for SML
+    products** (`map-sml-document-templates.ts`, 75 rows). Still unconfirmed for the other ~28
+    non-SML loan products — no optional documents will appear for those until mapped.
+- **Template status as of end of session**: `PROMISSORY_NOTE` and `DISCLOSURE_STATEMENT` fully
+  functional and confirmed end-to-end (schedule tables, all fee lines, hide-if-zero, rates, fonts).
+  `DATA_PRIVACY_CONSENT`, `DEED_OF_ASSIGNMENT_BORROWER/CO_BORROWER/SALARY`,
+  `SPECIAL_POWER_OF_ATTORNEY` have placeholders wired but not yet visually/end-to-end confirmed the
+  way the first two were. `ACKNOWLEDGEMENT_RECEIPT` deliberately still has no placeholders (mostly
+  manual/paper data — check numbers, ATM/passbook details — not tracked in this system; user chose
+  to leave it blank/manual for now). `LOAN_AGREEMENT_SALARY`/`LOAN_AGREEMENT_SEAFARER` have
+  placeholders wired, confirmed generating (once SML mapping was fixed). `MANULIFE` has only
+  `{BorrowerName}` plus whatever the user was mid-editing when this log was written.
+- `DISCLOSURE_STATEMENT`'s "Effective Interest Rate" line (§5) still has no placeholder. Per
+  ADR-010, "Effective Interest Rate" = Contractual Rate = `LoanAccount.interestRate`, which already
+  has a merge field (`{InterestRate}`) — likely just needs the placeholder added in Word, not a new
+  backend field, but not yet confirmed with the user.
+- Every pre-2026-07-14 loan account was missing `anticipatedDisbursementDate`,
+  `addOnInterestRate`, `contractualInterestRate` (all `NULL` — legacy gap, not a bug); temporary
+  SQL test values were set and reverted multiple times this session for `SL-REG_00114` while
+  testing — as of the last revert, it's back to `NULL` like every other pre-2026-07-14 loan. Any
+  **new** loan account created via the Create Loan Account form now correctly persists all three.
+- The frontend test harness still has exactly one test file covering pure utility functions — no
+  component/page tests yet. Expanding coverage is future work, not attempted here.
+- Two sync scripts now coexist: `Sync Database From Export.bat` (data + schema, can drop new
+  columns if the dump predates them) and `legacy/Sync Database And Apply Migrations.bat`
+  (same, but self-heals the schema afterward via `prisma migrate deploy`). The safe one should
+  probably become the only one used going forward, but the old one wasn't removed (colleague-owned
+  file, not this session's to delete unilaterally).
