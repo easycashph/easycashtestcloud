@@ -422,6 +422,7 @@ export function createApp(): Express {
   const mergeDataResolver = new LoanDocumentMergeDataResolver({
     loanAccountRepository,
     borrowerRepository,
+    coBorrowerRepository,
     loanProductRepository,
     repaymentInstallmentRepository,
     prisma,
