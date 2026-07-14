@@ -75,6 +75,11 @@ legacy/Excel LMS Files/
 # Local database backups (backup-database.bat output) — never committed.
 backups/
 
+# pg_dump exports of the live Postgres DB (real borrower/loan PII) — used to hand off a full
+# snapshot between team members' separate local Postgres instances (e.g. MIS Nomer's laptop).
+# Same sensitivity class as legacy/MongoDB dump/ above — never committed.
+legacy/db-exports/
+
 # Old SDevTech MongoDB backup batch/PowerShell scripts — contains a hardcoded remote DB
 # username/password (root/sdevtech2021) in plain text. Never committed to git history.
 legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
