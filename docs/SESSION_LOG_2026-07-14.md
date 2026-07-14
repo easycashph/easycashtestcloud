@@ -119,13 +119,92 @@ production Vite build (not the dev server), rebuilt it via `docker compose up -d
 to pick up the change, then the user confirmed in the browser: clicking Preview opens the modal
 with the PDF rendering inline, correctly, before downloading.
 
+## Nginx SPA fallback bug (found while testing document generation)
+
+Navigating directly to a client-side route (e.g. `/loans/:id`) — or refreshing one — 404'd in the
+Docker deployment. Root cause: `frontend.Dockerfile`'s `nginx:1.27-alpine` runtime stage had no
+custom nginx config, so the default config looked for a literal file at that path instead of
+falling back to `index.html` and letting React Router take over. Only surfaced now because local
+dev (`vite`) has SPA fallback built in — the Docker-served build had never been navigated to
+directly until this session.
+
+- [app/frontend/nginx.conf](../app/frontend/nginx.conf) — new file, `try_files $uri $uri/
+  /index.html;`.
+- [app/docker/frontend.Dockerfile](../app/docker/frontend.Dockerfile) — copies it to
+  `/etc/nginx/conf.d/default.conf`. (Placed under `app/frontend/`, not `app/docker/`, because the
+  frontend image's build context is `app/frontend` — Docker refuses `COPY ../docker/...` paths
+  outside the build context.)
+- Verified: `curl -o /dev/null -w '%{http_code}' http://localhost:5173/loans/<id>` went from 404 to
+  200 after rebuilding the frontend image; confirmed again in the browser.
+- Committed separately (`6200500`) since it's an unrelated infra bug, not part of the
+  document-generation feature work.
+
+## Promissory Note installment schedule + Anticipated Disbursement Date
+
+User shared a real legacy Promissory Note PDF (`DS - SML-REG_00373.pdf`) as the target format —
+it includes a per-installment schedule table (`# / Date / Payment Due` + Totals row) that the
+current template/merge-data setup had no way to produce (flat `Record<string,string>` merge data,
+no loop support).
+
+**Design (confirmed with user before implementing, since it changes 2 port interfaces):**
+`IDocumentFiller`/`ILoanDocumentMergeDataResolver`'s data type loosened from
+`Record<string,string>` to `Record<string,unknown>` so an array of row objects can flow through —
+docxtemplater (3.x, already a dependency, no new package needed) repeats a table row once per
+array entry when the template wraps that row in `{#Schedule}`/`{/Schedule}` tags.
+`LoanDocumentMergeDataResolver` now also returns `Schedule` (per-installment `Number`/`Date`/
+`PaymentDue`), `TotalPaymentDue`, and (added later, per user correction — the loan-amount sentence
+should show total payment due, not principal) `TotalPaymentDueWords` via the existing
+`moneyToWords` helper.
+
+**Template editing, iterated live against the Docker stack (rebuild backend → user tests → fix):**
+1. First attempt put the loop tags in plain tab-separated text, not a real Word table — flagged
+   before the user built it, since docxtemplater would have squished every installment onto one
+   line with no row breaks (this is also why the sample PDF's extracted text came out jumbled:
+   the *original* is a real table, cell boundaries just get lost by PDF text extraction).
+2. User rebuilt it as an actual 3-column table; first generation attempt failed with
+   docxtemplater's `TemplateError: Unclosed tag` — diagnosed via `docker compose logs backend`
+   down to a stray `{` left in the doc.xml (a placeholder had been partially deleted mid-edit,
+   e.g. `( P {  )  , Philippine Currency` instead of `( P {LoanAmountFigures} )`).
+3. Fixed, but the retyped placeholder turned out to be `{TotalPaymentDue}` where
+   `{LoanAmountFigures}` was expected — flagged, then the user clarified this was **intentional**:
+   the line should show total payment due, not loan amount, which is why
+   `TotalPaymentDueWords` was added as a new merge field.
+4. Generation succeeded; schedule table and total-due figures render correctly end to end.
+
+**Anticipated Disbursement Date:** user wanted this on the Promissory Note too. Turned out to
+already exist as a form field (`LoanAccountCreatePage.tsx`, "Anticipated Disbursement Date") used
+only to compute the Advance Interest Fee (ADR-046) client-side, then discarded — never sent to the
+backend, no schema column. Confirmed with user before adding a DB migration:
+
+- New nullable `LoanAccount.anticipatedDisbursementDate` column, migration
+  `20260714024327_add_anticipated_disbursement_date`, threaded through the domain entity
+  (`LoanAccount.ts`), repository, `CreateLoanAccountUseCase`, Zod validation schema, and presenter.
+- `LoanAccountCreatePage.tsx` now sends the existing `disbursementDate` form value in the create
+  payload instead of discarding it.
+- Exposed as `{AnticipatedDisbursementDate}` in merge data — distinct from `{DisbursementDate}`
+  (`activatedAt`), which has no value yet at APPROVED (when documents are generated).
+- **Verification approach:** avoided guessing the dev account's login password — instead wrote a
+  one-off `tsx` script calling `LoanDocumentMergeDataResolver.resolve()` directly against the local
+  Postgres to confirm the field resolves correctly, deleted the script after. All 1790 existing
+  loan accounts predate this field (created 2026-07-09) and have it `NULL` by definition, which is
+  correct, not a bug — confirmed by checking `createdAt` on the two accounts (`SML-REG_00373`,
+  `SL-REG_00114`) the user tested against. Temporarily set test values via direct SQL for both
+  (since no new loan account was created through the UI during this session), then reverted both
+  back to `NULL` before committing so no fake data was left in the dev database.
+
+Committed as `dc5a130` (schema/backend/frontend/template together — one coherent feature).
+`tsc --noEmit` clean on both backend and frontend; backend test suite unaffected (573 passed / 16
+pre-existing failures, unrelated to this work).
+
 ## Current state
 
 - Working tree clean as of the commits below; Docker stack (`postgres`, `backend`, `frontend`)
   is running locally at `localhost:5173`/`localhost:4000`/`localhost:5432` and left up
   intentionally.
 - Commits made this session: `5658b3a` (frontend vitest harness), `0152eac` (11 ADR-051 `.docx`
-  templates, placeholder editing in progress). Not yet pushed to `origin/main`.
+  templates), `c6d9778` (inline PDF preview), `6200500` (nginx SPA fallback fix), `dc5a130`
+  (Promissory Note schedule + Anticipated Disbursement Date). Not yet pushed to `origin/main`
+  (5 commits ahead).
 - Known follow-ups (carried over from 2026-07-13, still unresolved):
   - Two independent Note systems still coexist in the backend (`loan-note` vs `note` module) —
     needs a product decision on which is canonical.
@@ -134,15 +213,24 @@ with the PDF rendering inline, correctly, before downloading.
   - 16 pre-existing backend test failures in `loan-application`/`borrower` modules — should be
     reported to Jomer, not fixed without knowing his intended redesign.
   - Per-Loan-Product `DocumentTemplateMapping` data still needs confirming.
-- Updated follow-up: user is now actively filling in `{Placeholder}` merge fields for the remaining
-  9 of 11 ADR-051 templates (`ACKNOWLEDGEMENT_RECEIPT`, `DATA_PRIVACY_CONSENT`,
+- Updated follow-up: `PROMISSORY_NOTE.docx` is now functionally complete (schedule table, total
+  payment due in figures/words, borrower/PN-number fields) and confirmed working end to end. The
+  other 8 of 11 ADR-051 templates (`ACKNOWLEDGEMENT_RECEIPT`, `DATA_PRIVACY_CONSENT`,
   `LOAN_AGREEMENT_SALARY`, `LOAN_AGREEMENT_SEAFARER`, `DEED_OF_ASSIGNMENT_BORROWER`,
   `DEED_OF_ASSIGNMENT_CO_BORROWER`, `DEED_OF_ASSIGNMENT_SALARY`, `SPECIAL_POWER_OF_ATTORNEY`,
-  `MANULIFE`), plus finishing `DISCLOSURE_STATEMENT`'s remaining blank fields — generation pipeline
-  confirmed working, so this is now pure content work in Word, not an engineering blocker.
+  `MANULIFE`) still need their `{Placeholder}` merge fields added, plus `DISCLOSURE_STATEMENT`'s
+  remaining blank fields (Miscellaneous Fee, Net Proceeds, Effective Interest Rate,
+  Late Charges/Atty's Fee/Litigation Fee rates — the resolver already computes/hardcodes these
+  values, per 2026-07-14 earlier in this log, only the template placeholders are missing). Pipeline
+  confirmed working, so this is pure content work in Word, not an engineering blocker.
   `DocumentTemplateMapping` seed data (which conditional docs apply to which loan products) is
   still needed before conditional-document generation is fully usable end-to-end (the 4 required
   documents don't depend on it).
+- New follow-up: only 2 of ~1790 loan accounts in the dev database have `anticipatedDisbursementDate`
+  populated (both temporarily, for this session's testing, then reverted to `NULL`) — every
+  pre-2026-07-14 loan account will show a blank `{AnticipatedDisbursementDate}` on generated
+  documents until a new loan account is created through the (now-fixed) Create Loan Account form.
+  Not a bug, just worth knowing when testing against old data.
 - New follow-up from this session: the frontend test harness now exists but has exactly one test
   file covering pure utility functions — no component/page tests yet. Expanding coverage
   (components, hooks, API type guards) is future work, not attempted here.
