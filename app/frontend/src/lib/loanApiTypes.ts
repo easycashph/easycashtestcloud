@@ -46,6 +46,7 @@ export interface LoanAccount {
   installmentCount: number;
   repaymentPeriodUnit: string;
   firstRepaymentDate: string;
+  anticipatedDisbursementDate: string | null;
   approvedAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;

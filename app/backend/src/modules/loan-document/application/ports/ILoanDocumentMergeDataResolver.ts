@@ -5,5 +5,5 @@
  * only needs one collaborator for "give me this loan's document data."
  */
 export interface ILoanDocumentMergeDataResolver {
-  resolve(loanAccountId: string): Promise<Record<string, string>>;
+  resolve(loanAccountId: string): Promise<Record<string, unknown>>;
 }

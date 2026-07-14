@@ -53,6 +53,7 @@ export function presentLoanAccount(loanAccount: LoanAccount, isMatured = false) 
     repaymentPeriodUnit: loanAccount.repaymentPeriodUnit,
     gracePeriodDays: loanAccount.gracePeriodDays,
     firstRepaymentDate: loanAccount.firstRepaymentDate.toISOString(),
+    anticipatedDisbursementDate: loanAccount.anticipatedDisbursementDate?.toISOString() ?? null,
     approvedAt: loanAccount.approvedAt?.toISOString() ?? null,
     approvedByUserId: loanAccount.approvedByUserId ?? null,
     activatedAt: loanAccount.activatedAt?.toISOString() ?? null,

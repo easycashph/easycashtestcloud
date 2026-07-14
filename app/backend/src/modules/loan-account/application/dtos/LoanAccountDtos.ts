@@ -13,6 +13,8 @@ export interface CreateLoanAccountInput {
   gracePeriodDays?: number;
   /** ADR-045 (Concept 1 — Exact First Repayment Date): explicit input, never derived. */
   firstRepaymentDate: Date;
+  /** 2026-07-14: staff-entered estimate, reused as the Promissory Note's `{AnticipatedDisbursementDate}`. */
+  anticipatedDisbursementDate?: Date;
   /** 2026-07-11 (Create Loan Account origination fees) — each omitted/undefined defaults to 0. */
   processingFee?: string;
   advanceInterestFee?: string;
