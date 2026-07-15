@@ -751,7 +751,7 @@ export function DashboardPage() {
             Hover the ⓘ for each term's definition; click a value to see the accounts behind it.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
           <MetricItem
             term={FINANCIAL_GLOSSARY.delinquencyRate.term}
             definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
