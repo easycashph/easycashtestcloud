@@ -104,8 +104,9 @@ echo   Tapos na. I-refresh ang browser tab mo.
 echo   Paalala: baka kailangan mo pa ring i-re-seed
 echo   (npx tsx prisma\seed.ts) at i-re-apply ang mga
 echo   one-time data scripts (hal. backfill-net-proceeds.ts,
-echo   map-sml-document-templates.ts) kung wala pa ang laman
-echo   ng dump na ito.
+echo   map-sml-document-templates.ts,
+echo   backfill-loan-interest-rates.ts --apply) kung wala pa
+echo   ang laman ng dump na ito.
 echo ============================================
 
 :end
