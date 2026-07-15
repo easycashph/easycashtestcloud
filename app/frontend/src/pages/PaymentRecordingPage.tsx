@@ -333,8 +333,12 @@ export function PaymentRecordingPage() {
       setArNumber('');
       setAmount('');
       hasAutoFilledAmountRef.current = true; // do not auto-fill over the just-cleared field until a new loan is picked
-      void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
-      void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
+      // refetchQueries (not invalidateQueries) - forces the actual network refetch of this loan's
+      // repayment schedule right now, rather than only marking it stale. The "Next due" summary
+      // below reads unpaidInstallments straight from this query, and previously wasn't reliably
+      // picking up the just-recorded payment until a full page reload (2026-07-15 bug report).
+      void queryClient.refetchQueries({ queryKey: ['loan-accounts'] });
+      void queryClient.refetchQueries({ queryKey: ['repayment-schedule', loanId] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -480,6 +484,25 @@ export function PaymentRecordingPage() {
                     </p>
                     <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
                     <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
+                    {installmentsQuery.isLoading ? (
+                      <p className="mt-2 border-t pt-2">Loading next due amount…</p>
+                    ) : (
+                      unpaidInstallments.length > 0 && (
+                        <div className="mt-2 border-t pt-2">
+                          {(() => {
+                            const oldest = unpaidInstallments[0]!;
+                            const remaining = remainingDue(oldest);
+                            const totalRemaining = remaining.principal + remaining.interest + remaining.penalty + remaining.fees;
+                            return (
+                              <p>
+                                <span className="font-medium text-foreground">Next due:</span> Installment #{oldest.installmentNumber} ·{' '}
+                                {formatDate(oldest.dueDate)} · <span className="font-medium text-foreground">{formatPeso(totalRemaining)}</span>
+                              </p>
+                            );
+                          })()}
+                        </div>
+                      )
+                    )}
                   </div>
                 ) : (
                   !clientLoansQuery.isLoading && (
