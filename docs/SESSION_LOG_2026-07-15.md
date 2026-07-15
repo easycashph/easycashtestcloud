@@ -321,8 +321,14 @@ after use (one-off, not a repeatable maintenance script).
 
 ## Current state
 
-- Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync
-  with `origin/main` as of `660b5a9`.
+- Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
+  `origin/main` as of `370a3ea` (pushed). Five commits this session:
+  `922f341` (transaction sort, pass 1), `7c3a2e4` (Total Due column), `d01ac67` (payment allocation
+  visibility #1/#2/#3), `94424e2` (transaction sort, pass 2 — the real fix), `370a3ea` (Payment
+  Recording Close/Next-due).
+- **Next immediate task, agreed with the user: a real UI click-through once login credentials are
+  available.** Everything above was verified at the DB/API/build level only (no browser login access
+  this session) — see the two bullets below for exactly what still needs eyes-on confirmation.
 - Known follow-ups (carried over, still unresolved):
   - Two independent Note systems still coexist in the backend (`loan-note` vs `profile-note`
     module) — needs a product decision on which is canonical.
