@@ -86,10 +86,10 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
+        <div className="flex min-h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5 py-2">
           <img src="/logo-easycash.png" alt="Easycash logo" className="h-9 w-9 shrink-0 rounded bg-white object-contain p-0.5" />
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-sm font-semibold">{COMPANY_INFO.name}</p>
+            <p className="text-sm font-semibold leading-snug">{COMPANY_INFO.name}</p>
             <p className="truncate text-[11px] text-sidebar-foreground/60">{COMPANY_INFO.branchName} Branch</p>
           </div>
         </div>

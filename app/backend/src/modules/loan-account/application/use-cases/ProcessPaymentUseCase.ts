@@ -281,6 +281,13 @@ export class ProcessPaymentUseCase {
 
     loanAccount.applyPayment(TransactionComponents.of(components), paidAt);
 
+    // This payment may have fully settled the loan - auto-close it rather than leaving a
+    // zero-balance loan sitting ACTIVE/ACTIVE_IN_ARREARS indefinitely (only those two statuses
+    // can transition to CLOSED; see ALLOWED_TRANSITIONS in LoanAccount.ts).
+    if ((loanAccount.status === 'ACTIVE' || loanAccount.status === 'ACTIVE_IN_ARREARS') && loanAccount.isFullyPaid) {
+      loanAccount.close();
+    }
+
     const appliedAmount = paymentAmount.subtract(remainder);
     const repaymentTransaction = LoanTransaction.create({
       loanAccountId: loanAccount.id,

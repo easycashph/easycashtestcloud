@@ -80,7 +80,7 @@ export function LoanApplicationsPage() {
   const [category, setCategory] = React.useState('ALL');
   const [createOpen, setCreateOpen] = React.useState(false);
 
-  useLogPageView('Loan Applications');
+  useLogPageView('List of Loan Applications');
 
   const {
     items: applications,
@@ -116,7 +116,7 @@ export function LoanApplicationsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">List of Loan Applications</h2>
         </div>
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
@@ -140,7 +140,7 @@ export function LoanApplicationsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">Loan Applications</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">List of Loan Applications</h2>
           <p className="text-sm text-muted-foreground">
             {applications.length} application{applications.length === 1 ? '' : 's'} on this page ({pendingCount} pending decision) -
             intake, review, and decision workflow, wired to the live backend.
@@ -294,7 +294,7 @@ export function LoanApplicationsPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="Loan Applications" entityTypes={['LoanApplication', 'Loan Applications']} />
+      <RecentActivityPanel label="List of Loan Applications" entityTypes={['LoanApplication', 'Loan Applications']} />
     </div>
   );
 }
