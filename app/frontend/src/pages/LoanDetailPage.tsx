@@ -606,46 +606,60 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {installments.map((i) => {
-                      const late = wasInstallmentLate(i);
-                      // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
-                      // of today" figure for a prospective (non-migrated) loan — null for a
-                      // migrated loan, which falls back to due.penalty, its real historical
-                      // (fixed) figure instead.
-                      const isLivePenalty = i.currentPenaltyOwed !== null;
-                      const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
-                      return (
-                        <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
-                          <TableCell>{i.installmentNumber}</TableCell>
-                          <TableCell>{formatDate(i.dueDate)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
-                          <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatPeso(penaltyDisplay)}
-                            {isLivePenalty && penaltyDisplay > 0 && (
-                              <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
-                                (as of today)
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1.5">
-                              <InstallmentStatusBadge status={i.status} />
-                              {late && i.status === 'PAID' && (
-                                <Badge variant="destructive" className="text-[10px]">
-                                  Paid late
-                                </Badge>
+                    {(() => {
+                      // "Balance" (last column) - how much the client still owes as of this
+                      // installment: total obligation across the whole schedule minus everything
+                      // paid so far, running down toward 0 at the final installment.
+                      const totalObligation = installments.reduce((sum, i) => {
+                        const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                        return sum + num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                      }, 0);
+                      let cumulativePaid = 0;
+                      return installments.map((i) => {
+                        const late = wasInstallmentLate(i);
+                        // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
+                        // of today" figure for a prospective (non-migrated) loan — null for a
+                        // migrated loan, which falls back to due.penalty, its real historical
+                        // (fixed) figure instead.
+                        const isLivePenalty = i.currentPenaltyOwed !== null;
+                        const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
+                        cumulativePaid += num(i.paid.principal) + num(i.paid.interest);
+                        const balance = Math.max(0, totalObligation - cumulativePaid);
+                        return (
+                          <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
+                            <TableCell>{i.installmentNumber}</TableCell>
+                            <TableCell>{formatDate(i.dueDate)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
+                            <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatPeso(penaltyDisplay)}
+                              {isLivePenalty && penaltyDisplay > 0 && (
+                                <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
+                                  (as of today)
+                                </span>
                               )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                            </TableCell>
+                            <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <InstallmentStatusBadge status={i.status} />
+                                {late && i.status === 'PAID' && (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    Paid late
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-medium">{formatPeso(balance)}</TableCell>
+                          </TableRow>
+                        );
+                      });
+                    })()}
                     <TableRow className="border-t-2 font-semibold">
                       <TableCell colSpan={2}>Total</TableCell>
                       <TableCell className="text-right">
@@ -668,6 +682,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right">
                         {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.principal) + num(i.paid.interest), 0))}
                       </TableCell>
+                      <TableCell />
                       <TableCell />
                     </TableRow>
                   </TableBody>

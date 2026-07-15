@@ -768,6 +768,13 @@ export function LoanApplicationDetailPage() {
   const hasActiveLoan = (clientLoansQuery.data ?? []).some(
     (l) => l.borrowerId === application?.createdBorrowerId && l.status !== 'CLOSED' && l.status !== 'CLOSED_WRITTEN_OFF' && l.status !== 'CLOSED_REJECTED',
   );
+  // Once the loan account created from this application has been Activated (disbursed - status
+  // past PENDING_APPROVAL/APPROVED), the decision that produced it can no longer be reverted -
+  // there's a real, live loan on the books behind it.
+  const createdLoanAccount = (clientLoansQuery.data ?? []).find((l) => l.id === application?.createdLoanAccountId);
+  const isCreatedLoanAccountActivated = createdLoanAccount
+    ? createdLoanAccount.status !== 'PENDING_APPROVAL' && createdLoanAccount.status !== 'APPROVED'
+    : false;
 
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
@@ -933,6 +940,17 @@ export function LoanApplicationDetailPage() {
                   <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
                 )}
                 <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>{application.status.replaceAll('_', ' ')}</Badge>
+                {application.createdLoanAccountId && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/loans/${application.createdLoanAccountId}`} className="inline-flex items-center gap-1.5">
+                      <Landmark className="h-3.5 w-3.5" />
+                      Loan Account Created
+                      {application.createdLoanAccountCode && (
+                        <span className="font-mono text-xs text-muted-foreground">({application.createdLoanAccountCode})</span>
+                      )}
+                    </Link>
+                  </Button>
+                )}
               </div>
               <p className="font-mono text-xs text-muted-foreground">
                 {application.requestedCategory} · Submitted {formatDate(application.createdAt)}
@@ -961,33 +979,27 @@ export function LoanApplicationDetailPage() {
                   <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create Client Profile
                 </Button>
               )}
-              {/* Visible only once this application has a real client (createdBorrowerId set) - clickable
-                  only once this specific application is Approved and hasn't already produced a loan
-                  account, and the client has no other active loan open (2026-07-14, moved from the
-                  Client Profile page so it's gated per-application, not per-client). */}
-              {application.createdBorrowerId &&
-                (application.createdLoanAccountId ? (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={`/loans/${application.createdLoanAccountId}`} className="inline-flex items-center">
-                      <Landmark className="mr-1.5 h-3.5 w-3.5" /> Loan Account Created
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled={application.status !== 'APPROVED' || hasActiveLoan}
-                    onClick={() => setCreateLoanOpen(true)}
-                    title={
-                      application.status !== 'APPROVED'
-                        ? 'Only available once the application is Approved'
-                        : hasActiveLoan
-                          ? 'This client already has an active (or in-arrears) loan account'
-                          : undefined
-                    }
-                  >
-                    <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
-                  </Button>
-                ))}
+              {/* Visible only once this application has a real client (createdBorrowerId set) and hasn't
+                  already produced a loan account (that's now shown next to the applicant's name/status
+                  above) - clickable only once this specific application is Approved, and the client has
+                  no other active loan open (2026-07-14, moved from the Client Profile page so it's gated
+                  per-application, not per-client). */}
+              {application.createdBorrowerId && !application.createdLoanAccountId && (
+                <Button
+                  size="sm"
+                  disabled={application.status !== 'APPROVED' || hasActiveLoan}
+                  onClick={() => setCreateLoanOpen(true)}
+                  title={
+                    application.status !== 'APPROVED'
+                      ? 'Only available once the application is Approved'
+                      : hasActiveLoan
+                        ? 'This client already has an active (or in-arrears) loan account'
+                        : undefined
+                  }
+                >
+                  <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1177,14 +1189,20 @@ export function LoanApplicationDetailPage() {
                   {application.decisionNote && <p className="mt-2 text-sm text-muted-foreground">{application.decisionNote}</p>}
                 </div>
                 {canRevertLoanApplicationDecision ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirmAction('REVERT')}
-                    disabled={revertMutation.isPending}
-                  >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to AI Pre-Qualification
-                  </Button>
+                  isCreatedLoanAccountActivated ? (
+                    <p className="text-xs text-muted-foreground">
+                      This application's loan account has already been Activated - the decision can no longer be reverted.
+                    </p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConfirmAction('REVERT')}
+                      disabled={revertMutation.isPending}
+                    >
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to AI Pre-Qualification
+                    </Button>
+                  )
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     Only MIS can revert a decided application back to AI pre-qualification (accidental-click safety net).

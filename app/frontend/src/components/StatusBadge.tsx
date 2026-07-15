@@ -6,7 +6,7 @@ const LOAN_STATUS_STYLE: Record<LoanAccountStatus, { label: string; variant: 'de
   APPROVED: { label: 'Approved', variant: 'outline' },
   ACTIVE: { label: 'Active', variant: 'success' },
   ACTIVE_IN_ARREARS: { label: 'In Arrears', variant: 'warning' },
-  CLOSED: { label: 'Closed', variant: 'secondary' },
+  CLOSED: { label: 'Closed', variant: 'success' },
   CLOSED_WRITTEN_OFF: { label: 'Written Off', variant: 'destructive' },
   CLOSED_REJECTED: { label: 'Rejected', variant: 'secondary' },
 };

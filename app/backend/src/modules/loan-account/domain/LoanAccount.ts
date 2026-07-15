@@ -477,6 +477,29 @@ export class LoanAccount {
     this.props.updatedAt = paidAt;
   }
 
+  /**
+   * True once every balance component (principal/interest/fees/penalty) has been paid down to
+   * zero or better (an overpayment/credit still counts as "fully paid" — `FINANCIAL_INVARIANTS.md
+   * §3` allows a negative balance and this isn't the place to invent a disposition for it).
+   * Used by `ProcessPaymentUseCase` to decide whether a payment just settled the loan.
+   */
+  get isFullyPaid(): boolean {
+    return !this.props.balances.principalBalance.isPositive()
+      && !this.props.balances.interestBalance.isPositive()
+      && !this.props.balances.feesBalance.isPositive()
+      && !this.props.balances.penaltyBalance.isPositive();
+  }
+
+  /**
+   * Marks a fully-paid ACTIVE/ACTIVE_IN_ARREARS loan CLOSED. Mechanical transition only, mirroring
+   * `approve()`/`reject()` — callers (`ProcessPaymentUseCase`) decide *when* to call this, via
+   * `isFullyPaid`.
+   */
+  close(): void {
+    this.transitionTo('CLOSED');
+    this.props.closedAt = new Date();
+  }
+
   addAppliedFee(fee: AppliedFee): void {
     this.props.appliedFees.push(fee);
     this.props.updatedAt = new Date();
