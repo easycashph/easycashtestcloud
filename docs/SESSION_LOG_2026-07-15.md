@@ -429,16 +429,31 @@ client's penalty purely to prove the wiring works, unrequested, was judged out o
 risk; relied on the unit coverage instead. A real click-through (and a first real reduction) is
 worth doing once login access is available.
 
+## Report generation, continued: Reduce Penalty feature name display
+
+Small follow-up after the Reduce Penalty feature (see its own section above) shipped: the Loan
+Detail page showed "Reduced by Accounting" (the role) instead of the actual staff member's name.
+Fixed by joining `penaltyOverrideByUserId`'s name in the repository's read path
+(`findById`/`findByLoanAccountId`), same pattern already used by
+`PrismaGeneratedLoanDocumentRepository.generatedByName` — a display-only
+`PenaltyOverride.byName`, never touched by `reducePenalty()`'s write path. Now reads "Reduced by
+{actual name}", falling back to "Accounting" only if the name somehow doesn't resolve. Backend/
+frontend `tsc`/tests clean (updated two existing tests for the new field); containers rebuilt,
+route/bundle re-verified. Committed `0338f90`.
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
-  `origin/main` as of `370a3ea` (pushed). Five commits this session:
-  `922f341` (transaction sort, pass 1), `7c3a2e4` (Total Due column), `d01ac67` (payment allocation
-  visibility #1/#2/#3), `94424e2` (transaction sort, pass 2 — the real fix), `370a3ea` (Payment
-  Recording Close/Next-due).
+  `origin/main` as of `0338f90` — **not yet pushed this batch**, only up to `370a3ea` is pushed. Nine
+  commits this session total: `922f341` (transaction sort, pass 1), `7c3a2e4` (Total Due column),
+  `d01ac67` (payment allocation visibility #1/#2/#3), `94424e2` (transaction sort, pass 2 — the real
+  fix), `370a3ea` (Payment Recording Close/Next-due, **pushed**), `9d3d1de` (docs), `be3e312`
+  (Loan Releases Report + Reports hub + Dashboard preview cards), `bc8ec0c` (Reduce Penalty
+  feature), `0338f90` (Reduce Penalty name display fix) — **the last three (`be3e312`/`bc8ec0c`/
+  `0338f90`) are local-only, not yet pushed to `origin/main`**.
 - **Next immediate task, agreed with the user: a real UI click-through once login credentials are
-  available.** Everything above was verified at the DB/API/build level only (no browser login access
-  this session) — see the two bullets below for exactly what still needs eyes-on confirmation.
+  available.** Everything this session was verified at the DB/API/build level only (no browser login
+  access all session) — see the bullets below for exactly what still needs eyes-on confirmation.
 - Known follow-ups (carried over, still unresolved):
   - Two independent Note systems still coexist in the backend (`loan-note` vs `profile-note`
     module) — needs a product decision on which is canonical.
@@ -454,16 +469,19 @@ worth doing once login access is available.
     (likely just needs `{InterestRate}` per ADR-010, not a new backend field — unconfirmed).
   - Loan Portfolio Health Venn → proportional-bar redesign: mockup shown and liked in concept, not
     yet implemented.
-  - Report generation (Excel): scoped (11 sample reports categorized), no code written yet -
-    waiting on the user to pick which report to build first.
+  - **Report generation (Excel)**: 1 of 11 legacy reports done (Loan Releases Report, `be3e312`) —
+    the other 10 (Aging, Detailed Ending Current Balance, Accounts with Past Due, Collection,
+    Expected Collection, First Amortization, Daily Collection Report, Fully Paid Accounts, plus the
+    3 pre-existing General-category pages already live) remain "Coming soon" placeholders on the new
+    Reports hub (`/reports`) — pick the next one whenever ready to continue the pattern.
   - Pending user decision: whether to run `delete-test-records.ts --apply` against the 6 borrowers
     / 2 loan accounts / 1 loan application identified as test data.
   - **Transaction history sort bug**: fixed in two passes, both committed (`922f341`, `94424e2`) —
     see above.
   - **Payment allocation visibility (#1/#2/#3)**: committed (`d01ac67`) — see above.
-  - **Reduce Penalty feature**: built and committed this session — see above. Not yet exercised
-    against real live data (no login access); "Adjust fees" remains a permanent "Coming soon"
-    placeholder, not scoped.
+  - **Reduce Penalty feature**: built, committed (`bc8ec0c`, `0338f90`) — see above. Not yet
+    exercised against real live data (no login access); "Adjust fees" remains a permanent "Coming
+    soon" placeholder on the Actions dropdown, not scoped.
   - **Payment Recording "Next due" refresh issue**: root cause not conclusively found (see its own
     section above) — worked around by removing the "Record another payment" quick-succession flow
     entirely rather than continuing to chase the staleness bug. Revisit if "Next due" shows the same
@@ -471,5 +489,6 @@ worth doing once login access is available.
   - **No login credentials available in this environment all session** — every UI-observable change
     this session was verified at the DB/API/build level (raw SQL checks, `curl` route-registration
     probes, `tsc`/test suites, inspecting the served JS bundle) rather than by driving the actual
-    browser UI. A real click-through pass is worth doing once credentials are available, especially
-    for the newer payment-allocation-visibility and Payment Recording changes.
+    browser UI. A real click-through pass is worth doing once credentials are available — especially
+    the newer payment-allocation-visibility, Reports/Dashboard, and Reduce Penalty changes.
+  - **`be3e312`/`bc8ec0c`/`0338f90` are committed locally but not pushed** — push when ready.
