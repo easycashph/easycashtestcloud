@@ -91,6 +91,7 @@ describe('PrismaRepaymentInstallmentRepository', () => {
     expect(repaymentScheduleOps.findMany).toHaveBeenCalledWith({
       where: { loanAccountId: 'loan-1' },
       orderBy: { installmentNumber: 'asc' },
+      include: { penaltyOverrideBy: { select: { firstName: true, lastName: true } } },
     });
   });
 

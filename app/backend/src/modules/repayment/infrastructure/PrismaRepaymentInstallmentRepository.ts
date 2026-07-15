@@ -7,7 +7,8 @@ import { RepaymentInstallment, type RepaymentInstallmentProps } from '../domain/
 import { InstallmentAmounts } from '../domain/valueObjects/InstallmentAmounts';
 import type { IRepaymentInstallmentRepository } from '../application/ports/IRepaymentInstallmentRepository';
 
-type RepaymentScheduleRow = Prisma.RepaymentScheduleGetPayload<Record<string, never>>;
+const INCLUDE_PENALTY_OVERRIDE_BY = { penaltyOverrideBy: { select: { firstName: true, lastName: true } } } as const;
+type RepaymentScheduleRow = Prisma.RepaymentScheduleGetPayload<{ include: typeof INCLUDE_PENALTY_OVERRIDE_BY }>;
 
 function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
   const props: RepaymentInstallmentProps = {
@@ -37,6 +38,7 @@ function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
             amount: Money.of(row.penaltyOverrideAmount),
             reason: row.penaltyOverrideReason,
             byUserId: row.penaltyOverrideByUserId,
+            byName: row.penaltyOverrideBy ? `${row.penaltyOverrideBy.firstName} ${row.penaltyOverrideBy.lastName}`.trim() : undefined,
             at: row.penaltyOverrideAt,
           }
         : undefined,
@@ -111,7 +113,7 @@ async function persistInstallment(client: PrismaWriteClient, installment: Repaym
 export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallmentRepository {
   async findById(id: string, ctx?: TransactionContext): Promise<RepaymentInstallment | null> {
     const client = resolveClient(ctx);
-    const row = await client.repaymentSchedule.findUnique({ where: { id } });
+    const row = await client.repaymentSchedule.findUnique({ where: { id }, include: INCLUDE_PENALTY_OVERRIDE_BY });
     return row ? toDomain(row) : null;
   }
 
@@ -120,6 +122,7 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
     const rows = await client.repaymentSchedule.findMany({
       where: { loanAccountId },
       orderBy: { installmentNumber: 'asc' },
+      include: INCLUDE_PENALTY_OVERRIDE_BY,
     });
     return rows.map(toDomain);
   }

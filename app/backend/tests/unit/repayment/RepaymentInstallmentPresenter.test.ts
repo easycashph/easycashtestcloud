@@ -113,7 +113,13 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
 
       expect(result.currentPenaltyOwed).toBe('123.45');
       expect(result.isLivePenalty).toBe(false);
-      expect(result.penaltyOverride).toEqual({ amount: '123.45', reason: 'memo #1', byUserId: 'user-1', at: expect.any(String) });
+      expect(result.penaltyOverride).toEqual({
+        amount: '123.45',
+        reason: 'memo #1',
+        byUserId: 'user-1',
+        byName: null,
+        at: expect.any(String),
+      });
     });
 
     it('also overrides for a migrated (non-prospective) loan — currentPenaltyOwed becomes non-null', () => {

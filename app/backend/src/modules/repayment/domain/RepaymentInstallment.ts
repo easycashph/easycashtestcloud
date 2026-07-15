@@ -10,6 +10,8 @@ export interface PenaltyOverride {
   amount: Money;
   reason: string;
   byUserId: string;
+  /** Display-only, read-path convenience (never set by `reducePenalty()` itself — that's a pure write with no user-name lookup) — populated by the repository's `findById`/`findByLoanAccountId` reads for the presenter to surface "Reduced by X" without a second query. `undefined` when not hydrated (e.g. a freshly-constructed entity before its first save). */
+  byName?: string;
   at: Date;
 }
 

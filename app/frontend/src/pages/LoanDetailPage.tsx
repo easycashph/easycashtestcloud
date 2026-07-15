@@ -803,7 +803,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 <div className="flex flex-col items-end">
                                   <span>{formatPeso(penaltyDisplay)}</span>
                                   <span className="text-[10px] text-primary" title={i.penaltyOverride.reason}>
-                                    Reduced by Accounting
+                                    Reduced by {i.penaltyOverride.byName ?? 'Accounting'}
                                   </span>
                                 </div>
                               ) : (

@@ -308,7 +308,7 @@ export interface RepaymentInstallment {
   /** `true` only when `currentPenaltyOwed` reflects the live ADR-050 formula, not a frozen penaltyOverride. */
   isLivePenalty: boolean;
   /** 2026-07-15 (Reduce Penalty feature) — set when Accounting/MIS has reduced this installment's penalty; freezes `currentPenaltyOwed` at `amount`. */
-  penaltyOverride: { amount: string; reason: string; byUserId: string; at: string } | null;
+  penaltyOverride: { amount: string; reason: string; byUserId: string; byName: string | null; at: string } | null;
   /** Null until first paid. Compare against `dueDate` to tell a settled (PAID) installment was
    * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
    * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */

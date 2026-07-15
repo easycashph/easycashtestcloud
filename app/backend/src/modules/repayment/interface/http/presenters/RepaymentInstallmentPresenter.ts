@@ -57,6 +57,11 @@ export function presentRepaymentInstallment(installment: RepaymentInstallment, p
           amount: override.amount.toString(),
           reason: override.reason,
           byUserId: override.byUserId,
+          // Hydrated by the repository's read path (findById/findByLoanAccountId's join) — may be
+          // undefined if that join somehow didn't resolve (e.g. the user was since deleted); falls
+          // back to null rather than throwing, since this is a display convenience, not a business
+          // invariant.
+          byName: override.byName ?? null,
           at: override.at.toISOString(),
         }
       : null,
