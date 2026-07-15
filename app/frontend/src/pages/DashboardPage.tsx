@@ -5,11 +5,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -155,6 +152,10 @@ interface PortfolioCategorySlice {
   active: number;
   pastDue: number;
   matured: number;
+  /** Loan account counts for the same three buckets. */
+  activeCount: number;
+  pastDueCount: number;
+  maturedCount: number;
 }
 
 function buildRealPortfolioByCategory(
@@ -165,14 +166,19 @@ function buildRealPortfolioByCategory(
   const byCategory = new Map<string, PortfolioCategorySlice>();
   for (const loan of loans) {
     if (!REAL_ACTIVE_STATUSES.includes(loan.status)) continue;
-    const slice = byCategory.get(loan.category) ?? { category: loan.category, value: 0, loans: [], active: 0, pastDue: 0, matured: 0 };
+    const slice =
+      byCategory.get(loan.category) ??
+      { category: loan.category, value: 0, loans: [], active: 0, pastDue: 0, matured: 0, activeCount: 0, pastDueCount: 0, maturedCount: 0 };
     slice.value = Math.round((slice.value + loan.principalBalance) * 100) / 100;
     if (maturedLoanIds.has(loan.id)) {
       slice.matured = Math.round((slice.matured + loan.principalBalance) * 100) / 100;
+      slice.maturedCount += 1;
     } else if (overdueLoanIds.has(loan.id)) {
       slice.pastDue = Math.round((slice.pastDue + loan.principalBalance) * 100) / 100;
+      slice.pastDueCount += 1;
     } else {
       slice.active = Math.round((slice.active + loan.principalBalance) * 100) / 100;
+      slice.activeCount += 1;
     }
     slice.loans.push(loan);
     byCategory.set(loan.category, slice);
@@ -215,12 +221,6 @@ function buildRealDisbursementTrend(loans: PortfolioLoanRow[], monthsBack = 6) {
   }
   return buckets;
 }
-
-// Deliberately excludes --chart-1: that variable is re-themed per the LMS Configuration
-// accent color (emerald/violet/amber/rose) and can collide with one of the other fixed
-// chart hues (e.g. the default emerald accent looks identical to --chart-3's green). These
-// four stay fixed across every accent theme, so categories are always visually distinct.
-const CHART_COLORS = ['hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 // Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too - reads
 // as a jarring, low-contrast flash against the rest of the (theme-aware) dashboard. Pulling from
@@ -867,7 +867,8 @@ export function DashboardPage() {
         <CardHeader>
           <CardTitle>{t('dashboard.categoryBreakdown.title')}</CardTitle>
           <CardDescription>
-            Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) - click a slice for its accounts
+            Outstanding principal across the 3 active categories (SML = Seafarer Loan sub-class) - bar length is each category's share
+            of the total, colors are the Active/Past Due/Matured split - click a bar for its accounts
             {isFiltered ? ' · reflects the filter above' : ''}
           </CardDescription>
         </CardHeader>
@@ -877,50 +878,59 @@ export function DashboardPage() {
               No active loan accounts match the selected filter.
             </p>
           ) : (
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <div className="h-40 w-40 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={filteredPortfolioByCategory}
-                      dataKey="value"
-                      nameKey="category"
-                      innerRadius={45}
-                      outerRadius={68}
-                      paddingAngle={2}
-                      cursor="pointer"
-                      onClick={(data) => {
-                        const slice = (data as { payload?: PortfolioCategorySlice }).payload;
-                        if (slice?.category) openCategorySlice(slice);
-                      }}
-                    >
-                      {filteredPortfolioByCategory.map((entry, index) => (
-                        <Cell key={entry.category} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} />
-                  </PieChart>
-                </ResponsiveContainer>
+            <div className="flex flex-col">
+              <div className="mb-3 flex items-center gap-3 text-[10.5px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-success" />
+                  Active
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-warning" />
+                  Past Due
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-sm bg-destructive" />
+                  Matured
+                </span>
               </div>
-              <div className="flex flex-col gap-3">
-                {filteredPortfolioByCategory.map((entry, index) => (
-                  <div key={entry.category}>
-                    <button
-                      type="button"
-                      onClick={() => openCategorySlice(entry)}
-                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus:outline-none"
-                      title="View the loan accounts in this category"
-                    >
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-                      <span className="font-medium text-foreground">{entry.category}</span>
-                      <span>· {formatPeso(entry.value)}</span>
-                    </button>
-                    <p className="ml-4 text-xs text-muted-foreground">
-                      Active: {formatPeso(entry.active)} · Past Due: {formatPeso(entry.pastDue)} · Matured: {formatPeso(entry.matured)}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {(() => {
+                const maxValue = Math.max(...filteredPortfolioByCategory.map((e) => e.value), 1);
+                return filteredPortfolioByCategory.map((entry, index) => {
+                  const pct = (amount: number) => (entry.value === 0 ? 0 : Math.round((amount / entry.value) * 100));
+                  return (
+                    <div key={entry.category} className={cn('py-2', index > 0 && 'border-t border-border')}>
+                      <button
+                        type="button"
+                        onClick={() => openCategorySlice(entry)}
+                        className="flex w-full items-baseline gap-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none"
+                        title="View the loan accounts in this category"
+                      >
+                        <span className="font-medium text-foreground">{entry.category}</span>
+                        <span className="text-[10.5px] text-muted-foreground">({entry.loans.length})</span>
+                        <span className="ml-auto tabular-nums font-semibold text-foreground">{formatPeso(entry.value)}</span>
+                      </button>
+                      <div className="mt-1.5" style={{ width: `${(entry.value / maxValue) * 100}%` }}>
+                        <div className="flex h-3.5 overflow-hidden rounded">
+                          <div className="h-full bg-success" style={{ width: `${pct(entry.active)}%` }} />
+                          <div className="h-full bg-warning" style={{ width: `${pct(entry.pastDue)}%` }} />
+                          <div className="h-full bg-destructive" style={{ width: `${pct(entry.matured)}%` }} />
+                        </div>
+                      </div>
+                      <div className="mt-1 flex gap-2.5 text-[10.5px] tabular-nums">
+                        <span className="text-success">
+                          <b className="font-semibold">{pct(entry.active)}%</b> Active ({entry.activeCount})
+                        </span>
+                        <span className="text-warning">
+                          <b className="font-semibold">{pct(entry.pastDue)}%</b> Past Due ({entry.pastDueCount})
+                        </span>
+                        <span className="text-destructive">
+                          <b className="font-semibold">{pct(entry.matured)}%</b> Matured ({entry.maturedCount})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
         </CardContent>
