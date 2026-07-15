@@ -102,4 +102,35 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
     const result = presentRepaymentInstallment(installment, { isProspectiveLoan: true, principalAmount: Money.of('50000.00') });
     expect(result.currentPenaltyOwed).toBe('0.00');
   });
+
+  // 2026-07-15 (Reduce Penalty feature): an override always wins over live computation.
+  describe('penaltyOverride', () => {
+    it('overrides the live-computed amount and reports isLivePenalty=false', () => {
+      const installment = buildOverdueInstallment(new Date('2020-01-01T00:00:00Z'));
+      installment.reducePenalty(Money.of('123.45'), Money.of('99999.00'), 'memo #1', 'user-1');
+
+      const result = presentRepaymentInstallment(installment, { isProspectiveLoan: true, principalAmount: Money.of('50000.00') });
+
+      expect(result.currentPenaltyOwed).toBe('123.45');
+      expect(result.isLivePenalty).toBe(false);
+      expect(result.penaltyOverride).toEqual({ amount: '123.45', reason: 'memo #1', byUserId: 'user-1', at: expect.any(String) });
+    });
+
+    it('also overrides for a migrated (non-prospective) loan — currentPenaltyOwed becomes non-null', () => {
+      const installment = buildOverdueInstallment(new Date('2020-01-01T00:00:00Z'));
+      installment.reducePenalty(Money.of('0.00'), Money.of('500.00'), 'waived', 'user-1');
+
+      const result = presentRepaymentInstallment(installment, { isProspectiveLoan: false, principalAmount: Money.of('50000.00') });
+
+      expect(result.currentPenaltyOwed).toBe('0.00');
+      expect(result.isLivePenalty).toBe(false);
+    });
+
+    it('is null when no reduction has been applied', () => {
+      const installment = buildOverdueInstallment(new Date('2020-01-01T00:00:00Z'));
+      const result = presentRepaymentInstallment(installment, { isProspectiveLoan: true, principalAmount: Money.of('50000.00') });
+      expect(result.penaltyOverride).toBeNull();
+      expect(result.isLivePenalty).toBe(true);
+    });
+  });
 });

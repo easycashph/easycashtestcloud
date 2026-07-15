@@ -237,18 +237,20 @@ model User {
   roles                    UserRole[]
   refreshTokens            RefreshToken[]
   auditLogs                AuditLog[]
-  profileActivityLogs      ProfileActivityLog[] @relation("ProfileActivityLogUser")
-  borrowersAsLoanOfficer   Borrower[]        @relation("BorrowerLoanOfficer")
-  loanAccountsAsOfficer    LoanAccount[]     @relation("LoanAccountOfficer")
-  loanAccountsApproved     LoanAccount[]     @relation("LoanAccountApprovedBy")
-  transactionsPosted       LoanTransaction[] @relation("LoanTransactionPostedBy")
-  attachmentsUploaded      Attachment[]      @relation("AttachmentUploadedBy")
-  profileNotesAuthored     ProfileNote[]     @relation("ProfileNoteAuthor")
+  profileActivityLogs      ProfileActivityLog[]    @relation("ProfileActivityLogUser")
+  borrowersAsLoanOfficer   Borrower[]              @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer    LoanAccount[]           @relation("LoanAccountOfficer")
+  loanAccountsApproved     LoanAccount[]           @relation("LoanAccountApprovedBy")
+  transactionsPosted       LoanTransaction[]       @relation("LoanTransactionPostedBy")
+  attachmentsUploaded      Attachment[]            @relation("AttachmentUploadedBy")
+  profileNotesAuthored     ProfileNote[]           @relation("ProfileNoteAuthor")
   idempotencyKeys          IdempotencyKey[]
-  loanApplicationsEncoded  LoanApplication[] @relation("LoanApplicationEncodedBy")
-  loanApplicationsReviewed LoanApplication[] @relation("LoanApplicationReviewedBy")
+  loanApplicationsEncoded  LoanApplication[]       @relation("LoanApplicationEncodedBy")
+  loanApplicationsReviewed LoanApplication[]       @relation("LoanApplicationReviewedBy")
   loanNotesAuthored        LoanNote[]
   loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
+  penaltyOverridesSet      RepaymentSchedule[]     @relation("PenaltyOverrideBy")
+  penaltyReductionsMade    PenaltyReduction[]
 
   @@map("users")
 }
@@ -513,7 +515,7 @@ model Borrower {
   /// LoanApplication (see CreateBorrowerUseCase) - lets the application detail page know a
   /// client already exists for it and prevents creating a duplicate. Null for borrowers created
   /// any other way (e.g. legacy migration, direct walk-in without an application on file).
-  sourceApplicationId String?         @unique
+  sourceApplicationId String?          @unique
   sourceApplication   LoanApplication? @relation("LoanApplicationCreatedBorrower", fields: [sourceApplicationId], references: [id])
 
   /// Reverse side of LoanApplication.borrowerId (renewal applications started from this client's
@@ -621,7 +623,7 @@ model PsgcCityMunicipality {
   /// confident name match was found, never guessed. Used to auto-fill the address picker's ZIP
   /// Code field once a city/municipality is selected (still a plain editable Input afterward -
   /// staff can correct it, e.g. for a city that spans multiple ZIP codes).
-  zipCode String?
+  zipCode      String?
 
   @@index([provinceCode])
   @@map("psgc_city_municipalities")
@@ -959,6 +961,20 @@ model RepaymentSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// 2026-07-15 (Reduce Penalty feature, user-confirmed business rule): an Accounting/MIS-set
+  /// manual override that FREEZES this installment's penalty at the given amount — once set, it
+  /// replaces ADR-050's live daily computation entirely (no longer grows day over day) until paid
+  /// or overridden again. Null = no override, normal computation applies (live for a prospective
+  /// loan, the migrated `penaltyDue` snapshot otherwise). Deliberately NOT a mutation of the
+  /// immutable `penaltyDue`/`penaltyPaid` fields above (REPAY-3) — a separate override layer, kept
+  /// alongside an immutable `PenaltyReduction` audit row per action for full history even across
+  /// repeated reductions.
+  penaltyOverrideAmount   Decimal?  @db.Decimal(14, 2)
+  penaltyOverrideReason   String?
+  penaltyOverrideByUserId String?
+  penaltyOverrideBy       User?     @relation("PenaltyOverrideBy", fields: [penaltyOverrideByUserId], references: [id])
+  penaltyOverrideAt       DateTime?
+
   /// ADR-048-optimistic-concurrency: same optimistic concurrency mechanism as
   /// `LoanAccount.version` — see that field's comment for the full
   /// rationale. Applied here too for consistency, per the ADR's decision
@@ -966,6 +982,7 @@ model RepaymentSchedule {
   version Int @default(0)
 
   paymentAllocations PaymentAllocation[]
+  penaltyReductions  PenaltyReduction[]
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
@@ -975,6 +992,33 @@ model RepaymentSchedule {
   @@index([dueDate])
   @@index([status])
   @@map("repayment_schedules")
+}
+
+/// 2026-07-15 (Reduce Penalty feature): one immutable row per reduction action — like
+/// `PaymentAllocation`/`AppliedFee`, a historical record, never edited. Preserves the full history
+/// even when the same installment is reduced more than once (`RepaymentSchedule.penaltyOverride*`
+/// only tracks the CURRENT/latest override).
+model PenaltyReduction {
+  id                     String            @id @default(uuid())
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+
+  /// What the penalty would have been (live-computed, or the migrated snapshot) at the moment of
+  /// this action — not necessarily the previous override, since this may be the first reduction.
+  previousPenaltyAmount Decimal @db.Decimal(14, 2)
+  newPenaltyAmount      Decimal @db.Decimal(14, 2)
+
+  /// Required — captures the external approval reference (business rule: reductions are approved
+  /// outside this system, e.g. a branch manager memo; this system records the reference, not a
+  /// second in-app approval workflow).
+  reason String
+
+  reducedByUserId String
+  reducedBy       User     @relation(fields: [reducedByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([repaymentInstallmentId])
+  @@map("penalty_reductions")
 }
 
 /// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one
@@ -1065,7 +1109,7 @@ model AppliedFee {
 // ----------------------------------------------------------------------------
 
 model Attachment {
-  id               String              @id @default(uuid())
+  id               String                      @id @default(uuid())
   ownerType        AttachmentOwnerType
   ownerId          String
   fileName         String
@@ -1076,8 +1120,8 @@ model Attachment {
   storageKey       String
   documentCategory AttachmentDocumentCategory?
   uploadedByUserId String?
-  uploadedBy       User?               @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
-  uploadedAt       DateTime            @default(now())
+  uploadedBy       User?                       @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+  uploadedAt       DateTime                    @default(now())
 
   legacyId String? @unique
 
@@ -1222,17 +1266,17 @@ enum ProfileType {
 }
 
 model ProfileActivityLog {
-  id                   String       @id @default(uuid())
+  id                   String      @id @default(uuid())
   profileType          ProfileType
   profileId            String
   userId               String
-  user                 User         @relation("ProfileActivityLogUser", fields: [userId], references: [id], onDelete: Restrict)
+  user                 User        @relation("ProfileActivityLogUser", fields: [userId], references: [id], onDelete: Restrict)
   action               String
   /// JSON object with action-specific details (attachmentId, documentCategory,
   /// decisionStatus, paymentAmount, etc.). See ADR-050 for examples per action type.
   details              Json
-  visibilityRestricted Boolean      @default(false)
-  createdAt            DateTime     @default(now())
+  visibilityRestricted Boolean     @default(false)
+  createdAt            DateTime    @default(now())
   deletedByMisAt       DateTime?
   /// Soft delete: if set, MIS deleted this record at this time.
 
@@ -1308,46 +1352,46 @@ model LoanApplication {
   borrowerId String?
   borrower   Borrower? @relation("LoanApplicationBorrower", fields: [borrowerId], references: [id])
 
-  applicantName   String
-  age             Int?
-  gender          String?
-  civilStatus     String?
-  birthDate       DateTime?
-  placeOfBirth    String?
-  nationality     String?
-  homeOwnership   String?
+  applicantName      String
+  age                Int?
+  gender             String?
+  civilStatus        String?
+  birthDate          DateTime?
+  placeOfBirth       String?
+  nationality        String?
+  homeOwnership      String?
   /// Flattened, human-readable join of the structured fields below - kept for existing display
   /// code/history. The structured fields are what "Create Client Profile" copies into a real
   /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
-  address         String?
-  houseUnitNumber String?
-  street          String?
-  barangay        String?
-  cityMunicipality String?
-  province        String?
-  zipCode         String?
-  monthlyIncome   Decimal? @db.Decimal(14, 2)
-  employer        String?
-  occupation      String?
-  officeAddress   String?
-  tinNumber       String?
-  sssNumber       String?
-  propertiesOwned String[] @default([])
-  creditScore     Int?
+  address            String?
+  houseUnitNumber    String?
+  street             String?
+  barangay           String?
+  cityMunicipality   String?
+  province           String?
+  zipCode            String?
+  monthlyIncome      Decimal?  @db.Decimal(14, 2)
+  employer           String?
+  occupation         String?
+  officeAddress      String?
+  tinNumber          String?
+  sssNumber          String?
+  propertiesOwned    String[]  @default([])
+  creditScore        Int?
   coBorrowerName     String?
   coBorrowerEmployer String?
-  mobilePhone     String?
-  email           String?
+  mobilePhone        String?
+  email              String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
-  dependants      Json?
-  reference1Name   String?
-  reference1Mobile String?
-  reference2Name   String?
-  reference2Mobile String?
+  dependants         Json?
+  reference1Name     String?
+  reference1Mobile   String?
+  reference2Name     String?
+  reference2Mobile   String?
   /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
   /// field - carried over as-is into the Client Profile's own `note` field on creation.
-  note            String?
+  note               String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?
@@ -1365,11 +1409,11 @@ model LoanApplication {
   /// paper form on the applicant's behalf) — null for a self-service intake.
   encodedBy       User?   @relation("LoanApplicationEncodedBy", fields: [encodedByUserId], references: [id])
 
-  status LoanApplicationStatus @default(PREDECLINED)
+  status               LoanApplicationStatus @default(PREDECLINED)
   /// Cached at creation from geocoding the applicant's address against the assigned branch's
   /// coordinates — null if geocoding failed/was inconclusive (the distance rule fails open in that
   /// case; see LoanApplicationPreQualificationService).
-  distanceFromBranchKm Decimal? @db.Decimal(6, 2)
+  distanceFromBranchKm Decimal?              @db.Decimal(6, 2)
 
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).

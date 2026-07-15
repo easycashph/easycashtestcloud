@@ -372,6 +372,63 @@ structure — mocked up (via `visualize`) and approved before implementing:
 Both frontend-only; backend/frontend `tsc`/tests clean throughout. Verified by inspecting the served
 JS bundle for the new strings (no login access this session either).
 
+## Reduce Penalty feature (previously scoped-but-unstarted, revisited and built)
+
+Picked up the waive/reduce-penalty request flagged earlier this session as needing its own design
+pass. Confirmed every business rule with the user before writing code (CLAUDE.md "never invent
+business rules") rather than assuming:
+
+- Who: the Accounting Officer — mapped to the seeded `Accounting` role (plus MIS, per this
+  codebase's standing "MIS is in every allow-list" convention).
+- Approval: happens *outside* this system (a branch manager memo, etc.) — this feature records the
+  reference in a required `reason` field, it does not run its own in-app approval workflow.
+- Scope: partial or full (down to ₱0) reduction; never above what's currently owed.
+- Cannot reduce a penalty component that's already been paid (a refund/credit decision, explicitly
+  out of scope).
+- **Critical clarification that changed the design**: after a reduction, does the penalty resume
+  growing the next day per ADR-050's live daily formula, or stay frozen? Confirmed: **frozen** —
+  once reduced, an installment's penalty is a static manual override until paid or reduced again,
+  not a one-time subtraction from that day's live figure. This is why the implementation stores a
+  persistent override rather than applying a delta.
+- UI placement: iterated through three mockups with the user (inline "Waive" link → renamed
+  "Reduce" with a "new amount" field instead of "amount to subtract" → finally an "Actions" dropdown
+  per row, with "Adjust Fees" alongside as a disabled "Coming soon" placeholder) before writing any
+  code.
+
+**Backend**: `RepaymentSchedule` gained `penaltyOverride{Amount,Reason,ByUserId,At}` (the current/
+latest override, mutable) plus a new immutable `PenaltyReduction` audit table (one row per action,
+preserves full history across repeated reductions) — additive-only Prisma migration
+(`20260715131429_add_penalty_reduction`), verified via `prisma migrate status`/inspecting the
+generated SQL (only `ADD COLUMN`/`CREATE TABLE`, no drops). **Caught and fixed a self-inflicted bug
+during this migration**: an early schema edit accidentally deleted `RepaymentSchedule.legacyId`/
+`createdAt`/`updatedAt` while inserting the new fields — `prisma migrate dev` correctly refused to
+run non-interactively and warned it would drop those columns (8742 non-null values); caught before
+any data loss, fields restored, re-ran cleanly. `RepaymentInstallment.reducePenalty()` (domain
+entity) enforces every confirmed rule; extracted the ADR-050 rate/grace-period logic out of
+`RepaymentInstallmentPresenter` into a new shared `CurrentPenaltyResolver` so the presenter (display)
+and the new `ReducePenaltyUseCase` (validation ceiling) can't drift on what "currently owed" means.
+New `PenaltyReduction` domain entity + repository, `POST /repayment-installments/:id/reduce-penalty`
+gated to `MIS`/`Accounting`.
+
+**Frontend** (`LoanDetailPage`, Repayment Schedule tab): new "Actions" column (Accounting/MIS only),
+per-row dropdown with "Reduce penalty" (disabled once paid or already penalty-paid) and "Adjust
+fees" (permanently disabled, "Coming soon"). Reduce Penalty dialog: new-amount input pre-filled with
+the current penalty, a "Set to ₱0.00" shortcut, required reason field. `isLivePenalty` is now an
+explicit presenter field (previously the frontend inferred it from `currentPenaltyOwed !== null`,
+which broke once an override could also make that non-null) so the "(as of today)" label only shows
+when actually live-computed, not frozen.
+
+**Testing**: 9 new backend unit tests (6 on the domain entity's `reducePenalty()` — freeze
+behavior, zero/full waive, ceiling rejection, negative rejection, already-paid rejection, latest-
+reduction-wins; 3 on the presenter's override path) all passing; full suite back at the known
+576/16 baseline. Frontend `tsc`/tests clean. Both containers rebuilt; route confirmed registered
+(401, not 404); schema/migration confirmed additive via raw SQL inspection. **Deliberately did not**
+exercise a real reduction against live migrated-loan data as part of verification — no prospective
+(non-migrated) loan currently has a live nonzero penalty to test against, and mutating a real
+client's penalty purely to prove the wiring works, unrequested, was judged out of proportion to the
+risk; relied on the unit coverage instead. A real click-through (and a first real reduction) is
+worth doing once login access is available.
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
@@ -404,9 +461,9 @@ JS bundle for the new strings (no login access this session either).
   - **Transaction history sort bug**: fixed in two passes, both committed (`922f341`, `94424e2`) —
     see above.
   - **Payment allocation visibility (#1/#2/#3)**: committed (`d01ac67`) — see above.
-  - **No waive/reduce-penalty feature yet.** Discussed with the user; would need its own ADR (who can
-    waive, partial vs. full, approval thresholds, whether it applies to already-paid penalty) before
-    implementation — not started.
+  - **Reduce Penalty feature**: built and committed this session — see above. Not yet exercised
+    against real live data (no login access); "Adjust fees" remains a permanent "Coming soon"
+    placeholder, not scoped.
   - **Payment Recording "Next due" refresh issue**: root cause not conclusively found (see its own
     section above) — worked around by removing the "Record another payment" quick-succession flow
     entirely rather than continuing to chase the staleness bug. Revisit if "Next due" shows the same

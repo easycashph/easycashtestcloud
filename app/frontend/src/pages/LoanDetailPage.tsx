@@ -1,13 +1,32 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Bell, ChevronDown, ChevronRight, Clock, FileCheck2, Mail, MessageSquareText, Sparkles } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bell,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  FileCheck2,
+  Mail,
+  MessageSquareText,
+  MoreHorizontal,
+  Sparkles,
+} from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
 import type { Borrower as RealBorrower, LoanAccount, LoanDocumentListItem, LoanTransaction, PaginatedResponse, PaymentAllocationDetail, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -383,6 +402,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
   const [reverseReason, setReverseReason] = React.useState('');
   const [expandedTransactionId, setExpandedTransactionId] = React.useState<string | null>(null);
+  // 2026-07-15 (Reduce Penalty feature, user-confirmed): Accounting/MIS only (matches the backend's
+  // requireRole('MIS', 'Accounting') gate).
+  const [reduceTarget, setReduceTarget] = React.useState<RepaymentInstallment | null>(null);
+  const [reduceAmount, setReduceAmount] = React.useState('');
+  const [reduceReason, setReduceReason] = React.useState('');
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -467,6 +491,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const reduceMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<RepaymentInstallment>(`/repayment-installments/${reduceTarget!.id}/reduce-penalty`, {
+        newAmount: reduceAmount,
+        reason: reduceReason.trim(),
+      }),
+    onSuccess: () => {
+      setReduceTarget(null);
+      setReduceAmount('');
+      setReduceReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
   const openConfirm = (action: 'APPROVE' | 'ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
@@ -475,6 +514,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setActionError(null);
     setReverseReason('');
     setReverseTarget(transaction);
+  };
+  const openReduceConfirm = (installment: RepaymentInstallment, currentPenalty: number) => {
+    setActionError(null);
+    setReduceAmount(currentPenalty.toFixed(2));
+    setReduceReason('');
+    setReduceTarget(installment);
   };
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
@@ -585,6 +630,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     : null;
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
+  // 2026-07-15 (Reduce Penalty feature, user-confirmed): "the accounting officer" - matches the
+  // backend's REDUCE_PENALTY_ROLES gate.
+  const canReducePenalty = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
   const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const documents = documentsQuery.data?.items ?? [];
@@ -719,6 +767,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right font-medium text-muted-foreground">Remaining</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Status</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
+                      {canReducePenalty && <TableCell className="text-center font-medium text-muted-foreground">Actions</TableCell>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -734,14 +783,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       return installments.map((i) => {
                         const late = wasInstallmentLate(i);
                         // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
-                        // of today" figure for a prospective (non-migrated) loan — null for a
-                        // migrated loan, which falls back to due.penalty, its real historical
-                        // (fixed) figure instead.
-                        const isLivePenalty = i.currentPenaltyOwed !== null;
-                        const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
+                        // of today" figure for a prospective (non-migrated) loan, OR a frozen manual
+                        // override (2026-07-15, Reduce Penalty feature) — isLivePenalty distinguishes
+                        // the two so the "(as of today)" label only shows when actually accurate.
+                        const penaltyDisplay = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
                         cumulativePaid += rowPaid;
                         const balance = Math.max(0, totalObligation - cumulativePaid);
+                        const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
@@ -750,11 +799,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
                             <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
                             <TableCell className="text-right text-muted-foreground">
-                              {formatPeso(penaltyDisplay)}
-                              {isLivePenalty && penaltyDisplay > 0 && (
-                                <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
-                                  (as of today)
-                                </span>
+                              {i.penaltyOverride ? (
+                                <div className="flex flex-col items-end">
+                                  <span>{formatPeso(penaltyDisplay)}</span>
+                                  <span className="text-[10px] text-primary" title={i.penaltyOverride.reason}>
+                                    Reduced by Accounting
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  {formatPeso(penaltyDisplay)}
+                                  {i.isLivePenalty && penaltyDisplay > 0 && (
+                                    <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
+                                      (as of today)
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </TableCell>
                             <TableCell className="text-right font-medium">
@@ -788,6 +848,28 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-medium">{formatPeso(balance)}</TableCell>
+                            {canReducePenalty && (
+                              <TableCell className="text-center">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm" disabled={!canReduceThisRow} className="h-7 px-2">
+                                      <MoreHorizontal className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      disabled={penaltyDisplay <= 0}
+                                      onSelect={() => openReduceConfirm(i, penaltyDisplay)}
+                                    >
+                                      Reduce penalty
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem disabled title="Coming soon">
+                                      Adjust fees
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       });
@@ -839,6 +921,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       </TableCell>
                       <TableCell />
                       <TableCell />
+                      {canReducePenalty && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -1166,6 +1249,73 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={reverseMutation.isPending || reverseReason.trim().length === 0}
             >
               {reverseMutation.isPending ? 'Reversing…' : 'Yes, reverse this payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={reduceTarget !== null}
+        onOpenChange={(open) => !open && !reduceMutation.isPending && (setReduceTarget(null), setReduceAmount(''), setReduceReason(''))}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reduce penalty</DialogTitle>
+            <DialogDescription>
+              {reduceTarget &&
+                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Freezes this installment's penalty at the amount entered — it stops recalculating day over day until paid or reduced again. Approved outside this system; the reason below records that reference.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="reduce-amount">New penalty amount</Label>
+            <div className="flex gap-2">
+              <Input
+                id="reduce-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={reduceAmount}
+                onChange={(e) => setReduceAmount(e.target.value)}
+                disabled={reduceMutation.isPending}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={() => setReduceAmount('0.00')} disabled={reduceMutation.isPending}>
+                Set to ₱0.00
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="reduce-reason">Reason / external approval reference</Label>
+            <Textarea
+              id="reduce-reason"
+              placeholder="e.g. Approved by Branch Manager J. Santos, memo #2026-0714"
+              value={reduceReason}
+              onChange={(e) => setReduceReason(e.target.value)}
+              disabled={reduceMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReduceTarget(null);
+                setReduceAmount('');
+                setReduceReason('');
+              }}
+              disabled={reduceMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => reduceMutation.mutate()}
+              disabled={reduceMutation.isPending || reduceReason.trim().length === 0 || reduceAmount.trim().length === 0}
+            >
+              {reduceMutation.isPending ? 'Reducing…' : 'Reduce penalty'}
             </Button>
           </DialogFooter>
         </DialogContent>

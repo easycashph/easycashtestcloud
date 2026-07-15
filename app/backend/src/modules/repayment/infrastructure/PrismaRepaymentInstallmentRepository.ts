@@ -28,6 +28,18 @@ function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
       penalty: Money.of(row.penaltyPaid),
     }),
     lastPaidAt: row.lastPaidAt ?? undefined,
+    penaltyOverride:
+      row.penaltyOverrideAmount != null &&
+      row.penaltyOverrideReason != null &&
+      row.penaltyOverrideByUserId != null &&
+      row.penaltyOverrideAt != null
+        ? {
+            amount: Money.of(row.penaltyOverrideAmount),
+            reason: row.penaltyOverrideReason,
+            byUserId: row.penaltyOverrideByUserId,
+            at: row.penaltyOverrideAt,
+          }
+        : undefined,
     legacyId: row.legacyId ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -58,6 +70,10 @@ function toUpsertData(installment: RepaymentInstallment) {
     penaltyPaid: installment.paid.penalty.toDecimal(),
     status: installment.status,
     lastPaidAt: installment.lastPaidAt,
+    penaltyOverrideAmount: installment.penaltyOverride?.amount.toDecimal() ?? null,
+    penaltyOverrideReason: installment.penaltyOverride?.reason ?? null,
+    penaltyOverrideByUserId: installment.penaltyOverride?.byUserId ?? null,
+    penaltyOverrideAt: installment.penaltyOverride?.at ?? null,
     legacyId: installment.legacyId,
     createdAt: installment.createdAt,
     updatedAt: installment.updatedAt,

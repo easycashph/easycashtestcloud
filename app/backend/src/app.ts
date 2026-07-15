@@ -68,6 +68,8 @@ import { createRepaymentRouter } from '@modules/repayment/interface/http/repayme
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
 import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrastructure/PrismaRepaymentInstallmentRepository';
+import { PrismaPenaltyReductionRepository } from '@modules/repayment/infrastructure/PrismaPenaltyReductionRepository';
+import { ReducePenaltyUseCase } from '@modules/repayment/application/use-cases/ReducePenaltyUseCase';
 import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
 import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
 import { PrismaDashboardRepository } from '@modules/dashboard/infrastructure/PrismaDashboardRepository';
@@ -477,11 +479,19 @@ export function createApp(): Express {
   );
   app.use('/api/v1', ledgerRouter);
 
-  // --- repayment module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
+  // --- repayment module wiring (Milestone 8: HTTP API layer, mostly READ-ONLY per D-2) ---
+  const penaltyReductionRepository = new PrismaPenaltyReductionRepository();
   const repaymentRouter = createRepaymentRouter(
     {
       listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),
       getRepaymentInstallmentUseCase: new GetRepaymentInstallmentUseCase({ repaymentInstallmentRepository }),
+      reducePenaltyUseCase: new ReducePenaltyUseCase({
+        repaymentInstallmentRepository,
+        loanAccountRepository,
+        penaltyReductionRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
       getLoanAccountUseCase, // H-1: branch check via the parent loan account.
     },
     tokenService,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
 import { Money } from '@shared/domain/Money';
+import { PenaltyAlreadyPaidError, PenaltyReductionExceedsCurrentAmountError } from '@modules/repayment/domain/errors/RepaymentDomainErrors';
 
 function createInstallment(dueDate: Date) {
   return RepaymentInstallment.create({
@@ -107,5 +108,55 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
     const methodNames = Object.getOwnPropertyNames(Object.getPrototypeOf(installment));
     expect(methodNames).not.toContain('setDue');
     expect(methodNames).not.toContain('updateDue');
+  });
+
+  // 2026-07-15 (Reduce Penalty feature, user-confirmed business rules).
+  describe('reducePenalty', () => {
+    it('sets a penaltyOverride that freezes the amount', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      installment.reducePenalty(Money.of('500.00'), Money.of('1000.00'), 'Approved by memo #123', 'user-1');
+
+      expect(installment.penaltyOverride?.amount.equals(Money.of('500.00'))).toBe(true);
+      expect(installment.penaltyOverride?.reason).toBe('Approved by memo #123');
+      expect(installment.penaltyOverride?.byUserId).toBe('user-1');
+    });
+
+    it('allows reducing all the way to zero (full waive)', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      installment.reducePenalty(Money.ZERO, Money.of('1000.00'), 'Full waive per memo', 'user-1');
+
+      expect(installment.penaltyOverride?.amount.isZero()).toBe(true);
+    });
+
+    it('rejects a new amount above the current penalty — a reduction can only lower it', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      expect(() => installment.reducePenalty(Money.of('1500.00'), Money.of('1000.00'), 'reason', 'user-1')).toThrow(
+        PenaltyReductionExceedsCurrentAmountError,
+      );
+    });
+
+    it('rejects a negative new amount', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      expect(() => installment.reducePenalty(Money.of('-1.00'), Money.of('1000.00'), 'reason', 'user-1')).toThrow(
+        PenaltyReductionExceedsCurrentAmountError,
+      );
+    });
+
+    it('rejects reducing an installment whose penalty has already been paid', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      installment.recordPayment(InstallmentAmounts.of({ penalty: Money.of('50.00') }));
+      expect(() => installment.reducePenalty(Money.of('0.00'), Money.of('1000.00'), 'reason', 'user-1')).toThrow(
+        PenaltyAlreadyPaidError,
+      );
+    });
+
+    it('a later reduction overwrites the earlier override (latest wins)', () => {
+      const installment = createInstallment(new Date(Date.now() - 86_400_000));
+      installment.reducePenalty(Money.of('500.00'), Money.of('1000.00'), 'first reduction', 'user-1');
+      installment.reducePenalty(Money.of('200.00'), Money.of('500.00'), 'second reduction', 'user-2');
+
+      expect(installment.penaltyOverride?.amount.equals(Money.of('200.00'))).toBe(true);
+      expect(installment.penaltyOverride?.reason).toBe('second reduction');
+    });
   });
 });

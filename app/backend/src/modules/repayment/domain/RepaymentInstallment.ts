@@ -1,7 +1,17 @@
 import { randomUUID } from 'node:crypto';
+import type { Money } from '@shared/domain/Money';
 import { InstallmentAmounts } from './valueObjects/InstallmentAmounts';
+import { PenaltyAlreadyPaidError, PenaltyReductionExceedsCurrentAmountError } from './errors/RepaymentDomainErrors';
 
 export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
+
+/** 2026-07-15 (Reduce Penalty feature) — see `RepaymentInstallment.reducePenalty()`'s own doc comment. */
+export interface PenaltyOverride {
+  amount: Money;
+  reason: string;
+  byUserId: string;
+  at: Date;
+}
 
 export interface RepaymentInstallmentProps {
   id: string;
@@ -11,6 +21,7 @@ export interface RepaymentInstallmentProps {
   due: InstallmentAmounts;
   paid: InstallmentAmounts;
   lastPaidAt?: Date;
+  penaltyOverride?: PenaltyOverride;
   legacyId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -104,6 +115,10 @@ export class RepaymentInstallment {
     return this.props.lastPaidAt;
   }
 
+  get penaltyOverride(): PenaltyOverride | undefined {
+    return this.props.penaltyOverride;
+  }
+
   get legacyId(): string | undefined {
     return this.props.legacyId;
   }
@@ -166,6 +181,37 @@ export class RepaymentInstallment {
   recordPayment(amount: InstallmentAmounts, paidAt: Date = new Date()): void {
     this.props.paid = this.props.paid.add(amount);
     this.props.lastPaidAt = paidAt;
+    this.props.updatedAt = new Date();
+  }
+
+  /**
+   * 2026-07-15 (Reduce Penalty feature, user-confirmed business rules):
+   * - Accounting/MIS can partially or fully reduce this installment's penalty.
+   * - A reduction FREEZES the penalty at `newAmount` — it stops growing per ADR-050's live daily
+   *   formula from this point on, until paid or reduced again. This is why the override is stored
+   *   here rather than applied as a one-time subtraction: a stored, static value is what "frozen"
+   *   means, as opposed to a delta that a live recomputation would immediately swallow.
+   * - Cannot exceed `currentPenaltyAmount` (the live-computed or migrated-snapshot figure the
+   *   caller already resolved) — a reduction only ever lowers what's owed, never raises it.
+   * - Cannot be applied once any penalty has already been paid on this installment (approval
+   *   happens outside this system; an already-collected amount is out of scope for a waiver -
+   *   that would be a refund/credit decision, explicitly not part of this feature).
+   *
+   * Does not itself create the audit `PenaltyReduction` row — that's the use case's job (needs the
+   * repository), same division of responsibility as `ProcessPaymentUseCase` building
+   * `PaymentAllocation` rows alongside this entity's own `recordPayment()` call.
+   */
+  reducePenalty(newAmount: Money, currentPenaltyAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
+    if (this.props.paid.penalty.isPositive()) {
+      throw new PenaltyAlreadyPaidError(this.props.id);
+    }
+    if (newAmount.isNegative()) {
+      throw new PenaltyReductionExceedsCurrentAmountError(newAmount.toString(), currentPenaltyAmount.toString());
+    }
+    if (newAmount.greaterThan(currentPenaltyAmount)) {
+      throw new PenaltyReductionExceedsCurrentAmountError(newAmount.toString(), currentPenaltyAmount.toString());
+    }
+    this.props.penaltyOverride = { amount: newAmount, reason, byUserId, at };
     this.props.updatedAt = new Date();
   }
 }
