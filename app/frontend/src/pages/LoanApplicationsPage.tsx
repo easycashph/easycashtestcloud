@@ -18,6 +18,8 @@ import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -96,6 +98,24 @@ export function LoanApplicationsPage() {
     { search: debouncedSearch },
     PAGE_SIZE,
     canAccessLoanApplications,
+  );
+
+  // Which of this page's applications' created loan accounts have been Activated (disbursed) -
+  // an Approved application whose loan account has moved past PENDING_APPROVAL/APPROVED shows as
+  // "Disbursed" here instead, mirroring the Loan Application Detail page's own relabel.
+  const loanAccountsQuery = useQuery({
+    queryKey: ['loan-accounts', 'all', 'statusOnly'],
+    queryFn: () => fetchAllPages<{ id: string; status: string }>('/loan-accounts'),
+    enabled: canAccessLoanApplications,
+  });
+  const activatedLoanAccountIds = React.useMemo(
+    () =>
+      new Set(
+        (loanAccountsQuery.data ?? [])
+          .filter((l) => l.status !== 'PENDING_APPROVAL' && l.status !== 'APPROVED')
+          .map((l) => l.id),
+      ),
+    [loanAccountsQuery.data],
   );
 
   const categoryOptions = React.useMemo(
@@ -263,7 +283,21 @@ export function LoanApplicationsPage() {
                     {formatPeso(app.requestedAmount)}
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{app.status.replaceAll('_', ' ')}</Badge>
+                    {/* Waits for loanAccountsQuery before showing Approved/Disbursed for an
+                        application with a created loan account - otherwise this briefly flashes
+                        "Approved" (the raw application status) before flipping to "Disbursed" once
+                        the loan accounts list finishes loading a moment later. */}
+                    {app.status === 'APPROVED' && app.createdLoanAccountId && loanAccountsQuery.isLoading ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        …
+                      </Badge>
+                    ) : (
+                      <Badge variant={STATUS_BADGE_VARIANT[app.status]}>
+                        {app.status === 'APPROVED' && app.createdLoanAccountId && activatedLoanAccountIds.has(app.createdLoanAccountId)
+                          ? 'Disbursed'
+                          : app.status.replaceAll('_', ' ')}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell
                     className="cursor-pointer text-xs text-muted-foreground"

@@ -487,8 +487,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   // application that hasn't already produced a loan account (mirrors the "Create Loan Account"
   // dialog gating on the Loan Application Detail page, just keyed off the client instead of a
   // single application).
-  const hasApprovedApplicationAwaitingLoanAccount = myApplications.some((a) => a.status === 'APPROVED' && !a.createdLoanAccountId);
-  const canCreateLoanAccountNow = !hasActiveLoan && hasApprovedApplicationAwaitingLoanAccount;
+  const approvedApplicationAwaitingLoanAccount = myApplications.find((a) => a.status === 'APPROVED' && !a.createdLoanAccountId);
+  const canCreateLoanAccountNow = !hasActiveLoan && approvedApplicationAwaitingLoanAccount !== undefined;
 
   if (borrowerQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading client…</p>;
@@ -776,6 +776,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           {createLoanAccountOpen && (
             <LoanAccountForm
               lockedBorrower={borrower}
+              prefillTermMonths={approvedApplicationAwaitingLoanAccount?.requestedTermMonths}
               showChrome={false}
               onCreated={(loan) => {
                 setCreateLoanAccountOpen(false);

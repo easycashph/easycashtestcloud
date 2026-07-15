@@ -440,7 +440,7 @@ export function PaymentRecordingPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {selectedLoan && (
+                {selectedLoan ? (
                   <div className="rounded-md border bg-secondary/40 p-3 text-xs text-muted-foreground">
                     <p>
                       <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> - {selectedLoan.loanCode}
@@ -448,6 +448,13 @@ export function PaymentRecordingPage() {
                     <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
                     <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
                   </div>
+                ) : (
+                  !clientLoansQuery.isLoading && (
+                    <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+                      This loan is no longer payable - it's fully paid (Closed) or otherwise not Active. No payment can be recorded
+                      against it.
+                    </div>
+                  )
                 )}
 
                 <div className="space-y-1.5">
@@ -610,7 +617,7 @@ export function PaymentRecordingPage() {
 
                 <Button
                   className="w-full"
-                  disabled={!loanId || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
+                  disabled={!selectedLoan || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
                   onClick={openConfirm}
                 >
                   Submit Payment
