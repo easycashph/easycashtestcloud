@@ -54,7 +54,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     const client = resolveClient(ctx);
     const rows = await client.loanTransaction.findMany({
       where: options.branchId ? { loanAccountId, branchId: options.branchId } : { loanAccountId },
-      orderBy: { entryDate: 'desc' },
+      orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }],
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });

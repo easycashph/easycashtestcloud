@@ -176,6 +176,30 @@ borrowers, 2 loan accounts — including `SP-Easy_00001`, one of the 6 loans jus
 session). Flagged that risk explicitly and asked for confirmation before running `--apply`; user
 said to hold off for now. **Not executed.**
 
+## Transaction history sort order bug — diagnosed, not yet fixed
+
+User reported (in a separate, since-compacted conversation) that the `/loan-accounts/:id/transactions`
+endpoint's ordering looked wrong — REVERSAL entries appearing above the REPAYMENT they reverse, even
+though the REPAYMENT happened later. Root cause confirmed by re-checking the code today:
+
+- `entryDate` on REPAYMENT transactions comes from the "Payment date" field, a **date-only** picker —
+  so it's always stored at `00:00:00` regardless of what time the repayment was actually recorded.
+- `entryDate` on REVERSAL transactions is the **real** timestamp of the reversal action (e.g.
+  `06:28:14`).
+- Sorting by `entryDate DESC` alone puts same-day REVERSALs (real time) above same-day REPAYMENTs
+  (midnight), even when the REPAYMENT is chronologically the most recent ledger event.
+- Diagnosed fix: add `createdAt` (the true, immutable ledger-entry-creation timestamp) as a secondary
+  sort key, since `entryDate` alone can't be trusted as a tiebreaker (staff can backdate it).
+
+**Not yet applied.** Checked
+[PrismaLoanTransactionRepository.ts:57](../app/backend/src/modules/ledger/infrastructure/PrismaLoanTransactionRepository.ts)
+(`findByLoanAccountId`) in both the main tree and the `claude/exciting-herschel-138865` worktree —
+both still have only `orderBy: { entryDate: 'desc' }`, no `createdAt` tiebreaker. The worktree is an
+unrelated feature branch (Member Details/Activity Logs API), so this fix hasn't landed anywhere.
+**Follow-up:** change to `orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }]`, verify against a
+loan with reversals, and check whether any other transaction-listing query in the codebase has the
+same ordering assumption.
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync
@@ -199,3 +223,7 @@ said to hold off for now. **Not executed.**
     waiting on the user to pick which report to build first.
   - Pending user decision: whether to run `delete-test-records.ts --apply` against the 6 borrowers
     / 2 loan accounts / 1 loan application identified as test data.
+  - **Transaction history sort bug**: `findByLoanAccountId` in `PrismaLoanTransactionRepository.ts`
+    orders by `entryDate DESC` only; REPAYMENT entries are always midnight (date-only picker) while
+    REVERSAL entries have real timestamps, so reversals can display above the repayment they reverse.
+    Fix diagnosed (add `createdAt` as secondary sort key) but not yet applied — see above.

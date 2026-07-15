@@ -85,7 +85,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         ...(options.branchId ? { branchId: options.branchId } : {}),
         entryDate: entryDateFilter(options),
       },
-      orderBy: { entryDate: 'desc' },
+      orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }],
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
       include: {
