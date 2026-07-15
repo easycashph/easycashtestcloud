@@ -22,12 +22,22 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
+import { classifyProductType, groupByProductType } from '@/lib/productTypeClassification';
 import { formatDate, formatPeso } from '@/lib/utils';
 import type { Borrower, InterestRateChartEntry, LoanAccount, LoanProduct, LoanProductVersion, PaginatedResponse } from '@/lib/loanApiTypes';
 
 /** Only `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` versions — `ActivateLoanUseCase` rejects `FLAT` outright (`UnsupportedInterestCalculationMethodError`), so offering one here would let staff create a loan account that can never actually be activated. */
 function activeSupportedVersion(product: LoanProduct): LoanProductVersion | undefined {
   return product.versions.find((v) => v.isActive && v.interestCalculationMethod !== 'FLAT');
+}
+
+/** Any active version regardless of interest method - used only to decide whether a Flat-rate
+ * product (active on the Loan Products catalog, e.g. "BL-Special") should still be LISTED here
+ * (2026-07-14 user decision: show it, disabled, rather than silently omit it - staff were
+ * confused seeing fewer Product Classes here than on the catalog page for the same Product
+ * Type). `activeSupportedVersion` above still governs what's actually selectable/usable. */
+function anyActiveVersion(product: LoanProduct): LoanProductVersion | undefined {
+  return product.versions.find((v) => v.isActive);
 }
 
 /**
@@ -174,23 +184,49 @@ function solveGrossForDesiredNet(desiredNet: number, ctx: FeeComputationContext)
   return Math.round(guess * 100) / 100;
 }
 
+export function LoanAccountCreatePage() {
+  const navigate = useNavigate();
+  return (
+    <LoanAccountForm
+      onCreated={(loan) => navigate(`/loans/${loan.id}`)}
+      onCancel={() => navigate('/loans')}
+    />
+  );
+}
+
 /**
- * Find Client -> Loan Terms -> Schedule Preview -> Create. Scoped to an EXISTING client only
- * (2026-07-11 user decision) — a renewal or any new loan account goes straight here without
- * needing its own reviewed/approved Loan Application first. A brand-new (not-yet-a-client)
- * borrower isn't supported by this first version; add them via Client Data, then come back here.
+ * Find Client -> Loan Terms -> Schedule Preview -> Create. Extracted (2026-07-14) from
+ * `LoanAccountCreatePage` so it can also be reused inside a "Create Loan Account" dialog on the
+ * Loan Applicant Profile page - `lockedBorrower` skips the Find Client step entirely when the
+ * client is already known (e.g. from an Approved application), and `showChrome=false` drops the
+ * page header/back button for use inside a Dialog.
+ *
+ * Scoped to an EXISTING client only (2026-07-11 user decision) — a renewal or any new loan account
+ * goes straight here without needing its own reviewed/approved Loan Application first (except when
+ * opened from the Loan Applicant Profile flow, which does require one). A brand-new (not-yet-a-
+ * client) borrower isn't supported by this first version; add them via List of Clients, then come
+ * back here.
  *
  * Schedule computation itself is NOT done here — `previewLoanSchedule()` is a client-side preview
  * only (see its own doc comment). The real, authoritative schedule is generated server-side by
  * `AmortizationScheduleGenerator` at Activate time, once this loan account (created here in
  * PENDING_APPROVAL) has been approved.
  */
-export function LoanAccountCreatePage() {
+export function LoanAccountForm({
+  lockedBorrower,
+  showChrome = true,
+  onCreated,
+  onCancel,
+}: {
+  lockedBorrower?: Borrower;
+  showChrome?: boolean;
+  onCreated: (loan: LoanAccount) => void;
+  onCancel: () => void;
+}) {
   useLogPageView('Create Loan Account');
-  const navigate = useNavigate();
   const { currentAccount } = useRole();
 
-  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(null);
+  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(lockedBorrower ?? null);
   const [clientSearch, setClientSearch] = React.useState('');
   const debouncedClientSearch = useDebouncedValue(clientSearch);
   const clientSearchQuery = useQuery({
@@ -218,13 +254,38 @@ export function LoanAccountCreatePage() {
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
     enabled: Boolean(selectedBorrower),
   });
+  // Any active, non-hidden product is LISTED (matches the Loan Products catalog page's own
+  // "Active" count for the same Product Type) - `activeSupportedVersion` alone would silently drop
+  // Flat-rate products (e.g. "BL-Special"), which staff found confusing when a Product Type here
+  // showed fewer Product Classes than the catalog page. Flat-only ones are shown disabled instead
+  // (`isSelectable: false`, see the Product Class dropdown below).
   const availableProducts = (productsQuery.data ?? [])
-    .filter((p) => activeSupportedVersion(p) && !HIDDEN_PRODUCT_CODES.has(p.code))
+    .filter((p) => anyActiveVersion(p) && !HIDDEN_PRODUCT_CODES.has(p.code))
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Product Type -> Product Class two-step picker (2026-07-14) - same grouping as the Loan
+  // Products catalog page (`classifyProductType`/`groupByProductType`), so staff pick a category
+  // first (Business Loan, Salary Loan, etc.) before narrowing to the specific active product.
+  const productGroups = groupByProductType(
+    availableProducts.map((p) => ({
+      ...p,
+      productType: classifyProductType(p.name),
+      isSelectable: Boolean(activeSupportedVersion(p)),
+    })),
+  );
+  const [selectedProductType, setSelectedProductType] = React.useState('');
+  const productClassOptions = productGroups.find((g) => g.type === selectedProductType)?.rows ?? [];
 
   const [loanProductId, setLoanProductId] = React.useState('');
   const selectedProduct = availableProducts.find((p) => p.id === loanProductId);
   const selectedVersion = selectedProduct ? activeSupportedVersion(selectedProduct) : undefined;
+
+  // Clears the Product Class choice whenever Product Type changes, so a selection from a
+  // previously-picked type can never linger under a different one.
+  const handleProductTypeChange = (type: string) => {
+    setSelectedProductType(type);
+    setLoanProductId('');
+  };
 
   const [principalAmount, setPrincipalAmount] = React.useState('');
   // Amount Entry Mode (2026-07-11): lets staff enter the exact Net Amount a client asked for
@@ -439,7 +500,7 @@ export function LoanAccountCreatePage() {
         insuranceFee,
       }),
     onSuccess: (loan) => {
-      navigate(`/loans/${loan.id}`);
+      onCreated(loan);
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -469,17 +530,21 @@ export function LoanAccountCreatePage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/loans')}>
-        <ChevronLeft className="mr-1 h-4 w-4" /> Back to Loan Accounts
-      </Button>
+      {showChrome && (
+        <>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            <ChevronLeft className="mr-1 h-4 w-4" /> Back to List of Loan Accounts
+          </Button>
 
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">New Loan Account</h2>
-        <p className="text-sm text-muted-foreground">
-          Creates a PENDING_APPROVAL loan account for an existing client — approve and activate it afterward from the loan's own
-          detail page.
-        </p>
-      </div>
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">New Loan Account</h2>
+            <p className="text-sm text-muted-foreground">
+              Creates a PENDING_APPROVAL loan account for an existing client — approve and activate it afterward from the loan's own
+              detail page.
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -523,7 +588,7 @@ export function LoanAccountCreatePage() {
                   <p className="py-6 text-center text-sm text-muted-foreground">Start typing to find a client.</p>
                 )}
                 <p className="rounded-md border bg-secondary/40 p-2.5 text-xs text-muted-foreground">
-                  New to the company (not a client yet)? Add them under Client Data first, then come back here.
+                  New to the company (not a client yet)? Add them under List of Clients first, then come back here.
                 </p>
               </CardContent>
             </>
@@ -535,9 +600,11 @@ export function LoanAccountCreatePage() {
                     <CardTitle>{selectedBorrower.fullName}</CardTitle>
                     <CardDescription>Loan cycle: {selectedBorrower.loanCycle}</CardDescription>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={changeClient}>
-                    <ChevronLeft className="mr-1 h-4 w-4" /> Change
-                  </Button>
+                  {!lockedBorrower && (
+                    <Button variant="ghost" size="sm" onClick={changeClient}>
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Change
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -568,15 +635,38 @@ export function LoanAccountCreatePage() {
                 )}
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="product">Product</Label>
-                  <Select value={loanProductId} onValueChange={setLoanProductId} disabled={productsQuery.isLoading}>
-                    <SelectTrigger id="product">
-                      <SelectValue placeholder={productsQuery.isLoading ? 'Loading…' : 'Select a product...'} />
+                  <Label htmlFor="product-type">Product Type</Label>
+                  <Select value={selectedProductType} onValueChange={handleProductTypeChange} disabled={productsQuery.isLoading}>
+                    <SelectTrigger id="product-type">
+                      <SelectValue placeholder={productsQuery.isLoading ? 'Loading…' : 'Select a product type...'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableProducts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
+                      {productGroups.map((g) => (
+                        <SelectItem key={g.type} value={g.type}>
+                          {g.type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="product">Product Class</Label>
+                  <Select value={loanProductId} onValueChange={setLoanProductId} disabled={!selectedProductType}>
+                    <SelectTrigger id="product">
+                      <SelectValue placeholder={selectedProductType ? 'Select a product class...' : 'Select a product type first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productClassOptions.map((p) => (
+                        <SelectItem key={p.id} value={p.id} disabled={!p.isSelectable}>
+                          <span className="flex items-center gap-2">
+                            {p.name}
+                            {!p.isSelectable && (
+                              <Badge variant="outline" className="text-[10px]" title="Flat-rate products can't be activated yet - not selectable here">
+                                Not yet activatable
+                              </Badge>
+                            )}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -2,7 +2,6 @@ import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Briefcase, FilePlus2, Home, Landmark, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,14 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
+import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
+import { ATTACHMENT_ACCEPTED_MIME, ATTACHMENT_ACCEPTED_TYPES, ATTACHMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documentApiTypes';
 import type { Borrower as RealBorrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
+import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
@@ -91,10 +93,40 @@ function RealEditClientDialog({
   });
   const toggleUnlock = (field: keyof typeof unlocked) => setUnlocked((u) => ({ ...u, [field]: !u[field] }));
 
+  const queryKeyForAvatar = ['attachments', 'BORROWER', borrower.id];
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const [photoError, setPhotoError] = React.useState<string | null>(null);
+  const uploadPhotoMutation = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('ownerType', 'BORROWER');
+      formData.append('ownerId', borrower.id);
+      formData.append('documentCategory', 'PROFILE_PICTURE');
+      return uploadFile('/attachments', formData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeyForAvatar });
+    },
+  });
+  const handlePhotoFileSelected = (file: File) => {
+    if (!ATTACHMENT_ACCEPTED_MIME.has(file.type)) {
+      setPhotoError('Unsupported file type. Allowed: PDF, JPEG, PNG.');
+      return;
+    }
+    if (file.size > ATTACHMENT_MAX_FILE_SIZE_BYTES) {
+      setPhotoError(`File exceeds the ${ATTACHMENT_MAX_FILE_SIZE_BYTES / (1024 * 1024)} MB limit.`);
+      return;
+    }
+    setPhotoError(null);
+    uploadPhotoMutation.mutate(file);
+  };
+
   React.useEffect(() => {
     if (open) {
       setDraft(draftFromBorrower(borrower));
       setAddressTouched(false);
+      setPhotoError(null);
       setUnlocked({
         firstName: false,
         lastName: false,
@@ -155,6 +187,42 @@ function RealEditClientDialog({
             Updates the real client record. Every field starts locked - click "Click to edit" next to a field to unlock it.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex items-center gap-3 border-b pb-4">
+          <ApplicantAvatar
+            ownerType="BORROWER"
+            ownerId={borrower.id}
+            initials={((borrower.firstName[0] ?? '') + (borrower.lastName[0] ?? '')).toUpperCase()}
+            className="h-14 w-14"
+          />
+          <div className="space-y-1">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept={ATTACHMENT_ACCEPTED_TYPES}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoFileSelected(file);
+                e.target.value = '';
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploadPhotoMutation.isPending}
+              onClick={() => photoInputRef.current?.click()}
+            >
+              {uploadPhotoMutation.isPending ? 'Uploading…' : 'Upload Profile Picture'}
+            </Button>
+            {photoError && <p className="text-xs text-destructive">{photoError}</p>}
+            {uploadPhotoMutation.isError && !photoError && (
+              <p className="text-xs text-destructive">Could not upload the photo. Please try again.</p>
+            )}
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -317,21 +385,21 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-          <CardTitle>Risk &amp; Payment Summary</CardTitle>
+          <CardTitle className="text-sm">Risk &amp; Payment Summary</CardTitle>
         </div>
         {summary && <Badge variant={RISK_BADGE_VARIANT[summary.riskLevel]}>{RISK_LEVEL_LABEL[summary.riskLevel]}</Badge>}
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2 p-4 pt-0">
         {query.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading risk summary…</p>
         ) : !summary ? (
           <p className="text-sm text-muted-foreground">Could not load the risk summary.</p>
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-y-1.5 text-sm sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-y-1.5 text-xs sm:grid-cols-4">
               <dt className="text-muted-foreground">Active loans</dt>
               <dd className="text-right font-medium sm:text-left">{summary.activeLoanCount}</dd>
               <dt className="text-muted-foreground">Total exposure</dt>
@@ -345,7 +413,7 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
                 {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
               </dd>
             </dl>
-            <p className="text-sm text-muted-foreground">{summary.recommendation}</p>
+            <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
             <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
               Computed by the LMS from this client's real loan/repayment history - a deterministic rule-based calculation, not an
               external AI model.
@@ -362,9 +430,11 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { canAccessLoanApplications } = useRole();
   const [editOpen, setEditOpen] = React.useState(false);
   const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
+  const [createLoanAccountOpen, setCreateLoanAccountOpen] = React.useState(false);
 
   const borrowerQuery = useQuery({
     queryKey: ['borrower', borrowerId],
@@ -413,6 +483,12 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   // CreateLoanApplicationUseCase (belt-and-suspenders: this is just the UI gate).
   const hasPendingApplication = myApplications.some((a) => a.status !== 'DECLINED' && !a.createdLoanAccountId);
   const canCreateLoanApplicationNow = canAccessLoanApplications && !hasActiveLoan && !hasPendingApplication;
+  // Clickable only once the client has no active/in-arrears loan account AND has an Approved
+  // application that hasn't already produced a loan account (mirrors the "Create Loan Account"
+  // dialog gating on the Loan Application Detail page, just keyed off the client instead of a
+  // single application).
+  const hasApprovedApplicationAwaitingLoanAccount = myApplications.some((a) => a.status === 'APPROVED' && !a.createdLoanAccountId);
+  const canCreateLoanAccountNow = !hasActiveLoan && hasApprovedApplicationAwaitingLoanAccount;
 
   if (borrowerQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading client…</p>;
@@ -438,7 +514,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const num = (v: string) => Number.parseFloat(v) || 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
@@ -447,199 +523,224 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         Real client, migrated from legacy data (CP12) - details, loan history, Create Loan Account, and Attachments below are live.
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader className="items-center text-center">
-            <Avatar className="h-16 w-16">
-              <AvatarFallback className="text-lg">
-                {((borrower.firstName[0] ?? '') + (borrower.lastName[0] ?? '')).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <CardTitle className="mt-2">{borrower.fullName}</CardTitle>
-            <Badge variant="outline" className="text-xs">
-              {borrower.status}
-            </Badge>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit / Customize Details
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" /> {formatMobileNumber(borrower.mobilePhone1)}
+      {/* Tile grid - two compact columns on large screens */}
+      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Client basic info tile */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
+          <div className="flex items-center gap-3">
+            <ApplicantAvatar
+              ownerType="BORROWER"
+              ownerId={borrower.id}
+              initials={((borrower.firstName[0] ?? '') + (borrower.lastName[0] ?? '')).toUpperCase()}
+              className="h-10 w-10 shrink-0"
+              fallbackClassName="text-sm"
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">{borrower.fullName}</CardTitle>
+                <Badge variant="outline" className="text-xs">
+                  {borrower.status}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">Loan cycle {borrower.loanCycle}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground" /> {borrower.email ?? '-'}
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+          </Button>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            <div className="flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {formatMobileNumber(borrower.mobilePhone1)}
             </div>
-            <div className="flex items-center gap-2">
-              <Home className="h-4 w-4 text-muted-foreground" /> {addressLine}
+            <div className="flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {borrower.email ?? '-'}
             </div>
-            <div className="flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <div className="col-span-2 flex items-center gap-1.5">
+              <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {addressLine}
+            </div>
+            <div className="col-span-2 flex items-center gap-1.5">
+              <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               {borrower.incomeDetail?.position ?? '-'}, {borrower.incomeDetail?.employerName ?? '-'}
             </div>
-            <dl className="grid grid-cols-2 gap-y-2 border-t pt-3">
-              <dt className="text-muted-foreground">Monthly income</dt>
-              <dd className="text-right font-medium">
-                {borrower.incomeDetail?.monthlyIncome != null ? formatPeso(borrower.incomeDetail.monthlyIncome) : '-'}
-              </dd>
-              <dt className="text-muted-foreground">Civil status</dt>
-              <dd className="text-right font-medium">{borrower.civilStatus ?? '-'}</dd>
-              <dt className="text-muted-foreground">Date of birth</dt>
-              <dd className="text-right font-medium">{borrower.birthDate ? formatDate(borrower.birthDate) : '-'}</dd>
-              <dt className="text-muted-foreground">Loan cycle</dt>
-              <dd className="text-right font-medium">{borrower.loanCycle}</dd>
-            </dl>
-          </CardContent>
-        </Card>
+            <div>
+              <span className="text-muted-foreground">Income: </span>
+              {borrower.incomeDetail?.monthlyIncome != null ? formatPeso(borrower.incomeDetail.monthlyIncome) : '-'}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Civil status: </span>
+              {borrower.civilStatus ?? '-'}
+            </div>
+            <div>
+              <span className="text-muted-foreground">DOB: </span>
+              {borrower.birthDate ? formatDate(borrower.birthDate) : '-'}
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
 
-        <div className="space-y-4 lg:col-span-2">
-          <RiskPaymentSummaryCard borrowerId={borrowerId} />
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
+          <CardTitle className="text-sm">Loan Applications</CardTitle>
+          {canAccessLoanApplications ? (
+            <Button size="sm" disabled={!canCreateLoanApplicationNow} onClick={() => setCreateApplicationOpen(true)}>
+              <FilePlus2 className="mr-1.5 h-3.5 w-3.5" /> Create Loan Application
+            </Button>
+          ) : (
+            <Badge variant="outline" className="text-xs">
+              Only <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, or <RoleAbbr role="CRM" /> can create loan applications
+            </Badge>
+          )}
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          {hasActiveLoan && canAccessLoanApplications && (
+            <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              This client still has an active (or in-arrears) loan account - a new application can be started once it's closed.
+            </p>
+          )}
+          {!hasActiveLoan && hasPendingApplication && canAccessLoanApplications && (
+            <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+              This client already has a loan application that isn't Declined yet and hasn't produced a loan account - only one can
+              be open at a time.
+            </p>
+          )}
+          <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                <TableCell className="font-medium text-muted-foreground">Category</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Requested Amount</TableCell>
+                <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                <TableCell className="font-medium text-muted-foreground">Loan Account</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {myApplications.map((application) => (
+                <TableRow key={application.id} className="cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
+                  <TableCell className="text-xs">{formatDate(application.createdAt)}</TableCell>
+                  <TableCell>{application.requestedCategory}</TableCell>
+                  <TableCell className="text-right">{formatPeso(application.requestedAmount)}</TableCell>
+                  <TableCell>
+                    <Badge variant={application.status === 'APPROVED' ? 'success' : application.status === 'DECLINED' ? 'destructive' : 'outline'}>
+                      {application.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {application.createdLoanAccountId ? (
+                      <Link
+                        to={`/loans/${application.createdLoanAccountId}`}
+                        className="inline-flex items-center gap-1 font-mono text-xs text-primary underline-offset-2 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Landmark className="h-3 w-3" /> {application.createdLoanAccountCode ?? 'View'}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {myApplications.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
+                    No loan applications on record for this client.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle>Loan Applications</CardTitle>
-              {canAccessLoanApplications ? (
-                <Button size="sm" disabled={!canCreateLoanApplicationNow} onClick={() => setCreateApplicationOpen(true)}>
-                  <FilePlus2 className="mr-1.5 h-3.5 w-3.5" /> Create Loan Application
-                </Button>
-              ) : (
-                <Badge variant="outline" className="text-xs">
-                  Only <RoleAbbr role="MIS" />, <RoleAbbr role="Loan Operation Manager" />, or <RoleAbbr role="CRM" /> can create loan applications
-                </Badge>
-              )}
-            </CardHeader>
-            <CardContent>
-              {hasActiveLoan && canAccessLoanApplications && (
-                <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  This client still has an active (or in-arrears) loan account - a new application can be started once it's closed.
-                </p>
-              )}
-              {!hasActiveLoan && hasPendingApplication && canAccessLoanApplications && (
-                <p className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                  This client already has a loan application that isn't Declined yet and hasn't produced a loan account - only one can
-                  be open at a time.
-                </p>
-              )}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell className="font-medium text-muted-foreground">Date</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Category</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Requested Amount</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Loan Account</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {myApplications.map((application) => (
-                    <TableRow key={application.id} className="cursor-pointer" onClick={() => navigate(`/applications/${application.id}`)}>
-                      <TableCell className="text-xs">{formatDate(application.createdAt)}</TableCell>
-                      <TableCell>{application.requestedCategory}</TableCell>
-                      <TableCell className="text-right">{formatPeso(application.requestedAmount)}</TableCell>
-                      <TableCell>
-                        <Badge variant={application.status === 'APPROVED' ? 'success' : application.status === 'DECLINED' ? 'destructive' : 'outline'}>
-                          {application.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {application.createdLoanAccountId ? (
-                          <Link
-                            to={`/loans/${application.createdLoanAccountId}`}
-                            className="inline-flex items-center gap-1 font-mono text-xs text-primary underline-offset-2 hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Landmark className="h-3 w-3" /> {application.createdLoanAccountCode ?? 'View'}
-                          </Link>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {myApplications.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                        No loan applications on record for this client.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+      <RiskPaymentSummaryCard borrowerId={borrowerId} />
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan History</CardTitle>
-              <CardDescription>
-                To create a new loan account for this client, open the relevant approved Loan Application above - a "Create Loan
-                Account" button appears there once it's Approved.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell className="font-medium text-muted-foreground">Loan Code</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Product</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Principal Balance</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Interest Balance</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Penalty Balance</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Fees Balance</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Collections Balance</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loans.map((loan) => (
-                    <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
-                      <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
-                      <TableCell>{versionToProductName.get(loan.loanProductVersionId) ?? '-'}</TableCell>
-                      <TableCell>
-                        <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
-                      </TableCell>
-                      <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(loan.balances.feesBalance))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
-                    </TableRow>
-                  ))}
-                  {loansQuery.isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                        Loading loans…
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {!loansQuery.isLoading && loans.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                        No loans on record for this client.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
+          <div>
+            <CardTitle className="text-sm">Loan History</CardTitle>
+            <CardDescription className="text-xs">
+              {canCreateLoanAccountNow
+                ? 'Ready to originate - the client has an approved application and no active loan.'
+                : hasActiveLoan
+                  ? "This client still has an active (or in-arrears) loan account."
+                  : myApplications.length === 0
+                    ? 'This client has no loan application on record yet.'
+                    : 'This client has no Approved loan application awaiting a loan account.'}
+            </CardDescription>
+          </div>
+          <Button size="sm" disabled={!canCreateLoanAccountNow} onClick={() => setCreateLoanAccountOpen(true)}>
+            <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+          </Button>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell className="font-medium text-muted-foreground">Loan Code</TableCell>
+                <TableCell className="font-medium text-muted-foreground">Product</TableCell>
+                <TableCell className="font-medium text-muted-foreground">Status</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Principal Balance</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Interest Balance</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Penalty Balance</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Fees Balance</TableCell>
+                <TableCell className="text-right font-medium text-muted-foreground">Collections Balance</TableCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loans.map((loan) => (
+                <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
+                  <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
+                  <TableCell>{versionToProductName.get(loan.loanProductVersionId) ?? '-'}</TableCell>
+                  <TableCell>
+                    <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
+                  </TableCell>
+                  <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
+                  <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>
+                  <TableCell className="text-right">{formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
+                  <TableCell className="text-right">{formatPeso(num(loan.balances.feesBalance))}</TableCell>
+                  <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
+                </TableRow>
+              ))}
+              {loansQuery.isLoading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                    Loading loans…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!loansQuery.isLoading && loans.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                    No loans on record for this client.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <AttachmentsPanel ownerType="BORROWER" ownerId={borrower.id} canUpload />
 
       {/* Activity Timeline - ADR-050 */}
       <Card>
-        <CardHeader>
-          <CardTitle>Activity Timeline</CardTitle>
-          <CardDescription>Log of all actions taken on this client profile by loan officers</CardDescription>
+        <CardHeader className="p-4">
+          <CardTitle className="text-sm">Activity Timeline</CardTitle>
+          <CardDescription className="text-xs">Log of all actions taken on this client profile by loan officers</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-0">
           <ProfileActivityTimeline profileType="BORROWER" profileId={borrowerId} />
         </CardContent>
       </Card>
 
       <RecentActivityPanel label="Client Profile" entityId={borrowerId} />
+      </div>
 
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
 
@@ -661,6 +762,28 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                 navigate(`/applications/${application.id}`);
               }}
               onCancel={() => setCreateApplicationOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createLoanAccountOpen} onOpenChange={setCreateLoanAccountOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Loan Account</DialogTitle>
+            <DialogDescription>For {borrower.fullName}. Review before submitting.</DialogDescription>
+          </DialogHeader>
+          {createLoanAccountOpen && (
+            <LoanAccountForm
+              lockedBorrower={borrower}
+              showChrome={false}
+              onCreated={(loan) => {
+                setCreateLoanAccountOpen(false);
+                queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+                queryClient.invalidateQueries({ queryKey: ['loan-application', 'all'] });
+                navigate(`/loans/${loan.id}`);
+              }}
+              onCancel={() => setCreateLoanAccountOpen(false)}
             />
           )}
         </DialogContent>

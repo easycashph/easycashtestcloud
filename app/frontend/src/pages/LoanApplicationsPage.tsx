@@ -247,6 +247,7 @@ export function LoanApplicationsPage() {
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
                       <ApplicantAvatar
+                        ownerType="LOAN_APPLICATION"
                         ownerId={app.id}
                         initials={applicantInitials(app.applicantName)}
                         className="h-7 w-7"

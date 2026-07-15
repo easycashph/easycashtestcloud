@@ -1,0 +1,662 @@
+[
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 1.5
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.0
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.24
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.37
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.46
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.52
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.56
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.59
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.61
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.63
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.63
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 13,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 14,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 15,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 16,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 17,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 18,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 19,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 20,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.64
+  },
+  {
+    "termMonths": 21,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.64
+  },
+  {
+    "termMonths": 22,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.63
+  },
+  {
+    "termMonths": 23,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.63
+  },
+  {
+    "termMonths": 24,
+    "addOnRatePercent": 1.5,
+    "contractualRatePercent": 2.62
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 4.16
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.39
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.42
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.77
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.87
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.93
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 2.98
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.0
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.03
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.05
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.06
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.07
+  },
+  {
+    "termMonths": 13,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.07
+  },
+  {
+    "termMonths": 14,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.07
+  },
+  {
+    "termMonths": 15,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.06
+  },
+  {
+    "termMonths": 16,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.07
+  },
+  {
+    "termMonths": 17,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.06
+  },
+  {
+    "termMonths": 18,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.05
+  },
+  {
+    "termMonths": 19,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.05
+  },
+  {
+    "termMonths": 20,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.05
+  },
+  {
+    "termMonths": 21,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.04
+  },
+  {
+    "termMonths": 22,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.05
+  },
+  {
+    "termMonths": 23,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.03
+  },
+  {
+    "termMonths": 24,
+    "addOnRatePercent": 1.75,
+    "contractualRatePercent": 3.02
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 2.0
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 2.65
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 2.97
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.15
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.27
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.33
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.38
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.42
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.44
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.46
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.47
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 2.0,
+    "contractualRatePercent": 3.47
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 2.25
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 2.99
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.34
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.54
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.67
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.75
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.8
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.84
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.86
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.87
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.88
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 2.25,
+    "contractualRatePercent": 3.89
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 2.5
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 3.32
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 3.7
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 3.92
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.06
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.15
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.2
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.24
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.27
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.27
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.28
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.28
+  },
+  {
+    "termMonths": 13,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.29
+  },
+  {
+    "termMonths": 14,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.28
+  },
+  {
+    "termMonths": 15,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.28
+  },
+  {
+    "termMonths": 16,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.27
+  },
+  {
+    "termMonths": 17,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.26
+  },
+  {
+    "termMonths": 18,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.24
+  },
+  {
+    "termMonths": 19,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.23
+  },
+  {
+    "termMonths": 20,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.22
+  },
+  {
+    "termMonths": 21,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.21
+  },
+  {
+    "termMonths": 22,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.19
+  },
+  {
+    "termMonths": 23,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.18
+  },
+  {
+    "termMonths": 24,
+    "addOnRatePercent": 2.5,
+    "contractualRatePercent": 4.16
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 2.75
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 3.65
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.07
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.31
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.46
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.55
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.6
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.65
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.67
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.68
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.69
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 2.75,
+    "contractualRatePercent": 4.69
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 3.0
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 3.98
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 4.43
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 4.7
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 4.85
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 4.95
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.01
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.05
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.07
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.08
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.08
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 3.0,
+    "contractualRatePercent": 5.08
+  },
+  {
+    "termMonths": 1,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 3.5
+  },
+  {
+    "termMonths": 2,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 4.63
+  },
+  {
+    "termMonths": 3,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.17
+  },
+  {
+    "termMonths": 4,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.45
+  },
+  {
+    "termMonths": 5,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.63
+  },
+  {
+    "termMonths": 6,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.73
+  },
+  {
+    "termMonths": 7,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.8
+  },
+  {
+    "termMonths": 8,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.83
+  },
+  {
+    "termMonths": 9,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.86
+  },
+  {
+    "termMonths": 10,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.86
+  },
+  {
+    "termMonths": 11,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.86
+  },
+  {
+    "termMonths": 12,
+    "addOnRatePercent": 3.5,
+    "contractualRatePercent": 5.86
+  }
+]
