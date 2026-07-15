@@ -486,18 +486,36 @@ retained backfill scripts), two backfills per the user's explicit decision:
    1,783 migrated loans backfilled.
 
 Dry-run verified before `--apply`; DB re-checked after (`addOnInterestRate` 1→612,
-`contractualInterestRate` 1→1,784, sample rows spot-checked). `tsc` clean. **Not yet committed.**
+`contractualInterestRate` 1→1,784, sample rows spot-checked). `tsc` clean. Committed `1889ba0`.
+
+### Follow-up: post-restore reminder, and one false lead ruled out
+
+Two small closes on the backfill above:
+
+1. **`legacy\Sync Database And Apply Migrations.bat`** restores a colleague's `pg_dump` with
+   `--clean` (wipes local data) then re-applies Prisma migrations — it already reminded the user to
+   re-run a couple of named one-time data scripts after a restore, but didn't mention today's new
+   `backfill-loan-interest-rates.ts`. Same failure class as the DB-restore incidents noted in
+   earlier session logs (local-only backfilled data silently lost on the next sync). Added it to the
+   reminder list. Committed `f4fd6ca`.
+2. User asked whether a broader `addOnRate`-family field exists elsewhere in the legacy export.
+   Found `loan_products.addOnRates` (plural) in a raw grep, but on inspection it isn't a real
+   field at all — it's the literal corrupted-JSON-fragment text already documented in
+   `migrate-legacy-data.ts`'s `KNOWN_CORRUPTED_PRODUCT_NAMES` comment (one product, `CM-Car`, whose
+   `name` field ended up as the literal string `"addOnRates:[1.75"` from a legacy CSV-import bug;
+   zero real loans use that product). Confirmed there is no second, more-authoritative add-on-rate
+   source being missed — `loan_accounts.addOnRate` (already backfilled) is the only real one.
 
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
-  `origin/main` as of `0338f90` — **not yet pushed this batch**, only up to `370a3ea` is pushed. Nine
-  commits this session total: `922f341` (transaction sort, pass 1), `7c3a2e4` (Total Due column),
-  `d01ac67` (payment allocation visibility #1/#2/#3), `94424e2` (transaction sort, pass 2 — the real
-  fix), `370a3ea` (Payment Recording Close/Next-due, **pushed**), `9d3d1de` (docs), `be3e312`
-  (Loan Releases Report + Reports hub + Dashboard preview cards), `bc8ec0c` (Reduce Penalty
-  feature), `0338f90` (Reduce Penalty name display fix) — **the last three (`be3e312`/`bc8ec0c`/
-  `0338f90`) are local-only, not yet pushed to `origin/main`**.
+  `origin/main` as of `f4fd6ca` — **only up to `370a3ea` is pushed; 6 commits are local-only**:
+  `9d3d1de` (docs), `be3e312` (Loan Releases Report + Reports hub + Dashboard preview cards),
+  `bc8ec0c` (Reduce Penalty feature), `0338f90` (Reduce Penalty name display fix), `a46dd5b` (docs),
+  `1889ba0` (addOnInterestRate/contractualInterestRate migration backfill), `f4fd6ca` (post-restore
+  reminder update). Fourteen commits this session total (see git log for the full first-half list —
+  transaction sort ×2, Total Due column, payment allocation visibility, Payment Recording Close/
+  Next-due).
 - **Next immediate task, agreed with the user: a real UI click-through once login credentials are
   available.** Everything this session was verified at the DB/API/build level only (no browser login
   access all session) — see the bullets below for exactly what still needs eyes-on confirmation.
@@ -517,9 +535,9 @@ Dry-run verified before `--apply`; DB re-checked after (`addOnInterestRate` 1→
     (`CF:8a8e...`, 3,501 populated records, NOT the same as `contractualInterestRate`), never
     migrated into the current schema. Needs a decision: add a new `LoanAccount` field + backfill
     script, or some other resolution — not yet actioned.
-  - **`addOnInterestRate`/`contractualInterestRate` migration gap** — found and fixed this session
-    (`scripts/backfill-loan-interest-rates.ts`, kept as a retained migration-history script); see its
-    own section above. **Backfill applied to the DB but not yet committed to git.**
+  - **`addOnInterestRate`/`contractualInterestRate` migration gap** — found, fixed, and committed
+    this session (`1889ba0`, `scripts/backfill-loan-interest-rates.ts` kept as a retained
+    migration-history script); see its own section above.
   - Loan Portfolio Health Venn → proportional-bar redesign: mockup shown and liked in concept, not
     yet implemented.
   - **Report generation (Excel)**: 1 of 11 legacy reports done (Loan Releases Report, `be3e312`) —
