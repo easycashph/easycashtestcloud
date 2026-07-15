@@ -95,6 +95,9 @@ interface PortfolioLoanRow {
  * from `/dashboard/summary`'s live `maturedLoanAccountIds`, not from status. */
 const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
 
+/** Stable empty-Set reference for call sites that don't need the good/arrears/matured split. */
+const EMPTY_ID_SET: ReadonlySet<string> = new Set();
+
 /** Same product-family grouping already approved for the mock dashboard (see the historical
  * `getDashboardLoanCategory` in `mockData.ts`) - every SML-* product is a Seafarer Loan sub-class,
  * SL-* is Salary Loan, BL-* is Business Loan, everything else (PFL/REL/CL/OFW/...) is legacy.
@@ -147,14 +150,30 @@ interface PortfolioCategorySlice {
   category: string;
   value: number;
   loans: PortfolioLoanRow[];
+  /** Outstanding principal split by the same good/arrears/matured definition as
+   * `buildRealPortfolioHealth` (live `overdueLoanIds`/`maturedLoanIds`, not `status`). */
+  active: number;
+  pastDue: number;
+  matured: number;
 }
 
-function buildRealPortfolioByCategory(loans: PortfolioLoanRow[]): PortfolioCategorySlice[] {
+function buildRealPortfolioByCategory(
+  loans: PortfolioLoanRow[],
+  overdueLoanIds: ReadonlySet<string>,
+  maturedLoanIds: ReadonlySet<string>,
+): PortfolioCategorySlice[] {
   const byCategory = new Map<string, PortfolioCategorySlice>();
   for (const loan of loans) {
     if (!REAL_ACTIVE_STATUSES.includes(loan.status)) continue;
-    const slice = byCategory.get(loan.category) ?? { category: loan.category, value: 0, loans: [] };
+    const slice = byCategory.get(loan.category) ?? { category: loan.category, value: 0, loans: [], active: 0, pastDue: 0, matured: 0 };
     slice.value = Math.round((slice.value + loan.principalBalance) * 100) / 100;
+    if (maturedLoanIds.has(loan.id)) {
+      slice.matured = Math.round((slice.matured + loan.principalBalance) * 100) / 100;
+    } else if (overdueLoanIds.has(loan.id)) {
+      slice.pastDue = Math.round((slice.pastDue + loan.principalBalance) * 100) / 100;
+    } else {
+      slice.active = Math.round((slice.active + loan.principalBalance) * 100) / 100;
+    }
     slice.loans.push(loan);
     byCategory.set(loan.category, slice);
   }
@@ -439,8 +458,10 @@ export function DashboardPage() {
     });
   }, [loanAccountsQuery.data, borrowersQuery.data, productsQuery.data]);
 
+  // Just enumerating category names for the filter dropdown - the active/pastDue/matured split
+  // (which needs overdueLoanIds/maturedLoanIds) is irrelevant here, so pass empty sets.
   const loanCategoryOptions = React.useMemo(
-    () => [...new Set(buildRealPortfolioByCategory(allPortfolioLoans).map((s) => s.category))].sort(),
+    () => [...new Set(buildRealPortfolioByCategory(allPortfolioLoans, EMPTY_ID_SET, EMPTY_ID_SET).map((s) => s.category))].sort(),
     [allPortfolioLoans],
   );
 
@@ -482,8 +503,8 @@ export function DashboardPage() {
     [portfolioFilteredLoans, overdueLoanIds, maturedLoanIds],
   );
   const filteredPortfolioByCategory = React.useMemo(
-    () => buildRealPortfolioByCategory(portfolioFilteredLoans),
-    [portfolioFilteredLoans],
+    () => buildRealPortfolioByCategory(portfolioFilteredLoans, overdueLoanIds, maturedLoanIds),
+    [portfolioFilteredLoans, overdueLoanIds, maturedLoanIds],
   );
   const filteredQualityMetrics = React.useMemo(
     () => buildRealQualityMetrics(portfolioFilteredLoans, overdueLoanIds, maturedLoanIds),
@@ -881,19 +902,23 @@ export function DashboardPage() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {filteredPortfolioByCategory.map((entry, index) => (
-                  <button
-                    key={entry.category}
-                    type="button"
-                    onClick={() => openCategorySlice(entry)}
-                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus:outline-none"
-                    title="View the loan accounts in this category"
-                  >
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-                    <span className="font-medium text-foreground">{entry.category}</span>
-                    <span>· {formatPeso(entry.value)}</span>
-                  </button>
+                  <div key={entry.category}>
+                    <button
+                      type="button"
+                      onClick={() => openCategorySlice(entry)}
+                      className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus:outline-none"
+                      title="View the loan accounts in this category"
+                    >
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
+                      <span className="font-medium text-foreground">{entry.category}</span>
+                      <span>· {formatPeso(entry.value)}</span>
+                    </button>
+                    <p className="ml-4 text-xs text-muted-foreground">
+                      Active: {formatPeso(entry.active)} · Past Due: {formatPeso(entry.pastDue)} · Matured: {formatPeso(entry.matured)}
+                    </p>
+                  </div>
                 ))}
               </div>
             </div>
