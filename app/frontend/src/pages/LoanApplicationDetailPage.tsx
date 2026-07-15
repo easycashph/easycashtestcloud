@@ -546,10 +546,12 @@ function CreateLoanAccountDialog({
   open,
   onOpenChange,
   borrower,
+  requestedTermMonths,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   borrower: Borrower;
+  requestedTermMonths?: number;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -564,6 +566,7 @@ function CreateLoanAccountDialog({
         {open && (
           <LoanAccountForm
             lockedBorrower={borrower}
+            prefillTermMonths={requestedTermMonths}
             showChrome={false}
             onCreated={(loan) => {
               onOpenChange(false);
@@ -939,7 +942,9 @@ export function LoanApplicationDetailPage() {
                 ) : (
                   <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
                 )}
-                <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>{application.status.replaceAll('_', ' ')}</Badge>
+                <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>
+                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated ? 'Disbursed' : application.status.replaceAll('_', ' ')}
+                </Badge>
                 {application.createdLoanAccountId && (
                   <Button size="sm" variant="outline" asChild>
                     <Link to={`/loans/${application.createdLoanAccountId}`} className="inline-flex items-center gap-1.5">
@@ -1181,7 +1186,9 @@ export function LoanApplicationDetailPage() {
             ) : (
               <div className="space-y-3">
                 <div className="rounded-md border p-3 text-sm">
-                  <p className="font-medium">{application.status === 'APPROVED' ? 'Approved' : 'Declined'}</p>
+                  <p className="font-medium">
+                    {application.status === 'APPROVED' ? (isCreatedLoanAccountActivated ? 'Disbursed' : 'Approved') : 'Declined'}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {application.reviewedAt && formatDate(application.reviewedAt)}
                     {reviewedByName ? ` · by ${reviewedByName}` : ''}
@@ -1350,7 +1357,12 @@ export function LoanApplicationDetailPage() {
 
       <CreateClientProfileDialog open={createClientOpen} onOpenChange={setCreateClientOpen} application={application} />
       {clientBorrowerQuery.data && (
-        <CreateLoanAccountDialog open={createLoanOpen} onOpenChange={setCreateLoanOpen} borrower={clientBorrowerQuery.data} />
+        <CreateLoanAccountDialog
+          open={createLoanOpen}
+          onOpenChange={setCreateLoanOpen}
+          borrower={clientBorrowerQuery.data}
+          requestedTermMonths={application.requestedTermMonths}
+        />
       )}
     </div>
   );

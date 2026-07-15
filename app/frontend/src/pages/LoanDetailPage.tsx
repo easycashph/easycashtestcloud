@@ -22,6 +22,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
+import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 
 const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
   LOW: 'success',
@@ -509,6 +510,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const reversedTransactionIds = new Set(
     transactions.map((t) => t.reversesTransactionId).filter((id): id is string => id !== null),
   );
+  // No real RepaymentInstallment rows exist yet before Activation (the real
+  // AmortizationScheduleGenerator only runs at Activate time) - for PENDING_APPROVAL/APPROVED
+  // loans, show a client-side preview computed the same way Create Loan Account's own preview
+  // does, clearly marked as a preview so staff don't mistake it for the persisted schedule.
+  const showSchedulePreview = !installmentsQuery.isLoading && installments.length === 0 && (loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED');
+  const schedulePreview = showSchedulePreview
+    ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(loan.firstRepaymentDate))
+    : null;
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
@@ -584,7 +593,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <Tabs defaultValue="schedule">
           <CardHeader className="pb-2">
             <TabsList>
-              <TabsTrigger value="schedule">Repayment Schedule ({installments.length})</TabsTrigger>
+              <TabsTrigger value="schedule">
+                Repayment Schedule ({installments.length}
+                {schedulePreview ? ` preview: ${schedulePreview.schedule.length}` : ''})
+              </TabsTrigger>
               <TabsTrigger value="payments">Payment History ({transactions.length})</TabsTrigger>
             </TabsList>
           </CardHeader>
@@ -592,6 +604,39 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <TabsContent value="schedule" className="mt-0">
               {installmentsQuery.isLoading ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+              ) : installments.length === 0 && schedulePreview ? (
+                <>
+                  <div className="mb-3 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    Preview only - this loan hasn&apos;t been Activated yet, so this schedule hasn&apos;t been generated/persisted. It's
+                    computed live from the current Principal, Contractual Rate, Term, and First Repayment Date, and may still change
+                    before Activation.
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                        <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                        <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                        <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                        <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                        <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {schedulePreview.schedule.map((entry) => (
+                        <TableRow key={entry.installmentNumber}>
+                          <TableCell>{entry.installmentNumber}</TableCell>
+                          <TableCell>{formatDate(entry.dueDate.toISOString())}</TableCell>
+                          <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
+                          <TableCell className="text-right">{formatPeso(entry.payment)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatPeso(entry.endingPrincipal)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
               ) : installments.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
               ) : (

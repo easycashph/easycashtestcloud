@@ -214,11 +214,15 @@ export function LoanAccountCreatePage() {
  */
 export function LoanAccountForm({
   lockedBorrower,
+  prefillTermMonths,
   showChrome = true,
   onCreated,
   onCancel,
 }: {
   lockedBorrower?: Borrower;
+  /** Requested Term (months) from the client's loan application, if opened from one - takes
+   * priority over the product's own default term when a product is selected. */
+  prefillTermMonths?: number;
   showChrome?: boolean;
   onCreated: (loan: LoanAccount) => void;
   onCancel: () => void;
@@ -309,9 +313,10 @@ export function LoanAccountForm({
   React.useEffect(() => {
     if (!selectedVersion) return;
     setPrincipalAmount(selectedVersion.loanAmountDefault ?? selectedVersion.loanAmountMin);
-    setInstallmentCount(String(selectedVersion.installmentCountDefault ?? selectedVersion.installmentCountMin));
+    setInstallmentCount(String(prefillTermMonths ?? selectedVersion.installmentCountDefault ?? selectedVersion.installmentCountMin));
     setAddOnRate('');
     setInterestRate(selectedVersion.defaultInterestRate ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVersion]);
 
   const rateChartQuery = useQuery({
@@ -319,6 +324,14 @@ export function LoanAccountForm({
     queryFn: () => apiClient.get<PaginatedResponse<InterestRateChartEntry>>('/interest-rate-chart'),
   });
   const rateChart = rateChartQuery.data?.items ?? [];
+  // Distinct Add-On Rate options from the Interest Rate Chart (`Rate_details` — see the '201 Loan
+  // Docs Encode.xlsx' interest chart this was migrated from), sorted ascending, for the dropdown
+  // below - staff pick from the chart's actual rates rather than free-typing a value that may not
+  // be on file.
+  const addOnRateOptions = React.useMemo(
+    () => Array.from(new Set(rateChart.map((e) => e.addOnRatePercent))).sort((a, b) => Number(a) - Number(b)),
+    [rateChart],
+  );
 
   const principalNum = Number.parseFloat(principalAmount) || 0;
   const installmentCountNum = Number.parseInt(installmentCount, 10) || 0;
@@ -741,17 +754,28 @@ export function LoanAccountForm({
 
                     <div className="space-y-1.5">
                       <Label htmlFor="add-on-rate">Add-On Rate (% monthly)</Label>
-                      <Input id="add-on-rate" type="number" min="0" step="0.001" value={addOnRate} onChange={(e) => setAddOnRate(e.target.value)} />
+                      <Select value={addOnRate} onValueChange={setAddOnRate}>
+                        <SelectTrigger id="add-on-rate">
+                          <SelectValue placeholder={rateChartQuery.isLoading ? 'Loading…' : 'Select an Add-On Rate...'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {addOnRateOptions.map((rate) => (
+                            <SelectItem key={rate} value={rate}>
+                              {rate}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <p className="text-xs text-muted-foreground">Looks up the Contractual Rate below from the Interest Rate Chart, by this rate and the term.</p>
                     </div>
 
                     <div className="space-y-1.5">
                       <Label htmlFor="rate">Contractual Rate (% monthly)</Label>
-                      <Input id="rate" type="number" min="0" step="0.001" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} />
+                      <Input id="rate" type="number" min="0" step="0.001" value={interestRate} readOnly disabled className="bg-muted" />
                       {addOnRateNum > 0 && installmentCountNum > 0 && !chartMatch ? (
                         <p className="text-xs text-warning">
                           No Interest Rate Chart entry for {addOnRateNum}% / {installmentCountNum} months — not on file, please confirm
-                          with MIS and enter it manually.
+                          with MIS before proceeding.
                         </p>
                       ) : (
                         (selectedVersion.minInterestRate || selectedVersion.maxInterestRate) && (
