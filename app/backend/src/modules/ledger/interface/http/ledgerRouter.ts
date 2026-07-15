@@ -14,6 +14,7 @@ export function createLedgerRouter(deps: LedgerControllerDeps, tokenService: ITo
 
   router.get('/loan-accounts/:loanAccountId/transactions', requireAuth, controller.listForAccount);
   router.get('/transactions/:id', requireAuth, controller.get);
+  router.get('/transactions/:id/allocations', requireAuth, controller.listAllocations);
 
   return router;
 }

@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, Bell, Clock, FileCheck2, Mail, MessageSquareText, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bell, ChevronDown, ChevronRight, Clock, FileCheck2, Mail, MessageSquareText, Sparkles } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, LoanDocumentListItem, LoanTransaction, PaginatedResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, LoanAccount, LoanDocumentListItem, LoanTransaction, PaginatedResponse, PaymentAllocationDetail, RepaymentInstallment } from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +41,70 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
  * `LoanRiskAssessmentService`, from real repayment data - days past due, late-payment count) - no
  * external AI/ML model call. Replaced the earlier mock (`getMockRiskAssessment`) 2026-07-11.
  */
+/**
+ * Expanded content under a REPAYMENT row in the Payment History tab — which installment(s) the
+ * payment actually hit, per component. Reads the `payment_allocations` rows recorded at payment
+ * time (the same data Reverse Payment uses). Migrated/legacy REPAYMENTs predate allocation
+ * recording, so an empty result is a normal state, not an error.
+ */
+function TransactionAllocationsPanel({ transactionId }: { transactionId: string }) {
+  const num = (v: string) => Number.parseFloat(v) || 0;
+  const query = useQuery({
+    queryKey: ['transaction-allocations', transactionId],
+    queryFn: () => apiClient.get<{ allocations: PaymentAllocationDetail[] }>(`/transactions/${transactionId}/allocations`),
+  });
+
+  if (query.isLoading) {
+    return <p className="py-2 text-xs text-muted-foreground">Loading allocation…</p>;
+  }
+  const allocations = query.data?.allocations ?? [];
+  if (allocations.length === 0) {
+    return (
+      <p className="py-2 text-xs text-muted-foreground">
+        No allocation detail available - this payment was migrated from the legacy system or recorded before allocation
+        tracking was added.
+      </p>
+    );
+  }
+
+  return (
+    <div className="py-2">
+      <p className="mb-1 text-xs font-medium text-muted-foreground">Applied to:</p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableCell className="text-xs font-medium text-muted-foreground">Installment</TableCell>
+            <TableCell className="text-xs font-medium text-muted-foreground">Due Date</TableCell>
+            <TableCell className="text-right text-xs font-medium text-muted-foreground">Fees</TableCell>
+            <TableCell className="text-right text-xs font-medium text-muted-foreground">Penalty</TableCell>
+            <TableCell className="text-right text-xs font-medium text-muted-foreground">Interest</TableCell>
+            <TableCell className="text-right text-xs font-medium text-muted-foreground">Principal</TableCell>
+            <TableCell className="text-right text-xs font-medium text-muted-foreground">Total</TableCell>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {allocations.map((a) => (
+            <TableRow key={a.repaymentInstallmentId}>
+              <TableCell className="text-xs">{a.installmentNumber !== null ? `#${a.installmentNumber}` : '—'}</TableCell>
+              <TableCell className="text-xs">{a.installmentDueDate ? formatDate(a.installmentDueDate) : '—'}</TableCell>
+              <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(num(a.feesApplied))}</TableCell>
+              <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(num(a.penaltyApplied))}</TableCell>
+              <TableCell className="text-right text-xs">{formatPeso(num(a.interestApplied))}</TableCell>
+              <TableCell className="text-right text-xs">{formatPeso(num(a.principalApplied))}</TableCell>
+              <TableCell className="text-right text-xs font-medium">
+                {formatPeso(num(a.feesApplied) + num(a.penaltyApplied) + num(a.interestApplied) + num(a.principalApplied))}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      <p className="mt-1 text-[10px] text-muted-foreground">
+        Allocation order: Fees → Penalty → Interest → Principal, oldest unpaid installment first (ADR-009).
+      </p>
+    </div>
+  );
+}
+
 function RiskAssessmentCard({ loanId }: { loanId: string }) {
   const query = useQuery({
     queryKey: ['loan-risk-assessment', loanId],
@@ -318,6 +382,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // MIS-only (matches the backend's requireRole('MIS') gate) — see reverseMutation below.
   const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
   const [reverseReason, setReverseReason] = React.useState('');
+  const [expandedTransactionId, setExpandedTransactionId] = React.useState<string | null>(null);
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -651,6 +716,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Total Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Remaining</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Status</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
                     </TableRow>
@@ -673,7 +739,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         // (fixed) figure instead.
                         const isLivePenalty = i.currentPenaltyOwed !== null;
                         const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
-                        cumulativePaid += num(i.paid.principal) + num(i.paid.interest);
+                        const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
+                        cumulativePaid += rowPaid;
                         const balance = Math.max(0, totalObligation - cumulativePaid);
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
@@ -693,7 +760,23 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             <TableCell className="text-right font-medium">
                               {formatPeso(num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay)}
                             </TableCell>
-                            <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
+                            <TableCell className="text-right">{formatPeso(rowPaid)}</TableCell>
+                            {(() => {
+                              const rowRemaining = Math.max(
+                                0,
+                                num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay - rowPaid,
+                              );
+                              return (
+                                <TableCell
+                                  className={cn(
+                                    'text-right',
+                                    rowRemaining > 0 ? 'font-medium text-warning' : 'text-muted-foreground',
+                                  )}
+                                >
+                                  {formatPeso(rowRemaining)}
+                                </TableCell>
+                              );
+                            })()}
                             <TableCell>
                               <div className="flex items-center gap-1.5">
                                 <InstallmentStatusBadge status={i.status} />
@@ -737,7 +820,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.principal) + num(i.paid.interest), 0))}
+                        {formatPeso(
+                          installments.reduce(
+                            (sum, i) => sum + num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty),
+                            0,
+                          ),
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(
+                          installments.reduce((sum, i) => {
+                            const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                            const totalDue = num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                            const paid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
+                            return sum + Math.max(0, totalDue - paid);
+                          }, 0),
+                        )}
                       </TableCell>
                       <TableCell />
                       <TableCell />
@@ -759,6 +857,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableCell className="w-8" />
                       <TableCell className="font-medium text-muted-foreground">Date</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Type</TableCell>
                       <TableCell className="font-medium text-muted-foreground">OR#</TableCell>
@@ -776,8 +875,19 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   <TableBody>
                     {transactions.map((t) => {
                       const isReversed = reversedTransactionIds.has(t.id);
+                      const isExpandable = t.type === 'REPAYMENT';
+                      const isExpanded = expandedTransactionId === t.id;
                       return (
-                        <TableRow key={t.id} className={isReversed ? 'opacity-60' : undefined}>
+                        <React.Fragment key={t.id}>
+                        <TableRow
+                          className={cn(isReversed && 'opacity-60', isExpandable && 'cursor-pointer')}
+                          onClick={isExpandable ? () => setExpandedTransactionId(isExpanded ? null : t.id) : undefined}
+                          title={isExpandable ? 'Click to see which installments this payment was applied to' : undefined}
+                        >
+                          <TableCell className="w-8 text-muted-foreground">
+                            {isExpandable &&
+                              (isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
+                          </TableCell>
                           <TableCell>
                             {formatDate(t.entryDate)}
                             {isReversed && (
@@ -801,13 +911,29 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           {canReversePayment && (
                             <TableCell>
                               {t.type === 'REPAYMENT' && !isReversed && (
-                                <Button variant="outline" size="sm" onClick={() => openReverseConfirm(t)}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openReverseConfirm(t);
+                                  }}
+                                >
                                   Reverse
                                 </Button>
                               )}
                             </TableCell>
                           )}
                         </TableRow>
+                        {isExpanded && (
+                          <TableRow className="bg-muted/30 hover:bg-muted/30">
+                            <TableCell />
+                            <TableCell colSpan={canReversePayment ? 12 : 11}>
+                              <TransactionAllocationsPanel transactionId={t.id} />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                   </TableBody>

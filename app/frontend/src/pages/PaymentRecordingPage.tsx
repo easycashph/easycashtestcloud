@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, ChevronLeft, Search } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, ChevronLeft, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -112,9 +112,21 @@ function getPreviewRowSortValue(
  * backend re-validates authoritatively (per-installment remaining-due caps + exact total match)
  * before posting.
  */
+/** Everything the post-payment confirmation dialog needs, captured at success time (the form/queries reset underneath it). */
+interface PaymentSuccessInfo {
+  response: ProcessPaymentResponse;
+  loanId: string;
+  loanCode: string;
+  borrowerName: string;
+  amount: number;
+  paidAt: string;
+  orNumber?: string;
+}
+
 export function PaymentRecordingPage() {
   useLogPageView('Payment Recording');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedLoanId = searchParams.get('loanId');
 
@@ -182,6 +194,7 @@ export function PaymentRecordingPage() {
   const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = React.useState<PaymentSuccessInfo | null>(null);
   const idempotencyKeyRef = React.useRef<string | null>(null);
 
   // Manual mode (2026-07-10): staff picks specific unpaid installments and types the exact
@@ -303,12 +316,23 @@ export function PaymentRecordingPage() {
         'Idempotency-Key': idempotencyKeyRef.current,
       });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       idempotencyKeyRef.current = null;
       setConfirmOpen(false);
       setSubmitError(null);
+      setSuccessInfo({
+        response,
+        loanId,
+        loanCode: selectedLoan?.loanCode ?? '',
+        borrowerName: selectedBorrower?.fullName ?? '',
+        amount: paymentAmount,
+        paidAt,
+        orNumber: orNumber.trim() || undefined,
+      });
       setOrNumber('');
       setArNumber('');
+      setAmount('');
+      hasAutoFilledAmountRef.current = true; // do not auto-fill over the just-cleared field until a new loan is picked
       void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
       void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
     },
@@ -755,6 +779,86 @@ export function PaymentRecordingPage() {
               {paymentMutation.isPending ? 'Posting…' : 'Confirm Payment'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={successInfo !== null} onOpenChange={(open) => !open && setSuccessInfo(null)}>
+        <DialogContent className="max-w-xl">
+          {successInfo && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  <DialogTitle>Payment recorded</DialogTitle>
+                </div>
+                <DialogDescription>
+                  {successInfo.loanCode} · {successInfo.borrowerName}
+                  {successInfo.orNumber ? ` · OR# ${successInfo.orNumber}` : ''} · {formatDate(successInfo.paidAt)}
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-2xl font-semibold">{formatPeso(successInfo.amount)}</p>
+              {successInfo.response.appliedAllocations.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Applied to:</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell className="text-xs font-medium text-muted-foreground">Installment</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Fees</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Penalty</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Interest</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Principal</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Total</TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {successInfo.response.appliedAllocations.map((a) => (
+                        <TableRow key={a.repaymentInstallmentId}>
+                          <TableCell className="text-xs">
+                            {a.installmentNumber !== null ? `#${a.installmentNumber}` : '—'}
+                            {a.installmentDueDate ? ` · ${formatDate(a.installmentDueDate)}` : ''}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(parseAmount(a.feesApplied))}</TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(parseAmount(a.penaltyApplied))}</TableCell>
+                          <TableCell className="text-right text-xs">{formatPeso(parseAmount(a.interestApplied))}</TableCell>
+                          <TableCell className="text-right text-xs">{formatPeso(parseAmount(a.principalApplied))}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">
+                            {formatPeso(
+                              parseAmount(a.feesApplied) +
+                                parseAmount(a.penaltyApplied) +
+                                parseAmount(a.interestApplied) +
+                                parseAmount(a.principalApplied),
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {parseAmount(successInfo.response.remainder) > 0 && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {formatPeso(parseAmount(successInfo.response.remainder))} was not applied - it exceeds everything currently
+                    due on this loan. Only the applied amount was posted.
+                  </span>
+                </div>
+              )}
+              <div className="rounded-md bg-muted/50 p-3">
+                <p className="text-xs text-muted-foreground">Loan balance after</p>
+                <p className="text-base font-semibold">
+                  {formatPeso(parseAmount(successInfo.response.loanAccount.collectionsBalance))}
+                </p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSuccessInfo(null)}>
+                  Record another payment
+                </Button>
+                <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

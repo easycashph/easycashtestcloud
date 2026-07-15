@@ -176,11 +176,11 @@ borrowers, 2 loan accounts — including `SP-Easy_00001`, one of the 6 loans jus
 session). Flagged that risk explicitly and asked for confirmation before running `--apply`; user
 said to hold off for now. **Not executed.**
 
-## Transaction history sort order bug — diagnosed, not yet fixed
+## Transaction history sort order bug — diagnosed and fixed
 
 User reported (in a separate, since-compacted conversation) that the `/loan-accounts/:id/transactions`
 endpoint's ordering looked wrong — REVERSAL entries appearing above the REPAYMENT they reverse, even
-though the REPAYMENT happened later. Root cause confirmed by re-checking the code today:
+though the REPAYMENT happened later. Root cause:
 
 - `entryDate` on REPAYMENT transactions comes from the "Payment date" field, a **date-only** picker —
   so it's always stored at `00:00:00` regardless of what time the repayment was actually recorded.
@@ -188,17 +188,83 @@ though the REPAYMENT happened later. Root cause confirmed by re-checking the cod
   `06:28:14`).
 - Sorting by `entryDate DESC` alone puts same-day REVERSALs (real time) above same-day REPAYMENTs
   (midnight), even when the REPAYMENT is chronologically the most recent ledger event.
-- Diagnosed fix: add `createdAt` (the true, immutable ledger-entry-creation timestamp) as a secondary
-  sort key, since `entryDate` alone can't be trusted as a tiebreaker (staff can backdate it).
 
-**Not yet applied.** Checked
-[PrismaLoanTransactionRepository.ts:57](../app/backend/src/modules/ledger/infrastructure/PrismaLoanTransactionRepository.ts)
-(`findByLoanAccountId`) in both the main tree and the `claude/exciting-herschel-138865` worktree —
-both still have only `orderBy: { entryDate: 'desc' }`, no `createdAt` tiebreaker. The worktree is an
-unrelated feature branch (Member Details/Activity Logs API), so this fix hasn't landed anywhere.
-**Follow-up:** change to `orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }]`, verify against a
-loan with reversals, and check whether any other transaction-listing query in the codebase has the
-same ordering assumption.
+**Fixed**: added `createdAt` (the true, immutable ledger-entry-creation timestamp) as a secondary sort
+key in both
+[PrismaLoanTransactionRepository.ts](../app/backend/src/modules/ledger/infrastructure/PrismaLoanTransactionRepository.ts)
+(`findByLoanAccountId`, used by the loan detail page) and
+[PrismaReportingRepository.ts](../app/backend/src/modules/reporting/infrastructure/PrismaReportingRepository.ts)
+(`listTransactions`, same ordering assumption found while checking for other occurrences) —
+`orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }]`. Verified against `SML-REG_00362` (the
+loan from the original report): the ₱5,000 REPAYMENT created 06:30:55 now correctly sorts above both
+REVERSALs created 06:28:04/06:28:14. Backend `tsc`/tests clean at the known 574/16 baseline.
+Committed `922f341`, pushed.
+
+## Repayment Schedule table: Total Due column, Paid/Balance fees+penalty bug
+
+User asked to add a "Total Due" column (Principal + Interest + Fees + Penalty due) after Penalty Due
+in `LoanDetailPage`'s Repayment Schedule table — mocked up first via the `visualize` tool, approved,
+then implemented (uses the same live `currentPenaltyOwed`/ADR-050 logic as the existing Penalty Due
+column). Committed `7c3a2e4`.
+
+While explaining the new Balance column's "cumulative paid" formula, found (and the user then spotted
+independently in a screenshot) that **Paid and Balance only ever summed `principalPaid +
+interestPaid`** — never `feesPaid`/`penaltyPaid`, even though the API already returns both. Effect: an
+installment fully paid *including* a fee or penalty component still showed a smaller "Paid" than its
+new "Total Due" (looked incomplete when it wasn't), and the running Balance column stopped decreasing
+once a payment touched fees/penalty (reproduced live: `SML-REG_00359`'s Balance stuck at ₱99,244.44
+across all 4 rows after a ₱35,215.77 payment that included a ₱3,201.43 penalty). Fixed both to sum all
+four `paid` components. Committed `922f341` alongside the sort-order fix (same commit, same file).
+
+## Payment allocation visibility: three linked features (#1 Remaining column, #2 allocation
+## breakdown, #3 post-payment confirmation)
+
+User asked why the "Due" columns never decrease after a payment (by design — `due` is immutable,
+REPAY-3 — but the real gap was "no visibility into which installment(s) a payment actually hit").
+Discussed the current state (no waive/reduce-penalty feature exists yet either — flagged as a future
+ADR, not built this session), then scoped three additive UI features, each mocked up via `visualize`
+and approved before implementation:
+
+1. **Remaining column** (`LoanDetailPage`, Repayment Schedule tab) — `Total Due − Paid` per row and in
+   the Total row, amber/bold when > 0, muted when settled.
+2. **Payment allocation breakdown** (`LoanDetailPage`, Payment History tab) — REPAYMENT rows are now
+   expandable (chevron, click-to-toggle); expanding shows which installment(s) the payment hit and the
+   exact fees/penalty/interest/principal split per installment. Backend: the `payment_allocations`
+   table already existed (written since the 2026-07-11 Reverse Payment feature, but only ever read
+   internally by `ReversePaymentUseCase`) — added a read side: new
+   [ListPaymentAllocationsForTransactionUseCase](../app/backend/src/modules/ledger/application/use-cases/ListPaymentAllocationsForTransactionUseCase.ts),
+   `GET /transactions/:id/allocations` (branch-scoped, H-1), and
+   [PaymentAllocationPresenter](../app/backend/src/modules/ledger/interface/http/presenters/PaymentAllocationPresenter.ts).
+   Migrated/legacy REPAYMENTs (predate allocation recording) show an explanatory empty state instead
+   of an error.
+3. **Post-payment confirmation dialog** (`PaymentRecordingPage`) — replaces the previous silent
+   `setConfirmOpen(false)` on success with a dialog showing the applied amount, per-installment
+   allocation table, an overpayment warning if `remainder > 0`, and the new loan balance, with
+   "Record another payment" / "View loan" actions. Backend: `ProcessPaymentUseCase.execute()` now
+   also returns `appliedAllocations` (enriched with installment number/due date), threaded through
+   `ProcessPaymentResult` → the payments controller → `ProcessPaymentResponse`.
+
+Backend `tsc`/tests clean (574/16 baseline — one controller test updated for the new
+`appliedAllocations` field). Frontend `tsc`/tests clean. Both containers rebuilt; DB-level
+verification only (`payment_allocations` joins confirmed correct on `SML-REG_00362`; new route
+confirmed registered via 401/404 probe) — could not exercise the UI directly (no login credentials
+in this environment). Committed `7c3a2e4` (Total Due) is separate from this feature set, which is
+**not yet committed** — see below.
+
+### Caught immediately by feature #3: a real cashier-error case
+
+First live use of the new confirmation dialog caught a real discrepancy on `SML-REG_00378`: user
+intended to record ₱500.00 but the dialog showed ₱499.98 was actually applied. Verified against the
+DB this was genuine (not a display bug — `loan_transactions.amount = 499.98`,
+`interestComponent = 499.98`, matching `repayment_schedules` installment #2's `interestPaid`), so the
+amount field itself held 499.98 at submit time (input has no hidden rounding/clamping — root cause of
+*why* the field held that value wasn't pinned down: no browser access to reproduce; possibilities
+noted to the user were a leftover unclearsed value or a `step="0.01"` scroll-on-focus nudge on the
+`<input type="number">`). Reversed via a one-off script (`npx tsx`) that called the real
+`ReversePaymentUseCase` directly (same primitive the UI's "Reverse" button uses) rather than raw SQL —
+kept the ledger's `reversesTransactionId` link and audit log intact. Verified: REVERSAL transaction
+correctly linked, installment #2 back to `interestPaid = 0.00` / status `PENDING`. Script deleted
+after use (one-off, not a repeatable maintenance script).
 
 ## Current state
 
@@ -223,7 +289,10 @@ same ordering assumption.
     waiting on the user to pick which report to build first.
   - Pending user decision: whether to run `delete-test-records.ts --apply` against the 6 borrowers
     / 2 loan accounts / 1 loan application identified as test data.
-  - **Transaction history sort bug**: `findByLoanAccountId` in `PrismaLoanTransactionRepository.ts`
-    orders by `entryDate DESC` only; REPAYMENT entries are always midnight (date-only picker) while
-    REVERSAL entries have real timestamps, so reversals can display above the repayment they reverse.
-    Fix diagnosed (add `createdAt` as secondary sort key) but not yet applied — see above.
+  - **Transaction history sort bug**: fixed and committed (`922f341`) — see above.
+  - **Payment allocation visibility (#1/#2/#3)**: implemented and verified at the DB/API level this
+    session but **not yet committed** — needs a commit (and ideally a real UI walkthrough once login
+    access is available) before it's considered done. See above for full scope.
+  - **No waive/reduce-penalty feature yet.** Discussed with the user; would need its own ADR (who can
+    waive, partial vs. full, approval thresholds, whether it applies to already-paid penalty) before
+    implementation — not started.

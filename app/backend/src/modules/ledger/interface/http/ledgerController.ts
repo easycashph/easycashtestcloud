@@ -3,11 +3,14 @@ import { parsePaginationParams, toPaginatedResponse } from '@shared/http/paginat
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope } from '@shared/http/branchScope';
 import type { ListLoanTransactionsForAccountUseCase } from '../../application/use-cases/ListLoanTransactionsForAccountUseCase';
 import type { GetLoanTransactionUseCase } from '../../application/use-cases/GetLoanTransactionUseCase';
+import type { ListPaymentAllocationsForTransactionUseCase } from '../../application/use-cases/ListPaymentAllocationsForTransactionUseCase';
 import { presentLoanTransaction } from './presenters/LoanTransactionPresenter';
+import { presentPaymentAllocation } from './presenters/PaymentAllocationPresenter';
 
 export interface LedgerControllerDeps {
   listLoanTransactionsForAccountUseCase: ListLoanTransactionsForAccountUseCase;
   getLoanTransactionUseCase: GetLoanTransactionUseCase;
+  listPaymentAllocationsForTransactionUseCase: ListPaymentAllocationsForTransactionUseCase;
 }
 
 /**
@@ -40,6 +43,19 @@ export class LedgerController {
       const transaction = await this.deps.getLoanTransactionUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, transaction.branchId); // H-1: reject cross-branch reads for non-global roles.
       res.status(200).json(presentLoanTransaction(transaction));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listAllocations = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const { transaction, allocations } = await this.deps.listPaymentAllocationsForTransactionUseCase.execute(
+        req.params.id as string,
+      );
+      assertBranchAccess(scope, transaction.branchId); // H-1: same rule as the single-transaction read.
+      res.status(200).json({ allocations: allocations.map(presentPaymentAllocation) });
     } catch (error) {
       next(error);
     }

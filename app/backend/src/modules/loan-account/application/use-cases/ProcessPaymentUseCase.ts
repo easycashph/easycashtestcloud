@@ -31,6 +31,16 @@ export interface ProcessPaymentUseCaseDeps {
   profileActivityLogService?: ProfileActivityLogService;
 }
 
+export interface AppliedAllocation {
+  repaymentInstallmentId: string;
+  installmentNumber: number;
+  installmentDueDate: Date;
+  principalApplied: Money;
+  interestApplied: Money;
+  feesApplied: Money;
+  penaltyApplied: Money;
+}
+
 export interface ProcessPaymentResult {
   loanAccount: LoanAccount;
   /**
@@ -42,6 +52,13 @@ export interface ProcessPaymentResult {
    * what to do with it (or does nothing yet, pending that decision).
    */
   remainder: Money;
+  /**
+   * What this payment actually did, per installment touched (zero-amount
+   * allocations already filtered out) — the same rows persisted as
+   * `PaymentAllocation`s, enriched with installment number/due date so the
+   * UI can confirm "where the payment went" without a second fetch.
+   */
+  appliedAllocations: AppliedAllocation[];
 }
 
 /**
@@ -373,6 +390,22 @@ export class ProcessPaymentUseCase {
       });
     }
 
-    return { loanAccount, remainder };
+    const appliedAllocations: AppliedAllocation[] = paymentAllocationsToSave.flatMap((row) => {
+      const installment = installmentsById.get(row.repaymentInstallmentId);
+      if (!installment) return [];
+      return [
+        {
+          repaymentInstallmentId: row.repaymentInstallmentId,
+          installmentNumber: installment.installmentNumber,
+          installmentDueDate: installment.dueDate,
+          principalApplied: row.principalApplied,
+          interestApplied: row.interestApplied,
+          feesApplied: row.feesApplied,
+          penaltyApplied: row.penaltyApplied,
+        },
+      ];
+    });
+
+    return { loanAccount, remainder, appliedAllocations };
   }
 }
