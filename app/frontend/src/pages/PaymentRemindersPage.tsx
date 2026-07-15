@@ -14,9 +14,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
@@ -121,6 +123,7 @@ export function PaymentRemindersPage() {
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<PaymentReminderStatus | 'ALL'>('ALL');
+  const [dueDateRange, setDueDateRange] = React.useState<DateRange>({ from: '', to: '' });
   const [page, setPage] = React.useState(1);
   const [visibleColumns, setVisibleColumns] = React.useState<Record<OptionalColumnKey, boolean>>(loadColumnVisibility);
   React.useEffect(() => {
@@ -139,7 +142,12 @@ export function PaymentRemindersPage() {
     const matchesSearch =
       query.length === 0 || r.borrowerName.toLowerCase().includes(query) || r.loanCode.toLowerCase().includes(query);
     const matchesStatus = status === 'ALL' || r.status === status;
-    return matchesSearch && matchesStatus;
+    // Plain string comparison on the ISO-format dueDate - safe since both sides are YYYY-MM-DD,
+    // which sorts/compares correctly as strings without needing Date parsing.
+    const dueDateOnly = r.dueDate.slice(0, 10);
+    const matchesFrom = !dueDateRange.from || dueDateOnly >= dueDateRange.from;
+    const matchesTo = !dueDateRange.to || dueDateOnly <= dueDateRange.to;
+    return matchesSearch && matchesStatus && matchesFrom && matchesTo;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'dueDate', direction: 'asc' });
 
@@ -148,11 +156,26 @@ export function PaymentRemindersPage() {
   // no-longer-relevant later page.
   React.useEffect(() => {
     setPage(1);
-  }, [search, status, sort.key, sort.direction, reminders.length]);
+  }, [search, status, dueDateRange.from, dueDateRange.to, sort.key, sort.direction, reminders.length]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageRows = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Totals across the whole filtered result (every page), not just the rows currently shown -
+  // otherwise the figure would silently change depending on which page the user happens to be on.
+  const totals = filtered.reduce(
+    (acc, r) => {
+      const components = remainingDueByComponent(r);
+      acc.principal += components.principal;
+      acc.interest += components.interest;
+      acc.penalty += components.penalty;
+      acc.fees += components.fees;
+      acc.amountDue += remainingDue(r);
+      return acc;
+    },
+    { principal: 0, interest: 0, penalty: 0, fees: 0, amountDue: 0 },
+  );
 
   const overdueCount = reminders.filter((r) => r.status === 'LATE').length;
   // Loan Account + Borrower + Status are always visible (2 + 1), plus whichever optional columns are toggled on.
@@ -178,28 +201,40 @@ export function PaymentRemindersPage() {
       <Card>
         <CardHeader className="flex flex-col gap-3">
           <CardTitle className="text-base">Upcoming &amp; Overdue Installments — Search &amp; Filter</CardTitle>
-          <div className="flex flex-col flex-wrap gap-2 sm:flex-row">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search borrower or loan account..."
-                className="w-full pl-8 sm:w-64"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+          <div className="flex flex-col flex-wrap items-end gap-3 sm:flex-row">
+            <div className="space-y-1.5">
+              <Label htmlFor="reminders-search" className="text-xs">
+                Search
+              </Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="reminders-search"
+                  placeholder="Search borrower or loan account..."
+                  className="w-full pl-8 sm:w-64"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as PaymentReminderStatus | 'ALL')}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <Label htmlFor="reminders-status" className="text-xs">
+                Status
+              </Label>
+              <Select value={status} onValueChange={(v) => setStatus(v as PaymentReminderStatus | 'ALL')}>
+                <SelectTrigger id="reminders-status" className="w-full sm:w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DateRangeFilter value={dueDateRange} onChange={setDueDateRange} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="sm:ml-auto">
@@ -306,6 +341,19 @@ export function PaymentRemindersPage() {
                   <TableCell colSpan={visibleColumnCount} className="py-10 text-center text-sm text-muted-foreground">
                     {remindersQuery.isLoading ? 'Loading…' : 'No installments match your filter.'}
                   </TableCell>
+                </TableRow>
+              )}
+              {filtered.length > 0 && (
+                <TableRow className="border-t-2 bg-muted/40 font-semibold hover:bg-muted/40">
+                  <TableCell colSpan={2}>Total ({filtered.length} installment{filtered.length === 1 ? '' : 's'})</TableCell>
+                  {visibleColumns.dueDate && <TableCell />}
+                  {visibleColumns.principalDue && <TableCell className="text-right">{formatPeso(totals.principal)}</TableCell>}
+                  {visibleColumns.interestDue && <TableCell className="text-right">{formatPeso(totals.interest)}</TableCell>}
+                  {visibleColumns.penaltyDue && <TableCell className="text-right">{formatPeso(totals.penalty)}</TableCell>}
+                  {visibleColumns.feesDue && <TableCell className="text-right">{formatPeso(totals.fees)}</TableCell>}
+                  {visibleColumns.amountDue && <TableCell className="text-right">{formatPeso(totals.amountDue)}</TableCell>}
+                  {visibleColumns.progress && <TableCell />}
+                  <TableCell />
                 </TableRow>
               )}
             </TableBody>
