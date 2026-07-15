@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import type {
   CollectionReportRow,
@@ -79,20 +80,44 @@ export class PrismaReportingRepository implements IReportingRepository {
   }
 
   async listTransactions(options: ListReportTransactionsOptions): Promise<TransactionReportRow[]> {
-    const rows = await prisma.loanTransaction.findMany({
-      where: {
-        ...(options.type ? { type: options.type as never } : {}),
-        ...(options.branchId ? { branchId: options.branchId } : {}),
-        entryDate: entryDateFilter(options),
-      },
-      orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }],
-      take: options.limit,
-      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    // Same same-day ordering fix as PrismaLoanTransactionRepository.findByLoanAccountId (see that
+    // method's own doc comment) — REVERSAL/DISBURSEMENT's real time-of-day entryDate otherwise
+    // always outranks a same-day REPAYMENT's date-only (midnight) entryDate.
+    const range = entryDateFilter(options);
+    const typeClause = options.type ? Prisma.sql`AND lt."type" = ${options.type}::"LoanTransactionType"` : Prisma.empty;
+    const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
+    const fromClause = range?.gte ? Prisma.sql`AND lt."entryDate" >= ${range.gte}` : Prisma.empty;
+    const toClause = range?.lte ? Prisma.sql`AND lt."entryDate" <= ${range.lte}` : Prisma.empty;
+    const cursorClause = options.cursor
+      ? Prisma.sql`AND (DATE(lt."entryDate"), lt."createdAt", lt.id) < (
+          SELECT DATE(c."entryDate"), c."createdAt", c.id FROM loan_transactions c WHERE c.id = ${options.cursor}
+        )`
+      : Prisma.empty;
+
+    const orderedIds = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT lt.id
+      FROM loan_transactions lt
+      WHERE 1=1
+      ${typeClause}
+      ${branchClause}
+      ${fromClause}
+      ${toClause}
+      ${cursorClause}
+      ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
+      LIMIT ${options.limit}
+    `);
+
+    if (orderedIds.length === 0) return [];
+
+    const found = await prisma.loanTransaction.findMany({
+      where: { id: { in: orderedIds.map((r) => r.id) } },
       include: {
         loanAccount: { select: { loanCode: true, borrower: { select: { firstName: true, lastName: true } } } },
         branch: { select: { name: true } },
       },
     });
+    const byId = new Map(found.map((row) => [row.id, row]));
+    const rows = orderedIds.map((r) => byId.get(r.id)!);
 
     return rows.map((row) => ({
       id: row.id,

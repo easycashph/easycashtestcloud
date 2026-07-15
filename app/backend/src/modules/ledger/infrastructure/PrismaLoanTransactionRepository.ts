@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { Money } from '@shared/domain/Money';
@@ -52,13 +52,39 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     ctx?: TransactionContext,
   ): Promise<LoanTransaction[]> {
     const client = resolveClient(ctx);
-    const rows = await client.loanTransaction.findMany({
-      where: options.branchId ? { loanAccountId, branchId: options.branchId } : { loanAccountId },
-      orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }],
-      take: options.limit,
-      ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
-    });
-    return rows.map(toDomain);
+
+    // Ordering by raw entryDate (even with the createdAt tiebreaker) still put same-day
+    // REVERSAL/DISBURSEMENT transactions above same-day REPAYMENTs, because REPAYMENT's entryDate
+    // is date-only (midnight, from the "Payment date" picker — see this repository's own history)
+    // while REVERSAL (`reversedAt`, defaults to `new Date()`) and DISBURSEMENT (`activatedAt`)
+    // carry a real time-of-day that always compares as "later" than midnight on the same calendar
+    // day. Truncating entryDate to the calendar day for the primary sort key (raw SQL — Prisma's
+    // orderBy has no DATE() truncation) makes same-day transactions tie there, so createdAt (the
+    // one universally reliable "when this was actually recorded" timestamp) decides the order
+    // within a day, while entryDate still governs cross-day ordering (a backdated transaction
+    // still sits near its stated date, not at the top of the list).
+    const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
+    const cursorClause = options.cursor
+      ? Prisma.sql`AND (DATE(lt."entryDate"), lt."createdAt", lt.id) < (
+          SELECT DATE(c."entryDate"), c."createdAt", c.id FROM loan_transactions c WHERE c.id = ${options.cursor}
+        )`
+      : Prisma.empty;
+
+    const orderedIds = await client.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT lt.id
+      FROM loan_transactions lt
+      WHERE lt."loanAccountId" = ${loanAccountId}
+      ${branchClause}
+      ${cursorClause}
+      ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
+      LIMIT ${options.limit}
+    `);
+
+    if (orderedIds.length === 0) return [];
+
+    const rows = await client.loanTransaction.findMany({ where: { id: { in: orderedIds.map((r) => r.id) } } });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return orderedIds.map((r) => toDomain(byId.get(r.id)!));
   }
 
   async findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null> {

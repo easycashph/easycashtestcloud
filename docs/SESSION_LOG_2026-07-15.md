@@ -189,16 +189,40 @@ though the REPAYMENT happened later. Root cause:
 - Sorting by `entryDate DESC` alone puts same-day REVERSALs (real time) above same-day REPAYMENTs
   (midnight), even when the REPAYMENT is chronologically the most recent ledger event.
 
-**Fixed**: added `createdAt` (the true, immutable ledger-entry-creation timestamp) as a secondary sort
-key in both
+**First pass** (committed `922f341`, pushed): added `createdAt` as a secondary sort key —
+`orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }]` — in both
 [PrismaLoanTransactionRepository.ts](../app/backend/src/modules/ledger/infrastructure/PrismaLoanTransactionRepository.ts)
-(`findByLoanAccountId`, used by the loan detail page) and
+(`findByLoanAccountId`) and
 [PrismaReportingRepository.ts](../app/backend/src/modules/reporting/infrastructure/PrismaReportingRepository.ts)
-(`listTransactions`, same ordering assumption found while checking for other occurrences) —
-`orderBy: [{ entryDate: 'desc' }, { createdAt: 'desc' }]`. Verified against `SML-REG_00362` (the
-loan from the original report): the ₱5,000 REPAYMENT created 06:30:55 now correctly sorts above both
-REVERSALs created 06:28:04/06:28:14. Backend `tsc`/tests clean at the known 574/16 baseline.
-Committed `922f341`, pushed.
+(`listTransactions`). This fixed the originally-reported case but turned out incomplete.
+
+**Second pass, same day**: user noticed REVERSAL and DISBURSEMENT rows still always sorted above
+everything else in the loan detail Payment History tab. Root cause the first pass missed: REPAYMENT
+isn't the only type with a peculiar `entryDate` — REVERSAL's (`reversedAt`, defaults to `new Date()`)
+and DISBURSEMENT's (`activatedAt`) both carry a **real time-of-day**, while REPAYMENT's stays pinned
+at midnight. The `createdAt` tiebreaker never even gets consulted, because raw `entryDate` comparison
+alone already resolves same-day ordering in REVERSAL/DISBURSEMENT's favor (any non-midnight time
+beats midnight on the same calendar day) — no ties to break.
+
+**Real fix**: truncate `entryDate` to the calendar day for the *primary* sort key (raw SQL —
+Prisma's `orderBy` can't express `DATE()` truncation), so same-day transactions of any type tie
+there and `createdAt` (the one universally reliable "when this was actually recorded" timestamp)
+decides the order within a day; cross-day ordering (a backdated transaction) is unaffected. Applied
+to the same two methods, both rewritten to run a raw `SELECT id ... ORDER BY DATE("entryDate") DESC,
+"createdAt" DESC, id DESC` (with the existing branch/type/date-range/cursor filters translated to SQL
+`Prisma.sql` fragments) and reorder a normal `findMany({ where: { id: { in } } })` to match — same
+"fetch ordered ids, then findMany + reorder" pattern already used elsewhere in this codebase
+(`PrismaLoanAccountRepository`, `PrismaDashboardRepository`), rather than hand-mapping raw rows.
+Cursor pagination reimplemented as a keyset tuple comparison
+(`(DATE(entryDate), createdAt, id) < (cursor's own values)`) instead of Prisma's built-in
+`cursor`/`skip`, since that only works with Prisma's own `orderBy`.
+
+Verified against `SML-REG_00362`: the two REVERSALs (created 06:28:04/06:28:14) now sort correctly
+interleaved with same-day REPAYMENTs by real creation order, not pinned above all of them.
+`PrismaLoanTransactionRepository.test.ts` rewritten for the new raw-SQL/id-reorder contract (7/7
+passing); full suite back at the known 576/16 baseline (two extra passes vs. the prior 574 from the
+newly-added allocation-visibility work). Backend rebuilt; both affected routes confirmed still
+registered (401, not 404/500).
 
 ## Repayment Schedule table: Total Due column, Paid/Balance fees+penalty bug
 
