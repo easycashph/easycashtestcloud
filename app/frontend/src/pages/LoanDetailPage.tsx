@@ -649,6 +649,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Fees Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total Due</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Status</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
@@ -689,6 +690,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 </span>
                               )}
                             </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatPeso(num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay)}
+                            </TableCell>
                             <TableCell className="text-right">{formatPeso(num(i.paid.principal) + num(i.paid.interest))}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
@@ -722,6 +726,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             (sum, i) => sum + (i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty)),
                             0,
                           ),
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(
+                          installments.reduce((sum, i) => {
+                            const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                            return sum + num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                          }, 0),
                         )}
                       </TableCell>
                       <TableCell className="text-right">
