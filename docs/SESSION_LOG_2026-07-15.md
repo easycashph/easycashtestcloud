@@ -224,6 +224,35 @@ passing); full suite back at the known 576/16 baseline (two extra passes vs. the
 newly-added allocation-visibility work). Backend rebuilt; both affected routes confirmed still
 registered (401, not 404/500).
 
+## Payment Recording: "Next due" summary, confirmation-dialog "Close" behavior
+
+User asked to show what's due next on the Payment Recording page (so a cashier doesn't need to leave
+the page to check), and reported the summary wasn't refreshing after using the confirmation dialog's
+"Record another payment" button — only a full page reload showed the update. Chain of changes:
+
+1. Added a "Next due" line (oldest unpaid installment, remaining amount) to the loan summary card,
+   next to Collections/Accounting balance.
+2. First fix attempt: switched the post-payment cache refresh from `invalidateQueries` to
+   `refetchQueries` (forces an immediate network refetch rather than only marking the query stale).
+   Committed `9375a30`. User reported it still didn't show up even after this.
+3. Confirmed via the browser's fetched JS bundle that the deployed code *did* contain both the new
+   "Next due" string and `refetchQueries` call — ruled out a stale-build/cache-serving problem.
+4. Added explicit loading/error/empty states to the "Next due" block (previously silently rendered
+   nothing on any of those three conditions, making a real failure indistinguishable from "nothing
+   due") so a future report would surface *why* instead of just "it's blank" — but before that
+   diagnostic path was exercised further, the user decided to simplify instead.
+5. **User's actual resolution**: remove "Record another payment" entirely. Replaced with a **Close**
+   button that calls the existing `changeClient()` handler (resets `selectedBorrower`/`loanId`/search)
+   so it returns straight to the client-search step for the next transaction, instead of trying to
+   keep the same loan's form usable in place. Sidesteps the refresh-reliability question entirely
+   rather than continuing to chase it.
+
+Root cause of the original refresh issue was **not conclusively diagnosed** — plausible candidates
+noted (query-key mismatch, an unobserved fetch error, a race with dialog-close timing) but not
+confirmed against live data (no login access in this environment). Worth revisiting if "Next due"
+turns out to have the same staleness problem on ordinary loan selection (not just post-payment) once
+someone can drive the UI directly.
+
 ## Repayment Schedule table: Total Due column, Paid/Balance fees+penalty bug
 
 User asked to add a "Total Due" column (Principal + Interest + Fees + Penalty due) after Penalty Due
@@ -313,10 +342,18 @@ after use (one-off, not a repeatable maintenance script).
     waiting on the user to pick which report to build first.
   - Pending user decision: whether to run `delete-test-records.ts --apply` against the 6 borrowers
     / 2 loan accounts / 1 loan application identified as test data.
-  - **Transaction history sort bug**: fixed and committed (`922f341`) — see above.
-  - **Payment allocation visibility (#1/#2/#3)**: implemented and verified at the DB/API level this
-    session but **not yet committed** — needs a commit (and ideally a real UI walkthrough once login
-    access is available) before it's considered done. See above for full scope.
+  - **Transaction history sort bug**: fixed in two passes, both committed (`922f341`, `94424e2`) —
+    see above.
+  - **Payment allocation visibility (#1/#2/#3)**: committed (`d01ac67`) — see above.
   - **No waive/reduce-penalty feature yet.** Discussed with the user; would need its own ADR (who can
     waive, partial vs. full, approval thresholds, whether it applies to already-paid penalty) before
     implementation — not started.
+  - **Payment Recording "Next due" refresh issue**: root cause not conclusively found (see its own
+    section above) — worked around by removing the "Record another payment" quick-succession flow
+    entirely rather than continuing to chase the staleness bug. Revisit if "Next due" shows the same
+    problem on ordinary loan selection once UI access is available.
+  - **No login credentials available in this environment all session** — every UI-observable change
+    this session was verified at the DB/API/build level (raw SQL checks, `curl` route-registration
+    probes, `tsc`/test suites, inspecting the served JS bundle) rather than by driving the actual
+    browser UI. A real click-through pass is worth doing once credentials are available, especially
+    for the newer payment-allocation-visibility and Payment Recording changes.

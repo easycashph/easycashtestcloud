@@ -486,22 +486,26 @@ export function PaymentRecordingPage() {
                     <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
                     {installmentsQuery.isLoading ? (
                       <p className="mt-2 border-t pt-2">Loading next due amount…</p>
+                    ) : installmentsQuery.isError ? (
+                      <p className="mt-2 border-t pt-2 text-destructive">
+                        Could not load the repayment schedule ({installmentsQuery.error instanceof ApiError ? installmentsQuery.error.message : 'unknown error'}).
+                      </p>
+                    ) : unpaidInstallments.length > 0 ? (
+                      <div className="mt-2 border-t pt-2">
+                        {(() => {
+                          const oldest = unpaidInstallments[0]!;
+                          const remaining = remainingDue(oldest);
+                          const totalRemaining = remaining.principal + remaining.interest + remaining.penalty + remaining.fees;
+                          return (
+                            <p>
+                              <span className="font-medium text-foreground">Next due:</span> Installment #{oldest.installmentNumber} ·{' '}
+                              {formatDate(oldest.dueDate)} · <span className="font-medium text-foreground">{formatPeso(totalRemaining)}</span>
+                            </p>
+                          );
+                        })()}
+                      </div>
                     ) : (
-                      unpaidInstallments.length > 0 && (
-                        <div className="mt-2 border-t pt-2">
-                          {(() => {
-                            const oldest = unpaidInstallments[0]!;
-                            const remaining = remainingDue(oldest);
-                            const totalRemaining = remaining.principal + remaining.interest + remaining.penalty + remaining.fees;
-                            return (
-                              <p>
-                                <span className="font-medium text-foreground">Next due:</span> Installment #{oldest.installmentNumber} ·{' '}
-                                {formatDate(oldest.dueDate)} · <span className="font-medium text-foreground">{formatPeso(totalRemaining)}</span>
-                              </p>
-                            );
-                          })()}
-                        </div>
-                      )
+                      <p className="mt-2 border-t pt-2">No unpaid installments remain on this loan.</p>
                     )}
                   </div>
                 ) : (
@@ -875,8 +879,14 @@ export function PaymentRecordingPage() {
                 </p>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSuccessInfo(null)}>
-                  Record another payment
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSuccessInfo(null);
+                    changeClient();
+                  }}
+                >
+                  Close
                 </Button>
                 <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>
               </DialogFooter>
