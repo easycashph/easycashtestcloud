@@ -441,6 +441,53 @@ Fixed by joining `penaltyOverrideByUserId`'s name in the repository's read path
 frontend `tsc`/tests clean (updated two existing tests for the new field); containers rebuilt,
 route/bundle re-verified. Committed `0338f90`.
 
+## Legacy data investigation: Net Proceeds / Anticipated Disbursement Date, and a real migration gap found
+
+User asked to check the legacy MongoDB export (`legacy/MongoDB dump/extracted/07092026_ 92543/
+db-easycash/`, NOT `legacy/db-exports` which is actually a Postgres backup of *this* system, not
+SDevTech source) for where Net Amount/Proceeds and Anticipated Disbursement Date live.
+
+**Findings:**
+- `monthly_loan_releases` collection has `totalNetAmount` — confirmed exact source of the Excel
+  report's "Total Net Amount" column (verified the formula: loanAmount − sum of fees = totalNetAmount
+  for the sample row), matching our existing `LoanAccount.netProceeds`.
+- `document_templates`' Disclosure Statement HTML uses a Mambu merge-field `NET_LOAN_DISBURSED` for
+  "3. NET PROCEEDS OF LOAN" — same concept, computed at doc-gen time in the legacy system.
+- `loan_accounts.expectedDisbursementDate` / `disbursements.expected_disbursement_date` — confirmed
+  source of `LoanAccount.anticipatedDisbursementDate`.
+- **Bonus finding, corrects an earlier "unconfirmed" note**: the same Disclosure Statement's
+  "5. EFFECTIVE INTEREST RATE" section uses `CF:8a8e8f5e604d6aff01604eb4d8590425` — a genuine Mambu
+  custom field (3,501 populated records in `custom_field_values`, values like 12.12%/12.75%/9.62%,
+  distinct from and higher than `contractualInterestRate`). The earlier assumption ("likely just
+  needs `{InterestRate}` per ADR-010, not a new field") was **wrong** — this is real, unmigrated
+  legacy data with no current schema field. Flagged, not yet actioned.
+
+**Follow-up question this surfaced, investigated and fixed**: user asked whether interest-rate
+fields are as blank in our system as legacy's own gaps. Checked both sides:
+- Legacy `loan_accounts`: `interestRate` always populated (1805/1805); `addOnRate` only for
+  622/1805 (34%) — no separate "contractual rate" field exists at all in the source.
+- Our DB: `interestRate` correctly 100% migrated (1784/1784) — this is the field
+  `ActivateLoanUseCase` actually uses to run the amortization schedule
+  (`monthlyContractualRate = loanAccount.interestRate`), so no calculation-engine impact from any of
+  this. But `addOnInterestRate`/`contractualInterestRate` (display-only fields — Create Loan Account
+  form, Loan Releases Report columns) had only **1** row populated out of 1,784 — and that one row
+  turned out to be the user's own test loan (`SML-REG_00378`, no `legacyId`), not a real migrated
+  record. **Root cause**: `migrate-legacy-data.ts`'s loan account `create` payload never set either
+  field at all — confirmed by reading the script directly, not inferred.
+
+**Fix**: new `scripts/backfill-loan-interest-rates.ts` (kept, not one-off — same precedent as other
+retained backfill scripts), two backfills per the user's explicit decision:
+1. `addOnInterestRate` ← legacy `addOnRate`, keyed by `legacyId` — 611 of 622 legacy-sourced values
+   applied (11 belonged to loans that were themselves skipped during the original migration, e.g.
+   unresolved borrower — consistent, not a new gap). ~1,172 loans remain null because legacy itself
+   has no value for them — not fabricated.
+2. `contractualInterestRate` ← straight copy of that loan's own `interestRate` (legacy has no
+   separate source; the real contractual rate already migrated correctly into `interestRate`) — all
+   1,783 migrated loans backfilled.
+
+Dry-run verified before `--apply`; DB re-checked after (`addOnInterestRate` 1→612,
+`contractualInterestRate` 1→1,784, sample rows spot-checked). `tsc` clean. **Not yet committed.**
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
@@ -465,8 +512,14 @@ route/bundle re-verified. Committed `0338f90`.
   - `DocumentTemplateMapping` still empty for ~28 non-SML/SL/BL loan products.
   - `ACKNOWLEDGEMENT_RECEIPT.docx` deliberately has no placeholders yet (mostly manual/paper data
     not tracked in this system) — user's choice, not a gap to close.
-  - `DISCLOSURE_STATEMENT`'s "Effective Interest Rate" (§5) placeholder still not added in Word
-    (likely just needs `{InterestRate}` per ADR-010, not a new backend field — unconfirmed).
+  - **`DISCLOSURE_STATEMENT`'s "Effective Interest Rate" (§5)** — corrected, see the legacy
+    investigation section above: this is a genuine, distinct legacy Mambu custom field
+    (`CF:8a8e...`, 3,501 populated records, NOT the same as `contractualInterestRate`), never
+    migrated into the current schema. Needs a decision: add a new `LoanAccount` field + backfill
+    script, or some other resolution — not yet actioned.
+  - **`addOnInterestRate`/`contractualInterestRate` migration gap** — found and fixed this session
+    (`scripts/backfill-loan-interest-rates.ts`, kept as a retained migration-history script); see its
+    own section above. **Backfill applied to the DB but not yet committed to git.**
   - Loan Portfolio Health Venn → proportional-bar redesign: mockup shown and liked in concept, not
     yet implemented.
   - **Report generation (Excel)**: 1 of 11 legacy reports done (Loan Releases Report, `be3e312`) —
