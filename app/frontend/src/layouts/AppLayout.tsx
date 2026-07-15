@@ -6,9 +6,7 @@ import {
   Menu,
   Users,
   Package,
-  CalendarClock,
-  PiggyBank,
-  Receipt,
+  FileSpreadsheet,
   ShieldCheck,
   ScrollText,
   FileCheck2,
@@ -37,9 +35,7 @@ const NAV_GROUPS = [
     label: 'Home',
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/reports/loans', label: 'Loan Report', icon: CalendarClock, end: false },
-      { to: '/reports/collections', label: 'Collection Report', icon: PiggyBank, end: false },
-      { to: '/reports/transactions', label: 'Transaction Report', icon: Receipt, end: false },
+      { to: '/reports', label: 'Reports', icon: FileSpreadsheet, end: false },
     ],
   },
   {

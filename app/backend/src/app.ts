@@ -123,7 +123,9 @@ import { createReportingRouter } from '@modules/reporting/interface/http/reporti
 import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/use-cases/GetLoanOriginationReportUseCase';
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
 import { ListReportTransactionsUseCase } from '@modules/reporting/application/use-cases/ListReportTransactionsUseCase';
+import { GetLoanReleasesReportUseCase } from '@modules/reporting/application/use-cases/GetLoanReleasesReportUseCase';
 import { PrismaReportingRepository } from '@modules/reporting/infrastructure/PrismaReportingRepository';
+import { ExcelJsLoanReleasesReportWriter } from '@modules/reporting/infrastructure/ExcelJsLoanReleasesReportWriter';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
 import { PrismaFinancialAuditLogger } from '@shared/infrastructure/PrismaFinancialAuditLogger';
 import { PrismaIdempotencyKeyStore } from '@shared/infrastructure/PrismaIdempotencyKeyStore';
@@ -580,6 +582,8 @@ export function createApp(): Express {
       getLoanOriginationReportUseCase: new GetLoanOriginationReportUseCase({ reportingRepository }),
       getCollectionReportUseCase: new GetCollectionReportUseCase({ reportingRepository }),
       listReportTransactionsUseCase: new ListReportTransactionsUseCase({ reportingRepository }),
+      getLoanReleasesReportUseCase: new GetLoanReleasesReportUseCase({ reportingRepository }),
+      loanReleasesReportWriter: new ExcelJsLoanReleasesReportWriter(),
     },
     tokenService,
   );

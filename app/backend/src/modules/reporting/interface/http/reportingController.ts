@@ -5,13 +5,17 @@ import { ValidationError } from '@shared/errors/DomainError';
 import type { GetLoanOriginationReportUseCase } from '../../application/use-cases/GetLoanOriginationReportUseCase';
 import type { GetCollectionReportUseCase } from '../../application/use-cases/GetCollectionReportUseCase';
 import type { ListReportTransactionsUseCase } from '../../application/use-cases/ListReportTransactionsUseCase';
+import type { GetLoanReleasesReportUseCase } from '../../application/use-cases/GetLoanReleasesReportUseCase';
 import type { ReportGranularity } from '../../application/ports/IReportingRepository';
+import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
 import { presentTransactionReportRow } from './presenters/ReportPresenter';
 
 export interface ReportingControllerDeps {
   getLoanOriginationReportUseCase: GetLoanOriginationReportUseCase;
   getCollectionReportUseCase: GetCollectionReportUseCase;
   listReportTransactionsUseCase: ListReportTransactionsUseCase;
+  getLoanReleasesReportUseCase: GetLoanReleasesReportUseCase;
+  loanReleasesReportWriter: ExcelJsLoanReleasesReportWriter;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -78,6 +82,22 @@ export class ReportingController {
         branchId: resolveBranchFilter(scope),
       });
       res.status(200).json(toPaginatedResponse(rows.map(presentTransactionReportRow), limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  loanReleasesXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const buffer = await this.deps.loanReleasesReportWriter.write(rows);
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Monthly Loan Releases.xlsx"');
+      res.status(200).send(buffer);
     } catch (error) {
       next(error);
     }

@@ -12,6 +12,7 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/loan-origination', requireAuth, controller.loanOrigination);
   router.get('/reports/collections', requireAuth, controller.collections);
   router.get('/reports/transactions', requireAuth, controller.transactions);
+  router.get('/reports/loan-releases.xlsx', requireAuth, controller.loanReleasesXlsx);
 
   return router;
 }

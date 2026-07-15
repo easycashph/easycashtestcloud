@@ -5,6 +5,7 @@ import type {
   DateRangeFilter,
   IReportingRepository,
   ListReportTransactionsOptions,
+  LoanReleaseReportRow,
   OriginationReportRow,
   ReportGranularity,
   TransactionReportRow,
@@ -138,4 +139,90 @@ export class PrismaReportingRepository implements IReportingRepository {
       comment: row.comment ?? null,
     }));
   }
+
+  async getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]> {
+    const loans = await prisma.loanAccount.findMany({
+      where: {
+        activatedAt: { not: null, ...entryDateFilter(filter) },
+        ...(filter.branchId ? { branchId: filter.branchId } : {}),
+      },
+      include: {
+        borrower: { include: { incomeDetail: true } },
+        loanProductVersion: { include: { loanProduct: true } },
+      },
+      orderBy: { activatedAt: 'desc' },
+    });
+    if (loans.length === 0) return [];
+
+    // Address has no Prisma relation to Borrower (polymorphic ownerType/ownerId) — same bulk-fetch-
+    // then-group pattern as PrismaBorrowerRepository, not a per-loan query.
+    const borrowerIds = [...new Set(loans.map((loan) => loan.borrowerId))];
+    const addressRows = await prisma.address.findMany({ where: { ownerType: 'BORROWER', ownerId: { in: borrowerIds } } });
+    const addressByBorrowerId = new Map<string, (typeof addressRows)[number][]>();
+    for (const address of addressRows) {
+      const list = addressByBorrowerId.get(address.ownerId) ?? [];
+      list.push(address);
+      addressByBorrowerId.set(address.ownerId, list);
+    }
+
+    const loanIds = loans.map((loan) => loan.id);
+    const scheduleRows = await prisma.repaymentSchedule.findMany({
+      where: { loanAccountId: { in: loanIds } },
+      orderBy: { installmentNumber: 'asc' },
+    });
+    const scheduleByLoanId = new Map<string, (typeof scheduleRows)[number][]>();
+    for (const installment of scheduleRows) {
+      const list = scheduleByLoanId.get(installment.loanAccountId) ?? [];
+      list.push(installment);
+      scheduleByLoanId.set(installment.loanAccountId, list);
+    }
+
+    return loans.map((loan) => {
+      const schedule = scheduleByLoanId.get(loan.id) ?? [];
+      const totalInterest = schedule.reduce((sum, installment) => sum + Number(installment.interestDue), 0);
+      const maturityDate = schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null;
+      const firstInstallment = schedule[0];
+      const amortization = firstInstallment ? Number(firstInstallment.principalDue) + Number(firstInstallment.interestDue) : 0;
+      const address = addressByBorrowerId.get(loan.borrowerId)?.[0];
+
+      return {
+        clientId: loan.borrowerId,
+        clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+        address: formatAddress(address),
+        product: loan.loanProductVersion.loanProduct.name,
+        accountId: loan.loanCode,
+        agencyCompany: loan.borrower.incomeDetail?.employerName ?? '',
+        disbursementDate: loan.activatedAt!,
+        loanCreated: loan.createdAt,
+        maturityDate,
+        term: loan.installmentCount,
+        nthLoan: loan.borrower.loanCycle,
+        newOrRenew: loan.borrower.loanCycle > 1 ? 'Renew' : 'New',
+        firstRepaymentDate: loan.firstRepaymentDate,
+        amortization: amortization.toFixed(2),
+        loanAmount: loan.principalAmount.toString(),
+        totalInterest: totalInterest.toFixed(2),
+        totalOB: (Number(loan.principalAmount) + totalInterest).toFixed(2),
+        addOnInterestRate: loan.addOnInterestRate?.toString() ?? null,
+        contractualInterestRate: loan.contractualInterestRate?.toString() ?? null,
+        advanceInterestFee: loan.advanceInterestFee.toString(),
+        processingFee: loan.processingFee.toString(),
+        documentationFee: loan.docStampFee.toString(),
+        outstandingLoanBalance: loan.outstandingBalancePayoff.toString(),
+        accountManagementFee: loan.accountManagementFee.toString(),
+        insurance: loan.insuranceFee.toString(),
+        notarial: loan.notarialFee.toString(),
+        webFee: loan.webFee.toString(),
+        totalNetAmount: loan.netProceeds.toString(),
+      };
+    });
+  }
+}
+
+/** Same "first address on file, comma-joined" convention as `LoanDocumentMergeDataResolver.formatAddress` / `ClientProfilePage.tsx`'s `existingAddressLine`. */
+function formatAddress(address: { houseUnitNumber?: string | null; street?: string | null; barangay?: string | null; cityMunicipality?: string | null; province?: string | null } | undefined): string {
+  if (!address) return '';
+  return [address.houseUnitNumber, address.street, address.barangay, address.cityMunicipality, address.province]
+    .filter((part): part is string => Boolean(part))
+    .join(', ');
 }

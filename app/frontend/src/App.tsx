@@ -16,6 +16,8 @@ import { StatementOfAccountPage } from '@/pages/StatementOfAccountPage';
 import { LoanReportPage } from '@/pages/LoanReportPage';
 import { CollectionReportPage } from '@/pages/CollectionReportPage';
 import { TransactionReportPage } from '@/pages/TransactionReportPage';
+import { LoanReleasesReportPage } from '@/pages/LoanReleasesReportPage';
+import { ReportsHubPage } from '@/pages/ReportsHubPage';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { SettingsPage } from '@/pages/SettingsPage';
@@ -55,9 +57,11 @@ export default function App() {
         <Route path="clients/:borrowerId" element={<ClientProfilePage />} />
         <Route path="products" element={<LoanProductsPage />} />
         <Route path="payments" element={<PaymentRecordingPage />} />
+        <Route path="reports" element={<ReportsHubPage />} />
         <Route path="reports/loans" element={<LoanReportPage />} />
         <Route path="reports/collections" element={<CollectionReportPage />} />
         <Route path="reports/transactions" element={<TransactionReportPage />} />
+        <Route path="reports/loan-releases" element={<LoanReleasesReportPage />} />
         <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<MemberListPage />} />
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />

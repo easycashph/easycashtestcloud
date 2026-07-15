@@ -319,6 +319,59 @@ kept the ledger's `reversesTransactionId` link and audit log intact. Verified: R
 correctly linked, installment #2 back to `interestPaid = 0.00` / status `PENDING`. Script deleted
 after use (one-off, not a repeatable maintenance script).
 
+## Report generation: Loan Releases Report (first of 11 scoped legacy reports)
+
+Picked up the report-generation feature scoped-but-not-started earlier this session (11 legacy
+`.xlsx` samples, `C:\Users\EASYCASH\Downloads\Reports\`). Started with **Monthly Loan Releases**,
+per CLAUDE.md's incremental-work rule (one report fully end-to-end before repeating the pattern).
+
+1. **Column mapping** — parsed the legacy `Monthly-Loan-Releases (2).xlsx` sample directly (raw
+   OOXML `sharedStrings.xml`/`sheet1.xml`, via a Node one-liner, not a library) to get the exact
+   28-column header order and sample values. Mapped every column against the current schema; most
+   matched existing `LoanAccount` fields exactly (`netProceeds` → "Total Net Amount",
+   `outstandingBalancePayoff` → "Outstanding Loan Balance", `docStampFee` → "Documentation Fee",
+   confirming those fields' own doc comments). Two columns (`Nth Loan`, `New/Renew`) had no explicit
+   schema field — asked the user rather than guessing (CLAUDE.md "never invent business rules"):
+   confirmed `Nth Loan` = `Borrower.loanCycle`, `New/Renew` = "Renew" when `loanCycle > 1` else
+   "New". Confirmed scope: date-range filter on Disbursement Date, `.xlsx` via `exceljs` in a new
+   `reporting`-module read path (not a new module).
+2. **Backend**: `LoanReleaseReportRow` + `getLoanReleasesReport()` added to `IReportingRepository`;
+   implemented in `PrismaReportingRepository` (bulk-fetch address/schedule rows, same
+   fetch-then-group pattern as `PrismaBorrowerRepository` — `Address` has no Prisma relation,
+   polymorphic `ownerType`/`ownerId`). New `ExcelJsLoanReleasesReportWriter` (real `.xlsx`, currency/
+   date formatting, totals row with `SUM()` formulas) — installed `exceljs` (`^4.4.0`). New route
+   `GET /reports/loan-releases.xlsx?from=&to=`.
+3. **Frontend**: new `LoanReleasesReportPage` — date range filter + "Download report" button
+   (`downloadFile()`, same pattern as loan document downloads), no in-page table since the whole
+   point is the downloadable file.
+4. **Verification** (no login access): wrote a one-off script calling the real use case + writer
+   directly against live data — confirmed against **1,784 real disbursed loans**, header order
+   exactly matches the legacy file, `New/Renew`/`Nth Loan` derivation correct (spot-checked a
+   `loanCycle=3` loan → "Renew"), totals row formulas present. Script deleted after use. Noted but
+   did not fix: some borrowers' addresses show raw PSGC codes instead of decoded names (pre-existing
+   data-quality issue, same one `fix-coded-addresses.ts` was written for — only affects some rows).
+
+## Reports navigation: hub page + Dashboard preview cards
+
+User anticipated sidebar clutter as more of the 11 reports get built and asked for a better
+structure — mocked up (via `visualize`) and approved before implementing:
+
+1. **Reports hub** (`ReportsHubPage`, route `/reports`) — replaces the 4 individual sidebar report
+   links with one "Reports" entry. Cards grouped into categories mirroring the legacy system's own
+   report menu (discovered while categorizing the 11 samples): **General** (the 3 pre-existing report
+   pages, not 1:1 legacy replacements), **Accounting**, **Collection**, **Operation**. Live reports
+   are clickable; the 7 not-yet-built ones show a "Coming soon" badge, non-clickable.
+2. **Dashboard preview cards** — user pointed out Loan Report/Collection Report are chart-heavy and
+   asked about surfacing them on the Dashboard instead. Recommended (and the user agreed, after
+   seeing a full-dashboard-context mockup) a middle ground over a full move: small sparkline preview
+   cards (last 30 days, no axes/table/filters) with a link to the full report, added to
+   `DashboardPage` as a new "Reports" card, reusing the same DAILY endpoints
+   `LoanReportPage`/`CollectionReportPage` already call — no new backend work. Added English/Filipino
+   translation keys for the new labels.
+
+Both frontend-only; backend/frontend `tsc`/tests clean throughout. Verified by inspecting the served
+JS bundle for the new strings (no login access this session either).
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with

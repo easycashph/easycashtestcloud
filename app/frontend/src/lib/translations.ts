@@ -36,6 +36,10 @@ export const translations = {
     'dashboard.categoryBreakdown.title': 'Portfolio Breakdown by Loan Category',
     'dashboard.portfolioHealth.title': 'Loan Portfolio Health',
     'dashboard.recommendation.title': 'Recommendation',
+    'dashboard.reportsPreview.title': 'Reports',
+    'dashboard.reportsPreview.loanReleases': 'Loan Releases (30 days)',
+    'dashboard.reportsPreview.collections': 'Collections (30 days)',
+    'dashboard.reportsPreview.viewReport': 'Full report',
   },
   fil: {
     'settings.title': 'Mga Setting',
@@ -64,6 +68,10 @@ export const translations = {
     'dashboard.categoryBreakdown.title': 'Portfolio Breakdown ayon sa Loan Category',
     'dashboard.portfolioHealth.title': 'Kalusugan ng Loan Portfolio',
     'dashboard.recommendation.title': 'Rekomendasyon',
+    'dashboard.reportsPreview.title': 'Mga Report',
+    'dashboard.reportsPreview.loanReleases': 'Loan Releases (30 araw)',
+    'dashboard.reportsPreview.collections': 'Collections (30 araw)',
+    'dashboard.reportsPreview.viewReport': 'Buong report',
   },
 } as const satisfies Record<Language, Record<string, string>>;
 

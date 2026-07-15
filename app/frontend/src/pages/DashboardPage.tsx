@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { ComponentType } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Bar,
@@ -41,6 +42,7 @@ import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useLanguage } from '@/lib/languageContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
@@ -358,6 +360,38 @@ function SummaryCard({
   );
 }
 
+/** Glance-able chart + summary + link, used by the Reports preview section - sparkline only, no axes/legend/tooltip, since the full detail lives on the linked report page. */
+function ReportPreviewCard({
+  title,
+  to,
+  viewLabel,
+  summary,
+  children,
+}: {
+  title: string;
+  to: string;
+  viewLabel: string;
+  summary?: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <div className="rounded-lg border bg-secondary/20 p-3">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-sm font-medium">{title}</p>
+        <Link to={to} className="text-xs text-primary hover:underline">
+          {viewLabel} →
+        </Link>
+      </div>
+      <p className="mb-2 text-xs text-muted-foreground">{summary ?? '…'}</p>
+      <div className="h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          {children}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function MetricItem({
   term,
   definition,
@@ -404,6 +438,24 @@ export function DashboardPage() {
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: () => apiClient.get<DashboardSummary>('/dashboard/summary'),
+  });
+
+  // Reports preview (2026-07-15 user request): a glance-able summary of Loan Releases/Collections
+  // with a link to the full report page, not a full replacement of those pages - same DAILY
+  // endpoints LoanReportPage/CollectionReportPage already call, just the last 30 days, no filters.
+  const reportsPreviewFrom = React.useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const loanReleasesPreviewQuery = useQuery({
+    queryKey: ['reports', 'loan-origination', 'DAILY', reportsPreviewFrom, 'preview'],
+    queryFn: () =>
+      apiClient.get<{ items: OriginationReportRow[] }>(`/reports/loan-origination?granularity=DAILY&from=${reportsPreviewFrom}`),
+  });
+  const collectionsPreviewQuery = useQuery({
+    queryKey: ['reports', 'collections', 'DAILY', reportsPreviewFrom, 'preview'],
+    queryFn: () => apiClient.get<{ items: CollectionReportRow[] }>(`/reports/collections?granularity=DAILY&from=${reportsPreviewFrom}`),
   });
 
   // Full portfolio, fetched once and aggregated client-side - same pattern LoanListPage already
@@ -881,6 +933,46 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('dashboard.reportsPreview.title')}</CardTitle>
+          <CardDescription>Last 30 days - open the full report for filters, tables, and other periods.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <ReportPreviewCard
+            title={t('dashboard.reportsPreview.loanReleases')}
+            to="/reports/loans"
+            viewLabel={t('dashboard.reportsPreview.viewReport')}
+            summary={
+              loanReleasesPreviewQuery.data
+                ? `${loanReleasesPreviewQuery.data.items.reduce((sum, r) => sum + r.loansOriginated, 0)} loans · ${formatPeso(
+                    loanReleasesPreviewQuery.data.items.reduce((sum, r) => sum + Number(r.amountOriginated), 0),
+                  )}`
+                : undefined
+            }
+          >
+            <LineChart data={loanReleasesPreviewQuery.data?.items ?? []}>
+              <Line type="monotone" dataKey="loansOriginated" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ReportPreviewCard>
+
+          <ReportPreviewCard
+            title={t('dashboard.reportsPreview.collections')}
+            to="/reports/collections"
+            viewLabel={t('dashboard.reportsPreview.viewReport')}
+            summary={
+              collectionsPreviewQuery.data
+                ? formatPeso(collectionsPreviewQuery.data.items.reduce((sum, r) => sum + Number(r.amountCollected), 0))
+                : undefined
+            }
+          >
+            <BarChart data={collectionsPreviewQuery.data?.items ?? []}>
+              <Bar dataKey={(d: CollectionReportRow) => Number(d.amountCollected)} fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ReportPreviewCard>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
