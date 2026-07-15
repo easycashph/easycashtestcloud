@@ -216,6 +216,12 @@ export function PaymentRecordingPage() {
     .filter((i) => i.status !== 'PAID')
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
+  // Guards the auto-fill effect below so it only ever fires once per loan selection — without
+  // this, checking merely `amount === ''` couldn't tell "just switched loans, never filled in"
+  // apart from "staff manually cleared the field via backspace", so clearing the amount to type a
+  // different figure kept snapping it right back to the auto-filled total (2026-07-15 bug report).
+  const hasAutoFilledAmountRef = React.useRef(false);
+
   // Clears the previous loan's amount immediately on switch, so it never briefly shows a stale
   // figure while the new loan's schedule is still loading. Also clears OR#/AR# — a receipt number
   // is specific to one payment, never reused across a different loan selection.
@@ -223,15 +229,18 @@ export function PaymentRecordingPage() {
     setAmount('');
     setOrNumber('');
     setArNumber('');
+    hasAutoFilledAmountRef.current = false;
   }, [loanId]);
   // Auto-fills once the oldest unpaid installment's real total due is known — the amount staff
-  // will most commonly want to collect. Only fires while amount is still blank (the effect above
-  // guarantees that's "just switched loans", not "staff already typed something").
+  // will most commonly want to collect. Only fires once per loan selection (guarded by the ref
+  // above), not merely "whenever amount happens to be blank" — otherwise staff could never
+  // deliberately clear the field to type a different amount.
   React.useEffect(() => {
-    if (amount !== '' || unpaidInstallments.length === 0) return;
+    if (hasAutoFilledAmountRef.current || amount !== '' || unpaidInstallments.length === 0) return;
     const oldest = remainingDue(unpaidInstallments[0]!);
     const total = oldest.principal + oldest.interest + oldest.penalty + oldest.fees;
     setAmount(total.toFixed(2));
+    hasAutoFilledAmountRef.current = true;
   }, [amount, unpaidInstallments]);
 
   const paymentAmount = Number.parseFloat(amount) || 0;
