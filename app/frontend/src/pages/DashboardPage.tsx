@@ -916,15 +916,18 @@ export function DashboardPage() {
                           <div className="h-full bg-destructive" style={{ width: `${pct(entry.matured)}%` }} />
                         </div>
                       </div>
-                      <div className="mt-1 flex gap-2.5 text-[10.5px] tabular-nums">
+                      <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px] tabular-nums">
                         <span className="text-success">
-                          <b className="font-semibold">{pct(entry.active)}%</b> Active ({entry.activeCount})
+                          <b className="font-semibold">{pct(entry.active)}%</b> Active ({entry.activeCount}){' '}
+                          <span className="opacity-80">· {formatPeso(entry.active)}</span>
                         </span>
                         <span className="text-warning">
-                          <b className="font-semibold">{pct(entry.pastDue)}%</b> Past Due ({entry.pastDueCount})
+                          <b className="font-semibold">{pct(entry.pastDue)}%</b> Past Due ({entry.pastDueCount}){' '}
+                          <span className="opacity-80">· {formatPeso(entry.pastDue)}</span>
                         </span>
                         <span className="text-destructive">
-                          <b className="font-semibold">{pct(entry.matured)}%</b> Matured ({entry.maturedCount})
+                          <b className="font-semibold">{pct(entry.matured)}%</b> Matured ({entry.maturedCount}){' '}
+                          <span className="opacity-80">· {formatPeso(entry.matured)}</span>
                         </span>
                       </div>
                     </div>
