@@ -569,8 +569,27 @@ export function DashboardPage() {
       loans: filteredDelinquentLoans,
     });
 
-  const openVennSegment = (segment: PortfolioHealthSegment) =>
-    setDrillDown({ ...VENN_SEGMENT_META[segment], loans: filteredPortfolioHealth[segment].loans });
+  const openVennSegment = (segment: PortfolioHealthSegment) => {
+    // `PortfolioLoanRow.status` is the raw, legacy-migrated LoanAccountStatus field - it never
+    // transitions to/from 'ACTIVE_IN_ARREARS' in this codebase, so plenty of loans the live
+    // overdueLoanIds/maturedLoanIds computation correctly buckets as "good" still carry a stale
+    // 'ACTIVE_IN_ARREARS' status, and vice versa. Left as-is, LoanDrillDownDialog's status badge
+    // (which falls back to the raw `status` field whenever `isMatured` is false) would show
+    // "Active in Arrears" badges inside the "Good" list and "Active" badges inside the "In
+    // Arrears" list - contradicting the very bucket the row is listed under. Override the display
+    // status to match the live bucket the loan was actually just classified into; "matured" needs
+    // no override since LoanStatusBadge already shows "Matured" whenever isMatured is true,
+    // regardless of `status`.
+    const displayStatusOverride: Partial<Record<PortfolioHealthSegment, LoanAccountStatus>> = {
+      good: 'ACTIVE',
+      activeInArrears: 'ACTIVE_IN_ARREARS',
+    };
+    const override = displayStatusOverride[segment];
+    const loans = override
+      ? filteredPortfolioHealth[segment].loans.map((loan) => ({ ...loan, status: override }))
+      : filteredPortfolioHealth[segment].loans;
+    setDrillDown({ ...VENN_SEGMENT_META[segment], loans });
+  };
 
   const openCategorySlice = (slice: PortfolioCategorySlice) =>
     setDrillDown({
