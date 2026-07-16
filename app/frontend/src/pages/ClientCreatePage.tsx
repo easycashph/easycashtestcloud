@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
-import { AlertCircle, ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { AlertCircle, AlertTriangle, ChevronLeft, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { apiClient, ApiError } from '@/lib/apiClient';
-import type { Borrower, CreateBorrowerRequest, CreateCoBorrowerRequest } from '@/lib/loanApiTypes';
+import type { Borrower, CreateBorrowerRequest, CreateCoBorrowerRequest, PaginatedResponse } from '@/lib/loanApiTypes';
 
 interface CharacterReferenceField {
   firstName: string;
@@ -51,6 +52,28 @@ export function ClientCreatePage() {
   const [birthDate, setBirthDate] = React.useState('');
   const [gender, setGender] = React.useState('');
   const [civilStatus, setCivilStatus] = React.useState('');
+
+  // Duplicate-client warning (ADR-012 was previously deferred; this session resolved the basis as
+  // Full Name + Birth Date match, warning-only - staff can still save, since two real people can
+  // legitimately share a name). Only fires once all three fields are filled, to avoid false
+  // positives on a shared surname alone.
+  const debouncedFirstName = useDebouncedValue(firstName);
+  const debouncedLastName = useDebouncedValue(lastName);
+  const duplicateCheckEnabled = debouncedFirstName.trim().length > 0 && debouncedLastName.trim().length > 0 && birthDate.trim().length > 0;
+  const duplicateCheckQuery = useQuery({
+    queryKey: ['borrowers', 'duplicate-check', debouncedFirstName, debouncedLastName, birthDate],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Borrower>>(
+        `/borrowers?search=${encodeURIComponent(`${debouncedFirstName} ${debouncedLastName}`)}&limit=10`,
+      ),
+    enabled: duplicateCheckEnabled,
+  });
+  const possibleDuplicates = (duplicateCheckQuery.data?.items ?? []).filter(
+    (b) =>
+      b.firstName.trim().toLowerCase() === debouncedFirstName.trim().toLowerCase() &&
+      b.lastName.trim().toLowerCase() === debouncedLastName.trim().toLowerCase() &&
+      b.birthDate?.slice(0, 10) === birthDate,
+  );
 
   const [mobilePhone1, setMobilePhone1] = React.useState('');
   const [mobilePhone2, setMobilePhone2] = React.useState('');
@@ -255,6 +278,28 @@ export function ClientCreatePage() {
             </Select>
           </Field>
         </CardContent>
+        {possibleDuplicates.length > 0 && (
+          <CardContent className="pt-0">
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-medium">Possible existing client{possibleDuplicates.length > 1 ? 's' : ''} found</p>
+                <p className="text-muted-foreground">
+                  Same first name, last name, and birth date as{' '}
+                  {possibleDuplicates.map((b, i) => (
+                    <React.Fragment key={b.id}>
+                      {i > 0 && ', '}
+                      <a href={`/clients/${b.id}`} target="_blank" rel="noreferrer" className="underline">
+                        {b.fullName}
+                      </a>
+                    </React.Fragment>
+                  ))}
+                  . Double-check this isn't the same person before saving — you can still proceed if they're genuinely different.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       <Card>
