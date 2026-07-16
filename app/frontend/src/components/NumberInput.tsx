@@ -33,6 +33,11 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
   ({ value, onChange, onFocus, onBlur, minDecimals = 0, maxDecimals = 2, ...props }, forwardedRef) => {
     const innerRef = React.useRef<HTMLInputElement | null>(null);
     const isFocusedRef = React.useRef(false);
+    // Distinct from isFocusedRef: merely being focused (e.g. a Dialog auto-focusing this field the
+    // instant it opens, before the user has touched it at all - 2026-07-16 bug report) must NOT
+    // block an external prefill from showing. Only an actual keystroke (handleChange) should - see
+    // the sync effect below.
+    const hasEditedRef = React.useRef(false);
 
     const setRefs = React.useCallback(
       (el: HTMLInputElement | null) => {
@@ -51,10 +56,13 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     React.useEffect(() => {
       // Only sync from an externally-changed `value` (initial mount, product-default prefill,
-      // form reset, etc.) when the field isn't focused - while typing, handleChange already keeps
-      // displayValue in sync with live comma formatting, and this effect running mid-type would
-      // instead apply the stricter toFixed-based formatting and corrupt an in-progress decimal.
-      if (isFocusedRef.current) return;
+      // form reset, etc.) once the user has actually typed something (isFocusedRef +
+      // hasEditedRef) - while typing, handleChange already keeps displayValue in sync with live
+      // comma formatting, and this effect running mid-type would instead apply the stricter
+      // toFixed-based formatting and corrupt an in-progress decimal. Merely being focused (no
+      // keystroke yet - e.g. an auto-focused field in a freshly-opened Dialog) must NOT block
+      // this, or a prefill computed shortly after mount silently never appears.
+      if (isFocusedRef.current && hasEditedRef.current) return;
 
       if (value === undefined || value === '') {
         setDisplayValue('');
@@ -68,10 +76,12 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
       isFocusedRef.current = true;
+      hasEditedRef.current = false;
       onFocus?.(e);
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      hasEditedRef.current = true;
       const input = e.target.value;
       const cursorPos = e.target.selectionStart ?? input.length;
       const rawDigits = stripCommas(input);
@@ -106,6 +116,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
       isFocusedRef.current = false;
+      hasEditedRef.current = false;
       const input = stripCommas(e.target.value);
       if (input && input !== '' && input !== '-') {
         const num = parseFloat(input);

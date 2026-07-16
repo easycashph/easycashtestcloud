@@ -1184,7 +1184,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       <LoanDocumentPreviewModal target={previewTarget} onClose={() => setPreviewTarget(null)} />
 
       <Dialog open={recordPaymentOpen} onOpenChange={setRecordPaymentOpen}>
-        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+        <DialogContent
+          className="max-h-[90vh] max-w-5xl overflow-y-auto"
+          // Radix's default open-focus behavior auto-focuses the first focusable element inside the
+          // dialog - here, the Payment amount field, since this dialog skips straight to "Payment
+          // Details" (locked borrower/loan). That field being focused before the user has clicked
+          // it at all meant NumberInput's own "don't stomp an in-progress edit" guard blocked the
+          // auto-fill-from-next-due-amount effect from ever showing (2026-07-16 bug report - a
+          // blinking caret with no keystrokes, and the amount staying blank). Skip the auto-focus
+          // entirely - nothing in this dialog needs to grab focus the instant it opens.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
