@@ -773,6 +773,10 @@ export function LoanApplicationDetailPage() {
   const isCreatedLoanAccountActivated = createdLoanAccount
     ? createdLoanAccount.status !== 'PENDING_APPROVAL' && createdLoanAccount.status !== 'APPROVED'
     : false;
+  // Created but not yet Activated - the loan account itself shows as "For Disbursement" (see
+  // StatusBadge.tsx's LOAN_STATUS_STYLE) in this state, so this application's own status display
+  // matches it instead of still saying "Approved".
+  const isCreatedLoanAccountAwaitingDisbursement = Boolean(createdLoanAccount) && !isCreatedLoanAccountActivated;
 
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
@@ -934,8 +938,18 @@ export function LoanApplicationDetailPage() {
                 ) : (
                   <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
                 )}
-                <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>
-                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated ? 'Disbursed' : application.status.replaceAll('_', ' ')}
+                <Badge
+                  variant={
+                    application.status === 'APPROVED' && (isCreatedLoanAccountActivated || isCreatedLoanAccountAwaitingDisbursement)
+                      ? 'success'
+                      : DETAIL_STATUS_BADGE_VARIANT[application.status]
+                  }
+                >
+                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated
+                    ? 'Disbursed'
+                    : application.status === 'APPROVED' && isCreatedLoanAccountAwaitingDisbursement
+                      ? 'For Disbursement'
+                      : application.status.replaceAll('_', ' ')}
                 </Badge>
                 {application.createdLoanAccountId && (
                   <Button size="sm" variant="outline" asChild>
@@ -1179,7 +1193,13 @@ export function LoanApplicationDetailPage() {
               <div className="space-y-3">
                 <div className="rounded-md border p-3 text-sm">
                   <p className="font-medium">
-                    {application.status === 'APPROVED' ? (isCreatedLoanAccountActivated ? 'Disbursed' : 'Approved') : 'Declined'}
+                    {application.status === 'APPROVED'
+                      ? isCreatedLoanAccountActivated
+                        ? 'Disbursed'
+                        : isCreatedLoanAccountAwaitingDisbursement
+                          ? 'For Disbursement'
+                          : 'Approved'
+                      : 'Declined'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {application.reviewedAt && formatDate(application.reviewedAt)}

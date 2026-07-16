@@ -100,21 +100,17 @@ export function LoanApplicationsPage() {
     canAccessLoanApplications,
   );
 
-  // Which of this page's applications' created loan accounts have been Activated (disbursed) -
-  // an Approved application whose loan account has moved past PENDING_APPROVAL/APPROVED shows as
-  // "Disbursed" here instead, mirroring the Loan Application Detail page's own relabel.
+  // Which of this page's applications' created loan accounts exist, and their status - an
+  // Approved application whose loan account has been created but not yet Activated shows as "For
+  // Disbursement" (matching the loan account's own APPROVED-status relabel); once Activated it
+  // shows as "Disbursed" instead. Mirrors the Loan Application Detail page's own relabel.
   const loanAccountsQuery = useQuery({
     queryKey: ['loan-accounts', 'all', 'statusOnly'],
     queryFn: () => fetchAllPages<{ id: string; status: string }>('/loan-accounts'),
     enabled: canAccessLoanApplications,
   });
-  const activatedLoanAccountIds = React.useMemo(
-    () =>
-      new Set(
-        (loanAccountsQuery.data ?? [])
-          .filter((l) => l.status !== 'PENDING_APPROVAL' && l.status !== 'APPROVED')
-          .map((l) => l.id),
-      ),
+  const loanAccountStatusById = React.useMemo(
+    () => new Map((loanAccountsQuery.data ?? []).map((l) => [l.id, l.status])),
     [loanAccountsQuery.data],
   );
 
@@ -283,20 +279,23 @@ export function LoanApplicationsPage() {
                     {formatPeso(app.requestedAmount)}
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    {/* Waits for loanAccountsQuery before showing Approved/Disbursed for an
+                    {/* Waits for loanAccountsQuery before showing For Disbursement/Disbursed for an
                         application with a created loan account - otherwise this briefly flashes
-                        "Approved" (the raw application status) before flipping to "Disbursed" once
-                        the loan accounts list finishes loading a moment later. */}
+                        "Approved" (the raw application status) before flipping to the resolved
+                        label once the loan accounts list finishes loading a moment later. */}
                     {app.status === 'APPROVED' && app.createdLoanAccountId && loanAccountsQuery.isLoading ? (
                       <Badge variant="outline" className="text-muted-foreground">
                         …
                       </Badge>
                     ) : (
-                      <Badge variant={STATUS_BADGE_VARIANT[app.status]}>
-                        {app.status === 'APPROVED' && app.createdLoanAccountId && activatedLoanAccountIds.has(app.createdLoanAccountId)
-                          ? 'Disbursed'
-                          : app.status.replaceAll('_', ' ')}
-                      </Badge>
+                      (() => {
+                        const loanAccountStatus = app.createdLoanAccountId ? loanAccountStatusById.get(app.createdLoanAccountId) : undefined;
+                        if (app.status === 'APPROVED' && loanAccountStatus) {
+                          const isActivated = loanAccountStatus !== 'PENDING_APPROVAL' && loanAccountStatus !== 'APPROVED';
+                          return <Badge variant="success">{isActivated ? 'Disbursed' : 'For Disbursement'}</Badge>;
+                        }
+                        return <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{app.status.replaceAll('_', ' ')}</Badge>;
+                      })()
                     )}
                   </TableCell>
                   <TableCell
