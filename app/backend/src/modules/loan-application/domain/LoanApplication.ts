@@ -1,15 +1,28 @@
 import { randomUUID } from 'node:crypto';
 import { InvalidLoanApplicationTransitionError, ProductNotAssignedError } from './errors/LoanApplicationDomainErrors';
 
-/** PREAPPROVED/PREDECLINED are computed by LoanApplicationPreQualificationService — advisory only,
- * the officer still makes the real APPROVED/DECLINED call. */
-export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'APPROVED' | 'DECLINED';
+/** PREAPPROVED/PREDECLINED are computed by LoanApplicationPreQualificationService — advisory only.
+ * From PREAPPROVED, a CRM/MIS/Loan Operation Manager user starts a manual review (UNDER_REVIEW),
+ * tags it PRE_APPROVAL once the Review Report is complete, and only then can MIS/Loan Operation
+ * Manager give the final APPROVED/DECLINED call (2026-07-16, Under Review / Pre Approval stages). */
+export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
+export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
 
 export interface DependantEntry {
   name: string;
   age?: string;
   relationship?: string;
+}
+
+/** 2026-07-16 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
+ * captured while UNDER_REVIEW. `checkedDocuments` holds the subset of `submittedDocuments` the
+ * reviewer has verified, not an independent list. */
+export interface ReviewReport {
+  ciNotes?: string;
+  creditBureauResult?: CreditBureauResult;
+  creditBureauScore?: string;
+  checkedDocuments: string[];
 }
 
 export interface LoanApplicationProps {
@@ -72,6 +85,12 @@ export interface LoanApplicationProps {
   reviewedByUserId?: string;
   reviewedAt?: Date;
   decisionNote?: string;
+
+  reviewStartedByUserId?: string;
+  reviewStartedAt?: Date;
+  reviewReport?: ReviewReport;
+  preApprovedByUserId?: string;
+  preApprovedAt?: Date;
 
   createdAt: Date;
   updatedAt: Date;
@@ -220,6 +239,10 @@ export class LoanApplication {
     return this.props.updatedAt;
   }
 
+  get reviewReport(): ReviewReport | undefined {
+    return this.props.reviewReport;
+  }
+
   toProps(): Readonly<LoanApplicationProps> {
     return { ...this.props, propertiesOwned: [...this.props.propertiesOwned], submittedDocuments: [...this.props.submittedDocuments] };
   }
@@ -255,8 +278,12 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-07-17 (Milestone C): narrowed to PRE_APPROVAL-only - an application must go through
+   * Start Review -> Tag Pre Approval before the final Approve is reachable. Previously accepted
+   * PREAPPROVED/PREDECLINED directly (Milestone A/B kept that path open while the review routes
+   * and UI didn't exist yet). */
   approve(reviewedByUserId: string, decisionNote: string | undefined): void {
-    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') {
+    if (this.props.status !== 'PRE_APPROVAL') {
       throw new InvalidLoanApplicationTransitionError(this.props.status, 'approve');
     }
     if (!this.props.assignedLoanProductVersionId) {
@@ -269,14 +296,62 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-07-16: widened to allow declining from any of the four pre-decision stages, not just the
+   * system's initial PREAPPROVED/PREDECLINED verdict - a Credit Bureau flag or failed CI can
+   * surface mid-review just as easily as at intake. */
   decline(reviewedByUserId: string, decisionNote: string | undefined): void {
-    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') {
+    if (
+      this.props.status !== 'PREAPPROVED' &&
+      this.props.status !== 'PREDECLINED' &&
+      this.props.status !== 'UNDER_REVIEW' &&
+      this.props.status !== 'PRE_APPROVAL'
+    ) {
       throw new InvalidLoanApplicationTransitionError(this.props.status, 'decline');
     }
     this.props.status = 'DECLINED';
     this.props.reviewedByUserId = reviewedByUserId;
     this.props.reviewedAt = new Date();
     this.props.decisionNote = decisionNote;
+    this.props.updatedAt = new Date();
+  }
+
+  /** CRM/MIS/Loan Operation Manager clicks "Start Review": PREAPPROVED -> UNDER_REVIEW.
+   * PREDECLINED deliberately isn't a valid starting point - declining a PREDECLINED application
+   * still goes straight through decline(), not review. */
+  startReview(startedByUserId: string): void {
+    if (this.props.status !== 'PREAPPROVED') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'start review');
+    }
+    this.props.status = 'UNDER_REVIEW';
+    this.props.reviewStartedByUserId = startedByUserId;
+    this.props.reviewStartedAt = new Date();
+    this.props.updatedAt = new Date();
+  }
+
+  /** Saves/merges the Review Report while UNDER_REVIEW - locked (throws) once the application has
+   * moved on to PRE_APPROVAL/DECLINED/etc, so a stale report tab can't clobber a later stage's
+   * data. Only the provided fields are touched; `checkedDocuments` merges by replacement (the
+   * caller always sends the full current checklist state, same PATCH convention as
+   * updateApplicantFinancials). */
+  updateReviewReport(patch: Partial<ReviewReport>): void {
+    if (this.props.status !== 'UNDER_REVIEW') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'edit review report');
+    }
+    const current = this.props.reviewReport ?? { checkedDocuments: [] };
+    this.props.reviewReport = { ...current, ...patch };
+    this.props.updatedAt = new Date();
+  }
+
+  /** CRM/MIS/Loan Operation Manager "Tags as Pre Approval" once the Review Report is complete:
+   * UNDER_REVIEW -> PRE_APPROVAL. The report itself becomes implicitly locked from here on, since
+   * updateReviewReport() only accepts UNDER_REVIEW. */
+  tagPreApproval(taggedByUserId: string): void {
+    if (this.props.status !== 'UNDER_REVIEW') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'tag pre approval');
+    }
+    this.props.status = 'PRE_APPROVAL';
+    this.props.preApprovedByUserId = taggedByUserId;
+    this.props.preApprovedAt = new Date();
     this.props.updatedAt = new Date();
   }
 

@@ -18,6 +18,7 @@ import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
@@ -49,15 +50,19 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
 
 const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
-  { value: 'PREAPPROVED', label: 'Pre-approved' },
-  { value: 'PREDECLINED', label: 'Pre-declined' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'DECLINED', label: 'Declined' },
+  { value: 'PREAPPROVED', label: STATUS_DISPLAY_LABEL.PREAPPROVED },
+  { value: 'PREDECLINED', label: STATUS_DISPLAY_LABEL.PREDECLINED },
+  { value: 'UNDER_REVIEW', label: STATUS_DISPLAY_LABEL.UNDER_REVIEW },
+  { value: 'PRE_APPROVAL', label: STATUS_DISPLAY_LABEL.PRE_APPROVAL },
+  { value: 'APPROVED', label: STATUS_DISPLAY_LABEL.APPROVED },
+  { value: 'DECLINED', label: STATUS_DISPLAY_LABEL.DECLINED },
 ];
 
 const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning' | 'success' | 'destructive'> = {
   PREAPPROVED: 'secondary',
   PREDECLINED: 'warning',
+  UNDER_REVIEW: 'secondary',
+  PRE_APPROVAL: 'secondary',
   APPROVED: 'success',
   DECLINED: 'destructive',
 };
@@ -154,7 +159,9 @@ export function LoanApplicationsPage() {
     );
   }
 
-  const pendingCount = applications.filter((a) => a.status === 'PREAPPROVED' || a.status === 'PREDECLINED').length;
+  const pendingCount = applications.filter(
+    (a) => a.status === 'PREAPPROVED' || a.status === 'PREDECLINED' || a.status === 'UNDER_REVIEW' || a.status === 'PRE_APPROVAL',
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -295,7 +302,7 @@ export function LoanApplicationsPage() {
                       <Badge variant={STATUS_BADGE_VARIANT[app.status]}>
                         {app.status === 'APPROVED' && app.createdLoanAccountId && activatedLoanAccountIds.has(app.createdLoanAccountId)
                           ? 'Disbursed'
-                          : app.status.replaceAll('_', ' ')}
+                          : STATUS_DISPLAY_LABEL[app.status]}
                       </Badge>
                     )}
                   </TableCell>

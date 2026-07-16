@@ -61,6 +61,18 @@ export const decideLoanApplicationSchema = z.object({
 
 export type DecideLoanApplicationRequestBody = z.infer<typeof decideLoanApplicationSchema>;
 
+/** 2026-07-16 (Under Review / Pre Approval stages) — PATCH semantics, send only what changed.
+ * `checkedDocuments` always replaces (the caller sends the full current checklist state, same
+ * convention as updateLoanApplicationSchema's `propertiesOwned`). */
+export const reviewReportSchema = z.object({
+  ciNotes: z.string().optional(),
+  creditBureauResult: z.enum(['CLEAR', 'FLAGGED', 'NO_RECORD_FOUND']).optional(),
+  creditBureauScore: z.string().optional(),
+  checkedDocuments: z.array(z.string()).optional(),
+});
+
+export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;
+
 /** Risk-input fields, editable post-creation on the Detail page's AI Risk Management Summary —
  * moved off the Create form's intake fields (see loanApplicationSchemas' create schema above) now
  * that they're treated as inputs to a future risk-scoring feature rather than officer-encoded

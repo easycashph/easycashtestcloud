@@ -31,6 +31,14 @@ interface RoleContextValue {
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
   canCreateLoanAccount: boolean;
+  /** MIS, Loan Operation Manager, and CRM may Start Review, save the Review Report, and Tag Pre
+   * Approval (2026-07-17, Under Review / Pre Approval stages) - the same role set as
+   * canAccessLoanApplications today, kept as its own named boolean so a future change to one
+   * doesn't silently affect the other. */
+  canReviewLoanApplication: boolean;
+  /** Only MIS and Loan Operation Manager may give the FINAL Approve on a Loan Application -
+   * excludes CRM, whose role in the pipeline stops at Tag Pre Approval (2026-07-17). */
+  canApproveLoanApplication: boolean;
   /** Re-fetches `GET /auth/me` and updates `currentAccount` - call after a self-service profile
    * update so the sidebar/header name updates without requiring a full reload. */
   refreshCurrentUser: () => Promise<void>;
@@ -168,6 +176,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canRevertLoanApplicationDecision: currentAccount.roles.includes('MIS'),
     canViewActivityLogs: currentAccount.roles.includes('MIS'),
     canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+    canReviewLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+    canApproveLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
     refreshCurrentUser,
   };
 

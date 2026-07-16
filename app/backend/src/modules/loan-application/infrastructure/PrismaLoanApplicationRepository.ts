@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import { LoanApplication, type DependantEntry, type LoanApplicationProps } from '../domain/LoanApplication';
+import { LoanApplication, type DependantEntry, type LoanApplicationProps, type ReviewReport } from '../domain/LoanApplication';
 import type { FindManyLoanApplicationsOptions, ILoanApplicationRepository } from '../application/ports/ILoanApplicationRepository';
 
 type LoanApplicationRow = Prisma.LoanApplicationGetPayload<Record<string, never>>;
@@ -60,6 +60,11 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     reviewedByUserId: row.reviewedByUserId ?? undefined,
     reviewedAt: row.reviewedAt ?? undefined,
     decisionNote: row.decisionNote ?? undefined,
+    reviewStartedByUserId: row.reviewStartedByUserId ?? undefined,
+    reviewStartedAt: row.reviewStartedAt ?? undefined,
+    reviewReport: (row.reviewReport as ReviewReport | null) ?? undefined,
+    preApprovedByUserId: row.preApprovedByUserId ?? undefined,
+    preApprovedAt: row.preApprovedAt ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -121,6 +126,11 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       reviewedByUserId: p.reviewedByUserId,
       reviewedAt: p.reviewedAt,
       decisionNote: p.decisionNote,
+      reviewStartedByUserId: p.reviewStartedByUserId,
+      reviewStartedAt: p.reviewStartedAt,
+      reviewReport: p.reviewReport as Prisma.InputJsonValue | undefined,
+      preApprovedByUserId: p.preApprovedByUserId,
+      preApprovedAt: p.preApprovedAt,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     },
@@ -131,6 +141,11 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       reviewedByUserId: p.reviewedByUserId,
       reviewedAt: p.reviewedAt,
       decisionNote: p.decisionNote,
+      reviewStartedByUserId: p.reviewStartedByUserId,
+      reviewStartedAt: p.reviewStartedAt,
+      reviewReport: p.reviewReport as Prisma.InputJsonValue | undefined,
+      preApprovedByUserId: p.preApprovedByUserId,
+      preApprovedAt: p.preApprovedAt,
       // Previously missing here — a latent gap where nothing could ever persist a change to these
       // three fields on an existing row (only present in `create` above), found while adding
       // `updateApplicantFinancials()` (the Detail page's AI Risk Management Summary).

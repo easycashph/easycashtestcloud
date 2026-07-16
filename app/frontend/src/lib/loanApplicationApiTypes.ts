@@ -5,10 +5,33 @@
  * strings (the backend presenter sends them as numbers, not `Money`).
  *
  * PREAPPROVED/PREDECLINED are computed by the backend's LoanApplicationPreQualificationService -
- * advisory only, the officer still makes the real APPROVED/DECLINED call.
+ * advisory only. From PREAPPROVED, a CRM/MIS/Loan Operation Manager user Starts Review
+ * (UNDER_REVIEW), Tags Pre Approval once the Review Report is complete (PRE_APPROVAL), and only
+ * then can MIS/Loan Operation Manager give the final APPROVED/DECLINED call (2026-07-17, Under
+ * Review / Pre Approval stages).
  */
-export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'APPROVED' | 'DECLINED';
+export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
+export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
+
+/** 2026-07-17 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
+ * captured while UNDER_REVIEW. `checkedDocuments` is the subset of `submittedDocuments` the
+ * reviewer has verified, not an independent list. */
+export interface LoanApplicationReviewReport {
+  ciNotes?: string;
+  creditBureauResult?: CreditBureauResult;
+  creditBureauScore?: string;
+  checkedDocuments: string[];
+}
+
+/** Body for `PATCH /loan-applications/:id/review-report` — PATCH semantics, send only what
+ * changed. `checkedDocuments`, when present, replaces the full checklist state. */
+export interface SubmitReviewReportRequest {
+  ciNotes?: string;
+  creditBureauResult?: CreditBureauResult;
+  creditBureauScore?: string;
+  checkedDocuments?: string[];
+}
 
 export interface PreQualificationCheck {
   passed: boolean;
@@ -87,6 +110,11 @@ export interface LoanApplication {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   decisionNote: string | null;
+  reviewStartedByUserId: string | null;
+  reviewStartedAt: string | null;
+  reviewReport: LoanApplicationReviewReport | null;
+  preApprovedByUserId: string | null;
+  preApprovedAt: string | null;
   createdAt: string;
   updatedAt: string;
   preQualificationBreakdown: PreQualificationBreakdown | null;

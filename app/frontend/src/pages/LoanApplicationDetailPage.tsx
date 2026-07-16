@@ -29,9 +29,15 @@ import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
-import type { LoanApplication, UpdateLoanApplicationRequest } from '@/lib/loanApplicationApiTypes';
+import type {
+  CreditBureauResult,
+  LoanApplication,
+  SubmitReviewReportRequest,
+  UpdateLoanApplicationRequest,
+} from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
+import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 /** Best-effort split of a free-text full name into first/middle/last for the create-client
@@ -481,6 +487,8 @@ type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 const DETAIL_STATUS_BADGE_VARIANT: Record<LoanApplication['status'], 'secondary' | 'warning' | 'success' | 'destructive'> = {
   PREAPPROVED: 'secondary',
   PREDECLINED: 'warning',
+  UNDER_REVIEW: 'secondary',
+  PRE_APPROVAL: 'secondary',
   APPROVED: 'success',
   DECLINED: 'destructive',
 };
@@ -719,6 +727,133 @@ function RiskManagementSummaryCard({
   );
 }
 
+const CREDIT_BUREAU_RESULT_OPTIONS: { value: CreditBureauResult; label: string }[] = [
+  { value: 'CLEAR', label: 'Clear' },
+  { value: 'FLAGGED', label: 'Flagged' },
+  { value: 'NO_RECORD_FOUND', label: 'No record found' },
+];
+
+/**
+ * 2026-07-17 (Under Review / Pre Approval stages) - the CRM/credit-risk team's structured Review
+ * Report: Credit Investigation notes, Credit Bureau result + score, and a document checklist
+ * sourced from `application.submittedDocuments` (not an independently invented list). Editable
+ * only while UNDER_REVIEW and `canEdit`; read-only once PRE_APPROVAL/APPROVED/DECLINED, matching
+ * the backend's `updateReviewReport()` guard. Modeled after `RiskManagementSummaryCard` above, but
+ * always-editable rather than an edit-toggle, since this is a draft form saved repeatedly while
+ * the reviewer works through it.
+ */
+function ReviewReportCard({ application, canEdit }: { application: LoanApplication; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const report = application.reviewReport;
+  const [ciNotes, setCiNotes] = React.useState(report?.ciNotes ?? '');
+  const [creditBureauResult, setCreditBureauResult] = React.useState<CreditBureauResult | ''>(report?.creditBureauResult ?? '');
+  const [creditBureauScore, setCreditBureauScore] = React.useState(report?.creditBureauScore ?? '');
+  const [checkedDocuments, setCheckedDocuments] = React.useState<string[]>(report?.checkedDocuments ?? []);
+
+  const toggleDocument = (doc: string, checked: boolean) => {
+    setCheckedDocuments((prev) => (checked ? [...prev, doc] : prev.filter((d) => d !== doc)));
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/review-report`, {
+        ciNotes: ciNotes.trim() || undefined,
+        creditBureauResult: creditBureauResult || undefined,
+        creditBureauScore: creditBureauScore.trim() || undefined,
+        checkedDocuments,
+      } satisfies SubmitReviewReportRequest),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Review Report
+        </CardTitle>
+        <CardDescription>Credit Investigation, Credit Bureau checking, and document verification.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {saveMutation.isError && (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save the review report.'}
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Credit investigation notes</Label>
+          {canEdit ? (
+            <Textarea rows={3} value={ciNotes} onChange={(e) => setCiNotes(e.target.value)} placeholder="Findings from the CI visit or call" />
+          ) : (
+            <p className="text-sm">{ciNotes || 'None on record.'}</p>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Credit bureau result</Label>
+            {canEdit ? (
+              <Select value={creditBureauResult} onValueChange={(v) => setCreditBureauResult(v as CreditBureauResult)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_BUREAU_RESULT_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm">
+                {CREDIT_BUREAU_RESULT_OPTIONS.find((o) => o.value === creditBureauResult)?.label ?? 'Not yet checked'}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Credit bureau score (optional)</Label>
+            {canEdit ? (
+              <Input value={creditBureauScore} onChange={(e) => setCreditBureauScore(e.target.value)} />
+            ) : (
+              <p className="text-sm">{creditBureauScore || '-'}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Document checklist</Label>
+          {application.submittedDocuments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No documents were recorded as submitted at intake.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {application.submittedDocuments.map((doc) => (
+                <li key={doc} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input"
+                    checked={checkedDocuments.includes(doc)}
+                    disabled={!canEdit}
+                    onChange={(e) => toggleDocument(doc, e.target.checked)}
+                  />
+                  {doc}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {canEdit && (
+          <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            {saveMutation.isPending ? 'Saving…' : 'Save Review Report'}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
  * Every application starts system-classified PREAPPROVED/PREDECLINED (backend's
@@ -743,9 +878,10 @@ export function LoanApplicationDetailPage() {
   // created successfully.
   const failedDocumentLabels = (location.state as { failedDocumentLabels?: string[] } | null)?.failedDocumentLabels ?? [];
   const queryClient = useQueryClient();
-  const { canAccessLoanApplications, canRevertLoanApplicationDecision, currentAccount } = useRole();
+  const { canAccessLoanApplications, canRevertLoanApplicationDecision, canReviewLoanApplication, canApproveLoanApplication, currentAccount } =
+    useRole();
   const [decisionNote, setDecisionNote] = React.useState('');
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
   const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
 
@@ -868,6 +1004,19 @@ export function LoanApplicationDetailPage() {
     },
   });
 
+  const startReviewMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/start-review`),
+    onSuccess: invalidate,
+  });
+
+  const tagPreApprovalMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/tag-pre-approval`),
+    onSuccess: () => {
+      setConfirmAction(null);
+      invalidate();
+    },
+  });
+
   if (!canAccessLoanApplications) {
     return (
       <div className="space-y-4">
@@ -921,8 +1070,16 @@ export function LoanApplicationDetailPage() {
     .join('')
     .toUpperCase();
 
-  const isPending = application.status === 'PREAPPROVED' || application.status === 'PREDECLINED';
-  const mutationError = assignProductMutation.error || decideMutation.error || revertMutation.error;
+  const isPreApprovalStage = application.status === 'PREAPPROVED' || application.status === 'PREDECLINED';
+  const isUnderReview = application.status === 'UNDER_REVIEW';
+  const isPreApproval = application.status === 'PRE_APPROVAL';
+  const isDecided = application.status === 'APPROVED' || application.status === 'DECLINED';
+  const mutationError =
+    assignProductMutation.error ||
+    decideMutation.error ||
+    revertMutation.error ||
+    startReviewMutation.error ||
+    tagPreApprovalMutation.error;
 
   return (
     <div className="space-y-6">
@@ -946,7 +1103,7 @@ export function LoanApplicationDetailPage() {
                   <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
                 )}
                 <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>
-                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated ? 'Disbursed' : application.status.replaceAll('_', ' ')}
+                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated ? 'Disbursed' : STATUS_DISPLAY_LABEL[application.status]}
                 </Badge>
                 {application.createdLoanAccountId && (
                   <Button size="sm" variant="outline" asChild>
@@ -964,7 +1121,7 @@ export function LoanApplicationDetailPage() {
                 {application.requestedCategory} · Submitted {formatDate(application.createdAt)}
                 {encodedByName ? ` · Encoded by ${encodedByName}` : ''}
               </p>
-              {isPending && (
+              {isPreApprovalStage && (
                 <p className="text-xs text-muted-foreground">
                   System pre-qualification -{' '}
                   {application.distanceFromBranchKm !== null
@@ -1092,7 +1249,7 @@ export function LoanApplicationDetailPage() {
               <p className="text-xs text-muted-foreground">
                 The client only selects a category when applying - staff assigns the specific product type and class here.
               </p>
-              {isPending ? (
+              {!isDecided ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>Assigned product type</Label>
@@ -1159,7 +1316,54 @@ export function LoanApplicationDetailPage() {
 
             <Separator className="my-4" />
 
-            {isPending ? (
+            {isPreApprovalStage && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="decision-note">Decision note (optional)</Label>
+                  <Textarea
+                    id="decision-note"
+                    value={decisionNote}
+                    onChange={(e) => setDecisionNote(e.target.value)}
+                    placeholder="e.g. Verified via phone call, proceeding as recommended..."
+                    rows={2}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={() => startReviewMutation.mutate()} disabled={!canReviewLoanApplication || startReviewMutation.isPending}>
+                    {startReviewMutation.isPending ? 'Starting…' : 'Start Review'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmAction('DECLINED')}
+                    disabled={!canReviewLoanApplication || decideMutation.isPending}
+                  >
+                    Decline Application
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isUnderReview && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => setConfirmAction('PRE_APPROVAL')}
+                    disabled={!canReviewLoanApplication || tagPreApprovalMutation.isPending}
+                  >
+                    Tag as Pre Approval
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmAction('DECLINED')}
+                    disabled={!canReviewLoanApplication || decideMutation.isPending}
+                  >
+                    Decline Application
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {isPreApproval && (
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="decision-note">Decision note (optional)</Label>
@@ -1174,19 +1378,30 @@ export function LoanApplicationDetailPage() {
                 <div className="flex gap-2">
                   <Button
                     onClick={() => setConfirmAction('APPROVED')}
-                    disabled={!application.assignedLoanProductVersionId || decideMutation.isPending}
+                    disabled={!application.assignedLoanProductVersionId || !canApproveLoanApplication || decideMutation.isPending}
                   >
                     Approve Application
                   </Button>
-                  <Button variant="outline" onClick={() => setConfirmAction('DECLINED')} disabled={decideMutation.isPending}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmAction('DECLINED')}
+                    disabled={!canReviewLoanApplication || decideMutation.isPending}
+                  >
                     Decline Application
                   </Button>
                 </div>
                 {!application.assignedLoanProductVersionId && (
                   <p className="text-xs text-muted-foreground">Assign a product version above before approving.</p>
                 )}
+                {!canApproveLoanApplication && (
+                  <p className="text-xs text-muted-foreground">
+                    Only <RoleAbbr role="MIS" /> and <RoleAbbr role="Loan Operation Manager" /> can give the final approval.
+                  </p>
+                )}
               </div>
-            ) : (
+            )}
+
+            {isDecided && (
               <div className="space-y-3">
                 <div className="rounded-md border p-3 text-sm">
                   <p className="font-medium">
@@ -1304,6 +1519,10 @@ export function LoanApplicationDetailPage() {
         </CardContent>
       </Card>
 
+      {(isUnderReview || isPreApproval || (isDecided && application.reviewReport)) && (
+        <ReviewReportCard application={application} canEdit={isUnderReview && canReviewLoanApplication} />
+      )}
+
       <RiskManagementSummaryCard application={application} canEdit={canAccessLoanApplications} />
 
       <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />
@@ -1317,11 +1536,19 @@ export function LoanApplicationDetailPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" /> Confirm{' '}
-              {confirmAction === 'REVERT' ? 'revert' : confirmAction === 'APPROVED' ? 'approval' : 'decline'}
+              {confirmAction === 'REVERT'
+                ? 'revert'
+                : confirmAction === 'APPROVED'
+                  ? 'approval'
+                  : confirmAction === 'PRE_APPROVAL'
+                    ? 'pre approval'
+                    : 'decline'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'REVERT' &&
                 `This will revert ${application.applicantName}'s application back to a freshly recomputed AI pre-qualification and clear the previous decision.`}
+              {confirmAction === 'PRE_APPROVAL' &&
+                `This will tag ${application.applicantName}'s application as Pre Approval and lock the Review Report. It will then be ready for the final Approve/Decline.`}
               {(confirmAction === 'APPROVED' || confirmAction === 'DECLINED') &&
                 `Are you sure you want to ${confirmAction === 'APPROVED' ? 'approve' : 'decline'} ${application.applicantName}'s application? This is a safety-net confirmation to prevent an accidental click.`}
             </DialogDescription>
@@ -1333,7 +1560,8 @@ export function LoanApplicationDetailPage() {
             <Button
               onClick={() => {
                 if (confirmAction === 'REVERT') revertMutation.mutate();
-                else if (confirmAction) decideMutation.mutate(confirmAction);
+                else if (confirmAction === 'PRE_APPROVAL') tagPreApprovalMutation.mutate();
+                else if (confirmAction === 'APPROVED' || confirmAction === 'DECLINED') decideMutation.mutate(confirmAction);
               }}
             >
               Yes, confirm

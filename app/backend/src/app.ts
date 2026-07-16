@@ -87,6 +87,9 @@ import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/a
 import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
+import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
 import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
@@ -576,6 +579,17 @@ export function createApp(): Express {
         loanApplicationRepository,
         auditLogger,
         preQualificationService,
+        profileActivityLogService,
+      }),
+      startLoanApplicationReviewUseCase: new StartLoanApplicationReviewUseCase({
+        loanApplicationRepository,
+        auditLogger,
+        profileActivityLogService,
+      }),
+      submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
+      tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
+        loanApplicationRepository,
+        auditLogger,
         profileActivityLogService,
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),

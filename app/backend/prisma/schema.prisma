@@ -247,6 +247,8 @@ model User {
   idempotencyKeys          IdempotencyKey[]
   loanApplicationsEncoded  LoanApplication[]       @relation("LoanApplicationEncodedBy")
   loanApplicationsReviewed LoanApplication[]       @relation("LoanApplicationReviewedBy")
+  loanApplicationReviewsStarted LoanApplication[]  @relation("LoanApplicationReviewStartedBy")
+  loanApplicationsPreApproved   LoanApplication[]  @relation("LoanApplicationPreApprovedBy")
   loanNotesAuthored        LoanNote[]
   loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
   penaltyOverridesSet      RepaymentSchedule[]     @relation("PenaltyOverrideBy")
@@ -1400,8 +1402,18 @@ model ProfileActivityLog {
 enum LoanApplicationStatus {
   PREAPPROVED
   PREDECLINED
+  UNDER_REVIEW
+  PRE_APPROVAL
   APPROVED
   DECLINED
+}
+
+/// 2026-07-16 (Under Review / Pre Approval stages) — result of the CRM/credit-risk team's manual
+/// Credit Bureau check, captured on LoanApplication.reviewReport during UNDER_REVIEW.
+enum CreditBureauResult {
+  CLEAR
+  FLAGGED
+  NO_RECORD_FOUND
 }
 
 enum LoanApplicationAccountType {
@@ -1497,6 +1509,25 @@ model LoanApplication {
   /// mock UI's confirmation dialog, kept optional here since the API layer
   /// enforces "required" rather than the schema.
   decisionNote     String?
+
+  /// 2026-07-16 (Under Review / Pre Approval stages) — set once when "Start Review" moves
+  /// PREAPPROVED -> UNDER_REVIEW. Deliberately separate from reviewedByUserId/reviewedAt above
+  /// (which record the FINAL approve/decline/revert actor and get overwritten every transition) -
+  /// these two are per-stage and never overwritten once set.
+  reviewStartedByUserId String?
+  reviewStartedBy       User?     @relation("LoanApplicationReviewStartedBy", fields: [reviewStartedByUserId], references: [id])
+  reviewStartedAt       DateTime?
+
+  /// Structured Review Report captured during UNDER_REVIEW, locked once status leaves UNDER_REVIEW
+  /// - mirrors the `dependants Json?` precedent (small object, no independent query need). Shape:
+  /// { ciNotes?: string; creditBureauResult?: CreditBureauResult; creditBureauScore?: string;
+  /// checkedDocuments: string[] }.
+  reviewReport Json?
+
+  /// Set when "Tag as Pre Approval" moves UNDER_REVIEW -> PRE_APPROVAL.
+  preApprovedByUserId String?
+  preApprovedBy       User?     @relation("LoanApplicationPreApprovedBy", fields: [preApprovedByUserId], references: [id])
+  preApprovedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

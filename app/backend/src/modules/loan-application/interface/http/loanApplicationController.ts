@@ -10,6 +10,9 @@ import type { AssignLoanApplicationProductUseCase } from '../../application/use-
 import type { ApproveLoanApplicationUseCase } from '../../application/use-cases/ApproveLoanApplicationUseCase';
 import type { DeclineLoanApplicationUseCase } from '../../application/use-cases/DeclineLoanApplicationUseCase';
 import type { RevertLoanApplicationDecisionUseCase } from '../../application/use-cases/RevertLoanApplicationDecisionUseCase';
+import type { StartLoanApplicationReviewUseCase } from '../../application/use-cases/StartLoanApplicationReviewUseCase';
+import type { SubmitLoanApplicationReviewReportUseCase } from '../../application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
@@ -18,6 +21,7 @@ import type {
   AssignLoanApplicationProductRequestBody,
   CreateLoanApplicationRequestBody,
   DecideLoanApplicationRequestBody,
+  ReviewReportRequestBody,
   UpdateLoanApplicationRequestBody,
 } from './loanApplicationSchemas';
 import { presentLoanApplication, type LoanApplicationLinkage } from './presenters/LoanApplicationPresenter';
@@ -30,6 +34,9 @@ export interface LoanApplicationControllerDeps {
   approveLoanApplicationUseCase: ApproveLoanApplicationUseCase;
   declineLoanApplicationUseCase: DeclineLoanApplicationUseCase;
   revertLoanApplicationDecisionUseCase: RevertLoanApplicationDecisionUseCase;
+  startLoanApplicationReviewUseCase: StartLoanApplicationReviewUseCase;
+  submitLoanApplicationReviewReportUseCase: SubmitLoanApplicationReviewReportUseCase;
+  tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
@@ -191,6 +198,37 @@ export class LoanApplicationController {
       const body = req.body as DecideLoanApplicationRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.declineLoanApplicationUseCase.execute(req.params.id as string, currentUser.sub, body.decisionNote);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  startReview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.startLoanApplicationReviewUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  submitReviewReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as ReviewReportRequestBody;
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.submitLoanApplicationReviewReportUseCase.execute(req.params.id as string, currentUser.sub, body);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  tagPreApproval = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.tagLoanApplicationPreApprovalUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
