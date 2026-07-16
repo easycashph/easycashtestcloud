@@ -847,17 +847,28 @@ real link and the Disbursed badge will only appear once that specific account is
 
 ## Current state
 
-- Working tree clean; Docker stack (`postgres`, `backend`) running locally (frontend now run via
-  `Run LMS Preview.bat`'s Hot Reload Mode / Vite dev server on 5173 instead of the Docker frontend
-  container, per user preference this session — Docker `frontend` service stopped). In sync with
-  `origin/main` as of `0048187` — **only up to `370a3ea` is pushed; several commits are local-only**:
-  `9d3d1de` (docs), `be3e312` (Loan Releases Report + Reports hub + Dashboard preview cards),
-  `bc8ec0c` (Reduce Penalty feature), `0338f90` (Reduce Penalty name display fix), `a46dd5b` (docs),
-  `1889ba0` (addOnInterestRate/contractualInterestRate migration backfill), `f4fd6ca` (post-restore
-  reminder update), `0048187` (docs), `6d0da5a` (Adjust Fees feature), plus the unified Payment
-  History timeline commit made just now. Sixteen-plus commits this session total (see git log for
-  the full first-half list — transaction sort ×2, Total Due column, payment allocation visibility,
-  Payment Recording Close/Next-due).
+- Working tree clean; Docker stack (`postgres`, `backend`) running locally and rebuilt fresh as of
+  this session's last change (verified: container restart timestamp confirms the current image is
+  running, not a stale one). Frontend run via `Run LMS Preview.bat`'s Hot Reload Mode / Vite dev
+  server on 5173 instead of the Docker frontend container, per user preference this session —
+  Docker `frontend` service stopped.
+- In sync with `origin/main` only up to `370a3ea` — **23 commits are local-only, nothing pushed
+  this session.** Newest-first:
+  `e46e7f1` docs, `2face69` fix(frontend) sourceApplicationId wiring, `e54df65`
+  fix(loan-account) LoanAccount.sourceApplicationId + application linkage fix, `120f0ac`
+  feat(payment-recording) default Mode of Payment to Bank Transfer, `e9ffe2a`
+  fix(client-profile) Principal Balance display bug, `ce5c97c` docs, `664bc5c`
+  fix(loan-account) Reverse Payment reopen fix, `dbfb2b1` docs, `c8a4c39`
+  fix(repayment) Reduce Penalty balance sync, `2671a40` docs, `574a589`
+  fix(repayment) status-vs-override fix, `2b133e6` fix(repayment) payment allocation
+  override-aware fix, `1ac8d89` fix(repayment) Adjust Fees balance sync, `2bc90b8`
+  fix(repayment) Payment History cache invalidation, `4865959` feat(repayment) unified
+  Payment History timeline, `6d0da5a` feat(repayment) Adjust Fees feature, `0048187` docs,
+  `f4fd6ca` docs, `1889ba0` fix(migration) interest-rate backfill, `a46dd5b` docs, `0338f90`
+  feat(repayment) Reduce Penalty name display, `bc8ec0c` feat(repayment) Reduce Penalty feature,
+  `be3e312` feat(reporting) Loan Releases Report + Reports hub + Dashboard preview cards,
+  `9d3d1de` docs. (See git log for the full first-half list beyond these 23 — transaction sort
+  ×2, Total Due column, payment allocation visibility, Payment Recording Close/Next-due.)
 - **Correction to an earlier note in this log**: the user has, in fact, already exercised both
   Reduce Penalty and Adjust Fees against real live data via their own Hot Reload Mode session
   (`SL-CORP_00086` penalty reduction, `SP-Easy_00001` fee adjustment) — confirmed by finding those
