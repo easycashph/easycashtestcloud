@@ -168,6 +168,22 @@ export class RepaymentInstallment {
   }
 
   /**
+   * 2026-07-16 (status-vs-override fix): the same "chargeable" amount `ProcessPaymentUseCase`'s
+   * allocation engine and `resolveEffectivePenaltyDue` use — an explicit override wins, otherwise
+   * the frozen `due` figure. Deliberately NOT the live ADR-050 projection (`resolveComputedPenalty`)
+   * — a status that flips PAID/LATE as a live daily formula ticks upward, for an installment nobody
+   * has touched since it was settled, would be nonsensical. Kept local (not imported from
+   * `CurrentPenaltyResolver`) to avoid a circular import — that module already imports this class's
+   * type.
+   */
+  private get effectiveDueTotal(): Money {
+    return this.props.due.principal
+      .add(this.props.due.interest)
+      .add(this.effectiveFeesDue)
+      .add(this.props.penaltyOverride?.amount ?? this.props.due.penalty);
+  }
+
+  /**
    * REPAY-3, derived — never stored/settable directly.
    *
    * ASSUMPTION (not verified against legacy data — flag for confirmation
@@ -176,9 +192,14 @@ export class RepaymentInstallment {
    * partial payment, i.e. LATE takes precedence over PARTIALLY_PAID once
    * the due date has passed. PROJECT_RULES.md does not specify this
    * precedence explicitly.
+   *
+   * 2026-07-16: compares against `effectiveDueTotal` (override-aware), not raw `due.total()` — a
+   * Reduce Penalty or Adjust Fees override permanently lowers what "fully paid" means for this
+   * installment; comparing against the stale original total left a fully-settled installment stuck
+   * at LATE forever (found via a real client loan, `SML-REG_00210` installment #3).
    */
   get status(): RepaymentInstallmentStatus {
-    const totalDue = this.props.due.total();
+    const totalDue = this.effectiveDueTotal;
     const totalPaid = this.props.paid.total();
 
     if (totalPaid.greaterThan(totalDue) || totalPaid.equals(totalDue)) {

@@ -104,6 +104,55 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
       const installment = createInstallment(new Date());
       expect((installment as unknown as Record<string, unknown>).setStatus).toBeUndefined();
     });
+
+    // 2026-07-16: found via a real client loan (SML-REG_00210 installment #3) — a Reduce Penalty
+    // / Adjust Fees override permanently lowers what "fully paid" means, but `status` compared
+    // against the stale raw `due.total()`, leaving a fully-settled installment stuck at LATE.
+    it('is PAID once paid reaches the override-adjusted total, even though raw due is higher', () => {
+      const installment = RepaymentInstallment.create({
+        loanAccountId: 'loan-1',
+        installmentNumber: 1,
+        dueDate: new Date(Date.now() - 86_400_000),
+        due: InstallmentAmounts.of({
+          principal: Money.of('800.00'),
+          interest: Money.of('200.00'),
+          penalty: Money.of('1425.21'),
+          fees: Money.of('0.00'),
+        }),
+      });
+
+      const currentPenalty = Money.of('1425.21');
+      installment.reducePenalty(Money.of('400.00'), currentPenalty, 'test', 'user-1');
+      installment.adjustFees(Money.of('200.00'), 'test', 'user-1');
+      installment.recordPayment(
+        InstallmentAmounts.of({
+          principal: Money.of('800.00'),
+          interest: Money.of('200.00'),
+          penalty: Money.of('400.00'),
+          fees: Money.of('200.00'),
+        }),
+      );
+
+      expect(installment.status).toBe('PAID');
+    });
+
+    it('stays LATE when paid matches the override-adjusted total for one component but another remains unpaid', () => {
+      const installment = RepaymentInstallment.create({
+        loanAccountId: 'loan-1',
+        installmentNumber: 1,
+        dueDate: new Date(Date.now() - 86_400_000),
+        due: InstallmentAmounts.of({
+          principal: Money.of('800.00'),
+          interest: Money.of('200.00'),
+          penalty: Money.of('1425.21'),
+        }),
+      });
+
+      installment.reducePenalty(Money.of('400.00'), Money.of('1425.21'), 'test', 'user-1');
+      installment.recordPayment(InstallmentAmounts.of({ principal: Money.of('800.00'), interest: Money.of('200.00') }));
+
+      expect(installment.status).toBe('LATE');
+    });
   });
 
   describe('recordPayment (single-installment primitive, not the allocation algorithm)', () => {
