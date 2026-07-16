@@ -19,7 +19,7 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onPointerDownOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -28,6 +28,22 @@ const DialogContent = React.forwardRef<
         'fixed left-[50%] top-[50%] z-50 grid max-h-[85vh] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto border bg-background p-6 shadow-lg rounded-lg',
         className,
       )}
+      onPointerDownOutside={(e) => {
+        // A Select/Combobox/DropdownMenu/Popover opened inside this Dialog renders its own
+        // content via a Portal straight to document.body, positioned via Radix's Popper wrapper
+        // (`[data-radix-popper-content-wrapper]`). Clicking elsewhere inside the dialog to close
+        // just that popup fires a "pointer down outside" that Radix's Dialog layer also sees -
+        // by the time it runs, the popup's DOM may already be unmounting, so the event target no
+        // longer resolves as "inside" the dialog, and the dialog closes too even though the user
+        // only meant to close the dropdown. Ignoring outside-clicks whose target is (or was) part
+        // of one of these nested popups keeps the dialog open in that case.
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('[data-radix-popper-content-wrapper], [data-radix-select-content], [role="listbox"], [role="menu"]')) {
+          e.preventDefault();
+          return;
+        }
+        onPointerDownOutside?.(e);
+      }}
       {...props}
     >
       {children}
