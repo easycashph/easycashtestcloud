@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
 import { PhoneInput } from '@/components/PhoneInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { FieldTooltip } from '@/components/FieldTooltip';
@@ -855,10 +856,10 @@ export function LoanApplicationForm({
             <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </Field>
           <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
-            <Input value={tin} onChange={(e) => setTin(e.target.value)} />
+            <GroupedDigitsInput value={tin} onChange={(e) => setTin(e.target.value)} />
           </Field>
           <Field label="SSS no." tooltip="Applicant's Social Security System number, if available.">
-            <Input value={sss} onChange={(e) => setSss(e.target.value)} />
+            <GroupedDigitsInput value={sss} onChange={(e) => setSss(e.target.value)} />
           </Field>
         </div>
       </SectionCard>

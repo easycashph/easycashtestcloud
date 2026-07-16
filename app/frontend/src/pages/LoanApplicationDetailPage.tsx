@@ -16,6 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
 import { PhoneInput } from '@/components/PhoneInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -337,11 +338,11 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>TIN</Label>
-            <Input value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
+            <GroupedDigitsInput value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>SSS No.</Label>
-            <Input value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
+            <GroupedDigitsInput value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
           </div>
         </div>
 
