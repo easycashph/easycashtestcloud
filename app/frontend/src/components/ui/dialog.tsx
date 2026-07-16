@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { wasPopupJustClosed } from '@/lib/radixPopupGuard';
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -29,16 +30,23 @@ const DialogContent = React.forwardRef<
         className,
       )}
       onPointerDownOutside={(e) => {
-        // A Select/Combobox/DropdownMenu/Popover opened inside this Dialog renders its own
-        // content via a Portal straight to document.body, positioned via Radix's Popper wrapper
-        // (`[data-radix-popper-content-wrapper]`). Clicking elsewhere inside the dialog to close
-        // just that popup fires a "pointer down outside" that Radix's Dialog layer also sees -
-        // by the time it runs, the popup's DOM may already be unmounting, so the event target no
-        // longer resolves as "inside" the dialog, and the dialog closes too even though the user
-        // only meant to close the dropdown. Ignoring outside-clicks whose target is (or was) part
-        // of one of these nested popups keeps the dialog open in that case.
+        // A Select/DropdownMenu (or other Radix popper-based popup) opened inside this Dialog
+        // renders its own content via a Portal straight to document.body, not nested under this
+        // dialog's DOM subtree. Clicking elsewhere inside the dialog to dismiss just that popup
+        // fires a "pointer down outside" that this Dialog's own dismiss layer also observes -
+        // closing the whole dialog too, even though the user only meant to close the dropdown.
+        //
+        // Two complementary guards, since either alone misses cases the other catches:
+        //  1. If the click landed on/inside the popup's own portal content (matches its wrapper
+        //     attributes) - covers a click that's still technically part of the popup.
+        //  2. If any tracked popup (Select/DropdownMenu, via radixPopupGuard.ts) closed within
+        //     the last moment - covers the far more common case: the click that dismisses the
+        //     popup lands elsewhere in the dialog's own content, not on the popup at all.
         const target = e.target as HTMLElement | null;
-        if (target?.closest('[data-radix-popper-content-wrapper], [data-radix-select-content], [role="listbox"], [role="menu"]')) {
+        if (
+          target?.closest('[data-radix-popper-content-wrapper], [data-radix-select-content], [role="listbox"], [role="menu"]')
+          || wasPopupJustClosed()
+        ) {
           e.preventDefault();
           return;
         }
