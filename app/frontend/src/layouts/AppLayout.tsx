@@ -136,7 +136,7 @@ function Topbar({
   onCollapseToggle: () => void;
 }) {
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b bg-card px-4">
+    <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuClick}>
           <Menu className="h-5 w-5" />
@@ -175,15 +175,18 @@ export function AppLayout() {
   }, [collapsed]);
 
   return (
-    // h-dvh (dynamic viewport height), not h-screen (100vh) - on Windows, 100vh can report a
-    // taller height than what's actually visible above the taskbar at certain zoom levels/DPI
-    // scalings, so this outer container (and everything sized off it) extended past the visible
-    // screen - the bottom of a long page like About rendered behind the taskbar with no way to
-    // scroll to it, since the browser considered that space already "on screen". 100dvh tracks the
-    // real, currently-visible viewport instead.
-    <div className="flex h-dvh flex-col bg-background">
+    // Deliberately NOT height-constrained to the viewport (no h-screen/h-dvh on this root) - a
+    // fixed-height shell with an inner overflow-y-auto scroll region turned out unreliable on
+    // Windows: 100vh AND 100dvh could both still report more height than was actually visible
+    // above the taskbar at certain zoom/DPI combinations (confirmed live - 100dvh alone didn't
+    // fix it), so the bottom of a long page like About was unreachable no matter how far the
+    // inner region was scrolled. Switched to letting the page grow to its natural content height
+    // and scroll via the browser's own document scroll instead, which only depends on real
+    // document height, not a computed viewport unit - immune to this whole class of bug. The
+    // sidebar and topbar use `sticky` (not `fixed`) so they still stay pinned during that scroll.
+    <div className="flex min-h-screen flex-col bg-background">
       <PreviewBanner />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
         {/* min-w-0 is required here: a flex child otherwise refuses to shrink below its content's
@@ -191,13 +194,13 @@ export function AppLayout() {
             <Outlet /> was expanding this whole column — and with it the row containing the
             sidebar — past the viewport, causing a page-level horizontal scrollbar that dragged the
             (sticky) sidebar along with it instead of staying put while only the table scrolled. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Topbar
             onMenuClick={() => setSidebarOpen((o) => !o)}
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
+          <main className="min-w-0 flex-1 p-4 pb-8 sm:p-6 sm:pb-10">
             <Outlet />
           </main>
           <PreviewFooterNote />
