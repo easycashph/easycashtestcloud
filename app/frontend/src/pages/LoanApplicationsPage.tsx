@@ -47,11 +47,16 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
   }
 }
 
-const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] = [
+/** 'FOR_DISBURSEMENT' isn't a raw `LoanApplicationStatus` - it's a derived state (an APPROVED
+ * application whose loan account has been created but not yet Activated), same as the "For
+ * Disbursement" badge shown in the table below. Filtered separately from plain "Approved" so
+ * staff can find applications actually waiting on disbursement. */
+const STATUS_OPTIONS: { value: LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'PREAPPROVED', label: 'Pre-approved' },
   { value: 'PREDECLINED', label: 'Pre-declined' },
   { value: 'APPROVED', label: 'Approved' },
+  { value: 'FOR_DISBURSEMENT', label: 'For Disbursement' },
   { value: 'DECLINED', label: 'Declined' },
 ];
 
@@ -78,7 +83,7 @@ export function LoanApplicationsPage() {
   const { canAccessLoanApplications, currentAccount } = useRole();
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
+  const [status, setStatus] = React.useState<LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
   const [createOpen, setCreateOpen] = React.useState(false);
 
@@ -119,10 +124,23 @@ export function LoanApplicationsPage() {
     [applications],
   );
 
+  // Mirrors the "For Disbursement" badge logic below: an Approved application whose loan account
+  // exists but hasn't been Activated yet (still PENDING_APPROVAL/APPROVED on the loan account
+  // side).
+  const isForDisbursement = React.useCallback(
+    (app: LoanApplication) => {
+      if (app.status !== 'APPROVED' || !app.createdLoanAccountId) return false;
+      const loanAccountStatus = loanAccountStatusById.get(app.createdLoanAccountId);
+      return loanAccountStatus === 'PENDING_APPROVAL' || loanAccountStatus === 'APPROVED';
+    },
+    [loanAccountStatusById],
+  );
+
   // Computed unconditionally, before the early return below, so
   // useSortableTable's hook call is never skipped on some renders.
   const filtered = applications.filter((app) => {
-    const matchesStatus = status === 'ALL' || app.status === status;
+    const matchesStatus =
+      status === 'ALL' || (status === 'FOR_DISBURSEMENT' ? isForDisbursement(app) : app.status === status);
     const matchesCategory = category === 'ALL' || app.requestedCategory === category;
     return matchesStatus && matchesCategory;
   });
@@ -210,7 +228,7 @@ export function LoanApplicationsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as LoanApplicationStatus | 'ALL')}>
+            <Select value={status} onValueChange={(v) => setStatus(v as LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL')}>
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
