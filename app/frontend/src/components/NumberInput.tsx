@@ -13,10 +13,18 @@ interface NumberInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
  * Stores raw numeric value internally, displays formatted with commas.
  * Handles currency/financial fields without forcing a specific currency symbol.
  *
- * Example: as user types "1000000", displays "1,000,000"
+ * Formats with commas only while the field is NOT focused (on mount, on blur, and when the
+ * parent resets the value externally) - never while the user is actively typing. Reformatting
+ * on every keystroke (via a naive value-watching useEffect) breaks typing entirely: the cursor
+ * jumps to the end after each character, and a trailing decimal point ("1234.") gets silently
+ * dropped mid-type because `parseFloat("1234.")` rounds it back to "1234" before the user can
+ * type the fractional digits. Tracking focus and skipping the reformat while typing avoids both.
+ *
+ * Example: as user types "1000000", displays "1000000" while typing, then "1,000,000" on blur.
  */
 export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
-  ({ value, onChange, minDecimals = 0, maxDecimals = 2, ...props }, ref) => {
+  ({ value, onChange, onFocus, onBlur, minDecimals = 0, maxDecimals = 2, ...props }, ref) => {
+    const isFocusedRef = React.useRef(false);
     const [displayValue, setDisplayValue] = React.useState<string>(() => {
       if (!value) return '';
       const numValue = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : 0;
@@ -24,6 +32,11 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     });
 
     React.useEffect(() => {
+      // Never stomp the display value while the user is actively typing - only sync from an
+      // externally-changed `value` (initial mount, product-default prefill, form reset, etc.)
+      // when the field isn't focused.
+      if (isFocusedRef.current) return;
+
       if (value === undefined || value === '') {
         setDisplayValue('');
         return;
@@ -33,6 +46,14 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         setDisplayValue(formatNumberWithCommas(numValue, minDecimals, maxDecimals));
       }
     }, [value, minDecimals, maxDecimals]);
+
+    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      isFocusedRef.current = true;
+      // Switch to the raw (comma-free) value so the user edits plain digits, not a formatted
+      // string whose comma positions shift under them as they type.
+      setDisplayValue(stripCommas(displayValue));
+      onFocus?.(e);
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const input = e.target.value;
@@ -53,6 +74,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     };
 
     const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+      isFocusedRef.current = false;
       const input = e.target.value;
       if (input && input !== '' && input !== '-') {
         const num = parseFloat(input);
@@ -60,7 +82,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           setDisplayValue(formatNumberWithCommas(num, minDecimals, maxDecimals));
         }
       }
-      props.onBlur?.(e);
+      onBlur?.(e);
     };
 
     return (
@@ -69,6 +91,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         type="text"
         inputMode="decimal"
         value={displayValue}
+        onFocus={handleFocus}
         onChange={handleChange}
         onBlur={handleBlur}
         {...props}
@@ -78,6 +101,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 );
 
 NumberInput.displayName = 'NumberInput';
+
+function stripCommas(value: string): string {
+  return value.replace(/,/g, '');
+}
 
 /**
  * Format a number with thousand separators (commas).
