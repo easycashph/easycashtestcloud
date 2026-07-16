@@ -231,7 +231,7 @@ function CreateClientProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Client Profile</DialogTitle>
           <DialogDescription>
@@ -553,7 +553,7 @@ function CreateLoanAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Loan Account</DialogTitle>
           <DialogDescription>From {borrower.fullName}&apos;s approved application. Review before submitting.</DialogDescription>

@@ -181,7 +181,7 @@ function RealEditClientDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Client Details</DialogTitle>
           <DialogDescription>
@@ -756,7 +756,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
 
       <Dialog open={createApplicationOpen} onOpenChange={setCreateApplicationOpen}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Application</DialogTitle>
             <DialogDescription>
@@ -779,7 +779,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Dialog>
 
       <Dialog open={createLoanAccountOpen} onOpenChange={setCreateLoanAccountOpen}>
-        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Account</DialogTitle>
             <DialogDescription>For {borrower.fullName}. Review before submitting.</DialogDescription>

@@ -1194,7 +1194,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
       <Dialog open={recordPaymentOpen} onOpenChange={setRecordPaymentOpen}>
         <DialogContent
-          className="max-h-[90vh] max-w-5xl overflow-y-auto"
+          className="max-h-[90vh] max-w-6xl overflow-y-auto"
           // Radix's default open-focus behavior auto-focuses the first focusable element inside the
           // dialog - here, the Payment amount field, since this dialog skips straight to "Payment
           // Details" (locked borrower/loan). That field being focused before the user has clicked

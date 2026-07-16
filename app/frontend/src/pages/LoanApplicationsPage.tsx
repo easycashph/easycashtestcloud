@@ -194,7 +194,7 @@ export function LoanApplicationsPage() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Loan Application Form</DialogTitle>
             <DialogDescription>
