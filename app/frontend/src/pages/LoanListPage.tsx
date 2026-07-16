@@ -269,7 +269,15 @@ export function LoanListPage() {
                     <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(loan.principalAmount)}</TableCell>
-                  <TableCell className="text-right">{formatPeso(loan.collectionsBalance)}</TableCell>
+                  <TableCell className="text-right">
+                    {loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED' ? (
+                      <span className="text-muted-foreground" title="Not yet computed - the repayment schedule is only generated once this loan is Activated">
+                        —
+                      </span>
+                    ) : (
+                      formatPeso(loan.collectionsBalance)
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(loan.createdAt)}</TableCell>
                 </TableRow>
               ))}

@@ -583,6 +583,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const schedulePreview = showSchedulePreview
     ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(loan.firstRepaymentDate))
     : null;
+  // Every balance column (and the collectionsBalance/accountingBalance getters derived from them)
+  // is genuinely 0 before Activation - not because there's no obligation, but because
+  // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
+  const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
@@ -641,12 +645,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
-          <MiniStat label="Collections Balance" value={formatPeso(num(loan.collectionsBalance))} emphasize />
-          <MiniStat label="Accounting Balance" value={formatPeso(num(loan.accountingBalance))} emphasize />
-          <MiniStat label="Principal" value={formatPeso(num(loan.balances.principalBalance))} />
-          <MiniStat label="Interest" value={formatPeso(num(loan.balances.interestBalance))} />
-          <MiniStat label="Penalty" value={formatPeso(num(loan.balances.penaltyBalance))} />
-          <MiniStat label="Fees" value={formatPeso(num(loan.balances.feesBalance))} />
+          {/* Not yet Activated - every balance column is genuinely 0 only because the amortization
+              schedule hasn't been generated yet, not because there's no obligation. Showing "—"
+              here avoids that reading as "nothing owed"/"fully paid" for a loan that hasn't
+              started. */}
+          <MiniStat label="Collections Balance" value={notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))} emphasize />
+          <MiniStat label="Accounting Balance" value={notYetActivated ? '—' : formatPeso(num(loan.accountingBalance))} emphasize />
+          <MiniStat label="Principal" value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))} />
+          <MiniStat label="Interest" value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))} />
+          <MiniStat label="Penalty" value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))} />
+          <MiniStat label="Fees" value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))} />
           <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
           <MiniStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
           <MiniStat label="Installments" value={String(loan.installmentCount)} />

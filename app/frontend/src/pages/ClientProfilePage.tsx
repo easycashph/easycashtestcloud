@@ -701,10 +701,20 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                     <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(num(loan.principalAmount))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.feesBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
+                  {(() => {
+                    // Not yet Activated - every balance column is genuinely 0 only because the
+                    // amortization schedule hasn't been generated yet, not because there's no
+                    // obligation. "—" avoids that reading as "nothing owed"/"fully paid".
+                    const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
+                    return (
+                      <>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))}</TableCell>
+                      </>
+                    );
+                  })()}
                 </TableRow>
               ))}
               {loansQuery.isLoading && (
