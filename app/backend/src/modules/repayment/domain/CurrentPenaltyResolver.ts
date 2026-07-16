@@ -58,3 +58,19 @@ export function resolveComputedPenalty(
   }
   return installment.due.penalty;
 }
+
+/**
+ * 2026-07-16 (Reduce Penalty payment-allocation sync fix): for a *chargeable* amount — what a real
+ * payment is actually allocated against — only an explicit `penaltyOverride` should override
+ * `due.penalty`. This deliberately does NOT fall back to `resolveComputedPenalty`'s live ADR-050
+ * formula the way the display layer (`RepaymentInstallmentPresenter`) does: that formula is a
+ * today-relative *projection* for what staff sees on screen, not a value ever posted to the ledger
+ * or otherwise treated as collectible — `ProcessPaymentUseCase`'s allocation engine has always
+ * allocated against the frozen `due.penalty` regardless of how much ADR-050 projects is owed today,
+ * and this function preserves that (confirmed via `GoldenMasterReplay.test.ts`, whose fixture loans
+ * broke when an earlier version of this function called `resolveComputedPenalty` unconditionally).
+ * `penaltyOverride`, once set, IS a committed, non-projected figure — so it's the one exception.
+ */
+export function resolveEffectivePenaltyDue(installment: RepaymentInstallment): Money {
+  return installment.penaltyOverride?.amount ?? installment.due.penalty;
+}

@@ -16,6 +16,7 @@ import { PaymentAllocation } from '@modules/ledger/domain/PaymentAllocation';
 import { TransactionComponents } from '@modules/ledger/domain/valueObjects/TransactionComponents';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
+import { resolveEffectivePenaltyDue } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
 import { LoanAccount } from '../../domain/LoanAccount';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
@@ -69,13 +70,18 @@ export interface ProcessPaymentResult {
  * `due` is immutable and never reflects prior payments (REPAY-3 /
  * `FINANCIAL_INVARIANTS.md` §1); allocating against raw `due` would offer
  * an already-paid portion to this payment a second time.
+ *
+ * 2026-07-16 (Reduce Penalty / Adjust Fees allocation-sync fix): fees/penalty use the
+ * override-aware `effectiveFeesDue`/`resolveEffectivePenaltyDue` — not raw `due.fees`/
+ * `due.penalty` — otherwise a payment on an installment Reduce Penalty or Adjust Fees already
+ * touched would still be soaked up by the stale original amount instead of what's actually owed.
  */
 function toRemainingDue(installment: RepaymentInstallment): AllocatableInstallment {
   return {
     id: installment.id,
     dueDate: installment.dueDate,
-    feesDue: installment.due.fees.subtract(installment.paid.fees),
-    penaltyDue: installment.due.penalty.subtract(installment.paid.penalty),
+    feesDue: installment.effectiveFeesDue.subtract(installment.paid.fees),
+    penaltyDue: resolveEffectivePenaltyDue(installment).subtract(installment.paid.penalty),
     interestDue: installment.due.interest.subtract(installment.paid.interest),
     principalDue: installment.due.principal.subtract(installment.paid.principal),
   };

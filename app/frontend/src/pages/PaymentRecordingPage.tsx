@@ -49,12 +49,23 @@ function manualEntryTotal(entry: ManualEntry): number {
   );
 }
 
+/**
+ * 2026-07-16: penalty must fall back to `i.penaltyOverride`, NOT `i.currentPenaltyOwed` — that
+ * field also reflects ADR-050's live daily-accrual projection, which the backend's actual payment
+ * allocation (`ProcessPaymentUseCase`) deliberately does NOT charge against (a today-relative
+ * display projection, never posted to the ledger as collectible) — only an explicit Reduce Penalty
+ * override is. Using the live figure here would show/auto-fill/allocate a different amount than
+ * what the backend actually applies. Fees have no such live-vs-frozen split, so `currentFeesDue`
+ * (= `feesOverride?.amount ?? due.fees`) is already override-only and safe to use directly.
+ */
 function remainingDue(i: RepaymentInstallment) {
+  const owedPenalty = parseAmount(i.penaltyOverride?.amount ?? i.due.penalty);
+  const owedFees = parseAmount(i.currentFeesDue);
   return {
     principal: Math.max(0, parseAmount(i.due.principal) - parseAmount(i.paid.principal)),
     interest: Math.max(0, parseAmount(i.due.interest) - parseAmount(i.paid.interest)),
-    penalty: Math.max(0, parseAmount(i.due.penalty) - parseAmount(i.paid.penalty)),
-    fees: Math.max(0, parseAmount(i.due.fees) - parseAmount(i.paid.fees)),
+    penalty: Math.max(0, owedPenalty - parseAmount(i.paid.penalty)),
+    fees: Math.max(0, owedFees - parseAmount(i.paid.fees)),
   };
 }
 
@@ -259,16 +270,14 @@ export function PaymentRecordingPage() {
   const paymentAmount = Number.parseFloat(amount) || 0;
   const preview = previewCrossInstallmentAllocation(
     paymentAmount,
-    unpaidInstallments.map((i) => ({
-      id: i.id,
-      installmentNumber: i.installmentNumber,
-      remainingDue: {
-        feesDue: Math.max(0, parseAmount(i.due.fees) - parseAmount(i.paid.fees)),
-        penaltyDue: Math.max(0, parseAmount(i.due.penalty) - parseAmount(i.paid.penalty)),
-        interestDue: Math.max(0, parseAmount(i.due.interest) - parseAmount(i.paid.interest)),
-        principalDue: Math.max(0, parseAmount(i.due.principal) - parseAmount(i.paid.principal)),
-      },
-    })),
+    unpaidInstallments.map((i) => {
+      const r = remainingDue(i);
+      return {
+        id: i.id,
+        installmentNumber: i.installmentNumber,
+        remainingDue: { feesDue: r.fees, penaltyDue: r.penalty, interestDue: r.interest, principalDue: r.principal },
+      };
+    }),
   );
   const previewRowsWithDueDate = preview.rows.map((row) => ({
     ...row,

@@ -28,16 +28,33 @@ function buildActiveLoan(principalDue: string, interestDue: string) {
 function buildInstallment(
   installmentNumber: number,
   dueDate: string,
-  due: { principal: string; interest: string },
-  paid: { principal: string; interest: string } = { principal: '0', interest: '0' },
+  due: { principal: string; interest: string; fees?: string; penalty?: string },
+  paid: { principal: string; interest: string; fees?: string; penalty?: string } = { principal: '0', interest: '0' },
+  overrides: { feesOverride?: string; penaltyOverride?: string } = {},
 ) {
   return RepaymentInstallment.reconstitute({
     id: `installment-${installmentNumber}`,
     loanAccountId: 'loan-1',
     installmentNumber,
     dueDate: new Date(dueDate),
-    due: InstallmentAmounts.of({ principal: Money.of(due.principal), interest: Money.of(due.interest) }),
-    paid: InstallmentAmounts.of({ principal: Money.of(paid.principal), interest: Money.of(paid.interest) }),
+    due: InstallmentAmounts.of({
+      principal: Money.of(due.principal),
+      interest: Money.of(due.interest),
+      fees: Money.of(due.fees ?? '0'),
+      penalty: Money.of(due.penalty ?? '0'),
+    }),
+    paid: InstallmentAmounts.of({
+      principal: Money.of(paid.principal),
+      interest: Money.of(paid.interest),
+      fees: Money.of(paid.fees ?? '0'),
+      penalty: Money.of(paid.penalty ?? '0'),
+    }),
+    feesOverride: overrides.feesOverride
+      ? { amount: Money.of(overrides.feesOverride), reason: 'test', byUserId: 'user-1', at: new Date() }
+      : undefined,
+    penaltyOverride: overrides.penaltyOverride
+      ? { amount: Money.of(overrides.penaltyOverride), reason: 'test', byUserId: 'user-1', at: new Date() }
+      : undefined,
     createdAt: new Date(),
     updatedAt: new Date(),
     version: 0,
@@ -161,6 +178,56 @@ describe('ProcessPaymentUseCase', () => {
       // 250.00 applied: interest tier (50.00) first, then principal tier (200.00) — exactly exhausts remaining due.
       expect(partiallyPaid.paid.interest.equals(Money.of('50.00'))).toBe(true);
       expect(partiallyPaid.paid.principal.equals(Money.of('500.00'))).toBe(true);
+      expect(result.remainder.isZero()).toBe(true);
+    });
+  });
+
+  describe('override-aware allocation (2026-07-16 fix: Reduce Penalty / Adjust Fees must be reflected in payment allocation)', () => {
+    it('allocates against a fee adjustment override, not the stale raw due.fees', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      // due.fees is 500.00 (stale), but Adjust Fees lowered it to 50.00 — a 60.00 payment should
+      // fully clear the 50.00 fees tier and spill 10.00 into interest, not sit stuck in fees.
+      const inst = buildInstallment(
+        1,
+        '2026-08-15',
+        { principal: '500.00', interest: '50.00', fees: '500.00' },
+        undefined,
+        { feesOverride: '50.00' },
+      );
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', Money.of('60.00'), 'officer-1');
+
+      expect(inst.paid.fees.equals(Money.of('50.00'))).toBe(true);
+      expect(inst.paid.interest.equals(Money.of('10.00'))).toBe(true);
+      expect(result.remainder.isZero()).toBe(true);
+    });
+
+    it('allocates against a penalty reduction override, not the stale raw due.penalty', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      // due.penalty is 300.00 (stale), but Reduce Penalty lowered it to 20.00 — a 30.00 payment
+      // should fully clear the 20.00 penalty tier and spill 10.00 into interest.
+      const inst = buildInstallment(
+        1,
+        '2026-08-15',
+        { principal: '500.00', interest: '50.00', penalty: '300.00' },
+        undefined,
+        { penaltyOverride: '20.00' },
+      );
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', Money.of('30.00'), 'officer-1');
+
+      expect(inst.paid.penalty.equals(Money.of('20.00'))).toBe(true);
+      expect(inst.paid.interest.equals(Money.of('10.00'))).toBe(true);
       expect(result.remainder.isZero()).toBe(true);
     });
   });
