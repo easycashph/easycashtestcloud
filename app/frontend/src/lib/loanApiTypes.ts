@@ -370,7 +370,19 @@ export interface LoanDocumentListItem {
   } | null;
 }
 
+/** One installment a payment actually touched — from `payment_allocations`, the same rows Reverse Payment reads. */
+export interface PaymentAllocationDetail {
+  repaymentInstallmentId: string;
+  installmentNumber: number | null;
+  installmentDueDate: string | null;
+  principalApplied: string;
+  interestApplied: string;
+  feesApplied: string;
+  penaltyApplied: string;
+}
+
 export interface ProcessPaymentResponse {
   loanAccount: LoanAccount;
   remainder: string;
+  appliedAllocations: PaymentAllocationDetail[];
 }

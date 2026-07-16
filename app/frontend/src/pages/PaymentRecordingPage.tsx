@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertCircle, ChevronLeft, Search } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, ChevronLeft, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -112,9 +112,21 @@ function getPreviewRowSortValue(
  * backend re-validates authoritatively (per-installment remaining-due caps + exact total match)
  * before posting.
  */
+/** Everything the post-payment confirmation dialog needs, captured at success time (the form/queries reset underneath it). */
+interface PaymentSuccessInfo {
+  response: ProcessPaymentResponse;
+  loanId: string;
+  loanCode: string;
+  borrowerName: string;
+  amount: number;
+  paidAt: string;
+  orNumber?: string;
+}
+
 export function PaymentRecordingPage() {
   useLogPageView('Payment Recording');
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedLoanId = searchParams.get('loanId');
 
@@ -182,6 +194,7 @@ export function PaymentRecordingPage() {
   const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = React.useState<PaymentSuccessInfo | null>(null);
   const idempotencyKeyRef = React.useRef<string | null>(null);
 
   // Manual mode (2026-07-10): staff picks specific unpaid installments and types the exact
@@ -216,6 +229,12 @@ export function PaymentRecordingPage() {
     .filter((i) => i.status !== 'PAID')
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
+  // Guards the auto-fill effect below so it only ever fires once per loan selection — without
+  // this, checking merely `amount === ''` couldn't tell "just switched loans, never filled in"
+  // apart from "staff manually cleared the field via backspace", so clearing the amount to type a
+  // different figure kept snapping it right back to the auto-filled total (2026-07-15 bug report).
+  const hasAutoFilledAmountRef = React.useRef(false);
+
   // Clears the previous loan's amount immediately on switch, so it never briefly shows a stale
   // figure while the new loan's schedule is still loading. Also clears OR#/AR# — a receipt number
   // is specific to one payment, never reused across a different loan selection.
@@ -223,15 +242,18 @@ export function PaymentRecordingPage() {
     setAmount('');
     setOrNumber('');
     setArNumber('');
+    hasAutoFilledAmountRef.current = false;
   }, [loanId]);
   // Auto-fills once the oldest unpaid installment's real total due is known — the amount staff
-  // will most commonly want to collect. Only fires while amount is still blank (the effect above
-  // guarantees that's "just switched loans", not "staff already typed something").
+  // will most commonly want to collect. Only fires once per loan selection (guarded by the ref
+  // above), not merely "whenever amount happens to be blank" — otherwise staff could never
+  // deliberately clear the field to type a different amount.
   React.useEffect(() => {
-    if (amount !== '' || unpaidInstallments.length === 0) return;
+    if (hasAutoFilledAmountRef.current || amount !== '' || unpaidInstallments.length === 0) return;
     const oldest = remainingDue(unpaidInstallments[0]!);
     const total = oldest.principal + oldest.interest + oldest.penalty + oldest.fees;
     setAmount(total.toFixed(2));
+    hasAutoFilledAmountRef.current = true;
   }, [amount, unpaidInstallments]);
 
   const paymentAmount = Number.parseFloat(amount) || 0;
@@ -294,14 +316,29 @@ export function PaymentRecordingPage() {
         'Idempotency-Key': idempotencyKeyRef.current,
       });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       idempotencyKeyRef.current = null;
       setConfirmOpen(false);
       setSubmitError(null);
+      setSuccessInfo({
+        response,
+        loanId,
+        loanCode: selectedLoan?.loanCode ?? '',
+        borrowerName: selectedBorrower?.fullName ?? '',
+        amount: paymentAmount,
+        paidAt,
+        orNumber: orNumber.trim() || undefined,
+      });
       setOrNumber('');
       setArNumber('');
-      void queryClient.invalidateQueries({ queryKey: ['loan-accounts'] });
-      void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
+      setAmount('');
+      hasAutoFilledAmountRef.current = true; // do not auto-fill over the just-cleared field until a new loan is picked
+      // refetchQueries (not invalidateQueries) - forces the actual network refetch of this loan's
+      // repayment schedule right now, rather than only marking it stale. The "Next due" summary
+      // below reads unpaidInstallments straight from this query, and previously wasn't reliably
+      // picking up the just-recorded payment until a full page reload (2026-07-15 bug report).
+      void queryClient.refetchQueries({ queryKey: ['loan-accounts'] });
+      void queryClient.refetchQueries({ queryKey: ['repayment-schedule', loanId] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -447,6 +484,29 @@ export function PaymentRecordingPage() {
                     </p>
                     <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
                     <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
+                    {installmentsQuery.isLoading ? (
+                      <p className="mt-2 border-t pt-2">Loading next due amount…</p>
+                    ) : installmentsQuery.isError ? (
+                      <p className="mt-2 border-t pt-2 text-destructive">
+                        Could not load the repayment schedule ({installmentsQuery.error instanceof ApiError ? installmentsQuery.error.message : 'unknown error'}).
+                      </p>
+                    ) : unpaidInstallments.length > 0 ? (
+                      <div className="mt-2 border-t pt-2">
+                        {(() => {
+                          const oldest = unpaidInstallments[0]!;
+                          const remaining = remainingDue(oldest);
+                          const totalRemaining = remaining.principal + remaining.interest + remaining.penalty + remaining.fees;
+                          return (
+                            <p>
+                              <span className="font-medium text-foreground">Next due:</span> Installment #{oldest.installmentNumber} ·{' '}
+                              {formatDate(oldest.dueDate)} · <span className="font-medium text-foreground">{formatPeso(totalRemaining)}</span>
+                            </p>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <p className="mt-2 border-t pt-2">No unpaid installments remain on this loan.</p>
+                    )}
                   </div>
                 ) : (
                   !clientLoansQuery.isLoading && (
@@ -746,6 +806,92 @@ export function PaymentRecordingPage() {
               {paymentMutation.isPending ? 'Posting…' : 'Confirm Payment'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={successInfo !== null} onOpenChange={(open) => !open && setSuccessInfo(null)}>
+        <DialogContent className="max-w-xl">
+          {successInfo && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                  <DialogTitle>Payment recorded</DialogTitle>
+                </div>
+                <DialogDescription>
+                  {successInfo.loanCode} · {successInfo.borrowerName}
+                  {successInfo.orNumber ? ` · OR# ${successInfo.orNumber}` : ''} · {formatDate(successInfo.paidAt)}
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-2xl font-semibold">{formatPeso(successInfo.amount)}</p>
+              {successInfo.response.appliedAllocations.length > 0 && (
+                <div>
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Applied to:</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableCell className="text-xs font-medium text-muted-foreground">Installment</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Fees</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Penalty</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Interest</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Principal</TableCell>
+                        <TableCell className="text-right text-xs font-medium text-muted-foreground">Total</TableCell>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {successInfo.response.appliedAllocations.map((a) => (
+                        <TableRow key={a.repaymentInstallmentId}>
+                          <TableCell className="text-xs">
+                            {a.installmentNumber !== null ? `#${a.installmentNumber}` : '—'}
+                            {a.installmentDueDate ? ` · ${formatDate(a.installmentDueDate)}` : ''}
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(parseAmount(a.feesApplied))}</TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">{formatPeso(parseAmount(a.penaltyApplied))}</TableCell>
+                          <TableCell className="text-right text-xs">{formatPeso(parseAmount(a.interestApplied))}</TableCell>
+                          <TableCell className="text-right text-xs">{formatPeso(parseAmount(a.principalApplied))}</TableCell>
+                          <TableCell className="text-right text-xs font-medium">
+                            {formatPeso(
+                              parseAmount(a.feesApplied) +
+                                parseAmount(a.penaltyApplied) +
+                                parseAmount(a.interestApplied) +
+                                parseAmount(a.principalApplied),
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+              {parseAmount(successInfo.response.remainder) > 0 && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {formatPeso(parseAmount(successInfo.response.remainder))} was not applied - it exceeds everything currently
+                    due on this loan. Only the applied amount was posted.
+                  </span>
+                </div>
+              )}
+              <div className="rounded-md bg-muted/50 p-3">
+                <p className="text-xs text-muted-foreground">Loan balance after</p>
+                <p className="text-base font-semibold">
+                  {formatPeso(parseAmount(successInfo.response.loanAccount.collectionsBalance))}
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSuccessInfo(null);
+                    changeClient();
+                  }}
+                >
+                  Close
+                </Button>
+                <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

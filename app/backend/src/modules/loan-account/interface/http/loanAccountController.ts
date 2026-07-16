@@ -169,7 +169,7 @@ export class LoanAccountController {
           penalty: Money.of(a.penalty),
           fees: Money.of(a.fees),
         }));
-        const { loanAccount, remainder } = await this.deps.processPaymentUseCase.execute(
+        const { loanAccount, remainder, appliedAllocations } = await this.deps.processPaymentUseCase.execute(
           req.params.id as string,
           paymentAmount,
           currentUser.sub,
@@ -180,7 +180,19 @@ export class LoanAccountController {
         );
         return {
           statusCode: 200,
-          body: { loanAccount: presentLoanAccount(loanAccount), remainder: remainder.toString() },
+          body: {
+            loanAccount: presentLoanAccount(loanAccount),
+            remainder: remainder.toString(),
+            appliedAllocations: appliedAllocations.map((a) => ({
+              repaymentInstallmentId: a.repaymentInstallmentId,
+              installmentNumber: a.installmentNumber,
+              installmentDueDate: a.installmentDueDate.toISOString(),
+              principalApplied: a.principalApplied.toString(),
+              interestApplied: a.interestApplied.toString(),
+              feesApplied: a.feesApplied.toString(),
+              penaltyApplied: a.penaltyApplied.toString(),
+            })),
+          },
         };
       });
     } catch (error) {

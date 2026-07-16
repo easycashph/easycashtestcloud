@@ -306,6 +306,17 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       (deps.processPaymentUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         loanAccount: loan,
         remainder: Money.of('25.00'),
+        appliedAllocations: [
+          {
+            repaymentInstallmentId: 'inst-1',
+            installmentNumber: 4,
+            installmentDueDate: new Date('2026-10-05T00:00:00Z'),
+            principalApplied: Money.of('413.96'),
+            interestApplied: Money.of('86.04'),
+            feesApplied: Money.of('0.00'),
+            penaltyApplied: Money.of('0.00'),
+          },
+        ],
       });
       const controller = new LoanAccountController(deps);
       const req = {
@@ -330,6 +341,17 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       const body = res.json.mock.calls[0]?.[0];
       expect(body.remainder).toBe('25.00');
       expect(typeof body.remainder).toBe('string');
+      expect(body.appliedAllocations).toEqual([
+        {
+          repaymentInstallmentId: 'inst-1',
+          installmentNumber: 4,
+          installmentDueDate: '2026-10-05T00:00:00.000Z',
+          principalApplied: '413.96',
+          interestApplied: '86.04',
+          feesApplied: '0.00',
+          penaltyApplied: '0.00',
+        },
+      ]);
     });
 
     it('checks branch access BEFORE mutating — a cross-branch attempt never reaches processPaymentUseCase', async () => {

@@ -56,6 +56,7 @@ import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructur
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
+import { ListPaymentAllocationsForTransactionUseCase } from '@modules/ledger/application/use-cases/ListPaymentAllocationsForTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
 import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
 import { createLoanNoteRouter } from '@modules/loan-note/interface/http/loanNoteRouter';
@@ -464,6 +465,11 @@ export function createApp(): Express {
     {
       listLoanTransactionsForAccountUseCase: new ListLoanTransactionsForAccountUseCase({ loanTransactionRepository }),
       getLoanTransactionUseCase: new GetLoanTransactionUseCase({ loanTransactionRepository }),
+      listPaymentAllocationsForTransactionUseCase: new ListPaymentAllocationsForTransactionUseCase({
+        loanTransactionRepository,
+        paymentAllocationRepository,
+        repaymentInstallmentRepository,
+      }),
     },
     tokenService,
   );
