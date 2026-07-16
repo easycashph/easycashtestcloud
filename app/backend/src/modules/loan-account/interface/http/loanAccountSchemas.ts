@@ -25,6 +25,8 @@ export const createLoanAccountSchema = z.object({
   /** ADR-045 (Concept 1 — Exact First Repayment Date): required, explicit input, never derived. */
   firstRepaymentDate: z.coerce.date(),
   anticipatedDisbursementDate: z.coerce.date().optional(),
+  /** 2026-07-16 — see `LoanAccountProps.sourceApplicationId`'s own doc comment. */
+  sourceApplicationId: z.string().min(1).optional(),
   /** 2026-07-11 (Create Loan Account origination fees) — each omitted defaults to 0 in the use case. */
   processingFee: decimalStringSchema.optional(),
   advanceInterestFee: decimalStringSchema.optional(),

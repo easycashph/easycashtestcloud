@@ -15,6 +15,8 @@ export interface CreateLoanAccountInput {
   firstRepaymentDate: Date;
   /** 2026-07-14: staff-entered estimate, reused as the Promissory Note's `{AnticipatedDisbursementDate}`. */
   anticipatedDisbursementDate?: Date;
+  /** 2026-07-16 — see `LoanAccountProps.sourceApplicationId`'s own doc comment. */
+  sourceApplicationId?: string;
   /** 2026-07-11 (Create Loan Account origination fees) — each omitted/undefined defaults to 0. */
   processingFee?: string;
   advanceInterestFee?: string;

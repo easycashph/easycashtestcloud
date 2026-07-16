@@ -17,6 +17,16 @@ export interface ILoanAccountRepository {
   findByLoanCode(loanCode: string, ctx?: TransactionContext): Promise<LoanAccount | null>;
   findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]>;
   /**
+   * 2026-07-16: the loan account created FROM this specific LoanApplication, if any — mirrors
+   * `IBorrowerRepository.findBySourceApplicationId`'s identical shape/rationale. Replaces
+   * `loanApplicationController.buildLinkage()`'s previous "this borrower's most recent loan
+   * account" heuristic, which falsely matched an older, unrelated loan account for any borrower
+   * who already had one on file before this application was approved.
+   */
+  findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<LoanAccount | null>;
+  /** Batched form of `findBySourceApplicationId` for list views - one query for N applications. */
+  findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<LoanAccount[]>;
+  /**
    * 2026-07-11 (Create Loan Account): the highest numeric suffix among existing loan codes of the
    * form `{prefix}_NNNNN` (matches the real convention observed across migrated legacy data, e.g.
    * `SML-REG_00377`) — 0 if none exist yet. Used to auto-generate the next code; not atomic against

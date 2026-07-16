@@ -90,6 +90,14 @@ export interface LoanAccountProps {
    * perspective; only ever set via the one-time backfill script.
    */
   legacyBalanceDataMissing: boolean;
+  /**
+   * 2026-07-16: the LoanApplication this account was actually created from, if any — see the
+   * Prisma schema field's own doc comment for why this replaced a "borrower's most recent loan
+   * account" heuristic in `loanApplicationController.buildLinkage()`. Undefined for a loan
+   * created without going through an application (legacy migration, or Create Loan Account used
+   * standalone rather than from an application's Approved state).
+   */
+  sourceApplicationId?: string;
   /** 2026-07-11 (Create Loan Account) — see `OriginationFees`'s own doc comment. */
   originationFees: OriginationFees;
   /** = principalAmount - originationFees.total(). Computed once at creation (LA-4 snapshot), never recomputed. */
@@ -124,6 +132,8 @@ export interface CreateLoanAccountProps {
   gracePeriodDays?: number;
   firstRepaymentDate: Date;
   anticipatedDisbursementDate?: Date;
+  /** 2026-07-16 — see `LoanAccountProps.sourceApplicationId`'s own doc comment. */
+  sourceApplicationId?: string;
   /** 2026-07-11 (Create Loan Account) — omit for zero fees (e.g. programmatic/migration creation). */
   originationFees?: OriginationFeesProps;
   legacyId?: string;
@@ -188,6 +198,7 @@ export class LoanAccount {
         firstRepaymentDate: input.firstRepaymentDate,
         anticipatedDisbursementDate: input.anticipatedDisbursementDate,
         legacyBalanceDataMissing: false,
+        sourceApplicationId: input.sourceApplicationId,
         originationFees,
         netProceeds,
         legacyId: input.legacyId,
@@ -322,6 +333,10 @@ export class LoanAccount {
 
   get closedReason(): string | undefined {
     return this.props.closedReason;
+  }
+
+  get sourceApplicationId(): string | undefined {
+    return this.props.sourceApplicationId;
   }
 
   get legacyBalanceDataMissing(): boolean {

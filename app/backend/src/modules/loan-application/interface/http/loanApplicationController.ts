@@ -60,17 +60,20 @@ export class LoanApplicationController {
    * Borrower (`Borrower.sourceApplicationId`, reverse-looked-up here), while the "Create Loan
    * Application" renewal flow (2026-07-14) is created FROM an already-existing Borrower
    * (`application.borrowerId`, set directly at creation). Both must resolve to the same linkage
-   * shape so "Loan Account Created" detection works for either kind of application. */
+   * shape so "Loan Account Created" detection works for either kind of application.
+   *
+   * 2026-07-16: the loan account itself is looked up by `LoanAccount.sourceApplicationId` (the
+   * exact application it was created FROM), not "this borrower's most recent/first loan
+   * account" — the old heuristic falsely showed an older, unrelated loan account (e.g. a prior
+   * closed loan) as "the account THIS application produced" for any borrower who already had one
+   * on file, which is exactly what happens on every renewal. */
   private async buildLinkage(application: LoanApplication): Promise<LoanApplicationLinkage> {
     const borrower =
       (await this.deps.borrowerRepository.findBySourceApplicationId(application.id)) ??
       (application.borrowerId ? await this.deps.borrowerRepository.findById(application.borrowerId) : null);
-    if (!borrower) {
-      return { createdBorrowerId: null, createdLoanAccountId: null, createdLoanAccountCode: null };
-    }
-    const [loanAccount] = await this.deps.loanAccountRepository.findMany({ borrowerId: borrower.id, limit: 1 });
+    const loanAccount = await this.deps.loanAccountRepository.findBySourceApplicationId(application.id);
     return {
-      createdBorrowerId: borrower.id,
+      createdBorrowerId: borrower?.id ?? null,
       createdLoanAccountId: loanAccount?.id ?? null,
       createdLoanAccountCode: loanAccount?.loanCode ?? null,
     };
@@ -99,16 +102,14 @@ export class LoanApplicationController {
       }
     }
 
-    const borrowerIds = [...new Set([...borrowerByApplicationId.values()].map((b) => b.id))];
-    const loanAccounts =
-      borrowerIds.length > 0
-        ? (await Promise.all(borrowerIds.map((borrowerId) => this.deps.loanAccountRepository.findMany({ borrowerId, limit: 1 })))).flat()
-        : [];
-    const loanAccountByBorrowerId = new Map(loanAccounts.map((la) => [la.borrowerId, la]));
+    // 2026-07-16: looked up by LoanAccount.sourceApplicationId (the exact application it was
+    // created FROM) — see `buildLinkage`'s doc comment for why a borrower-keyed lookup was wrong.
+    const loanAccounts = await this.deps.loanAccountRepository.findManyBySourceApplicationIds(applications.map((a) => a.id));
+    const loanAccountByApplicationId = new Map(loanAccounts.map((la) => [la.sourceApplicationId as string, la]));
 
     return applications.map((application) => {
       const borrower = borrowerByApplicationId.get(application.id);
-      const loanAccount = borrower ? loanAccountByBorrowerId.get(borrower.id) : undefined;
+      const loanAccount = loanAccountByApplicationId.get(application.id);
       const linkage: LoanApplicationLinkage = {
         createdBorrowerId: borrower?.id ?? null,
         createdLoanAccountId: loanAccount?.id ?? null,

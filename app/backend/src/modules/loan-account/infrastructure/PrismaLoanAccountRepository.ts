@@ -58,6 +58,7 @@ function toDomain(row: LoanAccountRow): LoanAccount {
     closedAt: row.closedAt ?? undefined,
     closedReason: row.closedReason ?? undefined,
     legacyBalanceDataMissing: row.legacyBalanceDataMissing,
+    sourceApplicationId: row.sourceApplicationId ?? undefined,
     originationFees: OriginationFees.of({
       processingFee: Money.of(row.processingFee),
       advanceInterestFee: Money.of(row.advanceInterestFee),
@@ -140,6 +141,7 @@ async function writeGraph(client: PrismaWriteClient, loanAccount: LoanAccount): 
         activatedAt: loanAccount.activatedAt,
         closedAt: loanAccount.closedAt,
         closedReason: loanAccount.closedReason,
+        sourceApplicationId: loanAccount.sourceApplicationId,
         processingFee: originationFees.processingFee.toDecimal(),
         advanceInterestFee: originationFees.advanceInterestFee.toDecimal(),
         outstandingBalancePayoff: originationFees.outstandingBalancePayoff.toDecimal(),
@@ -229,6 +231,27 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     const client = resolveClient(ctx);
     const row = await client.loanAccount.findUnique({ where: { loanCode }, include: LOAN_ACCOUNT_INCLUDE });
     return row ? toDomain(row) : null;
+  }
+
+  async findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<LoanAccount | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanAccount.findUnique({
+      where: { sourceApplicationId: applicationId },
+      include: LOAN_ACCOUNT_INCLUDE,
+    });
+    return row ? toDomain(row) : null;
+  }
+
+  async findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<LoanAccount[]> {
+    if (applicationIds.length === 0) {
+      return [];
+    }
+    const client = resolveClient(ctx);
+    const rows = await client.loanAccount.findMany({
+      where: { sourceApplicationId: { in: applicationIds } },
+      include: LOAN_ACCOUNT_INCLUDE,
+    });
+    return rows.map(toDomain);
   }
 
   /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): borrowerId equality filter combined with the pre-existing branch/search filters. */

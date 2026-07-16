@@ -815,6 +815,16 @@ model LoanAccount {
   closedAt         DateTime?
   closedReason     String?
 
+  /// 2026-07-16: set at "Create Loan Account" time to the LoanApplication this account was
+  /// actually produced from — mirrors Borrower.sourceApplicationId's identical pattern. Replaces
+  /// a previous heuristic (loanApplicationController.buildLinkage: "this borrower's most
+  /// recent/first loan account") that falsely showed an unrelated older loan account — e.g. a
+  /// closed prior loan — as "the account this newly-approved application produced" for any
+  /// borrower who already had a loan account on file (a renewal's exact scenario). Null for
+  /// every loan account created before this field existed and for legacy-migrated accounts.
+  sourceApplicationId String?          @unique
+  sourceApplication   LoanApplication? @relation("LoanApplicationCreatedLoanAccount", fields: [sourceApplicationId], references: [id])
+
   /// CP12 migration follow-up (2026-07-09): true for a loan whose legacy record had NO
   /// account-level balance snapshot fields at all (principalBalance/interestBalance/feesBalance/
   /// penaltyBalance all absent, not zero) — 624 of 1,805 migrated loans, 191 of them
@@ -1475,6 +1485,12 @@ model LoanApplication {
   /// Reverse side of Borrower.sourceApplicationId - set once "Create Client Profile" has been
   /// used on this application.
   createdBorrower Borrower? @relation("LoanApplicationCreatedBorrower")
+
+  /// Reverse side of LoanAccount.sourceApplicationId (2026-07-16) - set once "Create Loan
+  /// Account" has actually been used on THIS application. See that field's own doc comment for
+  /// why this replaced a "borrower's most recent loan account" heuristic that broke for a
+  /// borrower with more than one loan account across their history (e.g. a renewal).
+  createdLoanAccount LoanAccount? @relation("LoanApplicationCreatedLoanAccount")
 
   @@index([branchId])
   @@index([borrowerId])
