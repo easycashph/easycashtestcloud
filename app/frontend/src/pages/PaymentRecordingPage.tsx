@@ -67,6 +67,19 @@ function parseAmount(value: string): number {
 }
 
 /**
+ * Like `parseAmount`, but for an actual account balance (collectionsBalance/accountingBalance),
+ * never a due/paid/applied amount - those are always >= 0 by definition, but a balance is allowed
+ * to go negative (an overpayment/credit - see `LoanAccount.collectionsBalance`'s own doc comment,
+ * `FINANCIAL_INVARIANTS.md` §3). `parseAmount`'s `> 0` floor silently clamped a real credit balance
+ * to ₱0.00, hiding it entirely (2026-07-16 bug report) - this only guards against a non-numeric
+ * string, never against a legitimately negative one.
+ */
+function parseBalance(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
  * Column sort here is DISPLAY-ONLY - it never changes which installments
  * were actually offered a share of the payment. `previewCrossInstallmentAllocation`
  * must keep computing over `unpaidInstallments` in oldest-due-first order
@@ -494,7 +507,7 @@ export function PaymentRecordingForm({
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Collections balance: {formatPeso(parseAmount(l.collectionsBalance))}
+                      Collections balance: {formatPeso(parseBalance(l.collectionsBalance))}
                     </p>
                   </button>
                 ))}
@@ -521,8 +534,8 @@ export function PaymentRecordingForm({
                     <p>
                       <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> - {selectedLoan.loanCode}
                     </p>
-                    <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
-                    <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
+                    <p className="mt-1">Collections balance: {formatPeso(parseBalance(selectedLoan.collectionsBalance))}</p>
+                    <p>Accounting balance: {formatPeso(parseBalance(selectedLoan.accountingBalance))}</p>
                     {installmentsQuery.isLoading ? (
                       <p className="mt-2 border-t pt-2">Loading next due amount…</p>
                     ) : installmentsQuery.isError ? (
@@ -914,7 +927,9 @@ export function PaymentRecordingForm({
               <div className="rounded-md bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">Loan balance after</p>
                 <p className="text-base font-semibold">
-                  {formatPeso(parseAmount(successInfo.response.loanAccount.collectionsBalance))}
+                  {parseBalance(successInfo.response.loanAccount.collectionsBalance) < 0
+                    ? `${formatPeso(Math.abs(parseBalance(successInfo.response.loanAccount.collectionsBalance)))} credit (overpaid)`
+                    : formatPeso(parseBalance(successInfo.response.loanAccount.collectionsBalance))}
                 </p>
               </div>
               <DialogFooter>
