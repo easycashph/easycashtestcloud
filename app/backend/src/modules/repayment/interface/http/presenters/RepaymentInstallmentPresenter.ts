@@ -65,5 +65,21 @@ export function presentRepaymentInstallment(installment: RepaymentInstallment, p
           at: override.at.toISOString(),
         }
       : null,
+    /**
+     * 2026-07-16 (Adjust Fees feature): the fees override amount if one is set, else `due.fees` —
+     * always non-null, unlike `currentPenaltyOwed`, since fees have no "live computation" concept
+     * to fall back to null for (see `RepaymentInstallment.effectiveFeesDue`'s own doc comment).
+     */
+    currentFeesDue: installment.effectiveFeesDue.toString(),
+    /** 2026-07-16 (Adjust Fees feature) — null unless an Accounting/MIS adjustment has been applied to this installment. Same shape/hydration story as `penaltyOverride`. */
+    feesOverride: installment.feesOverride
+      ? {
+          amount: installment.feesOverride.amount.toString(),
+          reason: installment.feesOverride.reason,
+          byUserId: installment.feesOverride.byUserId,
+          byName: installment.feesOverride.byName ?? null,
+          at: installment.feesOverride.at.toISOString(),
+        }
+      : null,
   };
 }

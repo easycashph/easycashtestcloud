@@ -4,12 +4,12 @@ import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { validateBody } from '@shared/middleware/validate';
 import { RepaymentController, type RepaymentControllerDeps } from './repaymentController';
-import { reducePenaltySchema } from './repaymentSchemas';
+import { adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
 
 /**
  * Mostly D-2 (read-only) — CreateRepaymentInstallmentUseCase and RecordInstallmentPaymentUseCase
- * still have no route. `reduce-penalty` below is the one deliberate write exception (2026-07-15,
- * user-confirmed business rules).
+ * still have no route. `reduce-penalty`/`adjust-fees` below are the deliberate write exceptions
+ * (2026-07-15/16, user-confirmed business rules).
  */
 
 /**
@@ -18,6 +18,9 @@ import { reducePenaltySchema } from './repaymentSchemas';
  * codebase's standing convention of MIS being included in every role-gated allow-list.
  */
 const REDUCE_PENALTY_ROLES = ['MIS', 'Accounting'];
+
+/** 2026-07-16 (Adjust Fees feature, user-confirmed): same allow-list as Reduce Penalty. */
+const ADJUST_FEES_ROLES = ['MIS', 'Accounting'];
 
 export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -32,6 +35,13 @@ export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenServic
     requireRole(...REDUCE_PENALTY_ROLES),
     validateBody(reducePenaltySchema),
     controller.reducePenalty,
+  );
+  router.post(
+    '/repayment-installments/:id/adjust-fees',
+    requireAuth,
+    requireRole(...ADJUST_FEES_ROLES),
+    validateBody(adjustFeesSchema),
+    controller.adjustFees,
   );
 
   return router;

@@ -251,6 +251,8 @@ model User {
   loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
   penaltyOverridesSet      RepaymentSchedule[]     @relation("PenaltyOverrideBy")
   penaltyReductionsMade    PenaltyReduction[]
+  feesOverridesSet         RepaymentSchedule[]     @relation("FeesOverrideBy")
+  feeAdjustmentsMade       FeeAdjustment[]
 
   @@map("users")
 }
@@ -975,6 +977,19 @@ model RepaymentSchedule {
   penaltyOverrideBy       User?     @relation("PenaltyOverrideBy", fields: [penaltyOverrideByUserId], references: [id])
   penaltyOverrideAt       DateTime?
 
+  /// 2026-07-15 (Adjust Fees feature, user-confirmed business rules): an Accounting/MIS-set manual
+  /// override on this installment's fees due — unlike the penalty override above, fees are never
+  /// live-computed (no daily formula to "freeze" against), so this simply replaces the effective
+  /// fees-due figure until paid or adjusted again. Bidirectional (may raise or lower the amount,
+  /// per the user's explicit decision — unlike the penalty override, which may only lower).
+  /// Deliberately NOT a mutation of the immutable `feesDue`/`feesPaid` fields above (REPAY-3) — a
+  /// separate override layer, kept alongside an immutable `FeeAdjustment` audit row per action.
+  feesOverrideAmount   Decimal?  @db.Decimal(14, 2)
+  feesOverrideReason   String?
+  feesOverrideByUserId String?
+  feesOverrideBy       User?     @relation("FeesOverrideBy", fields: [feesOverrideByUserId], references: [id])
+  feesOverrideAt       DateTime?
+
   /// ADR-048-optimistic-concurrency: same optimistic concurrency mechanism as
   /// `LoanAccount.version` — see that field's comment for the full
   /// rationale. Applied here too for consistency, per the ADR's decision
@@ -983,6 +998,7 @@ model RepaymentSchedule {
 
   paymentAllocations PaymentAllocation[]
   penaltyReductions  PenaltyReduction[]
+  feeAdjustments     FeeAdjustment[]
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
@@ -1019,6 +1035,31 @@ model PenaltyReduction {
 
   @@index([repaymentInstallmentId])
   @@map("penalty_reductions")
+}
+
+/// 2026-07-15 (Adjust Fees feature) — one immutable row per adjustment action, same posture as
+/// `PenaltyReduction`: a historical record, never edited. Bidirectional (unlike
+/// `PenaltyReduction`, `newFeesAmount` may be higher OR lower than `previousFeesAmount`).
+model FeeAdjustment {
+  id                     String            @id @default(uuid())
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+
+  /// The effective fees due (override if one was already set, else the immutable `feesDue`
+  /// snapshot) at the moment of this action — not necessarily the previous override, since this
+  /// may be the first adjustment.
+  previousFeesAmount Decimal @db.Decimal(14, 2)
+  newFeesAmount      Decimal @db.Decimal(14, 2)
+
+  /// Required — captures the external approval reference, same convention as `PenaltyReduction.reason`.
+  reason String
+
+  adjustedByUserId String
+  adjustedBy       User     @relation(fields: [adjustedByUserId], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@index([repaymentInstallmentId])
+  @@map("fee_adjustments")
 }
 
 /// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one

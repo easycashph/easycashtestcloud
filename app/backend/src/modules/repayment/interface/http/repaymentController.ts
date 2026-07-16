@@ -6,13 +6,15 @@ import type { GetLoanAccountUseCase } from '@modules/loan-account/application/us
 import type { ListRepaymentInstallmentsForLoanUseCase } from '../../application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import type { GetRepaymentInstallmentUseCase } from '../../application/use-cases/GetRepaymentInstallmentUseCase';
 import type { ReducePenaltyUseCase } from '../../application/use-cases/ReducePenaltyUseCase';
+import type { AdjustFeesUseCase } from '../../application/use-cases/AdjustFeesUseCase';
 import { presentRepaymentInstallment } from './presenters/RepaymentInstallmentPresenter';
-import type { ReducePenaltyRequestBody } from './repaymentSchemas';
+import type { AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
 
 export interface RepaymentControllerDeps {
   listRepaymentInstallmentsForLoanUseCase: ListRepaymentInstallmentsForLoanUseCase;
   getRepaymentInstallmentUseCase: GetRepaymentInstallmentUseCase;
   reducePenaltyUseCase: ReducePenaltyUseCase;
+  adjustFeesUseCase: AdjustFeesUseCase;
   /**
    * Milestone 8.1 / H-1: RepaymentInstallment has no `branchId` field of
    * its own (unlike Borrower/LoanAccount/LoanTransaction) — branch access
@@ -84,6 +86,26 @@ export class RepaymentController {
       const body = req.body as ReducePenaltyRequestBody;
       const currentUser = getCurrentUser(req);
       await this.deps.reducePenaltyUseCase.execute(installmentId, Money.of(body.newAmount), body.reason, currentUser.sub);
+
+      const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const penaltyContext = { isProspectiveLoan: !loanAccount.legacyId, principalAmount: loanAccount.principalAmount };
+      res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  adjustFees = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const installmentId = req.params.id as string;
+      const installment = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(installment.loanAccountId);
+      assertBranchAccess(scope, loanAccount.branchId); // H-1: same pattern as get()/listForLoan() above.
+
+      const body = req.body as AdjustFeesRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.adjustFeesUseCase.execute(installmentId, Money.of(body.newAmount), body.reason, currentUser.sub);
 
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = { isProspectiveLoan: !loanAccount.legacyId, principalAmount: loanAccount.principalAmount };

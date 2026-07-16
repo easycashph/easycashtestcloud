@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Money } from '@shared/domain/Money';
 import { InstallmentAmounts } from './valueObjects/InstallmentAmounts';
-import { PenaltyAlreadyPaidError, PenaltyReductionExceedsCurrentAmountError } from './errors/RepaymentDomainErrors';
+import {
+  FeesAlreadyPaidError,
+  InvalidFeesAdjustmentAmountError,
+  PenaltyAlreadyPaidError,
+  PenaltyReductionExceedsCurrentAmountError,
+} from './errors/RepaymentDomainErrors';
 
 export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
 
@@ -15,6 +20,16 @@ export interface PenaltyOverride {
   at: Date;
 }
 
+/** 2026-07-16 (Adjust Fees feature) — see `RepaymentInstallment.adjustFees()`'s own doc comment. Same shape as `PenaltyOverride`. */
+export interface FeesOverride {
+  amount: Money;
+  reason: string;
+  byUserId: string;
+  /** Display-only, read-path convenience — see `PenaltyOverride.byName`'s own doc comment. */
+  byName?: string;
+  at: Date;
+}
+
 export interface RepaymentInstallmentProps {
   id: string;
   loanAccountId: string;
@@ -24,6 +39,7 @@ export interface RepaymentInstallmentProps {
   paid: InstallmentAmounts;
   lastPaidAt?: Date;
   penaltyOverride?: PenaltyOverride;
+  feesOverride?: FeesOverride;
   legacyId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -121,6 +137,10 @@ export class RepaymentInstallment {
     return this.props.penaltyOverride;
   }
 
+  get feesOverride(): FeesOverride | undefined {
+    return this.props.feesOverride;
+  }
+
   get legacyId(): string | undefined {
     return this.props.legacyId;
   }
@@ -214,6 +234,39 @@ export class RepaymentInstallment {
       throw new PenaltyReductionExceedsCurrentAmountError(newAmount.toString(), currentPenaltyAmount.toString());
     }
     this.props.penaltyOverride = { amount: newAmount, reason, byUserId, at };
+    this.props.updatedAt = new Date();
+  }
+
+  /**
+   * Fees due, as currently in effect — the fees override if one is set, else the immutable
+   * `due.fees` snapshot. Fees are never live-computed (no ADR-050-style daily formula exists for
+   * them), so unlike `currentPenaltyOwed`'s live-vs-frozen distinction, this is the ONLY effective
+   * value there ever is for fees.
+   */
+  get effectiveFeesDue(): Money {
+    return this.props.feesOverride?.amount ?? this.props.due.fees;
+  }
+
+  /**
+   * 2026-07-16 (Adjust Fees feature, user-confirmed business rules):
+   * - Accounting/MIS can adjust this installment's fees due, in either direction (raise or lower —
+   *   unlike `reducePenalty()`, which may only lower).
+   * - `newAmount` must be non-negative; no upper ceiling (bidirectional, per the user's explicit
+   *   decision).
+   * - Cannot be applied once any fees have already been paid on this installment — same
+   *   already-paid rule and rationale as `reducePenalty()`.
+   *
+   * Does not itself create the audit `FeeAdjustment` row — that's the use case's job, same division
+   * of responsibility as `reducePenalty()`/`PenaltyReduction`.
+   */
+  adjustFees(newAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
+    if (this.props.paid.fees.isPositive()) {
+      throw new FeesAlreadyPaidError(this.props.id);
+    }
+    if (newAmount.isNegative()) {
+      throw new InvalidFeesAdjustmentAmountError(newAmount.toString());
+    }
+    this.props.feesOverride = { amount: newAmount, reason, byUserId, at };
     this.props.updatedAt = new Date();
   }
 }

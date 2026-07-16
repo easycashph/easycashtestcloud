@@ -313,6 +313,10 @@ export interface RepaymentInstallment {
    * paid late - `status` alone can't, since it's a live-derived value that resets to PAID once
    * fully settled (see backend `RepaymentInstallment.status`'s own doc comment). */
   lastPaidAt: string | null;
+  /** 2026-07-16 (Adjust Fees feature) — the fees override amount if one is set, else `due.fees`. Always non-null, unlike `currentPenaltyOwed` — fees have no "live computation" to fall back to null for. */
+  currentFeesDue: string;
+  /** 2026-07-16 (Adjust Fees feature) — set when Accounting/MIS has adjusted this installment's fees; may raise or lower, unlike penaltyOverride. */
+  feesOverride: { amount: string; reason: string; byUserId: string; byName: string | null; at: string } | null;
 }
 
 export type LoanTransactionType =

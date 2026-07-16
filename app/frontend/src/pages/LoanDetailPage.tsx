@@ -407,6 +407,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [reduceTarget, setReduceTarget] = React.useState<RepaymentInstallment | null>(null);
   const [reduceAmount, setReduceAmount] = React.useState('');
   const [reduceReason, setReduceReason] = React.useState('');
+  // 2026-07-16 (Adjust Fees feature, user-confirmed): same RBAC as Reduce Penalty, but
+  // bidirectional (no ceiling) — see AdjustFeesUseCase's own doc comment.
+  const [adjustFeesTarget, setAdjustFeesTarget] = React.useState<RepaymentInstallment | null>(null);
+  const [adjustFeesAmount, setAdjustFeesAmount] = React.useState('');
+  const [adjustFeesReason, setAdjustFeesReason] = React.useState('');
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -506,6 +511,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const adjustFeesMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<RepaymentInstallment>(`/repayment-installments/${adjustFeesTarget!.id}/adjust-fees`, {
+        newAmount: adjustFeesAmount,
+        reason: adjustFeesReason.trim(),
+      }),
+    onSuccess: () => {
+      setAdjustFeesTarget(null);
+      setAdjustFeesAmount('');
+      setAdjustFeesReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
   const openConfirm = (action: 'APPROVE' | 'ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
@@ -520,6 +540,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setReduceAmount(currentPenalty.toFixed(2));
     setReduceReason('');
     setReduceTarget(installment);
+  };
+  const openAdjustFeesConfirm = (installment: RepaymentInstallment, currentFees: number) => {
+    setActionError(null);
+    setAdjustFeesAmount(currentFees.toFixed(2));
+    setAdjustFeesReason('');
+    setAdjustFeesTarget(installment);
   };
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
@@ -630,9 +656,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     : null;
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
-  // 2026-07-15 (Reduce Penalty feature, user-confirmed): "the accounting officer" - matches the
-  // backend's REDUCE_PENALTY_ROLES gate.
-  const canReducePenalty = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
+  // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
+  // officer" - matches the backend's REDUCE_PENALTY_ROLES/ADJUST_FEES_ROLES gates (identical).
+  // Gates the whole Actions column, not just one of the two dropdown items.
+  const canManageInstallments = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
   const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const documents = documentsQuery.data?.items ?? [];
@@ -767,7 +794,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       <TableCell className="text-right font-medium text-muted-foreground">Remaining</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Status</TableCell>
                       <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
-                      {canReducePenalty && <TableCell className="text-center font-medium text-muted-foreground">Actions</TableCell>}
+                      {canManageInstallments && <TableCell className="text-center font-medium text-muted-foreground">Actions</TableCell>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -777,7 +804,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       // paid so far, running down toward 0 at the final installment.
                       const totalObligation = installments.reduce((sum, i) => {
                         const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
-                        return sum + num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                        return sum + num(i.due.principal) + num(i.due.interest) + num(i.currentFeesDue) + penalty;
                       }, 0);
                       let cumulativePaid = 0;
                       return installments.map((i) => {
@@ -787,17 +814,33 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         // override (2026-07-15, Reduce Penalty feature) — isLivePenalty distinguishes
                         // the two so the "(as of today)" label only shows when actually accurate.
                         const penaltyDisplay = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                        // 2026-07-16 (Adjust Fees feature): currentFeesDue is always non-null — the
+                        // fees override amount if one is set, else due.fees (no "live computation"
+                        // concept for fees the way penalty has, so no separate isLiveFees flag needed).
+                        const feesDisplay = num(i.currentFeesDue);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
                         cumulativePaid += rowPaid;
                         const balance = Math.max(0, totalObligation - cumulativePaid);
                         const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
+                        const canAdjustFeesThisRow = i.status !== 'PAID' && num(i.paid.fees) === 0;
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
                             <TableCell>{formatDate(i.dueDate)}</TableCell>
                             <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
                             <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{formatPeso(num(i.due.fees))}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {i.feesOverride ? (
+                                <div className="flex flex-col items-end">
+                                  <span>{formatPeso(feesDisplay)}</span>
+                                  <span className="text-[10px] text-primary" title={i.feesOverride.reason}>
+                                    Adjusted by {i.feesOverride.byName ?? 'Accounting'}
+                                  </span>
+                                </div>
+                              ) : (
+                                formatPeso(feesDisplay)
+                              )}
+                            </TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.penaltyOverride ? (
                                 <div className="flex flex-col items-end">
@@ -818,13 +861,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                               )}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatPeso(num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay)}
+                              {formatPeso(num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay)}
                             </TableCell>
                             <TableCell className="text-right">{formatPeso(rowPaid)}</TableCell>
                             {(() => {
                               const rowRemaining = Math.max(
                                 0,
-                                num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay - rowPaid,
+                                num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay - rowPaid,
                               );
                               return (
                                 <TableCell
@@ -848,22 +891,30 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                               </div>
                             </TableCell>
                             <TableCell className="text-right font-medium">{formatPeso(balance)}</TableCell>
-                            {canReducePenalty && (
+                            {canManageInstallments && (
                               <TableCell className="text-center">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="sm" disabled={!canReduceThisRow} className="h-7 px-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={!canReduceThisRow && !canAdjustFeesThisRow}
+                                      className="h-7 px-2"
+                                    >
                                       <MoreHorizontal className="h-3.5 w-3.5" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
                                     <DropdownMenuItem
-                                      disabled={penaltyDisplay <= 0}
+                                      disabled={!canReduceThisRow || penaltyDisplay <= 0}
                                       onSelect={() => openReduceConfirm(i, penaltyDisplay)}
                                     >
                                       Reduce penalty
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem disabled title="Coming soon">
+                                    <DropdownMenuItem
+                                      disabled={!canAdjustFeesThisRow}
+                                      onSelect={() => openAdjustFeesConfirm(i, feesDisplay)}
+                                    >
                                       Adjust fees
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -883,7 +934,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         {formatPeso(installments.reduce((sum, i) => sum + num(i.due.interest), 0))}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatPeso(installments.reduce((sum, i) => sum + num(i.due.fees), 0))}
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.currentFeesDue), 0))}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatPeso(
@@ -897,7 +948,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         {formatPeso(
                           installments.reduce((sum, i) => {
                             const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
-                            return sum + num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                            return sum + num(i.due.principal) + num(i.due.interest) + num(i.currentFeesDue) + penalty;
                           }, 0),
                         )}
                       </TableCell>
@@ -913,7 +964,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         {formatPeso(
                           installments.reduce((sum, i) => {
                             const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
-                            const totalDue = num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
+                            const totalDue = num(i.due.principal) + num(i.due.interest) + num(i.currentFeesDue) + penalty;
                             const paid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
                             return sum + Math.max(0, totalDue - paid);
                           }, 0),
@@ -921,7 +972,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       </TableCell>
                       <TableCell />
                       <TableCell />
-                      {canReducePenalty && <TableCell />}
+                      {canManageInstallments && <TableCell />}
                     </TableRow>
                   </TableBody>
                 </Table>
@@ -1316,6 +1367,81 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={reduceMutation.isPending || reduceReason.trim().length === 0 || reduceAmount.trim().length === 0}
             >
               {reduceMutation.isPending ? 'Reducing…' : 'Reduce penalty'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={adjustFeesTarget !== null}
+        onOpenChange={(open) =>
+          !open && !adjustFeesMutation.isPending && (setAdjustFeesTarget(null), setAdjustFeesAmount(''), setAdjustFeesReason(''))
+        }
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adjust fees</DialogTitle>
+            <DialogDescription>
+              {adjustFeesTarget &&
+                `Installment #${adjustFeesTarget.installmentNumber} · ${formatDate(adjustFeesTarget.dueDate)}. Sets this installment's fees due to the amount entered — may be raised or lowered. Approved outside this system; the reason below records that reference.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-fees-amount">New fees amount</Label>
+            <div className="flex gap-2">
+              <Input
+                id="adjust-fees-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={adjustFeesAmount}
+                onChange={(e) => setAdjustFeesAmount(e.target.value)}
+                disabled={adjustFeesMutation.isPending}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAdjustFeesAmount('0.00')}
+                disabled={adjustFeesMutation.isPending}
+              >
+                Set to ₱0.00
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-fees-reason">Reason / external approval reference</Label>
+            <Textarea
+              id="adjust-fees-reason"
+              placeholder="e.g. Approved by Branch Manager J. Santos, memo #2026-0714"
+              value={adjustFeesReason}
+              onChange={(e) => setAdjustFeesReason(e.target.value)}
+              disabled={adjustFeesMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAdjustFeesTarget(null);
+                setAdjustFeesAmount('');
+                setAdjustFeesReason('');
+              }}
+              disabled={adjustFeesMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => adjustFeesMutation.mutate()}
+              disabled={adjustFeesMutation.isPending || adjustFeesReason.trim().length === 0 || adjustFeesAmount.trim().length === 0}
+            >
+              {adjustFeesMutation.isPending ? 'Adjusting…' : 'Adjust fees'}
             </Button>
           </DialogFooter>
         </DialogContent>

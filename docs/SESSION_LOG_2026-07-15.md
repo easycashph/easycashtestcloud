@@ -506,16 +506,61 @@ Two small closes on the backfill above:
    zero real loans use that product). Confirmed there is no second, more-authoritative add-on-rate
    source being missed — `loan_accounts.addOnRate` (already backfilled) is the only real one.
 
+## Adjust Fees feature (second half of the Actions dropdown, "Coming soon" → live)
+
+Picked up the "Adjust fees" placeholder left disabled in the Reduce Penalty work — same UI slot,
+same confirm-business-rules-first process. Confirmed with the user before coding:
+
+- Who: same Accounting/MIS roles as Reduce Penalty.
+- **Bidirectional** — may raise OR lower the fees due, unlike Reduce Penalty (which can only lower).
+  Non-negative is the only ceiling.
+- Cannot adjust an installment whose fees have already been paid — same rule/rationale as Reduce
+  Penalty's already-paid-penalty restriction.
+- Same required `reason` field convention (external approval reference, not an in-app workflow).
+
+**Design difference from Reduce Penalty, worth noting**: penalty needed a "frozen override vs. live
+ADR-050 daily formula" distinction because penalty genuinely recomputes over time. Fees have no such
+live-computation concept at all (`due.fees` is already a static, immutable snapshot) — so
+`RepaymentInstallment.effectiveFeesDue` is simply "the override if one's set, else `due.fees`", no
+separate "is this live" flag needed the way `isLivePenalty` was for penalty.
+
+**Backend**: same architecture as Reduce Penalty, one-to-one — `RepaymentSchedule.feesOverride*`
+(current override, mirrors `penaltyOverride*`) plus an immutable `fee_adjustments` audit table
+(mirrors `penalty_reductions`). New `FeeAdjustment` domain entity/repository,
+`RepaymentInstallment.adjustFees()`, `AdjustFeesUseCase`, `POST /repayment-installments/:id/
+adjust-fees` (same `MIS`/`Accounting` gate). New Prisma migration
+(`20260716003024_add_fee_adjustment`) — purely additive, double-checked this time given the earlier
+accidental-deletion incident from the penalty migration.
+
+**Frontend**: reused the same "Actions" dropdown column from Reduce Penalty (renamed the shared
+visibility flag `canReducePenalty` → `canManageInstallments` since it now gates two actions, not
+one) — "Adjust fees" is no longer permanently disabled; per-row enablement checks `status !== 'PAID'
+&& feesPaid === 0`. Fees Due column, and every Total Due/Remaining/Balance calculation across the
+table, now reads the effective (override-aware) fees value instead of the raw immutable `due.fees`.
+New dialog mirrors Reduce Penalty's (new-amount input, "Set to ₱0.00" shortcut, required reason) —
+no "must not exceed" ceiling messaging since this one is bidirectional.
+
+**Testing**: 12 new backend unit tests (6 on `adjustFees()`/`effectiveFeesDue`, 2 on the presenter's
+`currentFeesDue`/`feesOverride` fields, plus repository include-clause assertion updates) all
+passing; full suite back at the known 595/16 baseline. Frontend `tsc`/tests clean. Verified the read
+path against a real installment with real unpaid fees (`SML-MAX_Q0F5H` installment #5, ₱1,101.47)
+via a one-off read-only script (deleted after use) — deliberately did **not** perform a real
+adjustment against live client data just to prove the write path, same judgment call as the Reduce
+Penalty verification. Backend container rebuilt; route confirmed registered (401, not 404).
+
 ## Current state
 
-- Working tree clean; Docker stack (`postgres`, `backend`, `frontend`) running locally, in sync with
-  `origin/main` as of `f4fd6ca` — **only up to `370a3ea` is pushed; 6 commits are local-only**:
+- Working tree clean; Docker stack (`postgres`, `backend`) running locally (frontend now run via
+  `Run LMS Preview.bat`'s Hot Reload Mode / Vite dev server on 5173 instead of the Docker frontend
+  container, per user preference this session — Docker `frontend` service stopped). In sync with
+  `origin/main` as of `0048187` — **only up to `370a3ea` is pushed; 7+1 commits are local-only**:
   `9d3d1de` (docs), `be3e312` (Loan Releases Report + Reports hub + Dashboard preview cards),
   `bc8ec0c` (Reduce Penalty feature), `0338f90` (Reduce Penalty name display fix), `a46dd5b` (docs),
   `1889ba0` (addOnInterestRate/contractualInterestRate migration backfill), `f4fd6ca` (post-restore
-  reminder update). Fourteen commits this session total (see git log for the full first-half list —
-  transaction sort ×2, Total Due column, payment allocation visibility, Payment Recording Close/
-  Next-due).
+  reminder update), `0048187` (docs), plus the Adjust Fees feature commit made just now (see git log
+  for its hash — not yet known at the time this paragraph was written). Fifteen-plus commits this
+  session total (see git log for the full first-half list — transaction sort ×2, Total Due column,
+  payment allocation visibility, Payment Recording Close/Next-due).
 - **Next immediate task, agreed with the user: a real UI click-through once login credentials are
   available.** Everything this session was verified at the DB/API/build level only (no browser login
   access all session) — see the bullets below for exactly what still needs eyes-on confirmation.
@@ -550,9 +595,10 @@ Two small closes on the backfill above:
   - **Transaction history sort bug**: fixed in two passes, both committed (`922f341`, `94424e2`) —
     see above.
   - **Payment allocation visibility (#1/#2/#3)**: committed (`d01ac67`) — see above.
-  - **Reduce Penalty feature**: built, committed (`bc8ec0c`, `0338f90`) — see above. Not yet
-    exercised against real live data (no login access); "Adjust fees" remains a permanent "Coming
-    soon" placeholder on the Actions dropdown, not scoped.
+  - **Reduce Penalty feature**: built, committed (`bc8ec0c`, `0338f90`) — see above.
+  - **Adjust Fees feature**: built and committed this session — see its own section above.
+    "Coming soon" placeholder replaced with a working, bidirectional adjustment. Both this and
+    Reduce Penalty are **not yet exercised against real live data** (no login access all session).
   - **Payment Recording "Next due" refresh issue**: root cause not conclusively found (see its own
     section above) — worked around by removing the "Record another payment" quick-succession flow
     entirely rather than continuing to chase the staleness bug. Revisit if "Next due" shows the same

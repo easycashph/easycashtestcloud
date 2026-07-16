@@ -7,8 +7,11 @@ import { RepaymentInstallment, type RepaymentInstallmentProps } from '../domain/
 import { InstallmentAmounts } from '../domain/valueObjects/InstallmentAmounts';
 import type { IRepaymentInstallmentRepository } from '../application/ports/IRepaymentInstallmentRepository';
 
-const INCLUDE_PENALTY_OVERRIDE_BY = { penaltyOverrideBy: { select: { firstName: true, lastName: true } } } as const;
-type RepaymentScheduleRow = Prisma.RepaymentScheduleGetPayload<{ include: typeof INCLUDE_PENALTY_OVERRIDE_BY }>;
+const INCLUDE_OVERRIDE_BY = {
+  penaltyOverrideBy: { select: { firstName: true, lastName: true } },
+  feesOverrideBy: { select: { firstName: true, lastName: true } },
+} as const;
+type RepaymentScheduleRow = Prisma.RepaymentScheduleGetPayload<{ include: typeof INCLUDE_OVERRIDE_BY }>;
 
 function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
   const props: RepaymentInstallmentProps = {
@@ -40,6 +43,16 @@ function toDomain(row: RepaymentScheduleRow): RepaymentInstallment {
             byUserId: row.penaltyOverrideByUserId,
             byName: row.penaltyOverrideBy ? `${row.penaltyOverrideBy.firstName} ${row.penaltyOverrideBy.lastName}`.trim() : undefined,
             at: row.penaltyOverrideAt,
+          }
+        : undefined,
+    feesOverride:
+      row.feesOverrideAmount != null && row.feesOverrideReason != null && row.feesOverrideByUserId != null && row.feesOverrideAt != null
+        ? {
+            amount: Money.of(row.feesOverrideAmount),
+            reason: row.feesOverrideReason,
+            byUserId: row.feesOverrideByUserId,
+            byName: row.feesOverrideBy ? `${row.feesOverrideBy.firstName} ${row.feesOverrideBy.lastName}`.trim() : undefined,
+            at: row.feesOverrideAt,
           }
         : undefined,
     legacyId: row.legacyId ?? undefined,
@@ -76,6 +89,10 @@ function toUpsertData(installment: RepaymentInstallment) {
     penaltyOverrideReason: installment.penaltyOverride?.reason ?? null,
     penaltyOverrideByUserId: installment.penaltyOverride?.byUserId ?? null,
     penaltyOverrideAt: installment.penaltyOverride?.at ?? null,
+    feesOverrideAmount: installment.feesOverride?.amount.toDecimal() ?? null,
+    feesOverrideReason: installment.feesOverride?.reason ?? null,
+    feesOverrideByUserId: installment.feesOverride?.byUserId ?? null,
+    feesOverrideAt: installment.feesOverride?.at ?? null,
     legacyId: installment.legacyId,
     createdAt: installment.createdAt,
     updatedAt: installment.updatedAt,
@@ -113,7 +130,7 @@ async function persistInstallment(client: PrismaWriteClient, installment: Repaym
 export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallmentRepository {
   async findById(id: string, ctx?: TransactionContext): Promise<RepaymentInstallment | null> {
     const client = resolveClient(ctx);
-    const row = await client.repaymentSchedule.findUnique({ where: { id }, include: INCLUDE_PENALTY_OVERRIDE_BY });
+    const row = await client.repaymentSchedule.findUnique({ where: { id }, include: INCLUDE_OVERRIDE_BY });
     return row ? toDomain(row) : null;
   }
 
@@ -122,7 +139,7 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
     const rows = await client.repaymentSchedule.findMany({
       where: { loanAccountId },
       orderBy: { installmentNumber: 'asc' },
-      include: INCLUDE_PENALTY_OVERRIDE_BY,
+      include: INCLUDE_OVERRIDE_BY,
     });
     return rows.map(toDomain);
   }

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
 import { Money } from '@shared/domain/Money';
-import { PenaltyAlreadyPaidError, PenaltyReductionExceedsCurrentAmountError } from '@modules/repayment/domain/errors/RepaymentDomainErrors';
+import {
+  FeesAlreadyPaidError,
+  InvalidFeesAdjustmentAmountError,
+  PenaltyAlreadyPaidError,
+  PenaltyReductionExceedsCurrentAmountError,
+} from '@modules/repayment/domain/errors/RepaymentDomainErrors';
 
 function createInstallment(dueDate: Date) {
   return RepaymentInstallment.create({
@@ -10,6 +15,15 @@ function createInstallment(dueDate: Date) {
     installmentNumber: 1,
     dueDate,
     due: InstallmentAmounts.of({ principal: Money.of('800.00'), interest: Money.of('200.00') }),
+  });
+}
+
+function createInstallmentWithFees(dueDate: Date, feesDue: string) {
+  return RepaymentInstallment.create({
+    loanAccountId: 'loan-1',
+    installmentNumber: 1,
+    dueDate,
+    due: InstallmentAmounts.of({ principal: Money.of('800.00'), interest: Money.of('200.00'), fees: Money.of(feesDue) }),
   });
 }
 
@@ -157,6 +171,65 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
 
       expect(installment.penaltyOverride?.amount.equals(Money.of('200.00'))).toBe(true);
       expect(installment.penaltyOverride?.reason).toBe('second reduction');
+    });
+  });
+
+  // 2026-07-16 (Adjust Fees feature, user-confirmed business rules).
+  describe('adjustFees', () => {
+    it('sets a feesOverride', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      installment.adjustFees(Money.of('250.00'), 'Approved by memo #456', 'user-1');
+
+      expect(installment.feesOverride?.amount.equals(Money.of('250.00'))).toBe(true);
+      expect(installment.feesOverride?.reason).toBe('Approved by memo #456');
+      expect(installment.feesOverride?.byUserId).toBe('user-1');
+    });
+
+    it('is bidirectional — allows raising the fee above the original due amount, unlike reducePenalty', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      installment.adjustFees(Money.of('500.00'), 'raised per memo', 'user-1');
+
+      expect(installment.feesOverride?.amount.equals(Money.of('500.00'))).toBe(true);
+    });
+
+    it('allows lowering the fee to zero', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      installment.adjustFees(Money.ZERO, 'waived per memo', 'user-1');
+
+      expect(installment.feesOverride?.amount.isZero()).toBe(true);
+    });
+
+    it('rejects a negative new amount', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      expect(() => installment.adjustFees(Money.of('-1.00'), 'reason', 'user-1')).toThrow(InvalidFeesAdjustmentAmountError);
+    });
+
+    it('rejects adjusting an installment whose fees have already been paid', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      installment.recordPayment(InstallmentAmounts.of({ fees: Money.of('50.00') }));
+      expect(() => installment.adjustFees(Money.of('0.00'), 'reason', 'user-1')).toThrow(FeesAlreadyPaidError);
+    });
+
+    it('a later adjustment overwrites the earlier override (latest wins)', () => {
+      const installment = createInstallmentWithFees(new Date(Date.now() - 86_400_000), '100.00');
+      installment.adjustFees(Money.of('500.00'), 'first adjustment', 'user-1');
+      installment.adjustFees(Money.of('50.00'), 'second adjustment', 'user-2');
+
+      expect(installment.feesOverride?.amount.equals(Money.of('50.00'))).toBe(true);
+      expect(installment.feesOverride?.reason).toBe('second adjustment');
+    });
+  });
+
+  describe('effectiveFeesDue', () => {
+    it('is due.fees when no override is set', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      expect(installment.effectiveFeesDue.equals(Money.of('100.00'))).toBe(true);
+    });
+
+    it('is the override amount once one is set', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      installment.adjustFees(Money.of('250.00'), 'reason', 'user-1');
+      expect(installment.effectiveFeesDue.equals(Money.of('250.00'))).toBe(true);
     });
   });
 });

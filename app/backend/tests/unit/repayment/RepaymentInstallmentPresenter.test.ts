@@ -139,4 +139,44 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
       expect(result.isLivePenalty).toBe(true);
     });
   });
+
+  // 2026-07-16 (Adjust Fees feature): currentFeesDue always resolves — no live-computation concept for fees.
+  describe('currentFeesDue / feesOverride', () => {
+    function buildInstallmentWithFees(feesDue: string) {
+      return RepaymentInstallment.reconstitute({
+        id: 'installment-fees',
+        loanAccountId: 'loan-1',
+        installmentNumber: 1,
+        dueDate: new Date('2020-01-01T00:00:00Z'),
+        due: InstallmentAmounts.of({ principal: Money.of('8000.00'), interest: Money.of('2000.00'), fees: Money.of(feesDue) }),
+        paid: InstallmentAmounts.of({}),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 0,
+      });
+    }
+
+    it('is due.fees when no adjustment has been applied', () => {
+      const installment = buildInstallmentWithFees('100.00');
+      const result = presentRepaymentInstallment(installment);
+      expect(result.currentFeesDue).toBe('100.00');
+      expect(result.feesOverride).toBeNull();
+    });
+
+    it('is the override amount once one is set, even raised above the original due', () => {
+      const installment = buildInstallmentWithFees('100.00');
+      installment.adjustFees(Money.of('500.00'), 'memo #2', 'user-1');
+
+      const result = presentRepaymentInstallment(installment);
+
+      expect(result.currentFeesDue).toBe('500.00');
+      expect(result.feesOverride).toEqual({
+        amount: '500.00',
+        reason: 'memo #2',
+        byUserId: 'user-1',
+        byName: null,
+        at: expect.any(String),
+      });
+    });
+  });
 });

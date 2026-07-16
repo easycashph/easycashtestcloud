@@ -69,7 +69,9 @@ import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/appl
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
 import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrastructure/PrismaRepaymentInstallmentRepository';
 import { PrismaPenaltyReductionRepository } from '@modules/repayment/infrastructure/PrismaPenaltyReductionRepository';
+import { PrismaFeeAdjustmentRepository } from '@modules/repayment/infrastructure/PrismaFeeAdjustmentRepository';
 import { ReducePenaltyUseCase } from '@modules/repayment/application/use-cases/ReducePenaltyUseCase';
+import { AdjustFeesUseCase } from '@modules/repayment/application/use-cases/AdjustFeesUseCase';
 import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
 import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
 import { PrismaDashboardRepository } from '@modules/dashboard/infrastructure/PrismaDashboardRepository';
@@ -481,6 +483,7 @@ export function createApp(): Express {
 
   // --- repayment module wiring (Milestone 8: HTTP API layer, mostly READ-ONLY per D-2) ---
   const penaltyReductionRepository = new PrismaPenaltyReductionRepository();
+  const feeAdjustmentRepository = new PrismaFeeAdjustmentRepository();
   const repaymentRouter = createRepaymentRouter(
     {
       listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),
@@ -489,6 +492,12 @@ export function createApp(): Express {
         repaymentInstallmentRepository,
         loanAccountRepository,
         penaltyReductionRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      adjustFeesUseCase: new AdjustFeesUseCase({
+        repaymentInstallmentRepository,
+        feeAdjustmentRepository,
         financialAuditLogger,
         unitOfWork,
       }),

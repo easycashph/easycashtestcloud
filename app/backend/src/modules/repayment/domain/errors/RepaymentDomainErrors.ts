@@ -25,3 +25,24 @@ export class PenaltyAlreadyPaidError extends DomainError {
     this.name = 'PenaltyAlreadyPaidError';
   }
 }
+
+/** 2026-07-16 (Adjust Fees feature, user-confirmed): a new fees amount must be a non-negative figure — bidirectional (may raise or lower), unlike penalty, but never negative. */
+export class InvalidFeesAdjustmentAmountError extends DomainError {
+  constructor(newAmount: string) {
+    super('INVALID_FEES_ADJUSTMENT_AMOUNT', `New fees amount ${newAmount} must not be negative.`, undefined, 400);
+    this.name = 'InvalidFeesAdjustmentAmountError';
+  }
+}
+
+/** 2026-07-16 (Adjust Fees feature, user-confirmed): fees already paid are settled — adjusting them would require a refund/credit disposition that was explicitly ruled out of scope, same rule as PenaltyAlreadyPaidError. */
+export class FeesAlreadyPaidError extends DomainError {
+  constructor(installmentId: string) {
+    super(
+      'FEES_ALREADY_PAID',
+      `Installment ${installmentId} has a paid fees component — already-paid fees cannot be adjusted.`,
+      undefined,
+      409,
+    );
+    this.name = 'FeesAlreadyPaidError';
+  }
+}
