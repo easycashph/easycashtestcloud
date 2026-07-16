@@ -2,12 +2,14 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { Money } from '@shared/domain/Money';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
+import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import { FeeAdjustment } from '../../domain/FeeAdjustment';
 import type { IRepaymentInstallmentRepository } from '../ports/IRepaymentInstallmentRepository';
 import type { IFeeAdjustmentRepository } from '../ports/IFeeAdjustmentRepository';
 
 export interface AdjustFeesUseCaseDeps {
   repaymentInstallmentRepository: IRepaymentInstallmentRepository;
+  loanAccountRepository: ILoanAccountRepository;
   feeAdjustmentRepository: IFeeAdjustmentRepository;
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
@@ -25,9 +27,11 @@ export interface AdjustFeesUseCaseDeps {
  * - Required `reason` captures the external approval reference — this system records that an
  *   adjustment was approved elsewhere, it does not run its own in-app approval workflow.
  *
- * No `LoanAccount` lookup needed (unlike `ReducePenaltyUseCase`) — fees are never live-computed
- * from loan-level context the way ADR-050's penalty formula is; `effectiveFeesDue` already resolves
- * entirely from the installment itself.
+ * `effectiveFeesDue` resolves entirely from the installment itself — no `LoanAccount` lookup is
+ * needed for the ceiling/validation math, unlike `ReducePenaltyUseCase`'s live ADR-050 formula.
+ * The `LoanAccount` is still loaded and saved here (2026-07-16 follow-up), purely to keep
+ * `feesBalance`/`accountingBalance`/`collectionsBalance` in sync via `adjustFeesBalance()` — see
+ * that method's doc comment for why this sync is NOT extended to penalty.
  */
 export class AdjustFeesUseCase {
   constructor(private readonly deps: AdjustFeesUseCaseDeps) {}
@@ -38,11 +42,17 @@ export class AdjustFeesUseCase {
       throw new NotFoundError('RepaymentInstallment', installmentId);
     }
 
+    const loanAccount = await this.deps.loanAccountRepository.findById(installment.loanAccountId);
+    if (!loanAccount) {
+      throw new NotFoundError('LoanAccount', installment.loanAccountId);
+    }
+
     const previousFees = installment.effectiveFeesDue;
 
     // Validation (negative / already-paid fees) lives on the entity itself — see
     // RepaymentInstallment.adjustFees()'s own doc comment.
     installment.adjustFees(newAmount, reason, adjustedByUserId);
+    loanAccount.adjustFeesBalance(previousFees.subtract(newAmount));
 
     const adjustment = FeeAdjustment.create({
       repaymentInstallmentId: installment.id,
@@ -54,6 +64,7 @@ export class AdjustFeesUseCase {
 
     await this.deps.unitOfWork.run(async (ctx) => {
       await this.deps.repaymentInstallmentRepository.save(installment, ctx);
+      await this.deps.loanAccountRepository.save(loanAccount, ctx);
       await this.deps.feeAdjustmentRepository.create(adjustment, ctx);
       await this.deps.financialAuditLogger.log(
         {

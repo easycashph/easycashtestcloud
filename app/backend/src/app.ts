@@ -498,6 +498,7 @@ export function createApp(): Express {
       }),
       adjustFeesUseCase: new AdjustFeesUseCase({
         repaymentInstallmentRepository,
+        loanAccountRepository,
         feeAdjustmentRepository,
         financialAuditLogger,
         unitOfWork,

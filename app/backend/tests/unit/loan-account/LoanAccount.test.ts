@@ -248,6 +248,48 @@ describe('LoanAccount', () => {
     });
   });
 
+  describe('adjustFeesBalance (2026-07-16 follow-up: keep summary balances in sync with Adjust Fees)', () => {
+    function activeLoan() {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({ principalDue: Money.of('10000.00'), interestDue: Money.of('500.00'), feesDue: Money.of('300.00') });
+      return loan;
+    }
+
+    it('lowers feesBalance and feesDue by a positive delta (fee reduced)', () => {
+      const loan = activeLoan();
+      loan.adjustFeesBalance(Money.of('200.00'));
+
+      expect(loan.balances.feesBalance.equals(Money.of('100.00'))).toBe(true);
+      expect(loan.balances.feesDue.equals(Money.of('100.00'))).toBe(true);
+    });
+
+    it('raises feesBalance and feesDue for a negative delta (fee increased)', () => {
+      const loan = activeLoan();
+      loan.adjustFeesBalance(Money.of('-150.00'));
+
+      expect(loan.balances.feesBalance.equals(Money.of('450.00'))).toBe(true);
+      expect(loan.balances.feesDue.equals(Money.of('450.00'))).toBe(true);
+    });
+
+    it('leaves principal/interest/penalty balances untouched', () => {
+      const loan = activeLoan();
+      loan.adjustFeesBalance(Money.of('200.00'));
+
+      expect(loan.balances.principalBalance.equals(Money.of('10000.00'))).toBe(true);
+      expect(loan.balances.interestBalance.equals(Money.of('500.00'))).toBe(true);
+      expect(loan.balances.penaltyBalance.isZero()).toBe(true);
+    });
+
+    it('sets updatedAt to the supplied adjustedAt', () => {
+      const loan = activeLoan();
+      const adjustedAt = new Date('2026-08-01T00:00:00.000Z');
+      loan.adjustFeesBalance(Money.of('50.00'), adjustedAt);
+
+      expect(loan.updatedAt).toEqual(adjustedAt);
+    });
+  });
+
   // Milestone 9.1 checkpoint 11 / ADR-007 §3 (RESOLVED, Option B): two
   // distinctly-named computed summary getters, neither called
   // `outstandingBalance`. No stored column, no schema change — pure
