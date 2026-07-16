@@ -18,6 +18,7 @@ import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClien
 import type {
   Borrower as RealBorrower,
   InstallmentAdjustment,
+  InterestRateChartEntry,
   LoanAccount,
   LoanDocumentListItem,
   LoanTransaction,
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -421,6 +423,30 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [adjustFeesTarget, setAdjustFeesTarget] = React.useState<RepaymentInstallment | null>(null);
   const [adjustFeesAmount, setAdjustFeesAmount] = React.useState('');
   const [adjustFeesReason, setAdjustFeesReason] = React.useState('');
+  // 2026-07-16 (Edit Loan Account, user request): "may kailangan baguhin katulad ng term or
+  // amount, dapat pwede ko ito i-edit hangga't before ma-approve" — same ORIGINATION_ROLES gate
+  // as "Create Loan Account"/"Approve Loan" (canCreateLoanAccount), only while PENDING_APPROVAL.
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editForm, setEditForm] = React.useState({
+    principalAmount: '',
+    addOnRate: '',
+    interestRate: '',
+    installmentCount: '',
+    firstRepaymentDate: '',
+    anticipatedDisbursementDate: '',
+    // 2026-07-16: percent-based, mirrors LoanAccountCreatePage's identical processingFeePercent/
+    // accountManagementFeePercent fields — converted to a peso amount from principalAmount just
+    // before submit, never sent to the backend as a raw percent.
+    processingFeePercent: '',
+    advanceInterestFee: '',
+    outstandingBalancePayoff: '',
+    docStampFee: '',
+    accountManagementFeePercent: '',
+    otherFees: '',
+    notarialFee: '',
+    webFee: '',
+    insuranceFee: '',
+  });
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -463,6 +489,106 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       setActionError('Could not reach the server. Check your connection and try again.');
     }
   };
+
+  const openEdit = () => {
+    if (!loan) return;
+    const principalNum = Number.parseFloat(loan.principalAmount) || 0;
+    // Reverse-derives a display percent from the stored peso amount — the loan's own source of
+    // truth is the peso fee, not a percent, so this is a "best starting point," same as every
+    // other "default then editable" field elsewhere in this codebase.
+    const feePercent = (fee: string) =>
+      principalNum > 0 ? (((Number.parseFloat(fee) || 0) / principalNum) * 100).toFixed(3) : '0';
+    setEditForm({
+      principalAmount: loan.principalAmount,
+      addOnRate: loan.addOnInterestRate ?? '',
+      interestRate: loan.interestRate,
+      installmentCount: String(loan.installmentCount),
+      firstRepaymentDate: loan.firstRepaymentDate.slice(0, 10),
+      anticipatedDisbursementDate: loan.anticipatedDisbursementDate ? loan.anticipatedDisbursementDate.slice(0, 10) : '',
+      processingFeePercent: feePercent(loan.originationFees.processingFee),
+      advanceInterestFee: loan.originationFees.advanceInterestFee,
+      outstandingBalancePayoff: loan.originationFees.outstandingBalancePayoff,
+      docStampFee: loan.originationFees.docStampFee,
+      accountManagementFeePercent: feePercent(loan.originationFees.accountManagementFee),
+      otherFees: loan.originationFees.otherFees,
+      notarialFee: loan.originationFees.notarialFee,
+      webFee: loan.originationFees.webFee,
+      insuranceFee: loan.originationFees.insuranceFee,
+    });
+    setActionError(null);
+    setEditOpen(true);
+  };
+
+  // 2026-07-16 (Edit Loan Account, mockup follow-up): mirrors LoanAccountCreatePage's own
+  // Add-On Rate -> Contractual Rate lookup exactly, so editing a loan looks up rates from the
+  // same Interest Rate Chart rather than letting staff free-type a contractual rate that may not
+  // be on file.
+  const rateChartQuery = useQuery({
+    queryKey: ['interest-rate-chart'],
+    queryFn: () => apiClient.get<PaginatedResponse<InterestRateChartEntry>>('/interest-rate-chart'),
+    enabled: editOpen,
+  });
+  const rateChart = rateChartQuery.data?.items ?? [];
+  const addOnRateOptions = React.useMemo(
+    () => Array.from(new Set(rateChart.map((e) => e.addOnRatePercent))).sort((a, b) => Number(a) - Number(b)),
+    [rateChart],
+  );
+  const editAddOnRateNum = Number.parseFloat(editForm.addOnRate) || 0;
+  const editInstallmentCountNum = Number.parseInt(editForm.installmentCount, 10) || 0;
+  const editChartMatch =
+    editAddOnRateNum > 0 && editInstallmentCountNum > 0
+      ? rateChart.find((e) => Number(e.addOnRatePercent) === editAddOnRateNum && e.termMonths === editInstallmentCountNum)
+      : undefined;
+  React.useEffect(() => {
+    if (editChartMatch) setEditForm((f) => ({ ...f, interestRate: editChartMatch.contractualRatePercent }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editChartMatch?.contractualRatePercent]);
+
+  // 2026-07-16 (mockup follow-up): live Total Fees / Net Proceeds preview, same computation
+  // LoanAccountCreatePage shows — processingFee/accountManagementFee are percent-of-principal
+  // here, converted to pesos before either display or submit; every other fee is already a flat
+  // peso amount.
+  const editPrincipalNum = Number.parseFloat(editForm.principalAmount) || 0;
+  const editProcessingFee = ((editPrincipalNum * (Number.parseFloat(editForm.processingFeePercent) || 0)) / 100).toFixed(2);
+  const editAccountManagementFee = ((editPrincipalNum * (Number.parseFloat(editForm.accountManagementFeePercent) || 0)) / 100).toFixed(2);
+  const editTotalFees = (
+    Number.parseFloat(editProcessingFee) +
+    (Number.parseFloat(editForm.advanceInterestFee) || 0) +
+    (Number.parseFloat(editForm.outstandingBalancePayoff) || 0) +
+    (Number.parseFloat(editForm.docStampFee) || 0) +
+    Number.parseFloat(editAccountManagementFee) +
+    (Number.parseFloat(editForm.otherFees) || 0) +
+    (Number.parseFloat(editForm.notarialFee) || 0) +
+    (Number.parseFloat(editForm.webFee) || 0) +
+    (Number.parseFloat(editForm.insuranceFee) || 0)
+  ).toFixed(2);
+  const editNetProceeds = (editPrincipalNum - Number.parseFloat(editTotalFees)).toFixed(2);
+
+  const editMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<LoanAccount>(`/loan-accounts/${loanId}`, {
+        principalAmount: editForm.principalAmount,
+        addOnInterestRate: editForm.addOnRate || undefined,
+        interestRate: editForm.interestRate,
+        installmentCount: Number(editForm.installmentCount),
+        firstRepaymentDate: editForm.firstRepaymentDate,
+        anticipatedDisbursementDate: editForm.anticipatedDisbursementDate || undefined,
+        processingFee: editProcessingFee,
+        advanceInterestFee: editForm.advanceInterestFee,
+        outstandingBalancePayoff: editForm.outstandingBalancePayoff,
+        docStampFee: editForm.docStampFee,
+        accountManagementFee: editAccountManagementFee,
+        otherFees: editForm.otherFees,
+        notarialFee: editForm.notarialFee,
+        webFee: editForm.webFee,
+        insuranceFee: editForm.insuranceFee,
+      }),
+    onSuccess: () => {
+      setEditOpen(false);
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
 
   const approveMutation = useMutation({
     mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/approve`, {}),
@@ -722,6 +848,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           {canCreateLoanAccount && loan.status === 'APPROVED' && (
             <Button size="sm" onClick={() => openConfirm('ACTIVATE')}>
               Activate Loan
+            </Button>
+          )}
+          {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
+            <Button size="sm" variant="outline" onClick={openEdit}>
+              Edit
             </Button>
           )}
           {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
@@ -1281,6 +1412,189 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       </Card>
 
       <RecentActivityPanel label="Loan Account" entityId={loan.id} />
+
+      <Dialog open={editOpen} onOpenChange={(open) => !open && !editMutation.isPending && setEditOpen(false)}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit {loan.loanCode}</DialogTitle>
+            <DialogDescription>
+              Only available while Pending Approval — every field below is locked once the loan is approved.
+            </DialogDescription>
+          </DialogHeader>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <p className="text-xs font-medium text-muted-foreground">Loan terms</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-principal">Principal amount</Label>
+              <Input
+                id="edit-principal"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.principalAmount}
+                onChange={(e) => setEditForm((f) => ({ ...f, principalAmount: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-term">Term (installments)</Label>
+              <Input
+                id="edit-term"
+                type="number"
+                min="1"
+                step="1"
+                value={editForm.installmentCount}
+                onChange={(e) => setEditForm((f) => ({ ...f, installmentCount: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-add-on-rate">Add-on rate (% monthly)</Label>
+              <Select value={editForm.addOnRate} onValueChange={(v) => setEditForm((f) => ({ ...f, addOnRate: v }))}>
+                <SelectTrigger id="edit-add-on-rate">
+                  <SelectValue placeholder={rateChartQuery.isLoading ? 'Loading…' : 'Select an add-on rate…'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {addOnRateOptions.map((rate) => (
+                    <SelectItem key={rate} value={rate}>
+                      {rate}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {editForm.addOnRate ? "Pre-filled from this loan's saved rate." : 'Looks up the contractual rate from the Interest Rate Chart, by this rate and the term.'}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-interest-rate">Contractual rate (% monthly)</Label>
+              <Input id="edit-interest-rate" type="number" min="0" step="0.001" value={editForm.interestRate} readOnly disabled className="bg-muted" />
+              {editAddOnRateNum > 0 && editInstallmentCountNum > 0 && !editChartMatch && (
+                <p className="text-xs text-warning">
+                  No Interest Rate Chart entry for {editAddOnRateNum}% / {editInstallmentCountNum} months — not on file, please confirm
+                  with MIS before proceeding.
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-first-repayment">First repayment date</Label>
+              <Input
+                id="edit-first-repayment"
+                type="date"
+                value={editForm.firstRepaymentDate}
+                onChange={(e) => setEditForm((f) => ({ ...f, firstRepaymentDate: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-disbursement-date">Anticipated disbursement date</Label>
+              <Input
+                id="edit-disbursement-date"
+                type="date"
+                value={editForm.anticipatedDisbursementDate}
+                onChange={(e) => setEditForm((f) => ({ ...f, anticipatedDisbursementDate: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <p className="pt-2 text-xs font-medium text-muted-foreground">Origination fees (one-time, taken at disbursement)</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-processingFeePercent" className="text-xs text-muted-foreground">
+                Processing fee (%)
+              </Label>
+              <Input
+                id="edit-processingFeePercent"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.processingFeePercent}
+                onChange={(e) => setEditForm((f) => ({ ...f, processingFeePercent: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">= {formatPeso(Number.parseFloat(editProcessingFee))}</p>
+            </div>
+            {(
+              [
+                ['advanceInterestFee', 'Advance interest fee'],
+                ['outstandingBalancePayoff', 'Outstanding balance payoff'],
+                ['docStampFee', 'Doc stamp fee'],
+              ] as const
+            ).map(([field, label]) => (
+              <div key={field} className="space-y-1.5">
+                <Label htmlFor={`edit-${field}`} className="text-xs text-muted-foreground">
+                  {label}
+                </Label>
+                <Input
+                  id={`edit-${field}`}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm[field]}
+                  onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                />
+              </div>
+            ))}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-accountManagementFeePercent" className="text-xs text-muted-foreground">
+                Account management fee (%)
+              </Label>
+              <Input
+                id="edit-accountManagementFeePercent"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.accountManagementFeePercent}
+                onChange={(e) => setEditForm((f) => ({ ...f, accountManagementFeePercent: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">= {formatPeso(Number.parseFloat(editAccountManagementFee))}</p>
+            </div>
+            {(
+              [
+                ['otherFees', 'Other fees'],
+                ['notarialFee', 'Notarial fee'],
+                ['webFee', 'Web fee'],
+                ['insuranceFee', 'Insurance fee'],
+              ] as const
+            ).map(([field, label]) => (
+              <div key={field} className="space-y-1.5">
+                <Label htmlFor={`edit-${field}`} className="text-xs text-muted-foreground">
+                  {label}
+                </Label>
+                <Input
+                  id={`edit-${field}`}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm[field]}
+                  onChange={(e) => setEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between border-t pt-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Total fees</p>
+              <p className="text-sm font-medium">{formatPeso(Number.parseFloat(editTotalFees))}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Net proceeds</p>
+              <p className="text-sm font-medium text-success">{formatPeso(Number.parseFloat(editNetProceeds))}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>
+              {editMutation.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && !actionPending && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">

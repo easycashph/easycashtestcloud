@@ -43,8 +43,11 @@ export interface LoanAccount {
   collectionsBalance: string;
   accountingBalance: string;
   interestRate: string;
+  addOnInterestRate: string | null;
+  contractualInterestRate: string | null;
   installmentCount: number;
   repaymentPeriodUnit: string;
+  gracePeriodDays: number;
   firstRepaymentDate: string;
   anticipatedDisbursementDate: string | null;
   approvedAt: string | null;
