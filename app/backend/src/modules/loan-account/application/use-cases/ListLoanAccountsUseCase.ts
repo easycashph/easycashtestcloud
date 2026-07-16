@@ -13,7 +13,7 @@ export interface ListLoanAccountsInput {
   search?: string;
   /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): filters to one borrower's loan history. */
   borrowerId?: string;
-  status?: LoanAccountStatus;
+  status?: LoanAccountStatus | 'MATURED';
   loanProductVersionIds?: string[];
 }
 

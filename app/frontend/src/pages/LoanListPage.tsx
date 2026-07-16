@@ -58,12 +58,18 @@ function getSortValue(loan: LoanRow, key: string): string | number | Date | null
   }
 }
 
-const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
+/** 'MATURED' isn't a raw `LoanAccountStatus` - it's a computed overlay (the loan's full scheduled
+ * term ended and it's still unpaid), same as the "Matured" badge that takes priority over the raw
+ * status label on a matured loan. Filtered as its own option so it doesn't silently mix into the
+ * Active/In Arrears views - the backend excludes matured loans from those two when filtering by
+ * them directly, matching what the badge already shows. */
+const STATUS_OPTIONS: { value: LoanAccountStatus | 'MATURED' | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
   { value: 'APPROVED', label: 'For Disbursement' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'ACTIVE_IN_ARREARS', label: 'In Arrears' },
+  { value: 'MATURED', label: 'Matured' },
   { value: 'CLOSED', label: 'Closed' },
   { value: 'CLOSED_WRITTEN_OFF', label: 'Written Off' },
   { value: 'CLOSED_REJECTED', label: 'Rejected' },
@@ -91,7 +97,7 @@ export function LoanListPage() {
   useLogPageView('List of Loan Accounts');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [status, setStatus] = React.useState<LoanAccountStatus | 'ALL'>('ALL');
+  const [status, setStatus] = React.useState<LoanAccountStatus | 'MATURED' | 'ALL'>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
 
   const productsQuery = useQuery({
@@ -218,7 +224,7 @@ export function LoanListPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as LoanAccountStatus | 'ALL')}>
+            <Select value={status} onValueChange={(v) => setStatus(v as LoanAccountStatus | 'MATURED' | 'ALL')}>
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>

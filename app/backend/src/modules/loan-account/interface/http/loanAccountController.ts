@@ -74,7 +74,7 @@ export class LoanAccountController {
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
       const borrowerId = typeof req.query.borrowerId === 'string' ? req.query.borrowerId : undefined;
-      const status = typeof req.query.status === 'string' ? (req.query.status as LoanAccountStatus) : undefined;
+      const status = typeof req.query.status === 'string' ? (req.query.status as LoanAccountStatus | 'MATURED') : undefined;
       const loanProductVersionIds =
         typeof req.query.loanProductVersionIds === 'string' && req.query.loanProductVersionIds.length > 0
           ? req.query.loanProductVersionIds.split(',')
