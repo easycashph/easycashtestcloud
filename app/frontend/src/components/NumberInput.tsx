@@ -9,22 +9,40 @@ interface NumberInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 /**
- * Number input with thousand separators (commas) for readability.
- * Stores raw numeric value internally, displays formatted with commas.
- * Handles currency/financial fields without forcing a specific currency symbol.
+ * Number input with thousand separators (commas) for readability, applied LIVE while typing (not
+ * just on blur) - staff need to see at a glance whether they're keying in hundreds, thousands, or
+ * millions as they go, not only after they tab away.
  *
- * Formats with commas only while the field is NOT focused (on mount, on blur, and when the
- * parent resets the value externally) - never while the user is actively typing. Reformatting
- * on every keystroke (via a naive value-watching useEffect) breaks typing entirely: the cursor
- * jumps to the end after each character, and a trailing decimal point ("1234.") gets silently
- * dropped mid-type because `parseFloat("1234.")` rounds it back to "1234" before the user can
- * type the fractional digits. Tracking focus and skipping the reformat while typing avoids both.
+ * Two things make live comma-formatting on every keystroke safe, where a naive version breaks:
  *
- * Example: as user types "1000000", displays "1000000" while typing, then "1,000,000" on blur.
+ *  1. Cursor position: reformatting the display string changes its length (commas get inserted/
+ *     removed as digit groups shift), so the browser's own cursor-follows-the-edit behavior lands
+ *     in the wrong place unless corrected. `handleChange` counts digits before the cursor in the
+ *     pre-edit string, reformats, then walks the post-edit string to the position with the same
+ *     digit count and explicitly restores the selection there via `requestAnimationFrame` (must
+ *     happen after React commits the new value to the DOM, not before).
+ *
+ *  2. Decimal entry: `liveFormatWithCommas` only ever inserts commas into the integer part and
+ *     copies the decimal part through untouched - including a bare trailing "." or a partial
+ *     "1234.5" - so it's safe to call on every keystroke. This is deliberately NOT the same as
+ *     `formatNumberWithCommas` below (which rounds/pads via `toFixed` and is only ever applied
+ *     once, on blur, when a lone "." or "1234.5" needs to become a clean "1,234.50" - doing that
+ *     mid-type would round away a decimal point the user hasn't finished entering yet).
  */
 export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
-  ({ value, onChange, onFocus, onBlur, minDecimals = 0, maxDecimals = 2, ...props }, ref) => {
+  ({ value, onChange, onFocus, onBlur, minDecimals = 0, maxDecimals = 2, ...props }, forwardedRef) => {
+    const innerRef = React.useRef<HTMLInputElement | null>(null);
     const isFocusedRef = React.useRef(false);
+
+    const setRefs = React.useCallback(
+      (el: HTMLInputElement | null) => {
+        innerRef.current = el;
+        if (typeof forwardedRef === 'function') forwardedRef(el);
+        else if (forwardedRef) (forwardedRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+      },
+      [forwardedRef],
+    );
+
     const [displayValue, setDisplayValue] = React.useState<string>(() => {
       if (!value) return '';
       const numValue = typeof value === 'string' ? parseFloat(value) : typeof value === 'number' ? value : 0;
@@ -32,9 +50,10 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     });
 
     React.useEffect(() => {
-      // Never stomp the display value while the user is actively typing - only sync from an
-      // externally-changed `value` (initial mount, product-default prefill, form reset, etc.)
-      // when the field isn't focused.
+      // Only sync from an externally-changed `value` (initial mount, product-default prefill,
+      // form reset, etc.) when the field isn't focused - while typing, handleChange already keeps
+      // displayValue in sync with live comma formatting, and this effect running mid-type would
+      // instead apply the stricter toFixed-based formatting and corrupt an in-progress decimal.
       if (isFocusedRef.current) return;
 
       if (value === undefined || value === '') {
@@ -49,33 +68,45 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
       isFocusedRef.current = true;
-      // Switch to the raw (comma-free) value so the user edits plain digits, not a formatted
-      // string whose comma positions shift under them as they type.
-      setDisplayValue(stripCommas(displayValue));
       onFocus?.(e);
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const input = e.target.value;
+      const cursorPos = e.target.selectionStart ?? input.length;
+      const rawDigits = stripCommas(input);
 
-      // Allow empty, just digits, decimals, minus sign
-      if (input === '' || /^-?\d*\.?\d*$/.test(input)) {
-        setDisplayValue(input);
-
-        // Pass the raw numeric value to the parent, not the formatted one
-        if (onChange) {
-          const evt = {
-            ...e,
-            target: { ...e.target, value: input },
-          };
-          onChange(evt as React.ChangeEvent<HTMLInputElement>);
-        }
+      if (rawDigits !== '' && !/^-?\d*\.?\d*$/.test(rawDigits)) {
+        return; // reject anything that isn't a valid in-progress number
       }
+
+      // How many non-comma characters precede the cursor - this count is what we need to land on
+      // after reformatting, since comma positions shift but digit order never does.
+      const digitsBeforeCursor = stripCommas(input.slice(0, cursorPos)).length;
+      const formatted = liveFormatWithCommas(rawDigits);
+      setDisplayValue(formatted);
+
+      if (onChange) {
+        const evt = { ...e, target: { ...e.target, value: rawDigits } };
+        onChange(evt as React.ChangeEvent<HTMLInputElement>);
+      }
+
+      requestAnimationFrame(() => {
+        const el = innerRef.current;
+        if (!el) return;
+        let pos = 0;
+        let count = 0;
+        while (pos < formatted.length && count < digitsBeforeCursor) {
+          if (formatted[pos] !== ',') count++;
+          pos++;
+        }
+        el.setSelectionRange(pos, pos);
+      });
     };
 
     const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
       isFocusedRef.current = false;
-      const input = e.target.value;
+      const input = stripCommas(e.target.value);
       if (input && input !== '' && input !== '-') {
         const num = parseFloat(input);
         if (!Number.isNaN(num)) {
@@ -87,7 +118,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
     return (
       <Input
-        ref={ref}
+        ref={setRefs}
         type="text"
         inputMode="decimal"
         value={displayValue}
@@ -107,8 +138,26 @@ function stripCommas(value: string): string {
 }
 
 /**
- * Format a number with thousand separators (commas).
- * Example: 1234567.89 -> "1,234,567.89"
+ * Adds commas to the integer part only, copying the decimal part (including a bare trailing "."
+ * or partial digits like "1234.5") through untouched. Safe to call on every keystroke - unlike
+ * `formatNumberWithCommas`, it never rounds or pads, so it can't corrupt a decimal the user is
+ * still in the middle of typing.
+ */
+function liveFormatWithCommas(raw: string): string {
+  if (raw === '' || raw === '-') return raw;
+  const negative = raw.startsWith('-');
+  const unsigned = negative ? raw.slice(1) : raw;
+  const dotIndex = unsigned.indexOf('.');
+  const integerPart = dotIndex === -1 ? unsigned : unsigned.slice(0, dotIndex);
+  const decimalPart = dotIndex === -1 ? '' : unsigned.slice(dotIndex); // includes the "."
+  const commaInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (negative ? '-' : '') + commaInteger + decimalPart;
+}
+
+/**
+ * Format a number with thousand separators (commas), rounded/padded to a fixed decimal length -
+ * only used for the initial mount value, an externally-changed value while unfocused, and on
+ * blur. Example: 1234567.89 -> "1,234,567.89"
  */
 function formatNumberWithCommas(num: number, minDecimals: number, maxDecimals: number): string {
   if (Number.isNaN(num)) return '';
