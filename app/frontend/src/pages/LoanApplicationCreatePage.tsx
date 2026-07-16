@@ -104,6 +104,8 @@ const LOAN_TYPE_OPTIONS = [
   { category: 'Seafarer Loan' },
 ];
 
+const LOAN_TERM_MONTHS_OPTIONS = Array.from({ length: 24 }, (_, i) => i + 1);
+
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Others'];
 const GENDER_OPTIONS = ['Female', 'Male'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
@@ -721,7 +723,18 @@ export function LoanApplicationForm({
             <NumberInput min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
           </Field>
           <Field label="Preferred loan term (months) *" tooltip="How many months the applicant wants to repay the loan over.">
-            <Input type="number" min="1" max="36" value={requestedTermMonths} onChange={(e) => setRequestedTermMonths(e.target.value)} />
+            <Select value={requestedTermMonths} onValueChange={setRequestedTermMonths}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOAN_TERM_MONTHS_OPTIONS.map((months) => (
+                  <SelectItem key={months} value={String(months)}>
+                    {months} {months === 1 ? 'month' : 'months'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         </div>
         <div className="mt-3">
