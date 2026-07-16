@@ -184,7 +184,8 @@ export function ClientCreatePage() {
     },
   });
 
-  const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0;
+  const coBorrowerIncomplete = includeCoBorrower && (coFirstName.trim().length === 0 || coLastName.trim().length === 0);
+  const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0 && !coBorrowerIncomplete;
 
   return (
     <div className="space-y-6">
@@ -442,6 +443,11 @@ export function ClientCreatePage() {
                 <Input value={coEmployer} onChange={(e) => setCoEmployer(e.target.value)} />
               </Field>
             </div>
+          )}
+          {coBorrowerIncomplete && (
+            <p className="text-sm text-destructive">
+              First Name and Last Name are required to include a co-borrower — uncheck the box above if you don't want to add one.
+            </p>
           )}
         </CardContent>
       </Card>
