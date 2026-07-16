@@ -15,7 +15,16 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
-import type { Borrower as RealBorrower, LoanAccount, LoanDocumentListItem, LoanTransaction, PaginatedResponse, PaymentAllocationDetail, RepaymentInstallment } from '@/lib/loanApiTypes';
+import type {
+  Borrower as RealBorrower,
+  InstallmentAdjustment,
+  LoanAccount,
+  LoanDocumentListItem,
+  LoanTransaction,
+  PaginatedResponse,
+  PaymentAllocationDetail,
+  RepaymentInstallment,
+} from '@/lib/loanApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -568,6 +577,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => fetchAllPages<LoanTransaction>(`/loan-accounts/${loanId}/transactions`),
   });
 
+  // 2026-07-16 (unified Payment History timeline, user request): penalty reductions and fee
+  // adjustments have no ledger impact of their own, so they're a separate endpoint/query, merged
+  // with `transactions` only at render time below — not folded into the LoanTransaction list itself.
+  const installmentAdjustmentsQuery = useQuery({
+    queryKey: ['installment-adjustments', loanId],
+    queryFn: () => fetchAllPages<InstallmentAdjustment>(`/loan-accounts/${loanId}/installment-adjustments`),
+  });
+
   // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory Note, and
   // other applicable legal documents, available once the loan is APPROVED.
   const documentsQuery = useQuery({
@@ -640,7 +657,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const borrower = borrowerQuery.data;
   const installments = installmentsQuery.data?.items ?? [];
   const transactions = transactionsQuery.data ?? [];
+  const installmentAdjustments = installmentAdjustmentsQuery.data ?? [];
   const num = (v: string) => Number.parseFloat(v) || 0;
+  // 2026-07-16 (unified Payment History timeline): interleave real LoanTransactions with penalty
+  // reduction/fee adjustment events, newest first — a plain UI-level merge (no ledger impact from
+  // the adjustment rows), tagged so the table can render each kind differently.
+  type PaymentHistoryRow = { kind: 'TRANSACTION'; at: string; transaction: LoanTransaction } | { kind: 'ADJUSTMENT'; at: string; adjustment: InstallmentAdjustment };
+  const paymentHistoryRows: PaymentHistoryRow[] = [
+    ...transactions.map((t): PaymentHistoryRow => ({ kind: 'TRANSACTION', at: t.entryDate, transaction: t })),
+    ...installmentAdjustments.map((a): PaymentHistoryRow => ({ kind: 'ADJUSTMENT', at: a.at, adjustment: a })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   // 2026-07-11 (Reverse Payment feature): which REPAYMENT ids already have a REVERSAL pointing at
   // them — computed from the same already-fetched transaction list, no extra request needed.
   const reversedTransactionIds = new Set(
@@ -983,9 +1009,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               </p>
             </TabsContent>
             <TabsContent value="payments" className="mt-0">
-              {transactionsQuery.isLoading ? (
+              {transactionsQuery.isLoading || installmentAdjustmentsQuery.isLoading ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
-              ) : transactions.length === 0 ? (
+              ) : paymentHistoryRows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No transactions recorded yet.</p>
               ) : (
                 <Table>
@@ -1007,7 +1033,38 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions.map((t) => {
+                    {paymentHistoryRows.map((row) => {
+                      // 2026-07-16: a penalty reduction / fee adjustment has no ledger impact of its
+                      // own — no components, no OR#/AR#, no balance, no allocation breakdown to
+                      // expand. Rendered as its own distinct row style (pro/purple) in the same
+                      // chronological list rather than a separate table.
+                      if (row.kind === 'ADJUSTMENT') {
+                        const a = row.adjustment;
+                        const label = a.kind === 'PENALTY_REDUCTION' ? 'Penalty reduced' : 'Fee adjusted';
+                        return (
+                          <TableRow key={a.id} className="bg-primary/5">
+                            <TableCell />
+                            <TableCell className="text-primary">{formatDate(a.at)}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="border-primary/40 text-primary">
+                                {label}
+                              </Badge>
+                            </TableCell>
+                            {/* Spans OR#/AR#/Principal/Interest/Penalty/Fees (6 columns) — none apply to an adjustment event. */}
+                            <TableCell colSpan={6} />
+                            <TableCell className="text-right font-semibold text-primary">
+                              {formatPeso(num(a.previousAmount))} → {formatPeso(num(a.newAmount))}
+                            </TableCell>
+                            <TableCell />
+                            <TableCell className="text-xs text-primary" title={a.reason}>
+                              Installment #{a.installmentNumber} · {a.byName ?? 'Accounting'} · {a.reason}
+                            </TableCell>
+                            {canReversePayment && <TableCell />}
+                          </TableRow>
+                        );
+                      }
+
+                      const t = row.transaction;
                       const isReversed = reversedTransactionIds.has(t.id);
                       const isExpandable = t.type === 'REPAYMENT';
                       const isExpanded = expandedTransactionId === t.id;

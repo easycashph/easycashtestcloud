@@ -72,6 +72,7 @@ import { PrismaPenaltyReductionRepository } from '@modules/repayment/infrastruct
 import { PrismaFeeAdjustmentRepository } from '@modules/repayment/infrastructure/PrismaFeeAdjustmentRepository';
 import { ReducePenaltyUseCase } from '@modules/repayment/application/use-cases/ReducePenaltyUseCase';
 import { AdjustFeesUseCase } from '@modules/repayment/application/use-cases/AdjustFeesUseCase';
+import { ListInstallmentAdjustmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
 import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
 import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
 import { PrismaDashboardRepository } from '@modules/dashboard/infrastructure/PrismaDashboardRepository';
@@ -500,6 +501,10 @@ export function createApp(): Express {
         feeAdjustmentRepository,
         financialAuditLogger,
         unitOfWork,
+      }),
+      listInstallmentAdjustmentsForLoanUseCase: new ListInstallmentAdjustmentsForLoanUseCase({
+        penaltyReductionRepository,
+        feeAdjustmentRepository,
       }),
       getLoanAccountUseCase, // H-1: branch check via the parent loan account.
     },

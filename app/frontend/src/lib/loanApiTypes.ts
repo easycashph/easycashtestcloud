@@ -394,3 +394,18 @@ export interface ProcessPaymentResponse {
   remainder: string;
   appliedAllocations: PaymentAllocationDetail[];
 }
+
+/** 2026-07-16 (unified Payment History timeline) — a penalty reduction or fee adjustment event, merged with LoanTransaction rows for display. No ledger/balance impact of its own. */
+export interface InstallmentAdjustment {
+  kind: 'PENALTY_REDUCTION' | 'FEE_ADJUSTMENT';
+  id: string;
+  repaymentInstallmentId: string;
+  installmentNumber: number;
+  installmentDueDate: string;
+  previousAmount: string;
+  newAmount: string;
+  reason: string;
+  byUserId: string;
+  byName: string | null;
+  at: string;
+}

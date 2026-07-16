@@ -7,7 +7,9 @@ import type { ListRepaymentInstallmentsForLoanUseCase } from '../../application/
 import type { GetRepaymentInstallmentUseCase } from '../../application/use-cases/GetRepaymentInstallmentUseCase';
 import type { ReducePenaltyUseCase } from '../../application/use-cases/ReducePenaltyUseCase';
 import type { AdjustFeesUseCase } from '../../application/use-cases/AdjustFeesUseCase';
+import type { ListInstallmentAdjustmentsForLoanUseCase } from '../../application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
 import { presentRepaymentInstallment } from './presenters/RepaymentInstallmentPresenter';
+import { presentInstallmentAdjustment } from './presenters/InstallmentAdjustmentPresenter';
 import type { AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
 
 export interface RepaymentControllerDeps {
@@ -15,6 +17,7 @@ export interface RepaymentControllerDeps {
   getRepaymentInstallmentUseCase: GetRepaymentInstallmentUseCase;
   reducePenaltyUseCase: ReducePenaltyUseCase;
   adjustFeesUseCase: AdjustFeesUseCase;
+  listInstallmentAdjustmentsForLoanUseCase: ListInstallmentAdjustmentsForLoanUseCase;
   /**
    * Milestone 8.1 / H-1: RepaymentInstallment has no `branchId` field of
    * its own (unlike Borrower/LoanAccount/LoanTransaction) — branch access
@@ -110,6 +113,21 @@ export class RepaymentController {
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = { isProspectiveLoan: !loanAccount.legacyId, principalAmount: loanAccount.principalAmount };
       res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listInstallmentAdjustmentsForLoan = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const loanAccountId = req.params.loanAccountId as string;
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(loanAccountId);
+      assertBranchAccess(scope, loanAccount.branchId); // H-1: same pattern as listForLoan() above.
+
+      const adjustments = await this.deps.listInstallmentAdjustmentsForLoanUseCase.execute(loanAccountId);
+      // Unpaginated, same rationale as listForLoan() — bounded by the loan's own schedule size.
+      res.status(200).json({ items: adjustments.map(presentInstallmentAdjustment), nextCursor: null });
     } catch (error) {
       next(error);
     }

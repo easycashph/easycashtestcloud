@@ -28,6 +28,7 @@ export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenServic
   const requireAuth = createRequireAuth(tokenService);
 
   router.get('/loan-accounts/:loanAccountId/repayment-schedule', requireAuth, controller.listForLoan);
+  router.get('/loan-accounts/:loanAccountId/installment-adjustments', requireAuth, controller.listInstallmentAdjustmentsForLoan);
   router.get('/repayment-installments/:id', requireAuth, controller.get);
   router.post(
     '/repayment-installments/:id/reduce-penalty',
