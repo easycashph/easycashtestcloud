@@ -125,30 +125,57 @@ interface PaymentSuccessInfo {
 }
 
 export function PaymentRecordingPage() {
-  useLogPageView('Payment Recording');
+  const [searchParams] = useSearchParams();
+  return <PaymentRecordingForm preselectedLoanId={searchParams.get('loanId') ?? undefined} />;
+}
+
+/**
+ * The actual form - extracted from `PaymentRecordingPage` (2026-07-16) so it can be reused inside
+ * a "Record Payment" dialog on the Loan Account Detail page, not just as the standalone
+ * `/payments` page. `lockedBorrower`/`lockedLoan` skip the Find Client / Choose Loan steps
+ * entirely when both are already known (the Loan Detail page always knows its own borrower and
+ * loan); `showChrome=false` drops the page header and RecentActivityPanel for use inside a Dialog,
+ * where the caller supplies its own header instead. `onDone` fires once staff dismiss the success
+ * confirmation - the standalone page resets back to Find Client; the dialog closes and refreshes
+ * the Loan Detail page's own queries instead of navigating anywhere.
+ */
+export function PaymentRecordingForm({
+  lockedBorrower,
+  lockedLoan,
+  preselectedLoanId,
+  showChrome = true,
+  onDone,
+}: {
+  lockedBorrower?: Borrower;
+  lockedLoan?: LoanAccount;
+  /** Standalone-page-only deep link (`?loanId=...`) - resolves the borrower/loan automatically
+   * instead of making staff search again. Ignored once `lockedBorrower`/`lockedLoan` are set. */
+  preselectedLoanId?: string;
+  showChrome?: boolean;
+  onDone?: () => void;
+}) {
+  useLogPageView('Payment Recording', showChrome ? undefined : 'record-payment-dialog');
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const preselectedLoanId = searchParams.get('loanId');
 
   // Step 1: find the client. Deep-linked from LoanDetailPage's "Record Payment" button
   // (?loanId=...) resolves the client automatically instead of making staff search again.
-  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(null);
-  const [loanId, setLoanId] = React.useState('');
+  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(lockedBorrower ?? null);
+  const [loanId, setLoanId] = React.useState(lockedLoan?.id ?? '');
 
   const preselectedLoanQuery = useQuery({
     queryKey: ['loan-accounts', preselectedLoanId],
     queryFn: () => apiClient.get<LoanAccount>(`/loan-accounts/${preselectedLoanId}`),
-    enabled: Boolean(preselectedLoanId) && !selectedBorrower,
+    enabled: Boolean(preselectedLoanId) && !selectedBorrower && !lockedBorrower,
   });
   React.useEffect(() => {
-    if (!preselectedLoanQuery.data || selectedBorrower) return;
+    if (!preselectedLoanQuery.data || selectedBorrower || lockedBorrower) return;
     const loan = preselectedLoanQuery.data;
     void apiClient.get<Borrower>(`/borrowers/${loan.borrowerId}`).then((borrower) => {
       setSelectedBorrower(borrower);
       setLoanId(loan.id);
     });
-  }, [preselectedLoanQuery.data, selectedBorrower]);
+  }, [preselectedLoanQuery.data, selectedBorrower, lockedBorrower]);
 
   const [clientSearch, setClientSearch] = React.useState('');
   const debouncedClientSearch = useDebouncedValue(clientSearch);
@@ -176,7 +203,7 @@ export function PaymentRecordingPage() {
     enabled: Boolean(selectedBorrower),
   });
   const clientPayableLoans = (clientLoansQuery.data?.items ?? []).filter((l) => PAYABLE_STATUSES.includes(l.status));
-  const selectedLoan = clientPayableLoans.find((l) => l.id === loanId);
+  const selectedLoan = lockedLoan ?? clientPayableLoans.find((l) => l.id === loanId);
 
   // Starts blank rather than a hardcoded guess (e.g. "1000.00") — the effect below fills it in
   // once the oldest unpaid installment's actual total due is known, per loan selection.
@@ -340,6 +367,13 @@ export function PaymentRecordingPage() {
       // picking up the just-recorded payment until a full page reload (2026-07-15 bug report).
       void queryClient.refetchQueries({ queryKey: ['loan-accounts'] });
       void queryClient.refetchQueries({ queryKey: ['repayment-schedule', loanId] });
+      // 2026-07-16 bug found while adding the "Record Payment" dialog to Loan Detail: that page's
+      // own balance/status query is keyed ['loan-account', loanId] (singular) - a different key
+      // prefix from the plural ['loan-accounts'] above, which never matched it. Without this, the
+      // Loan Detail page kept showing the pre-payment balance/status until a manual refresh even
+      // though the payment posted successfully.
+      void queryClient.refetchQueries({ queryKey: ['loan-account', loanId] });
+      void queryClient.refetchQueries({ queryKey: ['loan-transactions', loanId] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -364,13 +398,15 @@ export function PaymentRecordingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
-        <p className="text-sm text-muted-foreground">
-          Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
-          oldest installment first (ADR-009).
-        </p>
-      </div>
+      {showChrome && (
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
+          <p className="text-sm text-muted-foreground">
+            Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
+            oldest installment first (ADR-009).
+          </p>
+        </div>
+      )}
 
       {clientLoansQuery.isError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -472,9 +508,11 @@ export function PaymentRecordingPage() {
                     <CardTitle>Payment Details</CardTitle>
                     <CardDescription>Enter an amount to preview allocation.</CardDescription>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => setLoanId('')}>
-                    <ChevronLeft className="mr-1 h-4 w-4" /> Change loan
-                  </Button>
+                  {!lockedLoan && (
+                    <Button variant="ghost" size="sm" onClick={() => setLoanId('')}>
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Change loan
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -780,7 +818,7 @@ export function PaymentRecordingPage() {
         </Card>
       </div>
 
-      <RecentActivityPanel label="Payment Recording" />
+      {showChrome && <RecentActivityPanel label="Payment Recording" />}
 
       <Dialog open={confirmOpen} onOpenChange={(open) => !paymentMutation.isPending && setConfirmOpen(open)}>
         <DialogContent>
@@ -884,12 +922,13 @@ export function PaymentRecordingPage() {
                   variant="outline"
                   onClick={() => {
                     setSuccessInfo(null);
-                    changeClient();
+                    if (!lockedBorrower) changeClient();
+                    onDone?.();
                   }}
                 >
                   Close
                 </Button>
-                <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>
+                {!lockedLoan && <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>}
               </DialogFooter>
             </>
           )}

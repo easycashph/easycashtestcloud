@@ -23,6 +23,7 @@ import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
+import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
 const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
   LOW: 'success',
@@ -383,6 +384,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
   const [reverseReason, setReverseReason] = React.useState('');
   const [expandedTransactionId, setExpandedTransactionId] = React.useState<string | null>(null);
+  const [recordPaymentOpen, setRecordPaymentOpen] = React.useState(false);
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -617,7 +619,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
           {canRecordPayment && (
-            <Button size="sm" onClick={() => navigate(`/payments?loanId=${loan.id}`)}>
+            <Button size="sm" onClick={() => setRecordPaymentOpen(true)}>
               Record Payment
             </Button>
           )}
@@ -1180,6 +1182,25 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       </Dialog>
 
       <LoanDocumentPreviewModal target={previewTarget} onClose={() => setPreviewTarget(null)} />
+
+      <Dialog open={recordPaymentOpen} onOpenChange={setRecordPaymentOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>
+              {loan.loanCode} - {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+            </DialogDescription>
+          </DialogHeader>
+          {recordPaymentOpen && borrower && (
+            <PaymentRecordingForm
+              lockedBorrower={borrower}
+              lockedLoan={loan}
+              showChrome={false}
+              onDone={() => setRecordPaymentOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
