@@ -117,6 +117,13 @@ export class ReversePaymentUseCase {
 
     loanAccount.applyPayment(reversedComponents, reversedAt);
 
+    // This reversal may have undone the payment that auto-closed the loan (ProcessPaymentUseCase's
+    // isFullyPaid check) - reopen it rather than leaving it stuck CLOSED with a nonzero balance and
+    // no way to record another payment against it.
+    if (loanAccount.status === 'CLOSED' && !loanAccount.isFullyPaid) {
+      loanAccount.reopen();
+    }
+
     const reversalTransaction = LoanTransaction.create({
       loanAccountId: loanAccount.id,
       type: 'REVERSAL',

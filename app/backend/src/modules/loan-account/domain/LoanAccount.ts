@@ -32,7 +32,10 @@ const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   APPROVED: ['ACTIVE'],
   ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
-  CLOSED: [],
+  // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
+  // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
+  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED - those aren't "fully paid" closures to begin with.
+  CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],
 };
@@ -498,6 +501,16 @@ export class LoanAccount {
   close(): void {
     this.transitionTo('CLOSED');
     this.props.closedAt = new Date();
+  }
+
+  /**
+   * Undoes `close()`: a CLOSED loan whose balance is no longer fully paid (a `ReversePaymentUseCase`
+   * reversal on the payment that closed it) goes back to ACTIVE. Callers decide *when* to call
+   * this, via `isFullyPaid` — mirrors `close()`'s own division of responsibility.
+   */
+  reopen(): void {
+    this.transitionTo('ACTIVE');
+    this.props.closedAt = undefined;
   }
 
   addAppliedFee(fee: AppliedFee): void {
