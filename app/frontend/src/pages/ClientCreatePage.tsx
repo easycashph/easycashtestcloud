@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { AlertCircle, ChevronLeft } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,15 @@ interface CharacterReferenceField {
 }
 
 const EMPTY_REFERENCE: CharacterReferenceField = { firstName: '', lastName: '', relationship: '', phoneNumber: '' };
+
+interface CoBorrowerField {
+  firstName: string;
+  lastName: string;
+  relationship: string;
+  employer: string;
+}
+
+const EMPTY_CO_BORROWER: CoBorrowerField = { firstName: '', lastName: '', relationship: '', employer: '' };
 
 /**
  * Standalone client creation (Clients -> Add Client), scoped 2026-07-16 per the legacy Excel LMS
@@ -77,10 +86,13 @@ export function ClientCreatePage() {
   const [references, setReferences] = React.useState<CharacterReferenceField[]>([{ ...EMPTY_REFERENCE }, { ...EMPTY_REFERENCE }]);
 
   const [includeCoBorrower, setIncludeCoBorrower] = React.useState(false);
-  const [coFirstName, setCoFirstName] = React.useState('');
-  const [coLastName, setCoLastName] = React.useState('');
-  const [coRelationship, setCoRelationship] = React.useState('');
-  const [coEmployer, setCoEmployer] = React.useState('');
+  const [coBorrowers, setCoBorrowers] = React.useState<CoBorrowerField[]>([{ ...EMPTY_CO_BORROWER }]);
+
+  const updateCoBorrower = (index: number, patch: Partial<CoBorrowerField>) => {
+    setCoBorrowers((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  };
+  const addCoBorrower = () => setCoBorrowers((prev) => [...prev, { ...EMPTY_CO_BORROWER }]);
+  const removeCoBorrower = (index: number) => setCoBorrowers((prev) => prev.filter((_, i) => i !== index));
 
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
@@ -159,15 +171,18 @@ export function ClientCreatePage() {
 
       const borrower = await apiClient.post<Borrower>('/borrowers', body);
 
-      if (includeCoBorrower && coFirstName.trim() && coLastName.trim()) {
-        const coBody: CreateCoBorrowerRequest = {
-          borrowerId: borrower.id,
-          firstName: coFirstName,
-          lastName: coLastName,
-          relationship: coRelationship || undefined,
-          employer: coEmployer || undefined,
-        };
-        await apiClient.post('/co-borrowers', coBody);
+      if (includeCoBorrower) {
+        for (const co of coBorrowers) {
+          if (!co.firstName.trim() || !co.lastName.trim()) continue;
+          const coBody: CreateCoBorrowerRequest = {
+            borrowerId: borrower.id,
+            firstName: co.firstName,
+            lastName: co.lastName,
+            relationship: co.relationship || undefined,
+            employer: co.employer || undefined,
+          };
+          await apiClient.post('/co-borrowers', coBody);
+        }
       }
 
       return borrower;
@@ -184,7 +199,8 @@ export function ClientCreatePage() {
     },
   });
 
-  const coBorrowerIncomplete = includeCoBorrower && (coFirstName.trim().length === 0 || coLastName.trim().length === 0);
+  const coBorrowerIncomplete =
+    includeCoBorrower && coBorrowers.some((c) => c.firstName.trim().length === 0 || c.lastName.trim().length === 0);
   const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0 && !coBorrowerIncomplete;
 
   return (
@@ -429,24 +445,43 @@ export function ClientCreatePage() {
             Include a co-borrower
           </label>
           {includeCoBorrower && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="First Name" required>
-                <Input value={coFirstName} onChange={(e) => setCoFirstName(e.target.value)} />
-              </Field>
-              <Field label="Last Name" required>
-                <Input value={coLastName} onChange={(e) => setCoLastName(e.target.value)} />
-              </Field>
-              <Field label="Relationship">
-                <Input value={coRelationship} onChange={(e) => setCoRelationship(e.target.value)} />
-              </Field>
-              <Field label="Employer">
-                <Input value={coEmployer} onChange={(e) => setCoEmployer(e.target.value)} />
-              </Field>
+            <div className="space-y-4">
+              {coBorrowers.map((co, i) => (
+                <div key={i} className="grid grid-cols-1 gap-4 rounded-md border border-border p-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <Field label="First Name" required>
+                    <Input value={co.firstName} onChange={(e) => updateCoBorrower(i, { firstName: e.target.value })} />
+                  </Field>
+                  <Field label="Last Name" required>
+                    <Input value={co.lastName} onChange={(e) => updateCoBorrower(i, { lastName: e.target.value })} />
+                  </Field>
+                  <Field label="Relationship">
+                    <Input value={co.relationship} onChange={(e) => updateCoBorrower(i, { relationship: e.target.value })} />
+                  </Field>
+                  <Field label="Employer">
+                    <Input value={co.employer} onChange={(e) => updateCoBorrower(i, { employer: e.target.value })} />
+                  </Field>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeCoBorrower(i)}
+                      disabled={coBorrowers.length === 1}
+                      title={coBorrowers.length === 1 ? 'At least one co-borrower slot is required while this is checked' : 'Remove this co-borrower'}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addCoBorrower}>
+                <Plus className="mr-1 h-4 w-4" /> Add another co-borrower
+              </Button>
             </div>
           )}
           {coBorrowerIncomplete && (
             <p className="text-sm text-destructive">
-              First Name and Last Name are required to include a co-borrower — uncheck the box above if you don't want to add one.
+              Every co-borrower needs a First Name and Last Name — fill them in, remove the incomplete row, or uncheck the box above.
             </p>
           )}
         </CardContent>
