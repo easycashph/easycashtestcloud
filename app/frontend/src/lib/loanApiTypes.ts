@@ -83,6 +83,7 @@ export interface BorrowerIncomeDetail {
   natureOfBusiness: string | null;
   position: string | null;
   yearsEmployed: number | null;
+  monthsEmployed: number | null;
   monthlyIncome: number | null;
 }
 
@@ -128,6 +129,7 @@ export interface Borrower {
   firstName: string;
   middleName: string | null;
   lastName: string;
+  suffix: string | null;
   fullName: string;
   gender: string | null;
   birthDate: string | null;
@@ -138,6 +140,7 @@ export interface Borrower {
   mobilePhone1: string | null;
   mobilePhone2: string | null;
   email: string | null;
+  facebookLink: string | null;
   dependants: BorrowerDependant[];
   note: string | null;
   status: BorrowerStatus;
@@ -160,6 +163,7 @@ export interface CreateBorrowerRequest {
   firstName: string;
   lastName: string;
   middleName?: string;
+  suffix?: string;
   gender?: string;
   birthDate?: string;
   placeOfBirth?: string;
@@ -169,6 +173,7 @@ export interface CreateBorrowerRequest {
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: BorrowerDependant[];
   note?: string;
   /** Set by the "Create Client Profile" flow on an APPROVED loan application - links the new
@@ -181,6 +186,7 @@ export interface CreateBorrowerRequest {
     natureOfBusiness?: string;
     position?: string;
     yearsEmployed?: number;
+    monthsEmployed?: number;
     monthlyIncome?: number;
   };
   governmentId?: {
@@ -209,6 +215,8 @@ export interface CreateBorrowerRequest {
 
 /** Body for `POST /co-borrowers`. */
 export interface CreateCoBorrowerRequest {
+  /** 2026-07-16 (ADR-015 resolved: per-Borrower) - attaches the co-borrower directly to a client. */
+  borrowerId?: string;
   firstName: string;
   lastName: string;
   middleName?: string;

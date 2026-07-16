@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { Input } from '@/components/ui/input';
@@ -143,9 +144,12 @@ export function ClientListPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
-        <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
+          <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
+        </div>
+        <Button onClick={() => navigate('/clients/new')}>Add Client</Button>
       </div>
 
       {borrowersQuery.isError && (

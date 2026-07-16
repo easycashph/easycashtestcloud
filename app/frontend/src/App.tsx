@@ -10,6 +10,7 @@ import { LoanApplicationCreatePage } from '@/pages/LoanApplicationCreatePage';
 import { PaymentRemindersPage } from '@/pages/PaymentRemindersPage';
 import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
 import { ClientListPage } from '@/pages/ClientListPage';
+import { ClientCreatePage } from '@/pages/ClientCreatePage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { StatementOfAccountPage } from '@/pages/StatementOfAccountPage';
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="reminders" element={<PaymentRemindersPage />} />
         <Route path="loans/:loanId/soa" element={<StatementOfAccountPage />} />
         <Route path="clients" element={<ClientListPage />} />
+        <Route path="clients/new" element={<ClientCreatePage />} />
         <Route path="clients/:borrowerId" element={<ClientProfilePage />} />
         <Route path="products" element={<LoanProductsPage />} />
         <Route path="payments" element={<PaymentRecordingPage />} />
