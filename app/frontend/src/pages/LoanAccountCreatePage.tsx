@@ -215,6 +215,7 @@ export function LoanAccountCreatePage() {
 export function LoanAccountForm({
   lockedBorrower,
   prefillTermMonths,
+  sourceApplicationId,
   showChrome = true,
   onCreated,
   onCancel,
@@ -223,6 +224,11 @@ export function LoanAccountForm({
   /** Requested Term (months) from the client's loan application, if opened from one - takes
    * priority over the product's own default term when a product is selected. */
   prefillTermMonths?: number;
+  /** 2026-07-16: the LoanApplication this account is being created FROM, if opened from one -
+   * persisted as LoanAccount.sourceApplicationId so the application detail/profile pages can
+   * reliably tell "the account THIS application produced" apart from any other loan account the
+   * same borrower happens to have (e.g. an older, unrelated closed loan). */
+  sourceApplicationId?: string;
   showChrome?: boolean;
   onCreated: (loan: LoanAccount) => void;
   onCancel: () => void;
@@ -502,6 +508,7 @@ export function LoanAccountForm({
         installmentCount: installmentCountNum,
         firstRepaymentDate,
         anticipatedDisbursementDate: disbursementDate || undefined,
+        sourceApplicationId,
         processingFee,
         advanceInterestFee,
         outstandingBalancePayoff,

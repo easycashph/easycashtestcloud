@@ -777,6 +777,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
             <LoanAccountForm
               lockedBorrower={borrower}
               prefillTermMonths={approvedApplicationAwaitingLoanAccount?.requestedTermMonths}
+              sourceApplicationId={approvedApplicationAwaitingLoanAccount?.id}
               showChrome={false}
               onCreated={(loan) => {
                 setCreateLoanAccountOpen(false);

@@ -547,11 +547,13 @@ function CreateLoanAccountDialog({
   onOpenChange,
   borrower,
   requestedTermMonths,
+  applicationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   borrower: Borrower;
   requestedTermMonths?: number;
+  applicationId: string;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -567,6 +569,7 @@ function CreateLoanAccountDialog({
           <LoanAccountForm
             lockedBorrower={borrower}
             prefillTermMonths={requestedTermMonths}
+            sourceApplicationId={applicationId}
             showChrome={false}
             onCreated={(loan) => {
               onOpenChange(false);
@@ -1362,6 +1365,7 @@ export function LoanApplicationDetailPage() {
           onOpenChange={setCreateLoanOpen}
           borrower={clientBorrowerQuery.data}
           requestedTermMonths={application.requestedTermMonths}
+          applicationId={application.id}
         />
       )}
     </div>
