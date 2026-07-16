@@ -405,7 +405,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { currentAccount, canCreateLoanAccount } = useRole();
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
   // 2026-07-11 (Reverse Payment feature, user request): correcting a wrongly-entered payment.
@@ -609,7 +609,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     },
     onError: onActionError,
   });
-  const actionPending = approveMutation.isPending || activateMutation.isPending;
+  // 2026-07-16 (Undo Approve / Undo Activate, user request, MIS-only): safety nets for an
+  // accidental Approve/Activate click. No Idempotency-Key needed — unlike activate above, a
+  // duplicate undo attempt just hits ConcurrencyConflictError/InvalidStatusTransitionError on the
+  // second call, which onActionError already surfaces sensibly.
+  const undoApproveMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-approve`, {}),
+    onSuccess: onActionSuccess,
+    onError: onActionError,
+  });
+  const undoActivateMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-activate`, {}),
+    onSuccess: onActionSuccess,
+    onError: onActionError,
+  });
+  const actionPending =
+    approveMutation.isPending || activateMutation.isPending || undoApproveMutation.isPending || undoActivateMutation.isPending;
 
   const reverseMutation = useMutation({
     mutationFn: () =>
@@ -662,7 +677,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
-  const openConfirm = (action: 'APPROVE' | 'ACTIVATE') => {
+  const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
   };
@@ -686,6 +701,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
     else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
+    else if (confirmAction === 'UNDO_APPROVE') undoApproveMutation.mutate();
+    else if (confirmAction === 'UNDO_ACTIVATE') undoActivateMutation.mutate();
   };
 
   const borrowerQuery = useQuery({
@@ -847,7 +864,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
           {canCreateLoanAccount && loan.status === 'APPROVED' && (
             <Button size="sm" onClick={() => openConfirm('ACTIVATE')}>
-              Activate Loan
+              Disburse Loan
+            </Button>
+          )}
+          {/* 2026-07-16 (Undo Approve / Undo Activate, user request): MIS-only, matching the
+              backend's requireRole('MIS') gate — a narrower tier than canCreateLoanAccount
+              (ORIGINATION_ROLES), same reasoning as Reverse Payment below. */}
+          {currentAccount.roles.includes('MIS') && loan.status === 'APPROVED' && (
+            <Button size="sm" variant="outline" onClick={() => openConfirm('UNDO_APPROVE')}>
+              Undo Approve
+            </Button>
+          )}
+          {currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE' && (
+            <Button size="sm" variant="outline" onClick={() => openConfirm('UNDO_ACTIVATE')}>
+              Undo Disburse
             </Button>
           )}
           {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
@@ -906,7 +936,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 <>
                   <div className="mb-3 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
                     <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                    Preview only - this loan hasn&apos;t been Activated yet, so this schedule hasn&apos;t been generated/persisted. It's
+                    Preview only - this loan hasn&apos;t been Disbursed yet, so this schedule hasn&apos;t been generated/persisted. It's
                     computed live from the current Principal, Contractual Rate, Term, and First Repayment Date, and may still change
                     before Activation.
                   </div>
@@ -1600,12 +1630,25 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Confirm {confirmAction === 'APPROVE' ? 'approval' : 'disbursement'}
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Confirm{' '}
+              {confirmAction === 'APPROVE'
+                ? 'approval'
+                : confirmAction === 'ACTIVATE'
+                  ? 'disbursement'
+                  : confirmAction === 'UNDO_APPROVE'
+                    ? 'undo approve'
+                    : 'undo disburse'}
             </DialogTitle>
             <DialogDescription>
-              {confirmAction === 'APPROVE'
-                ? `This will approve ${loan.loanCode} — the account moves from Pending Approval to Approved, ready to be activated/disbursed. This is a safety-net confirmation to prevent an accidental click.`
-                : `This will activate ${loan.loanCode} — disbursing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
+              {confirmAction === 'APPROVE' &&
+                `This will approve ${loan.loanCode} — the account moves from Pending Approval to Approved, ready to be disbursed. This is a safety-net confirmation to prevent an accidental click.`}
+              {confirmAction === 'ACTIVATE' &&
+                `This will disburse ${loan.loanCode} — releasing the loan, generating its repayment schedule (${loan.installmentCount} installments starting ${formatDate(loan.firstRepaymentDate)}), and moving it to Active. This is a safety-net confirmation to prevent an accidental click.`}
+              {confirmAction === 'UNDO_APPROVE' &&
+                `This will move ${loan.loanCode} back from Approved to Pending Approval, so its term/amount can be corrected before approving again.`}
+              {confirmAction === 'UNDO_ACTIVATE' &&
+                `This will move ${loan.loanCode} back from Active to Approved — its repayment schedule will be deleted and balances reset to zero. Only allowed while no payment or penalty/fee adjustment has been recorded yet. The original disbursement stays in Payment History as a record of what happened.`}
             </DialogDescription>
           </DialogHeader>
           {actionError && (
