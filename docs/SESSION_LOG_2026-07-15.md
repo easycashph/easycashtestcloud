@@ -777,6 +777,74 @@ correct from the reversal itself (₱3,748.51 principal / ₱185.55 interest).
 Backend rebuilt (`docker compose up -d --build backend`). Not yet click-through verified in a
 browser (same standing limitation this session).
 
+## Default Mode of Payment: Bank Transfer
+
+One-line change: `PaymentRecordingPage.tsx`'s `paymentMethod` state defaulted to
+`ACTIVE_PAYMENT_METHODS[0]!.code` (GCash, array order) — hardcoded to `'BANK_TRANSFER'` instead, per
+user request. Committed as `120f0ac`.
+
+## Loan History "Principal Balance" column showed the original loan amount, not the balance
+
+Found while investigating the SML-REG_00378 "Create Loan Account" report below. `ClientProfilePage.
+tsx`'s Loan History table's "Principal Balance" column rendered `loan.principalAmount` (the original
+disbursed amount — ₱20,000.00 for a now-fully-paid, correctly-closed SML-REG_00378) instead of
+`loan.balances.principalBalance` (the real current balance, ₱0.00) — every other column in the same
+row already used the correct `balances.*` field. One-line fix. Confirmed via direct DB query that
+SML-REG_00378 itself is correctly CLOSED at a genuine zero balance — not a repeat of the earlier
+Reverse Payment bug, purely a display bug.
+
+## "Create Loan Account" falsely showed a newly-approved application as already "Disbursed"
+
+User reported: approved a brand-new Loan Application (a renewal, for a borrower — "TestNomer" test
+client — who already had the old, now-closed SML-REG_00378 on file) and it immediately showed a
+"Disbursed" badge plus "Loan Account Created (SML-REG_00378)", despite no loan account having been
+created from this new application at all.
+
+**Root cause**: no real database relationship ever existed linking a `LoanApplication` to the
+specific `LoanAccount` it produced. `loanApplicationController.buildLinkage()`/`presentMany()`
+resolved "the loan account this application produced" via `loanAccountRepository.findMany({
+borrowerId, limit: 1 })` — i.e. "any loan account this borrower happens to have" — which picks up
+an older, unrelated loan account (here, the closed SML-REG_00378) for any borrower who already had
+one on file before the new application was approved. Since that picked-up loan was `CLOSED` (not
+`PENDING_APPROVAL`/`APPROVED`), `isCreatedLoanAccountActivated` on the frontend read it as "already
+disbursed." Same root cause also explained the earlier-in-session "why won't Create Loan Account
+click" report: every approved application for a borrower with an existing loan account would
+permanently look "already converted," so the button could never become clickable again for that
+borrower.
+
+**Fix** (real schema change, mirrors the existing `Borrower.sourceApplicationId` pattern exactly):
+- New `LoanAccount.sourceApplicationId` column (nullable, unique, FK to `loan_applications`,
+  `ON DELETE SET NULL`) — migration `20260716060000_add_loan_account_source_application`. Written
+  by hand and applied via `prisma migrate deploy` rather than `migrate dev`, since the
+  non-interactive shell refused `migrate dev`'s unique-constraint confirmation prompt even with
+  `--create-only`; the SQL exactly mirrors the existing Borrower migration's own shape, and
+  `git diff --stat` confirmed the schema edit was purely additive before applying.
+- `LoanAccount` domain entity, `CreateLoanAccountUseCase`/its DTO, the HTTP schema, and
+  `PrismaLoanAccountRepository` (new `findBySourceApplicationId`/`findManyBySourceApplicationIds`,
+  mirroring `IBorrowerRepository`'s identical methods) all thread this field through end to end.
+- Frontend: `LoanAccountForm` (`LoanAccountCreatePage.tsx`) gained a `sourceApplicationId` prop,
+  now sent on `POST /loan-accounts`; both call sites — `ClientProfilePage`'s dialog and
+  `LoanApplicationDetailPage`'s `CreateLoanAccountDialog` — pass the actual application id they
+  already had in scope.
+- `loanApplicationController.buildLinkage()`/`presentMany()` rewritten to look up
+  `loanAccountRepository.findBySourceApplicationId(application.id)` (single) /
+  `findManyBySourceApplicationIds(...)` (batched list view) instead of the borrower-keyed
+  heuristic — now resolves to the exact account this application produced, or `null` if none yet.
+
+**Verification**: typecheck clean (backend + frontend), full backend suite still 616 passed / 16
+known pre-existing unrelated failures (confirmed the one `LoanApplicationController.test.ts` failure
+touched by this change — `list()`'s missing `borrowerRepository`/`loanAccountRepository` test mocks
+— was already one of the pre-existing 16 before this session, not a new regression, by running that
+file in isolation and cross-checking against the earlier full failure list). Confirmed via direct
+DB query that the "TestNomer" borrower's existing loan account (SML-REG_00378) still has
+`sourceApplicationId = NULL` (correct — it predates this fix) and none of their 3 approved
+applications are linked to it. Backend rebuilt and confirmed live via a one-off script calling
+`PrismaLoanAccountRepository.findBySourceApplicationId()` directly against the real DB for
+TestNomer's most recent APPROVED application (`bcf1b25a-...`) — returns `null`, correctly reporting
+"no loan account produced yet" instead of the old bug's false match against SML-REG_00378. Once
+staff actually clicks "Create Loan Account" from this application, the new account will carry the
+real link and the Disbursed badge will only appear once that specific account is truly activated.
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`) running locally (frontend now run via
