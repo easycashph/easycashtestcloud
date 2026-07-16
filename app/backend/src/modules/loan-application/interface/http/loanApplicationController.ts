@@ -151,7 +151,16 @@ export class LoanApplicationController {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
-      const applications = await this.deps.listLoanApplicationsUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
+      const status = typeof req.query.status === 'string' ? (req.query.status as LoanApplication['status']) : undefined;
+      const requestedCategory = typeof req.query.requestedCategory === 'string' ? req.query.requestedCategory : undefined;
+      const applications = await this.deps.listLoanApplicationsUseCase.execute({
+        limit,
+        cursor,
+        branchId: resolveBranchFilter(scope),
+        search,
+        status,
+        requestedCategory,
+      });
       const presented = await this.presentMany(applications);
       res.status(200).json(toPaginatedResponse(presented, limit, (item) => item.id));
     } catch (error) {

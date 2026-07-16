@@ -237,6 +237,10 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     const where: Prisma.LoanAccountWhereInput = {
       ...(options.branchId ? { branchId: options.branchId } : {}),
       ...(options.borrowerId ? { borrowerId: options.borrowerId } : {}),
+      ...(options.status ? { status: options.status } : {}),
+      ...(options.loanProductVersionIds && options.loanProductVersionIds.length > 0
+        ? { loanProductVersionId: { in: options.loanProductVersionIds } }
+        : {}),
       ...(options.search
         ? {
             OR: [

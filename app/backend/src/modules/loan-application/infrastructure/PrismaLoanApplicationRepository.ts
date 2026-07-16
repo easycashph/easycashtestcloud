@@ -161,6 +161,8 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
     const rows = await client.loanApplication.findMany({
       where: {
         ...(options.branchId ? { branchId: options.branchId } : {}),
+        ...(options.status ? { status: options.status } : {}),
+        ...(options.requestedCategory ? { requestedCategory: options.requestedCategory } : {}),
         ...(options.search ? { applicantName: { contains: options.search, mode: 'insensitive' } } : {}),
       },
       orderBy: { createdAt: 'desc' },

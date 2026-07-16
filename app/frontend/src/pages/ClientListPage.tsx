@@ -70,12 +70,13 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  * as `LoanListPage.tsx`: no `GET /branches` endpoint yet, and every migrated record currently
  * belongs to the single seeded "HQ" branch anyway.
  *
- * Real, server-side pagination (100 rows/page, Next/Previous - see `useCursorPagination`) replaced
+ * Real, server-side pagination (25 rows/page, Next/Previous - see `useCursorPagination`) replaced
  * the earlier "load every borrower up front" approach, which was the direct cause of frontend lag.
- * Search now goes to the backend's `?search=` param (debounced) instead of filtering an
- * already-fully-loaded array. The "Loan presence" filter is the one thing that still only sees the
- * current page - it can't be pushed server-side without a new backend filter param, so it narrows
- * within the 100 loaded rows rather than across the whole client base.
+ * Search and "Loan presence" (2026-07-16) both go to backend query params, so a full page of up to
+ * 25 matching rows is always shown even with a filter applied - Loan presence is a Prisma relation
+ * filter (`loanAccounts: { some/none: {...} }`) on the borrower repository. The per-row Loans
+ * count/badge still needs every loan account regardless of the filter, so `loansQuery` below stays
+ * a full `fetchAllPages` load.
  */
 export function ClientListPage() {
   const navigate = useNavigate();
@@ -92,7 +93,12 @@ export function ClientListPage() {
     hasPrev,
     goNext,
     goPrev,
-  } = useCursorPagination<Borrower>(['borrowers'], '/borrowers', { search: debouncedSearch }, PAGE_SIZE);
+  } = useCursorPagination<Borrower>(
+    ['borrowers'],
+    '/borrowers',
+    { search: debouncedSearch, loanPresence: loanPresence === 'ALL' ? undefined : loanPresence },
+    PAGE_SIZE,
+  );
 
   // Still loaded in full - needed to compute the "Loans" column/filter for whichever borrowers are
   // on the current page. Loan accounts aren't yet searchable/filterable by borrowerId server-side,
@@ -131,15 +137,8 @@ export function ClientListPage() {
     [borrowers, loansByBorrowerId],
   );
 
-  const filtered = rows.filter((c) => {
-    const matchesLoanPresence =
-      loanPresence === 'ALL' ||
-      (loanPresence === 'WITH_ACTIVE' && c.hasActiveLoan) ||
-      (loanPresence === 'WITH_HISTORY' && c.loanCount > 0) ||
-      (loanPresence === 'NONE' && c.loanCount === 0);
-    return matchesLoanPresence;
-  });
-  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: null, direction: 'asc' });
+  // loanPresence is already server-filtered above (via useCursorPagination's extraParams).
+  const { sorted, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: null, direction: 'asc' });
 
   return (
     <div className="space-y-6">
@@ -180,9 +179,7 @@ export function ClientListPage() {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {filtered.length} of {rows.length} clients shown.
-          </p>
+          <p className="text-xs text-muted-foreground">{rows.length} clients shown.</p>
         </CardHeader>
         <CardContent>
           <Table>
@@ -230,7 +227,7 @@ export function ClientListPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
                     No clients match your search.

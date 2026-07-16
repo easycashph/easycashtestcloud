@@ -11,6 +11,7 @@ export interface ListBorrowersInput {
   /** Milestone 8.1 / H-1: set for a branch-scoped caller, omitted for a global caller. */
   branchId?: string;
   search?: string;
+  loanPresence?: 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
 }
 
 export class ListBorrowersUseCase {

@@ -24,7 +24,13 @@ import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicati
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 25;
+
+/** Matches LoanApplicationCreatePage's LOAN_TYPE_OPTIONS exactly - every application's
+ * `requestedCategory` comes from that same fixed dropdown, so a static list here (rather than
+ * deriving options from whatever categories happen to be on the current fetched page) keeps every
+ * option available in the filter regardless of what's actually been paginated in yet. */
+const CATEGORY_OPTIONS = ['ALL', 'Business Loan', 'Salary Loan', 'Seafarer Loan'];
 
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -73,10 +79,14 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
  * page's Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
  * - advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
  *
- * Real, server-side pagination (100 rows/page - see `useCursorPagination`) replaced loading every
- * application up front. Applicant-name search goes to the backend's `?search=` param (debounced);
- * status and category have no backend filter param yet, so those two narrow within the current page
- * only, not across every application.
+ * Real, server-side pagination (25 rows/page - see `useCursorPagination`) so a full page of up to
+ * 25 matching rows is always shown, even with a filter applied. Applicant-name search, status, and
+ * category (2026-07-16) all go to backend query params - previously status/category only narrowed
+ * within whatever page had already been fetched, so a filtered view could show far fewer than 25
+ * rows despite more matches existing on later pages. "For Disbursement" is the one exception: it's
+ * a derived state, not a raw `status` value, so the server is asked for `status=APPROVED` and the
+ * derived narrowing happens client-side on that page only - a smaller, accepted gap versus the
+ * general bug this fixes.
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
@@ -100,7 +110,11 @@ export function LoanApplicationsPage() {
   } = useCursorPagination<LoanApplication>(
     ['loan-applications'],
     '/loan-applications',
-    { search: debouncedSearch },
+    {
+      search: debouncedSearch,
+      status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
+      requestedCategory: category === 'ALL' ? undefined : category,
+    },
     PAGE_SIZE,
     canAccessLoanApplications,
   );
@@ -119,11 +133,6 @@ export function LoanApplicationsPage() {
     [loanAccountsQuery.data],
   );
 
-  const categoryOptions = React.useMemo(
-    () => ['ALL', ...[...new Set(applications.map((a) => a.requestedCategory))].sort()],
-    [applications],
-  );
-
   // Mirrors the "For Disbursement" badge logic below: an Approved application whose loan account
   // exists but hasn't been Activated yet (still PENDING_APPROVAL/APPROVED on the loan account
   // side).
@@ -136,14 +145,13 @@ export function LoanApplicationsPage() {
     [loanAccountStatusById],
   );
 
+  // status and requestedCategory are already server-filtered above (via useCursorPagination's
+  // extraParams) - the only remaining client-side narrowing is FOR_DISBURSEMENT, a derived state
+  // the server can't filter on directly (it asked for status=APPROVED instead; see this
+  // component's own doc comment for why that's a smaller, accepted gap).
   // Computed unconditionally, before the early return below, so
   // useSortableTable's hook call is never skipped on some renders.
-  const filtered = applications.filter((app) => {
-    const matchesStatus =
-      status === 'ALL' || (status === 'FOR_DISBURSEMENT' ? isForDisbursement(app) : app.status === status);
-    const matchesCategory = category === 'ALL' || app.requestedCategory === category;
-    return matchesStatus && matchesCategory;
-  });
+  const filtered = status === 'FOR_DISBURSEMENT' ? applications.filter(isForDisbursement) : applications;
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   if (!canAccessLoanApplications) {
@@ -245,7 +253,7 @@ export function LoanApplicationsPage() {
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                {categoryOptions.map((c) => (
+                {CATEGORY_OPTIONS.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c === 'ALL' ? 'All categories' : c}
                   </SelectItem>

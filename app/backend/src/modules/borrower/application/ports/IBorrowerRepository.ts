@@ -16,6 +16,11 @@ export interface FindManyBorrowersOptions {
   branchId?: string;
   /** Case-insensitive match against firstName/middleName/lastName/email/mobilePhone1/mobilePhone2. */
   search?: string;
+  /** 2026-07-16 (List of Clients "Loan presence" filter): WITH_ACTIVE = has a LoanAccount whose
+   * status is ACTIVE/ACTIVE_IN_ARREARS; WITH_HISTORY = has any LoanAccount at all; NONE = has
+   * none. Pushed server-side so a filtered view shows a full page of matches instead of narrowing
+   * whatever page had already been fetched. */
+  loanPresence?: 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
 }
 
 export interface IBorrowerRepository {

@@ -58,7 +58,17 @@ export class BorrowerController {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
-      const borrowers = await this.deps.listBorrowersUseCase.execute({ limit, cursor, branchId: resolveBranchFilter(scope), search });
+      const loanPresence =
+        req.query.loanPresence === 'WITH_ACTIVE' || req.query.loanPresence === 'WITH_HISTORY' || req.query.loanPresence === 'NONE'
+          ? req.query.loanPresence
+          : undefined;
+      const borrowers = await this.deps.listBorrowersUseCase.execute({
+        limit,
+        cursor,
+        branchId: resolveBranchFilter(scope),
+        search,
+        loanPresence,
+      });
       res.status(200).json(toPaginatedResponse(borrowers.map(presentBorrower), limit, (item) => item.id));
     } catch (error) {
       next(error);

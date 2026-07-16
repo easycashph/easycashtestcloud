@@ -1,4 +1,4 @@
-import type { LoanApplication } from '../../domain/LoanApplication';
+import type { LoanApplication, LoanApplicationStatus } from '../../domain/LoanApplication';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 
 export interface FindManyLoanApplicationsOptions {
@@ -7,6 +7,8 @@ export interface FindManyLoanApplicationsOptions {
   branchId?: string;
   /** Case-insensitive match against applicantName. */
   search?: string;
+  status?: LoanApplicationStatus;
+  requestedCategory?: string;
 }
 
 export interface ILoanApplicationRepository {
