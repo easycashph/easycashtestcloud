@@ -59,7 +59,9 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.7',
+    // 2026-07-16: merged from two same-day entries (was separately 0.9.7 and 0.9.6, both dated
+    // July 12, 2026) - one release, one version bump, one changelog entry per calendar day.
+    version: '0.9.6',
     date: 'July 12, 2026',
     highlights: [
       'The Loan Application page now recognizes when an applicant has already been turned into a client - the "Create Client Profile" button is replaced with a link straight to their existing Client Profile, preventing duplicate client records.',
@@ -69,13 +71,6 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Loan Account details gained a real Notes feature - staff can leave a running log of notes on any loan account, visible to everyone with access, saved permanently.',
       'Loan Account details gained a real Reminders panel showing the confirmed 5/3/1-days-before, due-date, and weekly-past-due reminder schedule for that loan\'s next payment - actual SMS/Email sending is coming soon, pending a messaging provider.',
       'The Dashboard\'s Collections Forecast chart now shows a real projection - built bottom-up from every active loan\'s actual repayment schedule - instead of a sample illustration.',
-      'Continues this platform\'s ongoing effort to replace remaining preview/sample data with live, real data as Easycash LMS moves toward fully replacing the SDevTech system.',
-    ],
-  },
-  {
-    version: '0.9.6',
-    date: 'July 12, 2026',
-    highlights: [
       'New Activity Timeline on Loan Applications, Client Profiles, and Loan Accounts - shows exactly who did what and when on that specific record (documents uploaded, decisions made, payments recorded), visible to every staff member.',
       'A page-level "Recent Activity Logs" panel was added throughout the platform, and the master Activity Logs page (Administration) now records every meaningful action across the system - not just logins and loan decisions. Closed several gaps where real actions (creating a client, submitting a loan application, adding/editing/removing a staff member, adding a Role Class) were happening without leaving any record.',
       'Administration > Members is now fully self-service for MIS: add, edit, and remove staff accounts, reset a member\'s forgotten password, and organize staff under Role Types (MIS, LOM, CRM, Finance, Accounting, Collection) with their own job-title Role Classes (e.g. "MIS Manager", "Field Collector") - all editable from a new Roles tab.',
@@ -84,6 +79,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Added hover tooltips throughout the Loan Application form, Client Edit, and Payment Recording explaining what each field is for, plus full meanings for abbreviations like MIS, LOM, and CRM.',
       'Settings gained an English/Filipino language switcher (Dashboard and Settings translated as the first pages), and a fuller User Profile (photo, contact number, address, birthday). Theme Color was merged into the Appearance tab.',
       'All mobile/contact number fields across the platform were relabeled "Contact Number" with a consistent "09XX XXX XXXX" format hint.',
+      'Continues this platform\'s ongoing effort to replace remaining preview/sample data with live, real data as Easycash LMS moves toward fully replacing the SDevTech system.',
     ],
   },
   {
