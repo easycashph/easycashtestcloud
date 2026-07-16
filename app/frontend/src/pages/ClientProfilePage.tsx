@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
 import { FieldLockToggle } from '@/components/FieldLockToggle';
@@ -270,7 +271,7 @@ function RealEditClientDialog({
               </Label>
               <FieldLockToggle unlocked={unlocked.mobilePhone1} onToggle={() => toggleUnlock('mobilePhone1')} />
             </div>
-            <Input
+            <PhoneInput
               value={draft.mobilePhone1}
               onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })}
               placeholder="09XX XXX XXXX"

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
+import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -303,7 +304,7 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Contact Number</Label>
-            <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>

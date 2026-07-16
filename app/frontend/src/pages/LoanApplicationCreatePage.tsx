@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
+import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { FieldTooltip } from '@/components/FieldTooltip';
@@ -823,7 +824,7 @@ export function LoanApplicationForm({
             </Select>
           </Field>
           <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
-            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
@@ -952,13 +953,13 @@ export function LoanApplicationForm({
             <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value }))} />
           </Field>
           <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
-            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
           <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
             <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value }))} />
           </Field>
           <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
-            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
         </div>
       </SectionCard>
