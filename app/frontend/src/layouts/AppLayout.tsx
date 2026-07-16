@@ -82,7 +82,7 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
     >
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex h-full w-64 shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
@@ -175,7 +175,13 @@ export function AppLayout() {
   }, [collapsed]);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    // h-dvh (dynamic viewport height), not h-screen (100vh) - on Windows, 100vh can report a
+    // taller height than what's actually visible above the taskbar at certain zoom levels/DPI
+    // scalings, so this outer container (and everything sized off it) extended past the visible
+    // screen - the bottom of a long page like About rendered behind the taskbar with no way to
+    // scroll to it, since the browser considered that space already "on screen". 100dvh tracks the
+    // real, currently-visible viewport instead.
+    <div className="flex h-dvh flex-col bg-background">
       <PreviewBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
@@ -191,7 +197,7 @@ export function AppLayout() {
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
             <Outlet />
           </main>
           <PreviewFooterNote />
