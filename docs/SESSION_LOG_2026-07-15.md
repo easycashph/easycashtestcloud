@@ -695,6 +695,45 @@ History. Two separate, unrelated bugs found during investigation:
      override-adjusted total; stays LATE when only some components are settled). Full suite still
      606 passed / 16 known pre-existing unrelated failures (no net change).
 
+## Reduce Penalty balance sync (the deferred half of bug #2, revisited on request)
+
+User reviewed the loan-summary MiniStat cards for `SML-REG_00210` and asked for the numbers to be
+explained; walking through Collections/Accounting Balance's formula surfaced that Fees (₱100.00)
+was correctly synced but Penalty (₱3,875.63) still counted pre-reduction raw amounts — exactly the
+scope carve-out from the earlier Adjust Fees balance-sync fix. User asked to sync it now.
+
+Reused `resolveEffectivePenaltyDue()` (already added for the payment-allocation fix — override, or
+frozen `due.penalty` otherwise) as the delta basis instead of the live ADR-050 ceiling
+(`resolveComputedPenalty`) used for validation — same reasoning as before: `LoanAccount.
+penaltyBalance`/`penaltyDue` were seeded from `due.penalty`, never from the live daily-accrual
+projection, so a delta against the live figure would still subtract an amount the balance never
+actually held.
+
+**Fix**: new `LoanAccount.adjustPenaltyBalance(delta)` (mirrors `adjustFeesBalance`).
+`ReducePenaltyUseCase` now computes `previousBalanceTrackedPenalty = resolveEffectivePenaltyDue(
+installment)` *before* mutating the installment, calls `loanAccount.adjustPenaltyBalance(...)`, and
+saves `loanAccount` inside the same `unitOfWork.run()` block. 4 new unit tests on `LoanAccount.
+test.ts` (lower by delta, accumulates correctly across a repeated reduction on the same
+installment, other balances untouched, `updatedAt`) — the repeated-reduction test matters because
+each call's delta is computed against the *previous* effective value (override if one already
+exists, else raw `due.penalty`), so two reductions on the same installment net out correctly rather
+than double-counting against the original raw figure. Full suite still 610 passed / 16 known
+pre-existing unrelated failures (no net change).
+
+**Backfill**: two loans already had live Reduce Penalty writes made before this fix — computed each
+installment's net delta (`due.penalty − current override amount`, telescoping correctly through
+`SML-REG_00210`'s two separately-reduced installments) and applied it once to that loan's
+`penaltyBalance`/`penaltyDue` via direct SQL:
+  - `SL-CORP_00086` installment #4 (₱594.69 → ₱300.00 override): loan penalty ₱594.69 → **₱300.00**.
+  - `SML-REG_00210` installments #3 (₱1,425.21 → ₱400.00) and #4 (₱1,425.21 → ₱500.00): loan
+    penalty ₱3,875.63 → **₱1,925.21** (verified the backfilled total matches the sum of each
+    installment's effective/override-aware penalty — #3 ₱400 + #4 ₱500 + #5 ₱1,425.21 (untouched)
+    = ₱2,325.21 due, minus ₱400 already paid = ₱1,925.21 balance).
+
+Backend rebuilt (`docker compose up -d --build backend`). Not yet click-through verified in a
+browser (same standing limitation this session) — verified via unit tests and the backfilled SQL
+values cross-checked against the installment-level effective totals.
+
 Backend rebuilt (`docker compose up -d --build backend`) with all four fixes. Not yet click-through
 verified in a browser (no login credentials in this environment, same standing limitation as the
 rest of this session) — verified via DB query (write succeeded), unit tests (regression-tested
