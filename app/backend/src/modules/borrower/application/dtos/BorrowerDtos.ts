@@ -5,6 +5,7 @@ export interface CreateBorrowerIncomeDetailInput {
   natureOfBusiness?: string;
   position?: string;
   yearsEmployed?: number;
+  monthsEmployed?: number;
   monthlyIncome?: number;
 }
 
@@ -45,6 +46,7 @@ export interface CreateBorrowerInput {
   firstName: string;
   lastName: string;
   middleName?: string;
+  suffix?: string;
   gender?: string;
   birthDate?: Date;
   placeOfBirth?: string;
@@ -54,6 +56,7 @@ export interface CreateBorrowerInput {
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: CreateBorrowerDependantInput[];
   note?: string;
   legacyId?: string;
@@ -65,6 +68,8 @@ export interface CreateBorrowerInput {
 }
 
 export interface CreateCoBorrowerInput {
+  /** 2026-07-16 (ADR-015 resolved: per-Borrower) — see CreateCoBorrowerUseCase's own doc comment. */
+  borrowerId?: string;
   firstName: string;
   lastName: string;
   middleName?: string;

@@ -12,6 +12,8 @@ export interface BorrowerIncomeDetail {
   natureOfBusiness?: string;
   position?: string;
   yearsEmployed?: number;
+  /** 2026-07-16 (Create Client Account) — legacy Excel LMS's Client_details "Months Employed" column. */
+  monthsEmployed?: number;
   monthlyIncome?: number;
 }
 
@@ -51,6 +53,8 @@ export interface BorrowerProps {
   branchId: string;
   assignedLoanOfficerId?: string;
   name: PersonName;
+  /** 2026-07-16 (Create Client Account) — legacy Excel LMS's Client_details "Suffix" column. */
+  suffix?: string;
   gender?: string;
   birthDate?: Date;
   placeOfBirth?: string;
@@ -60,6 +64,8 @@ export interface BorrowerProps {
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  /** 2026-07-16 (Create Client Account) — legacy Excel LMS's Client_details "facebook" column. */
+  facebookLink?: string;
   dependants?: BorrowerDependant[];
   note?: string;
   status: BorrowerStatus;
@@ -80,6 +86,7 @@ export interface CreateBorrowerProps {
   branchId: string;
   assignedLoanOfficerId?: string;
   name: PersonName;
+  suffix?: string;
   gender?: string;
   birthDate?: Date;
   placeOfBirth?: string;
@@ -89,6 +96,7 @@ export interface CreateBorrowerProps {
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: BorrowerDependant[];
   note?: string;
   legacyId?: string;
@@ -116,6 +124,7 @@ export class Borrower {
       branchId: input.branchId,
       assignedLoanOfficerId: input.assignedLoanOfficerId,
       name: input.name,
+      suffix: input.suffix,
       gender: input.gender,
       birthDate: input.birthDate,
       placeOfBirth: input.placeOfBirth,
@@ -125,6 +134,7 @@ export class Borrower {
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
+      facebookLink: input.facebookLink,
       dependants: input.dependants,
       note: input.note,
       status: 'ACTIVE',
@@ -162,6 +172,10 @@ export class Borrower {
     return this.props.name;
   }
 
+  get suffix(): string | undefined {
+    return this.props.suffix;
+  }
+
   get gender(): string | undefined {
     return this.props.gender;
   }
@@ -196,6 +210,10 @@ export class Borrower {
 
   get email(): string | undefined {
     return this.props.email;
+  }
+
+  get facebookLink(): string | undefined {
+    return this.props.facebookLink;
   }
 
   get dependants(): readonly BorrowerDependant[] | undefined {
@@ -274,16 +292,20 @@ export class Borrower {
   /** PATCH-style: only overwrites fields actually present in `patch`; `name`, if given, must already be a full PersonName (built by the caller from whichever of first/middle/last changed). */
   updateContactDetails(patch: {
     name?: PersonName;
+    suffix?: string;
     civilStatus?: string;
     mobilePhone1?: string;
     mobilePhone2?: string;
     email?: string;
+    facebookLink?: string;
   }): void {
     if (patch.name !== undefined) this.props.name = patch.name;
+    if (patch.suffix !== undefined) this.props.suffix = patch.suffix;
     if (patch.civilStatus !== undefined) this.props.civilStatus = patch.civilStatus;
     if (patch.mobilePhone1 !== undefined) this.props.mobilePhone1 = patch.mobilePhone1;
     if (patch.mobilePhone2 !== undefined) this.props.mobilePhone2 = patch.mobilePhone2;
     if (patch.email !== undefined) this.props.email = patch.email;
+    if (patch.facebookLink !== undefined) this.props.facebookLink = patch.facebookLink;
     this.props.updatedAt = new Date();
   }
 

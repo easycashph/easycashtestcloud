@@ -845,17 +845,105 @@ TestNomer's most recent APPROVED application (`bcf1b25a-...`) — returns `null`
 staff actually clicks "Create Loan Account" from this application, the new account will carry the
 real link and the Disbursed badge will only appear once that specific account is truly activated.
 
+## Session extension (2026-07-16): reopen fix, Undo Approve/Activate, label renames, Create Client Account groundwork
+
+Continuing the same working session into 2026-07-16. Order of work:
+
+1. **SML-REG_00378 — reversed payment didn't reopen a CLOSED loan.** Root cause: `ReversePaymentUseCase`
+   recalculated balances but never transitioned `LoanAccount.status` back to `ACTIVE`. Fixed by adding
+   `LoanAccount.reopen()` (domain) and calling it from `ReversePaymentUseCase` when a reversal drops the
+   loan below fully-paid. The one real affected loan was backfilled after confirming (via SQL) it was the
+   only one of ~80 CLOSED loans actually in this inconsistent state — the rest were legitimate legacy data.
+   Committed `664bc5c` in the prior session's numbering, continued here.
+2. **Default Mode of Payment → Bank Transfer** on Payment Recording (matches actual staff usage pattern;
+   previously defaulted to a value staff always had to change manually).
+3. **Client Profile "Principal Balance" column bug** on the Loan History table — was reading the wrong
+   balance field; fixed to read `LoanAccount.balances.principalBalance`.
+4. **Undo Approve / Undo Activate (MIS-only)** — user asked for a way to reverse an approve/activate done
+   in error (e.g. wrong term/amount discovered right after activating). Scoped with the user up front:
+   - `undoApprove()`: unconditionally safe, `APPROVED → PENDING_APPROVAL`, clears `approvedAt`/`approvedByUserId`.
+   - `undoActivate()`: `ACTIVE → APPROVED`, resets balances to zero, deletes the generated repayment
+     schedule — but **guarded**: blocked with `LoanAccountHasActivityError` if any REPAYMENT transaction,
+     penalty reduction, or fee adjustment already exists against the loan. The original DISBURSEMENT
+     transaction is deliberately never deleted (TXN-1 append-only invariant — `ILoanTransactionRepository`
+     has no delete method at all), just superseded by re-activating later.
+   - Both actions gated to `MIS` role only (`requireRole('MIS')`), narrower than the normal
+     approve/activate role sets. 20 new tests (domain, 2 use cases, controller). Committed `77a00df`.
+5. **"Activate" → "Disburse" (labels only)** — per ADR-032 (loan release and disbursement are one business
+   event; legal documents already say "Disbursement Date"), renamed all user-facing strings ("Activate
+   Loan" → "Disburse Loan", "Undo Activate" → "Undo Disburse", confirm-dialog copy, badge text). No change
+   to the `ACTIVE` status enum, `activate()`, or route names — ADR-032 §5 explicitly says none is needed.
+   Committed `d876848`.
+6. **Nav label renames** for clarity, each proposed and user-confirmed individually:
+   - "Payment Reminders" → "Due & Overdue" (matches actual page content — overdue accounts, not just reminders).
+   - "Payment Recording" → "Record Payment" (verb-first, matches existing button text elsewhere).
+   - "Collection" (sidebar group) → "Payments" (Record Payment is actually done by Accounting, not
+     Collection staff — the old group name was misleading).
+   Committed `d0e161a`.
+7. **Feature/fix summary delivered as a downloadable .docx** (`Easycash_Session_Summary.docx`) via the
+   `anthropic-skills:docx` skill, translated to English at the user's request. `docx` npm package wasn't
+   preinstalled (`npm install docx` in scratchpad first); no Python/LibreOffice available for the skill's
+   normal PDF-verification step, substituted by unzipping the .docx and grepping `word/document.xml`.
+8. **Create Client Account — investigation and groundwork (backend only; frontend page NOT built yet).**
+   User wants a standalone "Create Client Account" page under Clients (not gated behind a Loan
+   Application), using their legacy Excel LMS (`legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`,
+   `Client_details`/`CoBorrower_details`/`Reference_details` sheets, decoded via the `.xlsm` zip's
+   `sharedStrings.xml`) as the field-completeness reference.
+   - Compared against current schema: most fields the Excel has (Present/Permanent address split,
+     address Status, Length of Stay, Employment Type, Years Employed) turned out to already be fully
+     supported in the schema, just not exposed in the current UI. Only 3 fields were genuinely missing:
+     `Borrower.suffix`, `Borrower.facebookLink`, `BorrowerIncomeDetail.monthsEmployed`.
+   - **ADR-015 resolved** (was PENDING all session): should CoBorrower belong to a Borrower (client) or
+     to a specific LoanAccount? Resolved **per-Borrower**, based on direct evidence in
+     `scripts/migrate-legacy-data.ts`'s own comment that the legacy sdev system's
+     `co_borrowers.parent_key` already resolved to the CLIENT, not a specific loan. Implemented as a new
+     nullable `CoBorrower.borrowerId` FK to `Borrower`; the existing per-loan `LoanAccountCoBorrower`
+     join table is kept as a historical per-loan attachment record but is no longer the primary
+     ownership path.
+   - Schema/migration: `app/backend/prisma/migrations/20260716070000_create_client_account_fields/` —
+     hand-written (interactive `prisma migrate dev` unavailable in this shell), applied via
+     `prisma migrate deploy`. Adds `borrowers.suffix`, `borrowers.facebookLink`,
+     `borrower_income_details.monthsEmployed`, `co_borrowers.borrowerId` (+ index + FK).
+   - **Live-data backfill executed**: derived `CoBorrower.borrowerId` from existing
+     `LoanAccountCoBorrower → LoanAccount.borrowerId` links. 216 of 217 CoBorrower rows backfilled; 1 row
+     had zero loan-account links and was intentionally left NULL rather than guessed.
+   - Full domain/repository/use-case/HTTP/DTO/presenter plumbing added for all 3 new fields plus
+     `CoBorrower.borrowerId`, across `Borrower.ts`, `CoBorrower.ts`, `PrismaBorrowerRepository.ts`,
+     `PrismaCoBorrowerRepository.ts` (new `findByBorrowerId`), `ICoBorrowerRepository.ts`,
+     `CreateBorrowerUseCase.ts`, `CreateCoBorrowerUseCase.ts`, `UpdateBorrowerUseCase.ts`,
+     `BorrowerDtos.ts`, `borrowerSchemas.ts`, `BorrowerPresenter.ts`. New/updated tests in
+     `CreateBorrowerUseCase.test.ts` and `CreateCoBorrowerUseCase.test.ts`.
+   - Verified: `tsc --noEmit` clean; `vitest run tests/unit/borrower` 61 passed / 3 pre-existing failures
+     (confirmed pre-existing via `git stash`); full suite 653 passed / 16 known pre-existing failures, no
+     regressions. Backend Docker image rebuilt and confirmed running the new code.
+   - Scope for the actual frontend page (3 mockup iterations shown via the `visualize` tool, agreed but
+     **not yet built as real React/TSX**): Personal Info, Contact (incl. Facebook), Present Address with
+     a "same as present" checkbox for Permanent Address, Employment, Government IDs, 2 Character
+     Reference slots, and an optional "Include a co-borrower" checkbox revealing a deliberately **light**
+     co-borrower sub-form (name, relationship, employer only — no separate address/SSS-TIN/employment
+     expansion in this v1). An "Auto Create Client Account" trigger from within the Loan Application
+     detail page (prefilled from the application's own data, lighter confirmation than today's manual
+     review dialog) was discussed and explicitly deferred until standalone Create Client Account exists.
+   - **As of this log entry, none of the Create Client Account backend changes above are committed to
+     git yet** (schema/migration/domain/repo/use-case/HTTP/test files all show as modified/untracked in
+     `git status`) — pending commit once the frontend page is also ready, or sooner if requested.
+
 ## Current state
 
-- Working tree clean; Docker stack (`postgres`, `backend`) running locally and rebuilt fresh as of
-  this session's last change (verified: container restart timestamp confirms the current image is
-  running, not a stale one). Frontend run via `Run LMS Preview.bat`'s Hot Reload Mode / Vite dev
-  server on 5173 instead of the Docker frontend container, per user preference this session —
-  Docker `frontend` service stopped.
-- In sync with `origin/main` only up to `370a3ea` — **23 commits are local-only, nothing pushed
-  this session.** Newest-first:
-  `e46e7f1` docs, `2face69` fix(frontend) sourceApplicationId wiring, `e54df65`
-  fix(loan-account) LoanAccount.sourceApplicationId + application linkage fix, `120f0ac`
+- Working tree **not clean**: the Create Client Account backend groundwork (see the 2026-07-16
+  session-extension section above) is fully implemented and verified but **uncommitted** — modified
+  files across `app/backend/prisma/schema.prisma`, the `borrower` module's domain/repository/use-case/
+  HTTP/test files, plus an untracked migration directory
+  (`app/backend/prisma/migrations/20260716070000_create_client_account_fields/`). Docker `backend`
+  rebuilt and running the new code even though it isn't committed yet — rebuild again after committing
+  if the image is ever recreated from a clean checkout.
+- Local branch has diverged from `origin/main` (30 ahead / 19 behind as of 2026-07-16) — nothing
+  pushed this session. Newest local commits, newest-first:
+  `d0e161a` feat(nav) rename Collection→Payments + two labels, `d876848` feat(loan-account)
+  Activate→Disburse label rename, `77a00df` feat(loan-account) Undo Approve/Undo Activate (MIS-only),
+  `a9846b9` feat(loan-detail) Edit dialog for PENDING_APPROVAL, `41c4fe7` feat(loan-account) allow
+  editing while PENDING_APPROVAL, `e46e7f1` docs, `2face69` fix(frontend) sourceApplicationId wiring,
+  `e54df65` fix(loan-account) LoanAccount.sourceApplicationId + application linkage fix, `120f0ac`
   feat(payment-recording) default Mode of Payment to Bank Transfer, `e9ffe2a`
   fix(client-profile) Principal Balance display bug, `ce5c97c` docs, `664bc5c`
   fix(loan-account) Reverse Payment reopen fix, `dbfb2b1` docs, `c8a4c39`
@@ -867,8 +955,11 @@ real link and the Disbursed badge will only appear once that specific account is
   `f4fd6ca` docs, `1889ba0` fix(migration) interest-rate backfill, `a46dd5b` docs, `0338f90`
   feat(repayment) Reduce Penalty name display, `bc8ec0c` feat(repayment) Reduce Penalty feature,
   `be3e312` feat(reporting) Loan Releases Report + Reports hub + Dashboard preview cards,
-  `9d3d1de` docs. (See git log for the full first-half list beyond these 23 — transaction sort
-  ×2, Total Due column, payment allocation visibility, Payment Recording Close/Next-due.)
+  `9d3d1de` docs. (See git log for the full list beyond these — transaction sort ×2, Total Due
+  column, payment allocation visibility, Payment Recording Close/Next-due.)
+- **Immediate next step (in progress):** build the actual "Create Client Account" frontend page
+  (standalone, under Clients) per the 3rd mockup iteration described above — backend prerequisites
+  are done and verified but the page itself has not been started as real code.
 - **Correction to an earlier note in this log**: the user has, in fact, already exercised both
   Reduce Penalty and Adjust Fees against real live data via their own Hot Reload Mode session
   (`SL-CORP_00086` penalty reduction, `SP-Easy_00001` fee adjustment) — confirmed by finding those

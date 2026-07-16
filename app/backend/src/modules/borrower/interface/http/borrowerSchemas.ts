@@ -12,6 +12,9 @@ const incomeDetailSchema = z.object({
   natureOfBusiness: z.string().min(1).optional(),
   position: z.string().min(1).optional(),
   yearsEmployed: z.number().int().nonnegative().optional(),
+  /** Structural validation only, matching yearsEmployed's own lack of an upper bound — no
+   * confirmed business rule that this must be a 0-11 remainder rather than a free-standing count. */
+  monthsEmployed: z.number().int().nonnegative().optional(),
   monthlyIncome: z.coerce.number().nonnegative().optional(),
 });
 
@@ -56,6 +59,7 @@ export const createBorrowerSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   middleName: z.string().min(1).optional(),
+  suffix: z.string().min(1).optional(),
   gender: z.string().min(1).optional(),
   birthDate: z.coerce.date().optional(),
   placeOfBirth: z.string().min(1).optional(),
@@ -65,6 +69,7 @@ export const createBorrowerSchema = z.object({
   mobilePhone1: z.string().min(1).optional(),
   mobilePhone2: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  facebookLink: z.string().min(1).optional(),
   dependants: z.array(dependantSchema).optional(),
   note: z.string().min(1).optional(),
   legacyId: z.string().min(1).optional(),
@@ -85,16 +90,20 @@ export const updateBorrowerSchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
   middleName: z.string().min(1).optional(),
+  suffix: z.string().min(1).optional(),
   civilStatus: z.string().min(1).optional(),
   mobilePhone1: z.string().min(1).optional(),
   mobilePhone2: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  facebookLink: z.string().min(1).optional(),
   addresses: z.array(addressSchema).optional(),
 });
 
 export type UpdateBorrowerRequestBody = z.infer<typeof updateBorrowerSchema>;
 
 export const createCoBorrowerSchema = z.object({
+  /** 2026-07-16 (ADR-015 resolved: per-Borrower) — see CreateCoBorrowerUseCase's own doc comment. */
+  borrowerId: z.string().min(1).optional(),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   middleName: z.string().min(1).optional(),

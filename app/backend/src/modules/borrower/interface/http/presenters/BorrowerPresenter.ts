@@ -19,6 +19,7 @@ export function presentBorrower(borrower: Borrower) {
     firstName: borrower.name.firstName,
     middleName: borrower.name.middleName ?? null,
     lastName: borrower.name.lastName,
+    suffix: borrower.suffix ?? null,
     fullName: borrower.name.fullName(),
     gender: borrower.gender ?? null,
     birthDate: borrower.birthDate?.toISOString() ?? null,
@@ -29,6 +30,7 @@ export function presentBorrower(borrower: Borrower) {
     mobilePhone1: borrower.mobilePhone1 ?? null,
     mobilePhone2: borrower.mobilePhone2 ?? null,
     email: borrower.email ?? null,
+    facebookLink: borrower.facebookLink ?? null,
     dependants: borrower.dependants ?? [],
     note: borrower.note ?? null,
     status: borrower.status,
@@ -51,6 +53,7 @@ export function presentBorrower(borrower: Borrower) {
 export function presentCoBorrower(coBorrower: CoBorrower) {
   return {
     id: coBorrower.id,
+    borrowerId: coBorrower.borrowerId ?? null,
     firstName: coBorrower.name.firstName,
     middleName: coBorrower.name.middleName ?? null,
     lastName: coBorrower.name.lastName,

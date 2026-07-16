@@ -4,6 +4,9 @@ import { Address } from './valueObjects/Address';
 
 export interface CoBorrowerProps {
   id: string;
+  /** 2026-07-16 (ADR-015 resolved: per-Borrower) — see this class's own doc comment. Optional only
+   * for the one already-migrated CoBorrower row with no derivable owner (see the backfill script). */
+  borrowerId?: string;
   name: PersonName;
   gender?: string;
   civilStatus?: string;
@@ -17,6 +20,7 @@ export interface CoBorrowerProps {
 }
 
 export interface CreateCoBorrowerProps {
+  borrowerId?: string;
   name: PersonName;
   gender?: string;
   civilStatus?: string;
@@ -30,11 +34,15 @@ export interface CreateCoBorrowerProps {
 }
 
 /**
- * Independent aggregate root (ADR-042 §3), NOT a child of Borrower or
- * LoanAccount. ADR-015 (per-borrower vs. per-loan co-borrower scope) is
- * still open; modeling CoBorrower as a peer aggregate, referenced from
- * LoanAccount only via the LoanAccountCoBorrower join table's
- * coBorrowerId, stays correct under either resolution.
+ * Independent aggregate root (ADR-042 §3), NOT a child of Borrower or LoanAccount — referenced
+ * from a Borrower via `borrowerId`, and (historically) from LoanAccount via the
+ * LoanAccountCoBorrower join table's coBorrowerId.
+ *
+ * ADR-015 RESOLVED (2026-07-16, user decision): per-Borrower, not per-LoanAccount — a client's
+ * co-borrowers belong to them directly and appear on every one of their loans, matching how the
+ * legacy sdev system's own `co_borrowers.parent_key` already scoped this (to the client, not a
+ * specific loan) before migration. `LoanAccountCoBorrower` remains as a historical per-loan
+ * attachment record but is no longer the primary way a co-borrower is associated with a client.
  */
 export class CoBorrower {
   private constructor(private props: CoBorrowerProps) {}
@@ -42,6 +50,7 @@ export class CoBorrower {
   static create(input: CreateCoBorrowerProps): CoBorrower {
     return new CoBorrower({
       id: randomUUID(),
+      borrowerId: input.borrowerId,
       name: input.name,
       gender: input.gender,
       civilStatus: input.civilStatus,
@@ -61,6 +70,10 @@ export class CoBorrower {
 
   get id(): string {
     return this.props.id;
+  }
+
+  get borrowerId(): string | undefined {
+    return this.props.borrowerId;
   }
 
   get name(): PersonName {

@@ -20,6 +20,25 @@ describe('CreateBorrowerUseCase', () => {
     expect(borrowerRepository.save).toHaveBeenCalledWith(borrower);
   });
 
+  // 2026-07-16 (Create Client Account, per the legacy Excel LMS's Client_details sheet).
+  it('carries suffix, facebookLink, and monthsEmployed through to the created Borrower', async () => {
+    const borrowerRepository = buildRepo();
+    const useCase = new CreateBorrowerUseCase({ borrowerRepository });
+
+    const borrower = await useCase.execute({
+      branchId: 'branch-1',
+      firstName: 'Juan',
+      lastName: 'Dela Cruz',
+      suffix: 'Jr.',
+      facebookLink: 'facebook.com/juandelacruz',
+      incomeDetail: { yearsEmployed: 3, monthsEmployed: 7 },
+    });
+
+    expect(borrower.suffix).toBe('Jr.');
+    expect(borrower.facebookLink).toBe('facebook.com/juandelacruz');
+    expect(borrower.incomeDetail?.monthsEmployed).toBe(7);
+  });
+
   it('propagates InvalidPersonNameError without saving anything for a blank name', async () => {
     const borrowerRepository = buildRepo();
     const useCase = new CreateBorrowerUseCase({ borrowerRepository });

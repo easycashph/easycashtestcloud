@@ -527,6 +527,8 @@ model Borrower {
   firstName     String
   middleName    String?
   lastName      String
+  /// 2026-07-16 (Create Client Account, per the legacy Excel LMS's Client_details sheet).
+  suffix        String?
   gender        String?
   birthDate     DateTime?
   placeOfBirth  String?
@@ -536,6 +538,8 @@ model Borrower {
   mobilePhone1  String?
   mobilePhone2  String?
   email         String?
+  /// 2026-07-16 (Create Client Account) — legacy Excel LMS's Client_details "facebook" column.
+  facebookLink  String?
   /// {name, age, relationship}[] - see LoanApplication.dependants doc comment.
   dependants    Json?
   /// Free-text catch-all, carried over from the source LoanApplication's own `note` at Client
@@ -553,6 +557,11 @@ model Borrower {
   identificationDocs  IdentificationDocument[]
   characterReferences CharacterReference[]
   loanAccounts        LoanAccount[]
+  /// 2026-07-16 (ADR-015 resolved: per-Borrower, not per-LoanAccount) — see CoBorrower.borrowerId's
+  /// own doc comment for why. A client's co-borrowers now belong to them directly; every one of
+  /// their loans sees the same list, matching how the legacy sdev system's own co_borrowers.
+  /// parent_key already scoped this (to the client, not a specific loan) before migration.
+  coBorrowers         CoBorrower[]
 
   /// Schema Review SR-06/SR-07/SR-08: branch/officer/status filtering and
   /// name/phone search (PROJECT_RULES.md §Search) were previously unindexed.
@@ -575,6 +584,9 @@ model BorrowerIncomeDetail {
   natureOfBusiness String?
   position         String?
   yearsEmployed    Int?
+  /// 2026-07-16 (Create Client Account) — legacy Excel LMS's Client_details "Months Employed" column;
+  /// yearsEmployed alone (above) already existed, this is the remainder-months half of that pair.
+  monthsEmployed   Int?
   monthlyIncome    Decimal? @db.Decimal(14, 2)
 
   @@map("borrower_income_details")
@@ -692,13 +704,19 @@ model CharacterReference {
   @@map("character_references")
 }
 
-/// ADR-015 PENDING (per-Borrower vs per-LoanAccount scope): modeled as its
-/// own person entity plus a many-to-many join table to LoanAccount. This
-/// is a safe extension point compatible with either resolution of the
-/// open ADR — a "per-loan" policy just means each CoBorrower row has
-/// exactly one join row; a "reusable across loans" policy means several.
+/// ADR-015 RESOLVED (2026-07-16, user decision): per-Borrower, not per-LoanAccount. The legacy
+/// sdev system's own `co_borrowers.parent_key` already resolved to the CLIENT, not a specific
+/// loan (see migrate-legacy-data.ts's Phase 3 comment) — every one of that period's co-borrowers
+/// was attached to every one of that client's loans as a practical migration-time default, which
+/// this resolution now makes the modeled behavior instead of a workaround. `borrowerId` is
+/// nullable only because 1 already-migrated CoBorrower (of 217) has no loan-account link at all to
+/// derive it from — see the backfill script for that one row's disposition. `LoanAccountCoBorrower`
+/// is kept as-is (historical per-loan attachment record, still accurate), just no longer the
+/// primary way a co-borrower is associated with a client going forward.
 model CoBorrower {
   id           String    @id @default(uuid())
+  borrowerId   String?
+  borrower     Borrower? @relation(fields: [borrowerId], references: [id])
   firstName    String
   lastName     String
   gender       String?
@@ -713,6 +731,7 @@ model CoBorrower {
 
   loanAccounts LoanAccountCoBorrower[]
 
+  @@index([borrowerId])
   @@map("co_borrowers")
 }
 

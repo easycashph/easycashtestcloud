@@ -9,12 +9,18 @@ export interface CreateCoBorrowerUseCaseDeps {
   auditLogger?: IAuditLogger;
 }
 
-/** ADR-015 (per-borrower vs. per-loan scope) is open — this use case only creates the person record; attaching it to a LoanAccount is a loan-account-module concern (LoanAccountCoBorrower join). */
+/**
+ * ADR-015 RESOLVED (2026-07-16): per-Borrower — `input.borrowerId`, when supplied, attaches this
+ * co-borrower directly to a client, visible on every one of their loans. Still optional (not
+ * required) since the standalone `POST /co-borrowers` endpoint predates this resolution and some
+ * callers may still be attaching purely via the legacy `LoanAccountCoBorrower` join instead.
+ */
 export class CreateCoBorrowerUseCase {
   constructor(private readonly deps: CreateCoBorrowerUseCaseDeps) {}
 
   async execute(input: CreateCoBorrowerInput, createdByUserId?: string): Promise<CoBorrower> {
     const coBorrower = CoBorrower.create({
+      borrowerId: input.borrowerId,
       name: PersonName.of(input.firstName, input.lastName, input.middleName),
       gender: input.gender,
       civilStatus: input.civilStatus,

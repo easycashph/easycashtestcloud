@@ -9,10 +9,12 @@ export interface UpdateBorrowerInput {
   firstName?: string;
   lastName?: string;
   middleName?: string;
+  suffix?: string;
   civilStatus?: string;
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  facebookLink?: string;
   addresses?: AddressProps[];
 }
 
@@ -32,10 +34,12 @@ export class UpdateBorrowerUseCase {
       name: nameChanged
         ? PersonName.of(input.firstName ?? borrower.name.firstName, input.lastName ?? borrower.name.lastName, input.middleName ?? borrower.name.middleName)
         : undefined,
+      suffix: input.suffix,
       civilStatus: input.civilStatus,
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
+      facebookLink: input.facebookLink,
     });
 
     if (input.addresses !== undefined) {
