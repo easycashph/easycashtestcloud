@@ -3,7 +3,7 @@ import type { Money } from '@shared/domain/Money';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
-import { resolveComputedPenalty } from '../../domain/CurrentPenaltyResolver';
+import { resolveComputedPenalty, resolveEffectivePenaltyDue } from '../../domain/CurrentPenaltyResolver';
 import { PenaltyReduction } from '../../domain/PenaltyReduction';
 import type { IRepaymentInstallmentRepository } from '../ports/IRepaymentInstallmentRepository';
 import type { IPenaltyReductionRepository } from '../ports/IPenaltyReductionRepository';
@@ -28,6 +28,12 @@ export interface ReducePenaltyUseCaseDeps {
  *   this system; an already-collected amount is a refund/credit decision, explicitly out of scope.
  * - Required `reason` captures the external approval reference — this system records that a
  *   reduction was approved elsewhere, it does not run its own in-app approval workflow.
+ *
+ * 2026-07-16 follow-up: also keeps `LoanAccount.balances.penaltyBalance`/`penaltyDue` in sync
+ * (`adjustPenaltyBalance()`), mirroring `AdjustFeesUseCase`'s balance sync. The delta is computed
+ * against `resolveEffectivePenaltyDue()` (override-or-frozen-`due.penalty`), NOT `currentPenalty`
+ * (the live ADR-050 ceiling used for validation above) — see `adjustPenaltyBalance()`'s own doc
+ * comment for why those two must not be conflated.
  */
 export class ReducePenaltyUseCase {
   constructor(private readonly deps: ReducePenaltyUseCaseDeps) {}
@@ -48,9 +54,12 @@ export class ReducePenaltyUseCase {
       principalAmount: loanAccount.principalAmount,
     });
 
+    const previousBalanceTrackedPenalty = resolveEffectivePenaltyDue(installment);
+
     // Validation (negative / exceeds current / already-paid penalty) lives on the entity itself —
     // see RepaymentInstallment.reducePenalty()'s own doc comment.
     installment.reducePenalty(newAmount, currentPenalty, reason, reducedByUserId);
+    loanAccount.adjustPenaltyBalance(previousBalanceTrackedPenalty.subtract(newAmount));
 
     const reduction = PenaltyReduction.create({
       repaymentInstallmentId: installment.id,
@@ -62,6 +71,7 @@ export class ReducePenaltyUseCase {
 
     await this.deps.unitOfWork.run(async (ctx) => {
       await this.deps.repaymentInstallmentRepository.save(installment, ctx);
+      await this.deps.loanAccountRepository.save(loanAccount, ctx);
       await this.deps.penaltyReductionRepository.create(reduction, ctx);
       await this.deps.financialAuditLogger.log(
         {

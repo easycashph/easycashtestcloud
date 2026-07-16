@@ -290,6 +290,53 @@ describe('LoanAccount', () => {
     });
   });
 
+  describe('adjustPenaltyBalance (2026-07-16 follow-up: keep summary balances in sync with Reduce Penalty)', () => {
+    function activeLoan() {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({
+        principalDue: Money.of('10000.00'),
+        interestDue: Money.of('500.00'),
+        penaltyDue: Money.of('1425.21'),
+      });
+      return loan;
+    }
+
+    it('lowers penaltyBalance and penaltyDue by a positive delta (penalty reduced)', () => {
+      const loan = activeLoan();
+      loan.adjustPenaltyBalance(Money.of('1025.21'));
+
+      expect(loan.balances.penaltyBalance.equals(Money.of('400.00'))).toBe(true);
+      expect(loan.balances.penaltyDue.equals(Money.of('400.00'))).toBe(true);
+    });
+
+    it('accumulates correctly across a repeated reduction on the same installment', () => {
+      const loan = activeLoan();
+      loan.adjustPenaltyBalance(Money.of('1025.21')); // 1425.21 -> 400.00
+      loan.adjustPenaltyBalance(Money.of('300.00')); // 400.00 -> 100.00
+
+      expect(loan.balances.penaltyBalance.equals(Money.of('100.00'))).toBe(true);
+      expect(loan.balances.penaltyDue.equals(Money.of('100.00'))).toBe(true);
+    });
+
+    it('leaves principal/interest/fees balances untouched', () => {
+      const loan = activeLoan();
+      loan.adjustPenaltyBalance(Money.of('1025.21'));
+
+      expect(loan.balances.principalBalance.equals(Money.of('10000.00'))).toBe(true);
+      expect(loan.balances.interestBalance.equals(Money.of('500.00'))).toBe(true);
+      expect(loan.balances.feesBalance.isZero()).toBe(true);
+    });
+
+    it('sets updatedAt to the supplied adjustedAt', () => {
+      const loan = activeLoan();
+      const adjustedAt = new Date('2026-08-01T00:00:00.000Z');
+      loan.adjustPenaltyBalance(Money.of('50.00'), adjustedAt);
+
+      expect(loan.updatedAt).toEqual(adjustedAt);
+    });
+  });
+
   // Milestone 9.1 checkpoint 11 / ADR-007 §3 (RESOLVED, Option B): two
   // distinctly-named computed summary getters, neither called
   // `outstandingBalance`. No stored column, no schema change — pure

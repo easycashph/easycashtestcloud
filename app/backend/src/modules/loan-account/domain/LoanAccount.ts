@@ -482,12 +482,7 @@ export class LoanAccount {
    * `RepaymentInstallment.adjustFees()` override — otherwise the loan-level summary balances
    * (`accountingBalance`/`collectionsBalance`) silently drift from what the Repayment Schedule
    * tab shows, since `AdjustFeesUseCase` mutates the installment but this entity is a separate
-   * aggregate. `due.fees` is a frozen (non-live-computed) figure, unlike penalty under ADR-050, so
-   * a straight delta is safe here — deliberately NOT extended to `penaltyBalance`: for a
-   * prospective loan, ADR-050's live daily penalty growth was never written back to this entity's
-   * `penaltyBalance` in the first place (a separate, pre-existing gap), so applying a Reduce
-   * Penalty delta here would produce a wrong number rather than a corrected one. User-confirmed
-   * scope (2026-07-16): fees sync now, penalty balance sync deferred as a known follow-up.
+   * aggregate. `due.fees` is a frozen (non-live-computed) figure — a straight delta is safe here.
    *
    * `delta` is `previousFeesAmount - newFeesAmount` (positive when the fee was lowered, negative
    * when raised) — mirrors `applyPayment()`'s same caller obligation: the corresponding
@@ -500,6 +495,27 @@ export class LoanAccount {
       ...balances.toProps(),
       feesBalance: balances.feesBalance.subtract(delta),
       feesDue: balances.feesDue.subtract(delta),
+    });
+    this.props.updatedAt = adjustedAt;
+  }
+
+  /**
+   * 2026-07-16 (Reduce Penalty follow-up, requested after `adjustFeesBalance` above shipped):
+   * same shape, same caller obligation — but `delta` MUST be computed against
+   * `resolveEffectivePenaltyDue()` (override-or-`due.penalty`), never `resolveComputedPenalty()`'s
+   * live ADR-050 projection. `penaltyBalance`/`penaltyDue` were seeded from `due.penalty` at
+   * activation and have never once been incremented by the live daily-accrual formula — syncing
+   * against that live figure would subtract an amount this balance never actually contained,
+   * producing a wrong number instead of a corrected one (this is exactly why this method was
+   * deferred when `adjustFeesBalance` first shipped). `due.penalty` itself IS safe to sync against
+   * because it's frozen the same way `due.fees` is — only the ADR-050 *projection* is live.
+   */
+  adjustPenaltyBalance(delta: Money, adjustedAt: Date = new Date()): void {
+    const balances = this.props.balances;
+    this.props.balances = LoanBalances.of({
+      ...balances.toProps(),
+      penaltyBalance: balances.penaltyBalance.subtract(delta),
+      penaltyDue: balances.penaltyDue.subtract(delta),
     });
     this.props.updatedAt = adjustedAt;
   }

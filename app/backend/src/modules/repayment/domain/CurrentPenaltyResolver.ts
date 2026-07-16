@@ -70,6 +70,12 @@ export function resolveComputedPenalty(
  * and this function preserves that (confirmed via `GoldenMasterReplay.test.ts`, whose fixture loans
  * broke when an earlier version of this function called `resolveComputedPenalty` unconditionally).
  * `penaltyOverride`, once set, IS a committed, non-projected figure — so it's the one exception.
+ *
+ * 2026-07-16 (LoanAccount.penaltyBalance sync): reused by `ReducePenaltyUseCase` for the exact same
+ * reason — `LoanAccount.balances.penaltyBalance`/`penaltyDue` were seeded from `due.penalty`, never
+ * from the live ADR-050 projection, so this (not `resolveComputedPenalty`) is the "previous effective
+ * amount" a reduction's balance-sync delta must be computed against, on both a first reduction
+ * (previous = frozen `due.penalty`) and a repeated one (previous = the existing override).
  */
 export function resolveEffectivePenaltyDue(installment: RepaymentInstallment): Money {
   return installment.penaltyOverride?.amount ?? installment.due.penalty;
