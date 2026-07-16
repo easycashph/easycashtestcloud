@@ -202,7 +202,7 @@ export function PaymentRecordingPage() {
   const [orNumber, setOrNumber] = React.useState('');
   const [arNumber, setArNumber] = React.useState('');
   const [allocationMode, setAllocationMode] = React.useState<AllocationMode>('AUTOMATIC');
-  const [paymentMethod, setPaymentMethod] = React.useState(ACTIVE_PAYMENT_METHODS[0]!.code);
+  const [paymentMethod, setPaymentMethod] = React.useState('BANK_TRANSFER');
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [successInfo, setSuccessInfo] = React.useState<PaymentSuccessInfo | null>(null);
