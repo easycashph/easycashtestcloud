@@ -26,13 +26,19 @@ export type RepaymentPeriodUnit = 'MONTHS';
  * transition table itself models the whole lifecycle now, so it does not
  * need to be redesigned when later milestones add the remaining
  * transitions.
+ *
+ * 2026-07-16: `CLOSED -> ACTIVE` added for `reopen()` — a `ReversePaymentUseCase` call that undoes
+ * the exact payment which had closed the loan (e.g. a cashier's wrong-amount entry) must be able to
+ * bring the loan back, otherwise a loan sits CLOSED with a nonzero real balance forever. Only from
+ * `CLOSED`, not `CLOSED_WRITTEN_OFF`/`CLOSED_REJECTED` — reversing a payment on an already
+ * written-off or rejected loan is a different, not-yet-scoped business decision.
  */
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
   APPROVED: ['ACTIVE'],
   ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
-  CLOSED: [],
+  CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],
 };
@@ -541,6 +547,21 @@ export class LoanAccount {
   close(): void {
     this.transitionTo('CLOSED');
     this.props.closedAt = new Date();
+  }
+
+  /**
+   * 2026-07-16 (Reverse Payment follow-up fix): undoes `close()` — brings a `CLOSED` loan back to
+   * `ACTIVE` and clears `closedAt`/`closedReason`, since neither is true anymore. Mechanical
+   * transition only, mirroring `close()`; the caller (`ReversePaymentUseCase`) decides *when* to
+   * call this, via `!isFullyPaid` after the reversal has been applied. Always reopens to `ACTIVE`,
+   * never `ACTIVE_IN_ARREARS` — this codebase does not track which of the two a loan was in before
+   * `close()` was called, and arrears classification is already computed live elsewhere (Loan
+   * Portfolio Health) rather than trusted from this stored column.
+   */
+  reopen(): void {
+    this.transitionTo('ACTIVE');
+    this.props.closedAt = undefined;
+    this.props.closedReason = undefined;
   }
 
   addAppliedFee(fee: AppliedFee): void {

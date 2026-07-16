@@ -305,5 +305,77 @@ describe('ReversePaymentUseCase', () => {
         mockCtx,
       );
     });
+
+    // 2026-07-16: found via a real client loan (SML-REG_00378) — reversing the payment that had
+    // fully settled and auto-closed a loan left it stuck CLOSED with a real nonzero balance.
+    it('reopens a CLOSED loan back to ACTIVE when reversing the payment that had fully settled it', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      // The original payment fully settled the loan, which auto-closed it (mirrors what
+      // ProcessPaymentUseCase does on isFullyPaid).
+      loan.applyPayment(TransactionComponents.of({ principalComponent: Money.of('1000.00'), interestComponent: Money.of('100.00') }));
+      loan.close();
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      const original = buildRepaymentTransaction({ amount: '1100.00', principal: '1000.00', interest: '100.00' });
+      deps.loanTransactionRepository.findById.mockResolvedValue(original);
+      deps.loanTransactionRepository.findByReversesTransactionId.mockResolvedValue(null);
+
+      const inst1 = buildInstallment(1, { principal: '1000.00', interest: '100.00' }, { principal: '1000.00', interest: '100.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const allocation = PaymentAllocation.create({
+        loanTransactionId: 'txn-1',
+        repaymentInstallmentId: 'installment-1',
+        principalApplied: Money.of('1000.00'),
+        interestApplied: Money.of('100.00'),
+        feesApplied: Money.ZERO,
+        penaltyApplied: Money.ZERO,
+      });
+      deps.paymentAllocationRepository.findByLoanTransactionId.mockResolvedValue([allocation]);
+
+      const useCase = new ReversePaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', 'txn-1', 'mis-1', 'Cashier entered the wrong amount');
+
+      expect(result.status).toBe('ACTIVE');
+      expect(result.closedAt).toBeUndefined();
+      expect(result.balances.principalBalance.equals(Money.of('1000.00'))).toBe(true);
+      expect(result.balances.interestBalance.equals(Money.of('100.00'))).toBe(true);
+    });
+
+    it('does not reopen a CLOSED loan when the reversed payment left it still fully paid (e.g. an overpayment reversal)', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('1000.00', '100.00');
+      // Fully settled by an overpayment (110.00 applied against 100.00 interest due -> extra
+      // 10.00 principal), then closed.
+      loan.applyPayment(TransactionComponents.of({ principalComponent: Money.of('1010.00'), interestComponent: Money.of('100.00') }));
+      loan.close();
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      // Reversing only a small 10.00 principal overpayment portion, recorded as its own
+      // transaction — the loan remains fully paid afterward.
+      const original = buildRepaymentTransaction({ id: 'txn-2', amount: '10.00', principal: '10.00', interest: '0.00' });
+      deps.loanTransactionRepository.findById.mockResolvedValue(original);
+      deps.loanTransactionRepository.findByReversesTransactionId.mockResolvedValue(null);
+
+      const inst1 = buildInstallment(1, { principal: '1000.00', interest: '100.00' }, { principal: '1010.00', interest: '100.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const allocation = PaymentAllocation.create({
+        loanTransactionId: 'txn-2',
+        repaymentInstallmentId: 'installment-1',
+        principalApplied: Money.of('10.00'),
+        interestApplied: Money.ZERO,
+        feesApplied: Money.ZERO,
+        penaltyApplied: Money.ZERO,
+      });
+      deps.paymentAllocationRepository.findByLoanTransactionId.mockResolvedValue([allocation]);
+
+      const useCase = new ReversePaymentUseCase(deps);
+      const result = await useCase.execute('loan-1', 'txn-2', 'mis-1', 'Correcting an overpayment');
+
+      expect(result.status).toBe('CLOSED');
+      expect(result.balances.principalBalance.isZero()).toBe(true);
+    });
   });
 });

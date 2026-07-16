@@ -124,6 +124,72 @@ describe('LoanAccount', () => {
     });
   });
 
+  // 2026-07-16 (Reverse Payment follow-up fix): a CLOSED loan must be able to come back to ACTIVE
+  // when the payment that had closed it gets reversed — see ReversePaymentUseCase.test.ts for the
+  // full use-case-level scenario (found via a real client loan, SML-REG_00378).
+  describe('close / reopen', () => {
+    function activeLoan() {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.activate({ principalDue: Money.of('1000.00'), interestDue: Money.of('100.00') });
+      return loan;
+    }
+
+    it('close() transitions ACTIVE -> CLOSED and stamps closedAt', () => {
+      const loan = activeLoan();
+      loan.close();
+
+      expect(loan.status).toBe('CLOSED');
+      expect(loan.closedAt).toBeInstanceOf(Date);
+    });
+
+    it('reopen() transitions CLOSED -> ACTIVE and clears closedAt/closedReason', () => {
+      const loan = activeLoan();
+      loan.close();
+      loan.reopen();
+
+      expect(loan.status).toBe('ACTIVE');
+      expect(loan.closedAt).toBeUndefined();
+      expect(loan.closedReason).toBeUndefined();
+    });
+
+    it('reopen() throws InvalidStatusTransitionError when the loan is not CLOSED', () => {
+      const loan = activeLoan();
+      expect(() => loan.reopen()).toThrow(InvalidStatusTransitionError);
+    });
+
+    it('reopen() throws InvalidStatusTransitionError for CLOSED_WRITTEN_OFF, not just any CLOSED-like status', () => {
+      const loan = activeLoan();
+      const writtenOff = LoanAccount.reconstitute({
+        id: loan.id,
+        loanCode: loan.loanCode,
+        borrowerId: loan.borrowerId,
+        loanProductVersionId: loan.loanProductVersionId,
+        branchId: loan.branchId,
+        loanOfficerId: loan.loanOfficerId,
+        status: 'CLOSED_WRITTEN_OFF',
+        principalAmount: loan.principalAmount,
+        balances: loan.balances,
+        interestRate: loan.interestRate,
+        addOnInterestRate: loan.addOnInterestRate,
+        contractualInterestRate: loan.contractualInterestRate,
+        installmentCount: loan.installmentCount,
+        repaymentPeriodUnit: loan.repaymentPeriodUnit,
+        gracePeriodDays: loan.gracePeriodDays,
+        approvedAt: loan.approvedAt,
+        approvedByUserId: loan.approvedByUserId,
+        activatedAt: loan.activatedAt,
+        legacyId: loan.legacyId,
+        createdAt: loan.createdAt,
+        updatedAt: loan.updatedAt,
+        appliedFees: [...loan.appliedFees],
+        coBorrowerIds: [...loan.coBorrowerIds],
+        version: loan.version,
+      });
+      expect(() => writtenOff.reopen()).toThrow(InvalidStatusTransitionError);
+    });
+  });
+
   // Milestone 9.1 checkpoint 7 / ADR-032: activation is disbursement — the
   // caller (future ActivateLoanUseCase, CP8) supplies already-computed
   // totals; this method only performs the mechanical transition + balance

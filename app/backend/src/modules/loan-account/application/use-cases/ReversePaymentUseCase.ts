@@ -53,6 +53,12 @@ export interface ReversePaymentUseCaseDeps {
  * (`requireRole('MIS')`, `reversePaymentSchema`), not here — this use case takes `reason` as a
  * plain required string and always records it as the new transaction's `comment`, trusting the
  * caller already enforced non-emptiness.
+ *
+ * 2026-07-16 follow-up: if the reversed payment was the one that had fully settled the loan
+ * (`ProcessPaymentUseCase` auto-closes on `isFullyPaid`), this reopens it — mirrors that same
+ * auto-close symmetrically, via `LoanAccount.reopen()`. Without this, reversing the closing
+ * payment left the loan stuck `CLOSED` with a real nonzero balance forever (found via a live
+ * client loan, `SML-REG_00378`).
  */
 export class ReversePaymentUseCase {
   constructor(private readonly deps: ReversePaymentUseCaseDeps) {}
@@ -116,6 +122,10 @@ export class ReversePaymentUseCase {
     });
 
     loanAccount.applyPayment(reversedComponents, reversedAt);
+
+    if (loanAccount.status === 'CLOSED' && !loanAccount.isFullyPaid) {
+      loanAccount.reopen();
+    }
 
     const reversalTransaction = LoanTransaction.create({
       loanAccountId: loanAccount.id,
