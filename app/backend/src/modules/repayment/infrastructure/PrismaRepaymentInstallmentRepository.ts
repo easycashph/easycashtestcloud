@@ -165,4 +165,9 @@ export class PrismaRepaymentInstallmentRepository implements IRepaymentInstallme
       }
     });
   }
+
+  async deleteAllByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.repaymentSchedule.deleteMany({ where: { loanAccountId } });
+  }
 }

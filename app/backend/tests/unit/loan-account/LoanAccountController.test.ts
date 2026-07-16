@@ -19,9 +19,11 @@ function buildDeps() {
     listLoanAccountsUseCase: { execute: vi.fn() },
     listMaturedLoanAccountIdsUseCase: { execute: vi.fn().mockResolvedValue(new Set()) },
     approveLoanUseCase: { execute: vi.fn() },
+    undoApproveLoanUseCase: { execute: vi.fn() },
     rejectLoanUseCase: { execute: vi.fn() },
     // Milestone 9.1/9.2 CP13.
     activateLoanUseCase: { execute: vi.fn() },
+    undoActivateLoanUseCase: { execute: vi.fn() },
     processPaymentUseCase: { execute: vi.fn() },
     idempotencyKeyStore: { claim: vi.fn().mockResolvedValue({ outcome: 'CLAIMED' }), complete: vi.fn(), release: vi.fn() },
   } as never as ConstructorParameters<typeof LoanAccountController>[0];
@@ -240,6 +242,65 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
 
       expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
       expect(deps.updateLoanAccountUseCase.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  // 2026-07-16 (Undo Approve / Undo Activate, user request, MIS-only).
+  describe('undoApprove() / undoActivate()', () => {
+    it('undoApprove() forwards the authenticated user id and returns the presented result', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = { params: { id: loan.id }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.undoApprove(req, res, vi.fn());
+
+      expect(deps.undoApproveLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'authenticated-user-1');
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('undoApprove() checks branch access BEFORE mutating', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan('branch-2');
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = { params: { id: loan.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
+      const next = vi.fn();
+
+      await controller.undoApprove(req, buildResponse(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(deps.undoApproveLoanUseCase.execute).not.toHaveBeenCalled();
+    });
+
+    it('undoActivate() forwards the authenticated user id and returns the presented result', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = { params: { id: loan.id }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.undoActivate(req, res, vi.fn());
+
+      expect(deps.undoActivateLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'authenticated-user-1');
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('undoActivate() checks branch access BEFORE mutating', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan('branch-2');
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = { params: { id: loan.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
+      const next = vi.fn();
+
+      await controller.undoActivate(req, buildResponse(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(deps.undoActivateLoanUseCase.execute).not.toHaveBeenCalled();
     });
   });
 

@@ -106,6 +106,25 @@ describe('LoanAccount', () => {
     });
   });
 
+  // 2026-07-16 (Undo Approve, user request, MIS-only): a safety net for an accidental Approve
+  // click — see UndoApproveLoanUseCase for the use-case-level scenario.
+  describe('undoApprove', () => {
+    it('transitions APPROVED -> PENDING_APPROVAL and clears approver/timestamp', () => {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      loan.undoApprove();
+
+      expect(loan.status).toBe('PENDING_APPROVAL');
+      expect(loan.approvedByUserId).toBeUndefined();
+      expect(loan.approvedAt).toBeUndefined();
+    });
+
+    it('throws InvalidStatusTransitionError when the loan is not APPROVED', () => {
+      const loan = createLoanAccount();
+      expect(() => loan.undoApprove()).toThrow(InvalidStatusTransitionError);
+    });
+  });
+
   describe('reject', () => {
     it('transitions PENDING_APPROVAL -> CLOSED_REJECTED and records the reason', () => {
       const loan = createLoanAccount();
@@ -330,6 +349,34 @@ describe('LoanAccount', () => {
       expect(() => loan.activate({ principalDue: Money.of('10000.00'), interestDue: Money.of('500.00') })).toThrow(
         InvalidStatusTransitionError,
       );
+    });
+  });
+
+  // 2026-07-16 (Undo Activate, user request, MIS-only): a safety net for an accidental Activate
+  // click — see UndoActivateLoanUseCase for the use-case-level activity guards (no payment, no
+  // penalty/fee override) this entity itself doesn't check.
+  describe('undoActivate', () => {
+    function approvedLoan() {
+      const loan = createLoanAccount();
+      loan.approve('officer-1');
+      return loan;
+    }
+
+    it('transitions ACTIVE -> APPROVED, clears activatedAt, and resets balances to zero', () => {
+      const loan = approvedLoan();
+      loan.activate({ principalDue: Money.of('10000.00'), interestDue: Money.of('500.00'), feesDue: Money.of('100.00') });
+      loan.undoActivate();
+
+      expect(loan.status).toBe('APPROVED');
+      expect(loan.activatedAt).toBeUndefined();
+      expect(loan.balances.principalBalance.isZero()).toBe(true);
+      expect(loan.balances.principalDue.isZero()).toBe(true);
+      expect(loan.balances.feesBalance.isZero()).toBe(true);
+    });
+
+    it('throws InvalidStatusTransitionError when the loan is not ACTIVE', () => {
+      const loan = approvedLoan();
+      expect(() => loan.undoActivate()).toThrow(InvalidStatusTransitionError);
     });
   });
 

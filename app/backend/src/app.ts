@@ -47,6 +47,8 @@ import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cas
 import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
 import { ListMaturedLoanAccountIdsUseCase } from '@modules/loan-account/application/use-cases/ListMaturedLoanAccountIdsUseCase';
 import { ApproveLoanUseCase } from '@modules/loan-account/application/use-cases/ApproveLoanUseCase';
+import { UndoApproveLoanUseCase } from '@modules/loan-account/application/use-cases/UndoApproveLoanUseCase';
+import { UndoActivateLoanUseCase } from '@modules/loan-account/application/use-cases/UndoActivateLoanUseCase';
 import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/RejectLoanUseCase';
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
@@ -366,6 +368,7 @@ export function createApp(): Express {
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
       listMaturedLoanAccountIdsUseCase: new ListMaturedLoanAccountIdsUseCase({ loanAccountRepository }),
       approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
+      undoApproveLoanUseCase: new UndoApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
       // cases (previously built with zero routes, per the D-2 precedent —
@@ -375,6 +378,19 @@ export function createApp(): Express {
         loanProductRepository,
         repaymentInstallmentRepository,
         loanTransactionRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
+      // 2026-07-16 (Undo Activate, user request, MIS-only): local repository instances here
+      // (rather than reusing the module-scoped ones defined later in this file for the repayment
+      // router) since this block runs before that point — both are stateless, cheap to construct.
+      undoActivateLoanUseCase: new UndoActivateLoanUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        penaltyReductionRepository: new PrismaPenaltyReductionRepository(),
+        feeAdjustmentRepository: new PrismaFeeAdjustmentRepository(),
         financialAuditLogger,
         unitOfWork,
         profileActivityLogService,

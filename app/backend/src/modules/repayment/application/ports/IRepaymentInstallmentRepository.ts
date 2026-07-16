@@ -15,4 +15,12 @@ export interface IRepaymentInstallmentRepository {
   save(installment: RepaymentInstallment, ctx?: TransactionContext): Promise<void>;
   /** Same conditional-write/`ConcurrencyConflictError` contract as `save()`, applied per row; the whole batch commits or rolls back atomically. */
   saveMany(installments: RepaymentInstallment[], ctx?: TransactionContext): Promise<void>;
+  /**
+   * 2026-07-16 (Undo Activate, user request, MIS-only) — deletes every installment for a loan
+   * whose activation is being undone. Safe only because `UndoActivateLoanUseCase` has already
+   * confirmed none of them carry a payment or a penalty/fee override before calling this; unlike
+   * `LoanTransaction` (TXN-1, no delete method at all), a not-yet-touched `RepaymentInstallment`
+   * has no append-only requirement of its own.
+   */
+  deleteAllByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<void>;
 }

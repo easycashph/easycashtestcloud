@@ -32,11 +32,18 @@ export type RepaymentPeriodUnit = 'MONTHS';
  * bring the loan back, otherwise a loan sits CLOSED with a nonzero real balance forever. Only from
  * `CLOSED`, not `CLOSED_WRITTEN_OFF`/`CLOSED_REJECTED` — reversing a payment on an already
  * written-off or rejected loan is a different, not-yet-scoped business decision.
+ *
+ * 2026-07-16 (Undo Approve / Undo Activate, user request, MIS-only): `APPROVED -> PENDING_APPROVAL`
+ * (`undoApprove()`) and `ACTIVE -> APPROVED` (`undoActivate()`) — both safety nets for an
+ * accidental click, not general-purpose reversals. `undoApprove()` is unconditionally safe (nothing
+ * financial has happened yet at APPROVED). `undoActivate()` is guarded at the use-case layer
+ * (`UndoActivateLoanUseCase`) against a loan that already has a recorded payment or a penalty/fee
+ * override — see `LoanAccountHasActivityError`'s own doc comment.
  */
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
-  APPROVED: ['ACTIVE'],
-  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
+  APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
+  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'APPROVED'],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
   CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
@@ -435,6 +442,18 @@ export class LoanAccount {
   }
 
   /**
+   * 2026-07-16 (Undo Approve, user request, MIS-only): undoes `approve()` — nothing financial has
+   * happened yet at APPROVED (see `approve()`'s own doc comment: "no LoanTransaction, no
+   * RepaymentInstallment generation, no balance change"), so this is unconditionally safe,
+   * mechanical only, no use-case-level guard needed (unlike `undoActivate()` below).
+   */
+  undoApprove(): void {
+    this.transitionTo('PENDING_APPROVAL');
+    this.props.approvedAt = undefined;
+    this.props.approvedByUserId = undefined;
+  }
+
+  /**
    * Milestone 9.1 checkpoint 7 / ADR-032: activation is disbursement — the
    * calculation engine's already-computed schedule totals (`input`) become
    * this loan's Due and Balance figures; nothing is paid yet. This method
@@ -474,6 +493,25 @@ export class LoanAccount {
       penaltyPaid: Money.ZERO,
       penaltyDue,
     });
+  }
+
+  /**
+   * 2026-07-16 (Undo Activate, user request, MIS-only): undoes `activate()` — transitions back to
+   * APPROVED, clears `activatedAt`, and resets balances to zero (mirroring `create()`'s own
+   * pre-activation state). Deliberately does NOT touch the `DISBURSEMENT` `LoanTransaction` the
+   * original `activate()` call inserted — `ILoanTransactionRepository` has no delete method at all
+   * (TXN-1: append-only, enforced at the type level), and user-confirmed scope keeps it that way:
+   * that transaction stays in Payment History as a factual record ("activation was attempted at
+   * this timestamp"), superseded rather than erased once the loan is corrected and activated
+   * again. The use-case layer (`UndoActivateLoanUseCase`) is responsible for also deleting this
+   * loan's `RepaymentInstallment` rows (not under the same append-only rule) and for refusing the
+   * whole operation up front if a real payment or penalty/fee override already exists — this
+   * entity has no ledger/installment access and cannot check either itself.
+   */
+  undoActivate(): void {
+    this.transitionTo('APPROVED');
+    this.props.activatedAt = undefined;
+    this.props.balances = LoanBalances.zero();
   }
 
   /**

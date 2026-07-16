@@ -67,6 +67,11 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
   router.get('/loan-accounts', requireAuth, controller.list);
 
   router.post('/loan-accounts/:id/approve', requireAuth, requireRole(...APPROVAL_ROLES), controller.approve);
+  // 2026-07-16 (Undo Approve / Undo Activate, user request): MIS only — narrower than approval/
+  // activation themselves, same "accidental-click safety net for a financially consequential
+  // action" reasoning as Reverse Payment below. Not open to the full APPROVAL_ROLES/
+  // ACTIVATION_ROLES tier per explicit user instruction.
+  router.post('/loan-accounts/:id/undo-approve', requireAuth, requireRole('MIS'), controller.undoApprove);
   router.post(
     '/loan-accounts/:id/reject',
     requireAuth,
@@ -76,6 +81,7 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
   );
 
   router.post('/loan-accounts/:id/activate', requireAuth, requireRole(...ACTIVATION_ROLES), controller.activate);
+  router.post('/loan-accounts/:id/undo-activate', requireAuth, requireRole('MIS'), controller.undoActivate);
   router.post(
     '/loan-accounts/:id/payments',
     requireAuth,

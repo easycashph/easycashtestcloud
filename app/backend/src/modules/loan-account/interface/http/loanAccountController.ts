@@ -11,8 +11,10 @@ import type { GetLoanAccountUseCase } from '../../application/use-cases/GetLoanA
 import type { ListLoanAccountsUseCase } from '../../application/use-cases/ListLoanAccountsUseCase';
 import type { ListMaturedLoanAccountIdsUseCase } from '../../application/use-cases/ListMaturedLoanAccountIdsUseCase';
 import type { ApproveLoanUseCase } from '../../application/use-cases/ApproveLoanUseCase';
+import type { UndoApproveLoanUseCase } from '../../application/use-cases/UndoApproveLoanUseCase';
 import type { RejectLoanUseCase } from '../../application/use-cases/RejectLoanUseCase';
 import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLoanUseCase';
+import type { UndoActivateLoanUseCase } from '../../application/use-cases/UndoActivateLoanUseCase';
 import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
 import type { ReversePaymentUseCase } from '../../application/use-cases/ReversePaymentUseCase';
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
@@ -32,8 +34,10 @@ export interface LoanAccountControllerDeps {
   listLoanAccountsUseCase: ListLoanAccountsUseCase;
   listMaturedLoanAccountIdsUseCase: ListMaturedLoanAccountIdsUseCase;
   approveLoanUseCase: ApproveLoanUseCase;
+  undoApproveLoanUseCase: UndoApproveLoanUseCase;
   rejectLoanUseCase: RejectLoanUseCase;
   activateLoanUseCase: ActivateLoanUseCase;
+  undoActivateLoanUseCase: UndoActivateLoanUseCase;
   processPaymentUseCase: ProcessPaymentUseCase;
   reversePaymentUseCase: ReversePaymentUseCase;
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
@@ -124,6 +128,36 @@ export class LoanAccountController {
       const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       assertBranchAccess(scope, existing.branchId);
       await this.deps.approveLoanUseCase.execute(req.params.id as string, currentUser.sub);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      res.status(200).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-16 (Undo Approve, user request, MIS-only) — role gate enforced at the router. */
+  undoApprove = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      await this.deps.undoApproveLoanUseCase.execute(req.params.id as string, currentUser.sub);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      res.status(200).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-16 (Undo Activate, user request, MIS-only) — role gate enforced at the router. */
+  undoActivate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      await this.deps.undoActivateLoanUseCase.execute(req.params.id as string, currentUser.sub);
       const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       res.status(200).json(presentLoanAccount(loanAccount));
     } catch (error) {

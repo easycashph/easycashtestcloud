@@ -35,6 +35,25 @@ export class LoanAccountNotEditableError extends DomainError {
 }
 
 /**
+ * 2026-07-16 (Undo Activate, user request, MIS-only): guards against undoing an activation that
+ * already has real financial activity attached — a recorded REPAYMENT, or a Reduce Penalty/Adjust
+ * Fees override on any installment. Deliberately scoped this narrow (user-confirmed): "Undo
+ * Activate" exists for the "clicked Activate by mistake, nothing else has happened yet" case, not
+ * as a general-purpose way to unwind an active loan with real activity on it.
+ */
+export class LoanAccountHasActivityError extends DomainError {
+  constructor(loanAccountId: string, reason: string) {
+    super(
+      'LOAN_ACCOUNT_HAS_ACTIVITY',
+      `Cannot undo activation of LoanAccount ${loanAccountId}: ${reason}.`,
+      undefined,
+      400,
+    );
+    this.name = 'LoanAccountHasActivityError';
+  }
+}
+
+/**
  * Milestone 8 / D-3: configuration validation, not financial calculation
  * - the loan's requested principal must fall within its LoanProductVersion's
  * configured `loanAmountMin`/`loanAmountMax`. No interest/amortization math
