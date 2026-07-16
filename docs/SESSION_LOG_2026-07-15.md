@@ -739,6 +739,44 @@ verified in a browser (no login credentials in this environment, same standing l
 rest of this session) — verified via DB query (write succeeded), unit tests (regression-tested
 against golden-master fixtures), and typecheck only.
 
+## Reverse Payment: a fully-settled loan's auto-close was never undone on reversal
+
+User reported: reversed a payment on `SML-REG_00378` after it had auto-closed, expected the loan to
+return to ACTIVE with its balance restored — balance came back, status did not, leaving the loan
+stuck `CLOSED` with a real ₱3,934.06 outstanding.
+
+**Root cause**: `ProcessPaymentUseCase` auto-closes a loan on `isFullyPaid` (`loanAccount.close()`),
+but `ReversePaymentUseCase` had no symmetric reopen — it called `loanAccount.applyPayment()` to
+restore the balance components but never checked whether that reversal had un-settled a `CLOSED`
+loan. Confirmed directly against the DB: `loan_transactions` showed the exact closing `REPAYMENT`
+(₱3,934.06, `balanceAfter: 0.00`) immediately followed by its `REVERSAL` (`balanceAfter: 3748.51`)
+two minutes later — the write succeeded, only the status transition was missing.
+
+**Fix**: `LoanAccount`'s `ALLOWED_TRANSITIONS` gained `CLOSED -> ACTIVE` (only from `CLOSED`, not
+`CLOSED_WRITTEN_OFF`/`CLOSED_REJECTED` — those are different, not-yet-scoped decisions). New
+`reopen()` mirrors `close()`: transitions to `ACTIVE`, clears `closedAt`/`closedReason`. Always
+reopens to `ACTIVE`, never `ACTIVE_IN_ARREARS` — this codebase doesn't track which of the two a
+loan was in before closing, and arrears is already computed live elsewhere (Loan Portfolio Health)
+rather than trusted from this stored column. `ReversePaymentUseCase` now calls `loanAccount.reopen()`
+when `status === 'CLOSED' && !isFullyPaid` after applying the reversal. 6 new unit tests: 4 on
+`LoanAccount.test.ts` (close/reopen transitions, reopen rejected when not CLOSED, reopen rejected
+for CLOSED_WRITTEN_OFF specifically) and 2 on `ReversePaymentUseCase.test.ts` (reopens when the
+reversed payment was the one that had fully settled the loan; does NOT reopen when the loan remains
+fully paid after a smaller reversal, e.g. correcting an overpayment). Full suite still 616 passed /
+16 known pre-existing unrelated failures (no net change).
+
+**Backfill scope check**: before touching any data, queried every `CLOSED` loan with a nonzero
+balance — found 80, not just the one reported. Cross-checked against `loan_transactions` for an
+actual `REVERSAL` row: only `SML-REG_00378` had one. The other 79 have no `REVERSAL` at all and
+`closedAt` either blank or a batch-uniform `2026-03-15 16:00:00` timestamp — the already-known,
+separately-flagged legacy migration balance-disagreement issue (~954 loans, needs a business
+decision — see "Known follow-ups" below), NOT this bug. Left untouched. Backfilled only
+`SML-REG_00378`: `status` CLOSED → ACTIVE, `closedAt`/`closedReason` cleared, balances already
+correct from the reversal itself (₱3,748.51 principal / ₱185.55 interest).
+
+Backend rebuilt (`docker compose up -d --build backend`). Not yet click-through verified in a
+browser (same standing limitation this session).
+
 ## Current state
 
 - Working tree clean; Docker stack (`postgres`, `backend`) running locally (frontend now run via
