@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
-import { PreviewBanner, PreviewFooterNote } from '@/components/PreviewBanner';
+import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/staticConfig';
 import { cn } from '@/lib/utils';
@@ -172,7 +172,6 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <PreviewBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
