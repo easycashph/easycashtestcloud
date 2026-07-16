@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, uploadFile } from '@/lib/apiClient';
+import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
 import {
@@ -123,14 +123,16 @@ function Field({
   children,
   hint,
   tooltip,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
   tooltip?: string;
+  className?: string;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className={`space-y-1.5${className ? ` ${className}` : ''}`}>
       <Label className="flex items-center gap-1 text-xs">
         {label}
         {tooltip && <FieldTooltip text={tooltip} />}
@@ -328,7 +330,48 @@ export function LoanApplicationForm({
   const [hasCoBorrower, setHasCoBorrower] = React.useState(Boolean(prefillFrom?.coBorrowerName));
   const [coBorrowerName, setCoBorrowerName] = React.useState(prefillCoBorrower?.name ?? '');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(prefillCoBorrower?.relationship ?? '');
-  const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState(prefillFrom?.coBorrowerEmployer ?? '');
+  const [coBorrowerContactNumber, setCoBorrowerContactNumber] = React.useState(prefillFrom?.coBorrowerContactNumber ?? '');
+  const [coBorrowerEmail, setCoBorrowerEmail] = React.useState(prefillFrom?.coBorrowerEmail ?? '');
+  const [coBorrowerAddress, setCoBorrowerAddress] = React.useState(prefillFrom?.coBorrowerAddress ?? '');
+
+  // Only offered when this form was opened FROM an existing client (lockedBorrowerId set, the
+  // renewal flow) - pulls that client's own past applications to find co-borrowers they've used
+  // before, so staff can pick one instead of re-typing the same person's details every renewal.
+  // Never shown for the original walk-in intake flow (no borrower/history exists yet). No
+  // borrowerId filter exists on GET /loan-applications yet, so this fetches every application and
+  // filters client-side - same pattern ClientProfilePage's own "myApplications" already uses.
+  const previousApplicationsQuery = useQuery({
+    queryKey: ['loan-applications', 'all', 'coBorrowerHistory'],
+    queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
+    enabled: Boolean(lockedBorrowerId),
+  });
+  const previousCoBorrowers = React.useMemo(() => {
+    const seen = new Map<string, { name: string; relationship: string; contactNumber: string; email: string; address: string }>();
+    for (const app of previousApplicationsQuery.data ?? []) {
+      if (app.borrowerId !== lockedBorrowerId) continue;
+      if (!app.coBorrowerName) continue;
+      const parsed = parseCoBorrowerName(app.coBorrowerName);
+      if (!parsed.name || seen.has(parsed.name)) continue;
+      seen.set(parsed.name, {
+        name: parsed.name,
+        relationship: parsed.relationship,
+        contactNumber: app.coBorrowerContactNumber ?? '',
+        email: app.coBorrowerEmail ?? '',
+        address: app.coBorrowerAddress ?? '',
+      });
+    }
+    return [...seen.values()];
+  }, [previousApplicationsQuery.data]);
+
+  const applyPreviousCoBorrower = (name: string) => {
+    const match = previousCoBorrowers.find((c) => c.name === name);
+    if (!match) return;
+    setCoBorrowerName(match.name);
+    setCoBorrowerRelationship(match.relationship);
+    setCoBorrowerContactNumber(match.contactNumber);
+    setCoBorrowerEmail(match.email);
+    setCoBorrowerAddress(match.address);
+  };
   // §9 - character references
   const [reference1, setReference1] = React.useState({
     name: prefillFrom?.reference1Name ?? '',
@@ -508,7 +551,9 @@ export function LoanApplicationForm({
           hasCoBorrower && coBorrowerName.trim()
             ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
             : undefined,
-        coBorrowerEmployer: hasCoBorrower && coBorrowerEmployer.trim() ? coBorrowerEmployer.trim() : undefined,
+        coBorrowerContactNumber: hasCoBorrower && coBorrowerContactNumber.trim() ? coBorrowerContactNumber.trim() : undefined,
+        coBorrowerEmail: hasCoBorrower && coBorrowerEmail.trim() ? coBorrowerEmail.trim() : undefined,
+        coBorrowerAddress: hasCoBorrower && coBorrowerAddress.trim() ? coBorrowerAddress.trim() : undefined,
         reference1Name: reference1.name.trim() || undefined,
         reference1Mobile: reference1.mobile.trim() || undefined,
         reference2Name: reference2.name.trim() || undefined,
@@ -934,16 +979,47 @@ export function LoanApplicationForm({
           This application has a co-borrower
         </label>
         {hasCoBorrower && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
-              <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
-            </Field>
-            <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
-              <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
-            </Field>
-            <Field label="Co-borrower employer" tooltip="Where the co-borrower works.">
-              <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
-            </Field>
+          <div className="mt-3 space-y-3">
+            {/* Existing-client flow only (opened with lockedBorrowerId, e.g. Client Profile's
+                "Create Loan Application") - lets staff reuse a co-borrower this same client has
+                already used on a past application instead of re-typing their details. Selecting
+                one autofills the fields below, which stay freely editable; not selecting anything
+                just leaves them blank for a brand-new co-borrower. Never shown on the original
+                walk-in intake form - no client/history exists yet to pull from. */}
+            {lockedBorrowerId && previousCoBorrowers.length > 0 && (
+              <Field label="Use a previous co-borrower" tooltip="Autofills the fields below from a co-borrower this client has used before - still editable after.">
+                <Select onValueChange={applyPreviousCoBorrower}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={previousApplicationsQuery.isLoading ? 'Loading…' : 'Select a previous co-borrower...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {previousCoBorrowers.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>
+                        {c.name}
+                        {c.relationship ? ` (${c.relationship})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
+                <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
+              </Field>
+              <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
+                <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
+              </Field>
+              <Field label="Co-borrower contact number" tooltip="Co-borrower's active mobile number.">
+                <PhoneInput value={coBorrowerContactNumber} onChange={(e) => setCoBorrowerContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+              </Field>
+              <Field label="Co-borrower email address" tooltip="Co-borrower's email, if available.">
+                <Input type="email" value={coBorrowerEmail} onChange={(e) => setCoBorrowerEmail(e.target.value)} />
+              </Field>
+              <Field label="Co-borrower address" tooltip="Co-borrower's home address." className="sm:col-span-2">
+                <Input value={coBorrowerAddress} onChange={(e) => setCoBorrowerAddress(e.target.value)} />
+              </Field>
+            </div>
           </div>
         )}
       </SectionCard>

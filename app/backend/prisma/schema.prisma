@@ -1334,8 +1334,11 @@ model LoanApplication {
   sssNumber       String?
   propertiesOwned String[] @default([])
   creditScore     Int?
-  coBorrowerName     String?
-  coBorrowerEmployer String?
+  coBorrowerName          String?
+  coBorrowerEmployer      String?
+  coBorrowerContactNumber String?
+  coBorrowerEmail         String?
+  coBorrowerAddress       String?
   mobilePhone     String?
   email           String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
