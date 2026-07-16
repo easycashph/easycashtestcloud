@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { FieldTooltip } from '@/components/FieldTooltip';
@@ -717,7 +718,7 @@ export function LoanApplicationForm({
             </Select>
           </Field>
           <Field label="Desired loan amount (₱) *" tooltip="The peso amount the applicant is requesting to borrow.">
-            <Input type="number" min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
+            <NumberInput min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
           </Field>
           <Field label="Preferred loan term (months) *" tooltip="How many months the applicant wants to repay the loan over.">
             <Input type="number" min="1" max="36" value={requestedTermMonths} onChange={(e) => setRequestedTermMonths(e.target.value)} />
@@ -837,7 +838,7 @@ export function LoanApplicationForm({
             </Field>
           </div>
           <Field label="Monthly income" tooltip="Applicant's gross monthly income - used for the Risk Management pre-qualification assessment.">
-            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+            <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </Field>
           <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
             <Input value={tin} onChange={(e) => setTin(e.target.value)} />

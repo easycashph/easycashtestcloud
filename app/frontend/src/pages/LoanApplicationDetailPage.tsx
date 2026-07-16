@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -331,7 +332,7 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Monthly Income</Label>
-            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+            <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </div>
           <div className="space-y-1.5">
             <Label>TIN</Label>
@@ -656,11 +657,11 @@ function RiskManagementSummaryCard({
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Monthly income (₱)</Label>
-              <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
+              <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Credit score (from CB report)</Label>
-              <Input type="number" min="0" max="1000" value={creditScore} onChange={(e) => setCreditScore(e.target.value)} />
+              <NumberInput min="0" max="1000" value={creditScore} onChange={(e) => setCreditScore(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Properties owned</Label>
