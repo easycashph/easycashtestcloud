@@ -733,14 +733,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      // "Balance" (last column) - how much the client still owes as of this
-                      // installment: total obligation across the whole schedule minus everything
-                      // paid so far, running down toward 0 at the final installment.
+                      // "Balance" (last column) - the SCHEDULED remaining obligation after this
+                      // installment: total obligation across the whole schedule minus every
+                      // installment's DUE amount through this row (not what's actually been paid).
+                      // Deliberately due-based, not paid-based (2026-07-16 bug report comparing
+                      // this against the Activation preview's own Balance column): a paid-based
+                      // running total stays pinned at the full totalObligation on every single row
+                      // until a payment is actually recorded, instead of declining installment by
+                      // installment the way an amortization schedule always should - due amounts
+                      // are fixed at schedule-generation time and don't depend on payment status,
+                      // so this now declines smoothly regardless of what's been paid so far,
+                      // matching the preview's own (also due-based) endingPrincipal column.
                       const totalObligation = installments.reduce((sum, i) => {
                         const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
                         return sum + num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penalty;
                       }, 0);
-                      let cumulativePaid = 0;
+                      let cumulativeDue = 0;
                       return installments.map((i) => {
                         const late = wasInstallmentLate(i);
                         // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
@@ -750,8 +758,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         const isLivePenalty = i.currentPenaltyOwed !== null;
                         const penaltyDisplay = isLivePenalty ? num(i.currentPenaltyOwed!) : num(i.due.penalty);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
-                        cumulativePaid += rowPaid;
-                        const balance = Math.max(0, totalObligation - cumulativePaid);
+                        const rowDue = num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay;
+                        cumulativeDue += rowDue;
+                        const balance = Math.max(0, totalObligation - cumulativeDue);
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
