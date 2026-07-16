@@ -14,6 +14,27 @@ export class InvalidStatusTransitionError extends DomainError {
 }
 
 /**
+ * 2026-07-16 (Edit Loan Account, user request): "may kailangan baguhin katulad ng term or amount,
+ * dapat pwede ko ito i-edit hangga't before ma-approve" — mirrors LA-4's "immutable once approved"
+ * precedent already used everywhere else in this codebase (loan product versions, penalty/fee
+ * snapshots): a PENDING_APPROVAL loan account has disbursed nothing and posted no ledger entries
+ * yet, so its origination fields are still safe to change; once APPROVED (or later), the
+ * risk-assessment/documents/schedule preview a reviewer already looked at could silently drift
+ * from what gets activated, so editing is refused outright rather than allowed-then-reconciled.
+ */
+export class LoanAccountNotEditableError extends DomainError {
+  constructor(status: string) {
+    super(
+      'LOAN_ACCOUNT_NOT_EDITABLE',
+      `Cannot edit a LoanAccount once it is past PENDING_APPROVAL (current status: ${status}).`,
+      'LA-4',
+      400,
+    );
+    this.name = 'LoanAccountNotEditableError';
+  }
+}
+
+/**
  * Milestone 8 / D-3: configuration validation, not financial calculation
  * - the loan's requested principal must fall within its LoanProductVersion's
  * configured `loanAmountMin`/`loanAmountMax`. No interest/amortization math

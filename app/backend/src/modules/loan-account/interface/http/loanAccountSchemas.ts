@@ -42,6 +42,34 @@ export const createLoanAccountSchema = z.object({
 
 export type CreateLoanAccountRequestBody = z.infer<typeof createLoanAccountSchema>;
 
+/**
+ * 2026-07-16 (Edit Loan Account, user request) — PATCH /loan-accounts/:id. Every field optional
+ * (partial update); `UpdateLoanAccountUseCase`/`LoanAccount.update()` refuse the whole request
+ * once the loan is past PENDING_APPROVAL, not this schema — see those doc comments.
+ */
+export const updateLoanAccountSchema = z.object({
+  loanProductVersionId: z.string().min(1).optional(),
+  principalAmount: decimalStringSchema.optional(),
+  interestRate: decimalStringSchema.optional(),
+  addOnInterestRate: decimalStringSchema.optional(),
+  contractualInterestRate: decimalStringSchema.optional(),
+  installmentCount: z.coerce.number().int().positive().optional(),
+  gracePeriodDays: z.coerce.number().int().min(0).optional(),
+  firstRepaymentDate: z.coerce.date().optional(),
+  anticipatedDisbursementDate: z.coerce.date().optional(),
+  processingFee: decimalStringSchema.optional(),
+  advanceInterestFee: decimalStringSchema.optional(),
+  outstandingBalancePayoff: decimalStringSchema.optional(),
+  docStampFee: decimalStringSchema.optional(),
+  accountManagementFee: decimalStringSchema.optional(),
+  otherFees: decimalStringSchema.optional(),
+  notarialFee: decimalStringSchema.optional(),
+  webFee: decimalStringSchema.optional(),
+  insuranceFee: decimalStringSchema.optional(),
+});
+
+export type UpdateLoanAccountRequestBody = z.infer<typeof updateLoanAccountSchema>;
+
 export const rejectLoanSchema = z.object({
   reason: z.string().min(1).optional(),
 });

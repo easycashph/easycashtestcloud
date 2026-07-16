@@ -14,6 +14,7 @@ function buildResponse() {
 function buildDeps() {
   return {
     createLoanAccountUseCase: { execute: vi.fn() },
+    updateLoanAccountUseCase: { execute: vi.fn() },
     getLoanAccountUseCase: { execute: vi.fn() },
     listLoanAccountsUseCase: { execute: vi.fn() },
     listMaturedLoanAccountIdsUseCase: { execute: vi.fn().mockResolvedValue(new Set()) },
@@ -200,6 +201,45 @@ describe('LoanAccountController (thin — presenters handle all Money/Percentage
       await controller.approve(req, buildResponse(), vi.fn());
 
       expect(deps.approveLoanUseCase.execute).toHaveBeenCalledWith(loan.id, 'authenticated-user-1');
+    });
+  });
+
+  // 2026-07-16 (Edit Loan Account, user request).
+  describe('update()', () => {
+    it('forwards the request body to updateLoanAccountUseCase and returns the presented result', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan();
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      (deps.updateLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = {
+        params: { id: loan.id },
+        body: { principalAmount: '12000.00', installmentCount: 6 },
+        authUser: authUser(['MIS'], 'branch-1'),
+      } as unknown as Request;
+      const res = buildResponse();
+
+      await controller.update(req, res, vi.fn());
+
+      expect(deps.updateLoanAccountUseCase.execute).toHaveBeenCalledWith(loan.id, {
+        principalAmount: '12000.00',
+        installmentCount: 6,
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('checks branch access BEFORE mutating — a cross-branch attempt never reaches updateLoanAccountUseCase', async () => {
+      const deps = buildDeps();
+      const loan = buildLoan('branch-2');
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(loan);
+      const controller = new LoanAccountController(deps);
+      const req = { params: { id: loan.id }, body: {}, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
+      const next = vi.fn();
+
+      await controller.update(req, buildResponse(), next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(ForbiddenError));
+      expect(deps.updateLoanAccountUseCase.execute).not.toHaveBeenCalled();
     });
   });
 

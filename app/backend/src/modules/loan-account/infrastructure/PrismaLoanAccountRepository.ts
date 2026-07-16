@@ -164,6 +164,32 @@ async function writeGraph(client: PrismaWriteClient, loanAccount: LoanAccount): 
       data: {
         loanOfficerId: loanAccount.loanOfficerId,
         status: loanAccount.status,
+        // 2026-07-16 (Edit Loan Account): these origination-term fields were previously an LA-4
+        // immutable snapshot, written only at INSERT — now editable while PENDING_APPROVAL
+        // (LoanAccount.update()), so the UPDATE branch must persist them too. Writing the
+        // caller's already-current in-memory value here is a no-op for every write that isn't an
+        // edit (approve/activate/payment/etc. never touch these props), so this is safe to
+        // include unconditionally rather than branching on "was this an edit."
+        loanProductVersionId: loanAccount.loanProductVersionId,
+        principalAmount: loanAccount.principalAmount.toDecimal(),
+        interestRate: loanAccount.interestRate.toDecimal(),
+        addOnInterestRate: loanAccount.addOnInterestRate?.toDecimal(),
+        contractualInterestRate: loanAccount.contractualInterestRate?.toDecimal(),
+        installmentCount: loanAccount.installmentCount,
+        repaymentPeriodUnit: loanAccount.repaymentPeriodUnit,
+        gracePeriodDays: loanAccount.gracePeriodDays,
+        firstRepaymentDate: loanAccount.firstRepaymentDate,
+        anticipatedDisbursementDate: loanAccount.anticipatedDisbursementDate,
+        processingFee: originationFees.processingFee.toDecimal(),
+        advanceInterestFee: originationFees.advanceInterestFee.toDecimal(),
+        outstandingBalancePayoff: originationFees.outstandingBalancePayoff.toDecimal(),
+        docStampFee: originationFees.docStampFee.toDecimal(),
+        accountManagementFee: originationFees.accountManagementFee.toDecimal(),
+        otherFees: originationFees.otherFees.toDecimal(),
+        notarialFee: originationFees.notarialFee.toDecimal(),
+        webFee: originationFees.webFee.toDecimal(),
+        insuranceFee: originationFees.insuranceFee.toDecimal(),
+        netProceeds: loanAccount.netProceeds.toDecimal(),
         principalBalance: balances.principalBalance.toDecimal(),
         principalPaid: balances.principalPaid.toDecimal(),
         principalDue: balances.principalDue.toDecimal(),

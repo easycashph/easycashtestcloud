@@ -5,7 +5,7 @@ import type { TransactionComponents } from '@modules/ledger/domain/valueObjects/
 import { LoanBalances } from './valueObjects/LoanBalances';
 import { OriginationFees, type OriginationFeesProps } from './valueObjects/OriginationFees';
 import type { AppliedFee } from './AppliedFee';
-import { InvalidStatusTransitionError } from './errors/LoanAccountDomainErrors';
+import { InvalidStatusTransitionError, LoanAccountNotEditableError } from './errors/LoanAccountDomainErrors';
 
 export type LoanAccountStatus =
   | 'PENDING_APPROVAL'
@@ -137,6 +137,27 @@ export interface CreateLoanAccountProps {
   /** 2026-07-11 (Create Loan Account) — omit for zero fees (e.g. programmatic/migration creation). */
   originationFees?: OriginationFeesProps;
   legacyId?: string;
+}
+
+/**
+ * 2026-07-16 (Edit Loan Account) — every field `update()` may change, all optional (a caller
+ * supplies only what the staff member actually edited). Deliberately the same set `create()`
+ * accepts, minus `loanCode`/`borrowerId`/`branchId`/`loanOfficerId`/`legacyId`/
+ * `sourceApplicationId` — identity/ownership/linkage fields, not origination terms, so out of
+ * scope for "I typed the wrong term/amount."
+ */
+export interface UpdateLoanAccountProps {
+  loanProductVersionId?: string;
+  principalAmount?: Money;
+  interestRate?: Percentage;
+  addOnInterestRate?: Percentage;
+  contractualInterestRate?: Percentage;
+  installmentCount?: number;
+  repaymentPeriodUnit?: RepaymentPeriodUnit;
+  gracePeriodDays?: number;
+  firstRepaymentDate?: Date;
+  anticipatedDisbursementDate?: Date;
+  originationFees?: OriginationFeesProps;
 }
 
 /**
@@ -577,6 +598,61 @@ export class LoanAccount {
     this.transitionTo('ACTIVE');
     this.props.closedAt = undefined;
     this.props.closedReason = undefined;
+  }
+
+  /**
+   * 2026-07-16 (Edit Loan Account, user request) — see `LoanAccountNotEditableError`'s own doc
+   * comment for why this is refused once the loan is past `PENDING_APPROVAL`. Every field is
+   * optional (partial update — only what the caller actually supplied changes); `netProceeds` is
+   * recomputed whenever either `principalAmount` or `originationFees` changes, mirroring
+   * `create()`'s own derivation, so it never silently goes stale relative to the edited values.
+   * `LoanProductVersion` range validation (loanAmountMin/Max, installmentCountMin/Max) is the
+   * caller's job (`UpdateLoanAccountUseCase`), exactly as it already is for `create()` — this
+   * entity has no product-version lookup of its own.
+   */
+  update(input: UpdateLoanAccountProps): void {
+    if (this.props.status !== 'PENDING_APPROVAL') {
+      throw new LoanAccountNotEditableError(this.props.status);
+    }
+
+    if (input.loanProductVersionId !== undefined) {
+      this.props.loanProductVersionId = input.loanProductVersionId;
+    }
+    if (input.principalAmount !== undefined) {
+      this.props.principalAmount = input.principalAmount;
+    }
+    if (input.interestRate !== undefined) {
+      this.props.interestRate = input.interestRate;
+    }
+    if (input.addOnInterestRate !== undefined) {
+      this.props.addOnInterestRate = input.addOnInterestRate;
+    }
+    if (input.contractualInterestRate !== undefined) {
+      this.props.contractualInterestRate = input.contractualInterestRate;
+    }
+    if (input.installmentCount !== undefined) {
+      this.props.installmentCount = input.installmentCount;
+    }
+    if (input.repaymentPeriodUnit !== undefined) {
+      this.props.repaymentPeriodUnit = input.repaymentPeriodUnit;
+    }
+    if (input.gracePeriodDays !== undefined) {
+      this.props.gracePeriodDays = input.gracePeriodDays;
+    }
+    if (input.firstRepaymentDate !== undefined) {
+      this.props.firstRepaymentDate = input.firstRepaymentDate;
+    }
+    if (input.anticipatedDisbursementDate !== undefined) {
+      this.props.anticipatedDisbursementDate = input.anticipatedDisbursementDate;
+    }
+    if (input.originationFees !== undefined) {
+      this.props.originationFees = OriginationFees.of(input.originationFees);
+    }
+    if (input.principalAmount !== undefined || input.originationFees !== undefined) {
+      this.props.netProceeds = this.props.principalAmount.subtract(this.props.originationFees.total());
+    }
+
+    this.props.updatedAt = new Date();
   }
 
   addAppliedFee(fee: AppliedFee): void {

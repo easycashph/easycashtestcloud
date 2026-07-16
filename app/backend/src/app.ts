@@ -42,6 +42,7 @@ import { ActivateLoanProductVersionUseCase } from '@modules/loan-product/applica
 import { PrismaLoanProductRepository } from '@modules/loan-product/infrastructure/PrismaLoanProductRepository';
 import { createLoanAccountRouter } from '@modules/loan-account/interface/http/loanAccountRouter';
 import { CreateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/CreateLoanAccountUseCase';
+import { UpdateLoanAccountUseCase } from '@modules/loan-account/application/use-cases/UpdateLoanAccountUseCase';
 import { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import { ListLoanAccountsUseCase } from '@modules/loan-account/application/use-cases/ListLoanAccountsUseCase';
 import { ListMaturedLoanAccountIdsUseCase } from '@modules/loan-account/application/use-cases/ListMaturedLoanAccountIdsUseCase';
@@ -360,6 +361,7 @@ export function createApp(): Express {
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
+      updateLoanAccountUseCase: new UpdateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
       listMaturedLoanAccountIdsUseCase: new ListMaturedLoanAccountIdsUseCase({ loanAccountRepository }),

@@ -3,7 +3,7 @@ import { LoanAccount } from '@modules/loan-account/domain/LoanAccount';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { AppliedFee } from '@modules/loan-account/domain/AppliedFee';
-import { InvalidStatusTransitionError } from '@modules/loan-account/domain/errors/LoanAccountDomainErrors';
+import { InvalidStatusTransitionError, LoanAccountNotEditableError } from '@modules/loan-account/domain/errors/LoanAccountDomainErrors';
 import { TransactionComponents } from '@modules/ledger/domain/valueObjects/TransactionComponents';
 
 function createLoanAccount() {
@@ -187,6 +187,85 @@ describe('LoanAccount', () => {
         version: loan.version,
       });
       expect(() => writtenOff.reopen()).toThrow(InvalidStatusTransitionError);
+    });
+  });
+
+  // 2026-07-16 (Edit Loan Account, user request): "may kailangan baguhin katulad ng term or
+  // amount, dapat pwede ko ito i-edit hangga't before ma-approve."
+  describe('update', () => {
+    function pendingLoan() {
+      return createLoanAccount();
+    }
+
+    it('changes only the supplied fields, leaving the rest untouched', () => {
+      const loan = pendingLoan();
+      loan.update({ principalAmount: Money.of('15000.00'), installmentCount: 6 });
+
+      expect(loan.principalAmount.equals(Money.of('15000.00'))).toBe(true);
+      expect(loan.installmentCount).toBe(6);
+      expect(loan.interestRate.equals(Percentage.of('2.5'))).toBe(true);
+    });
+
+    it('recomputes netProceeds when principalAmount changes', () => {
+      const loan = LoanAccount.create({
+        loanCode: 'LN-0001',
+        borrowerId: 'borrower-1',
+        loanProductVersionId: 'version-1',
+        branchId: 'branch-1',
+        principalAmount: Money.of('10000.00'),
+        interestRate: Percentage.of('2.5'),
+        installmentCount: 12,
+        firstRepaymentDate: new Date('2026-08-15'),
+        originationFees: {
+          processingFee: Money.of('500.00'),
+          advanceInterestFee: Money.ZERO,
+          outstandingBalancePayoff: Money.ZERO,
+          docStampFee: Money.ZERO,
+          accountManagementFee: Money.ZERO,
+          otherFees: Money.ZERO,
+          notarialFee: Money.ZERO,
+          webFee: Money.ZERO,
+          insuranceFee: Money.ZERO,
+        },
+      });
+      expect(loan.netProceeds.equals(Money.of('9500.00'))).toBe(true);
+
+      loan.update({ principalAmount: Money.of('20000.00') });
+      expect(loan.netProceeds.equals(Money.of('19500.00'))).toBe(true);
+    });
+
+    it('recomputes netProceeds when originationFees changes, holding principalAmount fixed', () => {
+      const loan = pendingLoan();
+      loan.update({
+        originationFees: {
+          processingFee: Money.of('1000.00'),
+          advanceInterestFee: Money.ZERO,
+          outstandingBalancePayoff: Money.ZERO,
+          docStampFee: Money.ZERO,
+          accountManagementFee: Money.ZERO,
+          otherFees: Money.ZERO,
+          notarialFee: Money.ZERO,
+          webFee: Money.ZERO,
+          insuranceFee: Money.ZERO,
+        },
+      });
+
+      expect(loan.netProceeds.equals(Money.of('9000.00'))).toBe(true);
+    });
+
+    it('throws LoanAccountNotEditableError once the loan is past PENDING_APPROVAL', () => {
+      const loan = pendingLoan();
+      loan.approve('officer-1');
+
+      expect(() => loan.update({ principalAmount: Money.of('20000.00') })).toThrow(LoanAccountNotEditableError);
+    });
+
+    it('sets updatedAt on a successful edit', () => {
+      const loan = pendingLoan();
+      const before = loan.updatedAt;
+      loan.update({ installmentCount: 6 });
+
+      expect(loan.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     });
   });
 

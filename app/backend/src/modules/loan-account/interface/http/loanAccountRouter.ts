@@ -4,7 +4,13 @@ import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { LoanAccountController, type LoanAccountControllerDeps } from './loanAccountController';
-import { createLoanAccountSchema, processPaymentSchema, rejectLoanSchema, reversePaymentSchema } from './loanAccountSchemas';
+import {
+  createLoanAccountSchema,
+  processPaymentSchema,
+  rejectLoanSchema,
+  reversePaymentSchema,
+  updateLoanAccountSchema,
+} from './loanAccountSchemas';
 
 /**
  * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination and
@@ -46,6 +52,15 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     requireRole(...ORIGINATION_ROLES),
     validateBody(createLoanAccountSchema),
     controller.create,
+  );
+  // 2026-07-16 (Edit Loan Account, user request): same tier as origination — the same real-world
+  // job function that created the loan account is who'd fix a typo'd term/amount on it.
+  router.patch(
+    '/loan-accounts/:id',
+    requireAuth,
+    requireRole(...ORIGINATION_ROLES),
+    validateBody(updateLoanAccountSchema),
+    controller.update,
   );
   router.get('/loan-accounts/:id', requireAuth, controller.get);
   router.get('/loan-accounts/:id/risk-assessment', requireAuth, controller.riskAssessment);

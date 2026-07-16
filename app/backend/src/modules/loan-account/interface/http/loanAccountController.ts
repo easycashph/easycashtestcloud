@@ -6,6 +6,7 @@ import { withIdempotency } from '@shared/http/idempotency';
 import { Money } from '@shared/domain/Money';
 import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotencyKeyStore';
 import type { CreateLoanAccountUseCase } from '../../application/use-cases/CreateLoanAccountUseCase';
+import type { UpdateLoanAccountUseCase } from '../../application/use-cases/UpdateLoanAccountUseCase';
 import type { GetLoanAccountUseCase } from '../../application/use-cases/GetLoanAccountUseCase';
 import type { ListLoanAccountsUseCase } from '../../application/use-cases/ListLoanAccountsUseCase';
 import type { ListMaturedLoanAccountIdsUseCase } from '../../application/use-cases/ListMaturedLoanAccountIdsUseCase';
@@ -20,11 +21,13 @@ import type {
   ProcessPaymentRequestBody,
   RejectLoanRequestBody,
   ReversePaymentRequestBody,
+  UpdateLoanAccountRequestBody,
 } from './loanAccountSchemas';
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 
 export interface LoanAccountControllerDeps {
   createLoanAccountUseCase: CreateLoanAccountUseCase;
+  updateLoanAccountUseCase: UpdateLoanAccountUseCase;
   getLoanAccountUseCase: GetLoanAccountUseCase;
   listLoanAccountsUseCase: ListLoanAccountsUseCase;
   listMaturedLoanAccountIdsUseCase: ListMaturedLoanAccountIdsUseCase;
@@ -50,6 +53,25 @@ export class LoanAccountController {
       const branchId = resolveWriteBranchId(scope, body.branchId);
       const loanAccount = await this.deps.createLoanAccountUseCase.execute({ ...body, branchId });
       res.status(201).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * 2026-07-16 (Edit Loan Account, user request): PATCH — H-1 branch check before mutating, same
+   * "fetch, check, mutate, re-fetch" shape as `approve`/`reject` above. `LoanAccount.update()`
+   * itself refuses the whole request once the loan is past PENDING_APPROVAL
+   * (`LoanAccountNotEditableError`), so no status check is duplicated here.
+   */
+  update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const body = req.body as UpdateLoanAccountRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const loanAccount = await this.deps.updateLoanAccountUseCase.execute(req.params.id as string, body);
+      res.status(200).json(presentLoanAccount(loanAccount));
     } catch (error) {
       next(error);
     }
