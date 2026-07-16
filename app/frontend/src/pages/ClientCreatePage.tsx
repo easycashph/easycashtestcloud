@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError } from '@/lib/apiClient';
@@ -56,21 +57,13 @@ export function ClientCreatePage() {
   const [email, setEmail] = React.useState('');
   const [facebookLink, setFacebookLink] = React.useState('');
 
-  const [presentHouseUnit, setPresentHouseUnit] = React.useState('');
-  const [presentStreet, setPresentStreet] = React.useState('');
-  const [presentBarangay, setPresentBarangay] = React.useState('');
-  const [presentCity, setPresentCity] = React.useState('');
-  const [presentProvince, setPresentProvince] = React.useState('');
+  const [presentAddress, setPresentAddress] = React.useState<AddressDraft>(emptyAddressDraft());
   const [presentOwnership, setPresentOwnership] = React.useState('');
   const [presentStayYears, setPresentStayYears] = React.useState('');
   const [presentStayMonths, setPresentStayMonths] = React.useState('');
 
   const [permanentSameAsPresent, setPermanentSameAsPresent] = React.useState(true);
-  const [permanentHouseUnit, setPermanentHouseUnit] = React.useState('');
-  const [permanentStreet, setPermanentStreet] = React.useState('');
-  const [permanentBarangay, setPermanentBarangay] = React.useState('');
-  const [permanentCity, setPermanentCity] = React.useState('');
-  const [permanentProvince, setPermanentProvince] = React.useState('');
+  const [permanentAddress, setPermanentAddress] = React.useState<AddressDraft>(emptyAddressDraft());
 
   const [employmentType, setEmploymentType] = React.useState('');
   const [employerName, setEmployerName] = React.useState('');
@@ -105,11 +98,12 @@ export function ClientCreatePage() {
       const addresses: NonNullable<CreateBorrowerRequest['addresses']> = [
         {
           addressType: 'PRESENT',
-          houseUnitNumber: presentHouseUnit || undefined,
-          street: presentStreet || undefined,
-          barangay: presentBarangay || undefined,
-          cityMunicipality: presentCity || undefined,
-          province: presentProvince || undefined,
+          houseUnitNumber: presentAddress.houseUnitNumber || undefined,
+          street: presentAddress.street || undefined,
+          barangay: presentAddress.barangay || undefined,
+          cityMunicipality: presentAddress.cityMunicipality || undefined,
+          province: presentAddress.province || undefined,
+          zipCode: presentAddress.zipCode || undefined,
           ownershipStatus: presentOwnership || undefined,
           lengthOfStayMonths:
             presentStayYears || presentStayMonths
@@ -122,11 +116,12 @@ export function ClientCreatePage() {
       } else {
         addresses.push({
           addressType: 'PERMANENT',
-          houseUnitNumber: permanentHouseUnit || undefined,
-          street: permanentStreet || undefined,
-          barangay: permanentBarangay || undefined,
-          cityMunicipality: permanentCity || undefined,
-          province: permanentProvince || undefined,
+          houseUnitNumber: permanentAddress.houseUnitNumber || undefined,
+          street: permanentAddress.street || undefined,
+          barangay: permanentAddress.barangay || undefined,
+          cityMunicipality: permanentAddress.cityMunicipality || undefined,
+          province: permanentAddress.province || undefined,
+          zipCode: permanentAddress.zipCode || undefined,
         });
       }
 
@@ -286,38 +281,26 @@ export function ClientCreatePage() {
         <CardHeader>
           <CardTitle className="text-base">Present Address</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="House/Unit #">
-            <Input value={presentHouseUnit} onChange={(e) => setPresentHouseUnit(e.target.value)} />
-          </Field>
-          <Field label="Street">
-            <Input value={presentStreet} onChange={(e) => setPresentStreet(e.target.value)} />
-          </Field>
-          <Field label="Barangay">
-            <Input value={presentBarangay} onChange={(e) => setPresentBarangay(e.target.value)} />
-          </Field>
-          <Field label="City/Municipality">
-            <Input value={presentCity} onChange={(e) => setPresentCity(e.target.value)} />
-          </Field>
-          <Field label="Province">
-            <Input value={presentProvince} onChange={(e) => setPresentProvince(e.target.value)} />
-          </Field>
-          <Field label="Ownership Status">
-            <Select value={presentOwnership} onValueChange={setPresentOwnership}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Owned">Owned</SelectItem>
-                <SelectItem value="Renting">Renting</SelectItem>
-                <SelectItem value="Living with Family">Living with Family</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Length of Stay (Years)">
-            <Input type="number" min="0" value={presentStayYears} onChange={(e) => setPresentStayYears(e.target.value)} />
-          </Field>
-          <Field label="Length of Stay (Months)">
-            <Input type="number" min="0" max="11" value={presentStayMonths} onChange={(e) => setPresentStayMonths(e.target.value)} />
-          </Field>
+        <CardContent className="space-y-4">
+          <PsgcAddressPicker value={presentAddress} onChange={(patch) => setPresentAddress((prev) => ({ ...prev, ...patch }))} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Ownership Status">
+              <Select value={presentOwnership} onValueChange={setPresentOwnership}>
+                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Owned">Owned</SelectItem>
+                  <SelectItem value="Renting">Renting</SelectItem>
+                  <SelectItem value="Living with Family">Living with Family</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Length of Stay (Years)">
+              <Input type="number" min="0" value={presentStayYears} onChange={(e) => setPresentStayYears(e.target.value)} />
+            </Field>
+            <Field label="Length of Stay (Months)">
+              <Input type="number" min="0" max="11" value={presentStayMonths} onChange={(e) => setPresentStayMonths(e.target.value)} />
+            </Field>
+          </div>
         </CardContent>
       </Card>
 
@@ -335,23 +318,9 @@ export function ClientCreatePage() {
             />
             Same as present address
           </label>
-          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 ${permanentSameAsPresent ? 'opacity-50' : ''}`}>
-            <Field label="House/Unit #">
-              <Input disabled={permanentSameAsPresent} value={permanentHouseUnit} onChange={(e) => setPermanentHouseUnit(e.target.value)} />
-            </Field>
-            <Field label="Street">
-              <Input disabled={permanentSameAsPresent} value={permanentStreet} onChange={(e) => setPermanentStreet(e.target.value)} />
-            </Field>
-            <Field label="Barangay">
-              <Input disabled={permanentSameAsPresent} value={permanentBarangay} onChange={(e) => setPermanentBarangay(e.target.value)} />
-            </Field>
-            <Field label="City/Municipality">
-              <Input disabled={permanentSameAsPresent} value={permanentCity} onChange={(e) => setPermanentCity(e.target.value)} />
-            </Field>
-            <Field label="Province">
-              <Input disabled={permanentSameAsPresent} value={permanentProvince} onChange={(e) => setPermanentProvince(e.target.value)} />
-            </Field>
-          </div>
+          {!permanentSameAsPresent && (
+            <PsgcAddressPicker value={permanentAddress} onChange={(patch) => setPermanentAddress((prev) => ({ ...prev, ...patch }))} />
+          )}
         </CardContent>
       </Card>
 
