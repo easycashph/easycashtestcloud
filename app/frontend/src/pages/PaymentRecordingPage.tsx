@@ -135,7 +135,7 @@ interface PaymentSuccessInfo {
 }
 
 export function PaymentRecordingPage() {
-  useLogPageView('Payment Recording');
+  useLogPageView('Record Payment');
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -373,7 +373,7 @@ export function PaymentRecordingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Payment Recording</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Record Payment</h2>
         <p className="text-sm text-muted-foreground">
           Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
           oldest installment first (ADR-009).
@@ -788,7 +788,7 @@ export function PaymentRecordingPage() {
         </Card>
       </div>
 
-      <RecentActivityPanel label="Payment Recording" />
+      <RecentActivityPanel label="Record Payment" />
 
       <Dialog open={confirmOpen} onOpenChange={(open) => !paymentMutation.isPending && setConfirmOpen(open)}>
         <DialogContent>

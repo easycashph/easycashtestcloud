@@ -47,10 +47,10 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Collection',
+    label: 'Payments',
     items: [
-      { to: '/payments', label: 'Payment Recording', icon: Wallet, end: false },
-      { to: '/reminders', label: 'Payment Reminders', icon: BellRing, end: false },
+      { to: '/payments', label: 'Record Payment', icon: Wallet, end: false },
+      { to: '/reminders', label: 'Due & Overdue', icon: BellRing, end: false },
     ],
   },
   {

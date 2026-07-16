@@ -119,7 +119,7 @@ const STATUS_BADGE: Record<PaymentReminderStatus, { variant: 'destructive' | 'wa
  * simulated reminder-send history like the earlier mock version.
  */
 export function PaymentRemindersPage() {
-  useLogPageView('Payment Reminders');
+  useLogPageView('Due & Overdue');
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<PaymentReminderStatus | 'ALL'>('ALL');
@@ -184,7 +184,7 @@ export function PaymentRemindersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Payment Reminders</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Due & Overdue</h2>
         <p className="text-sm text-muted-foreground">
           {reminders.length} active loan account{reminders.length === 1 ? '' : 's'} with an installment due or overdue (
           {overdueCount} overdue). Each row is the next unpaid installment for that loan. No SMS/email notification service is wired
@@ -370,7 +370,7 @@ export function PaymentRemindersPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="Payment Reminders" />
+      <RecentActivityPanel label="Due & Overdue" />
     </div>
   );
 }
