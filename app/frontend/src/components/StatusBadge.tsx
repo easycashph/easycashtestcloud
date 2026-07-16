@@ -3,7 +3,7 @@ import type { LoanAccountStatus, RepaymentInstallmentStatus } from '@/lib/loanAp
 
 const LOAN_STATUS_STYLE: Record<LoanAccountStatus, { label: string; variant: 'default' | 'secondary' | 'success' | 'warning' | 'destructive' | 'outline' }> = {
   PENDING_APPROVAL: { label: 'Pending Approval', variant: 'secondary' },
-  APPROVED: { label: 'Approved', variant: 'outline' },
+  APPROVED: { label: 'For Disbursement', variant: 'success' },
   ACTIVE: { label: 'Active', variant: 'success' },
   ACTIVE_IN_ARREARS: { label: 'In Arrears', variant: 'warning' },
   CLOSED: { label: 'Closed', variant: 'success' },

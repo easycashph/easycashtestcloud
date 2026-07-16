@@ -61,7 +61,7 @@ function getSortValue(loan: LoanRow, key: string): string | number | Date | null
 const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
-  { value: 'APPROVED', label: 'Approved' },
+  { value: 'APPROVED', label: 'For Disbursement' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'ACTIVE_IN_ARREARS', label: 'In Arrears' },
   { value: 'CLOSED', label: 'Closed' },
