@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, ChevronLeft, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -521,7 +522,7 @@ export function PaymentRecordingPage() {
                   <Label htmlFor="amount" className="flex items-center gap-1">
                     Payment amount <FieldTooltip text="Total peso amount the borrower is paying today." />
                   </Label>
-                  <Input id="amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                  <NumberInput id="amount" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 </div>
 
                 <div className="space-y-1.5">
