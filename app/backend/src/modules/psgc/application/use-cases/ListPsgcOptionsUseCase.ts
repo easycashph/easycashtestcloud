@@ -1,6 +1,6 @@
-import type { IPsgcRepository, PsgcCityOption, PsgcOption } from '../ports/IPsgcRepository';
+import type { IPsgcRepository, PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '../ports/IPsgcRepository';
 
-/** Single use case for all four PSGC lookup levels — each is a trivial passthrough, no business logic to separate. */
+/** Single use case for all PSGC lookups — each is a trivial passthrough, no business logic to separate. */
 export class ListPsgcOptionsUseCase {
   constructor(private readonly deps: { psgcRepository: IPsgcRepository }) {}
 
@@ -18,5 +18,9 @@ export class ListPsgcOptionsUseCase {
 
   listBarangays(cityMunicipalityCode: string): Promise<PsgcOption[]> {
     return this.deps.psgcRepository.listBarangays(cityMunicipalityCode);
+  }
+
+  resolveAddressCodes(names: { province?: string; cityMunicipality?: string; barangay?: string }): Promise<ResolvedAddressCodes> {
+    return this.deps.psgcRepository.resolveAddressCodes(names);
   }
 }

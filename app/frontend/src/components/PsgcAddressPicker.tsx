@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/apiClient';
-import type { PsgcCityOption, PsgcOption } from '@/lib/psgcApiTypes';
+import type { PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '@/lib/psgcApiTypes';
 import { toProperCase } from '@/lib/utils';
 
 export interface AddressDraft {
@@ -36,37 +36,62 @@ function usePsgcOptions<T extends PsgcOption = PsgcOption>(path: string, enabled
  *
  * The cascade is driven by PSGC *codes* internally (each level's children are queried by their
  * parent's code), but `value`/`onChange` only ever carry the resolved *names* - the shape
- * `Address`/`Borrower` already store on the wire. Because of that, this component can't pre-select
- * an existing text-only address (e.g. "CAVITE") back into its code-based dropdowns without a
- * reverse name->code lookup this API doesn't offer - the caller is expected to show the current
- * address as read-only context alongside this picker, which only ever produces a new selection.
+ * `Address`/`Borrower` already store on the wire. When `value` arrives already populated (e.g. an
+ * existing loan application's address being carried into "Create Client Profile"), a one-time
+ * reverse lookup (`GET /psgc/resolve-address`) resolves those names back to codes so the cascading
+ * dropdowns pre-select the existing address instead of starting blank - without this, staff could
+ * mistake a filled-in address for an empty one, and picking Region "to fill it in" would wipe the
+ * province/city/barangay that were already there (see `pickRegion` below).
  */
 export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; onChange: (patch: Partial<AddressDraft>) => void }) {
   const [regionCode, setRegionCode] = React.useState('');
   const [provinceCode, setProvinceCode] = React.useState('');
   const [cityCode, setCityCode] = React.useState('');
+  const [barangayCode, setBarangayCode] = React.useState('');
 
   const regionsQuery = usePsgcOptions('/psgc/regions', true);
   const provincesQuery = usePsgcOptions(`/psgc/provinces?regionCode=${regionCode}`, Boolean(regionCode));
   const citiesQuery = usePsgcOptions<PsgcCityOption>(`/psgc/cities?provinceCode=${provinceCode}`, Boolean(provinceCode));
   const barangaysQuery = usePsgcOptions(`/psgc/barangays?cityMunicipalityCode=${cityCode}`, Boolean(cityCode));
 
+  // One-time reverse lookup for an already-populated `value` - `enabled` turns itself off once
+  // `regionCode` is set (whether from this resolution or from the user's own picks), so this never
+  // fights a manual selection or refetches on every keystroke of the free-text fields below.
+  const resolveQuery = useQuery({
+    queryKey: ['psgc', 'resolve-address', value.province, value.cityMunicipality, value.barangay],
+    queryFn: () =>
+      apiClient.get<ResolvedAddressCodes>(
+        `/psgc/resolve-address?province=${encodeURIComponent(value.province)}&cityMunicipality=${encodeURIComponent(value.cityMunicipality)}&barangay=${encodeURIComponent(value.barangay)}`,
+      ),
+    enabled: Boolean(value.province) && !regionCode,
+  });
+  React.useEffect(() => {
+    if (!resolveQuery.data) return;
+    if (resolveQuery.data.regionCode) setRegionCode(resolveQuery.data.regionCode);
+    if (resolveQuery.data.provinceCode) setProvinceCode(resolveQuery.data.provinceCode);
+    if (resolveQuery.data.cityMunicipalityCode) setCityCode(resolveQuery.data.cityMunicipalityCode);
+    if (resolveQuery.data.barangayCode) setBarangayCode(resolveQuery.data.barangayCode);
+  }, [resolveQuery.data]);
+
   const pickRegion = (code: string) => {
     setRegionCode(code);
     setProvinceCode('');
     setCityCode('');
+    setBarangayCode('');
     onChange({ province: '', cityMunicipality: '', barangay: '' });
   };
 
   const pickProvince = (code: string) => {
     setProvinceCode(code);
     setCityCode('');
+    setBarangayCode('');
     const name = toProperCase(provincesQuery.data?.find((p) => p.code === code)?.name ?? '');
     onChange({ province: name, cityMunicipality: '', barangay: '' });
   };
 
   const pickCity = (code: string) => {
     setCityCode(code);
+    setBarangayCode('');
     const city = citiesQuery.data?.find((c) => c.code === code);
     const name = toProperCase(city?.name ?? '');
     // Best-effort suggestion (see scripts/import-ph-zip-codes.ts) - still a plain editable Input
@@ -75,6 +100,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
   };
 
   const pickBarangay = (code: string) => {
+    setBarangayCode(code);
     const name = toProperCase(barangaysQuery.data?.find((b) => b.code === code)?.name ?? '');
     onChange({ barangay: name });
   };
@@ -129,7 +155,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Barangay</Label>
-          <Select onValueChange={pickBarangay} disabled={!cityCode}>
+          <Select value={barangayCode} onValueChange={pickBarangay} disabled={!cityCode}>
             <SelectTrigger>
               <SelectValue placeholder={!cityCode ? 'Select a city/municipality first' : barangaysQuery.isLoading ? 'Loading…' : 'Select barangay'} />
             </SelectTrigger>

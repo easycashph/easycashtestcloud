@@ -52,4 +52,15 @@ export class PsgcController {
       next(error);
     }
   };
+
+  resolveAddressCodes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const province = typeof req.query.province === 'string' ? req.query.province : undefined;
+      const cityMunicipality = typeof req.query.cityMunicipality === 'string' ? req.query.cityMunicipality : undefined;
+      const barangay = typeof req.query.barangay === 'string' ? req.query.barangay : undefined;
+      res.status(200).json(await this.deps.listPsgcOptionsUseCase.resolveAddressCodes({ province, cityMunicipality, barangay }));
+    } catch (error) {
+      next(error);
+    }
+  };
 }
