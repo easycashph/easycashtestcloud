@@ -436,6 +436,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     void queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
     void queryClient.invalidateQueries({ queryKey: ['repayment-schedule', loanId] });
     void queryClient.invalidateQueries({ queryKey: ['loan-transactions', loanId] });
+    void queryClient.invalidateQueries({ queryKey: ['installment-adjustments', loanId] });
   };
   // 2026-07-11 (Reverse Payment feature) — these three ReversePaymentUseCase rejections are also
   // HTTP 409 (see LedgerDomainErrors.ts), but they're permanent, expected business rules, not a
