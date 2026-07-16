@@ -730,7 +730,7 @@ export function LoanApplicationForm({
               <SelectContent>
                 {LOAN_TERM_MONTHS_OPTIONS.map((months) => (
                   <SelectItem key={months} value={String(months)}>
-                    {months} {months === 1 ? 'month' : 'months'}
+                    {months}
                   </SelectItem>
                 ))}
               </SelectContent>
