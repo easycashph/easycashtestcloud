@@ -99,9 +99,9 @@ const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/
 
 /** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate - only the 3 active categories are offered today. */
 const LOAN_TYPE_OPTIONS = [
-  { paperLabel: 'Salary', category: 'Salary Loan' },
-  { paperLabel: 'Seaman', category: 'Seafarer Loan' },
-  { paperLabel: 'Business/Corporate', category: 'Business Loan' },
+  { category: 'Business Loan' },
+  { category: 'Salary Loan' },
+  { category: 'Seafarer Loan' },
 ];
 
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Others'];
@@ -711,7 +711,7 @@ export function LoanApplicationForm({
               <SelectContent>
                 {LOAN_TYPE_OPTIONS.map((o) => (
                   <SelectItem key={o.category} value={o.category}>
-                    {o.paperLabel} ({o.category})
+                    {o.category}
                   </SelectItem>
                 ))}
               </SelectContent>

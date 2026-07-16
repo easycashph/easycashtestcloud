@@ -474,7 +474,7 @@ function CreateClientProfileDialog({
  * new applicants going forward - surfaced with a badge, not hidden, so staff can tell the
  * difference at a glance.
  */
-const LOAN_TYPE_OPTIONS = ['Salary Loan', 'Seafarer Loan', 'Business Loan'] as const;
+const LOAN_TYPE_OPTIONS = ['Business Loan', 'Salary Loan', 'Seafarer Loan'] as const;
 type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 
 /** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT - kept local since this file doesn't
