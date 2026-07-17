@@ -28,6 +28,9 @@ export interface LoanTransactionProps {
   comment?: string;
   orNumber?: string;
   arNumber?: string;
+  /** 2026-07-17 (Reports) — the payment channel/mode selected on Record Payment, one of
+   * `ACTIVE_PAYMENT_METHODS`' `code` values. See schema.prisma's own doc comment. */
+  paymentMethod?: string;
   reversesTransactionId?: string;
   legacyId?: string;
   createdAt: Date;
@@ -50,6 +53,7 @@ export interface CreateLoanTransactionProps {
   comment?: string;
   orNumber?: string;
   arNumber?: string;
+  paymentMethod?: string;
   reversesTransactionId?: string;
   legacyId?: string;
 }
@@ -89,6 +93,7 @@ export class LoanTransaction {
       comment: input.comment,
       orNumber: input.orNumber,
       arNumber: input.arNumber,
+      paymentMethod: input.paymentMethod,
       reversesTransactionId: input.reversesTransactionId,
       legacyId: input.legacyId,
       createdAt: new Date(),
@@ -145,6 +150,10 @@ export class LoanTransaction {
 
   get arNumber(): string | undefined {
     return this.props.arNumber;
+  }
+
+  get paymentMethod(): string | undefined {
+    return this.props.paymentMethod;
   }
 
   get reversesTransactionId(): string | undefined {

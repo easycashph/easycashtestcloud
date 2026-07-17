@@ -241,6 +241,7 @@ export class LoanAccountController {
           manualAllocations,
           body.orNumber,
           body.arNumber,
+          body.paymentMethod,
         );
         return {
           statusCode: 200,

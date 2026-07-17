@@ -6,8 +6,26 @@ import type { GetLoanOriginationReportUseCase } from '../../application/use-case
 import type { GetCollectionReportUseCase } from '../../application/use-cases/GetCollectionReportUseCase';
 import type { ListReportTransactionsUseCase } from '../../application/use-cases/ListReportTransactionsUseCase';
 import type { GetLoanReleasesReportUseCase } from '../../application/use-cases/GetLoanReleasesReportUseCase';
+import type { GetAgingReportUseCase } from '../../application/use-cases/GetAgingReportUseCase';
+import type { GetEndingBalanceReportUseCase } from '../../application/use-cases/GetEndingBalanceReportUseCase';
+import type { GetAccountsWithPastDueReportUseCase } from '../../application/use-cases/GetAccountsWithPastDueReportUseCase';
+import type { GetCollectionHistoryReportUseCase } from '../../application/use-cases/GetCollectionHistoryReportUseCase';
+import type { GetExpectedCollectionReportUseCase } from '../../application/use-cases/GetExpectedCollectionReportUseCase';
+import type { GetFirstAmortizationReportUseCase } from '../../application/use-cases/GetFirstAmortizationReportUseCase';
+import type { GetDailyCollectionReportUseCase } from '../../application/use-cases/GetDailyCollectionReportUseCase';
+import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
 import type { ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
+import {
+  writeAccountsWithPastDueReportXlsx,
+  writeAgingReportXlsx,
+  writeCollectionHistoryReportXlsx,
+  writeDailyCollectionReportXlsx,
+  writeEndingBalanceReportXlsx,
+  writeExpectedCollectionReportXlsx,
+  writeFirstAmortizationReportXlsx,
+  writeFullyPaidAccountsReportXlsx,
+} from '../../infrastructure/reportWriters';
 import { presentTransactionReportRow } from './presenters/ReportPresenter';
 
 export interface ReportingControllerDeps {
@@ -16,6 +34,14 @@ export interface ReportingControllerDeps {
   listReportTransactionsUseCase: ListReportTransactionsUseCase;
   getLoanReleasesReportUseCase: GetLoanReleasesReportUseCase;
   loanReleasesReportWriter: ExcelJsLoanReleasesReportWriter;
+  getAgingReportUseCase: GetAgingReportUseCase;
+  getEndingBalanceReportUseCase: GetEndingBalanceReportUseCase;
+  getAccountsWithPastDueReportUseCase: GetAccountsWithPastDueReportUseCase;
+  getCollectionHistoryReportUseCase: GetCollectionHistoryReportUseCase;
+  getExpectedCollectionReportUseCase: GetExpectedCollectionReportUseCase;
+  getFirstAmortizationReportUseCase: GetFirstAmortizationReportUseCase;
+  getDailyCollectionReportUseCase: GetDailyCollectionReportUseCase;
+  getFullyPaidAccountsReportUseCase: GetFullyPaidAccountsReportUseCase;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -97,6 +123,118 @@ export class ReportingController {
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Monthly Loan Releases.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  agingXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const rows = await this.deps.getAgingReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const buffer = await writeAgingReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Aging Report.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  endingBalanceXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const rows = await this.deps.getEndingBalanceReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const buffer = await writeEndingBalanceReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Detailed Ending Current Balance.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  accountsWithPastDueXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const rows = await this.deps.getAccountsWithPastDueReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const buffer = await writeAccountsWithPastDueReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Accounts with Past Due.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  collectionHistoryXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getCollectionHistoryReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const buffer = await writeCollectionHistoryReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Collection.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  expectedCollectionXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const buffer = await writeExpectedCollectionReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Expected Collection.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  firstAmortizationXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getFirstAmortizationReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const buffer = await writeFirstAmortizationReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="First Amortization.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  dailyCollectionXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const buffer = await writeDailyCollectionReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Daily Collection Report.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  fullyPaidXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const rows = await this.deps.getFullyPaidAccountsReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const buffer = await writeFullyPaidAccountsReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Fully Paid Accounts.xlsx"');
       res.status(200).send(buffer);
     } catch (error) {
       next(error);

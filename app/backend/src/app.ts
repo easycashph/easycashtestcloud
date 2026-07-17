@@ -135,6 +135,14 @@ import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
 import { ListReportTransactionsUseCase } from '@modules/reporting/application/use-cases/ListReportTransactionsUseCase';
 import { GetLoanReleasesReportUseCase } from '@modules/reporting/application/use-cases/GetLoanReleasesReportUseCase';
+import { GetAgingReportUseCase } from '@modules/reporting/application/use-cases/GetAgingReportUseCase';
+import { GetEndingBalanceReportUseCase } from '@modules/reporting/application/use-cases/GetEndingBalanceReportUseCase';
+import { GetAccountsWithPastDueReportUseCase } from '@modules/reporting/application/use-cases/GetAccountsWithPastDueReportUseCase';
+import { GetCollectionHistoryReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionHistoryReportUseCase';
+import { GetExpectedCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetExpectedCollectionReportUseCase';
+import { GetFirstAmortizationReportUseCase } from '@modules/reporting/application/use-cases/GetFirstAmortizationReportUseCase';
+import { GetDailyCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetDailyCollectionReportUseCase';
+import { GetFullyPaidAccountsReportUseCase } from '@modules/reporting/application/use-cases/GetFullyPaidAccountsReportUseCase';
 import { PrismaReportingRepository } from '@modules/reporting/infrastructure/PrismaReportingRepository';
 import { ExcelJsLoanReleasesReportWriter } from '@modules/reporting/infrastructure/ExcelJsLoanReleasesReportWriter';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
@@ -641,6 +649,14 @@ export function createApp(): Express {
       listReportTransactionsUseCase: new ListReportTransactionsUseCase({ reportingRepository }),
       getLoanReleasesReportUseCase: new GetLoanReleasesReportUseCase({ reportingRepository }),
       loanReleasesReportWriter: new ExcelJsLoanReleasesReportWriter(),
+      getAgingReportUseCase: new GetAgingReportUseCase({ reportingRepository }),
+      getEndingBalanceReportUseCase: new GetEndingBalanceReportUseCase({ reportingRepository }),
+      getAccountsWithPastDueReportUseCase: new GetAccountsWithPastDueReportUseCase({ reportingRepository }),
+      getCollectionHistoryReportUseCase: new GetCollectionHistoryReportUseCase({ reportingRepository }),
+      getExpectedCollectionReportUseCase: new GetExpectedCollectionReportUseCase({ reportingRepository }),
+      getFirstAmortizationReportUseCase: new GetFirstAmortizationReportUseCase({ reportingRepository }),
+      getDailyCollectionReportUseCase: new GetDailyCollectionReportUseCase({ reportingRepository }),
+      getFullyPaidAccountsReportUseCase: new GetFullyPaidAccountsReportUseCase({ reportingRepository }),
     },
     tokenService,
   );

@@ -105,6 +105,8 @@ export const processPaymentSchema = z.object({
   orNumber: z.string().min(1).optional(),
   /** Acknowledgment Receipt number — optional; not every payment channel issues one. */
   arNumber: z.string().min(1).optional(),
+  /** 2026-07-17 (Reports): Mode of Payment, one of ACTIVE_PAYMENT_METHODS' `code` values. */
+  paymentMethod: z.string().min(1).optional(),
 });
 
 export type ProcessPaymentRequestBody = z.infer<typeof processPaymentSchema>;

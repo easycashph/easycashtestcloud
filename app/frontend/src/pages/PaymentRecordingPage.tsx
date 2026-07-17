@@ -348,7 +348,13 @@ export function PaymentRecordingForm({
   const paymentMutation = useMutation({
     mutationFn: async () => {
       if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
-      const base = { paymentAmount: amount, paidAt, orNumber: orNumber.trim() || undefined, arNumber: arNumber.trim() || undefined };
+      const base = {
+        paymentAmount: amount,
+        paidAt,
+        orNumber: orNumber.trim() || undefined,
+        arNumber: arNumber.trim() || undefined,
+        paymentMethod,
+      };
       const body =
         allocationMode === 'MANUAL'
           ? {

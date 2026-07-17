@@ -13,6 +13,14 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/collections', requireAuth, controller.collections);
   router.get('/reports/transactions', requireAuth, controller.transactions);
   router.get('/reports/loan-releases.xlsx', requireAuth, controller.loanReleasesXlsx);
+  router.get('/reports/aging.xlsx', requireAuth, controller.agingXlsx);
+  router.get('/reports/ending-balance.xlsx', requireAuth, controller.endingBalanceXlsx);
+  router.get('/reports/accounts-past-due.xlsx', requireAuth, controller.accountsWithPastDueXlsx);
+  router.get('/reports/collection-history.xlsx', requireAuth, controller.collectionHistoryXlsx);
+  router.get('/reports/expected-collection.xlsx', requireAuth, controller.expectedCollectionXlsx);
+  router.get('/reports/first-amortization.xlsx', requireAuth, controller.firstAmortizationXlsx);
+  router.get('/reports/daily-collection.xlsx', requireAuth, controller.dailyCollectionXlsx);
+  router.get('/reports/fully-paid.xlsx', requireAuth, controller.fullyPaidXlsx);
 
   return router;
 }

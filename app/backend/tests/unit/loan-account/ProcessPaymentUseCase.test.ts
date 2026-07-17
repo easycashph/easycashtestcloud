@@ -291,6 +291,21 @@ describe('ProcessPaymentUseCase', () => {
       expect(transaction.amount.equals(Money.of('1150.00'))).toBe(true);
       expect(transaction.amount.equals(Money.of('1300.00'))).toBe(false);
     });
+
+    it('records the paymentMethod (Reports: Daily Collection Report "Channel" column) on the REPAYMENT transaction', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('2000.00', '300.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '1000.00', interest: '150.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await useCase.execute('loan-1', Money.of('1150.00'), 'officer-1', undefined, undefined, undefined, undefined, 'GCASH');
+
+      const transaction = deps.loanTransactionRepository.create.mock.calls[0]?.[0];
+      expect(transaction.paymentMethod).toBe('GCASH');
+    });
   });
 
   describe('manual per-installment allocation (2026-07-10, Payment Recording "Manual" tab)', () => {
