@@ -356,6 +356,8 @@ export interface LoanTransaction {
   comment: string | null;
   orNumber: string | null;
   arNumber: string | null;
+  /** 2026-07-17 (Reports): Mode of Payment selected on Record Payment (ACTIVE_PAYMENT_METHODS' `code`). */
+  paymentMethod: string | null;
   /** 2026-07-11 (Reverse Payment feature): set on a REVERSAL transaction, pointing at the REPAYMENT it corrects — used to tell whether a given transaction has already been reversed (see LoanDetailPage's payments tab). */
   reversesTransactionId: string | null;
 }

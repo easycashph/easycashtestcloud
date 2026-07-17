@@ -18,6 +18,7 @@ export function presentLoanTransaction(transaction: LoanTransaction) {
     comment: transaction.comment ?? null,
     orNumber: transaction.orNumber ?? null,
     arNumber: transaction.arNumber ?? null,
+    paymentMethod: transaction.paymentMethod ?? null,
     reversesTransactionId: transaction.reversesTransactionId ?? null,
     legacyId: transaction.legacyId ?? null,
     createdAt: transaction.createdAt.toISOString(),

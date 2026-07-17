@@ -941,6 +941,12 @@ model LoanTransaction {
   /// Acknowledgment Receipt number — optional; not every payment channel
   /// issues one.
   arNumber String?
+  /// 2026-07-17 (Reports): the "Mode of Payment" selected on Record Payment (GCash/Cash/Bank
+  /// Transfer/PDC/Auto Debit — see `ACTIVE_PAYMENT_METHODS` in frontend `staticConfig.ts`), one
+  /// of the stored raw `code` values. Previously captured in the UI but silently discarded -
+  /// needed for the Daily Collection Report's "Channel" column. Nullable: historical/migrated
+  /// transactions and non-REPAYMENT types have no channel.
+  paymentMethod String?
 
   /// Present on a transaction that IS a reversal — points to the original
   /// transaction it corrects (TXN-1).

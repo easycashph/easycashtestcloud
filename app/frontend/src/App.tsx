@@ -20,6 +20,14 @@ import { LoanReportPage } from '@/pages/LoanReportPage';
 import { CollectionReportPage } from '@/pages/CollectionReportPage';
 import { TransactionReportPage } from '@/pages/TransactionReportPage';
 import { LoanReleasesReportPage } from '@/pages/LoanReleasesReportPage';
+import { AgingReportPage } from '@/pages/AgingReportPage';
+import { EndingBalanceReportPage } from '@/pages/EndingBalanceReportPage';
+import { AccountsWithPastDueReportPage } from '@/pages/AccountsWithPastDueReportPage';
+import { CollectionHistoryReportPage } from '@/pages/CollectionHistoryReportPage';
+import { ExpectedCollectionReportPage } from '@/pages/ExpectedCollectionReportPage';
+import { FirstAmortizationReportPage } from '@/pages/FirstAmortizationReportPage';
+import { DailyCollectionReportPage } from '@/pages/DailyCollectionReportPage';
+import { FullyPaidAccountsReportPage } from '@/pages/FullyPaidAccountsReportPage';
 import { ReportsHubPage } from '@/pages/ReportsHubPage';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
@@ -80,6 +88,14 @@ export default function App() {
         <Route path="reports/collections" element={<CollectionReportPage />} />
         <Route path="reports/transactions" element={<TransactionReportPage />} />
         <Route path="reports/loan-releases" element={<LoanReleasesReportPage />} />
+        <Route path="reports/aging" element={<AgingReportPage />} />
+        <Route path="reports/ending-balance" element={<EndingBalanceReportPage />} />
+        <Route path="reports/accounts-past-due" element={<AccountsWithPastDueReportPage />} />
+        <Route path="reports/collection-history" element={<CollectionHistoryReportPage />} />
+        <Route path="reports/expected-collection" element={<ExpectedCollectionReportPage />} />
+        <Route path="reports/first-amortization" element={<FirstAmortizationReportPage />} />
+        <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
+        <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
         <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<MemberListPage />} />
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />

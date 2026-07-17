@@ -83,9 +83,155 @@ export interface LoanReleaseReportRow {
   totalNetAmount: string;
 }
 
+/**
+ * 2026-07-17: the remaining 8 legacy reports (`docs/SESSION_LOG_2026-07-15.md`'s Report Generation
+ * scoping section), header layouts verified directly against the real legacy `.xlsx` samples
+ * (`C:\Users\EASYCASH\Downloads\Reports\`). Four are "as-of-today" snapshots (no date filter,
+ * confirmed with the user — matches the legacy files having no date-range columns): Aging,
+ * Detailed Ending Current Balance, Accounts with Past Due, Fully Paid Accounts. The other four
+ * (Collection, Expected Collection, First Amortization, Daily Collection) filter like every other
+ * report in this module.
+ */
+export interface AgingReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  state: string;
+  maturityDate: Date | null;
+  current: string;
+  days1to30: string;
+  days31to60: string;
+  days61to90: string;
+  days91to120: string;
+  days121to150: string;
+  days150Plus: string;
+  total: string;
+}
+
+export interface EndingBalanceReportRow {
+  clientName: string;
+  product: string;
+  loanAccountId: string;
+  loanAmount: string;
+  principalBalance: string;
+  interestBalance: string;
+  feesBalance: string;
+  totalObligation: string;
+  maturityDate: Date | null;
+  /** "N Month/s" - `installmentCount` + `repaymentPeriodUnit`, matching the legacy sample's text format exactly. */
+  termRate: string;
+  interestRate: string;
+  accountState: string;
+}
+
+export interface AccountsWithPastDueReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  /** Oldest unpaid installment's due date. */
+  dueDate: Date;
+  maturityDate: Date | null;
+  lastPaidDate: Date | null;
+  currentAmountDue: string;
+  pastAmountDue: string;
+  daysLate: number;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  countOfPaidDue: number;
+}
+
+export interface CollectionHistoryReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  dueDate: Date;
+  maturityDate: Date | null;
+  lastPaidDate: Date | null;
+  amountDue: string;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  repaymentCount: number;
+  installmentNumber: number;
+}
+
+export interface ExpectedCollectionReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  mobileNumber: string;
+  accountState: string;
+  dueDate: Date;
+  maturityDate: Date | null;
+  lastPaidDate: Date | null;
+  principalDue: string;
+  interestDue: string;
+  principalPaid: string;
+  interestPaid: string;
+  monthDue: string;
+  pastDueAmount: string;
+  daysLate: number;
+  repayment: string;
+  state: string;
+}
+
+export interface FirstAmortizationReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  firstAmortizationDate: Date;
+  principalDue: string;
+  interestDue: string;
+  feesDue: string;
+  penaltyDue: string;
+  obligation: string;
+  payment: string;
+  lastDatePaid: Date | null;
+  repaymentState: string;
+}
+
+export interface DailyCollectionReportRow {
+  fullName: string;
+  productId: string;
+  accountId: string;
+  totalBalance: string;
+  amount: string;
+  principalAmount: string;
+  interestAmount: string;
+  feesAmount: string;
+  penaltyAmount: string;
+  expectedMaturityDate: Date | null;
+  valueDate: Date;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
+  type: string;
+}
+
+export interface FullyPaidAccountsReportRow {
+  clientName: string;
+  product: string;
+  productId: string;
+  accountId: string;
+  loanAmount: string;
+  maturityDate: Date | null;
+  fullyPaidDate: Date | null;
+}
+
 export interface IReportingRepository {
   getLoanOriginationReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<OriginationReportRow[]>;
   getCollectionReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<CollectionReportRow[]>;
   listTransactions(options: ListReportTransactionsOptions): Promise<TransactionReportRow[]>;
   getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]>;
+  getAgingReport(filter: { branchId?: string }): Promise<AgingReportRow[]>;
+  getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]>;
+  getAccountsWithPastDueReport(filter: { branchId?: string }): Promise<AccountsWithPastDueReportRow[]>;
+  getCollectionHistoryReport(filter: DateRangeFilter & { branchId?: string }): Promise<CollectionHistoryReportRow[]>;
+  getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
+  getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
+  getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<DailyCollectionReportRow[]>;
+  getFullyPaidAccountsReport(filter: { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
 }

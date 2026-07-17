@@ -241,6 +241,7 @@ export class ProcessPaymentUseCase {
     manualAllocations?: readonly ManualAllocationInput[],
     orNumber?: string,
     arNumber?: string,
+    paymentMethod?: string,
   ): Promise<ProcessPaymentResult> {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) {
@@ -323,6 +324,7 @@ export class ProcessPaymentUseCase {
       entryDate: paidAt,
       orNumber,
       arNumber,
+      paymentMethod,
     });
 
     // 2026-07-11 (Reverse Payment feature): one PaymentAllocation row per installment this
