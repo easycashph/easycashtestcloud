@@ -2,6 +2,7 @@ import * as React from 'react';
 import { apiClient, ApiError, setAccessToken, setOnSessionExpired } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
+import { useDashboardLayout } from '@/components/dashboard-layout-provider';
 import type { LmsRole } from './staticConfig';
 import { LoginPage } from '@/pages/LoginPage';
 
@@ -78,6 +79,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = React.useState<AuthStatus>('loading');
   const [user, setUser] = React.useState<AuthenticatedUserView | null>(null);
   const { loadPreferenceFor } = useTheme();
+  const { loadPreferenceFor: loadDashboardLayoutFor } = useDashboardLayout();
   // A manual login() can resolve before the mount-time silent refresh below does (e.g. the
   // refresh is slow, rate-limited, or the browser session predates a stale refresh token). Without
   // this guard, the refresh's catch block would still fire afterwards and stomp the just-set
@@ -95,11 +97,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         if (cancelled || loggedInRef.current) return;
         setUser(me);
         loadPreferenceFor(me.id);
+        loadDashboardLayoutFor(me.id);
         setStatus('authenticated');
       } catch {
         if (cancelled || loggedInRef.current) return;
         setAccessToken(null);
         loadPreferenceFor(null);
+        loadDashboardLayoutFor(null);
         setStatus('unauthenticated');
       }
     })();
@@ -117,9 +121,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(result.accessToken);
       setUser(result.user);
       loadPreferenceFor(result.user.id);
+      loadDashboardLayoutFor(result.user.id);
       setStatus('authenticated');
     },
-    [loadPreferenceFor],
+    [loadPreferenceFor, loadDashboardLayoutFor],
   );
 
   const refreshCurrentUser = React.useCallback(async () => {
@@ -137,8 +142,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     setUser(null);
     loadPreferenceFor(null);
+    loadDashboardLayoutFor(null);
     setStatus('unauthenticated');
-  }, [loadPreferenceFor]);
+  }, [loadPreferenceFor, loadDashboardLayoutFor]);
 
   // Without this, a session that goes bad mid-use (refresh token expired, or revoked via the
   // backend's rotation-reuse detection) left every page silently 401-ing forever with no way to
@@ -149,10 +155,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(null);
       setUser(null);
       loadPreferenceFor(null);
+      loadDashboardLayoutFor(null);
       setStatus('unauthenticated');
     });
     return () => setOnSessionExpired(null);
-  }, [loadPreferenceFor]);
+  }, [loadPreferenceFor, loadDashboardLayoutFor]);
 
   if (status === 'loading') {
     return (

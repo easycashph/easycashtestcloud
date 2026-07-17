@@ -155,4 +155,16 @@ export class PrismaUserRepository implements IUserRepository {
     });
     return count > 0;
   }
+
+  async findByRolesAndBranch(roleNames: string[], branchId: string): Promise<UserRecord[]> {
+    const rows = await prisma.user.findMany({
+      where: {
+        status: 'ACTIVE',
+        branchId,
+        roles: { some: { role: { name: { in: roleNames } } } },
+      },
+      include: USER_WITH_ROLES_INCLUDE,
+    });
+    return rows.map(toUserRecord);
+  }
 }

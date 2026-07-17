@@ -1,6 +1,7 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 
@@ -8,6 +9,7 @@ export interface ApproveLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   auditLogger: IAuditLogger;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 export class ApproveLoanApplicationUseCase {
@@ -38,6 +40,18 @@ export class ApproveLoanApplicationUseCase {
         profileId: application.id,
         userId: reviewedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated(previousStatus, 'APPROVED', decisionNote),
+      });
+    }
+
+    // Notification Center (2026-07-17): tell whoever encoded this application that it was decided.
+    if (this.deps.notificationService && application.encodedByUserId && application.encodedByUserId !== reviewedByUserId) {
+      await this.deps.notificationService.notifyUser({
+        userId: application.encodedByUserId,
+        branchId: application.branchId,
+        type: 'APPLICATION_DECIDED',
+        title: `Approved: ${application.applicantName}`,
+        entityType: 'LoanApplication',
+        entityId: application.id,
       });
     }
 

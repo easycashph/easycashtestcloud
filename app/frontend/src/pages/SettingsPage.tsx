@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, Globe, KeyRound, Moon, Palette, Sun, UserRound } from 'lucide-react';
+import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,11 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
-import { ACCENT_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
+import { ACCENT_OPTIONS, FONT_SIZE_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
+import { DASHBOARD_CARD_LABELS, useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
+import { LANDING_PAGE_OPTIONS, readLandingPage, writeLandingPage } from '@/lib/landingPagePreference';
+import { NOTIFICATION_TYPE_OPTIONS, readMutedTypes, writeMutedTypes } from '@/lib/notificationPreference';
+import type { NotificationType } from '@/lib/notificationApiTypes';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
@@ -27,7 +31,7 @@ import { cn } from '@/lib/utils';
  * `MIN_LENGTH` so the two don't silently drift. */
 const PASSWORD_MIN_LENGTH = 12;
 
-type SettingsTab = 'profile' | 'security' | 'appearance' | 'language';
+type SettingsTab = 'profile' | 'security' | 'appearance' | 'notifications' | 'language';
 
 /**
  * Frontend↔Backend Wiring Pilot, Stage 0c, self-service Profile/Password wired to real endpoints
@@ -49,10 +53,11 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="profile">{t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="security">{t('settings.tab.security')}</TabsTrigger>
           <TabsTrigger value="appearance">{t('settings.tab.appearance')}</TabsTrigger>
+          <TabsTrigger value="notifications">{t('settings.tab.notifications')}</TabsTrigger>
           <TabsTrigger value="language">{t('settings.tab.language')}</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -60,6 +65,7 @@ export function SettingsPage() {
       {tab === 'profile' && <UserProfileTab />}
       {tab === 'security' && <SecurityTab />}
       {tab === 'appearance' && <AppearanceTab />}
+      {tab === 'notifications' && <NotificationsTab />}
       {tab === 'language' && <LanguageTab />}
 
       <RecentActivityPanel label="Settings" />
@@ -312,7 +318,14 @@ function SecurityTab() {
 }
 
 function AppearanceTab() {
-  const { theme, toggleTheme, accent, setAccent } = useTheme();
+  const { theme, toggleTheme, accent, setAccent, customColor, setCustomColor, fontSize, setFontSize } = useTheme();
+  const { currentAccount } = useRole();
+  const [landingPage, setLandingPageState] = React.useState(() => readLandingPage(currentAccount.id));
+
+  const applyLandingPage = (value: (typeof LANDING_PAGE_OPTIONS)[number]['value']) => {
+    setLandingPageState(value);
+    writeLandingPage(currentAccount.id, value);
+  };
 
   const handleToggle = () => {
     toggleTheme();
@@ -374,9 +387,234 @@ function AppearanceTab() {
                 <span className="text-xs font-medium">{option.label}</span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => applyAccent('custom')}
+              className={cn(
+                'flex flex-col items-center gap-2 rounded-md border p-3 text-center transition-colors hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring',
+                accent === 'custom' && 'border-primary ring-1 ring-primary',
+              )}
+              aria-pressed={accent === 'custom'}
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-full border" style={{ background: customColor }}>
+                {accent === 'custom' && <Check className="h-5 w-5 text-white" />}
+              </span>
+              <span className="text-xs font-medium">Custom</span>
+            </button>
+          </div>
+          {accent === 'custom' && (
+            <div className="mt-4 flex items-center gap-3 rounded-md border p-3">
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => setCustomColor(e.target.value)}
+                className="h-9 w-9 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+                aria-label="Pick a custom accent color"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Pick your color</p>
+                <p className="truncate text-xs text-muted-foreground">{customColor}</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <Type className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Text Size</CardTitle>
+            <CardDescription>
+              Scales text and spacing across the whole app - useful if the default is too small or too large for you. Applies only to
+              your account.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {FONT_SIZE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFontSize(option.value)}
+                className={cn(
+                  'flex flex-col items-center gap-1.5 rounded-md border p-3 text-center transition-colors hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring',
+                  fontSize === option.value && 'border-primary ring-1 ring-primary',
+                )}
+                aria-pressed={fontSize === option.value}
+              >
+                <span
+                  className="font-semibold"
+                  style={{ fontSize: option.value === 'small' ? '0.875rem' : option.value === 'large' ? '1.375rem' : '1.125rem' }}
+                >
+                  Aa
+                </span>
+                <span className="text-xs font-medium">{option.label}</span>
+              </button>
+            ))}
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <DoorOpen className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Landing Page</CardTitle>
+            <CardDescription>Where you land right after signing in. Applies only to your account.</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {LANDING_PAGE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => applyLandingPage(option.value)}
+                className={cn(
+                  'rounded-md border p-3 text-center text-sm font-medium transition-colors hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring',
+                  landingPage === option.value && 'border-primary ring-1 ring-primary',
+                )}
+                aria-pressed={landingPage === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <DashboardLayoutCard />
     </div>
+  );
+}
+
+/** Settings > Appearance > Dashboard Layout (2026-07-17 user request) - lets each officer hide,
+ * reorder, and set the density of the 4 stat cards at the top of the Dashboard. No drag-and-drop
+ * library in this codebase yet, so reordering uses simple up/down buttons - consistent with the
+ * rest of the app's dependency footprint. */
+function DashboardLayoutCard() {
+  const { cards, density, toggleCardVisibility, moveCard, setDensity, resetLayout } = useDashboardLayout();
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <LayoutGrid className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Dashboard Layout</CardTitle>
+          <CardDescription>
+            Show/hide and reorder the stat cards at the top of your Dashboard, and pick a density. Your personal preference only.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between rounded-md border p-4">
+          <div>
+            <p className="text-sm font-medium">Compact Density</p>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Currently: <Badge variant="outline">{density === 'compact' ? 'Compact' : 'Comfortable'}</Badge>
+            </div>
+          </div>
+          <Switch
+            checked={density === 'compact'}
+            onCheckedChange={(checked) => setDensity(checked ? 'compact' : 'comfortable')}
+            aria-label="Toggle compact density"
+          />
+        </div>
+
+        <div className="divide-y rounded-md border">
+          {cards.map((card, index) => (
+            <div key={card.id} className={cn('flex items-center justify-between gap-3 p-3', !card.visible && 'opacity-50')}>
+              <span className="text-sm font-medium">{DASHBOARD_CARD_LABELS[card.id as DashboardCardId]}</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={index === 0}
+                  onClick={() => moveCard(card.id, 'up')}
+                  aria-label={`Move ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]} up`}
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={index === cards.length - 1}
+                  onClick={() => moveCard(card.id, 'down')}
+                  aria-label={`Move ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]} down`}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => toggleCardVisibility(card.id)}
+                  aria-label={card.visible ? `Hide ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]}` : `Show ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]}`}
+                >
+                  {card.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Button type="button" variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset to Default
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Settings > Notifications (2026-07-17 user request) - per-type mute toggles for the Topbar bell
+ * (`NotificationBell.tsx`). Muting only hides a type from this device/account's badge/dropdown -
+ * the notifications still exist server-side (`GET /notifications`), so unmuting later shows the
+ * backlog again. Personal, per-user, localStorage-only, same as every other Appearance preference.
+ */
+function NotificationsTab() {
+  const { currentAccount } = useRole();
+  const [mutedTypes, setMutedTypes] = React.useState<NotificationType[]>(() => readMutedTypes(currentAccount.id));
+
+  const toggleType = (type: NotificationType) => {
+    setMutedTypes((prev) => {
+      const next = prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type];
+      writeMutedTypes(currentAccount.id, next);
+      return next;
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <Bell className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Notifications</CardTitle>
+          <CardDescription>
+            Choose which notifications show up in your bell icon. Muted types are still recorded - turning one back on shows its
+            backlog again. Applies only to your account.
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="divide-y rounded-md border">
+        {NOTIFICATION_TYPE_OPTIONS.map((option) => (
+          <div key={option.value} className="flex items-center justify-between gap-3 p-3">
+            <span className="text-sm font-medium">{option.label}</span>
+            <Switch
+              checked={!mutedTypes.includes(option.value)}
+              onCheckedChange={() => toggleType(option.value)}
+              aria-label={`Toggle ${option.label}`}
+            />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }

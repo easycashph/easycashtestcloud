@@ -18,9 +18,11 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
+import { NotificationBell } from '@/components/NotificationBell';
 import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { COMPANY_INFO } from '@/lib/staticConfig';
+import { useRole } from '@/lib/roleContext';
 import { cn } from '@/lib/utils';
 
 /**
@@ -151,24 +153,37 @@ function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <AccountMenu />
       </div>
     </header>
   );
 }
 
-const SIDEBAR_COLLAPSED_KEY = 'lms.sidebarCollapsed';
+const SIDEBAR_COLLAPSED_KEY_PREFIX = 'lms.sidebarCollapsed';
+
+/** 2026-07-17: was a single shared key (`lms.sidebarCollapsed`) - one officer's collapse choice on
+ * a shared machine silently applied to whoever logged in next. Suffixed per-user like every other
+ * Settings > Appearance preference. `AppLayout` only ever renders inside the authenticated route
+ * tree (see `App.tsx`'s doc comment - `RoleProvider` swaps in `LoginPage` for the entire tree
+ * otherwise), and remounts fresh on every login/logout, so a plain per-user-keyed `useState`
+ * initializer is enough here - no `loadPreferenceFor`-style live scope-switch needed, unlike
+ * `theme-provider.tsx`'s prefs which stay mounted across that transition. */
+function sidebarCollapsedKey(userId: string): string {
+  return `${SIDEBAR_COLLAPSED_KEY_PREFIX}:${userId}`;
+}
 
 export function AppLayout() {
+  const { currentAccount } = useRole();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    return window.localStorage.getItem(sidebarCollapsedKey(currentAccount.id)) === '1';
   });
 
   React.useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
-  }, [collapsed]);
+    window.localStorage.setItem(sidebarCollapsedKey(currentAccount.id), collapsed ? '1' : '0');
+  }, [collapsed, currentAccount.id]);
 
   return (
     // Deliberately NOT height-constrained to the viewport (no h-screen/h-dvh on this root) - a

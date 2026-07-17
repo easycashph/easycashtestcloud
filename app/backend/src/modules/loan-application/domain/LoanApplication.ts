@@ -232,6 +232,20 @@ export class LoanApplication {
     return this.props.branchId;
   }
 
+  /** Added 2026-07-17 for the Notification Center's title text (e.g. "New loan application: Jane
+   * Doe") - use cases that only have an `id` (not the original create `input`) need this to build
+   * a readable notification without a second DB round-trip. */
+  get applicantName(): string {
+    return this.props.applicantName;
+  }
+
+  /** Added 2026-07-17 for the Notification Center - who to notify when this application is
+   * decided (the officer who originally encoded it, if any - the public application intake has no
+   * encoder). */
+  get encodedByUserId(): string | undefined {
+    return this.props.encodedByUserId;
+  }
+
   get borrowerId(): string | undefined {
     return this.props.borrowerId;
   }
