@@ -6,6 +6,8 @@ const loanProductVersionOps = { findMany: vi.fn() };
 // Collections Forecast (merged in from a parallel branch, 2026-07-13) - 4 calls per getSummary,
 // one per forecast month; a shared default keeps every other test's setup untouched.
 const repaymentScheduleOps = { aggregate: vi.fn() };
+// LoanApplication pipeline funnel (2026-07-17) - shared defaults keep every other test's setup untouched.
+const loanApplicationOps = { groupBy: vi.fn(), count: vi.fn() };
 const queryRaw = vi.fn();
 
 const prismaMock = {
@@ -13,6 +15,7 @@ const prismaMock = {
   loanTransaction: loanTransactionOps,
   loanProductVersion: loanProductVersionOps,
   repaymentSchedule: repaymentScheduleOps,
+  loanApplication: loanApplicationOps,
   $queryRaw: queryRaw,
 };
 
@@ -31,6 +34,8 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
     loanAccountOps.groupBy.mockResolvedValue([]);
     queryRaw.mockResolvedValue([]); // findOverdueLoanAccounts -> none, by default
     repaymentScheduleOps.aggregate.mockResolvedValue({ _sum: { principalDue: 0, interestDue: 0 } });
+    loanApplicationOps.groupBy.mockResolvedValue([]);
+    loanApplicationOps.count.mockResolvedValue(0);
   });
 
   it('Total Active Loans has no trend field (2026-07-12: dropped — 477 of 502 legacy CLOSED loans have no closedAt, making a 30-day reconstruction fabricate a swing)', async () => {
@@ -111,5 +116,31 @@ describe('PrismaDashboardRepository (2026-07-12 correctness fix + trend)', () =>
 
     expect(summary.overdueAccounts.loanAccountIds).toEqual(['loan-arrears', 'loan-matured']);
     expect(summary.overdueAccounts.maturedLoanAccountIds).toEqual(['loan-matured']);
+  });
+
+  it('buckets the LoanApplication pipeline funnel by status, pulling released out of the raw APPROVED count', async () => {
+    loanAccountOps.aggregate.mockResolvedValueOnce({ _count: 0, _sum: { principalBalance: 0 } }).mockResolvedValueOnce(zeroMoneyAggregate(0));
+    loanTransactionOps.aggregate.mockResolvedValueOnce({ _sum: { amount: 0 } }).mockResolvedValueOnce({ _sum: { amount: 0 } });
+    loanApplicationOps.groupBy.mockResolvedValueOnce([
+      { status: 'PREAPPROVED', _count: 10 },
+      { status: 'UNDER_REVIEW', _count: 4 },
+      { status: 'PRE_APPROVAL', _count: 3 },
+      { status: 'APPROVED', _count: 5 },
+      { status: 'DECLINED', _count: 2 },
+      { status: 'PREDECLINED', _count: 1 },
+    ]);
+    loanApplicationOps.count.mockResolvedValueOnce(2); // released
+
+    const repo = new PrismaDashboardRepository();
+    const summary = await repo.getSummary(undefined);
+
+    expect(summary.loanApplicationPipeline).toEqual({
+      requirementCompliance: 10,
+      underwriting: 4,
+      review: 3,
+      approved: 3, // 5 raw APPROVED minus 2 released
+      released: 2,
+      declined: 3, // 2 DECLINED + 1 PREDECLINED
+    });
   });
 });
