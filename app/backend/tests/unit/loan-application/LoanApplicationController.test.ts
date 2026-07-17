@@ -8,16 +8,38 @@ function buildResponse() {
   return res as unknown as Response & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> };
 }
 
+/** 2026-07-17: `buildLinkage`/`buildBreakdown` (private, called by both `present()` and
+ * `presentMany()`) need `borrowerRepository`/`loanAccountRepository`/`preQualificationService` -
+ * previously missing here entirely. `create()`/`approve()`'s assertions only happened to still
+ * pass because `res.status(200).json(await this.present(...))` calls `res.status(200)`
+ * synchronously before awaiting `present()`, so a thrown error there went unnoticed by those two
+ * tests - but `list()` awaits `presentMany()` in a separate statement first, so it genuinely never
+ * reached `res.status` at all. Also replaced the stale `markLoanApplicationReviewedUseCase` (no
+ * longer a controller dep since the 2026-07-16 Under Review / Pre Approval pipeline) with the
+ * current deps shape. */
 function buildDeps() {
   return {
     createLoanApplicationUseCase: { execute: vi.fn() },
     getLoanApplicationUseCase: { execute: vi.fn() },
     listLoanApplicationsUseCase: { execute: vi.fn() },
-    markLoanApplicationReviewedUseCase: { execute: vi.fn() },
     assignLoanApplicationProductUseCase: { execute: vi.fn() },
     approveLoanApplicationUseCase: { execute: vi.fn() },
     declineLoanApplicationUseCase: { execute: vi.fn() },
     revertLoanApplicationDecisionUseCase: { execute: vi.fn() },
+    startLoanApplicationReviewUseCase: { execute: vi.fn() },
+    submitLoanApplicationReviewReportUseCase: { execute: vi.fn() },
+    tagLoanApplicationPreApprovalUseCase: { execute: vi.fn() },
+    updateLoanApplicationUseCase: { execute: vi.fn() },
+    preQualificationService: { classify: vi.fn(), evaluateCriteria: vi.fn().mockReturnValue({} as never) },
+    borrowerRepository: {
+      findBySourceApplicationId: vi.fn().mockResolvedValue(null),
+      findManyBySourceApplicationIds: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+    },
+    loanAccountRepository: {
+      findBySourceApplicationId: vi.fn().mockResolvedValue(null),
+      findManyBySourceApplicationIds: vi.fn().mockResolvedValue([]),
+    },
   } as never as ConstructorParameters<typeof LoanApplicationController>[0];
 }
 
@@ -28,6 +50,7 @@ function buildApplication() {
     requestedCategory: 'Salary Loan',
     requestedAmount: 50000,
     requestedTermMonths: 12,
+    status: 'PREAPPROVED',
   });
 }
 

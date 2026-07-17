@@ -4,14 +4,21 @@ import { LoanApplication } from '@modules/loan-application/domain/LoanApplicatio
 import { NotFoundError } from '@shared/errors/DomainError';
 import { ProductNotAssignedError } from '@modules/loan-application/domain/errors/LoanApplicationDomainErrors';
 
+/** 2026-07-17: `approve()` now only succeeds from PRE_APPROVAL (2026-07-16 Under Review / Pre
+ * Approval pipeline) - `status` must be supplied at create() and driven to PRE_APPROVAL via the
+ * same startReview()/tagPreApproval() path a real application goes through, not assumed. */
 function buildApplication() {
-  return LoanApplication.create({
+  const application = LoanApplication.create({
     branchId: 'branch-1',
     applicantName: 'Juan Dela Cruz',
     requestedCategory: 'Salary Loan',
     requestedAmount: 50000,
     requestedTermMonths: 12,
+    status: 'PREAPPROVED',
   });
+  application.startReview('reviewer-1');
+  application.tagPreApproval('reviewer-1');
+  return application;
 }
 
 describe('ApproveLoanApplicationUseCase', () => {

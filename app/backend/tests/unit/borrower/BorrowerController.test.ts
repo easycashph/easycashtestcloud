@@ -106,7 +106,12 @@ describe('BorrowerController (thin — no business logic; presenters used, never
     const coBorrower = CoBorrower.create({ name: PersonName.of('Maria', 'Santos') });
     (deps.createCoBorrowerUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue(coBorrower);
     const controller = new BorrowerController(deps);
-    const req = { body: { firstName: 'Maria', lastName: 'Santos' } } as Request;
+    // 2026-07-17: createCoBorrower() now reads getCurrentUser(req) too (passes currentUser.sub
+    // through to the use case) - previously untested, req had no authUser at all.
+    const req = {
+      body: { firstName: 'Maria', lastName: 'Santos' },
+      authUser: authUser(['Loan Operation Manager'], 'branch-1'),
+    } as unknown as Request;
     const res = buildResponse();
 
     await controller.createCoBorrower(req, res, vi.fn());
@@ -145,8 +150,10 @@ describe('BorrowerController (thin — no business logic; presenters used, never
 
       await controller.create(req, buildResponse(), vi.fn());
 
+      // 2026-07-17: create() now forwards currentUser.sub as a second argument too.
       expect(deps.createBorrowerUseCase.execute).toHaveBeenCalledWith(
         expect.objectContaining({ branchId: 'branch-1' }),
+        expect.any(String),
       );
     });
 
@@ -164,6 +171,7 @@ describe('BorrowerController (thin — no business logic; presenters used, never
 
       expect(deps.createBorrowerUseCase.execute).toHaveBeenCalledWith(
         expect.objectContaining({ branchId: 'branch-2' }),
+        expect.any(String),
       );
     });
 

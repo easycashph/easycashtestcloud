@@ -462,7 +462,7 @@ export function createApp(): Express {
   // --- notification module wiring (Notification Center, 2026-07-17) ---
   const notificationRouter = createNotificationRouter(
     {
-      listNotificationsUseCase: new ListNotificationsUseCase({ notificationRepository, notificationService }),
+      listNotificationsUseCase: new ListNotificationsUseCase({ notificationRepository }),
       markNotificationReadUseCase: new MarkNotificationReadUseCase({ notificationRepository }),
       markAllNotificationsReadUseCase: new MarkAllNotificationsReadUseCase({ notificationRepository }),
     },
@@ -738,6 +738,11 @@ export function createApp(): Express {
   app.use('/api/v1', profileActivityLogRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
+
+  // Exposed via app.locals (not a changed return type - `createApp(): Express` is imported by
+  // ~100 test files as-is) so `server.ts` can start the real overdue-notification scheduler
+  // against the same wired instance, without duplicating its dependencies.
+  app.locals.notificationService = notificationService;
 
   app.use(errorHandler);
 

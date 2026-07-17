@@ -36,9 +36,10 @@ function timeAgo(iso: string): string {
 /**
  * Notification Center (2026-07-17 user request) - bell icon in the Topbar with an unread badge
  * and a dropdown listing recent notifications, backed by the real `GET /notifications` endpoint
- * (see `app/backend/src/modules/notification`). No push mechanism exists in this codebase, so
- * this polls every 30s while open in a tab - not truly real-time, same disclosed limitation as
- * the LOAN_OVERDUE sync itself (see `NotificationService.syncOverdueNotifications`'s doc comment).
+ * (see `app/backend/src/modules/notification`). No push/websocket mechanism exists in this
+ * codebase, so this polls every 30s while open in a tab - server-side, LOAN_OVERDUE notifications
+ * themselves are now created by a real periodic scheduler independent of anyone having the app
+ * open (`OverdueNotificationScheduler.ts`), not tied to this poll.
  *
  * Muted types (Settings > Notifications) are filtered out client-side only - the notifications
  * still exist server-side (so unmuting later shows the backlog), this just hides them from this
