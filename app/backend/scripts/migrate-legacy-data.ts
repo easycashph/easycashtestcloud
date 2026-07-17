@@ -427,6 +427,15 @@ async function migrateLoanAccounts(
     }
     const disb = disbursementsByUid.get(String(la.disbursementDetailsKey));
     const firstRepaymentDate = toDate(disb?.first_repayment_date);
+    // 2026-07-17 bug fix (user-reported): `activatedAt` - treated everywhere downstream as the
+    // official Disbursement Date (ADR-032; read by LoanDocumentMergeDataResolver and the Loan
+    // Releases report) - used to be sourced from `la.creationDate` (the loan-account record's
+    // creation timestamp, not a disbursement event). Real source is `disb.disbursment_date` [sic,
+    // legacy typo]; falls back to `disb.expected_disbursement_date` for the ~23 legacy records
+    // missing the real one. See `scripts/backfill-legacy-disbursement-dates.ts`, which corrected
+    // the 1,754 already-migrated loans this bug affected (idempotent upserts here don't retouch
+    // existing rows - `update: {}` below - so a fix here alone wouldn't have reached them).
+    const activatedAt = toDate(disb?.disbursment_date) ?? toDate(disb?.expected_disbursement_date);
     if (!firstRepaymentDate) {
       // Design doc §3 point "firstRepaymentDate": no fabrication rule exists (ADR-045) — 7 legacy
       // loans have no source value; skipped rather than guessed, per CLAUDE.md "never fabricate
@@ -450,6 +459,14 @@ async function migrateLoanAccounts(
           loanProductVersionId: productVersionId,
           branchId: hqBranchId,
           status: status as never,
+          // 2026-07-17 bug fix (user-reported): without this, Prisma's `@default(now())` recorded
+          // the migration run's own timestamp as "created," not the real SDevTech loan-account
+          // creation date. See `scripts/backfill-legacy-loan-created-dates.ts`, which corrected
+          // the 1,783 already-migrated loans this affected. (An earlier theory - deriving this
+          // from a zero-principal DISBURSEMENT transaction - was checked against the data and
+          // ruled out: only 21% of loans have one, and 80% of those postdate the real
+          // disbursement, so they're some other event, not account creation.)
+          createdAt: toDate(la.creationDate) ?? undefined,
           principalAmount: toDecimalString(la.loanAmount ?? la.principalBalance ?? 0),
           principalBalance: toDecimalString(la.principalBalance ?? 0),
           principalPaid: toDecimalString(la.principalPaid ?? 0),
@@ -469,7 +486,7 @@ async function migrateLoanAccounts(
           gracePeriodDays: Number(la.gracePeriod ?? 0),
           firstRepaymentDate,
           approvedAt: toDate(la.approvedDate),
-          activatedAt: toDate(la.creationDate),
+          activatedAt,
           closedAt: toDate(la.closedDate),
           legacyId,
         },
