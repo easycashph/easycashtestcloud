@@ -88,6 +88,9 @@ export interface LoanApplication {
   creditScore: number | null;
   coBorrowerName: string | null;
   coBorrowerEmployer: string | null;
+  coBorrowerContactNumber: string | null;
+  coBorrowerEmail: string | null;
+  coBorrowerAddress: string | null;
   mobilePhone: string | null;
   email: string | null;
   dependants: LoanApplicationDependant[];
@@ -156,6 +159,9 @@ export interface CreateLoanApplicationRequest {
   creditScore?: number;
   coBorrowerName?: string;
   coBorrowerEmployer?: string;
+  coBorrowerContactNumber?: string;
+  coBorrowerEmail?: string;
+  coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
   dependants?: LoanApplicationDependant[];

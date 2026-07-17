@@ -17,7 +17,10 @@ echo   cd "%ROOT_DIR%"
 echo   .\"Run LMS Preview.bat"
 echo.
 
-echo [1/4] Chinicheck kung may backend na tumatakbo sa port 4000...
+echo [1/4] Chinicheck kung may process na gumagamit ng port 5173 o 4000...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+echo       Naglinis ng stale processes sa port 5173.
+
 set "BACKEND_ALREADY_RUNNING="
 for /f %%A in ('powershell -NoProfile -Command "(Test-NetConnection -ComputerName localhost -Port 4000 -WarningAction SilentlyContinue).TcpTestSucceeded"') do set "BACKEND_ALREADY_RUNNING=%%A"
 
@@ -32,7 +35,7 @@ if /I "%BACKEND_ALREADY_RUNNING%"=="True" (
 )
 
 echo [3/4] Sinisimulan ang frontend hot-reload dev server sa PORT 5173...
-start "Easycash LMS Frontend Server [HOT RELOAD - localhost:5173]" cmd /k "cd /d "%FRONTEND_DIR%" && echo. && echo ============================================== && echo   HOT RELOAD MODE -- http://localhost:5173 && echo   Live-reloading local dev server, hindi Docker. && echo   I-edit ang code, automatic na mag-re-refresh && echo   ang browser. && echo ============================================== && echo. && npm run dev -- --host --port 5173 --strictPort"
+start "Easycash LMS Frontend Server [HOT RELOAD - localhost:5173]" cmd /k "cd /d "%FRONTEND_DIR%" && echo. && echo ============================================== && echo   HOT RELOAD MODE -- http://localhost:5173 && echo   Live-reloading local dev server, hindi Docker. && echo   I-edit ang code, automatic na mag-re-refresh && echo   ang browser. && echo ============================================== && echo. && npm run dev"
 
 echo [4/4] Naghihintay habang nagsi-start ang frontend ^(8 segundo^)...
 timeout /t 8 /nobreak >nul

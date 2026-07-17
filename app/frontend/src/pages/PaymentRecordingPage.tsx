@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, ChevronLeft, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -77,6 +78,19 @@ function parseAmount(value: string): number {
 }
 
 /**
+ * Like `parseAmount`, but for an actual account balance (collectionsBalance/accountingBalance),
+ * never a due/paid/applied amount - those are always >= 0 by definition, but a balance is allowed
+ * to go negative (an overpayment/credit - see `LoanAccount.collectionsBalance`'s own doc comment,
+ * `FINANCIAL_INVARIANTS.md` §3). `parseAmount`'s `> 0` floor silently clamped a real credit balance
+ * to ₱0.00, hiding it entirely (2026-07-16 bug report) - this only guards against a non-numeric
+ * string, never against a legitimately negative one.
+ */
+function parseBalance(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
  * Column sort here is DISPLAY-ONLY - it never changes which installments
  * were actually offered a share of the payment. `previewCrossInstallmentAllocation`
  * must keep computing over `unpaidInstallments` in oldest-due-first order
@@ -135,30 +149,57 @@ interface PaymentSuccessInfo {
 }
 
 export function PaymentRecordingPage() {
-  useLogPageView('Record Payment');
+  const [searchParams] = useSearchParams();
+  return <PaymentRecordingForm preselectedLoanId={searchParams.get('loanId') ?? undefined} />;
+}
+
+/**
+ * The actual form - extracted from `PaymentRecordingPage` (2026-07-16) so it can be reused inside
+ * a "Record Payment" dialog on the Loan Account Detail page, not just as the standalone
+ * `/payments` page. `lockedBorrower`/`lockedLoan` skip the Find Client / Choose Loan steps
+ * entirely when both are already known (the Loan Detail page always knows its own borrower and
+ * loan); `showChrome=false` drops the page header and RecentActivityPanel for use inside a Dialog,
+ * where the caller supplies its own header instead. `onDone` fires once staff dismiss the success
+ * confirmation - the standalone page resets back to Find Client; the dialog closes and refreshes
+ * the Loan Detail page's own queries instead of navigating anywhere.
+ */
+export function PaymentRecordingForm({
+  lockedBorrower,
+  lockedLoan,
+  preselectedLoanId,
+  showChrome = true,
+  onDone,
+}: {
+  lockedBorrower?: Borrower;
+  lockedLoan?: LoanAccount;
+  /** Standalone-page-only deep link (`?loanId=...`) - resolves the borrower/loan automatically
+   * instead of making staff search again. Ignored once `lockedBorrower`/`lockedLoan` are set. */
+  preselectedLoanId?: string;
+  showChrome?: boolean;
+  onDone?: () => void;
+}) {
+  useLogPageView('Record Payment', showChrome ? undefined : 'record-payment-dialog');
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const preselectedLoanId = searchParams.get('loanId');
 
   // Step 1: find the client. Deep-linked from LoanDetailPage's "Record Payment" button
   // (?loanId=...) resolves the client automatically instead of making staff search again.
-  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(null);
-  const [loanId, setLoanId] = React.useState('');
+  const [selectedBorrower, setSelectedBorrower] = React.useState<Borrower | null>(lockedBorrower ?? null);
+  const [loanId, setLoanId] = React.useState(lockedLoan?.id ?? '');
 
   const preselectedLoanQuery = useQuery({
     queryKey: ['loan-accounts', preselectedLoanId],
     queryFn: () => apiClient.get<LoanAccount>(`/loan-accounts/${preselectedLoanId}`),
-    enabled: Boolean(preselectedLoanId) && !selectedBorrower,
+    enabled: Boolean(preselectedLoanId) && !selectedBorrower && !lockedBorrower,
   });
   React.useEffect(() => {
-    if (!preselectedLoanQuery.data || selectedBorrower) return;
+    if (!preselectedLoanQuery.data || selectedBorrower || lockedBorrower) return;
     const loan = preselectedLoanQuery.data;
     void apiClient.get<Borrower>(`/borrowers/${loan.borrowerId}`).then((borrower) => {
       setSelectedBorrower(borrower);
       setLoanId(loan.id);
     });
-  }, [preselectedLoanQuery.data, selectedBorrower]);
+  }, [preselectedLoanQuery.data, selectedBorrower, lockedBorrower]);
 
   const [clientSearch, setClientSearch] = React.useState('');
   const debouncedClientSearch = useDebouncedValue(clientSearch);
@@ -186,7 +227,7 @@ export function PaymentRecordingPage() {
     enabled: Boolean(selectedBorrower),
   });
   const clientPayableLoans = (clientLoansQuery.data?.items ?? []).filter((l) => PAYABLE_STATUSES.includes(l.status));
-  const selectedLoan = clientPayableLoans.find((l) => l.id === loanId);
+  const selectedLoan = lockedLoan ?? clientPayableLoans.find((l) => l.id === loanId);
 
   // Starts blank rather than a hardcoded guess (e.g. "1000.00") — the effect below fills it in
   // once the oldest unpaid installment's actual total due is known, per loan selection.
@@ -348,6 +389,13 @@ export function PaymentRecordingPage() {
       // picking up the just-recorded payment until a full page reload (2026-07-15 bug report).
       void queryClient.refetchQueries({ queryKey: ['loan-accounts'] });
       void queryClient.refetchQueries({ queryKey: ['repayment-schedule', loanId] });
+      // 2026-07-16 bug found while adding the "Record Payment" dialog to Loan Detail: that page's
+      // own balance/status query is keyed ['loan-account', loanId] (singular) - a different key
+      // prefix from the plural ['loan-accounts'] above, which never matched it. Without this, the
+      // Loan Detail page kept showing the pre-payment balance/status until a manual refresh even
+      // though the payment posted successfully.
+      void queryClient.refetchQueries({ queryKey: ['loan-account', loanId] });
+      void queryClient.refetchQueries({ queryKey: ['loan-transactions', loanId] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
@@ -372,13 +420,15 @@ export function PaymentRecordingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Record Payment</h2>
-        <p className="text-sm text-muted-foreground">
-          Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
-          oldest installment first (ADR-009).
-        </p>
-      </div>
+      {showChrome && (
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Record Payment</h2>
+          <p className="text-sm text-muted-foreground">
+            Live - posts a real payment against <code>app/backend</code>. Automatic allocation: fees → penalty → interest → principal,
+            oldest installment first (ADR-009).
+          </p>
+        </div>
+      )}
 
       {clientLoansQuery.isError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -466,7 +516,7 @@ export function PaymentRecordingPage() {
                       </Badge>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Collections balance: {formatPeso(parseAmount(l.collectionsBalance))}
+                      Collections balance: {formatPeso(parseBalance(l.collectionsBalance))}
                     </p>
                   </button>
                 ))}
@@ -480,9 +530,11 @@ export function PaymentRecordingPage() {
                     <CardTitle>Payment Details</CardTitle>
                     <CardDescription>Enter an amount to preview allocation.</CardDescription>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => setLoanId('')}>
-                    <ChevronLeft className="mr-1 h-4 w-4" /> Change loan
-                  </Button>
+                  {!lockedLoan && (
+                    <Button variant="ghost" size="sm" onClick={() => setLoanId('')}>
+                      <ChevronLeft className="mr-1 h-4 w-4" /> Change loan
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -491,8 +543,8 @@ export function PaymentRecordingPage() {
                     <p>
                       <span className="font-medium text-foreground">{selectedBorrower.fullName}</span> - {selectedLoan.loanCode}
                     </p>
-                    <p className="mt-1">Collections balance: {formatPeso(parseAmount(selectedLoan.collectionsBalance))}</p>
-                    <p>Accounting balance: {formatPeso(parseAmount(selectedLoan.accountingBalance))}</p>
+                    <p className="mt-1">Collections balance: {formatPeso(parseBalance(selectedLoan.collectionsBalance))}</p>
+                    <p>Accounting balance: {formatPeso(parseBalance(selectedLoan.accountingBalance))}</p>
                     {installmentsQuery.isLoading ? (
                       <p className="mt-2 border-t pt-2">Loading next due amount…</p>
                     ) : installmentsQuery.isError ? (
@@ -530,7 +582,7 @@ export function PaymentRecordingPage() {
                   <Label htmlFor="amount" className="flex items-center gap-1">
                     Payment amount <FieldTooltip text="Total peso amount the borrower is paying today." />
                   </Label>
-                  <Input id="amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                  <NumberInput id="amount" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 </div>
 
                 <div className="space-y-1.5">
@@ -788,7 +840,7 @@ export function PaymentRecordingPage() {
         </Card>
       </div>
 
-      <RecentActivityPanel label="Record Payment" />
+      {showChrome && <RecentActivityPanel label="Record Payment" />}
 
       <Dialog open={confirmOpen} onOpenChange={(open) => !paymentMutation.isPending && setConfirmOpen(open)}>
         <DialogContent>
@@ -884,7 +936,9 @@ export function PaymentRecordingPage() {
               <div className="rounded-md bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">Loan balance after</p>
                 <p className="text-base font-semibold">
-                  {formatPeso(parseAmount(successInfo.response.loanAccount.collectionsBalance))}
+                  {parseBalance(successInfo.response.loanAccount.collectionsBalance) < 0
+                    ? `${formatPeso(Math.abs(parseBalance(successInfo.response.loanAccount.collectionsBalance)))} credit (overpaid)`
+                    : formatPeso(parseBalance(successInfo.response.loanAccount.collectionsBalance))}
                 </p>
               </div>
               <DialogFooter>
@@ -892,12 +946,13 @@ export function PaymentRecordingPage() {
                   variant="outline"
                   onClick={() => {
                     setSuccessInfo(null);
-                    changeClient();
+                    if (!lockedBorrower) changeClient();
+                    onDone?.();
                   }}
                 >
                   Close
                 </Button>
-                <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>
+                {!lockedLoan && <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>}
               </DialogFooter>
             </>
           )}

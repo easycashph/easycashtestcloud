@@ -28,6 +28,9 @@ export interface CreateLoanApplicationInput {
   creditScore?: number;
   coBorrowerName?: string;
   coBorrowerEmployer?: string;
+  coBorrowerContactNumber?: string;
+  coBorrowerEmail?: string;
+  coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
   dependants?: DependantEntry[];

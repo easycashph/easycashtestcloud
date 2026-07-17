@@ -59,7 +59,62 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.10',
+    date: 'July 16, 2026',
+    highlights: [
+      'Create Loan Account: Add-On Rate is now a dropdown sourced from the official Interest Rate Chart instead of free-typed, Contractual Rate auto-computes and can no longer be accidentally overwritten, and Term prefills from the client\'s requested term.',
+      'A Loan Account that hasn\'t been Activated yet now shows a clearly-labeled repayment schedule preview instead of "No repayment schedule found."',
+      'Loan Account and Loan Application statuses relabeled for clarity: an Approved loan awaiting disbursement now reads "For Disbursement," and a Loan Application whose loan has been disbursed now reads "Disbursed."',
+      'Financial amounts, contact numbers, and SSS/TIN numbers now format live while typing (thousand separators, "09XX XXX XXXX", "XXXX XXXX XXXX") throughout the platform, instead of only after leaving the field.',
+      'Fixed a platform-wide bug where clicking a dropdown field inside any pop-up form, then clicking elsewhere to dismiss it, closed the entire form and lost everything already entered.',
+      'Co-Borrower details on a Loan Application streamlined to name, relationship, contact number, email, and address; starting an application from an existing client now offers a dropdown of their previous co-borrowers with one-click autofill, while a brand-new applicant\'s form stays as-is.',
+      'Fixed "Create Client Profile" not carrying an approved applicant\'s saved address into the Region/Province/City/Barangay dropdowns.',
+      'Fixed the product-class list shown when approving a Loan Application, which had gone stale and was missing several currently-active products.',
+      'List of Loan Applications, List of Clients, and List of Loan Accounts: fixed status/category/product filters sometimes showing fewer results than actually match, and added a dedicated "Matured" status filter for Loan Accounts (previously mixed into "In Arrears").',
+      'Record Payment on a Loan Account now opens in place as a dialog instead of navigating to a separate page, and the loan\'s balance now updates immediately afterward instead of requiring a manual refresh.',
+      'Fixed the About page (and other pages) sometimes rendering with content cut off behind the Windows taskbar at 100% browser zoom.',
+    ],
+  },
+  {
+    version: '0.9.9',
+    date: 'July 15, 2026',
+    highlights: [
+      'Dashboard\'s Portfolio Breakdown chart redesigned: replaced the donut chart with proportional bars sized by each product category\'s real share of the portfolio, still showing the Active/Past Due/Matured split with peso amounts and account counts per segment.',
+      'Fixed a Dashboard drill-down bug where clicking Good/In Arrears/Matured could show a mismatched status label on some listed loans - the underlying list itself was always correct.',
+      'Completed optional loan-document mapping for every Salary Loan and Business Loan product (Seafarer Loan products were completed the day before) - the right optional documents (Deed of Assignment, Loan Agreement, Manulife, etc.) now appear for every product family.',
+      'Payment Reminders gained a Due Date range filter, a totals row (Principal/Interest/Penalty/Fees/Total Due across every filtered result), better filter-bar alignment, and a smaller 50-row page size.',
+      'Fixed Payment History transaction ordering - a reversal or disbursement no longer appears above a more recent repayment made the same day.',
+      'Added a Total Due column to the Repayment Schedule table, and fixed the Paid/Balance columns undercounting an installment\'s fees and penalty payments - an installment fully paid including a fee or penalty could look incomplete, and the running balance could get stuck instead of decreasing.',
+      'Payment Recording gained a live "Next due" summary, and now shows a full confirmation screen after a payment (amount applied, exact per-installment breakdown, new balance) instead of closing silently.',
+      'Payment History rows can now be expanded to see exactly which installment(s) a payment was applied to and the exact split - already caught a genuine ₱0.02 cashier data-entry discrepancy on its first real use, corrected immediately.',
+    ],
+  },
+  {
+    version: '0.9.8',
+    date: 'July 14, 2026',
+    highlights: [
+      'Loan document generation (Promissory Note, Disclosure Statement, and others) confirmed fully working end to end in the real deployment, including the full per-installment repayment schedule table on each document.',
+      'Added an inline PDF Preview button next to Download on a Loan Account\'s Documents card, so a generated document can be reviewed without downloading it first.',
+      'Fixed a bug where opening a direct link to (or refreshing) a Loan Account, Client, or Loan Application page showed a "not found" error instead of the page.',
+      'Fixed generated PDF documents occasionally rendering as blank boxes instead of readable text.',
+      'Fixed a data bug affecting all 1,790 migrated loan accounts where the "Net Proceeds" figure on generated documents always showed ₱0.00 regardless of the real amount.',
+      'Optional loan documents (Loan Agreement - Seafarer, Special Power of Attorney, Deed of Assignment, Manulife) now correctly appear for every Seafarer Loan product.',
+    ],
+  },
+  {
     version: '0.9.7',
+    date: 'July 13, 2026',
+    highlights: [
+      'Renamed sidebar labels for clarity: "Client Data" is now "Clients," and "Member Management" is now "User Accounts."',
+      'Fixed three real Dashboard accuracy bugs, all traced to the same stale legacy field: Overdue Accounts, Delinquency Rate/Portfolio at Risk, and Loan Portfolio Health\'s "Matured" segment (which had always shown zero) now all compute correctly - Matured alone surfaced roughly ₱56M of credit-loss exposure that wasn\'t visible before.',
+      'Removed a fabricated Dashboard trend figure and fixed a "Collections This Month" comparison that had been measuring a partial month against a full previous month.',
+      'Softened the sidebar\'s active-page highlight styling so it no longer visually clashes with warning-colored banners.',
+    ],
+  },
+  {
+    // 2026-07-16: merged from two same-day entries (was separately 0.9.7 and 0.9.6, both dated
+    // July 12, 2026) - one release, one version bump, one changelog entry per calendar day.
+    version: '0.9.6',
     date: 'July 12, 2026',
     highlights: [
       'The Loan Application page now recognizes when an applicant has already been turned into a client - the "Create Client Profile" button is replaced with a link straight to their existing Client Profile, preventing duplicate client records.',
@@ -69,13 +124,6 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Loan Account details gained a real Notes feature - staff can leave a running log of notes on any loan account, visible to everyone with access, saved permanently.',
       'Loan Account details gained a real Reminders panel showing the confirmed 5/3/1-days-before, due-date, and weekly-past-due reminder schedule for that loan\'s next payment - actual SMS/Email sending is coming soon, pending a messaging provider.',
       'The Dashboard\'s Collections Forecast chart now shows a real projection - built bottom-up from every active loan\'s actual repayment schedule - instead of a sample illustration.',
-      'Continues this platform\'s ongoing effort to replace remaining preview/sample data with live, real data as Easycash LMS moves toward fully replacing the SDevTech system.',
-    ],
-  },
-  {
-    version: '0.9.6',
-    date: 'July 12, 2026',
-    highlights: [
       'New Activity Timeline on Loan Applications, Client Profiles, and Loan Accounts - shows exactly who did what and when on that specific record (documents uploaded, decisions made, payments recorded), visible to every staff member.',
       'A page-level "Recent Activity Logs" panel was added throughout the platform, and the master Activity Logs page (Administration) now records every meaningful action across the system - not just logins and loan decisions. Closed several gaps where real actions (creating a client, submitting a loan application, adding/editing/removing a staff member, adding a Role Class) were happening without leaving any record.',
       'Administration > Members is now fully self-service for MIS: add, edit, and remove staff accounts, reset a member\'s forgotten password, and organize staff under Role Types (MIS, LOM, CRM, Finance, Accounting, Collection) with their own job-title Role Classes (e.g. "MIS Manager", "Field Collector") - all editable from a new Roles tab.',
@@ -84,6 +132,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Added hover tooltips throughout the Loan Application form, Client Edit, and Payment Recording explaining what each field is for, plus full meanings for abbreviations like MIS, LOM, and CRM.',
       'Settings gained an English/Filipino language switcher (Dashboard and Settings translated as the first pages), and a fuller User Profile (photo, contact number, address, birthday). Theme Color was merged into the Appearance tab.',
       'All mobile/contact number fields across the platform were relabeled "Contact Number" with a consistent "09XX XXX XXXX" format hint.',
+      'Continues this platform\'s ongoing effort to replace remaining preview/sample data with live, real data as Easycash LMS moves toward fully replacing the SDevTech system.',
     ],
   },
   {

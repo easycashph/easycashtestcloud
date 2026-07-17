@@ -2,8 +2,26 @@ import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { markPopupJustClosed } from '@/lib/radixPopupGuard';
 
-const Select = SelectPrimitive.Root;
+/**
+ * Wraps SelectPrimitive.Root only to mark the module-level "a popup just closed" guard whenever
+ * this Select closes (for any reason - picking an option, Escape, or an outside click). See
+ * `radixPopupGuard.ts` for why: it's what stops an ancestor Dialog from also closing itself when
+ * the user clicks elsewhere in the dialog just to dismiss this dropdown.
+ */
+const Select = ({
+  onOpenChange,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) => (
+  <SelectPrimitive.Root
+    onOpenChange={(open) => {
+      if (!open) markPopupJustClosed();
+      onOpenChange?.(open);
+    }}
+    {...props}
+  />
+);
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 

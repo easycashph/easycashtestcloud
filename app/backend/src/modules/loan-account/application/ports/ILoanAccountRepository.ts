@@ -1,5 +1,5 @@
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import type { LoanAccount } from '../../domain/LoanAccount';
+import type { LoanAccount, LoanAccountStatus } from '../../domain/LoanAccount';
 
 export interface FindManyLoanAccountsOptions {
   limit: number;
@@ -10,6 +10,18 @@ export interface FindManyLoanAccountsOptions {
   search?: string;
   /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): filters to one borrower's loan history — read-only, combinable with branchId. */
   borrowerId?: string;
+  /** 2026-07-16 (List of Loan Accounts status/product filters): equality against `status`, plus a
+   * pseudo-status `'MATURED'` - not a real `LoanAccountStatus` (it's a computed overlay, same
+   * definition as `findMaturedLoanAccountIds`/the "Matured" badge - full term ended, still unpaid),
+   * but staff need to filter by it directly, and filtering ACTIVE/ACTIVE_IN_ARREARS by the raw
+   * status alone let already-Matured loans mix into those views (they're still raw-status
+   * ACTIVE_IN_ARREARS underneath, just displayed as "Matured" instead). `findMany` excludes matured
+   * loans from a plain ACTIVE/ACTIVE_IN_ARREARS filter and includes only them for `'MATURED'`. */
+  status?: LoanAccountStatus | 'MATURED';
+  /** 2026-07-16: the frontend resolves a selected Product Class to every one of its
+   * `LoanProductVersion` ids (a product can have several versions over time) and filters by that
+   * set - avoids needing a product-name join here. */
+  loanProductVersionIds?: string[];
 }
 
 export interface ILoanAccountRepository {

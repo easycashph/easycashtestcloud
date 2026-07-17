@@ -13,6 +13,7 @@ export function createPsgcRouter(deps: PsgcControllerDeps, tokenService: ITokenS
   router.get('/psgc/provinces', requireAuth, controller.listProvinces);
   router.get('/psgc/cities', requireAuth, controller.listCities);
   router.get('/psgc/barangays', requireAuth, controller.listBarangays);
+  router.get('/psgc/resolve-address', requireAuth, controller.resolveAddressCodes);
 
   return router;
 }

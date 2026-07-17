@@ -2,8 +2,22 @@ import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight, Circle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { markPopupJustClosed } from '@/lib/radixPopupGuard';
 
-const DropdownMenu = DropdownMenuPrimitive.Root;
+/** See select.tsx's Select wrapper - same reasoning, so a DropdownMenu nested inside a Dialog
+ * doesn't also close the Dialog when the user clicks elsewhere in it to dismiss the menu. */
+const DropdownMenu = ({
+  onOpenChange,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>) => (
+  <DropdownMenuPrimitive.Root
+    onOpenChange={(open) => {
+      if (!open) markPopupJustClosed();
+      onOpenChange?.(open);
+    }}
+    {...props}
+  />
+);
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 const DropdownMenuPortal = DropdownMenuPrimitive.Portal;

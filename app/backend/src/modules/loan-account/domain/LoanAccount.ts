@@ -45,6 +45,9 @@ const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
   ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'APPROVED'],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
+  // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
+  // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
+  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED - those aren't "fully paid" closures to begin with.
   CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],

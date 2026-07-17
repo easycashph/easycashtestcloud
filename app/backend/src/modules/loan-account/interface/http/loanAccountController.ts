@@ -5,6 +5,7 @@ import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWri
 import { withIdempotency } from '@shared/http/idempotency';
 import { Money } from '@shared/domain/Money';
 import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotencyKeyStore';
+import type { LoanAccountStatus } from '../../domain/LoanAccount';
 import type { CreateLoanAccountUseCase } from '../../application/use-cases/CreateLoanAccountUseCase';
 import type { UpdateLoanAccountUseCase } from '../../application/use-cases/UpdateLoanAccountUseCase';
 import type { GetLoanAccountUseCase } from '../../application/use-cases/GetLoanAccountUseCase';
@@ -99,12 +100,19 @@ export class LoanAccountController {
       const { limit, cursor } = parsePaginationParams(req.query);
       const search = parseSearchParam(req.query);
       const borrowerId = typeof req.query.borrowerId === 'string' ? req.query.borrowerId : undefined;
+      const status = typeof req.query.status === 'string' ? (req.query.status as LoanAccountStatus | 'MATURED') : undefined;
+      const loanProductVersionIds =
+        typeof req.query.loanProductVersionIds === 'string' && req.query.loanProductVersionIds.length > 0
+          ? req.query.loanProductVersionIds.split(',')
+          : undefined;
       const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({
         limit,
         cursor,
         branchId: resolveBranchFilter(scope),
         search,
         borrowerId,
+        status,
+        loanProductVersionIds,
       });
       const maturedIds = await this.deps.listMaturedLoanAccountIdsUseCase.execute(loanAccounts.map((l) => l.id));
       res.status(200).json(

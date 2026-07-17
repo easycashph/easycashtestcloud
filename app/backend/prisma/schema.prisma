@@ -1445,25 +1445,28 @@ model LoanApplication {
   /// Flattened, human-readable join of the structured fields below - kept for existing display
   /// code/history. The structured fields are what "Create Client Profile" copies into a real
   /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
-  address            String?
-  houseUnitNumber    String?
-  street             String?
-  barangay           String?
-  cityMunicipality   String?
-  province           String?
-  zipCode            String?
-  monthlyIncome      Decimal?  @db.Decimal(14, 2)
-  employer           String?
-  occupation         String?
-  officeAddress      String?
-  tinNumber          String?
-  sssNumber          String?
-  propertiesOwned    String[]  @default([])
-  creditScore        Int?
-  coBorrowerName     String?
-  coBorrowerEmployer String?
-  mobilePhone        String?
-  email              String?
+  address                 String?
+  houseUnitNumber         String?
+  street                  String?
+  barangay                String?
+  cityMunicipality        String?
+  province                String?
+  zipCode                 String?
+  monthlyIncome           Decimal? @db.Decimal(14, 2)
+  employer                String?
+  occupation              String?
+  officeAddress           String?
+  tinNumber               String?
+  sssNumber               String?
+  propertiesOwned         String[] @default([])
+  creditScore             Int?
+  coBorrowerName          String?
+  coBorrowerEmployer      String?
+  coBorrowerContactNumber String?
+  coBorrowerEmail         String?
+  coBorrowerAddress       String?
+  mobilePhone             String?
+  email                   String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
   dependants         Json?

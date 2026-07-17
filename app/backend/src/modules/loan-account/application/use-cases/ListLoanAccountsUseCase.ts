@@ -1,4 +1,4 @@
-import type { LoanAccount } from '../../domain/LoanAccount';
+import type { LoanAccount, LoanAccountStatus } from '../../domain/LoanAccount';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
 
 export interface ListLoanAccountsUseCaseDeps {
@@ -13,6 +13,8 @@ export interface ListLoanAccountsInput {
   search?: string;
   /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): filters to one borrower's loan history. */
   borrowerId?: string;
+  status?: LoanAccountStatus | 'MATURED';
+  loanProductVersionIds?: string[];
 }
 
 export class ListLoanAccountsUseCase {

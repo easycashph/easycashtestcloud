@@ -58,12 +58,18 @@ function getSortValue(loan: LoanRow, key: string): string | number | Date | null
   }
 }
 
-const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
+/** 'MATURED' isn't a raw `LoanAccountStatus` - it's a computed overlay (the loan's full scheduled
+ * term ended and it's still unpaid), same as the "Matured" badge that takes priority over the raw
+ * status label on a matured loan. Filtered as its own option so it doesn't silently mix into the
+ * Active/In Arrears views - the backend excludes matured loans from those two when filtering by
+ * them directly, matching what the badge already shows. */
+const STATUS_OPTIONS: { value: LoanAccountStatus | 'MATURED' | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
-  { value: 'APPROVED', label: 'Approved' },
+  { value: 'APPROVED', label: 'For Disbursement' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'ACTIVE_IN_ARREARS', label: 'In Arrears' },
+  { value: 'MATURED', label: 'Matured' },
   { value: 'CLOSED', label: 'Closed' },
   { value: 'CLOSED_WRITTEN_OFF', label: 'Written Off' },
   { value: 'CLOSED_REJECTED', label: 'Rejected' },
@@ -77,11 +83,13 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'ALL'; label: string }[] = [
  * branch anyway (§5 point 1 of the CP12 design), so a branch dimension has no real value to show
  * right now - removed rather than faked.
  *
- * Real, server-side pagination (100 rows/page, Next/Previous - see `useCursorPagination`) replaced
+ * Real, server-side pagination (25 rows/page, Next/Previous - see `useCursorPagination`) replaced
  * the earlier "load every loan up front" approach that this doc comment used to flag as a temporary
- * stopgap - it became the actual frontend-lag problem it warned about. Borrower/loan-code search
- * goes to the backend's `?search=` param (debounced); status/product have no backend filter param
- * yet, so those two narrow within the current page only, not across every loan.
+ * stopgap - it became the actual frontend-lag problem it warned about. Borrower/loan-code search,
+ * status, and product (2026-07-16) all go to backend query params, so a full page of up to 25
+ * matching rows is always shown even with a filter applied - status is a direct equality filter;
+ * product resolves the selected product name to every one of its LoanProductVersion ids client-side
+ * (via the already-fetched full product catalog) and filters loan-accounts by that id set.
  */
 export function LoanListPage() {
   const navigate = useNavigate();
@@ -89,8 +97,34 @@ export function LoanListPage() {
   useLogPageView('List of Loan Accounts');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [status, setStatus] = React.useState<LoanAccountStatus | 'ALL'>('ALL');
+  const [status, setStatus] = React.useState<LoanAccountStatus | 'MATURED' | 'ALL'>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
+
+  const productsQuery = useQuery({
+    // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
+    // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
+    // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
+    // identical fix for the full explanation.
+    queryKey: ['loan-products', 'all', 'versionToProductMap'],
+    queryFn: async () => {
+      const products = await fetchAllPages<LoanProduct>('/loan-products');
+      const versionToProduct = new Map<string, { name: string; isActive: boolean }>();
+      // 2026-07-16 (status/product filters): the Product filter needs every version id belonging
+      // to a selected product name, so the loan-accounts request can filter server-side by
+      // `loanProductVersionIds` (a product can have several versions over time) - avoids needing a
+      // product-name join on the backend.
+      const versionIdsByProductName = new Map<string, string[]>();
+      for (const p of products) {
+        for (const v of p.versions ?? []) {
+          versionToProduct.set(v.id, { name: p.name, isActive: v.isActive });
+          versionIdsByProductName.set(p.name, [...(versionIdsByProductName.get(p.name) ?? []), v.id]);
+        }
+      }
+      return { versionToProduct, versionIdsByProductName, productNames: [...versionIdsByProductName.keys()].sort() };
+    },
+  });
+
+  const selectedProductVersionIds = product === 'ALL' ? undefined : productsQuery.data?.versionIdsByProductName.get(product);
 
   const {
     items: loans,
@@ -100,7 +134,20 @@ export function LoanListPage() {
     hasPrev,
     goNext,
     goPrev,
-  } = useCursorPagination<LoanAccount>(['loan-accounts'], '/loan-accounts', { search: debouncedSearch }, PAGE_SIZE);
+  } = useCursorPagination<LoanAccount>(
+    ['loan-accounts'],
+    '/loan-accounts',
+    {
+      search: debouncedSearch,
+      status: status === 'ALL' ? undefined : status,
+      loanProductVersionIds: selectedProductVersionIds && selectedProductVersionIds.length > 0 ? selectedProductVersionIds.join(',') : undefined,
+    },
+    PAGE_SIZE,
+    // Waits for the product catalog to load before the first fetch whenever a product filter is
+    // selected, so that request always carries the real version ids instead of firing once
+    // unfiltered and again a moment later once they resolve.
+    product === 'ALL' || Boolean(productsQuery.data),
+  );
 
   // Still loaded in full for the name join - there's no batch "GET /borrowers?ids=" endpoint, and
   // borrower search is already covered server-side via the loan-accounts search param above.
@@ -112,28 +159,10 @@ export function LoanListPage() {
   });
   const borrowerById = React.useMemo(() => new Map((borrowersQuery.data ?? []).map((b) => [b.id, b])), [borrowersQuery.data]);
 
-  const productsQuery = useQuery({
-    // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
-    // LoanProduct[] array; this query's Map shape crashed them on cross-page navigation
-    // (`(productsQuery.data ?? []).flatMap is not a function`). See ClientProfilePage.tsx's
-    // identical fix for the full explanation.
-    queryKey: ['loan-products', 'all', 'versionToProductMap'],
-    queryFn: async () => {
-      const products = await fetchAllPages<LoanProduct>('/loan-products');
-      const versionToProduct = new Map<string, { name: string; isActive: boolean }>();
-      for (const p of products) {
-        for (const v of p.versions ?? []) {
-          versionToProduct.set(v.id, { name: p.name, isActive: v.isActive });
-        }
-      }
-      return versionToProduct;
-    },
-  });
-
   const isLoading = loansQuery.isLoading || borrowersQuery.isLoading || productsQuery.isLoading;
 
   const rows: LoanRow[] = React.useMemo(() => {
-    const versionMap = productsQuery.data ?? new Map();
+    const versionMap = productsQuery.data?.versionToProduct ?? new Map();
     return loans.map((l) => {
       const borrower = borrowerById.get(l.borrowerId);
       const productInfo = versionMap.get(l.loanProductVersionId);
@@ -153,14 +182,12 @@ export function LoanListPage() {
     });
   }, [loans, borrowerById, productsQuery.data]);
 
-  const productOptions = React.useMemo(() => ['ALL', ...[...new Set(rows.map((r) => r.productName))].sort()], [rows]);
+  // From the full product catalog, not the current fetched page - every product stays selectable
+  // in the filter regardless of what's actually been paginated in yet.
+  const productOptions = React.useMemo(() => ['ALL', ...(productsQuery.data?.productNames ?? [])], [productsQuery.data]);
 
-  const filtered = rows.filter((loan) => {
-    const matchesStatus = status === 'ALL' || loan.status === status;
-    const matchesProduct = product === 'ALL' || loan.productName === product;
-    return matchesStatus && matchesProduct;
-  });
-  const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
+  // status and product are already server-filtered above (via useCursorPagination's extraParams).
+  const { sorted, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   return (
     <div className="space-y-6">
@@ -197,7 +224,7 @@ export function LoanListPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as LoanAccountStatus | 'ALL')}>
+            <Select value={status} onValueChange={(v) => setStatus(v as LoanAccountStatus | 'MATURED' | 'ALL')}>
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
@@ -269,11 +296,19 @@ export function LoanListPage() {
                     <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(loan.principalAmount)}</TableCell>
-                  <TableCell className="text-right">{formatPeso(loan.collectionsBalance)}</TableCell>
+                  <TableCell className="text-right">
+                    {loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED' ? (
+                      <span className="text-muted-foreground" title="Not yet computed - the repayment schedule is only generated once this loan is Activated">
+                        —
+                      </span>
+                    ) : (
+                      formatPeso(loan.collectionsBalance)
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(loan.createdAt)}</TableCell>
                 </TableRow>
               ))}
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && sorted.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                     No loans match your search/filter.

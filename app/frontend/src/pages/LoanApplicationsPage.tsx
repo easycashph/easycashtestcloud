@@ -25,7 +25,13 @@ import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicati
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 25;
+
+/** Matches LoanApplicationCreatePage's LOAN_TYPE_OPTIONS exactly - every application's
+ * `requestedCategory` comes from that same fixed dropdown, so a static list here (rather than
+ * deriving options from whatever categories happen to be on the current fetched page) keeps every
+ * option available in the filter regardless of what's actually been paginated in yet. */
+const CATEGORY_OPTIONS = ['ALL', 'Business Loan', 'Salary Loan', 'Seafarer Loan'];
 
 function applicantInitials(name: string) {
   return name.split(' ').filter(Boolean).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
@@ -48,13 +54,18 @@ function getSortValue(app: LoanApplication, key: string): string | number | Date
   }
 }
 
-const STATUS_OPTIONS: { value: LoanApplicationStatus | 'ALL'; label: string }[] = [
+/** 'FOR_DISBURSEMENT' isn't a raw `LoanApplicationStatus` - it's a derived state (an APPROVED
+ * application whose loan account has been created but not yet Activated), same as the "For
+ * Disbursement" badge shown in the table below. Filtered separately from plain "Approved" so
+ * staff can find applications actually waiting on disbursement. */
+const STATUS_OPTIONS: { value: LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'PREAPPROVED', label: STATUS_DISPLAY_LABEL.PREAPPROVED },
   { value: 'PREDECLINED', label: STATUS_DISPLAY_LABEL.PREDECLINED },
   { value: 'UNDER_REVIEW', label: STATUS_DISPLAY_LABEL.UNDER_REVIEW },
   { value: 'PRE_APPROVAL', label: STATUS_DISPLAY_LABEL.PRE_APPROVAL },
   { value: 'APPROVED', label: STATUS_DISPLAY_LABEL.APPROVED },
+  { value: 'FOR_DISBURSEMENT', label: 'For Disbursement' },
   { value: 'DECLINED', label: STATUS_DISPLAY_LABEL.DECLINED },
 ];
 
@@ -73,17 +84,21 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
  * page's Risk Management Summary is saved) by the backend's LoanApplicationPreQualificationService
  * - advisory only; the officer still makes the real APPROVED/DECLINED call from the Detail page.
  *
- * Real, server-side pagination (100 rows/page - see `useCursorPagination`) replaced loading every
- * application up front. Applicant-name search goes to the backend's `?search=` param (debounced);
- * status and category have no backend filter param yet, so those two narrow within the current page
- * only, not across every application.
+ * Real, server-side pagination (25 rows/page - see `useCursorPagination`) so a full page of up to
+ * 25 matching rows is always shown, even with a filter applied. Applicant-name search, status, and
+ * category (2026-07-16) all go to backend query params - previously status/category only narrowed
+ * within whatever page had already been fetched, so a filtered view could show far fewer than 25
+ * rows despite more matches existing on later pages. "For Disbursement" is the one exception: it's
+ * a derived state, not a raw `status` value, so the server is asked for `status=APPROVED` and the
+ * derived narrowing happens client-side on that page only - a smaller, accepted gap versus the
+ * general bug this fixes.
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
   const { canAccessLoanApplications, currentAccount } = useRole();
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [status, setStatus] = React.useState<LoanApplicationStatus | 'ALL'>('ALL');
+  const [status, setStatus] = React.useState<LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
   const [createOpen, setCreateOpen] = React.useState(false);
 
@@ -100,41 +115,48 @@ export function LoanApplicationsPage() {
   } = useCursorPagination<LoanApplication>(
     ['loan-applications'],
     '/loan-applications',
-    { search: debouncedSearch },
+    {
+      search: debouncedSearch,
+      status: status === 'ALL' ? undefined : status === 'FOR_DISBURSEMENT' ? 'APPROVED' : status,
+      requestedCategory: category === 'ALL' ? undefined : category,
+    },
     PAGE_SIZE,
     canAccessLoanApplications,
   );
 
-  // Which of this page's applications' created loan accounts have been Activated (disbursed) -
-  // an Approved application whose loan account has moved past PENDING_APPROVAL/APPROVED shows as
-  // "Disbursed" here instead, mirroring the Loan Application Detail page's own relabel.
+  // Which of this page's applications' created loan accounts exist, and their status - an
+  // Approved application whose loan account has been created but not yet Activated shows as "For
+  // Disbursement" (matching the loan account's own APPROVED-status relabel); once Activated it
+  // shows as "Disbursed" instead. Mirrors the Loan Application Detail page's own relabel.
   const loanAccountsQuery = useQuery({
     queryKey: ['loan-accounts', 'all', 'statusOnly'],
     queryFn: () => fetchAllPages<{ id: string; status: string }>('/loan-accounts'),
     enabled: canAccessLoanApplications,
   });
-  const activatedLoanAccountIds = React.useMemo(
-    () =>
-      new Set(
-        (loanAccountsQuery.data ?? [])
-          .filter((l) => l.status !== 'PENDING_APPROVAL' && l.status !== 'APPROVED')
-          .map((l) => l.id),
-      ),
+  const loanAccountStatusById = React.useMemo(
+    () => new Map((loanAccountsQuery.data ?? []).map((l) => [l.id, l.status])),
     [loanAccountsQuery.data],
   );
 
-  const categoryOptions = React.useMemo(
-    () => ['ALL', ...[...new Set(applications.map((a) => a.requestedCategory))].sort()],
-    [applications],
+  // Mirrors the "For Disbursement" badge logic below: an Approved application whose loan account
+  // exists but hasn't been Activated yet (still PENDING_APPROVAL/APPROVED on the loan account
+  // side).
+  const isForDisbursement = React.useCallback(
+    (app: LoanApplication) => {
+      if (app.status !== 'APPROVED' || !app.createdLoanAccountId) return false;
+      const loanAccountStatus = loanAccountStatusById.get(app.createdLoanAccountId);
+      return loanAccountStatus === 'PENDING_APPROVAL' || loanAccountStatus === 'APPROVED';
+    },
+    [loanAccountStatusById],
   );
 
+  // status and requestedCategory are already server-filtered above (via useCursorPagination's
+  // extraParams) - the only remaining client-side narrowing is FOR_DISBURSEMENT, a derived state
+  // the server can't filter on directly (it asked for status=APPROVED instead; see this
+  // component's own doc comment for why that's a smaller, accepted gap).
   // Computed unconditionally, before the early return below, so
   // useSortableTable's hook call is never skipped on some renders.
-  const filtered = applications.filter((app) => {
-    const matchesStatus = status === 'ALL' || app.status === status;
-    const matchesCategory = category === 'ALL' || app.requestedCategory === category;
-    return matchesStatus && matchesCategory;
-  });
+  const filtered = status === 'FOR_DISBURSEMENT' ? applications.filter(isForDisbursement) : applications;
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   if (!canAccessLoanApplications) {
@@ -179,7 +201,7 @@ export function LoanApplicationsPage() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Loan Application Form</DialogTitle>
             <DialogDescription>
@@ -221,7 +243,7 @@ export function LoanApplicationsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Select value={status} onValueChange={(v) => setStatus(v as LoanApplicationStatus | 'ALL')}>
+            <Select value={status} onValueChange={(v) => setStatus(v as LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL')}>
               <SelectTrigger className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
@@ -238,7 +260,7 @@ export function LoanApplicationsPage() {
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
-                {categoryOptions.map((c) => (
+                {CATEGORY_OPTIONS.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c === 'ALL' ? 'All categories' : c}
                   </SelectItem>
@@ -290,20 +312,23 @@ export function LoanApplicationsPage() {
                     {formatPeso(app.requestedAmount)}
                   </TableCell>
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
-                    {/* Waits for loanAccountsQuery before showing Approved/Disbursed for an
+                    {/* Waits for loanAccountsQuery before showing For Disbursement/Disbursed for an
                         application with a created loan account - otherwise this briefly flashes
-                        "Approved" (the raw application status) before flipping to "Disbursed" once
-                        the loan accounts list finishes loading a moment later. */}
+                        "Approved" (the raw application status) before flipping to the resolved
+                        label once the loan accounts list finishes loading a moment later. */}
                     {app.status === 'APPROVED' && app.createdLoanAccountId && loanAccountsQuery.isLoading ? (
                       <Badge variant="outline" className="text-muted-foreground">
                         …
                       </Badge>
                     ) : (
-                      <Badge variant={STATUS_BADGE_VARIANT[app.status]}>
-                        {app.status === 'APPROVED' && app.createdLoanAccountId && activatedLoanAccountIds.has(app.createdLoanAccountId)
-                          ? 'Disbursed'
-                          : STATUS_DISPLAY_LABEL[app.status]}
-                      </Badge>
+                      (() => {
+                        const loanAccountStatus = app.createdLoanAccountId ? loanAccountStatusById.get(app.createdLoanAccountId) : undefined;
+                        if (app.status === 'APPROVED' && loanAccountStatus) {
+                          const isActivated = loanAccountStatus !== 'PENDING_APPROVAL' && loanAccountStatus !== 'APPROVED';
+                          return <Badge variant="success">{isActivated ? 'Disbursed' : 'For Disbursement'}</Badge>;
+                        }
+                        return <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{STATUS_DISPLAY_LABEL[app.status]}</Badge>;
+                      })()
                     )}
                   </TableCell>
                   <TableCell

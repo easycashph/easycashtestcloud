@@ -283,9 +283,12 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
   /** Frontend↔Backend Wiring Pilot follow-up (2026-07-09): borrowerId equality filter combined with the pre-existing branch/search filters. */
   async findMany(options: FindManyLoanAccountsOptions, ctx?: TransactionContext): Promise<LoanAccount[]> {
     const client = resolveClient(ctx);
-    const where: Prisma.LoanAccountWhereInput = {
+    const baseWhere: Prisma.LoanAccountWhereInput = {
       ...(options.branchId ? { branchId: options.branchId } : {}),
       ...(options.borrowerId ? { borrowerId: options.borrowerId } : {}),
+      ...(options.loanProductVersionIds && options.loanProductVersionIds.length > 0
+        ? { loanProductVersionId: { in: options.loanProductVersionIds } }
+        : {}),
       ...(options.search
         ? {
             OR: [
@@ -296,6 +299,33 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
           }
         : {}),
     };
+
+    let where: Prisma.LoanAccountWhereInput = baseWhere;
+
+    // 'MATURED' and a plain ACTIVE/ACTIVE_IN_ARREARS filter both need to know which of the
+    // candidate rows (matching every other filter) are matured, since that's a computed overlay,
+    // not a column - see FindManyLoanAccountsOptions.status's own doc comment for why. Scoped to
+    // ACTIVE/ACTIVE_IN_ARREARS candidates only, since maturity is only ever possible for those two
+    // (mirrors findMaturedLoanAccountIds's own status filter).
+    if (options.status === 'MATURED' || options.status === 'ACTIVE' || options.status === 'ACTIVE_IN_ARREARS') {
+      const candidateStatus: ('ACTIVE' | 'ACTIVE_IN_ARREARS')[] =
+        options.status === 'MATURED' ? ['ACTIVE', 'ACTIVE_IN_ARREARS'] : [options.status];
+      const candidates = await client.loanAccount.findMany({
+        where: { ...baseWhere, status: { in: candidateStatus } },
+        select: { id: true },
+      });
+      const maturedIds = await this.findMaturedLoanAccountIds(
+        candidates.map((c) => c.id),
+        ctx,
+      );
+      where =
+        options.status === 'MATURED'
+          ? { ...baseWhere, status: { in: candidateStatus }, id: { in: [...maturedIds] } }
+          : { ...baseWhere, status: options.status, id: { notIn: [...maturedIds] } };
+    } else if (options.status) {
+      where = { ...baseWhere, status: options.status };
+    }
+
     const rows = await client.loanAccount.findMany({
       where,
       include: LOAN_ACCOUNT_INCLUDE,

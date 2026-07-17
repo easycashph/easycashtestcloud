@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
 import { FieldLockToggle } from '@/components/FieldLockToggle';
@@ -180,7 +181,7 @@ function RealEditClientDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Client Details</DialogTitle>
           <DialogDescription>
@@ -270,7 +271,7 @@ function RealEditClientDialog({
               </Label>
               <FieldLockToggle unlocked={unlocked.mobilePhone1} onToggle={() => toggleUnlock('mobilePhone1')} />
             </div>
-            <Input
+            <PhoneInput
               value={draft.mobilePhone1}
               onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })}
               placeholder="09XX XXX XXXX"
@@ -699,11 +700,23 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                   <TableCell>
                     <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
                   </TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.principalBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.interestBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.balances.feesBalance))}</TableCell>
-                  <TableCell className="text-right">{formatPeso(num(loan.collectionsBalance))}</TableCell>
+                  {(() => {
+                    // Not yet Activated - every balance column is genuinely 0 only because the
+                    // amortization schedule hasn't been generated yet, not because there's no
+                    // obligation. "—" avoids that reading as "nothing owed"/"fully paid". Uses
+                    // loan.balances (the remaining balance), not loan.principalAmount (the
+                    // original loan amount) - see the Principal Balance display fix.
+                    const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
+                    return (
+                      <>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))}</TableCell>
+                        <TableCell className="text-right">{notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))}</TableCell>
+                      </>
+                    );
+                  })()}
                 </TableRow>
               ))}
               {loansQuery.isLoading && (
@@ -745,7 +758,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />
 
       <Dialog open={createApplicationOpen} onOpenChange={setCreateApplicationOpen}>
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Application</DialogTitle>
             <DialogDescription>
@@ -768,7 +781,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Dialog>
 
       <Dialog open={createLoanAccountOpen} onOpenChange={setCreateLoanAccountOpen}>
-        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Loan Account</DialogTitle>
             <DialogDescription>For {borrower.fullName}. Review before submitting.</DialogDescription>

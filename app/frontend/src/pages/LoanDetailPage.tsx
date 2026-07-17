@@ -53,6 +53,7 @@ import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
+import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
 const RISK_BADGE_VARIANT: Record<RiskLevel, 'success' | 'warning' | 'destructive'> = {
   LOW: 'success',
@@ -447,6 +448,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     webFee: '',
     insuranceFee: '',
   });
+  const [recordPaymentOpen, setRecordPaymentOpen] = React.useState(false);
 
   const loanQuery = useQuery({
     queryKey: ['loan-account', loanId],
@@ -824,6 +826,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const schedulePreview = showSchedulePreview
     ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(loan.firstRepaymentDate))
     : null;
+  // Every balance column (and the collectionsBalance/accountingBalance getters derived from them)
+  // is genuinely 0 before Activation - not because there's no obligation, but because
+  // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
+  const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
   const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const canReversePayment = currentAccount.roles.includes('MIS');
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
@@ -858,7 +864,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
           {canRecordPayment && (
-            <Button size="sm" onClick={() => navigate(`/payments?loanId=${loan.id}`)}>
+            <Button size="sm" onClick={() => setRecordPaymentOpen(true)}>
               Record Payment
             </Button>
           )}
@@ -904,12 +910,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
       <Card>
         <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
-          <MiniStat label="Collections Balance" value={formatPeso(num(loan.collectionsBalance))} emphasize />
-          <MiniStat label="Accounting Balance" value={formatPeso(num(loan.accountingBalance))} emphasize />
-          <MiniStat label="Principal" value={formatPeso(num(loan.balances.principalBalance))} />
-          <MiniStat label="Interest" value={formatPeso(num(loan.balances.interestBalance))} />
-          <MiniStat label="Penalty" value={formatPeso(num(loan.balances.penaltyBalance))} />
-          <MiniStat label="Fees" value={formatPeso(num(loan.balances.feesBalance))} />
+          {/* Not yet Activated - every balance column is genuinely 0 only because the amortization
+              schedule hasn't been generated yet, not because there's no obligation. Showing "—"
+              here avoids that reading as "nothing owed"/"fully paid" for a loan that hasn't
+              started. */}
+          <MiniStat label="Collections Balance" value={notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))} emphasize />
+          <MiniStat label="Accounting Balance" value={notYetActivated ? '—' : formatPeso(num(loan.accountingBalance))} emphasize />
+          <MiniStat label="Principal" value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))} />
+          <MiniStat label="Interest" value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))} />
+          <MiniStat label="Penalty" value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))} />
+          <MiniStat label="Fees" value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))} />
           <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
           <MiniStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
           <MiniStat label="Installments" value={String(loan.installmentCount)} />
@@ -987,14 +997,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      // "Balance" (last column) - how much the client still owes as of this
-                      // installment: total obligation across the whole schedule minus everything
-                      // paid so far, running down toward 0 at the final installment.
+                      // "Balance" (last column) - the SCHEDULED remaining obligation after this
+                      // installment: total obligation across the whole schedule minus every
+                      // installment's DUE amount through this row (not what's actually been paid).
+                      // Deliberately due-based, not paid-based (2026-07-16 bug report comparing
+                      // this against the Activation preview's own Balance column): a paid-based
+                      // running total stays pinned at the full totalObligation on every single row
+                      // until a payment is actually recorded, instead of declining installment by
+                      // installment the way an amortization schedule always should - due amounts
+                      // are fixed at schedule-generation time and don't depend on payment status,
+                      // so this now declines smoothly regardless of what's been paid so far,
+                      // matching the preview's own (also due-based) endingPrincipal column.
                       const totalObligation = installments.reduce((sum, i) => {
                         const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
                         return sum + num(i.due.principal) + num(i.due.interest) + num(i.currentFeesDue) + penalty;
                       }, 0);
-                      let cumulativePaid = 0;
+                      let cumulativeDue = 0;
                       return installments.map((i) => {
                         const late = wasInstallmentLate(i);
                         // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
@@ -1007,8 +1025,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         // concept for fees the way penalty has, so no separate isLiveFees flag needed).
                         const feesDisplay = num(i.currentFeesDue);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
-                        cumulativePaid += rowPaid;
-                        const balance = Math.max(0, totalObligation - cumulativePaid);
+                        const rowDue = num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay;
+                        cumulativeDue += rowDue;
+                        const balance = Math.max(0, totalObligation - cumulativeDue);
                         const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
                         const canAdjustFeesThisRow = i.status !== 'PAID' && num(i.paid.fees) === 0;
                         return (
@@ -1863,6 +1882,35 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       </Dialog>
 
       <LoanDocumentPreviewModal target={previewTarget} onClose={() => setPreviewTarget(null)} />
+
+      <Dialog open={recordPaymentOpen} onOpenChange={setRecordPaymentOpen}>
+        <DialogContent
+          className="max-h-[90vh] max-w-6xl overflow-y-auto"
+          // Radix's default open-focus behavior auto-focuses the first focusable element inside the
+          // dialog - here, the Payment amount field, since this dialog skips straight to "Payment
+          // Details" (locked borrower/loan). That field being focused before the user has clicked
+          // it at all meant NumberInput's own "don't stomp an in-progress edit" guard blocked the
+          // auto-fill-from-next-due-amount effect from ever showing (2026-07-16 bug report - a
+          // blinking caret with no keystrokes, and the amount staying blank). Skip the auto-focus
+          // entirely - nothing in this dialog needs to grab focus the instant it opens.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Record Payment</DialogTitle>
+            <DialogDescription>
+              {loan.loanCode} - {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+            </DialogDescription>
+          </DialogHeader>
+          {recordPaymentOpen && borrower && (
+            <PaymentRecordingForm
+              lockedBorrower={borrower}
+              lockedLoan={loan}
+              showChrome={false}
+              onDone={() => setRecordPaymentOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

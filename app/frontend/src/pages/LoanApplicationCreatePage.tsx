@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
+import { PhoneInput } from '@/components/PhoneInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { FieldTooltip } from '@/components/FieldTooltip';
@@ -22,7 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, uploadFile } from '@/lib/apiClient';
+import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import type { CreateLoanApplicationRequest, LoanApplication } from '@/lib/loanApplicationApiTypes';
 import type { ExtractedLoanApplicationFields } from '@/lib/aiExtractionApiTypes';
 import {
@@ -98,10 +101,12 @@ const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/
 
 /** Paper form §2 lists Seaman / Salary / OFW / Business-Corporate / Car / Real Estate - only the 3 active categories are offered today. */
 const LOAN_TYPE_OPTIONS = [
-  { paperLabel: 'Salary', category: 'Salary Loan' },
-  { paperLabel: 'Seaman', category: 'Seafarer Loan' },
-  { paperLabel: 'Business/Corporate', category: 'Business Loan' },
+  { category: 'Business Loan' },
+  { category: 'Salary Loan' },
+  { category: 'Seafarer Loan' },
 ];
+
+const LOAN_TERM_MONTHS_OPTIONS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Others'];
 const GENDER_OPTIONS = ['Female', 'Male'];
@@ -118,14 +123,16 @@ function Field({
   children,
   hint,
   tooltip,
+  className,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
   tooltip?: string;
+  className?: string;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className={`space-y-1.5${className ? ` ${className}` : ''}`}>
       <Label className="flex items-center gap-1 text-xs">
         {label}
         {tooltip && <FieldTooltip text={tooltip} />}
@@ -323,7 +330,48 @@ export function LoanApplicationForm({
   const [hasCoBorrower, setHasCoBorrower] = React.useState(Boolean(prefillFrom?.coBorrowerName));
   const [coBorrowerName, setCoBorrowerName] = React.useState(prefillCoBorrower?.name ?? '');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(prefillCoBorrower?.relationship ?? '');
-  const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState(prefillFrom?.coBorrowerEmployer ?? '');
+  const [coBorrowerContactNumber, setCoBorrowerContactNumber] = React.useState(prefillFrom?.coBorrowerContactNumber ?? '');
+  const [coBorrowerEmail, setCoBorrowerEmail] = React.useState(prefillFrom?.coBorrowerEmail ?? '');
+  const [coBorrowerAddress, setCoBorrowerAddress] = React.useState(prefillFrom?.coBorrowerAddress ?? '');
+
+  // Only offered when this form was opened FROM an existing client (lockedBorrowerId set, the
+  // renewal flow) - pulls that client's own past applications to find co-borrowers they've used
+  // before, so staff can pick one instead of re-typing the same person's details every renewal.
+  // Never shown for the original walk-in intake flow (no borrower/history exists yet). No
+  // borrowerId filter exists on GET /loan-applications yet, so this fetches every application and
+  // filters client-side - same pattern ClientProfilePage's own "myApplications" already uses.
+  const previousApplicationsQuery = useQuery({
+    queryKey: ['loan-applications', 'all', 'coBorrowerHistory'],
+    queryFn: () => fetchAllPages<LoanApplication>('/loan-applications'),
+    enabled: Boolean(lockedBorrowerId),
+  });
+  const previousCoBorrowers = React.useMemo(() => {
+    const seen = new Map<string, { name: string; relationship: string; contactNumber: string; email: string; address: string }>();
+    for (const app of previousApplicationsQuery.data ?? []) {
+      if (app.borrowerId !== lockedBorrowerId) continue;
+      if (!app.coBorrowerName) continue;
+      const parsed = parseCoBorrowerName(app.coBorrowerName);
+      if (!parsed.name || seen.has(parsed.name)) continue;
+      seen.set(parsed.name, {
+        name: parsed.name,
+        relationship: parsed.relationship,
+        contactNumber: app.coBorrowerContactNumber ?? '',
+        email: app.coBorrowerEmail ?? '',
+        address: app.coBorrowerAddress ?? '',
+      });
+    }
+    return [...seen.values()];
+  }, [previousApplicationsQuery.data]);
+
+  const applyPreviousCoBorrower = (name: string) => {
+    const match = previousCoBorrowers.find((c) => c.name === name);
+    if (!match) return;
+    setCoBorrowerName(match.name);
+    setCoBorrowerRelationship(match.relationship);
+    setCoBorrowerContactNumber(match.contactNumber);
+    setCoBorrowerEmail(match.email);
+    setCoBorrowerAddress(match.address);
+  };
   // §9 - character references
   const [reference1, setReference1] = React.useState({
     name: prefillFrom?.reference1Name ?? '',
@@ -503,7 +551,9 @@ export function LoanApplicationForm({
           hasCoBorrower && coBorrowerName.trim()
             ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
             : undefined,
-        coBorrowerEmployer: hasCoBorrower && coBorrowerEmployer.trim() ? coBorrowerEmployer.trim() : undefined,
+        coBorrowerContactNumber: hasCoBorrower && coBorrowerContactNumber.trim() ? coBorrowerContactNumber.trim() : undefined,
+        coBorrowerEmail: hasCoBorrower && coBorrowerEmail.trim() ? coBorrowerEmail.trim() : undefined,
+        coBorrowerAddress: hasCoBorrower && coBorrowerAddress.trim() ? coBorrowerAddress.trim() : undefined,
         reference1Name: reference1.name.trim() || undefined,
         reference1Mobile: reference1.mobile.trim() || undefined,
         reference2Name: reference2.name.trim() || undefined,
@@ -710,17 +760,28 @@ export function LoanApplicationForm({
               <SelectContent>
                 {LOAN_TYPE_OPTIONS.map((o) => (
                   <SelectItem key={o.category} value={o.category}>
-                    {o.paperLabel} ({o.category})
+                    {o.category}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
           <Field label="Desired loan amount (₱) *" tooltip="The peso amount the applicant is requesting to borrow.">
-            <Input type="number" min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
+            <NumberInput min="0" value={requestedAmount} onChange={(e) => setRequestedAmount(e.target.value)} />
           </Field>
           <Field label="Preferred loan term (months) *" tooltip="How many months the applicant wants to repay the loan over.">
-            <Input type="number" min="1" max="36" value={requestedTermMonths} onChange={(e) => setRequestedTermMonths(e.target.value)} />
+            <Select value={requestedTermMonths} onValueChange={setRequestedTermMonths}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOAN_TERM_MONTHS_OPTIONS.map((months) => (
+                  <SelectItem key={months} value={String(months)}>
+                    {months}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         </div>
         <div className="mt-3">
@@ -809,7 +870,7 @@ export function LoanApplicationForm({
             </Select>
           </Field>
           <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
-            <Input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
@@ -837,13 +898,13 @@ export function LoanApplicationForm({
             </Field>
           </div>
           <Field label="Monthly income" tooltip="Applicant's gross monthly income - used for the Risk Management pre-qualification assessment.">
-            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+            <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </Field>
           <Field label="TIN" tooltip="Applicant's Tax Identification Number (BIR), if available.">
-            <Input value={tin} onChange={(e) => setTin(e.target.value)} />
+            <GroupedDigitsInput value={tin} onChange={(e) => setTin(e.target.value)} />
           </Field>
           <Field label="SSS no." tooltip="Applicant's Social Security System number, if available.">
-            <Input value={sss} onChange={(e) => setSss(e.target.value)} />
+            <GroupedDigitsInput value={sss} onChange={(e) => setSss(e.target.value)} />
           </Field>
         </div>
       </SectionCard>
@@ -918,16 +979,47 @@ export function LoanApplicationForm({
           This application has a co-borrower
         </label>
         {hasCoBorrower && (
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
-              <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
-            </Field>
-            <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
-              <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
-            </Field>
-            <Field label="Co-borrower employer" tooltip="Where the co-borrower works.">
-              <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
-            </Field>
+          <div className="mt-3 space-y-3">
+            {/* Existing-client flow only (opened with lockedBorrowerId, e.g. Client Profile's
+                "Create Loan Application") - lets staff reuse a co-borrower this same client has
+                already used on a past application instead of re-typing their details. Selecting
+                one autofills the fields below, which stay freely editable; not selecting anything
+                just leaves them blank for a brand-new co-borrower. Never shown on the original
+                walk-in intake form - no client/history exists yet to pull from. */}
+            {lockedBorrowerId && previousCoBorrowers.length > 0 && (
+              <Field label="Use a previous co-borrower" tooltip="Autofills the fields below from a co-borrower this client has used before - still editable after.">
+                <Select onValueChange={applyPreviousCoBorrower}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={previousApplicationsQuery.isLoading ? 'Loading…' : 'Select a previous co-borrower...'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {previousCoBorrowers.map((c) => (
+                      <SelectItem key={c.name} value={c.name}>
+                        {c.name}
+                        {c.relationship ? ` (${c.relationship})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
+                <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
+              </Field>
+              <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
+                <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
+              </Field>
+              <Field label="Co-borrower contact number" tooltip="Co-borrower's active mobile number.">
+                <PhoneInput value={coBorrowerContactNumber} onChange={(e) => setCoBorrowerContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+              </Field>
+              <Field label="Co-borrower email address" tooltip="Co-borrower's email, if available.">
+                <Input type="email" value={coBorrowerEmail} onChange={(e) => setCoBorrowerEmail(e.target.value)} />
+              </Field>
+              <Field label="Co-borrower address" tooltip="Co-borrower's home address." className="sm:col-span-2">
+                <Input value={coBorrowerAddress} onChange={(e) => setCoBorrowerAddress(e.target.value)} />
+              </Field>
+            </div>
           </div>
         )}
       </SectionCard>
@@ -938,13 +1030,13 @@ export function LoanApplicationForm({
             <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value }))} />
           </Field>
           <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
-            <Input value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
           <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
             <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value }))} />
           </Field>
           <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
-            <Input value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
         </div>
       </SectionCard>

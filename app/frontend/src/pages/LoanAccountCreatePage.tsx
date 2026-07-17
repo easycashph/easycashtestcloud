@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -720,9 +721,8 @@ export function LoanAccountForm({
                     {amountEntryMode === 'net' && (
                       <div className="space-y-1.5">
                         <Label htmlFor="desired-net">Desired Net Amount</Label>
-                        <Input
+                        <NumberInput
                           id="desired-net"
-                          type="number"
                           min="0"
                           step="0.01"
                           value={desiredNetAmount}
@@ -736,9 +736,8 @@ export function LoanAccountForm({
 
                     <div className="space-y-1.5">
                       <Label htmlFor="principal">{amountEntryMode === 'net' ? 'Principal Amount (solved)' : 'Principal Amount'}</Label>
-                      <Input
+                      <NumberInput
                         id="principal"
-                        type="number"
                         min="0"
                         step="0.01"
                         value={principalAmount}

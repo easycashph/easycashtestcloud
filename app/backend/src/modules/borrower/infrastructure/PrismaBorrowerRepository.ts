@@ -154,6 +154,13 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
     const client = resolveClient(ctx);
     const where: Prisma.BorrowerWhereInput = {
       ...(options.branchId ? { branchId: options.branchId } : {}),
+      ...(options.loanPresence === 'WITH_ACTIVE'
+        ? { loanAccounts: { some: { status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] } } } }
+        : options.loanPresence === 'WITH_HISTORY'
+          ? { loanAccounts: { some: {} } }
+          : options.loanPresence === 'NONE'
+            ? { loanAccounts: { none: {} } }
+            : {}),
       ...(options.search
         ? {
             OR: [

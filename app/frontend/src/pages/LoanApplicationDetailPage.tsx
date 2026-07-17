@@ -14,6 +14,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/NumberInput';
+import { PhoneInput } from '@/components/PhoneInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -29,6 +32,7 @@ import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { classifyProductType } from '@/lib/productTypeClassification';
 import type {
   CreditBureauResult,
   LoanApplication,
@@ -233,7 +237,7 @@ function CreateClientProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Client Profile</DialogTitle>
           <DialogDescription>
@@ -308,7 +312,7 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Contact Number</Label>
-            <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>
@@ -337,15 +341,15 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Monthly Income</Label>
-            <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+            <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </div>
           <div className="space-y-1.5">
             <Label>TIN</Label>
-            <Input value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
+            <GroupedDigitsInput value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>SSS No.</Label>
-            <Input value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
+            <GroupedDigitsInput value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
           </div>
         </div>
 
@@ -471,15 +475,7 @@ function CreateClientProfileDialog({
   );
 }
 
-/**
- * Curated product-class whitelist per loan type, confirmed with the business 2026-07-10 - not
- * every active `LoanProduct` in the database, deliberately: only these are offered through this
- * assignment flow. `discontinued: true` entries are still real, currently-active products (loans
- * already running under them still need to be assignable/visible), but are no longer offered to
- * new applicants going forward - surfaced with a badge, not hidden, so staff can tell the
- * difference at a glance.
- */
-const LOAN_TYPE_OPTIONS = ['Salary Loan', 'Seafarer Loan', 'Business Loan'] as const;
+const LOAN_TYPE_OPTIONS = ['Business Loan', 'Salary Loan', 'Seafarer Loan'] as const;
 type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 
 /** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT - kept local since this file doesn't
@@ -493,35 +489,34 @@ const DETAIL_STATUS_BADGE_VARIANT: Record<LoanApplication['status'], 'secondary'
   DECLINED: 'destructive',
 };
 
-const PRODUCT_CLASS_BY_TYPE: Record<LoanTypeOption, { name: string; discontinued?: boolean }[]> = {
-  'Salary Loan': [
-    { name: 'SL-Regular' },
-    { name: 'SL-Corporate' },
-    { name: 'SL-Snap-A', discontinued: true },
-    { name: 'SL-Snap-B', discontinued: true },
-    { name: 'SL-Online', discontinued: true },
-    { name: 'SL-Online_New', discontinued: true },
-    { name: 'SL-Lazada', discontinued: true },
-    { name: 'SL-Lazada -New', discontinued: true },
-    { name: 'SL-Lazada-Promo', discontinued: true },
-  ],
-  'Seafarer Loan': [
-    { name: 'SML-Regular' },
-    { name: 'SML-Special' },
-    { name: 'SML-Kaborrow', discontinued: true },
-    { name: 'SML-PDC', discontinued: true },
-    { name: 'SML-Quick Cash', discontinued: true },
-    { name: 'SML-Co-Borrower Allotment', discontinued: true },
-    { name: 'SML-Self Allotment', discontinued: true },
-  ],
-  'Business Loan': [{ name: 'BL-Regular' }, { name: 'BL-Special' }],
-};
+/**
+ * 2026-07-16: previously a hand-maintained whitelist confirmed with the business 2026-07-10 - it
+ * went stale (new active product classes like SML-Max/SML-Lite/SML-Deluxe etc. never appeared
+ * here, and some it did list - e.g. SML-Quick Cash - had drifted out of sync with which products
+ * are actually still active). Replaced with a live derivation from the same `/loan-products`
+ * catalog + `classifyProductType` grouping the Create Loan Account form already uses, so this can
+ * never go stale again. Still still-real-but-legacy products marked "discontinued" (no longer
+ * offered to new applicants, but still assignable so existing loans under them stay usable) - kept
+ * as a small static hint set rather than re-deriving it (nothing in the product catalog encodes
+ * that distinction), so a name only needs to be added here if/when the business discontinues it.
+ */
+const KNOWN_DISCONTINUED_PRODUCT_NAMES = new Set([
+  'SL-Snap-A',
+  'SL-Snap-B',
+  'SL-Online',
+  'SL-Online_New',
+  'SL-Lazada',
+  'SL-Lazada -New',
+  'SL-Lazada-Promo',
+  'SML-Kaborrow',
+  'SML-PDC',
+  'SML-Co-Borrower Allotment',
+  'SML-Self Allotment',
+]);
 
 function findLoanTypeForProductName(productName: string): LoanTypeOption | null {
-  for (const type of LOAN_TYPE_OPTIONS) {
-    if (PRODUCT_CLASS_BY_TYPE[type].some((c) => c.name === productName)) return type;
-  }
-  return null;
+  const type = classifyProductType(productName);
+  return (LOAN_TYPE_OPTIONS as readonly string[]).includes(type) ? (type as LoanTypeOption) : null;
 }
 
 /** One pass/fail row of the decision-scoring breakdown - mirrors the backend's
@@ -568,7 +563,7 @@ function CreateLoanAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Loan Account</DialogTitle>
           <DialogDescription>From {borrower.fullName}&apos;s approved application. Review before submitting.</DialogDescription>
@@ -667,11 +662,11 @@ function RiskManagementSummaryCard({
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Monthly income (₱)</Label>
-              <Input type="number" min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
+              <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Credit score (from CB report)</Label>
-              <Input type="number" min="0" max="1000" value={creditScore} onChange={(e) => setCreditScore(e.target.value)} />
+              <NumberInput min="0" max="1000" value={creditScore} onChange={(e) => setCreditScore(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Properties owned</Label>
@@ -917,6 +912,10 @@ export function LoanApplicationDetailPage() {
   const isCreatedLoanAccountActivated = createdLoanAccount
     ? createdLoanAccount.status !== 'PENDING_APPROVAL' && createdLoanAccount.status !== 'APPROVED'
     : false;
+  // Created but not yet Activated - the loan account itself shows as "For Disbursement" (see
+  // StatusBadge.tsx's LOAN_STATUS_STYLE) in this state, so this application's own status display
+  // matches it instead of still saying "Approved".
+  const isCreatedLoanAccountAwaitingDisbursement = Boolean(createdLoanAccount) && !isCreatedLoanAccountActivated;
 
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
@@ -931,10 +930,6 @@ export function LoanApplicationDetailPage() {
           .map((v) => ({ id: v.id, productName: product.name, label: `${product.name} (v${v.versionNumber})` })),
       ),
     [productsQuery.data],
-  );
-  const versionIdByProductName = React.useMemo(
-    () => new Map(activeVersionOptions.map((v) => [v.productName, v.id])),
-    [activeVersionOptions],
   );
   const productNameByVersionId = React.useMemo(
     () => new Map(activeVersionOptions.map((v) => [v.id, v.productName])),
@@ -960,10 +955,11 @@ export function LoanApplicationDetailPage() {
 
   const productClassOptions = React.useMemo(() => {
     if (!selectedProductType) return [];
-    return PRODUCT_CLASS_BY_TYPE[selectedProductType]
-      .map((c) => ({ ...c, versionId: versionIdByProductName.get(c.name) }))
-      .filter((c): c is { name: string; discontinued?: boolean; versionId: string } => Boolean(c.versionId));
-  }, [selectedProductType, versionIdByProductName]);
+    return activeVersionOptions
+      .filter((v) => classifyProductType(v.productName) === selectedProductType)
+      .map((v) => ({ name: v.productName, versionId: v.id, discontinued: KNOWN_DISCONTINUED_PRODUCT_NAMES.has(v.productName) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedProductType, activeVersionOptions]);
 
   // Resolves encodedByUserId/reviewedByUserId (raw LMS account ids) into display names for the
   // "encoded by" / "reviewed by" indicators below - same join pattern used elsewhere (e.g.
@@ -1102,8 +1098,18 @@ export function LoanApplicationDetailPage() {
                 ) : (
                   <h2 className="text-2xl font-semibold tracking-tight">{application.applicantName}</h2>
                 )}
-                <Badge variant={DETAIL_STATUS_BADGE_VARIANT[application.status]}>
-                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated ? 'Disbursed' : STATUS_DISPLAY_LABEL[application.status]}
+                <Badge
+                  variant={
+                    application.status === 'APPROVED' && (isCreatedLoanAccountActivated || isCreatedLoanAccountAwaitingDisbursement)
+                      ? 'success'
+                      : DETAIL_STATUS_BADGE_VARIANT[application.status]
+                  }
+                >
+                  {application.status === 'APPROVED' && isCreatedLoanAccountActivated
+                    ? 'Disbursed'
+                    : application.status === 'APPROVED' && isCreatedLoanAccountAwaitingDisbursement
+                      ? 'For Disbursement'
+                      : STATUS_DISPLAY_LABEL[application.status]}
                 </Badge>
                 {application.createdLoanAccountId && (
                   <Button size="sm" variant="outline" asChild>
@@ -1405,7 +1411,13 @@ export function LoanApplicationDetailPage() {
               <div className="space-y-3">
                 <div className="rounded-md border p-3 text-sm">
                   <p className="font-medium">
-                    {application.status === 'APPROVED' ? (isCreatedLoanAccountActivated ? 'Disbursed' : 'Approved') : 'Declined'}
+                    {application.status === 'APPROVED'
+                      ? isCreatedLoanAccountActivated
+                        ? 'Disbursed'
+                        : isCreatedLoanAccountAwaitingDisbursement
+                          ? 'For Disbursement'
+                          : 'Approved'
+                      : 'Declined'}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {application.reviewedAt && formatDate(application.reviewedAt)}

@@ -38,6 +38,9 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     creditScore: row.creditScore ?? undefined,
     coBorrowerName: row.coBorrowerName ?? undefined,
     coBorrowerEmployer: row.coBorrowerEmployer ?? undefined,
+    coBorrowerContactNumber: row.coBorrowerContactNumber ?? undefined,
+    coBorrowerEmail: row.coBorrowerEmail ?? undefined,
+    coBorrowerAddress: row.coBorrowerAddress ?? undefined,
     mobilePhone: row.mobilePhone ?? undefined,
     email: row.email ?? undefined,
     dependants: (row.dependants as DependantEntry[] | null) ?? undefined,
@@ -104,6 +107,9 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       creditScore: p.creditScore,
       coBorrowerName: p.coBorrowerName,
       coBorrowerEmployer: p.coBorrowerEmployer,
+      coBorrowerContactNumber: p.coBorrowerContactNumber,
+      coBorrowerEmail: p.coBorrowerEmail,
+      coBorrowerAddress: p.coBorrowerAddress,
       mobilePhone: p.mobilePhone,
       email: p.email,
       dependants: p.dependants as Prisma.InputJsonValue | undefined,
@@ -170,6 +176,8 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
     const rows = await client.loanApplication.findMany({
       where: {
         ...(options.branchId ? { branchId: options.branchId } : {}),
+        ...(options.status ? { status: options.status } : {}),
+        ...(options.requestedCategory ? { requestedCategory: options.requestedCategory } : {}),
         ...(options.search ? { applicantName: { contains: options.search, mode: 'insensitive' } } : {}),
       },
       orderBy: { createdAt: 'desc' },

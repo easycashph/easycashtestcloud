@@ -57,6 +57,9 @@ export interface LoanApplicationProps {
   creditScore?: number;
   coBorrowerName?: string;
   coBorrowerEmployer?: string;
+  coBorrowerContactNumber?: string;
+  coBorrowerEmail?: string;
+  coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
   dependants?: DependantEntry[];
@@ -124,6 +127,9 @@ export interface CreateLoanApplicationProps {
   creditScore?: number;
   coBorrowerName?: string;
   coBorrowerEmployer?: string;
+  coBorrowerContactNumber?: string;
+  coBorrowerEmail?: string;
+  coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
   dependants?: DependantEntry[];
@@ -188,6 +194,9 @@ export class LoanApplication {
       creditScore: input.creditScore,
       coBorrowerName: input.coBorrowerName,
       coBorrowerEmployer: input.coBorrowerEmployer,
+      coBorrowerContactNumber: input.coBorrowerContactNumber,
+      coBorrowerEmail: input.coBorrowerEmail,
+      coBorrowerAddress: input.coBorrowerAddress,
       mobilePhone: input.mobilePhone,
       email: input.email,
       dependants: input.dependants,
