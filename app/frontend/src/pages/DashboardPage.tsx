@@ -302,6 +302,7 @@ const PORTFOLIO_HEALTH_PLANS: {
  * the funnel mockup shown to and approved by the user 2026-07-17. Declined uses the red ramp since
  * it's a branch/exit, not part of the taper. */
 const PIPELINE_STAGE_STYLE: Record<string, { fill: string; text: string }> = {
+  totalApplications: { fill: '#173B5E', text: '#CFE3F7' },
   requirementCompliance: { fill: '#E6F1FB', text: '#0C447C' },
   underwriting: { fill: '#B5D4F4', text: '#0C447C' },
   review: { fill: '#85B7EB', text: '#042C53' },
@@ -315,22 +316,31 @@ const PIPELINE_STAGE_STYLE: Record<string, { fill: string; text: string }> = {
  * rolled SVG (same convention as the mockup and the Portfolio Breakdown div-bars below) since
  * Recharts has no first-class funnel chart type. `approved`/`released` are sequential, non-
  * overlapping segments - see the backend field's own doc comment.
+ *
+ * 2026-07-17 v2 fix: the first version based every %/taper width on `requirementCompliance` (the
+ * first per-stage bucket), which is frequently 0 for this dataset (most legacy applications never
+ * passed through this system's own PREAPPROVED stage) - a 0 basis produced an inverted/oversized
+ * taper and a "Declined 300%" reading. Now leads with an explicit "Total Applications" bar (every
+ * stage + declined summed) as the taper's basis, so % is always relative to a real, non-zero total.
  */
 function LoanApplicationPipelineFunnel({ pipeline }: { pipeline: DashboardSummary['loanApplicationPipeline'] }) {
+  const totalApplications =
+    pipeline.requirementCompliance + pipeline.underwriting + pipeline.review + pipeline.approved + pipeline.released + pipeline.declined;
   const stages: { key: keyof typeof PIPELINE_STAGE_STYLE; label: string; value: number }[] = [
+    { key: 'totalApplications', label: 'Total Applications', value: totalApplications },
     { key: 'requirementCompliance', label: 'Requirement compliance', value: pipeline.requirementCompliance },
     { key: 'underwriting', label: 'Underwriting', value: pipeline.underwriting },
     { key: 'review', label: 'Review', value: pipeline.review },
     { key: 'approved', label: 'Approved', value: pipeline.approved },
     { key: 'released', label: 'Released', value: pipeline.released },
   ];
-  const total = stages[0]!.value || 1;
+  const basis = totalApplications || 1;
   const cx = 260;
   const top = 20;
   const rowH = 62;
   const minHalfW = 40;
   const maxHalfW = 230;
-  const halfWidthFor = (v: number) => minHalfW + (v / total) * (maxHalfW - minHalfW);
+  const halfWidthFor = (v: number) => minHalfW + (v / basis) * (maxHalfW - minHalfW);
 
   const segments = stages.map((s, i) => {
     const y0 = top + i * rowH;
@@ -338,18 +348,24 @@ function LoanApplicationPipelineFunnel({ pipeline }: { pipeline: DashboardSummar
     const w0 = halfWidthFor(s.value);
     const nextValue = i < stages.length - 1 ? stages[i + 1]!.value : Math.round(s.value * 0.7);
     const w1 = i < stages.length - 1 ? halfWidthFor(nextValue) : Math.max(minHalfW * 0.6, w0 * 0.7);
-    const conv = i > 0 && stages[i - 1]!.value > 0 ? Math.round((s.value / stages[i - 1]!.value) * 100) : null;
+    // % of Total Applications, not of the previous stage - keeps every stage's % on the same basis.
+    const pctOfTotal = i > 0 ? Math.round((s.value / basis) * 100) : null;
     const style = PIPELINE_STAGE_STYLE[s.key]!;
-    return { ...s, y0, y1, w0, w1, conv, style };
+    return { ...s, y0, y1, w0, w1, pctOfTotal, style };
   });
   const svgHeight = top + stages.length * rowH + 20;
-  const declinedPct = total > 0 ? Math.round((pipeline.declined / total) * 100) : 0;
+  const declinedPct = Math.round((pipeline.declined / basis) * 100);
+  const underwritingSeg = segments[2]!; // branch point: after Underwriting, before Review
+  const declinedBranchY = top + rowH * 2.5;
+  // Clamped so the Declined callout box (150 wide) never runs past the 640-wide viewBox, however
+  // wide the Underwriting segment gets.
+  const declinedBoxX = Math.min(cx + underwritingSeg.w0 + 20, 640 - 160);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Loan application pipeline</CardTitle>
-        <CardDescription>Requirement Compliance through Released, live counts. Declined branches off at any stage.</CardDescription>
+        <CardDescription>Total Applications through Released, live counts. Declined branches off after Underwriting.</CardDescription>
       </CardHeader>
       <CardContent>
         <svg viewBox={`0 0 640 ${svgHeight}`} role="img" style={{ width: '100%', height: 'auto', maxWidth: 640 }}>
@@ -366,21 +382,21 @@ function LoanApplicationPipelineFunnel({ pipeline }: { pipeline: DashboardSummar
               </text>
               <text x={cx} y={(s.y0 + s.y1) / 2 + 14} textAnchor="middle" fontSize="16" fontWeight="500" fill={s.style.text}>
                 {s.value}
-                {s.conv !== null ? ` · ${s.conv}%` : ''}
+                {s.pctOfTotal !== null ? ` · ${s.pctOfTotal}%` : ''}
               </text>
             </g>
           ))}
           <path
-            d={`M ${cx + segments[1]!.w0 + 20},${top + rowH * 1.5} C ${cx + segments[1]!.w0 + 80},${top + rowH * 1.5} ${cx + segments[1]!.w0 + 80},${top + rowH * 1.5 + 60} ${cx + segments[1]!.w0 + 140},${top + rowH * 1.5 + 60}`}
+            d={`M ${cx + underwritingSeg.w0 + 20},${declinedBranchY} C ${declinedBoxX + 60},${declinedBranchY} ${declinedBoxX + 60},${declinedBranchY + 60} ${declinedBoxX + 75},${declinedBranchY + 60}`}
             fill="none"
             stroke="#F09595"
             strokeWidth="2"
           />
-          <rect x={cx + segments[1]!.w0 + 138} y={top + rowH * 1.5 + 40} width="150" height="46" rx="4" fill="#FCEBEB" />
-          <text x={cx + segments[1]!.w0 + 213} y={top + rowH * 1.5 + 60} textAnchor="middle" fontSize="12" fontWeight="500" fill="#791F1F">
+          <rect x={declinedBoxX} y={declinedBranchY + 40} width="150" height="46" rx="4" fill="#FCEBEB" />
+          <text x={declinedBoxX + 75} y={declinedBranchY + 60} textAnchor="middle" fontSize="12" fontWeight="500" fill="#791F1F">
             Declined
           </text>
-          <text x={cx + segments[1]!.w0 + 213} y={top + rowH * 1.5 + 78} textAnchor="middle" fontSize="14" fontWeight="500" fill="#791F1F">
+          <text x={declinedBoxX + 75} y={declinedBranchY + 78} textAnchor="middle" fontSize="14" fontWeight="500" fill="#791F1F">
             {pipeline.declined} · {declinedPct}% of total
           </text>
         </svg>
@@ -886,8 +902,6 @@ export function DashboardPage() {
         />
       </div>
 
-      {summaryQuery.data && <LoanApplicationPipelineFunnel pipeline={summaryQuery.data.loanApplicationPipeline} />}
-
       <Card>
         <CardHeader>
           <CardTitle>{t('dashboard.portfolioQuality.title')}</CardTitle>
@@ -1025,6 +1039,8 @@ export function DashboardPage() {
             </p>
           </CardContent>
         </Card>
+
+        {summaryQuery.data && <LoanApplicationPipelineFunnel pipeline={summaryQuery.data.loanApplicationPipeline} />}
       </div>
 
       <Card>
