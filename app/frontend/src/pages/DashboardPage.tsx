@@ -41,6 +41,7 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useLanguage } from '@/lib/languageContext';
+import { useDashboardLayout } from '@/components/dashboard-layout-provider';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
@@ -306,6 +307,7 @@ function SummaryCard({
   tone = 'default',
   onClick,
   trend,
+  compact = false,
 }: {
   title: string;
   value: string;
@@ -315,6 +317,9 @@ function SummaryCard({
   onClick?: () => void;
   /** 2026-07-12: rolling 30-day (Total Active Loans) / vs-last-month (Collections) — omitted entirely, not shown as "0%", when the backend can't compute a reliable baseline (`changePercent: null`, e.g. Overdue Accounts, or a zero previous-period baseline). */
   trend?: { changePercent: number | null; label: string };
+  /** Settings > Appearance > Dashboard Layout "Compact" density preference (2026-07-17) - tighter
+   * padding and a smaller value figure so more cards fit above the fold. */
+  compact?: boolean;
 }) {
   return (
     <Card
@@ -334,13 +339,13 @@ function SummaryCard({
       }
       title={onClick ? 'View the loan accounts behind this figure' : undefined}
     >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className={cn('flex flex-row items-center justify-between space-y-0', compact ? 'pb-1' : 'pb-2')}>
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
         <Icon className={tone === 'destructive' ? 'h-4 w-4 text-destructive' : 'h-4 w-4 text-primary'} />
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-2">
-          <div className="text-2xl font-bold">{value}</div>
+          <div className={compact ? 'text-xl font-bold' : 'text-2xl font-bold'}>{value}</div>
           {trend && trend.changePercent !== null && (
             <span
               className={cn(
@@ -353,8 +358,8 @@ function SummaryCard({
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
-        {trend && trend.changePercent !== null && <p className="text-[11px] text-muted-foreground">{trend.label}</p>}
+        {!compact && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+        {!compact && trend && trend.changePercent !== null && <p className="text-[11px] text-muted-foreground">{trend.label}</p>}
       </CardContent>
     </Card>
   );
@@ -431,6 +436,7 @@ const EMPTY_DATE_RANGE: DateRange = { from: '', to: '' };
 export function DashboardPage() {
   useLogPageView('Dashboard');
   const { t } = useLanguage();
+  const { cards: cardLayout, density } = useDashboardLayout();
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
   // Live portfolio-wide totals from the real backend (GET /dashboard/summary) - backs the three
@@ -748,52 +754,82 @@ export function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard
-          title={t('dashboard.stat.activeLoans')}
-          value={liveSummary ? liveSummary.totalActiveLoans.count.toString() : filteredActiveCount.toString()}
-          hint={
-            liveSummary
-              ? `${formatPeso(Number(liveSummary.totalActiveLoans.outstandingPrincipalBalance))} outstanding principal`
-              : `${formatPeso(filteredOutstandingTotal)} outstanding principal`
-          }
-          icon={Landmark}
-          onClick={() =>
-            setDrillDown({
-              title: 'Total Active Loans',
-              description:
-                'All still-active loan accounts - ACTIVE, ACTIVE_IN_ARREARS, and MATURED.' +
-                (isFiltered ? ' Reflects the Portfolio Filter above.' : ' Across all branches.'),
-              loans: filteredActivePortfolioLoans,
-            })
-          }
-        />
-        <SummaryCard
-          title={t('dashboard.stat.collectionsThisMonth')}
-          value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
-          hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
-          icon={Banknote}
-          trend={liveSummary ? { changePercent: liveSummary.collectionsThisMonth.trend.changePercent, label: 'vs same days last month, portfolio-wide' } : undefined}
-        />
-        <SummaryCard
-          title={t('dashboard.stat.overdueAccounts')}
-          value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
-          hint={
-            liveSummary
-              ? `${formatPeso(Number(liveSummary.overdueAccounts.atRiskCollectionsBalance))} at risk (collections balance)`
-              : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`
-          }
-          icon={AlertOctagon}
-          tone="destructive"
-          onClick={() => openVennSegment('activeInArrears')}
-        />
-        <SummaryCard
-          title={t('dashboard.stat.portfolioGrowth')}
-          value="+4.8%"
-          hint="Month-over-month disbursement (portfolio-wide) - sample data"
-          icon={TrendingUp}
-        />
-      </div>
+      {(() => {
+        const compact = density === 'compact';
+        // Settings > Appearance > Dashboard Layout (2026-07-17): each officer can hide and reorder
+        // these 4 cards - `cardLayout` is already in the officer's preferred display order.
+        const cardById: Record<string, React.ReactNode> = {
+          activeLoans: (
+            <SummaryCard
+              title={t('dashboard.stat.activeLoans')}
+              value={liveSummary ? liveSummary.totalActiveLoans.count.toString() : filteredActiveCount.toString()}
+              hint={
+                liveSummary
+                  ? `${formatPeso(Number(liveSummary.totalActiveLoans.outstandingPrincipalBalance))} outstanding principal`
+                  : `${formatPeso(filteredOutstandingTotal)} outstanding principal`
+              }
+              icon={Landmark}
+              compact={compact}
+              onClick={() =>
+                setDrillDown({
+                  title: 'Total Active Loans',
+                  description:
+                    'All still-active loan accounts - ACTIVE, ACTIVE_IN_ARREARS, and MATURED.' +
+                    (isFiltered ? ' Reflects the Portfolio Filter above.' : ' Across all branches.'),
+                  loans: filteredActivePortfolioLoans,
+                })
+              }
+            />
+          ),
+          collectionsThisMonth: (
+            <SummaryCard
+              title={t('dashboard.stat.collectionsThisMonth')}
+              value={liveSummary ? formatPeso(Number(liveSummary.collectionsThisMonth.amount)) : formatPeso(scaledCollectionsThisMonth)}
+              hint={liveSummary ? 'Live, across all branches' : isFiltered ? 'Estimated for the selected filter' : 'Across all branches'}
+              icon={Banknote}
+              compact={compact}
+              trend={
+                liveSummary
+                  ? { changePercent: liveSummary.collectionsThisMonth.trend.changePercent, label: 'vs same days last month, portfolio-wide' }
+                  : undefined
+              }
+            />
+          ),
+          overdueAccounts: (
+            <SummaryCard
+              title={t('dashboard.stat.overdueAccounts')}
+              value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
+              hint={
+                liveSummary
+                  ? `${formatPeso(Number(liveSummary.overdueAccounts.atRiskCollectionsBalance))} at risk (collections balance)`
+                  : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`
+              }
+              icon={AlertOctagon}
+              tone="destructive"
+              compact={compact}
+              onClick={() => openVennSegment('activeInArrears')}
+            />
+          ),
+          portfolioGrowth: (
+            <SummaryCard
+              title={t('dashboard.stat.portfolioGrowth')}
+              value="+4.8%"
+              hint="Month-over-month disbursement (portfolio-wide) - sample data"
+              icon={TrendingUp}
+              compact={compact}
+            />
+          ),
+        };
+        const visibleCards = cardLayout.filter((c) => c.visible);
+        if (visibleCards.length === 0) return null;
+        return (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {visibleCards.map((c) => (
+              <React.Fragment key={c.id}>{cardById[c.id]}</React.Fragment>
+            ))}
+          </div>
+        );
+      })()}
 
       <Card>
         <CardHeader>

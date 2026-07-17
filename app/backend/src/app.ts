@@ -67,6 +67,12 @@ import { CreateLoanNoteUseCase } from '@modules/loan-note/application/use-cases/
 import { ListLoanNotesUseCase } from '@modules/loan-note/application/use-cases/ListLoanNotesUseCase';
 import { DeleteLoanNoteUseCase } from '@modules/loan-note/application/use-cases/DeleteLoanNoteUseCase';
 import { PrismaLoanNoteRepository } from '@modules/loan-note/infrastructure/PrismaLoanNoteRepository';
+import { createNotificationRouter } from '@modules/notification/interface/http/notificationRouter';
+import { NotificationService } from '@modules/notification/application/NotificationService';
+import { ListNotificationsUseCase } from '@modules/notification/application/use-cases/ListNotificationsUseCase';
+import { MarkNotificationReadUseCase } from '@modules/notification/application/use-cases/MarkNotificationReadUseCase';
+import { MarkAllNotificationsReadUseCase } from '@modules/notification/application/use-cases/MarkAllNotificationsReadUseCase';
+import { PrismaNotificationRepository } from '@modules/notification/infrastructure/PrismaNotificationRepository';
 import { createRepaymentRouter } from '@modules/repayment/interface/http/repaymentRouter';
 import { ListRepaymentInstallmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListRepaymentInstallmentsForLoanUseCase';
 import { GetRepaymentInstallmentUseCase } from '@modules/repayment/application/use-cases/GetRepaymentInstallmentUseCase';
@@ -238,6 +244,12 @@ export function createApp(): Express {
   const userRepository = new PrismaUserRepository();
   const refreshTokenRepository = new PrismaRefreshTokenRepository();
   const auditLogger = new PrismaAuditLogger();
+
+  // --- notification module wiring (Notification Center, 2026-07-17) - built early, before other
+  // modules, since `notificationService` is injected as an optional side-effect dep into several
+  // of them below (mirrors `profileActivityLogService`'s own wiring position/pattern) ---
+  const notificationRepository = new PrismaNotificationRepository();
+  const notificationService = new NotificationService({ notificationRepository, userRepository });
 
   // Audit finding H-01: env.JWT_REFRESH_TTL_MS (pre-parsed, fail-fast in
   // env.ts) is now actually threaded through, instead of the use cases'
@@ -439,6 +451,17 @@ export function createApp(): Express {
   );
   app.use('/api/v1', loanNoteRouter);
 
+  // --- notification module wiring (Notification Center, 2026-07-17) ---
+  const notificationRouter = createNotificationRouter(
+    {
+      listNotificationsUseCase: new ListNotificationsUseCase({ notificationRepository, notificationService }),
+      markNotificationReadUseCase: new MarkNotificationReadUseCase({ notificationRepository }),
+      markAllNotificationsReadUseCase: new MarkAllNotificationsReadUseCase({ notificationRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', notificationRouter);
+
   // --- loan-document module wiring (ADR-051, 2026-07-12: Loan Document Generation) ---
   const documentTemplateRepository = new PrismaDocumentTemplateRepository();
   const generatedLoanDocumentRepository = new PrismaGeneratedLoanDocumentRepository();
@@ -561,6 +584,7 @@ export function createApp(): Express {
         preQualificationService,
         profileActivityLogService,
         loanAccountRepository,
+        notificationService,
       }),
       getLoanApplicationUseCase: new GetLoanApplicationUseCase({ loanApplicationRepository }),
       listLoanApplicationsUseCase: new ListLoanApplicationsUseCase({ loanApplicationRepository }),
@@ -569,11 +593,13 @@ export function createApp(): Express {
         loanApplicationRepository,
         auditLogger,
         profileActivityLogService,
+        notificationService,
       }),
       declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
         loanApplicationRepository,
         auditLogger,
         profileActivityLogService,
+        notificationService,
       }),
       revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
         loanApplicationRepository,
@@ -591,6 +617,7 @@ export function createApp(): Express {
         loanApplicationRepository,
         auditLogger,
         profileActivityLogService,
+        notificationService,
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
       preQualificationService,

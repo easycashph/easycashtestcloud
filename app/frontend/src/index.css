@@ -124,42 +124,6 @@
     --sidebar-accent: 158 55% 38%;
     --chart-1: 158 55% 50%;
   }
-  [data-accent='violet'] {
-    --primary: 262 60% 42%;
-    --ring: 262 60% 42%;
-    --sidebar-accent: 262 60% 42%;
-    --chart-1: 262 60% 52%;
-  }
-  .dark[data-accent='violet'] {
-    --primary: 262 60% 62%;
-    --ring: 262 60% 62%;
-    --sidebar-accent: 262 55% 52%;
-    --chart-1: 262 60% 65%;
-  }
-  [data-accent='amber'] {
-    --primary: 30 90% 34%;
-    --ring: 30 90% 34%;
-    --sidebar-accent: 30 90% 34%;
-    --chart-1: 32 92% 44%;
-  }
-  .dark[data-accent='amber'] {
-    --primary: 32 90% 52%;
-    --ring: 32 90% 52%;
-    --sidebar-accent: 32 85% 44%;
-    --chart-1: 32 90% 58%;
-  }
-  [data-accent='rose'] {
-    --primary: 348 70% 38%;
-    --ring: 348 70% 38%;
-    --sidebar-accent: 348 70% 38%;
-    --chart-1: 348 70% 48%;
-  }
-  .dark[data-accent='rose'] {
-    --primary: 348 65% 58%;
-    --ring: 348 65% 58%;
-    --sidebar-accent: 348 65% 48%;
-    --chart-1: 348 65% 62%;
-  }
 }
 
 @layer base {
@@ -198,6 +162,17 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Settings > Appearance > Text Size (2026-07-17 user request) - scales the root font-size, so
+   every `rem`-based Tailwind utility across the app (text, padding, icon sizes, etc.) scales with
+   it uniformly. `medium` is the default, no attribute needed (browser default 16px). Applied to
+   `<html>` by ThemeProvider (`document.documentElement.dataset.fontSize`, see theme-provider.tsx). */
+html[data-font-size='small'] {
+  font-size: 87.5%;
+}
+html[data-font-size='large'] {
+  font-size: 112.5%;
 }
 
 /* 2026-07-11 (user request): native <input type="date"> (and time/datetime-local, same issue)

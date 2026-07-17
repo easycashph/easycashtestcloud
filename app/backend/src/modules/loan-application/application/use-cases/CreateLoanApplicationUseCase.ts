@@ -2,11 +2,15 @@ import { LoanApplication } from '../../domain/LoanApplication';
 import { BorrowerHasInFlightLoanError } from '../../domain/errors/LoanApplicationDomainErrors';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 
 const CLOSED_LOAN_ACCOUNT_STATUSES = new Set(['CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_REJECTED']);
+
+/** Reviewer roles for a freshly-submitted application - mirrors the frontend's `canReviewLoanApplication`. */
+const APPLICATION_SUBMITTED_NOTIFY_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 
 export interface CreateLoanApplicationUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
@@ -15,6 +19,7 @@ export interface CreateLoanApplicationUseCaseDeps {
   /** Only needed to enforce the one-application-at-a-time rule below - undefined for callers that
    * don't set `input.borrowerId` (the original walk-in intake flow has no borrower yet). */
   loanAccountRepository?: ILoanAccountRepository;
+  notificationService?: NotificationService;
 }
 
 export class CreateLoanApplicationUseCase {
@@ -69,6 +74,20 @@ export class CreateLoanApplicationUseCase {
         userId: input.encodedByUserId,
         action: 'profile_created',
         details: {},
+      });
+    }
+
+    // Notification Center (2026-07-17): tell reviewers a new application needs their attention.
+    if (this.deps.notificationService) {
+      await this.deps.notificationService.notifyRoles({
+        roleNames: APPLICATION_SUBMITTED_NOTIFY_ROLES,
+        branchId: application.branchId,
+        type: 'APPLICATION_SUBMITTED',
+        title: `New loan application: ${input.applicantName}`,
+        body: `${input.requestedCategory} - ${input.requestedAmount}`,
+        entityType: 'LoanApplication',
+        entityId: application.id,
+        excludeUserId: input.encodedByUserId,
       });
     }
 

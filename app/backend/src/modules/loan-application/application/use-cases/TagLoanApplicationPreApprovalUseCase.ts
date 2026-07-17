@@ -1,13 +1,18 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
+
+/** Final-approval roles - mirrors the frontend's `canApproveLoanApplication`. */
+const PRE_APPROVAL_READY_NOTIFY_ROLES = ['MIS', 'Loan Operation Manager'];
 
 export interface TagLoanApplicationPreApprovalUseCaseDeps {
   loanApplicationRepository: ILoanApplicationRepository;
   auditLogger: IAuditLogger;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 /** "Tags as Pre Approval": UNDER_REVIEW -> PRE_APPROVAL, once the Review Report is complete. */
@@ -38,6 +43,19 @@ export class TagLoanApplicationPreApprovalUseCase {
         profileId: application.id,
         userId: taggedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated(previousStatus, 'PRE_APPROVAL'),
+      });
+    }
+
+    // Notification Center (2026-07-17): tell final approvers this application is ready for them.
+    if (this.deps.notificationService) {
+      await this.deps.notificationService.notifyRoles({
+        roleNames: PRE_APPROVAL_READY_NOTIFY_ROLES,
+        branchId: application.branchId,
+        type: 'APPLICATION_PRE_APPROVAL_READY',
+        title: `Ready for final approval: ${application.applicantName}`,
+        entityType: 'LoanApplication',
+        entityId: application.id,
+        excludeUserId: taggedByUserId,
       });
     }
 

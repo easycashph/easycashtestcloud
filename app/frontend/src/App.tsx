@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { useRole } from '@/lib/roleContext';
+import { landingPagePath, readLandingPage } from '@/lib/landingPagePreference';
 import { LoanListPage } from '@/pages/LoanListPage';
 import { LoanAccountCreatePage } from '@/pages/LoanAccountCreatePage';
 import { LoanDetailPage } from '@/pages/LoanDetailPage';
@@ -41,11 +43,25 @@ import { AboutPage } from '@/pages/AboutPage';
  *   payment method labels, intake document checklist) - not fake business data, see that file's
  *   own top-of-file comment.
  */
+/**
+ * Settings > Appearance > Landing Page (2026-07-17): sends the signed-in officer straight to their
+ * preferred page instead of always Dashboard. Read once per mount (this component only exists on
+ * the index route, which unmounts/remounts on every login via RoleProvider swapping this whole
+ * tree in) - no live-update needed while already sitting on the landing page.
+ */
+function IndexRedirect() {
+  const { currentAccount } = useRole();
+  const preferred = readLandingPage(currentAccount.id);
+  const path = landingPagePath(preferred);
+  if (path === '/') return <DashboardPage />;
+  return <Navigate to={path} replace />;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<DashboardPage />} />
+        <Route index element={<IndexRedirect />} />
         <Route path="loans" element={<LoanListPage />} />
         <Route path="loans/new" element={<LoanAccountCreatePage />} />
         <Route path="loans/:loanId" element={<LoanDetailPage />} />

@@ -67,4 +67,9 @@ export interface IUserRepository {
   create(input: CreateUserInput): Promise<UserRecord>;
   update(id: string, patch: UpdateUserInput): Promise<UserRecord>;
   hasAnyUserWithRole(roleName: string): Promise<boolean>;
+  /** ACTIVE users holding any of `roleNames`, scoped to `branchId` OR holding a global role (`MIS`
+   * - see `GLOBAL_ROLES` in `shared/http/branchScope.ts`) regardless of their own branch. Added
+   * 2026-07-17 for the Notification Center's recipient resolution (e.g. "notify every MIS/Loan
+   * Operation Manager/CRM at this application's branch"). */
+  findByRolesAndBranch(roleNames: string[], branchId: string): Promise<UserRecord[]>;
 }

@@ -197,6 +197,7 @@ model Branch {
   loanAccounts     LoanAccount[]
   transactions     LoanTransaction[]
   loanApplications LoanApplication[]
+  notifications    Notification[]
 
   @@map("branches")
 }
@@ -255,6 +256,7 @@ model User {
   penaltyReductionsMade    PenaltyReduction[]
   feesOverridesSet         RepaymentSchedule[]     @relation("FeesOverrideBy")
   feeAdjustmentsMade       FeeAdjustment[]
+  notificationsReceived    Notification[]
 
   @@map("users")
 }
@@ -1321,6 +1323,39 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@map("audit_logs")
+}
+
+enum NotificationType {
+  APPLICATION_SUBMITTED
+  APPLICATION_PRE_APPROVAL_READY
+  APPLICATION_DECIDED
+  LOAN_OVERDUE
+}
+
+/// Notification Center (2026-07-17 user request). Distinct from AuditLog (which is a write/
+/// page-view trail, MIS-only) - these are user-visible "things needing your attention," created as
+/// a side effect of real domain events (LoanApplication submitted/tagged-pre-approval/decided) or,
+/// for LOAN_OVERDUE, by a lazy sync run whenever any authenticated user requests their
+/// notifications (no job scheduler exists in this codebase yet - see NotificationService's own doc
+/// comment). entityType/entityId link back to the source record, same pattern as AuditLog.
+model Notification {
+  id              String           @id @default(uuid())
+  recipientUserId String
+  recipient       User             @relation(fields: [recipientUserId], references: [id])
+  type            NotificationType
+  title           String
+  body            String?
+  entityType      String?
+  entityId        String?
+  branchId        String
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  read            Boolean          @default(false)
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([recipientUserId, read, createdAt])
+  @@index([type, entityId, createdAt])
+  @@map("notifications")
 }
 
 // ----------------------------------------------------------------------------

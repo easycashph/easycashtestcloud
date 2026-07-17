@@ -15,6 +15,7 @@ export const translations = {
     'settings.tab.security': 'Security',
     'settings.tab.theme': 'Theme Color',
     'settings.tab.appearance': 'Appearance',
+    'settings.tab.notifications': 'Notifications',
     'settings.tab.language': 'Language',
     'settings.language.title': 'LMS Language',
     'settings.language.description':
@@ -47,6 +48,7 @@ export const translations = {
     'settings.tab.security': 'Seguridad',
     'settings.tab.theme': 'Kulay ng Theme',
     'settings.tab.appearance': 'Itsura',
+    'settings.tab.notifications': 'Mga Abiso',
     'settings.tab.language': 'Wika',
     'settings.language.title': 'Wika ng LMS',
     'settings.language.description':
