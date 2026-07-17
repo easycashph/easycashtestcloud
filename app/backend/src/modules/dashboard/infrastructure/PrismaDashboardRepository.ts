@@ -17,7 +17,16 @@ export class PrismaDashboardRepository implements IDashboardRepository {
     const now = new Date();
     const forecastMonths = nextFourMonthRanges();
 
-    const [activeAgg, overdueLoans, collectionsAgg, collectionsSameWindowLastMonthAgg, byProductGroups, forecastAggs] = await Promise.all([
+    const [
+      activeAgg,
+      overdueLoans,
+      collectionsAgg,
+      collectionsSameWindowLastMonthAgg,
+      byProductGroups,
+      forecastAggs,
+      applicationStatusGroups,
+      releasedCount,
+    ] = await Promise.all([
       prisma.loanAccount.aggregate({
         where: { ...branchFilter, status: { in: [...ACTIVE_STATUSES] } },
         _count: true,
@@ -53,6 +62,14 @@ export class PrismaDashboardRepository implements IDashboardRepository {
           }),
         ),
       ),
+      prisma.loanApplication.groupBy({ by: ['status'], where: branchFilter, _count: true }),
+      prisma.loanApplication.count({
+        where: {
+          ...branchFilter,
+          status: 'APPROVED',
+          createdLoanAccount: { status: { notIn: ['PENDING_APPROVAL', 'APPROVED'] } },
+        },
+      }),
     ]);
 
     const overdueAgg = await prisma.loanAccount.aggregate({
@@ -82,6 +99,19 @@ export class PrismaDashboardRepository implements IDashboardRepository {
       existing.outstandingPrincipalBalance += Number(group._sum.principalBalance ?? 0);
       byProductId.set(product.id, existing);
     }
+
+    const applicationCountByStatus = new Map(applicationStatusGroups.map((g) => [g.status, g._count]));
+    const rawApprovedCount = applicationCountByStatus.get('APPROVED') ?? 0;
+    const loanApplicationPipeline = {
+      requirementCompliance: applicationCountByStatus.get('PREAPPROVED') ?? 0,
+      underwriting: applicationCountByStatus.get('UNDER_REVIEW') ?? 0,
+      review: applicationCountByStatus.get('PRE_APPROVAL') ?? 0,
+      // Sequential, non-overlapping with `released` (pulled out of the raw APPROVED count) so the
+      // funnel's taper reads correctly - see this field's own doc comment on IDashboardRepository.
+      approved: Math.max(0, rawApprovedCount - releasedCount),
+      released: releasedCount,
+      declined: (applicationCountByStatus.get('DECLINED') ?? 0) + (applicationCountByStatus.get('PREDECLINED') ?? 0),
+    };
 
     const overdueCollectionsBalance =
       Number(overdueAgg._sum.principalBalance ?? 0) +
@@ -118,6 +148,7 @@ export class PrismaDashboardRepository implements IDashboardRepository {
           scheduledAmount: (Number(agg?._sum.principalDue ?? 0) + Number(agg?._sum.interestDue ?? 0)).toString(),
         };
       }),
+      loanApplicationPipeline,
     };
   }
 }

@@ -62,6 +62,23 @@ export interface DashboardSummary {
     year: number;
     scheduledAmount: string;
   }>;
+  /**
+   * 2026-07-17: LoanApplication funnel, one bucket per pipeline stage. `approved` and `released`
+   * are sequential, non-overlapping segments (not "released" being a subset of "approved") -
+   * `released` is pulled OUT of the raw APPROVED count, matching the funnel visualization's taper.
+   * `declined` sums DECLINED + PREDECLINED (a system pre-decline is still "declined" for this view).
+   * "Released" = an APPROVED application whose linked LoanAccount has been Activated/disbursed
+   * (status not PENDING_APPROVAL/APPROVED) - the same check `LoanApplicationDetailPage.tsx`'s
+   * `isCreatedLoanAccountActivated` already uses.
+   */
+  loanApplicationPipeline: {
+    requirementCompliance: number;
+    underwriting: number;
+    review: number;
+    approved: number;
+    released: number;
+    declined: number;
+  };
 }
 
 export interface IDashboardRepository {

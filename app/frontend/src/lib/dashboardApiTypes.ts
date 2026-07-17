@@ -22,4 +22,15 @@ export interface DashboardSummary {
     year: number;
     scheduledAmount: string;
   }>;
+  /** LoanApplication pipeline funnel, one bucket per stage. `approved`/`released` are sequential,
+   * non-overlapping segments (released is pulled out of the raw APPROVED count). `declined` sums
+   * DECLINED + PREDECLINED. */
+  loanApplicationPipeline: {
+    requirementCompliance: number;
+    underwriting: number;
+    review: number;
+    approved: number;
+    released: number;
+    declined: number;
+  };
 }
