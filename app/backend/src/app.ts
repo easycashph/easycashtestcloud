@@ -133,6 +133,8 @@ import { ChangeOwnPasswordUseCase } from '@modules/identity/application/use-case
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
+import { createSmsReminderDlrRouter } from '@modules/sms-reminder/interface/http/smsReminderDlrRouter';
+import { PrismaSmsReminderRepository } from '@modules/sms-reminder/infrastructure/PrismaSmsReminderRepository';
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
@@ -655,6 +657,10 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', paymentReminderRouter);
+
+  // --- sms-reminder module wiring: M360 DLR webhook (no requireAuth - see controller's own doc comment) ---
+  const smsReminderDlrRouter = createSmsReminderDlrRouter({ smsReminderRepository: new PrismaSmsReminderRepository() });
+  app.use('/api/v1', smsReminderDlrRouter);
 
   // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
   const interestRateChartRouter = createInterestRateChartRouter(

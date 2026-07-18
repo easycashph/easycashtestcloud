@@ -235,28 +235,28 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles                    UserRole[]
-  refreshTokens            RefreshToken[]
-  auditLogs                AuditLog[]
-  profileActivityLogs      ProfileActivityLog[]    @relation("ProfileActivityLogUser")
-  borrowersAsLoanOfficer   Borrower[]              @relation("BorrowerLoanOfficer")
-  loanAccountsAsOfficer    LoanAccount[]           @relation("LoanAccountOfficer")
-  loanAccountsApproved     LoanAccount[]           @relation("LoanAccountApprovedBy")
-  transactionsPosted       LoanTransaction[]       @relation("LoanTransactionPostedBy")
-  attachmentsUploaded      Attachment[]            @relation("AttachmentUploadedBy")
-  profileNotesAuthored     ProfileNote[]           @relation("ProfileNoteAuthor")
-  idempotencyKeys          IdempotencyKey[]
-  loanApplicationsEncoded  LoanApplication[]       @relation("LoanApplicationEncodedBy")
-  loanApplicationsReviewed LoanApplication[]       @relation("LoanApplicationReviewedBy")
-  loanApplicationReviewsStarted LoanApplication[]  @relation("LoanApplicationReviewStartedBy")
-  loanApplicationsPreApproved   LoanApplication[]  @relation("LoanApplicationPreApprovedBy")
-  loanNotesAuthored        LoanNote[]
-  loanDocumentsGenerated   GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
-  penaltyOverridesSet      RepaymentSchedule[]     @relation("PenaltyOverrideBy")
-  penaltyReductionsMade    PenaltyReduction[]
-  feesOverridesSet         RepaymentSchedule[]     @relation("FeesOverrideBy")
-  feeAdjustmentsMade       FeeAdjustment[]
-  notificationsReceived    Notification[]
+  roles                         UserRole[]
+  refreshTokens                 RefreshToken[]
+  auditLogs                     AuditLog[]
+  profileActivityLogs           ProfileActivityLog[]    @relation("ProfileActivityLogUser")
+  borrowersAsLoanOfficer        Borrower[]              @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer         LoanAccount[]           @relation("LoanAccountOfficer")
+  loanAccountsApproved          LoanAccount[]           @relation("LoanAccountApprovedBy")
+  transactionsPosted            LoanTransaction[]       @relation("LoanTransactionPostedBy")
+  attachmentsUploaded           Attachment[]            @relation("AttachmentUploadedBy")
+  profileNotesAuthored          ProfileNote[]           @relation("ProfileNoteAuthor")
+  idempotencyKeys               IdempotencyKey[]
+  loanApplicationsEncoded       LoanApplication[]       @relation("LoanApplicationEncodedBy")
+  loanApplicationsReviewed      LoanApplication[]       @relation("LoanApplicationReviewedBy")
+  loanApplicationReviewsStarted LoanApplication[]       @relation("LoanApplicationReviewStartedBy")
+  loanApplicationsPreApproved   LoanApplication[]       @relation("LoanApplicationPreApprovedBy")
+  loanNotesAuthored             LoanNote[]
+  loanDocumentsGenerated        GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
+  penaltyOverridesSet           RepaymentSchedule[]     @relation("PenaltyOverrideBy")
+  penaltyReductionsMade         PenaltyReduction[]
+  feesOverridesSet              RepaymentSchedule[]     @relation("FeesOverrideBy")
+  feeAdjustmentsMade            FeeAdjustment[]
+  notificationsReceived         Notification[]
 
   @@map("users")
 }
@@ -551,6 +551,11 @@ model Borrower {
   note          String?
   status        BorrowerStatus @default(ACTIVE)
   loanCycle     Int            @default(0)
+
+  /// 2026-07-18 (Auto SMS Payment Reminders, ADR pending) - opt-out switch. Default true (every
+  /// existing/new client is reminded unless they explicitly ask off) - SendPaymentReminderSmsUseCase
+  /// skips a Borrower with this false regardless of how many installments are due.
+  smsRemindersEnabled Boolean @default(true)
 
   legacyId  String?  @unique
   createdAt DateTime @default(now())
@@ -897,6 +902,7 @@ model LoanAccount {
   coBorrowers        LoanAccountCoBorrower[]
   notes              LoanNote[]
   generatedDocuments GeneratedLoanDocument[]
+  smsReminderLogs    SmsReminderLog[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -937,10 +943,10 @@ model LoanTransaction {
   /// schema level because non-REPAYMENT transaction types (DISBURSEMENT,
   /// ADJUSTMENT, etc.) have no receipt to record — requiredness for
   /// REPAYMENT specifically is enforced by processPaymentSchema, not here.
-  orNumber String?
+  orNumber      String?
   /// Acknowledgment Receipt number — optional; not every payment channel
   /// issues one.
-  arNumber String?
+  arNumber      String?
   /// 2026-07-17 (Reports): the "Mode of Payment" selected on Record Payment (GCash/Cash/Bank
   /// Transfer/PDC/Auto Debit — see `ACTIVE_PAYMENT_METHODS` in frontend `staticConfig.ts`), one
   /// of the stored raw `code` values. Previously captured in the UI but silently discarded -
@@ -1038,6 +1044,7 @@ model RepaymentSchedule {
   paymentAllocations PaymentAllocation[]
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
+  smsReminderLog     SmsReminderLog?
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
@@ -1364,6 +1371,45 @@ model Notification {
   @@map("notifications")
 }
 
+enum SmsReminderStatus {
+  SENT
+  DELIVERED
+  UNDELIVERED
+  REJECTED
+  FAILED
+}
+
+/// Auto SMS Payment Reminders (2026-07-18 user request, via the existing M360/Globe SMS API
+/// already used by the legacy SDevTech system - see
+/// legacy/reports/M360 SMS API and Passthru Version 3.3.4.pdf). One row per reminder attempt for a
+/// given RepaymentSchedule installment - the `@@unique([installmentId])` is the idempotency guard:
+/// SendPaymentReminderSmsUseCase checks for an existing row before sending, so a re-run of the
+/// daily job (or two overlapping runs) can never double-text the same installment. `status` starts
+/// at SENT (M360 accepted the broadcast, code 201) and is updated to DELIVERED/UNDELIVERED/REJECTED
+/// by the DLR webhook when M360 calls back with the telco's actual delivery outcome; FAILED means
+/// M360 itself rejected the send (non-201 response) - no DLR follow-up expected for that case.
+model SmsReminderLog {
+  id            String            @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount       @relation(fields: [loanAccountId], references: [id])
+  installmentId String            @unique
+  installment   RepaymentSchedule @relation(fields: [installmentId], references: [id])
+
+  phoneNumber String
+  message     String
+
+  status          SmsReminderStatus @default(SENT)
+  providerTransId String?
+  errorMessage    String?
+
+  sentAt      DateTime  @default(now())
+  deliveredAt DateTime?
+
+  @@index([loanAccountId])
+  @@index([providerTransId])
+  @@map("sms_reminder_logs")
+}
+
 // ----------------------------------------------------------------------------
 // Profile Activity Timeline — ADR-050
 // Track loan officer actions on Loan Applications, Borrowers, and Loan Accounts
@@ -1475,14 +1521,14 @@ model LoanApplication {
   borrowerId String?
   borrower   Borrower? @relation("LoanApplicationBorrower", fields: [borrowerId], references: [id])
 
-  applicantName      String
-  age                Int?
-  gender             String?
-  civilStatus        String?
-  birthDate          DateTime?
-  placeOfBirth       String?
-  nationality        String?
-  homeOwnership      String?
+  applicantName           String
+  age                     Int?
+  gender                  String?
+  civilStatus             String?
+  birthDate               DateTime?
+  placeOfBirth            String?
+  nationality             String?
+  homeOwnership           String?
   /// Flattened, human-readable join of the structured fields below - kept for existing display
   /// code/history. The structured fields are what "Create Client Profile" copies into a real
   /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
@@ -1493,13 +1539,13 @@ model LoanApplication {
   cityMunicipality        String?
   province                String?
   zipCode                 String?
-  monthlyIncome           Decimal? @db.Decimal(14, 2)
+  monthlyIncome           Decimal?  @db.Decimal(14, 2)
   employer                String?
   occupation              String?
   officeAddress           String?
   tinNumber               String?
   sssNumber               String?
-  propertiesOwned         String[] @default([])
+  propertiesOwned         String[]  @default([])
   creditScore             Int?
   coBorrowerName          String?
   coBorrowerEmployer      String?
@@ -1510,14 +1556,14 @@ model LoanApplication {
   email                   String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
-  dependants         Json?
-  reference1Name     String?
-  reference1Mobile   String?
-  reference2Name     String?
-  reference2Mobile   String?
+  dependants              Json?
+  reference1Name          String?
+  reference1Mobile        String?
+  reference2Name          String?
+  reference2Mobile        String?
   /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
   /// field - carried over as-is into the Client Profile's own `note` field on creation.
-  note               String?
+  note                    String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?

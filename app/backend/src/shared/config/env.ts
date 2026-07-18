@@ -35,6 +35,30 @@ const envSchema = z.object({
   // Docker this would need `--add-host=host.docker.internal:host-gateway` or a real host IP.
   OLLAMA_BASE_URL: z.string().default('http://host.docker.internal:11434'),
   OLLAMA_VISION_MODEL: z.string().default('moondream'),
+
+  // Auto SMS Payment Reminders (2026-07-18) - via the M360/Globe SMS API already used by the
+  // legacy SDevTech system (legacy/reports/M360 SMS API and Passthru Version 3.3.4.pdf).
+  // SMS_ENABLED defaults false so no environment sends real SMS until explicitly turned on -
+  // SendPaymentReminderSmsUseCase still runs and logs on the false path, it just skips the
+  // real M360 call (dry-run), which is what makes it safe to leave cron running everywhere.
+  // NOT z.coerce.boolean() - that coerces via JS `Boolean(str)`, so the string "false" (still
+  // non-empty) would coerce to `true`. This only accepts the literal strings "true"/"false".
+  SMS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  SMS_REMINDER_DAYS_BEFORE_DUE: z.coerce.number().int().positive().default(5),
+  SMS_REMINDER_CRON: z.string().default('0 8 * * *'), // 8:00 AM Asia/Manila daily
+  // Optional override for the wording in reminderMessageTemplate.ts, without a deploy. Placeholders: {borrowerName}, {loanCode}, {amountDue}, {dueDate}.
+  SMS_REMINDER_TEMPLATE: z.string().optional(),
+  M360_API_URL: z.string().default('https://api.m360.com.ph/v3/api/broadcast'),
+  M360_USERNAME: z.string().optional(),
+  M360_PASSWORD: z.string().optional(),
+  M360_SHORTCODE_MASK: z.string().optional(),
+  // Shared secret M360 must echo back as a query param on the DLR webhook URL we give them -
+  // the M360 docs define no auth scheme for that inbound call, so this is our own guard against
+  // a stranger who knows the URL forging delivery-status updates.
+  SMS_REMINDER_DLR_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema> & {
@@ -77,6 +101,17 @@ function loadEnv(): Env {
     // eslint-disable-next-line no-console
     console.error(trustProxyError);
     process.exit(1);
+  }
+
+  if (parsed.data.SMS_ENABLED) {
+    const missing = (['M360_USERNAME', 'M360_PASSWORD', 'M360_SHORTCODE_MASK', 'SMS_REMINDER_DLR_SECRET'] as const).filter(
+      (key) => !parsed.data[key],
+    );
+    if (missing.length > 0) {
+      // eslint-disable-next-line no-console
+      console.error(`SMS_ENABLED=true requires the following to also be set: ${missing.join(', ')}`);
+      process.exit(1);
+    }
   }
 
   return { ...parsed.data, JWT_REFRESH_TTL_MS: refreshTtlMs };

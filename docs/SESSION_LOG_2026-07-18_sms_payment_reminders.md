@@ -1,0 +1,95 @@
+# Session Log — 2026-07-18 (Auto SMS Payment Reminders)
+
+## What was done, in order
+
+1. **Design discussion (exploratory, per CLAUDE.md's "analyze, design, validate before
+   implementation")** — user asked for auto SMS payment reminders sent 5 days before an
+   installment's due date. Recommended reusing the existing `payment-reminder` module's live
+   "next-due-installment-per-loan" query (just filtered to an exact date instead of
+   any-upcoming/overdue), and flagged the real gap: nothing in this codebase runs on a timer yet
+   (`NotificationService.syncOverdueNotifications`'s own doc comment says as much) - this feature
+   is the first to genuinely need one.
+
+2. **Provider research** — searched current PH SMS gateway pricing/options (Semaphore, PhilSMS,
+   international providers) and initially recommended Semaphore. User corrected this: EasyCash
+   already has an active M360 (Globe-provisioned) SMS API account, the same one the legacy
+   SDevTech system used - documented in
+   `legacy/reports/M360 SMS API and Passthru Version 3.3.4.pdf`. Read that PDF in full and used it
+   as the actual integration spec instead.
+
+3. **Design finalized and approved**, covering: new `sms-reminder` module (Clean Architecture),
+   `SmsReminderLog` table for idempotency/audit, `node-cron` for the first real scheduled job,
+   `ISmsGateway` abstraction (M360 today, swappable later), a `SMS_ENABLED` dry-run safety switch,
+   a `Borrower.smsRemindersEnabled` opt-out, and an M360 DLR (delivery status) webhook.
+
+4. **Implemented:**
+   - **Schema**: `Borrower.smsRemindersEnabled` (default `true`), new `SmsReminderLog` model
+     (`@@unique([installmentId])` is the idempotency guard - a re-run of the daily job, or two
+     overlapping runs, can never double-text the same installment). Migration
+     `20260718020653_add_sms_reminder_logs`, applied to local dev Postgres.
+   - **`app/backend/src/modules/sms-reminder/`**:
+     - `application/ports/ISmsReminderRepository.ts`, `ISmsGateway.ts` - the two abstractions.
+     - `application/reminderMessageTemplate.ts` - configurable message template
+       (`SMS_REMINDER_TEMPLATE` env override, placeholders `{borrowerName}`/`{loanCode}`/
+       `{amountDue}`/`{dueDate}`), per CLAUDE.md "financial rules must be configurable."
+     - `application/use-cases/SendPaymentReminderSmsUseCase.ts` - the daily job body: find
+       candidates due on `targetDate`, skip already-logged installments, render the message, send
+       (or dry-run log if `smsEnabled=false`), log success/failure per candidate - one bad number
+       never sinks the whole batch.
+     - `infrastructure/PrismaSmsReminderRepository.ts` - live query mirroring
+       `PrismaPaymentReminderRepository`'s "next not-fully-paid installment per loan" pattern,
+       filtered to a specific Asia/Manila calendar day (a `manilaDayRange` helper: Manila is fixed
+       UTC+8 year-round, no DST, so shifting the instant by the offset before reading UTC Y/M/D
+       gives the correct Manila wall-clock date for free, including month/year rollover via
+       `Date.UTC`'s own normalization).
+     - `infrastructure/M360SmsGateway.ts` - the M360 Broadcast API client
+       (`POST https://api.m360.com.ph/v3/api/broadcast`), matching the PDF's documented payload/
+       response shape exactly; throws `SmsGatewayError` with M360's own message on a non-201
+       response.
+     - `infrastructure/smsReminderScheduler.ts` - `node-cron` wiring, `SMS_REMINDER_CRON` (default
+       `0 8 * * *`, Asia/Manila). Deliberately started from `src/server.ts`, NOT from
+       `src/app.ts`'s `createApp()` - that function is shared by every test file via supertest, and
+       a real cron timer has no place running during the test suite.
+     - `interface/http/smsReminderDlrController.ts` / `smsReminderDlrRouter.ts` - the M360 DLR
+       webhook (`GET /api/v1/sms-reminders/dlr`). M360's own doc defines no auth scheme for this
+       inbound call, so a `key` query-param shared secret (`SMS_REMINDER_DLR_SECRET`) is our own
+       addition, checked before touching anything. Maps M360's DLR status codes (`1`→DELIVERED,
+       `2`→UNDELIVERED, `16`→REJECTED, `8`/Acknowledge is a no-op since `SmsReminderLog` already
+       starts at `SENT`).
+   - **`shared/config/env.ts`**: 9 new env vars (`SMS_ENABLED`, `SMS_REMINDER_DAYS_BEFORE_DUE`,
+     `SMS_REMINDER_CRON`, `SMS_REMINDER_TEMPLATE`, `M360_API_URL`, `M360_USERNAME`,
+     `M360_PASSWORD`, `M360_SHORTCODE_MASK`, `SMS_REMINDER_DLR_SECRET`) - fail-fast at boot if
+     `SMS_ENABLED=true` but the 4 M360/secret values aren't all set. **Bug caught and fixed during
+     this pass**: `z.coerce.boolean()` on `SMS_ENABLED` coerced the *string* `"false"` to `true`
+     (any non-empty string is JS-truthy) - would have made every environment think SMS was enabled
+     the moment `.env` had `SMS_ENABLED=false` written in it. Fixed with an explicit
+     `z.enum(['true','false']).transform(v => v === 'true')`.
+   - **`.env`**: all 9 new vars added, `SMS_ENABLED=false` and the M360 credential fields left
+     blank - safe dry-run default until the user fills in the real, active M360 username/password/
+     shortcode_mask and a chosen DLR secret themselves (never asked for or handled the actual
+     credential values in-chat, per this project's credential-handling rule).
+
+5. **Verified**: `tsc --noEmit` clean, 10 new unit tests (use-case idempotency/dry-run/success/
+   partial-failure paths, M360 gateway payload shape + error mapping, DLR controller secret-key
+   check + status-code mapping) - full suite 703 passed / 16 known pre-existing failures (same
+   baseline, +10). Spot-checked `PrismaSmsReminderRepository.findCandidatesDueOn` directly against
+   the live dev DB across a 14-day window - correctly found real loans (e.g. `SML-REG_00343` at
+   +0d, `BL-REG_00059` at +2d) and confirmed the Manila day-boundary math lines up (a `dueDate`
+   stored as `...T16:00:00.000Z` UTC = midnight Manila the next day, landed in the expected
+   bucket). Rebuilt the backend Docker image, confirmed a clean boot and the DLR webhook route
+   correctly rejects an unauthenticated/wrong-key request (401).
+
+## Current state / what's NOT done yet
+
+- **`SMS_ENABLED=false` in every environment right now** - this feature sends nothing for real
+  yet. To go live: fill in `M360_USERNAME`/`M360_PASSWORD`/`M360_SHORTCODE_MASK` (the user
+  confirmed these are active) and a chosen `SMS_REMINDER_DLR_SECRET` in `.env`, set
+  `SMS_ENABLED=true`, and give M360 the DLR webhook URL
+  (`https://<your-domain>/api/v1/sms-reminders/dlr?key=<the secret>`) so they know where to POST
+  delivery-status callbacks.
+- **No visibility UI yet** - the design's item 7 (a Reports Hub tab or Notification Center section
+  showing who got texted, when, delivery status) was deliberately deferred; the backend fully logs
+  everything needed for it (`SmsReminderLog`), but no frontend page reads it yet. Follow-up work,
+  not started.
+- **No frontend changes at all this session** - purely backend.
+- Not committed yet - pending user review of this session's work.
