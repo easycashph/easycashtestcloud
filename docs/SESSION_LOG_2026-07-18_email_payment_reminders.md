@@ -60,13 +60,31 @@ Reminders feature, second channel).
    - Final retry succeeded - user confirmed receipt of the real email (From: `collections@
      easycash.ph`) in their own inbox.
 
+4. **Second real test send** (THREE_DAYS_BEFORE, `SL-REG_00114`) - user confirmed receipt. Notable:
+   the loan's "next-due installment" had rolled forward to August by this point (the July
+   installment that was overdue earlier in the session had since been paid off), confirming the
+   candidate query correctly re-derives the live next-due installment each run rather than caching
+   anything stale.
+
+5. **Unified Reminder Logs view** (user request: "malaman ng user ng system... saan galing ang
+   reminder, SMS or Email") - replaced the two separate `SmsReminderLogsPage.tsx`/
+   `EmailReminderLogsPage.tsx` Reports Hub pages with one `ReminderLogsPage.tsx`, merged
+   client-side from both existing endpoints (`mergeReminderLogs()` in the new
+   `reminderLogApiTypes.ts` - no new backend endpoint needed, both already return everything
+   required). Adds a Channel column/filter (SMS/Email) alongside the existing Trigger/Status
+   filters; the message-preview drawer shows M360 transid/DELIVERED timestamp only for SMS rows
+   (EMAIL rows never have either - no DLR-equivalent for plain SMTP). Deleted the two now-redundant
+   page files, collapsed the two Reports Hub cards into one ("Reminder logs"), single route
+   `/reports/reminder-logs`. Purely a frontend change - no backend touched. `tsc --noEmit` and
+   frontend production build both clean.
+
 ## Current state
 
 - `EMAIL_ENABLED` is `false` - no automated email reminders sending yet, same standing instruction
-  as SMS. Only the FIVE_DAYS_BEFORE content has been real-world tested so far (mirrors the SMS
-  rollout's own incremental verification) - the other 4 triggers are implemented identically but
-  not yet individually test-sent for email.
+  as SMS. FIVE_DAYS_BEFORE and THREE_DAYS_BEFORE content are now real-world tested; ONE_DAY_BEFORE/
+  DUE_DATE/PAST_DUE_WEEKLY are implemented identically but not yet individually test-sent for email.
 - Real Google Workspace SMTP credentials are in `.env` and confirmed working.
-- Visibility UI covers both channels now (Reports Hub → Operation → "SMS reminder logs" and "Email
-  reminder logs"; Loan Detail page's Reminders panel shows both SMS and Email real status
-  side by side per trigger).
+- **Visibility UI is now a single unified view** (Reports Hub → Operation → "Reminder logs") - both
+  channels together, filterable by Channel/Trigger/Status. The Loan Detail page's Reminders panel
+  still shows SMS and Email as separate badges side by side per trigger (that per-loan view wasn't
+  changed - the consolidation request was specifically about the Reports Hub list).

@@ -10,7 +10,6 @@ import {
   CalendarCheck,
   CheckSquare,
   MessageSquare,
-  Mail,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLogPageView } from '@/lib/activityLog';
@@ -116,17 +115,10 @@ const CATEGORIES: ReportCategory[] = [
         status: 'live',
       },
       {
-        to: '/reports/sms-reminder-logs',
-        label: 'SMS reminder logs',
-        description: 'Who got texted, when, delivery status',
+        to: '/reports/reminder-logs',
+        label: 'Reminder logs',
+        description: 'Who got reminded, by SMS or email, when, status',
         icon: MessageSquare,
-        status: 'live',
-      },
-      {
-        to: '/reports/email-reminder-logs',
-        label: 'Email reminder logs',
-        description: 'Who got emailed, when, send status',
-        icon: Mail,
         status: 'live',
       },
     ],
