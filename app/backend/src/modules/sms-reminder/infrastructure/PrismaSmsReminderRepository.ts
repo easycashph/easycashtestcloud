@@ -4,6 +4,7 @@ import type {
   LogReminderFailedInput,
   LogReminderSentInput,
   SmsReminderCandidate,
+  SmsReminderLogRow,
 } from '../application/ports/ISmsReminderRepository';
 
 const ACTIVE_LOAN_STATUSES = ['ACTIVE', 'ACTIVE_IN_ARREARS'] as const;
@@ -115,5 +116,30 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
       where: { providerTransId },
       data: { status, deliveredAt },
     });
+  }
+
+  async listLogs(branchId: string | undefined): Promise<SmsReminderLogRow[]> {
+    const rows = await prisma.smsReminderLog.findMany({
+      where: branchId ? { loanAccount: { branchId } } : {},
+      orderBy: { sentAt: 'desc' },
+      include: {
+        loanAccount: { select: { loanCode: true, branchId: true, borrower: { select: { firstName: true, lastName: true } } } },
+      },
+    });
+
+    return rows.map((row) => ({
+      id: row.id,
+      loanAccountId: row.loanAccountId,
+      loanCode: row.loanAccount.loanCode,
+      branchId: row.loanAccount.branchId,
+      borrowerName: `${row.loanAccount.borrower.firstName} ${row.loanAccount.borrower.lastName}`,
+      phoneNumber: row.phoneNumber,
+      message: row.message,
+      status: row.status,
+      providerTransId: row.providerTransId,
+      errorMessage: row.errorMessage,
+      sentAt: row.sentAt,
+      deliveredAt: row.deliveredAt,
+    }));
   }
 }

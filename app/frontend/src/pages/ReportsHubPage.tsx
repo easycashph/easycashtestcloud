@@ -9,6 +9,7 @@ import {
   ListChecks,
   CalendarCheck,
   CheckSquare,
+  MessageSquare,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLogPageView } from '@/lib/activityLog';
@@ -111,6 +112,13 @@ const CATEGORIES: ReportCategory[] = [
         label: 'Fully paid accounts',
         description: 'Loans settled in full',
         icon: CheckSquare,
+        status: 'live',
+      },
+      {
+        to: '/reports/sms-reminder-logs',
+        label: 'SMS reminder logs',
+        description: 'Who got texted, when, delivery status',
+        icon: MessageSquare,
         status: 'live',
       },
     ],

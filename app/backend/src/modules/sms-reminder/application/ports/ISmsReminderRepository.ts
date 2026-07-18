@@ -26,6 +26,21 @@ export interface LogReminderFailedInput {
   errorMessage: string;
 }
 
+export interface SmsReminderLogRow {
+  id: string;
+  loanAccountId: string;
+  loanCode: string;
+  branchId: string;
+  borrowerName: string;
+  phoneNumber: string;
+  message: string;
+  status: 'SENT' | 'DELIVERED' | 'UNDELIVERED' | 'REJECTED' | 'FAILED';
+  providerTransId: string | null;
+  errorMessage: string | null;
+  sentAt: Date;
+  deliveredAt: Date | null;
+}
+
 export interface ISmsReminderRepository {
   /**
    * One row per ACTIVE/ACTIVE_IN_ARREARS loan account whose NEXT not-fully-paid installment's
@@ -44,4 +59,7 @@ export interface ISmsReminderRepository {
 
   /** Applied by the M360 DLR webhook once the telco reports the real delivery outcome. */
   updateDeliveryStatus(providerTransId: string, status: 'DELIVERED' | 'UNDELIVERED' | 'REJECTED', deliveredAt: Date): Promise<void>;
+
+  /** Reports Hub visibility (2026-07-18) - every logged reminder attempt, newest first. Unpaginated by design, matching the same "thousands, not 100,000+" volume acceptance as payment-reminder/dashboard. */
+  listLogs(branchId: string | undefined): Promise<SmsReminderLogRow[]>;
 }

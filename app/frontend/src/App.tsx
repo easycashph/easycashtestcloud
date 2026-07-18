@@ -10,6 +10,7 @@ import { LoanApplicationsPage } from '@/pages/LoanApplicationsPage';
 import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
 import { LoanApplicationCreatePage } from '@/pages/LoanApplicationCreatePage';
 import { PaymentRemindersPage } from '@/pages/PaymentRemindersPage';
+import { SmsReminderLogsPage } from '@/pages/SmsReminderLogsPage';
 import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
 import { ClientListPage } from '@/pages/ClientListPage';
 import { ClientCreatePage } from '@/pages/ClientCreatePage';
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="reports/first-amortization" element={<FirstAmortizationReportPage />} />
         <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
         <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
+        <Route path="reports/sms-reminder-logs" element={<SmsReminderLogsPage />} />
         <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<MemberListPage />} />
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />

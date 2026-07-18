@@ -101,6 +101,25 @@
      prisma.$disconnect())` on the top-level `main()` call, matching every other script in
      `scripts/`'s existing convention exactly.
 
+7. **Reports Hub visibility UI (user request, deferred item from the original design)** - built
+   the read-only "who got texted, when, delivery status" view:
+   - Backend: `ListSmsReminderLogsUseCase` + `PrismaSmsReminderRepository.listLogs()` (branch-scoped
+     like every other report/dashboard query), `SmsReminderLogPresenter`, `SmsReminderLogController`/
+     `Router` at `GET /api/v1/sms-reminder-logs` (`requireAuth`, unpaginated - same "thousands, not
+     100,000+" volume acceptance as payment-reminder/dashboard).
+   - Frontend: `smsReminderApiTypes.ts` (hand-maintained DTO mirror, same convention as every other
+     report type file), `SmsReminderLogsPage.tsx` - a sortable/searchable/paginated table (mirrors
+     `TransactionReportPage.tsx`/`PaymentRemindersPage.tsx`'s established pattern exactly: search
+     box, status filter, click-to-expand row showing the full message/M360 transid/error, click the
+     loan code to jump to that loan account). Wired into `App.tsx`
+     (`/reports/sms-reminder-logs`) and `ReportsHubPage.tsx` (new card under "Operation").
+   - Verified: `tsc --noEmit` both apps, full backend suite still 703/16 (unchanged - the new
+     endpoint is a thin pass-through, consistent with `ListPaymentRemindersUseCase` having no
+     dedicated test either), frontend production build clean, Docker rebuild + route smoke-tested
+     (401 unauthenticated, confirming it's live and auth-gated). No browser click-through possible
+     (no login credentials in this environment, the standing constraint noted throughout this
+     project) - checked the console for load-time errors on the public login page only.
+
 ## Current state / what's NOT done yet
 
 - **Real M360 credentials are now in `.env` and confirmed working** (test SMS successfully
@@ -108,12 +127,10 @@
   is still `false`, though - the automated daily cron has NOT been turned on yet, only the manual
   single-loan test path has been proven. Turning on `SMS_ENABLED=true` is a separate decision (it
   affects the whole portfolio, not one test loan) - wait for explicit user go-ahead before doing
-  that.
+  that. User also mentioned still tuning the SMS message wording before going live.
 - `SMS_REMINDER_DLR_SECRET` is still blank - needs a value chosen and given to M360 (as a query
   param on the DLR webhook URL) before delivery-status tracking works, independent of the
   `SMS_ENABLED` decision above.
-- **No visibility UI yet** - the design's item 7 (a Reports Hub tab or Notification Center section
-  showing who got texted, when, delivery status) was deliberately deferred; the backend fully logs
-  everything needed for it (`SmsReminderLog`), but no frontend page reads it yet. Follow-up work,
-  not started.
-- **No frontend changes at all this session** - purely backend.
+- **Visibility UI now live** (Reports Hub → Operation → "SMS reminder logs") - shows every logged
+  reminder attempt, including manual test sends. Will show real automated-job rows too, once
+  `SMS_ENABLED=true`.
