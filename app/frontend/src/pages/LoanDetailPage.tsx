@@ -265,29 +265,66 @@ function computeReminderTriggers(dueDate: Date, isLate: boolean): { type: Remind
   return triggers;
 }
 
-function buildRealReminderMessage(params: {
-  borrowerName: string;
-  loanCode: string;
-  installmentNumber: number;
-  installmentsTotalCount: number;
-  installmentsPaidCount: number;
-  amountDue: number;
-  dueDate: string;
-  penaltyDue: number;
-}): string {
-  const lines = [
-    `Hi ${params.borrowerName},`,
-    '',
-    `This is a reminder from Easycash Lending Company Inc. regarding your loan account ${params.loanCode}.`,
-    '',
-    `Installment #${params.installmentNumber} of ${params.installmentsTotalCount}: ${formatPeso(params.amountDue)} due ${formatDate(params.dueDate)}.`,
-    `Payment progress: ${params.installmentsPaidCount} of ${params.installmentsTotalCount} installments paid so far.`,
-  ];
-  if (params.penaltyDue > 0) {
-    lines.push(`Penalty fee for late payment: ${formatPeso(params.penaltyDue)}.`);
-  }
-  lines.push('', 'Please settle at your earliest convenience to avoid additional penalties. Thank you!', '- Easycash Lending Company Inc.');
-  return lines.join('\n');
+/**
+ * Client-side mirror of the backend's real per-trigger templates
+ * (`app/backend/src/modules/sms-reminder/application/reminderMessageTemplate.ts`'s
+ * `DEFAULT_TEMPLATES`, the 4 date-anchored ones only) - used ONLY as a preview before a real
+ * `SmsReminderLog` exists for that trigger (once one exists, the actual sent `log.message` is
+ * shown instead, verbatim). Kept in sync manually since this is a preview, not a second source of
+ * truth for what actually gets sent - if the backend wording changes, update both.
+ */
+const PREVIEW_TEMPLATES: Record<'FIVE_DAYS_BEFORE' | 'THREE_DAYS_BEFORE' | 'ONE_DAY_BEFORE' | 'DUE_DATE', string> = {
+  FIVE_DAYS_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+This is a friendly reminder regarding your loan account {loanCode} amounting to PHP {amountDue}, is due on {dueDate}.
+
+To avoid additional penalties and charges, please settle your payment on or before the due date.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  THREE_DAYS_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due in 3 days, on {dueDate}.
+
+Please settle your payment on or before the due date to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  ONE_DAY_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due tomorrow, {dueDate}.
+
+Please settle your payment on or before the due date to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  DUE_DATE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due TODAY, {dueDate}.
+
+Please settle your payment today to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+};
+
+function renderPreviewMessage(
+  triggerType: keyof typeof PREVIEW_TEMPLATES,
+  params: { borrowerName: string; loanCode: string; amountDue: number; dueDate: string },
+): string {
+  return PREVIEW_TEMPLATES[triggerType]
+    .replace('{borrowerName}', params.borrowerName)
+    .replace('{loanCode}', params.loanCode)
+    .replace('{amountDue}', formatPeso(params.amountDue))
+    .replace('{dueDate}', formatDate(params.dueDate));
 }
 
 const REMINDER_STATUS_BADGE: Record<
@@ -365,19 +402,8 @@ function RealRemindersPanel({
 
   const num = (v: string) => Number.parseFloat(v) || 0;
   const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
-  const installmentsPaidCount = installments.filter((i) => i.status === 'PAID').length;
   const dateTriggers = computeReminderTriggers(new Date(nextDue.dueDate), false); // only the 4 date-anchored ones - PAST_DUE_WEEKLY handled separately below, from real logs
   const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
-  const previewMessage = buildRealReminderMessage({
-    borrowerName,
-    loanCode,
-    installmentNumber: nextDue.installmentNumber,
-    installmentsTotalCount: installments.length,
-    installmentsPaidCount,
-    amountDue,
-    dueDate: nextDue.dueDate,
-    penaltyDue: nextDue.status === 'LATE' ? num(nextDue.due.penalty) : 0,
-  });
 
   const pastDueLogs = logs.filter((l) => l.triggerType === 'PAST_DUE_WEEKLY').sort((a, b) => a.triggerDate.localeCompare(b.triggerDate));
 
@@ -390,10 +416,25 @@ function RealRemindersPanel({
         <CardDescription>Trigger schedule for installment #{nextDue.installmentNumber}, and every real Past Due send for this loan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {dateTriggers.map((trigger) => {
+        {nextDue.status === 'LATE' && (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            This installment is already past due - the 5/3/1-days-before and Due Date reminders no longer apply (their window has
+            passed). Only Past Due reminders send while this account stays overdue; the date-anchored schedule resumes once it's
+            current again.
+          </p>
+        )}
+        {nextDue.status !== 'LATE' &&
+          dateTriggers.map((trigger) => {
           const log = logs.find((l) => l.triggerType === trigger.type);
           const due = trigger.date <= now;
           const key = trigger.type;
+          // dateTriggers only ever contains the 4 date-anchored types (computeReminderTriggers isLate=false) - never PAST_DUE_WEEKLY.
+          const previewMessage = renderPreviewMessage(trigger.type as keyof typeof PREVIEW_TEMPLATES, {
+            borrowerName,
+            loanCode,
+            amountDue,
+            dueDate: nextDue.dueDate,
+          });
           return (
             <div key={key} className="rounded-md border">
               <button
