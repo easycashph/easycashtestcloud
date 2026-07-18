@@ -25,13 +25,14 @@ import type { Language } from '@/lib/translations';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { AuthenticatedUserView } from '@/lib/authTypes';
 import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
+import type { ReminderSettings } from '@/lib/reminderSettingsApiTypes';
 import { cn } from '@/lib/utils';
 
 /** Cross-referenced against `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real
  * `MIN_LENGTH` so the two don't silently drift. */
 const PASSWORD_MIN_LENGTH = 12;
 
-type SettingsTab = 'profile' | 'security' | 'appearance' | 'notifications' | 'language';
+type SettingsTab = 'profile' | 'security' | 'appearance' | 'notifications' | 'language' | 'system';
 
 /**
  * Frontend↔Backend Wiring Pilot, Stage 0c, self-service Profile/Password wired to real endpoints
@@ -44,6 +45,7 @@ export function SettingsPage() {
   useLogPageView('Settings');
   const [tab, setTab] = React.useState<SettingsTab>('profile');
   const { t } = useLanguage();
+  const { canManageReminderSettings } = useRole();
 
   return (
     <div className="space-y-6">
@@ -53,12 +55,13 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+        <TabsList className={cn('grid w-full grid-cols-2', canManageReminderSettings ? 'sm:grid-cols-6' : 'sm:grid-cols-5')}>
           <TabsTrigger value="profile">{t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="security">{t('settings.tab.security')}</TabsTrigger>
           <TabsTrigger value="appearance">{t('settings.tab.appearance')}</TabsTrigger>
           <TabsTrigger value="notifications">{t('settings.tab.notifications')}</TabsTrigger>
           <TabsTrigger value="language">{t('settings.tab.language')}</TabsTrigger>
+          {canManageReminderSettings && <TabsTrigger value="system">System</TabsTrigger>}
         </TabsList>
       </Tabs>
 
@@ -67,6 +70,7 @@ export function SettingsPage() {
       {tab === 'appearance' && <AppearanceTab />}
       {tab === 'notifications' && <NotificationsTab />}
       {tab === 'language' && <LanguageTab />}
+      {tab === 'system' && canManageReminderSettings && <SystemTab />}
 
       <RecentActivityPanel label="Settings" />
     </div>
@@ -614,6 +618,86 @@ function NotificationsTab() {
             />
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * MIS-only master switches for the SMS/Email automated daily reminder jobs (2026-07-18 user
+ * request) - wired to `GET`/`PATCH /reminder-settings`, DB-backed so a toggle here takes effect on
+ * the cron's next run without a server restart (see `ReminderSettings` Prisma model's own doc
+ * comment). Defaults to both off - the manual test scripts (`test-send-sms-reminder.ts`/
+ * `test-send-email-reminder.ts`) work regardless of these switches, which only gate the automated
+ * job.
+ */
+function SystemTab() {
+  const queryClient = useQueryClient();
+  const [error, setError] = React.useState<string | null>(null);
+
+  const settingsQuery = useQuery({
+    queryKey: ['reminder-settings'],
+    queryFn: () => apiClient.get<ReminderSettings>('/reminder-settings'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (body: { smsEnabled?: boolean; emailEnabled?: boolean }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['reminder-settings'], settings);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not update reminder settings.'),
+  });
+
+  const settings = settingsQuery.data;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payment reminders</CardTitle>
+        <CardDescription>Turn on automated sending once you've verified the content and test sends.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-1 divide-y rounded-md border">
+        {error && (
+          <div className="flex items-center gap-2 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">SMS reminders</p>
+            <p className="text-xs text-muted-foreground">Sent via M360/Globe to borrowers' mobile numbers</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.smsEnabled ? 'success' : 'warning'}>{settings?.smsEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.smsEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ smsEnabled: checked })}
+              aria-label="Toggle SMS reminders"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">Email reminders</p>
+            <p className="text-xs text-muted-foreground">Sent from collections@easycash.ph to borrowers' email</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.emailEnabled ? 'success' : 'warning'}>{settings?.emailEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.emailEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ emailEnabled: checked })}
+              aria-label="Toggle Email reminders"
+            />
+          </div>
+        </div>
+      </CardContent>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground">
+          Test sends (the manual scripts) still work regardless of these switches - this only controls the automated daily job.
+        </p>
       </CardContent>
     </Card>
   );

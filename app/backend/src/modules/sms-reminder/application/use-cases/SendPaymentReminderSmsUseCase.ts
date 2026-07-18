@@ -1,4 +1,5 @@
 import { logger } from '@shared/logger/logger';
+import type { IReminderSettingsRepository } from '@modules/reminder-settings/application/ports/IReminderSettingsRepository';
 import type { ISmsReminderRepository, ReminderTriggerType, SmsReminderCandidate } from '../ports/ISmsReminderRepository';
 import type { ISmsGateway } from '../ports/ISmsGateway';
 import { renderReminderMessage } from '../reminderMessageTemplate';
@@ -32,34 +33,37 @@ function isManilaMonday(now: Date): boolean {
  * triggers always run (each looks at today +/- its own offset); PAST_DUE_WEEKLY only runs on
  * Mondays (Asia/Manila), uncapped, for as long as a loan has any overdue unpaid installment.
  *
- * `smsEnabled=false` (SMS_ENABLED unset in .env) is a real, first-class code path, not a stub -
- * it still runs the whole candidate/idempotency/logging pipeline and logs `logSent` with a
- * synthetic transid, it just never calls `smsGateway.send`. This is what makes it safe to run the
- * cron in every environment (dev, staging) without risking a real SMS blast before a `SMS_ENABLED
- * =true` deploy - the day it flips on, there's no backlog of unsent-but-already-logged reminders
- * to reconcile.
+ * The enabled/disabled switch (2026-07-18: moved from a static `SMS_ENABLED` env var to a
+ * DB-backed `ReminderSettings` row, checked fresh at the START of each run - not per candidate -
+ * so a mid-day MIS toggle takes effect on the next run without a server restart) is a real,
+ * first-class code path, not a stub: even disabled, this still runs the whole candidate/
+ * idempotency/logging pipeline and logs `logSent` with a synthetic transid, it just never calls
+ * `smsGateway.send`. This is what makes it safe to run the cron in every environment without
+ * risking a real SMS blast before someone flips it on - the day it does, there's no backlog of
+ * unsent-but-already-logged reminders to reconcile.
  */
 export class SendPaymentReminderSmsUseCase {
   constructor(
     private readonly deps: {
       smsReminderRepository: ISmsReminderRepository;
       smsGateway: ISmsGateway;
-      smsEnabled: boolean;
+      reminderSettingsRepository: IReminderSettingsRepository;
     },
   ) {}
 
   async execute(now: Date = new Date()): Promise<SendPaymentReminderSmsResult> {
     const totals: SendPaymentReminderSmsResult = { candidateCount: 0, sentCount: 0, skippedCount: 0, failedCount: 0 };
+    const settings = await this.deps.reminderSettingsRepository.get();
 
     for (const { type, offsetDays } of DATE_TRIGGER_OFFSETS) {
       const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
       const candidates = await this.deps.smsReminderRepository.findCandidatesDueOn(targetDate, undefined);
-      await this.processCandidates(candidates, type, targetDate, totals);
+      await this.processCandidates(candidates, type, targetDate, totals, settings.smsEnabled);
     }
 
     if (isManilaMonday(now)) {
       const candidates = await this.deps.smsReminderRepository.findPastDueCandidates(undefined);
-      await this.processCandidates(candidates, 'PAST_DUE_WEEKLY', now, totals);
+      await this.processCandidates(candidates, 'PAST_DUE_WEEKLY', now, totals, settings.smsEnabled);
     }
 
     return totals;
@@ -70,6 +74,7 @@ export class SendPaymentReminderSmsUseCase {
     triggerType: ReminderTriggerType,
     triggerDate: Date,
     totals: SendPaymentReminderSmsResult,
+    smsEnabled: boolean,
   ): Promise<void> {
     totals.candidateCount += candidates.length;
 
@@ -82,7 +87,7 @@ export class SendPaymentReminderSmsUseCase {
 
       const message = renderReminderMessage(candidate, triggerType);
 
-      if (!this.deps.smsEnabled) {
+      if (!smsEnabled) {
         await this.deps.smsReminderRepository.logSent({
           loanAccountId: candidate.loanAccountId,
           installmentId: candidate.installmentId,

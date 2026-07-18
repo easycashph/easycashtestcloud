@@ -140,6 +140,10 @@ import { PrismaSmsReminderRepository } from '@modules/sms-reminder/infrastructur
 import { createEmailReminderLogRouter } from '@modules/email-reminder/interface/http/emailReminderLogRouter';
 import { ListEmailReminderLogsUseCase } from '@modules/email-reminder/application/use-cases/ListEmailReminderLogsUseCase';
 import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
+import { createReminderSettingsRouter } from '@modules/reminder-settings/interface/http/reminderSettingsRouter';
+import { GetReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/GetReminderSettingsUseCase';
+import { UpdateReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/UpdateReminderSettingsUseCase';
+import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
@@ -680,6 +684,16 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', emailReminderLogRouter);
+
+  // --- reminder-settings module wiring: MIS-only master switches for the SMS/Email cron jobs ---
+  const reminderSettingsRouter = createReminderSettingsRouter(
+    {
+      getReminderSettingsUseCase: new GetReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', reminderSettingsRouter);
 
   // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
   const interestRateChartRouter = createInterestRateChartRouter(

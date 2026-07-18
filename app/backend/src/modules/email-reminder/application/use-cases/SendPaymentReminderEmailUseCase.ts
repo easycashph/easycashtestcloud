@@ -1,6 +1,7 @@
 import { logger } from '@shared/logger/logger';
 import { renderReminderMessage } from '@modules/sms-reminder/application/reminderMessageTemplate';
 import type { SmsReminderCandidate } from '@modules/sms-reminder/application/ports/ISmsReminderRepository';
+import type { IReminderSettingsRepository } from '@modules/reminder-settings/application/ports/IReminderSettingsRepository';
 import type { IEmailReminderRepository, ReminderTriggerType, EmailReminderCandidate } from '../ports/IEmailReminderRepository';
 import type { IEmailGateway } from '../ports/IEmailGateway';
 
@@ -44,22 +45,23 @@ export class SendPaymentReminderEmailUseCase {
     private readonly deps: {
       emailReminderRepository: IEmailReminderRepository;
       emailGateway: IEmailGateway;
-      emailEnabled: boolean;
+      reminderSettingsRepository: IReminderSettingsRepository;
     },
   ) {}
 
   async execute(now: Date = new Date()): Promise<SendPaymentReminderEmailResult> {
     const totals: SendPaymentReminderEmailResult = { candidateCount: 0, sentCount: 0, skippedCount: 0, failedCount: 0 };
+    const settings = await this.deps.reminderSettingsRepository.get();
 
     for (const { type, offsetDays } of DATE_TRIGGER_OFFSETS) {
       const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
       const candidates = await this.deps.emailReminderRepository.findCandidatesDueOn(targetDate, undefined);
-      await this.processCandidates(candidates, type, targetDate, totals);
+      await this.processCandidates(candidates, type, targetDate, totals, settings.emailEnabled);
     }
 
     if (isManilaMonday(now)) {
       const candidates = await this.deps.emailReminderRepository.findPastDueCandidates(undefined);
-      await this.processCandidates(candidates, 'PAST_DUE_WEEKLY', now, totals);
+      await this.processCandidates(candidates, 'PAST_DUE_WEEKLY', now, totals, settings.emailEnabled);
     }
 
     return totals;
@@ -70,6 +72,7 @@ export class SendPaymentReminderEmailUseCase {
     triggerType: ReminderTriggerType,
     triggerDate: Date,
     totals: SendPaymentReminderEmailResult,
+    emailEnabled: boolean,
   ): Promise<void> {
     totals.candidateCount += candidates.length;
 
@@ -82,7 +85,7 @@ export class SendPaymentReminderEmailUseCase {
 
       const message = renderReminderMessage(toSmsShapedCandidate(candidate), triggerType);
 
-      if (!this.deps.emailEnabled) {
+      if (!emailEnabled) {
         await this.deps.emailReminderRepository.logSent({
           loanAccountId: candidate.loanAccountId,
           installmentId: candidate.installmentId,

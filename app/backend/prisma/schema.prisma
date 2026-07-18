@@ -257,6 +257,7 @@ model User {
   feesOverridesSet              RepaymentSchedule[]     @relation("FeesOverrideBy")
   feeAdjustmentsMade            FeeAdjustment[]
   notificationsReceived         Notification[]
+  reminderSettingsUpdated       ReminderSettings[]
 
   @@map("users")
 }
@@ -1718,4 +1719,22 @@ model IdempotencyKey {
 
   @@unique([key, endpoint])
   @@map("idempotency_keys")
+}
+
+/// Auto SMS/Email Payment Reminders master switches (2026-07-18 user request) - a single-row
+/// table (`id` fixed to "singleton") so the automated daily cron jobs can check a live,
+/// DB-backed value each run instead of a static `.env` var that requires a server restart to
+/// change. `SMS_ENABLED`/`EMAIL_ENABLED` in `.env` remain the fallback default (used only if this
+/// row somehow doesn't exist yet - seeded to false on first read otherwise); once this row exists,
+/// it always wins. MIS-only to change (enforced by the HTTP layer's `requireRole('MIS')`, not
+/// here), matching every other system-wide toggle in this codebase.
+model ReminderSettings {
+  id              String   @id @default("singleton")
+  smsEnabled      Boolean  @default(false)
+  emailEnabled    Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+  updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])
+
+  @@map("reminder_settings")
 }

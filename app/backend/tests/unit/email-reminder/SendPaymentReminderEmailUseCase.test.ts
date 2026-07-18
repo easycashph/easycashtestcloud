@@ -33,11 +33,15 @@ function buildRepository(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function buildSettingsRepository(emailEnabled: boolean) {
+  return { get: vi.fn().mockResolvedValue({ smsEnabled: false, emailEnabled, updatedAt: new Date(), updatedByUserId: null }) };
+}
+
 describe('SendPaymentReminderEmailUseCase', () => {
   it('checks all 4 date-anchored triggers every run, and skips PAST_DUE_WEEKLY on a non-Monday', async () => {
     const emailReminderRepository = buildRepository();
     const emailGateway = { send: vi.fn() };
-    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, emailEnabled: true });
+    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     await useCase.execute(WEDNESDAY);
 
@@ -50,7 +54,7 @@ describe('SendPaymentReminderEmailUseCase', () => {
       findPastDueCandidates: vi.fn().mockResolvedValue([buildCandidate({ installmentId: null, dueDate: null, daysLate: 14, totalAmountDue: '5000' })]),
     });
     const emailGateway = { send: vi.fn().mockResolvedValue(undefined) };
-    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, emailEnabled: true });
+    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(MONDAY);
 
@@ -64,7 +68,7 @@ describe('SendPaymentReminderEmailUseCase', () => {
       findCandidatesDueOn: vi.fn().mockResolvedValueOnce([buildCandidate()]).mockResolvedValue([]),
     });
     const emailGateway = { send: vi.fn() };
-    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, emailEnabled: false });
+    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, reminderSettingsRepository: buildSettingsRepository(false) });
 
     const result = await useCase.execute(WEDNESDAY);
 
@@ -78,7 +82,7 @@ describe('SendPaymentReminderEmailUseCase', () => {
       findCandidatesDueOn: vi.fn().mockResolvedValueOnce([buildCandidate()]).mockResolvedValue([]),
     });
     const emailGateway = { send: vi.fn().mockRejectedValue(new Error('SMTP send failed: bad credentials')) };
-    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, emailEnabled: true });
+    const useCase = new SendPaymentReminderEmailUseCase({ emailReminderRepository, emailGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(WEDNESDAY);
 

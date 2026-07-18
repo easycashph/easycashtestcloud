@@ -40,6 +40,8 @@ interface RoleContextValue {
   /** Only MIS and Loan Operation Manager may give the FINAL Approve on a Loan Application -
    * excludes CRM, whose role in the pipeline stops at Tag Pre Approval (2026-07-17). */
   canApproveLoanApplication: boolean;
+  /** MIS-only (2026-07-18 user request) - the Settings page's SMS/Email reminder master switches. */
+  canManageReminderSettings: boolean;
   /** Re-fetches `GET /auth/me` and updates `currentAccount` - call after a self-service profile
    * update so the sidebar/header name updates without requiring a full reload. */
   refreshCurrentUser: () => Promise<void>;
@@ -185,6 +187,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
     canReviewLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
     canApproveLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
+    canManageReminderSettings: currentAccount.roles.includes('MIS'),
     refreshCurrentUser,
   };
 

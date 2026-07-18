@@ -9,6 +9,7 @@ import { startEmailReminderScheduler } from '@modules/email-reminder/infrastruct
 import { SendPaymentReminderEmailUseCase } from '@modules/email-reminder/application/use-cases/SendPaymentReminderEmailUseCase';
 import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
 import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
+import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
 
 const app = createApp();
 
@@ -18,6 +19,8 @@ const server = app.listen(env.PORT, () => {
 
 // Not started inside createApp() - see startSmsReminderScheduler's own doc comment (tests import
 // createApp() directly and must never spin up a real cron timer).
+const reminderSettingsRepository = new PrismaReminderSettingsRepository();
+
 startSmsReminderScheduler({
   sendPaymentReminderSmsUseCase: new SendPaymentReminderSmsUseCase({
     smsReminderRepository: new PrismaSmsReminderRepository(),
@@ -27,7 +30,7 @@ startSmsReminderScheduler({
       password: env.M360_PASSWORD ?? '',
       shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
     }),
-    smsEnabled: env.SMS_ENABLED,
+    reminderSettingsRepository,
   }),
   cronExpression: env.SMS_REMINDER_CRON,
 });
@@ -42,7 +45,7 @@ startEmailReminderScheduler({
       password: env.SMTP_PASSWORD ?? '',
       fromAddress: env.SMTP_FROM_ADDRESS,
     }),
-    emailEnabled: env.EMAIL_ENABLED,
+    reminderSettingsRepository,
   }),
   cronExpression: env.EMAIL_REMINDER_CRON,
 });

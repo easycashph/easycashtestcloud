@@ -36,11 +36,15 @@ function buildRepository(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function buildSettingsRepository(smsEnabled: boolean) {
+  return { get: vi.fn().mockResolvedValue({ smsEnabled, emailEnabled: false, updatedAt: new Date(), updatedByUserId: null }) };
+}
+
 describe('SendPaymentReminderSmsUseCase', () => {
   it('checks all 4 date-anchored triggers every run, and skips PAST_DUE_WEEKLY on a non-Monday', async () => {
     const smsReminderRepository = buildRepository();
     const smsGateway = { send: vi.fn() };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: true });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     await useCase.execute(WEDNESDAY);
 
@@ -53,7 +57,7 @@ describe('SendPaymentReminderSmsUseCase', () => {
       findPastDueCandidates: vi.fn().mockResolvedValue([buildCandidate({ installmentId: null, dueDate: null, daysLate: 14, totalAmountDue: '5000' })]),
     });
     const smsGateway = { send: vi.fn().mockResolvedValue({ providerTransId: 'M360-past-due' }) };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: true });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(MONDAY);
 
@@ -69,7 +73,7 @@ describe('SendPaymentReminderSmsUseCase', () => {
       existsForTrigger: vi.fn().mockResolvedValue(true),
     });
     const smsGateway = { send: vi.fn() };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: true });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(WEDNESDAY);
 
@@ -83,7 +87,7 @@ describe('SendPaymentReminderSmsUseCase', () => {
       findCandidatesDueOn: vi.fn().mockResolvedValueOnce([buildCandidate()]).mockResolvedValue([]),
     });
     const smsGateway = { send: vi.fn() };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: false });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(false) });
 
     const result = await useCase.execute(WEDNESDAY);
 
@@ -99,7 +103,7 @@ describe('SendPaymentReminderSmsUseCase', () => {
       findCandidatesDueOn: vi.fn().mockResolvedValueOnce([buildCandidate()]).mockResolvedValue([]),
     });
     const smsGateway = { send: vi.fn().mockResolvedValue({ providerTransId: 'M360-abc123' }) };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: true });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(WEDNESDAY);
 
@@ -121,7 +125,7 @@ describe('SendPaymentReminderSmsUseCase', () => {
         .mockRejectedValueOnce(new Error('M360 rejected the send (code 401 Unauthorized): bad credentials'))
         .mockResolvedValueOnce({ providerTransId: 'M360-good' }),
     };
-    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, smsEnabled: true });
+    const useCase = new SendPaymentReminderSmsUseCase({ smsReminderRepository, smsGateway, reminderSettingsRepository: buildSettingsRepository(true) });
 
     const result = await useCase.execute(WEDNESDAY);
 
