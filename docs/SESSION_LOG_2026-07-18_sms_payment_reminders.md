@@ -120,14 +120,25 @@
      (no login credentials in this environment, the standing constraint noted throughout this
      project) - checked the console for load-time errors on the public login page only.
 
+8. **Final message wording, user-provided copy** - user supplied the actual approved SMS text
+   (branded header, friendly-reminder body, "already paid? disregard" closer). Replaced
+   `reminderMessageTemplate.ts`'s placeholder `DEFAULT_TEMPLATE` with it verbatim, with one
+   flagged and user-approved edit: the original text used an em-dash (`–`) and peso sign (`₱`),
+   both outside the GSM-7 character set - including either one forces the *entire* SMS into
+   UCS-2 encoding (70 chars/segment instead of 160), which would have billed every single
+   reminder as 7 segments instead of 3 for a difference no recipient would actually notice.
+   Swapped to a plain hyphen and "PHP" instead, user confirmed this was fine. Re-ran
+   `scripts/test-send-sms-reminder.ts --loan-code=SL-REG_00114 --apply` with the final wording -
+   user confirmed receipt and approved the content (`transid: M36046486D34A763A6BB81784345790`).
+
 ## Current state / what's NOT done yet
 
-- **Real M360 credentials are now in `.env` and confirmed working** (test SMS successfully
-  delivered to a real phone via `scripts/test-send-sms-reminder.ts --apply`). `SMS_ENABLED` itself
-  is still `false`, though - the automated daily cron has NOT been turned on yet, only the manual
-  single-loan test path has been proven. Turning on `SMS_ENABLED=true` is a separate decision (it
-  affects the whole portfolio, not one test loan) - wait for explicit user go-ahead before doing
-  that. User also mentioned still tuning the SMS message wording before going live.
+- **Real M360 credentials are now in `.env` and confirmed working, final message wording approved
+  by the user** (both proven via two separate real test sends to `SL-REG_00114`, the second with
+  the final approved copy). `SMS_ENABLED` itself is still `false`, though - the automated daily
+  cron has NOT been turned on yet, only the manual single-loan test path has been proven. Turning
+  on `SMS_ENABLED=true` is a separate decision (it affects the whole portfolio, not one test loan)
+  - wait for explicit user go-ahead before doing that.
 - `SMS_REMINDER_DLR_SECRET` is still blank - needs a value chosen and given to M360 (as a query
   param on the DLR webhook URL) before delivery-status tracking works, independent of the
   `SMS_ENABLED` decision above.
