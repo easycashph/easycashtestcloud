@@ -3,7 +3,7 @@ import { ListNotificationsUseCase } from '@modules/notification/application/use-
 import { Notification } from '@modules/notification/domain/Notification';
 
 describe('ListNotificationsUseCase', () => {
-  it('syncs overdue notifications before listing, then returns items + unread count', async () => {
+  it('returns items + unread count for the requesting recipient', async () => {
     const notification = Notification.create({
       recipientUserId: 'user-1',
       type: 'APPLICATION_SUBMITTED',
@@ -20,12 +20,10 @@ describe('ListNotificationsUseCase', () => {
       existsRecent: vi.fn(),
       findOverdueLoanAccounts: vi.fn(),
     };
-    const notificationService = { syncOverdueNotifications: vi.fn().mockResolvedValue(undefined) };
-    const useCase = new ListNotificationsUseCase({ notificationRepository, notificationService: notificationService as never });
+    const useCase = new ListNotificationsUseCase({ notificationRepository });
 
     const result = await useCase.execute({ recipientUserId: 'user-1', limit: 20 });
 
-    expect(notificationService.syncOverdueNotifications).toHaveBeenCalledTimes(1);
     expect(result.items).toEqual([notification]);
     expect(result.unreadCount).toBe(3);
     expect(notificationRepository.findMany).toHaveBeenCalledWith({

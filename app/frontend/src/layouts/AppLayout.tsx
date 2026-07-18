@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
+import { GlobalSearch } from '@/components/GlobalSearch';
+import { HelpButton } from '@/components/HelpButton';
 import { NotificationBell } from '@/components/NotificationBell';
 import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
@@ -153,6 +155,8 @@ function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <GlobalSearch />
+        <HelpButton />
         <NotificationBell />
         <AccountMenu />
       </div>

@@ -10,6 +10,8 @@ import { SendPaymentReminderEmailUseCase } from '@modules/email-reminder/applica
 import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
 import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
+import { startOverdueNotificationScheduler } from '@modules/notification/infrastructure/OverdueNotificationScheduler';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 
 const app = createApp();
 
@@ -50,8 +52,13 @@ startEmailReminderScheduler({
   cronExpression: env.EMAIL_REMINDER_CRON,
 });
 
+const stopOverdueNotificationScheduler = startOverdueNotificationScheduler(
+  app.locals.notificationService as NotificationService,
+);
+
 function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down gracefully.`);
+  stopOverdueNotificationScheduler();
   server.close(() => process.exit(0));
 }
 

@@ -79,20 +79,18 @@ export class NotificationService {
   }
 
   /**
-   * LOAN_OVERDUE sync - a lazy substitute for a real job scheduler, which doesn't exist anywhere
-   * in this codebase yet (the `payment-reminder` module is a read-only worklist, not a scheduled
-   * send mechanism - see its own doc comments). Called once per `ListNotificationsUseCase.execute`
-   * (i.e. whenever any authenticated user opens their notification bell): scans every currently-
-   * overdue loan account (same live definition as the Dashboard's `overdueAccounts` figure) and
-   * creates one LOAN_OVERDUE notification per account for MIS/Loan Operation Manager/Collection
-   * Officer at that account's branch, skipping any account that already got one in the last 24h so
-   * staying overdue doesn't spam a fresh notification on every page load.
+   * LOAN_OVERDUE sync - scans every currently-overdue loan account (same live definition as the
+   * Dashboard's `overdueAccounts` figure) and creates one LOAN_OVERDUE notification per account
+   * for MIS/Loan Operation Manager/Collection Officer at that account's branch, skipping any
+   * account that already got one in the last 24h so staying overdue doesn't spam a fresh
+   * notification on every run.
    *
-   * Known, disclosed limitation: an account that JUST became overdue won't get a notification
-   * until the next time *someone* opens their bell - not truly real-time, since nothing in this
-   * codebase runs on a timer. A real fix needs an actual job scheduler, which is out of scope for
-   * this feature (see docs/SESSION_LOG for the follow-up note) - this sync exists so the feature
-   * still surfaces overdue accounts today rather than omitting them entirely.
+   * 2026-07-17: called on a real periodic timer (`OverdueNotificationScheduler.ts`, started from
+   * `server.ts`, every `OVERDUE_SYNC_INTERVAL_MS`) - not tied to user activity. Previously ran as
+   * a lazy substitute inside `ListNotificationsUseCase.execute` (once per bell poll, every 30s per
+   * connected user) because no scheduler existed in this codebase; replaced once one did, both for
+   * genuine real-time-ness (independent of whether anyone happens to have the app open) and to
+   * stop re-running the overdue scan on every single poll.
    */
   async syncOverdueNotifications(): Promise<void> {
     const overdueAccounts = await this.deps.notificationRepository.findOverdueLoanAccounts(new Date());

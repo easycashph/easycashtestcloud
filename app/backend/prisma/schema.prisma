@@ -1351,9 +1351,8 @@ enum NotificationType {
 /// Notification Center (2026-07-17 user request). Distinct from AuditLog (which is a write/
 /// page-view trail, MIS-only) - these are user-visible "things needing your attention," created as
 /// a side effect of real domain events (LoanApplication submitted/tagged-pre-approval/decided) or,
-/// for LOAN_OVERDUE, by a lazy sync run whenever any authenticated user requests their
-/// notifications (no job scheduler exists in this codebase yet - see NotificationService's own doc
-/// comment). entityType/entityId link back to the source record, same pattern as AuditLog.
+/// for LOAN_OVERDUE, by a real periodic scheduler (see OverdueNotificationScheduler.ts, started
+/// from server.ts). entityType/entityId link back to the source record, same pattern as AuditLog.
 model Notification {
   id              String           @id @default(uuid())
   recipientUserId String

@@ -1,6 +1,5 @@
 import type { INotificationRepository } from '../ports/INotificationRepository';
 import type { Notification } from '../../domain/Notification';
-import type { NotificationService } from '../NotificationService';
 
 export interface ListNotificationsInput {
   recipientUserId: string;
@@ -15,17 +14,13 @@ export interface ListNotificationsResult {
 }
 
 export class ListNotificationsUseCase {
-  constructor(
-    private readonly deps: { notificationRepository: INotificationRepository; notificationService: NotificationService },
-  ) {}
+  constructor(private readonly deps: { notificationRepository: INotificationRepository }) {}
 
   async execute(input: ListNotificationsInput): Promise<ListNotificationsResult> {
-    // Runs the LOAN_OVERDUE lazy sync before reading the list back, so a freshly-overdue account
-    // shows up the first time anyone opens their bell after it crossed over - see
-    // NotificationService.syncOverdueNotifications's own doc comment for why this exists instead
-    // of a real job scheduler.
-    await this.deps.notificationService.syncOverdueNotifications();
-
+    // 2026-07-17: used to run NotificationService.syncOverdueNotifications() here as a lazy
+    // substitute for a real scheduler - replaced by an actual periodic job (see
+    // `OverdueNotificationScheduler.ts`, started from `server.ts`), so this no longer needs to run
+    // the overdue scan on every single bell poll (previously every 30s per connected user).
     const [items, unreadCount] = await Promise.all([
       this.deps.notificationRepository.findMany({
         recipientUserId: input.recipientUserId,
