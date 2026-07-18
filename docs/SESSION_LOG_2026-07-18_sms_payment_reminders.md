@@ -131,17 +131,77 @@
    `scripts/test-send-sms-reminder.ts --loan-code=SL-REG_00114 --apply` with the final wording -
    user confirmed receipt and approved the content (`transid: M36046486D34A763A6BB81784345790`).
 
+9. **Expanded from a single 5-days-before trigger to the full 5-stage business-confirmed schedule**
+   (5/3/1 days before, Due Date, Past Due Weekly) - previously only simulated in
+   `LoanDetailPage.tsx`'s `RealRemindersPanel`/`computeReminderTriggers`. Triggered by the user
+   noticing that panel's stale "Coming Soon"/"no SMS/Email provider is connected" copy after the
+   real M360 integration already existed - investigation found it was a completely separate,
+   hardcoded, pre-2026-07-12 mock, architecturally disconnected from the real `sms-reminder`
+   module. User chose to make it real rather than retire or just reword it.
+   - **Schema**: added `ReminderTriggerType` enum, `triggerType`/`triggerDate` columns on
+     `SmsReminderLog`, `installmentId` now nullable (PAST_DUE_WEEKLY sums across every overdue
+     installment, not one), idempotency key changed from `@@unique([installmentId])` to
+     `@@unique([loanAccountId, triggerType, triggerDate])` - a loan can now accumulate up to 5 rows
+     (one per date-anchored trigger) plus a growing weekly tail. Migration
+     `20260718052204_expand_sms_reminder_triggers`, hand-written (table was empty in every
+     environment - this feature has never sent a real send outside manual tests - so no backfill
+     needed; `prisma migrate dev`'s interactive confirmation prompt doesn't work in this
+     non-interactive environment).
+   - **Business rules confirmed with the user, one at a time** (CLAUDE.md "never invent business
+     rules"): (1) content for the 4 date-anchored triggers, in the same style as the already-
+     approved FIVE_DAYS_BEFORE copy, escalating urgency toward the due date; (2) for long-overdue
+     accounts, `{totalAmountDue}` = sum of every overdue-and-unpaid installment's remaining
+     principal+interest+fees+penalty (what's needed to become current) - explicitly NOT
+     `LoanAccount`'s whole remaining balance (which would include not-yet-due future installments
+     and overstate what the borrower needs to pay right now) - caught and corrected this
+     distinction mid-conversation before implementing it wrong; (3) PAST_DUE_WEEKLY content
+     (user-provided verbatim, same em-dash-to-hyphen fix as before: 5 segments → 2); (4) cadence -
+     uncapped, every Monday (Asia/Manila), for as long as the loan has any overdue installment (no
+     more "capped at 3 occurrences").
+   - **Backend**: `ISmsReminderRepository`/`PrismaSmsReminderRepository` gained
+     `findPastDueCandidates` (sums every overdue-unpaid installment per loan, `daysLate` from the
+     OLDEST one) alongside the existing `findCandidatesDueOn`; `existsForTrigger` replaced
+     `existsForInstallment`. `reminderMessageTemplate.ts` now holds one default template per
+     trigger type. `SendPaymentReminderSmsUseCase.execute(now)` checks all 4 date offsets every
+     run and additionally runs PAST_DUE_WEEKLY only when `now` is a Manila Monday.
+     `smsReminderScheduler.ts`/`SMS_REMINDER_DAYS_BEFORE_DUE` simplified away (no single
+     configurable offset anymore). `GET /sms-reminder-logs` gained an optional `loanAccountId`
+     query param (for the Loan Detail page's per-loan view) and `triggerType`/`triggerDate` in its
+     response.
+   - **Frontend**: `SmsReminderLogsPage.tsx` gained a Trigger column + filter.
+     `LoanDetailPage.tsx`'s `RealRemindersPanel` now fetches real `SmsReminderLog` rows for the
+     loan and overlays real status (Sent/Delivered/Failed/etc.) on the computed date-anchored
+     triggers, and lists every real Past Due send directly (no more synthetic 3-occurrence list).
+   - **Manual test script** (`scripts/test-send-sms-reminder.ts`) gained a `--trigger=<TYPE>` flag
+     - date-anchored triggers preview against the loan's real next-due installment, PAST_DUE_WEEKLY
+     sums the loan's actual overdue installments.
+   - **Verified**: `tsc --noEmit` both apps, full backend suite 705/16 (baseline restored, +2 from
+     the rewritten/expanded use-case test), frontend production build clean, Docker rebuild.
+     Rewrote `SendPaymentReminderSmsUseCase.test.ts` entirely for the new orchestration (4 date
+     triggers checked every run, PAST_DUE_WEEKLY gated on Monday, idempotency keyed per trigger not
+     per installment).
+   - **Real end-to-end test sends for all 4 newly-added triggers**, one loan only
+     (`SL-REG_00114`, same as before): THREE_DAYS_BEFORE (`M360561D4564B57DCA7231784353960`),
+     ONE_DAY_BEFORE (`M360705A376E0AC7215F61784353979`), DUE_DATE
+     (`M360A67C2CAFCC71545311784353993`), PAST_DUE_WEEKLY (`M3602BB1FEE19CBC41FF01784354026` -
+     first attempt hit a transient M360 error, HTML instead of JSON, likely a brief rate-limit
+     from 3 rapid-fire sends back to back; succeeded on retry after a few seconds' pause). User
+     confirmed all 4 messages were received correctly on the real phone. Combined with the
+     already-proven FIVE_DAYS_BEFORE, every one of the 5 trigger contents is now real-world
+     verified, not just dry-run previewed.
+
 ## Current state / what's NOT done yet
 
-- **Real M360 credentials are now in `.env` and confirmed working, final message wording approved
-  by the user** (both proven via two separate real test sends to `SL-REG_00114`, the second with
-  the final approved copy). `SMS_ENABLED` itself is still `false`, though - the automated daily
-  cron has NOT been turned on yet, only the manual single-loan test path has been proven. Turning
-  on `SMS_ENABLED=true` is a separate decision (it affects the whole portfolio, not one test loan)
-  - wait for explicit user go-ahead before doing that.
+- **`SMS_ENABLED` still `false`** per explicit user instruction mid-session ("manatili na disable
+  muna ang sending sms hanggat hindi ko sinasabi na i enable ito") - stayed false throughout this
+  entire 5-stage expansion, verified via dry-run + 6 total real manual `--apply` test sends (all to
+  `SL-REG_00114`) rather than ever letting the automated cron fire.
+- Real M360 credentials are in `.env`, and **all 5 trigger contents are now real-world verified**
+  (FIVE_DAYS_BEFORE proven earlier in the session; THREE_DAYS_BEFORE/ONE_DAY_BEFORE/DUE_DATE/
+  PAST_DUE_WEEKLY proven just now) - nothing left needing a content check before `SMS_ENABLED=true`.
 - `SMS_REMINDER_DLR_SECRET` is still blank - needs a value chosen and given to M360 (as a query
   param on the DLR webhook URL) before delivery-status tracking works, independent of the
   `SMS_ENABLED` decision above.
-- **Visibility UI now live** (Reports Hub → Operation → "SMS reminder logs") - shows every logged
-  reminder attempt, including manual test sends. Will show real automated-job rows too, once
-  `SMS_ENABLED=true`.
+- **Visibility UI covers all 5 triggers now** (Reports Hub → Operation → "SMS reminder logs", plus
+  the Loan Detail page's own Reminders panel per-loan). Will show real automated-job rows too,
+  once `SMS_ENABLED=true`.

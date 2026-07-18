@@ -1044,7 +1044,7 @@ model RepaymentSchedule {
   paymentAllocations PaymentAllocation[]
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
-  smsReminderLog     SmsReminderLog?
+  smsReminderLogs    SmsReminderLog[]
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
@@ -1379,21 +1379,42 @@ enum SmsReminderStatus {
   FAILED
 }
 
+/// The 5-stage business-confirmed reminder schedule (2026-07-12 decision, previously only
+/// simulated in `LoanDetailPage.tsx`'s `RealRemindersPanel`/`computeReminderTriggers` - now the
+/// real trigger set the backend actually sends against). The 4 date-anchored triggers fire once
+/// each, relative to a loan's next-due installment; `PAST_DUE_WEEKLY` fires every Monday
+/// (Asia/Manila), uncapped, for as long as the loan has any overdue unpaid installment.
+enum ReminderTriggerType {
+  FIVE_DAYS_BEFORE
+  THREE_DAYS_BEFORE
+  ONE_DAY_BEFORE
+  DUE_DATE
+  PAST_DUE_WEEKLY
+}
+
 /// Auto SMS Payment Reminders (2026-07-18 user request, via the existing M360/Globe SMS API
 /// already used by the legacy SDevTech system - see
-/// legacy/reports/M360 SMS API and Passthru Version 3.3.4.pdf). One row per reminder attempt for a
-/// given RepaymentSchedule installment - the `@@unique([installmentId])` is the idempotency guard:
-/// SendPaymentReminderSmsUseCase checks for an existing row before sending, so a re-run of the
-/// daily job (or two overlapping runs) can never double-text the same installment. `status` starts
-/// at SENT (M360 accepted the broadcast, code 201) and is updated to DELIVERED/UNDELIVERED/REJECTED
+/// legacy/reports/M360 SMS API and Passthru Version 3.3.4.pdf). One row per reminder SEND ATTEMPT
+/// - a single loan can now accumulate up to 5 rows (one per trigger type) plus a growing weekly
+/// tail from PAST_DUE_WEEKLY, so idempotency is `@@unique([loanAccountId, triggerType,
+/// triggerDate])` (not `installmentId` alone anymore - a loan has no single stable "the"
+/// installment once PAST_DUE_WEEKLY sums across every overdue one). `triggerDate` is the Asia/
+/// Manila calendar date this specific trigger instance fired on - for the 4 date-anchored
+/// triggers it's the installment's own due-date-relative day; for PAST_DUE_WEEKLY it's that
+/// Monday's date, which is what makes each week's send its own idempotent row.
+/// `installmentId` is nullable: set to the anchor installment for the 4 date-based triggers, null
+/// for PAST_DUE_WEEKLY (which sums across every overdue installment, not one). `status` starts at
+/// SENT (M360 accepted the broadcast, code 201) and is updated to DELIVERED/UNDELIVERED/REJECTED
 /// by the DLR webhook when M360 calls back with the telco's actual delivery outcome; FAILED means
 /// M360 itself rejected the send (non-201 response) - no DLR follow-up expected for that case.
 model SmsReminderLog {
-  id            String            @id @default(uuid())
+  id            String              @id @default(uuid())
   loanAccountId String
-  loanAccount   LoanAccount       @relation(fields: [loanAccountId], references: [id])
-  installmentId String            @unique
-  installment   RepaymentSchedule @relation(fields: [installmentId], references: [id])
+  loanAccount   LoanAccount         @relation(fields: [loanAccountId], references: [id])
+  installmentId String?
+  installment   RepaymentSchedule?  @relation(fields: [installmentId], references: [id])
+  triggerType   ReminderTriggerType
+  triggerDate   DateTime
 
   phoneNumber String
   message     String
@@ -1405,7 +1426,9 @@ model SmsReminderLog {
   sentAt      DateTime  @default(now())
   deliveredAt DateTime?
 
+  @@unique([loanAccountId, triggerType, triggerDate])
   @@index([loanAccountId])
+  @@index([installmentId])
   @@index([providerTransId])
   @@map("sms_reminder_logs")
 }

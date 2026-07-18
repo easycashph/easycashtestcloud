@@ -1,5 +1,5 @@
 import { logger } from '@shared/logger/logger';
-import type { ISmsReminderRepository } from '../ports/ISmsReminderRepository';
+import type { ISmsReminderRepository, ReminderTriggerType, SmsReminderCandidate } from '../ports/ISmsReminderRepository';
 import type { ISmsGateway } from '../ports/ISmsGateway';
 import { renderReminderMessage } from '../reminderMessageTemplate';
 
@@ -10,10 +10,27 @@ export interface SendPaymentReminderSmsResult {
   failedCount: number;
 }
 
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** The 4 date-anchored triggers, relative to a loan's next-due installment. */
+const DATE_TRIGGER_OFFSETS: { type: ReminderTriggerType; offsetDays: number }[] = [
+  { type: 'FIVE_DAYS_BEFORE', offsetDays: -5 },
+  { type: 'THREE_DAYS_BEFORE', offsetDays: -3 },
+  { type: 'ONE_DAY_BEFORE', offsetDays: -1 },
+  { type: 'DUE_DATE', offsetDays: 0 },
+];
+
+/** Asia/Manila is fixed UTC+8 year-round (no DST) - true every Monday, matching PAST_DUE_WEEKLY's user-confirmed cadence. */
+function isManilaMonday(now: Date): boolean {
+  return new Date(now.getTime() + MANILA_OFFSET_MS).getUTCDay() === 1;
+}
+
 /**
  * The daily job body (see infrastructure/smsReminderScheduler.ts for the cron wiring itself).
- * Runs once per calendar day, `targetDate` = today + SMS_REMINDER_DAYS_BEFORE_DUE — finds every
- * loan whose next-due installment lands exactly there, and texts each one once.
+ * Runs once per calendar day and checks EVERY trigger in the 5-stage business-confirmed schedule
+ * (2026-07-12 decision, previously only simulated in `LoanDetailPage.tsx`): the 4 date-anchored
+ * triggers always run (each looks at today +/- its own offset); PAST_DUE_WEEKLY only runs on
+ * Mondays (Asia/Manila), uncapped, for as long as a loan has any overdue unpaid installment.
  *
  * `smsEnabled=false` (SMS_ENABLED unset in .env) is a real, first-class code path, not a stub -
  * it still runs the whole candidate/idempotency/logging pipeline and logs `logSent` with a
@@ -28,35 +45,54 @@ export class SendPaymentReminderSmsUseCase {
       smsReminderRepository: ISmsReminderRepository;
       smsGateway: ISmsGateway;
       smsEnabled: boolean;
-      /** SMS_REMINDER_TEMPLATE override - omit to use reminderMessageTemplate.ts's own default. */
-      messageTemplate?: string;
     },
   ) {}
 
-  async execute(targetDate: Date): Promise<SendPaymentReminderSmsResult> {
-    const candidates = await this.deps.smsReminderRepository.findCandidatesDueOn(targetDate, undefined);
-    let sentCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
+  async execute(now: Date = new Date()): Promise<SendPaymentReminderSmsResult> {
+    const totals: SendPaymentReminderSmsResult = { candidateCount: 0, sentCount: 0, skippedCount: 0, failedCount: 0 };
+
+    for (const { type, offsetDays } of DATE_TRIGGER_OFFSETS) {
+      const targetDate = new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000);
+      const candidates = await this.deps.smsReminderRepository.findCandidatesDueOn(targetDate, undefined);
+      await this.processCandidates(candidates, type, targetDate, totals);
+    }
+
+    if (isManilaMonday(now)) {
+      const candidates = await this.deps.smsReminderRepository.findPastDueCandidates(undefined);
+      await this.processCandidates(candidates, 'PAST_DUE_WEEKLY', now, totals);
+    }
+
+    return totals;
+  }
+
+  private async processCandidates(
+    candidates: SmsReminderCandidate[],
+    triggerType: ReminderTriggerType,
+    triggerDate: Date,
+    totals: SendPaymentReminderSmsResult,
+  ): Promise<void> {
+    totals.candidateCount += candidates.length;
 
     for (const candidate of candidates) {
-      const alreadyLogged = await this.deps.smsReminderRepository.existsForInstallment(candidate.installmentId);
+      const alreadyLogged = await this.deps.smsReminderRepository.existsForTrigger(candidate.loanAccountId, triggerType, triggerDate);
       if (alreadyLogged) {
-        skippedCount++;
+        totals.skippedCount++;
         continue;
       }
 
-      const message = this.deps.messageTemplate ? renderReminderMessage(candidate, this.deps.messageTemplate) : renderReminderMessage(candidate);
+      const message = renderReminderMessage(candidate, triggerType);
 
       if (!this.deps.smsEnabled) {
         await this.deps.smsReminderRepository.logSent({
           loanAccountId: candidate.loanAccountId,
           installmentId: candidate.installmentId,
+          triggerType,
+          triggerDate,
           phoneNumber: candidate.phoneNumber,
           message,
-          providerTransId: `DRY-RUN-${candidate.installmentId}`,
+          providerTransId: `DRY-RUN-${candidate.loanAccountId}-${triggerType}`,
         });
-        sentCount++;
+        totals.sentCount++;
         continue;
       }
 
@@ -65,25 +101,27 @@ export class SendPaymentReminderSmsUseCase {
         await this.deps.smsReminderRepository.logSent({
           loanAccountId: candidate.loanAccountId,
           installmentId: candidate.installmentId,
+          triggerType,
+          triggerDate,
           phoneNumber: candidate.phoneNumber,
           message,
           providerTransId: result.providerTransId,
         });
-        sentCount++;
+        totals.sentCount++;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown SMS gateway error';
         await this.deps.smsReminderRepository.logFailed({
           loanAccountId: candidate.loanAccountId,
           installmentId: candidate.installmentId,
+          triggerType,
+          triggerDate,
           phoneNumber: candidate.phoneNumber,
           message,
           errorMessage,
         });
-        failedCount++;
-        logger.error({ loanCode: candidate.loanCode, errorMessage }, 'Payment reminder SMS failed to send');
+        totals.failedCount++;
+        logger.error({ loanCode: candidate.loanCode, triggerType, errorMessage }, 'Payment reminder SMS failed to send');
       }
     }
-
-    return { candidateCount: candidates.length, sentCount, skippedCount, failedCount };
   }
 }

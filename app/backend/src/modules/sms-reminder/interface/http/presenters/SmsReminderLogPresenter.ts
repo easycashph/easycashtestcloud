@@ -8,6 +8,8 @@ export interface SmsReminderLogResponse {
   borrowerName: string;
   phoneNumber: string;
   message: string;
+  triggerType: SmsReminderLogRow['triggerType'];
+  triggerDate: string;
   status: SmsReminderLogRow['status'];
   providerTransId: string | null;
   errorMessage: string | null;
@@ -24,6 +26,8 @@ export function presentSmsReminderLog(row: SmsReminderLogRow): SmsReminderLogRes
     borrowerName: row.borrowerName,
     phoneNumber: row.phoneNumber,
     message: row.message,
+    triggerType: row.triggerType,
+    triggerDate: row.triggerDate.toISOString(),
     status: row.status,
     providerTransId: row.providerTransId,
     errorMessage: row.errorMessage,

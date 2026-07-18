@@ -26,6 +26,7 @@ import type {
   PaymentAllocationDetail,
   RepaymentInstallment,
 } from '@/lib/loanApiTypes';
+import type { SmsReminderLog } from '@/lib/smsReminderApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -289,27 +290,48 @@ function buildRealReminderMessage(params: {
   return lines.join('\n');
 }
 
+const REMINDER_STATUS_BADGE: Record<
+  SmsReminderLog['status'],
+  { variant: 'outline' | 'success' | 'destructive'; label: string }
+> = {
+  SENT: { variant: 'outline', label: 'Sent' },
+  DELIVERED: { variant: 'success', label: 'Delivered' },
+  UNDELIVERED: { variant: 'destructive', label: 'Undelivered' },
+  REJECTED: { variant: 'destructive', label: 'Rejected' },
+  FAILED: { variant: 'destructive', label: 'Failed' },
+};
+
 /**
  * Real reminder trigger schedule (confirmed business policy, see `computeReminderTriggers`) for
- * this loan's next unpaid installment, computed from the already-fetched real repayment schedule
- * - no extra query needed. Deliberately does NOT claim any trigger was "Sent": no SMS/email
- * provider is connected yet (pending MIS/Nomer, per 2026-07-12 conversation), so every trigger is
- * shown as "Due" (its date has arrived) or "Upcoming", never as a notification that actually went
- * out. `PaymentRemindersPage.tsx`'s real worklist uses the same honest framing.
+ * this loan's next unpaid installment, overlaid with REAL send status from `SmsReminderLog`
+ * (2026-07-18: M360/Globe SMS integration shipped - see docs/SESSION_LOG_2026-07-18_*.md). The 4
+ * date-anchored triggers show the matching real log's status (SENT/DELIVERED/etc.) once one
+ * exists for this loan, or "Not sent yet" (the schedule's date hasn't been reached by the daily
+ * job, or `SMS_ENABLED` is still off) beforehand. PAST_DUE_WEEKLY is now uncapped and uses the
+ * loan's actual logged sends directly (one row per real Monday it fired), not a locally-simulated
+ * 3-occurrence list.
  */
 function RealRemindersPanel({
+  loanAccountId,
   loanCode,
   borrower,
   installments,
 }: {
+  loanAccountId: string;
   loanCode: string;
   borrower: RealBorrower | undefined;
   installments: RepaymentInstallment[];
 }) {
-  const [expandedType, setExpandedType] = React.useState<ReminderTriggerType | null>(null);
+  const [expandedKey, setExpandedKey] = React.useState<string | null>(null);
   const now = new Date();
   const unpaid = installments.filter((i) => i.status !== 'PAID');
   const nextDue = unpaid.find((i) => new Date(i.dueDate) >= now) ?? unpaid[unpaid.length - 1];
+
+  const remindersQuery = useQuery({
+    queryKey: ['sms-reminder-logs', loanAccountId],
+    queryFn: () => apiClient.get<{ items: SmsReminderLog[] }>(`/sms-reminder-logs?loanAccountId=${loanAccountId}`),
+  });
+  const logs = remindersQuery.data?.items ?? [];
 
   if (!nextDue) {
     return (
@@ -329,9 +351,9 @@ function RealRemindersPanel({
   const num = (v: string) => Number.parseFloat(v) || 0;
   const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
   const installmentsPaidCount = installments.filter((i) => i.status === 'PAID').length;
-  const triggers = computeReminderTriggers(new Date(nextDue.dueDate), nextDue.status === 'LATE');
+  const dateTriggers = computeReminderTriggers(new Date(nextDue.dueDate), false); // only the 4 date-anchored ones - PAST_DUE_WEEKLY handled separately below, from real logs
   const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
-  const message = buildRealReminderMessage({
+  const previewMessage = buildRealReminderMessage({
     borrowerName,
     loanCode,
     installmentNumber: nextDue.installmentNumber,
@@ -342,48 +364,57 @@ function RealRemindersPanel({
     penaltyDue: nextDue.status === 'LATE' ? num(nextDue.due.penalty) : 0,
   });
 
+  const pastDueLogs = logs.filter((l) => l.triggerType === 'PAST_DUE_WEEKLY').sort((a, b) => a.triggerDate.localeCompare(b.triggerDate));
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Bell className="h-4 w-4 text-muted-foreground" /> Reminders
         </CardTitle>
-        <CardDescription>
-          Trigger schedule for installment #{nextDue.installmentNumber} - no SMS/Email provider is connected yet, so nothing below has
-          actually been sent.
-        </CardDescription>
+        <CardDescription>Trigger schedule for installment #{nextDue.installmentNumber}, and every real Past Due send for this loan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {triggers.map((trigger) => {
+        {dateTriggers.map((trigger) => {
+          const log = logs.find((l) => l.triggerType === trigger.type);
           const due = trigger.date <= now;
+          const key = trigger.type;
           return (
-            <div key={trigger.type} className="rounded-md border">
+            <div key={key} className="rounded-md border">
               <button
                 type="button"
                 className="flex w-full items-center justify-between p-3 text-left"
-                onClick={() => setExpandedType((cur) => (cur === trigger.type ? null : trigger.type))}
+                onClick={() => setExpandedKey((cur) => (cur === key ? null : key))}
               >
                 <div className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{REMINDER_TRIGGER_LABELS[trigger.type]}</span>
                   <span className="text-xs text-muted-foreground">{formatDate(trigger.date.toISOString())}</span>
                 </div>
-                <Badge variant={due ? 'warning' : 'outline'}>
-                  <span className="flex items-center gap-1">
-                    {due ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                    {due ? 'Due' : 'Upcoming'}
-                  </span>
-                </Badge>
+                {log ? (
+                  <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                ) : (
+                  <Badge variant={due ? 'warning' : 'outline'}>
+                    <span className="flex items-center gap-1">
+                      {due ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                      {due ? 'Not sent yet' : 'Upcoming'}
+                    </span>
+                  </Badge>
+                )}
               </button>
-              {expandedType === trigger.type && (
+              {expandedKey === key && (
                 <div className="space-y-3 border-t p-3">
-                  <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{message}</pre>
+                  <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{log?.message ?? previewMessage}</pre>
                   <div className="grid gap-1.5 sm:grid-cols-2">
                     <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
                       <span className="flex items-center gap-2">
                         <MessageSquareText className="h-4 w-4" /> SMS ({borrower?.mobilePhone1 ?? 'no number on file'})
                       </span>
-                      <Badge variant="secondary">Coming Soon</Badge>
+                      {log ? (
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Not sent yet</Badge>
+                      )}
                     </div>
                     <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
                       <span className="flex items-center gap-2">
@@ -397,6 +428,44 @@ function RealRemindersPanel({
             </div>
           );
         })}
+
+        {nextDue.status === 'LATE' && (
+          <div className="rounded-md border">
+            <div className="flex items-center gap-2 border-b p-3">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Past Due (Weekly)</span>
+              <span className="text-xs text-muted-foreground">
+                {pastDueLogs.length > 0 ? `${pastDueLogs.length} sent so far` : 'not sent yet - runs every Monday while overdue'}
+              </span>
+            </div>
+            {pastDueLogs.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">No Past Due reminder has been sent yet for this loan.</p>
+            ) : (
+              <div className="divide-y">
+                {pastDueLogs.map((log) => {
+                  const key = `PAST_DUE_WEEKLY-${log.id}`;
+                  return (
+                    <div key={log.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between p-3 text-left"
+                        onClick={() => setExpandedKey((cur) => (cur === key ? null : key))}
+                      >
+                        <span className="text-xs text-muted-foreground">{formatDate(log.triggerDate)}</span>
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                      </button>
+                      {expandedKey === key && (
+                        <div className="border-t p-3">
+                          <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{log.message}</pre>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1316,7 +1385,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </Tabs>
       </Card>
 
-      <RealRemindersPanel loanCode={loan.loanCode} borrower={borrower} installments={installments} />
+      <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
 
       <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
 

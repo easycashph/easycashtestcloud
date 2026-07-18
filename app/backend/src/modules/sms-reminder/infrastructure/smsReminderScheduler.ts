@@ -9,14 +9,17 @@ import type { SendPaymentReminderSmsUseCase } from '../application/use-cases/Sen
  * Deliberately NOT started from `createApp()` (src/app.ts) - that function is also used by every
  * test file via supertest, and a real cron timer has no place running during a test suite. Call
  * this once, from src/server.ts, after the real process is listening.
+ *
+ * No `daysBeforeDue` parameter - the use case itself now checks every trigger in the 5-stage
+ * schedule (5/3/1 days before, due date, and Monday past-due) each run, not a single configurable
+ * offset.
  */
-export function startSmsReminderScheduler(deps: { sendPaymentReminderSmsUseCase: SendPaymentReminderSmsUseCase; cronExpression: string; daysBeforeDue: number }): void {
+export function startSmsReminderScheduler(deps: { sendPaymentReminderSmsUseCase: SendPaymentReminderSmsUseCase; cronExpression: string }): void {
   cron.schedule(
     deps.cronExpression,
     () => {
-      const targetDate = new Date(Date.now() + deps.daysBeforeDue * 24 * 60 * 60 * 1000);
       deps.sendPaymentReminderSmsUseCase
-        .execute(targetDate)
+        .execute(new Date())
         .then((result) => logger.info(result, 'Payment reminder SMS job finished'))
         .catch((error) => logger.error({ error }, 'Payment reminder SMS job crashed'));
     },

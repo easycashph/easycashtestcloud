@@ -3,6 +3,7 @@ import type {
   ISmsReminderRepository,
   LogReminderFailedInput,
   LogReminderSentInput,
+  ReminderTriggerType,
   SmsReminderCandidate,
   SmsReminderLogRow,
 } from '../application/ports/ISmsReminderRepository';
@@ -20,6 +21,11 @@ function manilaDayRange(targetDate: Date): { start: Date; end: Date } {
   const manilaMidnightUtcMs =
     Date.UTC(manilaWallClock.getUTCFullYear(), manilaWallClock.getUTCMonth(), manilaWallClock.getUTCDate(), 0, 0, 0) - MANILA_OFFSET_MS;
   return { start: new Date(manilaMidnightUtcMs), end: new Date(manilaMidnightUtcMs + 24 * 60 * 60 * 1000) };
+}
+
+/** The Asia/Manila calendar-day start for `targetDate` - what gets stored in `triggerDate` (one row per calendar day, never per exact timestamp). */
+function manilaCalendarDay(targetDate: Date): Date {
+  return manilaDayRange(targetDate).start;
 }
 
 /**
@@ -74,14 +80,83 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
         phoneNumber,
         dueDate: row.dueDate,
         amountDueTotal: amountDueTotal.toString(),
+        daysLate: null,
+        totalAmountDue: null,
       });
     }
 
     return candidates;
   }
 
-  async existsForInstallment(installmentId: string): Promise<boolean> {
-    const existing = await prisma.smsReminderLog.findUnique({ where: { installmentId } });
+  async findPastDueCandidates(branchId: string | undefined): Promise<SmsReminderCandidate[]> {
+    const now = new Date();
+    const loanAccountFilter = {
+      status: { in: [...ACTIVE_LOAN_STATUSES] },
+      ...(branchId ? { branchId } : {}),
+    };
+
+    const overdueRows = await prisma.repaymentSchedule.findMany({
+      where: { status: { not: 'PAID' }, dueDate: { lt: now }, loanAccount: loanAccountFilter },
+      orderBy: [{ loanAccountId: 'asc' }, { dueDate: 'asc' }],
+      include: {
+        loanAccount: {
+          select: {
+            loanCode: true,
+            branchId: true,
+            borrower: { select: { firstName: true, lastName: true, mobilePhone1: true, smsRemindersEnabled: true } },
+          },
+        },
+      },
+    });
+
+    const byLoan = new Map<
+      string,
+      { rows: typeof overdueRows; oldestDueDate: Date }
+    >();
+    for (const row of overdueRows) {
+      const existing = byLoan.get(row.loanAccountId);
+      if (existing) {
+        existing.rows.push(row);
+      } else {
+        byLoan.set(row.loanAccountId, { rows: [row], oldestDueDate: row.dueDate }); // rows ordered by dueDate asc - first hit per loan is the oldest overdue installment.
+      }
+    }
+
+    const candidates: SmsReminderCandidate[] = [];
+    for (const [loanAccountId, { rows, oldestDueDate }] of byLoan) {
+      const first = rows[0]!;
+      if (!first.loanAccount.borrower.smsRemindersEnabled) continue;
+      const phoneNumber = first.loanAccount.borrower.mobilePhone1;
+      if (!phoneNumber) continue;
+
+      const totalAmountDue = rows.reduce((sum, r) => {
+        const due = Number(r.principalDue) + Number(r.interestDue) + Number(r.feesDue) + Number(r.penaltyDue);
+        const paid = Number(r.principalPaid) + Number(r.interestPaid) + Number(r.feesPaid) + Number(r.penaltyPaid);
+        return sum + Math.max(0, due - paid);
+      }, 0);
+      const daysLate = Math.floor((now.getTime() - oldestDueDate.getTime()) / (24 * 60 * 60 * 1000));
+
+      candidates.push({
+        installmentId: null, // PAST_DUE_WEEKLY sums across every overdue installment, not one
+        loanAccountId,
+        loanCode: first.loanAccount.loanCode,
+        branchId: first.loanAccount.branchId,
+        borrowerName: `${first.loanAccount.borrower.firstName} ${first.loanAccount.borrower.lastName}`,
+        phoneNumber,
+        dueDate: null,
+        amountDueTotal: '0',
+        daysLate,
+        totalAmountDue: totalAmountDue.toString(),
+      });
+    }
+
+    return candidates;
+  }
+
+  async existsForTrigger(loanAccountId: string, triggerType: ReminderTriggerType, triggerDate: Date): Promise<boolean> {
+    const existing = await prisma.smsReminderLog.findUnique({
+      where: { loanAccountId_triggerType_triggerDate: { loanAccountId, triggerType, triggerDate: manilaCalendarDay(triggerDate) } },
+    });
     return existing !== null;
   }
 
@@ -90,6 +165,8 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
       data: {
         loanAccountId: input.loanAccountId,
         installmentId: input.installmentId,
+        triggerType: input.triggerType,
+        triggerDate: manilaCalendarDay(input.triggerDate),
         phoneNumber: input.phoneNumber,
         message: input.message,
         status: 'SENT',
@@ -103,6 +180,8 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
       data: {
         loanAccountId: input.loanAccountId,
         installmentId: input.installmentId,
+        triggerType: input.triggerType,
+        triggerDate: manilaCalendarDay(input.triggerDate),
         phoneNumber: input.phoneNumber,
         message: input.message,
         status: 'FAILED',
@@ -118,9 +197,12 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
     });
   }
 
-  async listLogs(branchId: string | undefined): Promise<SmsReminderLogRow[]> {
+  async listLogs(branchId: string | undefined, loanAccountId?: string): Promise<SmsReminderLogRow[]> {
     const rows = await prisma.smsReminderLog.findMany({
-      where: branchId ? { loanAccount: { branchId } } : {},
+      where: {
+        ...(branchId ? { loanAccount: { branchId } } : {}),
+        ...(loanAccountId ? { loanAccountId } : {}),
+      },
       orderBy: { sentAt: 'desc' },
       include: {
         loanAccount: { select: { loanCode: true, branchId: true, borrower: { select: { firstName: true, lastName: true } } } },
@@ -135,6 +217,8 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
       borrowerName: `${row.loanAccount.borrower.firstName} ${row.loanAccount.borrower.lastName}`,
       phoneNumber: row.phoneNumber,
       message: row.message,
+      triggerType: row.triggerType,
+      triggerDate: row.triggerDate,
       status: row.status,
       providerTransId: row.providerTransId,
       errorMessage: row.errorMessage,

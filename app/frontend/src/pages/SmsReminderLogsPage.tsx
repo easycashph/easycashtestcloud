@@ -14,7 +14,7 @@ import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
-import type { SmsReminderLog, SmsReminderStatus } from '@/lib/smsReminderApiTypes';
+import type { ReminderTriggerType, SmsReminderLog, SmsReminderStatus } from '@/lib/smsReminderApiTypes';
 import { formatDateTime } from '@/lib/utils';
 
 const PAGE_SIZE = 50;
@@ -26,6 +26,24 @@ const STATUS_OPTIONS: { value: SmsReminderStatus | 'ALL'; label: string }[] = [
   { value: 'UNDELIVERED', label: 'Undelivered' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'FAILED', label: 'Failed' },
+];
+
+/** Matches LoanDetailPage.tsx's REMINDER_TRIGGER_LABELS exactly - same 5-stage schedule, same wording. */
+const TRIGGER_LABELS: Record<ReminderTriggerType, string> = {
+  FIVE_DAYS_BEFORE: '5 Days Before',
+  THREE_DAYS_BEFORE: '3 Days Before',
+  ONE_DAY_BEFORE: '1 Day Before',
+  DUE_DATE: 'Due Date',
+  PAST_DUE_WEEKLY: 'Past Due (Weekly)',
+};
+
+const TRIGGER_OPTIONS: { value: ReminderTriggerType | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All triggers' },
+  { value: 'FIVE_DAYS_BEFORE', label: TRIGGER_LABELS.FIVE_DAYS_BEFORE },
+  { value: 'THREE_DAYS_BEFORE', label: TRIGGER_LABELS.THREE_DAYS_BEFORE },
+  { value: 'ONE_DAY_BEFORE', label: TRIGGER_LABELS.ONE_DAY_BEFORE },
+  { value: 'DUE_DATE', label: TRIGGER_LABELS.DUE_DATE },
+  { value: 'PAST_DUE_WEEKLY', label: TRIGGER_LABELS.PAST_DUE_WEEKLY },
 ];
 
 const STATUS_BADGE: Record<SmsReminderStatus, { variant: 'outline' | 'success' | 'destructive'; label: string; icon: typeof Send }> = {
@@ -48,6 +66,8 @@ function getSortValue(log: SmsReminderLog, key: string): string | number | Date 
       return log.phoneNumber;
     case 'status':
       return log.status;
+    case 'triggerType':
+      return TRIGGER_LABELS[log.triggerType];
     case 'deliveredAt':
       return log.deliveredAt ? new Date(log.deliveredAt) : null;
     default:
@@ -66,6 +86,7 @@ export function SmsReminderLogsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = React.useState('');
   const [status, setStatus] = React.useState<SmsReminderStatus | 'ALL'>('ALL');
+  const [triggerType, setTriggerType] = React.useState<ReminderTriggerType | 'ALL'>('ALL');
   const [page, setPage] = React.useState(1);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
@@ -92,13 +113,14 @@ export function SmsReminderLogsPage() {
       log.loanCode.toLowerCase().includes(query) ||
       log.phoneNumber.includes(query);
     const matchesStatus = status === 'ALL' || log.status === status;
-    return matchesSearch && matchesStatus;
+    const matchesTrigger = triggerType === 'ALL' || log.triggerType === triggerType;
+    return matchesSearch && matchesStatus && matchesTrigger;
   });
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'sentAt', direction: 'desc' });
 
   React.useEffect(() => {
     setPage(1);
-  }, [search, status, sort.key, sort.direction, logs.length]);
+  }, [search, status, triggerType, sort.key, sort.direction, logs.length]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -156,6 +178,23 @@ export function SmsReminderLogsPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sms-logs-trigger" className="text-xs">
+                Trigger
+              </Label>
+              <Select value={triggerType} onValueChange={(v) => setTriggerType(v as ReminderTriggerType | 'ALL')}>
+                <SelectTrigger id="sms-logs-trigger" className="w-full sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TRIGGER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -174,6 +213,9 @@ export function SmsReminderLogsPage() {
                 </SortableTableHead>
                 <SortableTableHead sortKey="phoneNumber" currentSort={sort} onSort={toggleSort}>
                   Phone
+                </SortableTableHead>
+                <SortableTableHead sortKey="triggerType" currentSort={sort} onSort={toggleSort}>
+                  Trigger
                 </SortableTableHead>
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Status
@@ -204,6 +246,9 @@ export function SmsReminderLogsPage() {
                       </TableCell>
                       <TableCell className="font-medium">{log.borrowerName}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{log.phoneNumber}</TableCell>
+                      <TableCell className="text-xs">
+                        <Badge variant="secondary">{TRIGGER_LABELS[log.triggerType]}</Badge>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={badge.variant}>
                           <span className="flex items-center gap-1">
@@ -218,7 +263,7 @@ export function SmsReminderLogsPage() {
                     </TableRow>
                     {isOpen && (
                       <TableRow>
-                        <TableCell colSpan={7} className="bg-secondary/30">
+                        <TableCell colSpan={8} className="bg-secondary/30">
                           <div className="space-y-2 p-2 text-sm">
                             <div>
                               <p className="text-xs uppercase text-muted-foreground">Message sent</p>
@@ -245,7 +290,7 @@ export function SmsReminderLogsPage() {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     {logsQuery.isLoading ? 'Loading…' : 'No SMS reminder logs match your filter.'}
                   </TableCell>
                 </TableRow>
@@ -254,7 +299,7 @@ export function SmsReminderLogsPage() {
             {filtered.length > 0 && (
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={7}>Total ({filtered.length} reminder{filtered.length === 1 ? '' : 's'})</TableCell>
+                  <TableCell colSpan={8}>Total ({filtered.length} reminder{filtered.length === 1 ? '' : 's'})</TableCell>
                 </TableRow>
               </TableFooter>
             )}

@@ -47,10 +47,9 @@ const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
-  SMS_REMINDER_DAYS_BEFORE_DUE: z.coerce.number().int().positive().default(5),
+  // Checks every trigger in the 5-stage schedule (5/3/1 days before, due date, Monday past-due)
+  // each run - no single offset to configure anymore, see SendPaymentReminderSmsUseCase.
   SMS_REMINDER_CRON: z.string().default('0 8 * * *'), // 8:00 AM Asia/Manila daily
-  // Optional override for the wording in reminderMessageTemplate.ts, without a deploy. Placeholders: {borrowerName}, {loanCode}, {amountDue}, {dueDate}.
-  SMS_REMINDER_TEMPLATE: z.string().optional(),
   M360_API_URL: z.string().default('https://api.m360.com.ph/v3/api/broadcast'),
   M360_USERNAME: z.string().optional(),
   M360_PASSWORD: z.string().optional(),

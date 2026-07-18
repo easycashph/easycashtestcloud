@@ -24,10 +24,8 @@ startSmsReminderScheduler({
       shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
     }),
     smsEnabled: env.SMS_ENABLED,
-    messageTemplate: env.SMS_REMINDER_TEMPLATE,
   }),
   cronExpression: env.SMS_REMINDER_CRON,
-  daysBeforeDue: env.SMS_REMINDER_DAYS_BEFORE_DUE,
 });
 
 function shutdown(signal: string) {

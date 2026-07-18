@@ -14,7 +14,8 @@ export class SmsReminderLogController {
   list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const logs = await this.deps.listSmsReminderLogsUseCase.execute(resolveBranchFilter(scope));
+      const loanAccountId = typeof req.query.loanAccountId === 'string' ? req.query.loanAccountId : undefined;
+      const logs = await this.deps.listSmsReminderLogsUseCase.execute(resolveBranchFilter(scope), loanAccountId);
       res.status(200).json({ items: logs.map(presentSmsReminderLog) });
     } catch (error) {
       next(error);
