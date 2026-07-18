@@ -137,6 +137,9 @@ import { createSmsReminderDlrRouter } from '@modules/sms-reminder/interface/http
 import { createSmsReminderLogRouter } from '@modules/sms-reminder/interface/http/smsReminderLogRouter';
 import { ListSmsReminderLogsUseCase } from '@modules/sms-reminder/application/use-cases/ListSmsReminderLogsUseCase';
 import { PrismaSmsReminderRepository } from '@modules/sms-reminder/infrastructure/PrismaSmsReminderRepository';
+import { createEmailReminderLogRouter } from '@modules/email-reminder/interface/http/emailReminderLogRouter';
+import { ListEmailReminderLogsUseCase } from '@modules/email-reminder/application/use-cases/ListEmailReminderLogsUseCase';
+import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
@@ -670,6 +673,13 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', smsReminderLogRouter);
+
+  // --- email-reminder module wiring: Reports Hub visibility (mirrors sms-reminder, second channel) ---
+  const emailReminderLogRouter = createEmailReminderLogRouter(
+    { listEmailReminderLogsUseCase: new ListEmailReminderLogsUseCase({ emailReminderRepository: new PrismaEmailReminderRepository() }) },
+    tokenService,
+  );
+  app.use('/api/v1', emailReminderLogRouter);
 
   // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
   const interestRateChartRouter = createInterestRateChartRouter(

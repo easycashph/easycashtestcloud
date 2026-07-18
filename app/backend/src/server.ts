@@ -5,6 +5,10 @@ import { startSmsReminderScheduler } from '@modules/sms-reminder/infrastructure/
 import { SendPaymentReminderSmsUseCase } from '@modules/sms-reminder/application/use-cases/SendPaymentReminderSmsUseCase';
 import { PrismaSmsReminderRepository } from '@modules/sms-reminder/infrastructure/PrismaSmsReminderRepository';
 import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
+import { startEmailReminderScheduler } from '@modules/email-reminder/infrastructure/emailReminderScheduler';
+import { SendPaymentReminderEmailUseCase } from '@modules/email-reminder/application/use-cases/SendPaymentReminderEmailUseCase';
+import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
+import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
 
 const app = createApp();
 
@@ -26,6 +30,21 @@ startSmsReminderScheduler({
     smsEnabled: env.SMS_ENABLED,
   }),
   cronExpression: env.SMS_REMINDER_CRON,
+});
+
+startEmailReminderScheduler({
+  sendPaymentReminderEmailUseCase: new SendPaymentReminderEmailUseCase({
+    emailReminderRepository: new PrismaEmailReminderRepository(),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+    emailEnabled: env.EMAIL_ENABLED,
+  }),
+  cronExpression: env.EMAIL_REMINDER_CRON,
 });
 
 function shutdown(signal: string) {

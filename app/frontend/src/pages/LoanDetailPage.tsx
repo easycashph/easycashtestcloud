@@ -27,6 +27,7 @@ import type {
   RepaymentInstallment,
 } from '@/lib/loanApiTypes';
 import type { SmsReminderLog } from '@/lib/smsReminderApiTypes';
+import type { EmailReminderLog } from '@/lib/emailReminderApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -207,8 +208,9 @@ function TransactionTypeBadge({ type }: { type: string }) {
  * `NotesPanel` 2026-07-13 to disambiguate from the separate `loan-note` module's own,
  * differently-capable notes), Reminders
  * (`RealRemindersPanel` - real trigger schedule computed from the real repayment schedule,
- * business-confirmed 2026-07-12; SMS/Email sending itself stays "Coming Soon", no provider
- * connected yet), and Loan Documents (ADR-051 - Disclosure Statement, Promissory Note, etc.,
+ * business-confirmed 2026-07-12; SMS via M360 and Email via Google Workspace SMTP both real as of
+ * 2026-07-18, overlaid with real SmsReminderLog/EmailReminderLog send status), and Loan Documents
+ * (ADR-051 - Disclosure Statement, Promissory Note, etc.,
  * generated from the loan product's configured templates once the loan is APPROVED). See
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
@@ -345,6 +347,16 @@ function reminderStatusText(log: SmsReminderLog): string {
   return `${label} · ${formatDateTime(timestamp)}`;
 }
 
+const EMAIL_STATUS_BADGE: Record<EmailReminderLog['status'], { variant: 'outline' | 'destructive'; label: string }> = {
+  SENT: { variant: 'outline', label: 'Sent' },
+  FAILED: { variant: 'destructive', label: 'Failed' },
+};
+
+/** Mirrors reminderStatusText - no delivery-confirmation concept for plain SMTP, so always the send timestamp. */
+function emailReminderStatusText(log: EmailReminderLog): string {
+  return `${EMAIL_STATUS_BADGE[log.status].label} · ${formatDateTime(log.sentAt)}`;
+}
+
 /**
  * Real reminder trigger schedule (confirmed business policy, see `computeReminderTriggers`) for
  * this loan's next unpaid installment, overlaid with REAL send status from `SmsReminderLog`
@@ -384,6 +396,12 @@ function RealRemindersPanel({
     queryFn: () => apiClient.get<{ items: SmsReminderLog[] }>(`/sms-reminder-logs?loanAccountId=${loanAccountId}`),
   });
   const logs = remindersQuery.data?.items ?? [];
+
+  const emailRemindersQuery = useQuery({
+    queryKey: ['email-reminder-logs', loanAccountId],
+    queryFn: () => apiClient.get<{ items: EmailReminderLog[] }>(`/email-reminder-logs?loanAccountId=${loanAccountId}`),
+  });
+  const emailLogs = emailRemindersQuery.data?.items ?? [];
 
   if (!nextDue) {
     return (
@@ -426,6 +444,7 @@ function RealRemindersPanel({
         {nextDue.status !== 'LATE' &&
           dateTriggers.map((trigger) => {
           const log = logs.find((l) => l.triggerType === trigger.type);
+          const emailLog = emailLogs.find((l) => l.triggerType === trigger.type);
           const due = trigger.date <= now;
           const key = trigger.type;
           // dateTriggers only ever contains the 4 date-anchored types (computeReminderTriggers isLate=false) - never PAST_DUE_WEEKLY.
@@ -476,7 +495,11 @@ function RealRemindersPanel({
                       <span className="flex items-center gap-2">
                         <Mail className="h-4 w-4" /> Email ({borrower?.email ?? 'no email on file'})
                       </span>
-                      <Badge variant="secondary">Coming Soon</Badge>
+                      {emailLog ? (
+                        <Badge variant={EMAIL_STATUS_BADGE[emailLog.status].variant}>{emailReminderStatusText(emailLog)}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Not sent yet</Badge>
+                      )}
                     </div>
                   </div>
                 </div>

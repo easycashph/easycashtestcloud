@@ -903,6 +903,7 @@ model LoanAccount {
   notes              LoanNote[]
   generatedDocuments GeneratedLoanDocument[]
   smsReminderLogs    SmsReminderLog[]
+  emailReminderLogs  EmailReminderLog[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1045,6 +1046,7 @@ model RepaymentSchedule {
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
   smsReminderLogs    SmsReminderLog[]
+  emailReminderLogs  EmailReminderLog[]
 
   /// Schema Review SR-12 (Critical): Aging, Delinquency, Expected
   /// Collection, and Daily Collection reports (PROJECT_RULES.md §Reports)
@@ -1431,6 +1433,42 @@ model SmsReminderLog {
   @@index([installmentId])
   @@index([providerTransId])
   @@map("sms_reminder_logs")
+}
+
+enum EmailReminderStatus {
+  SENT
+  FAILED
+}
+
+/// Auto Email Payment Reminders (2026-07-18, same Reminders feature as SmsReminderLog, second
+/// channel) - via the company's own Google Workspace SMTP (Gmail "Send As" alias
+/// collections@easycash.ph on a real mailbox, per CLAUDE.md "avoid unnecessary paid cloud
+/// services" - no separate paid transactional email service needed). Mirrors SmsReminderLog's
+/// shape and idempotency key exactly (`@@unique([loanAccountId, triggerType, triggerDate])`) -
+/// same 5-stage trigger schedule, same content (user-confirmed: identical wording to the SMS
+/// templates). No DLR-equivalent here - plain SMTP only reports accept/reject at send time, so
+/// `status` only ever ends at SENT or FAILED, never DELIVERED (unlike SmsReminderLog, which gets
+/// a real delivery outcome from M360's DLR webhook).
+model EmailReminderLog {
+  id            String              @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount         @relation(fields: [loanAccountId], references: [id])
+  installmentId String?
+  installment   RepaymentSchedule?  @relation(fields: [installmentId], references: [id])
+  triggerType   ReminderTriggerType
+  triggerDate   DateTime
+
+  recipientEmail String
+  message        String
+
+  status       EmailReminderStatus @default(SENT)
+  errorMessage String?
+
+  sentAt DateTime @default(now())
+
+  @@unique([loanAccountId, triggerType, triggerDate])
+  @@index([loanAccountId])
+  @@map("email_reminder_logs")
 }
 
 // ----------------------------------------------------------------------------
