@@ -79,17 +79,41 @@
    bucket). Rebuilt the backend Docker image, confirmed a clean boot and the DLR webhook route
    correctly rejects an unauthenticated/wrong-key request (401).
 
+6. **Real end-to-end test send, one loan only (user request: "huwag muna sa lahat ng loan
+   account")** - rather than flipping `SMS_ENABLED=true` globally (which would let the cron fire
+   for every qualifying loan portfolio-wide), built `scripts/test-send-sms-reminder.ts`: a one-off,
+   single-loan-code-targeted script following this repo's existing backfill-script convention
+   (dry-run by default, `--apply` required to actually send). Deliberately does NOT write to
+   `SmsReminderLog` - a manual verification send shouldn't collide with or contaminate that table's
+   idempotency guard for whatever installment gets picked.
+   - User designated `SL-REG_00114` (their own account, NOMER PEREZ) as the test loan.
+   - First `--apply` attempt failed: M360 returned `401 User Not Found` - wrong `M360_USERNAME`
+     (an email address; M360 expects the client-level account username, not an email). User
+     corrected it in `.env`.
+   - Second attempt **succeeded** - M360 returned `transid: M36069731B9EFCE48D3241784344058`,
+     user confirmed the SMS was received on the actual phone. Full pipeline (candidate lookup →
+     template render → M360 API call → real delivery) verified end to end with real credentials.
+   - Caught and fixed a minor script issue during this: the script called `process.exit()` at
+     multiple points while a Prisma connection was still open, which raced with libuv's async
+     handle cleanup on Windows (`Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)`) -
+     harmless (the SMS had already sent successfully before the crash), but noisy. Fixed by
+     switching to `process.exitCode = 1; return;` throughout and `.finally(() =>
+     prisma.$disconnect())` on the top-level `main()` call, matching every other script in
+     `scripts/`'s existing convention exactly.
+
 ## Current state / what's NOT done yet
 
-- **`SMS_ENABLED=false` in every environment right now** - this feature sends nothing for real
-  yet. To go live: fill in `M360_USERNAME`/`M360_PASSWORD`/`M360_SHORTCODE_MASK` (the user
-  confirmed these are active) and a chosen `SMS_REMINDER_DLR_SECRET` in `.env`, set
-  `SMS_ENABLED=true`, and give M360 the DLR webhook URL
-  (`https://<your-domain>/api/v1/sms-reminders/dlr?key=<the secret>`) so they know where to POST
-  delivery-status callbacks.
+- **Real M360 credentials are now in `.env` and confirmed working** (test SMS successfully
+  delivered to a real phone via `scripts/test-send-sms-reminder.ts --apply`). `SMS_ENABLED` itself
+  is still `false`, though - the automated daily cron has NOT been turned on yet, only the manual
+  single-loan test path has been proven. Turning on `SMS_ENABLED=true` is a separate decision (it
+  affects the whole portfolio, not one test loan) - wait for explicit user go-ahead before doing
+  that.
+- `SMS_REMINDER_DLR_SECRET` is still blank - needs a value chosen and given to M360 (as a query
+  param on the DLR webhook URL) before delivery-status tracking works, independent of the
+  `SMS_ENABLED` decision above.
 - **No visibility UI yet** - the design's item 7 (a Reports Hub tab or Notification Center section
   showing who got texted, when, delivery status) was deliberately deferred; the backend fully logs
   everything needed for it (`SmsReminderLog`), but no frontend page reads it yet. Follow-up work,
   not started.
 - **No frontend changes at all this session** - purely backend.
-- Not committed yet - pending user review of this session's work.
