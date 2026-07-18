@@ -324,8 +324,16 @@ function RealRemindersPanel({
 }) {
   const [expandedKey, setExpandedKey] = React.useState<string | null>(null);
   const now = new Date();
+  // The OLDEST not-fully-paid installment by installmentNumber, whether its due date is in the
+  // future or already overdue - matches the backend's own "next-due installment" definition
+  // exactly (PrismaPaymentReminderRepository/PrismaSmsReminderRepository: first status != 'PAID'
+  // row ordered by installmentNumber asc). Previously this filtered to `dueDate >= now`, which
+  // skipped straight past an already-overdue installment to whichever LATER installment happened
+  // to have a future due date - showing this panel's reminder schedule for the wrong installment
+  // entirely whenever a loan was late (caught 2026-07-18 from a real screenshot: installment #2
+  // was overdue and unpaid, but the panel computed trigger dates for installment #3 instead).
   const unpaid = installments.filter((i) => i.status !== 'PAID');
-  const nextDue = unpaid.find((i) => new Date(i.dueDate) >= now) ?? unpaid[unpaid.length - 1];
+  const nextDue = unpaid[0];
 
   const remindersQuery = useQuery({
     queryKey: ['sms-reminder-logs', loanAccountId],

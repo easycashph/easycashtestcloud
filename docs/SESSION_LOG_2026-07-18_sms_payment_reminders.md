@@ -190,11 +190,36 @@
      already-proven FIVE_DAYS_BEFORE, every one of the 5 trigger contents is now real-world
      verified, not just dry-run previewed.
 
+10. **Two bugs found from a real screenshot of the Loan Detail page** (SL-REG_00114) after the
+    5-stage expansion shipped, both fixed:
+    - **Manual test sends were invisible everywhere.** `test-send-sms-reminder.ts` deliberately
+      never wrote to `SmsReminderLog` (by original design, to avoid colliding with the automated
+      job's idempotency guard) - so all 6 real SMS sent earlier in this session left zero trace in
+      either the Reports Hub or the Loan Detail page's Reminders panel, despite having actually
+      gone out via M360. Fixed: the script now logs via the SAME `PrismaSmsReminderRepository`
+      the real pipeline uses (`existsForTrigger` idempotency check, `logSent`/`logFailed` on
+      success/failure) - a manual test now leaves the exact same trail a real automated send
+      would, and if the daily cron later independently fires for a loan/trigger/day this script
+      already tested, it correctly sees it as already-sent and skips (no double-text, no crash).
+    - **`RealRemindersPanel` computed trigger dates for the WRONG installment whenever a loan was
+      already late.** Its `nextDue` selection filtered to `dueDate >= now`, which skips straight
+      past an actually-overdue-and-unpaid installment to whichever LATER installment happened to
+      have a future due date - visible in the screenshot as the panel showing August triggers for
+      installment #3 while installment #2 (due July 15, ₱1,816.42 still owed) sat overdue and
+      ignored. Fixed to just take the oldest not-fully-paid installment by installment number
+      (`unpaid[0]`), matching the backend's own "next-due installment" definition exactly
+      (`PrismaPaymentReminderRepository`/`PrismaSmsReminderRepository`: first `status != 'PAID'`
+      row ordered by installmentNumber ascending, no due-date filter).
+    - Re-ran `scripts/test-send-sms-reminder.ts --loan-code=SL-REG_00114 --trigger=FIVE_DAYS_BEFORE
+      --apply` with both fixes in place (`transid: M360F6578D6D6124D9BB91784354988`) - confirmed via
+      direct SQL that the row now lands in `sms_reminder_logs` with the correct `triggerType`/
+      `triggerDate`. `tsc --noEmit` both apps, frontend production build, Docker rebuild all clean.
+
 ## Current state / what's NOT done yet
 
 - **`SMS_ENABLED` still `false`** per explicit user instruction mid-session ("manatili na disable
   muna ang sending sms hanggat hindi ko sinasabi na i enable ito") - stayed false throughout this
-  entire 5-stage expansion, verified via dry-run + 6 total real manual `--apply` test sends (all to
+  entire 5-stage expansion, verified via dry-run + 7 total real manual `--apply` test sends (all to
   `SL-REG_00114`) rather than ever letting the automated cron fire.
 - Real M360 credentials are in `.env`, and **all 5 trigger contents are now real-world verified**
   (FIVE_DAYS_BEFORE proven earlier in the session; THREE_DAYS_BEFORE/ONE_DAY_BEFORE/DUE_DATE/
@@ -202,6 +227,7 @@
 - `SMS_REMINDER_DLR_SECRET` is still blank - needs a value chosen and given to M360 (as a query
   param on the DLR webhook URL) before delivery-status tracking works, independent of the
   `SMS_ENABLED` decision above.
-- **Visibility UI covers all 5 triggers now** (Reports Hub → Operation → "SMS reminder logs", plus
-  the Loan Detail page's own Reminders panel per-loan). Will show real automated-job rows too,
-  once `SMS_ENABLED=true`.
+- **Visibility UI covers all 5 triggers now and manual test sends are no longer invisible**
+  (Reports Hub → Operation → "SMS reminder logs", plus the Loan Detail page's own Reminders panel
+  per-loan, now correctly anchored to the actual oldest unpaid installment). Will show real
+  automated-job rows too, once `SMS_ENABLED=true`.

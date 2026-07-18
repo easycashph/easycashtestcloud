@@ -2,9 +2,13 @@
 /**
  * One-off manual test for the Auto SMS Payment Reminders feature (2026-07-18) - sends a REAL SMS
  * for exactly ONE loan account, so it can be verified against a real phone before the daily cron
- * (`smsReminderScheduler.ts`) is ever allowed to run for real across the whole portfolio. Does NOT
- * touch `SmsReminderLog` (deliberately - this is a manual verification send, not the automated
- * pipeline, and shouldn't collide with or contaminate that table's idempotency guard).
+ * (`smsReminderScheduler.ts`) is ever allowed to run for real across the whole portfolio. DOES log
+ * to `SmsReminderLog` on a real `--apply` send (2026-07-18 follow-up: a test send with no log row
+ * was invisible everywhere - Reports Hub, the Loan Detail page's Reminders panel - even though a
+ * real SMS had gone out) - uses the SAME `(loanAccountId, triggerType, triggerDate)` idempotency
+ * key as the real automated job, so if the daily cron later independently fires for the exact same
+ * loan/trigger/day this test already covered, it will correctly see it as already-sent and skip
+ * (no double-text) rather than erroring.
  *
  * Usage:
  *   npx tsx scripts/test-send-sms-reminder.ts --loan-code=SML-REG_00001                                # dry run, FIVE_DAYS_BEFORE (default)
@@ -22,6 +26,7 @@
 import 'dotenv/config';
 import { prisma } from '../src/shared/database/prismaClient';
 import { M360SmsGateway } from '../src/modules/sms-reminder/infrastructure/M360SmsGateway';
+import { PrismaSmsReminderRepository } from '../src/modules/sms-reminder/infrastructure/PrismaSmsReminderRepository';
 import { renderReminderMessage } from '../src/modules/sms-reminder/application/reminderMessageTemplate';
 import type { ReminderTriggerType, SmsReminderCandidate } from '../src/modules/sms-reminder/application/ports/ISmsReminderRepository';
 
@@ -178,10 +183,42 @@ async function main() {
     password,
     shortcodeMask,
   });
+  const smsReminderRepository = new PrismaSmsReminderRepository();
+  const triggerDate = new Date(); // "as if this trigger fired today" - the manual test's own intent
+
+  const alreadyLogged = await smsReminderRepository.existsForTrigger(candidate.loanAccountId, triggerType, triggerDate);
+  if (alreadyLogged) {
+    console.error(`\nA reminder for this loan/trigger/day is already logged (ran this exact test earlier today?). Skipping to avoid a duplicate log row.`);
+    process.exitCode = 1;
+    return;
+  }
 
   console.log('\nSending via M360...');
-  const result = await gateway.send(candidate.phoneNumber, message);
-  console.log(`Sent. M360 transid: ${result.providerTransId}`);
+  try {
+    const result = await gateway.send(candidate.phoneNumber, message);
+    console.log(`Sent. M360 transid: ${result.providerTransId}`);
+    await smsReminderRepository.logSent({
+      loanAccountId: candidate.loanAccountId,
+      installmentId: candidate.installmentId,
+      triggerType,
+      triggerDate,
+      phoneNumber: candidate.phoneNumber,
+      message,
+      providerTransId: result.providerTransId,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown SMS gateway error';
+    await smsReminderRepository.logFailed({
+      loanAccountId: candidate.loanAccountId,
+      installmentId: candidate.installmentId,
+      triggerType,
+      triggerDate,
+      phoneNumber: candidate.phoneNumber,
+      message,
+      errorMessage,
+    });
+    throw error;
+  }
 }
 
 main()
