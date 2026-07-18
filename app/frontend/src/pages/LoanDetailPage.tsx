@@ -52,7 +52,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
+import { cn, formatDate, formatDateTime, formatPercentage, formatPeso } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -301,6 +301,13 @@ const REMINDER_STATUS_BADGE: Record<
   FAILED: { variant: 'destructive', label: 'Failed' },
 };
 
+/** e.g. "Sent · Jul 18, 2026 6:09 AM" - DELIVERED shows the delivery timestamp (the more relevant moment once M360's DLR webhook confirms it), every other status shows when the send attempt itself happened. */
+function reminderStatusText(log: SmsReminderLog): string {
+  const label = REMINDER_STATUS_BADGE[log.status].label;
+  const timestamp = log.status === 'DELIVERED' && log.deliveredAt ? log.deliveredAt : log.sentAt;
+  return `${label} · ${formatDateTime(timestamp)}`;
+}
+
 /**
  * Real reminder trigger schedule (confirmed business policy, see `computeReminderTriggers`) for
  * this loan's next unpaid installment, overlaid with REAL send status from `SmsReminderLog`
@@ -400,7 +407,7 @@ function RealRemindersPanel({
                   <span className="text-xs text-muted-foreground">{formatDate(trigger.date.toISOString())}</span>
                 </div>
                 {log ? (
-                  <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                  <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
                 ) : (
                   <Badge variant={due ? 'warning' : 'outline'}>
                     <span className="flex items-center gap-1">
@@ -419,7 +426,7 @@ function RealRemindersPanel({
                         <MessageSquareText className="h-4 w-4" /> SMS ({borrower?.mobilePhone1 ?? 'no number on file'})
                       </span>
                       {log ? (
-                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
                       ) : (
                         <Badge variant="secondary">Not sent yet</Badge>
                       )}
@@ -460,7 +467,7 @@ function RealRemindersPanel({
                         onClick={() => setExpandedKey((cur) => (cur === key ? null : key))}
                       >
                         <span className="text-xs text-muted-foreground">{formatDate(log.triggerDate)}</span>
-                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{REMINDER_STATUS_BADGE[log.status].label}</Badge>
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
                       </button>
                       {expandedKey === key && (
                         <div className="border-t p-3">
