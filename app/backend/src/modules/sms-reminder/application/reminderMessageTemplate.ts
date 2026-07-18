@@ -5,8 +5,16 @@ import type { SmsReminderCandidate } from './ports/ISmsReminderRepository';
  * override via SMS_REMINDER_TEMPLATE if the wording ever needs to change without a deploy.
  * Placeholders: {borrowerName}, {loanCode}, {amountDue}, {dueDate}.
  */
-const DEFAULT_TEMPLATE =
-  'Hi {borrowerName}, your Easycash loan {loanCode} payment of PHP {amountDue} is due on {dueDate}. Please settle on time to avoid penalties. Thank you.';
+const DEFAULT_TEMPLATE = `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+This is a friendly reminder regarding your loan account {loanCode} amounting to PHP {amountDue}, is due on {dueDate}.
+
+To avoid additional penalties and charges, please settle your payment on or before the due date.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`;
 
 function formatDueDate(date: Date): string {
   return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Manila' });
