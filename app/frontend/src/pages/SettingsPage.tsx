@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Lock, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -631,6 +631,11 @@ function NotificationsTab() {
  * `test-send-email-reminder.ts`) work regardless of these switches, which only gate the automated
  * job.
  */
+/** 2026-07-18 user request: temporarily prevent anyone from accidentally toggling these switches
+ * on via the UI, without touching the backend gate or default state. UI-only (a direct API call
+ * would still work) - flip back to `false` once ready to allow toggling again from Settings. */
+const REMINDER_TOGGLES_LOCKED = true;
+
 function SystemTab() {
   const queryClient = useQueryClient();
   const [error, setError] = React.useState<string | null>(null);
@@ -663,7 +668,12 @@ function SystemTab() {
             <AlertCircle className="h-4 w-4 shrink-0" /> {error}
           </div>
         )}
-        <div className="flex items-center justify-between gap-3 p-3">
+        {REMINDER_TOGGLES_LOCKED && (
+          <div className="flex items-center gap-2 rounded-md bg-warning/20 p-3 text-xs text-warning-foreground">
+            <Lock className="h-4 w-4 shrink-0" /> Toggles are temporarily locked to prevent accidental enabling - by MIS - Nomer.
+          </div>
+        )}
+        <div className={cn('flex items-center justify-between gap-3 p-3', REMINDER_TOGGLES_LOCKED && 'opacity-60')}>
           <div>
             <p className="text-sm font-medium">SMS reminders</p>
             <p className="text-xs text-muted-foreground">Sent via M360/Globe to borrowers' mobile numbers</p>
@@ -672,13 +682,13 @@ function SystemTab() {
             <Badge variant={settings?.smsEnabled ? 'success' : 'warning'}>{settings?.smsEnabled ? 'On' : 'Off'}</Badge>
             <Switch
               checked={settings?.smsEnabled ?? false}
-              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              disabled={REMINDER_TOGGLES_LOCKED || settingsQuery.isLoading || updateMutation.isPending}
               onCheckedChange={(checked) => updateMutation.mutate({ smsEnabled: checked })}
               aria-label="Toggle SMS reminders"
             />
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 p-3">
+        <div className={cn('flex items-center justify-between gap-3 p-3', REMINDER_TOGGLES_LOCKED && 'opacity-60')}>
           <div>
             <p className="text-sm font-medium">Email reminders</p>
             <p className="text-xs text-muted-foreground">Sent from collections@easycash.ph to borrowers' email</p>
@@ -687,7 +697,7 @@ function SystemTab() {
             <Badge variant={settings?.emailEnabled ? 'success' : 'warning'}>{settings?.emailEnabled ? 'On' : 'Off'}</Badge>
             <Switch
               checked={settings?.emailEnabled ?? false}
-              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              disabled={REMINDER_TOGGLES_LOCKED || settingsQuery.isLoading || updateMutation.isPending}
               onCheckedChange={(checked) => updateMutation.mutate({ emailEnabled: checked })}
               aria-label="Toggle Email reminders"
             />
