@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "frontend-preview",
-      "runtimeExecutable": ".\\.claude\\run-frontend.bat",
-      "runtimeArgs": [],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "app/frontend"],
       "port": 5173,
       "autoPort": true
     },

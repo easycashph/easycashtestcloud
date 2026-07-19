@@ -18,11 +18,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbAddressApiDir } from './lib/legacyDumpPath';
 
-const API_DIR = path.resolve(
-  __dirname,
-  '../../../legacy/MongoDB dump/extracted/07092026_ 92543/db-address-api',
-);
+const API_DIR = legacyDbAddressApiDir();
 const DRY_RUN = process.argv.includes('--dry-run');
 const NUMERIC = /^\d+$/;
 

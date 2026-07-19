@@ -91,6 +91,7 @@ legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
 # Reverse-engineered MongoDB remote backup script (2026-07-10) — same hardcoded remote
 # credentials as the zip above, structurally required for mongodump to connect. Never committed.
 backup-mongodb.bat
+backup-mongodb.command
 
 # Personal login credentials in plain text — never committed.
 MIS Jomer Login.md
