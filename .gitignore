@@ -83,6 +83,10 @@ backups/
 # snapshot between team members' separate local Postgres instances (e.g. MIS Nomer's laptop).
 # Same sensitivity class as legacy/MongoDB dump/ above — never committed.
 legacy/db-exports/
+# Safety net (2026-07-19): a pg_dump was found staged outside legacy/db-exports/ (app/docker/) -
+# catch any *.dump file anywhere in the repo, regardless of where it's created, since this is the
+# same real-PII sensitivity class either way.
+*.dump
 
 # Old SDevTech MongoDB backup batch/PowerShell scripts — contains a hardcoded remote DB
 # username/password (root/sdevtech2021) in plain text. Never committed to git history.
