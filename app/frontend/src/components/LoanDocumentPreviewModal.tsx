@@ -5,17 +5,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
 
 export interface LoanDocumentPreviewTarget {
-  loanAccountId: string;
-  generatedDocumentId: string;
+  /** Full API path to the PDF, e.g. `/loan-accounts/:id/documents/:id/download` or `/loan-accounts/:id/statements-of-account/:id/download` — built by the caller, since Documents (ADR-051) and Statement of Account (ADR-052) live under different endpoints. */
+  downloadPath: string;
   title: string;
   fileName: string;
 }
 
 /**
- * Inline PDF preview for a generated loan document (ADR-051), mirroring
- * `AttachmentPreviewModal`'s pattern. Generated loan documents are always PDF (the download
- * controller always sets `Content-Type: application/pdf`), so unlike attachments there's no
- * image/mime branching needed here.
+ * Inline PDF preview for a generated loan document (ADR-051) or Statement of Account (ADR-052),
+ * mirroring `AttachmentPreviewModal`'s pattern. Both are always PDF (their download controllers
+ * always set `Content-Type: application/pdf`), so unlike attachments there's no image/mime
+ * branching needed here.
  */
 export function LoanDocumentPreviewModal({
   target,
@@ -35,7 +35,7 @@ export function LoanDocumentPreviewModal({
     setError(null);
     setObjectUrl(null);
     setLoading(true);
-    fetchFileBlob(`/loan-accounts/${target.loanAccountId}/documents/${target.generatedDocumentId}/download`)
+    fetchFileBlob(target.downloadPath)
       .then((blob) => {
         if (cancelled) return;
         localUrl = URL.createObjectURL(blob);
@@ -79,7 +79,7 @@ export function LoanDocumentPreviewModal({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void downloadFile(`/loan-accounts/${target.loanAccountId}/documents/${target.generatedDocumentId}/download`, target.fileName)}
+                onClick={() => void downloadFile(target.downloadPath, target.fileName)}
               >
                 <Download className="mr-2 h-3.5 w-3.5" /> Download
               </Button>

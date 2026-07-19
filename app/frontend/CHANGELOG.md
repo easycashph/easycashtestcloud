@@ -8,6 +8,16 @@ and Payment Recording now call `app/backend` for real; every other page is still
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
+## 2026-07-19 — Statement of Account (SOA) Generation (ADR-052)
+
+New "Create SOA" action on the Loan Account detail page — opens a dialog (As Of Date, Collection
+Fee, Other Fee), generates a real PDF via a new backend module (`statement-of-account`), and lists
+past generations with Download. Deliberately separate from ADR-051's Documents pipeline (different
+lifecycle — on-demand at any point, not once after approval). Accrued Interest formula sourced
+directly from the user's own legacy Excel/VBA tool, confirmed with the user before implementation —
+see `docs/Architecture/ADR-052-statement-of-account-generation.md` for the full computation
+breakdown and the `.docx` placeholder list still needed (template file has no merge tags yet).
+
 ## 2026-07-12 (continued) — Mock Data Removal: Application→Client→Loan Lifecycle
 
 Deliberate, incremental mock-removal initiative (per CLAUDE.md's project objective of replacing

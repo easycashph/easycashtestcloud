@@ -1,0 +1,138 @@
+import { randomUUID } from 'node:crypto';
+import type { Money } from '@shared/domain/Money';
+import { formatSoaNumber } from './formatSoaNumber';
+
+export interface GeneratedStatementOfAccountProps {
+  id: string;
+  loanAccountId: string;
+  soaSequenceNumber: number;
+  penaltyAsOfDate: Date;
+  accruedInterestAsOfDate: Date;
+  currentAmortizationDue: Money;
+  pastDuePrincipal: Money;
+  pastDueInterest: Money;
+  pastDuePenalty: Money;
+  totalPastDue: Money;
+  accruedInterest: Money;
+  collectionFee: Money;
+  otherFee: Money;
+  totalAmountDue: Money;
+  storageKey: string;
+  generatedByUserId: string;
+  generatedAt: Date;
+}
+
+export interface CreateGeneratedStatementOfAccountProps {
+  loanAccountId: string;
+  soaSequenceNumber: number;
+  penaltyAsOfDate: Date;
+  accruedInterestAsOfDate: Date;
+  currentAmortizationDue: Money;
+  pastDuePrincipal: Money;
+  pastDueInterest: Money;
+  pastDuePenalty: Money;
+  totalPastDue: Money;
+  accruedInterest: Money;
+  collectionFee: Money;
+  otherFee: Money;
+  totalAmountDue: Money;
+  storageKey: string;
+  generatedByUserId: string;
+  /** Must be the exact same instant used to compute `soaNumber`'s date part and the PDF's `StatementDate` placeholder (`GenerateStatementOfAccountUseCase`'s `statementDate`) - defaults to `new Date()` only for callers (e.g. tests) that don't already have one, since calling `new Date()` twice risks an off-by-one-day mismatch across a midnight boundary. */
+  generatedAt?: Date;
+}
+
+/**
+ * Append-only, like `GeneratedLoanDocument` — every generation is its own permanent, immutable
+ * snapshot of the figures shown to/sent to the borrower at that moment (see schema.prisma's own
+ * doc comment on the underlying table for the full rationale). There is no "regenerate the same
+ * row" operation; a new statement is always a new row.
+ */
+export class GeneratedStatementOfAccount {
+  private constructor(private readonly props: GeneratedStatementOfAccountProps) {}
+
+  static create(input: CreateGeneratedStatementOfAccountProps): GeneratedStatementOfAccount {
+    return new GeneratedStatementOfAccount({
+      id: randomUUID(),
+      ...input,
+      generatedAt: input.generatedAt ?? new Date(),
+    });
+  }
+
+  static reconstitute(props: GeneratedStatementOfAccountProps): GeneratedStatementOfAccount {
+    return new GeneratedStatementOfAccount(props);
+  }
+
+  get id(): string {
+    return this.props.id;
+  }
+
+  get loanAccountId(): string {
+    return this.props.loanAccountId;
+  }
+
+  get soaSequenceNumber(): number {
+    return this.props.soaSequenceNumber;
+  }
+
+  /** `SOA-{5-digit soaSequenceNumber}-{MMDDYYYY of generatedAt}` — see `formatSoaNumber`'s own doc comment. */
+  get soaNumber(): string {
+    return formatSoaNumber(this.props.soaSequenceNumber, this.props.generatedAt);
+  }
+
+  get penaltyAsOfDate(): Date {
+    return this.props.penaltyAsOfDate;
+  }
+
+  get accruedInterestAsOfDate(): Date {
+    return this.props.accruedInterestAsOfDate;
+  }
+
+  get currentAmortizationDue(): Money {
+    return this.props.currentAmortizationDue;
+  }
+
+  get pastDuePrincipal(): Money {
+    return this.props.pastDuePrincipal;
+  }
+
+  get pastDueInterest(): Money {
+    return this.props.pastDueInterest;
+  }
+
+  get pastDuePenalty(): Money {
+    return this.props.pastDuePenalty;
+  }
+
+  get totalPastDue(): Money {
+    return this.props.totalPastDue;
+  }
+
+  get accruedInterest(): Money {
+    return this.props.accruedInterest;
+  }
+
+  get collectionFee(): Money {
+    return this.props.collectionFee;
+  }
+
+  get otherFee(): Money {
+    return this.props.otherFee;
+  }
+
+  get totalAmountDue(): Money {
+    return this.props.totalAmountDue;
+  }
+
+  get storageKey(): string {
+    return this.props.storageKey;
+  }
+
+  get generatedByUserId(): string {
+    return this.props.generatedByUserId;
+  }
+
+  get generatedAt(): Date {
+    return this.props.generatedAt;
+  }
+}

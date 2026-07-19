@@ -12,11 +12,13 @@ import {
   Mail,
   MessageSquareText,
   MoreHorizontal,
+  Receipt,
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
 import type {
   Borrower as RealBorrower,
+  GeneratedStatementOfAccountListItem,
   InstallmentAdjustment,
   InterestRateChartEntry,
   LoanAccount,
@@ -933,6 +935,54 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     });
   };
 
+  // ADR-052 (2026-07-19): Statement of Account generation — separate from ADR-051's Documents
+  // above (different lifecycle: on-demand at any point, not once after approval; Collection
+  // Fee/Other Fee are staff-entered per generation, not derived from any stored field).
+  const statementsQuery = useQuery({
+    queryKey: ['statements-of-account', loanId],
+    queryFn: () => apiClient.get<{ items: GeneratedStatementOfAccountListItem[] }>(`/loan-accounts/${loanId}/statements-of-account`),
+  });
+  const [soaDialogOpen, setSoaDialogOpen] = React.useState(false);
+  // Two DELIBERATELY SEPARATE, manually-entered dates (2026-07-19, user request) - matches the
+  // legacy Excel/VBA tool's own UI, which has independent "To Date" fields for Penalties and for
+  // Accrued Interest, so staff can check each figure as of a different date before generating.
+  const [soaPenaltyAsOfDate, setSoaPenaltyAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
+  const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
+  const [soaError, setSoaError] = React.useState<string | null>(null);
+
+  const generateStatementMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post(
+        `/loan-accounts/${loanId}/statements-of-account`,
+        {
+          penaltyAsOfDate: soaPenaltyAsOfDate,
+          accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
+          collectionFee: soaCollectionFee,
+          otherFee: soaOtherFee,
+        },
+        { 'Idempotency-Key': crypto.randomUUID() },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['statements-of-account', loanId] });
+      setSoaDialogOpen(false);
+      setSoaCollectionFee('0.00');
+      setSoaOtherFee('0.00');
+    },
+    onError: (error) => {
+      setSoaError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  const downloadStatement = async (generatedStatementId: string, fallbackFileName: string) => {
+    try {
+      await downloadFile(`/loan-accounts/${loanId}/statements-of-account/${generatedStatementId}/download`, fallbackFileName);
+    } catch {
+      setSoaError('Could not download the file. Please try again.');
+    }
+  };
+
   if (loanQuery.isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading loan account…</p>;
   }
@@ -1538,8 +1588,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                               size="sm"
                               onClick={() =>
                                 setPreviewTarget({
-                                  loanAccountId: loanId,
-                                  generatedDocumentId: doc.latestGeneration!.id,
+                                  downloadPath: `/loan-accounts/${loanId}/documents/${doc.latestGeneration!.id}/download`,
                                   title: doc.documentTemplateName,
                                   fileName: `${doc.documentTemplateName}.pdf`,
                                 })
@@ -1597,6 +1646,140 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection document,
+          distinct from the required/conditional Documents above (ADR-051 §1). */}
+      <Card>
+        <CardHeader className="flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle>Statement of Account</CardTitle>
+            <CardDescription>Generate a Statement of Account PDF for this loan, as of a chosen date.</CardDescription>
+          </div>
+          {canGenerateDocuments && (
+            <Button size="sm" onClick={() => setSoaDialogOpen(true)}>
+              <Receipt className="mr-2 h-4 w-4" /> Create SOA
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!canGenerateDocuments ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Available once this loan is approved.</p>
+          ) : statementsQuery.isLoading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <>
+              {soaError && (
+                <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{soaError}</span>
+                </div>
+              )}
+              <ul className="space-y-2">
+                {(statementsQuery.data?.items ?? []).map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
+                    <div>
+                      <p className="text-sm font-medium">{item.soaNumber} · {formatPeso(num(item.totalAmountDue))}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Penalty as of {formatDate(item.penaltyAsOfDate)} · Accrued Interest as of {formatDate(item.accruedInterestAsOfDate)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Generated by {item.generatedByName} · {formatDate(item.generatedAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setPreviewTarget({
+                            downloadPath: `/loan-accounts/${loanId}/statements-of-account/${item.id}/download`,
+                            title: item.soaNumber,
+                            fileName: `${item.soaNumber}.pdf`,
+                          })
+                        }
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => downloadStatement(item.id, `${item.soaNumber}.pdf`)}
+                      >
+                        Download
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+                {(statementsQuery.data?.items ?? []).length === 0 && (
+                  <p className="py-4 text-center text-sm text-muted-foreground">No Statement of Account generated yet for this loan.</p>
+                )}
+              </ul>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={soaDialogOpen} onOpenChange={(open) => { setSoaDialogOpen(open); if (!open) setSoaError(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Statement of Account</DialogTitle>
+            <DialogDescription>
+              Current Amortization and Past Due (Principal/Interest) are computed automatically. Penalty and Accrued Interest each
+              use their own "as of" date below, so you can check the figures before generating.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="soa-penalty-as-of-date">Penalty - As Of Date</Label>
+              <Input
+                id="soa-penalty-as-of-date"
+                type="date"
+                value={soaPenaltyAsOfDate}
+                onChange={(e) => setSoaPenaltyAsOfDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="soa-accrued-as-of-date">Accrued Interest - As Of Date</Label>
+              <Input
+                id="soa-accrued-as-of-date"
+                type="date"
+                value={soaAccruedInterestAsOfDate}
+                onChange={(e) => setSoaAccruedInterestAsOfDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="soa-collection-fee">Collection Fee</Label>
+              <Input
+                id="soa-collection-fee"
+                type="number"
+                step="0.01"
+                min="0"
+                value={soaCollectionFee}
+                onChange={(e) => setSoaCollectionFee(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="soa-other-fee">Other Fee</Label>
+              <Input
+                id="soa-other-fee"
+                type="number"
+                step="0.01"
+                min="0"
+                value={soaOtherFee}
+                onChange={(e) => setSoaOtherFee(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSoaDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => generateStatementMutation.mutate()} disabled={generateStatementMutation.isPending}>
+              {generateStatementMutation.isPending ? 'Generating…' : 'Generate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

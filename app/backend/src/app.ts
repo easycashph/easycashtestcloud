@@ -180,6 +180,12 @@ import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/in
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
 import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
 import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
+import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
+import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
+import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
+import { GetGeneratedStatementOfAccountFileUseCase } from '@modules/statement-of-account/application/use-cases/GetGeneratedStatementOfAccountFileUseCase';
+import { PrismaGeneratedStatementOfAccountRepository } from '@modules/statement-of-account/infrastructure/PrismaGeneratedStatementOfAccountRepository';
+import { StatementOfAccountMergeDataResolver } from '@modules/statement-of-account/infrastructure/StatementOfAccountMergeDataResolver';
 import { createProfileActivityLogRouter } from '@modules/profile-activity/interface/http/ProfileActivityLogRouter';
 import { GetProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/GetProfileActivityUseCase';
 import { DeleteProfileActivityUseCase } from '@modules/profile-activity/application/use-cases/DeleteProfileActivityUseCase';
@@ -529,6 +535,43 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanDocumentRouter);
+
+  // --- statement-of-account module wiring (ADR-052, 2026-07-19: Statement of Account Generation) ---
+  // Deliberately separate from the loan-document module above — ADR-051 §1/§9 explicitly excluded
+  // SOA from the required/conditional DocumentTemplate matrix (different lifecycle: on-demand at
+  // any point in a loan's life, not once after approval), so it bypasses DocumentTemplate entirely
+  // and calls IDocumentFiller with a hardcoded 'SOA' template code — reuses the same underlying
+  // docxtemplater/LibreOffice/file-storage infrastructure, not the required/conditional gating.
+  const generatedStatementOfAccountRepository = new PrismaGeneratedStatementOfAccountRepository();
+  const statementOfAccountMergeDataResolver = new StatementOfAccountMergeDataResolver({
+    loanAccountRepository,
+    borrowerRepository,
+    coBorrowerRepository,
+    repaymentInstallmentRepository,
+  });
+  const statementOfAccountRouter = createStatementOfAccountRouter(
+    {
+      generateStatementOfAccountUseCase: new GenerateStatementOfAccountUseCase({
+        loanAccountRepository,
+        generatedStatementOfAccountRepository,
+        mergeDataResolver: statementOfAccountMergeDataResolver,
+        documentFiller,
+        docxToPdfConverter,
+        fileStorage: loanDocumentFileStorage,
+      }),
+      listStatementsOfAccountUseCase: new ListStatementsOfAccountUseCase({
+        generatedStatementOfAccountRepository,
+      }),
+      getGeneratedStatementOfAccountFileUseCase: new GetGeneratedStatementOfAccountFileUseCase({
+        generatedStatementOfAccountRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
+      getLoanAccountUseCase,
+      idempotencyKeyStore,
+    },
+    tokenService,
+  );
+  app.use('/api/v1', statementOfAccountRouter);
 
   // --- ledger module wiring (Milestone 8: HTTP API layer, READ-ONLY per D-2) ---
   const ledgerRouter = createLedgerRouter(
