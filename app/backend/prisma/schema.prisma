@@ -1330,11 +1330,12 @@ model GeneratedStatementOfAccount {
   loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
 
   /// Display format `SOA-{5-digit soaSequenceNumber}-{MMDDYYYY of generatedAt}` (e.g.
-  /// `SOA-00001-07192026`), matching the legacy Excel/VBA tool's own numbering (2026-07-19, user
-  /// request — confirmed against a real screenshot of that tool). A GLOBAL running counter across
-  /// every loan account, not per-loan (the legacy format has no loan-code prefix). Computed the
-  /// same way as `LoanAccount.loanCode` (`CreateLoanAccountUseCase.generateLoanCode`'s own doc
-  /// comment) - plain "max existing + 1" at generation time, not a Postgres-native sequence/
+  /// `SOA-00001-07192026`), matching the legacy Excel/VBA tool's own numbering. A PER-LOAN-ACCOUNT
+  /// running counter (confirmed 2026-07-19 against the tool's actual VBA source -
+  /// `wsLoan.Cells(r, 26)`, incremented per the specific loan account row found - correcting an
+  /// earlier "global counter" assumption made from a screenshot alone). Computed similarly to
+  /// `LoanAccount.loanCode` (`CreateLoanAccountUseCase.generateLoanCode`'s own doc comment) - plain
+  /// "max existing + 1 for this loanAccountId" at generation time, not a Postgres-native sequence/
   /// autoincrement column - because the number must be known BEFORE the PDF is filled (it's a
   /// placeholder on the document itself), and this is a low-frequency, staff-driven action where
   /// that non-atomic read-then-use is an accepted tradeoff, same as the loan code precedent.

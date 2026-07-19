@@ -2,7 +2,6 @@ import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
-import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 
 export interface RemainingScheduleRow {
   dueDate: Date;
@@ -12,7 +11,7 @@ export interface RemainingScheduleRow {
 }
 
 export interface StatementOfAccountFigures {
-  /** Total due on the next not-yet-due installment (PENDING/PARTIALLY_PAID, due date in the future). */
+  /** Total due on the next unpaid installment whose due date is AFTER `penaltyAsOfDate` (0 if every installment is already due on/before that date). */
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
   pastDueInterest: Money;
@@ -20,23 +19,8 @@ export interface StatementOfAccountFigures {
   /** Principal + Interest + Penalty past due — the base the Accrued Interest formula multiplies against. */
   totalPastDue: Money;
   accruedInterest: Money;
-  /** Unpaid installments, oldest first — the "Remaining Amortization" table. */
+  /** Every installment with a positive remaining balance, oldest first — the "Remaining Amortization" table (date-independent). */
   remainingSchedule: RemainingScheduleRow[];
-}
-
-/** Effective per-installment penalty owed as of `asOfDate` — mirrors `RepaymentInstallmentPresenter`'s
- * "override wins, else live ADR-050 projection for an open prospective-loan installment, else the
- * frozen due.penalty" precedence, so an SOA never disagrees with what the Loan Detail page shows. */
-function effectivePenalty(
-  installment: RepaymentInstallment,
-  penaltyContext: PenaltyComputationContext | undefined,
-  asOfDate: Date,
-): Money {
-  if (installment.penaltyOverride) return installment.penaltyOverride.amount;
-  if (penaltyContext?.isProspectiveLoan && installment.status !== 'PAID') {
-    return resolveComputedPenalty(installment, penaltyContext, asOfDate);
-  }
-  return installment.due.penalty;
 }
 
 /** Whole days from `from` to `to` (>= 0) — calendar-day difference, not a 24h-multiple wall-clock diff. */
@@ -48,20 +32,39 @@ function daysBetween(from: Date, to: Date): number {
 
 /**
  * Statement of Account figures — sourced from the user's own legacy Excel/VBA tool
- * (`legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`, `vbaProject.bin`'s "NEW ACCRUED INTEREST
- * FORMULA ENGINE"), confirmed directly with the user (2026-07-19) rather than invented:
+ * (`legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`'s `vbaProject.bin`, full source shared 2026-07-19),
+ * confirmed directly with the user rather than invented. See ADR-052 §4/§5 for the full citation.
+ *
+ * **Past Due bucket** (Principal, Interest, Penalty) — matches `btnApplyPenalties_Click`: an
+ * installment counts as Past Due when its `dueDate <= penaltyAsOfDate` (the staff-entered "as of"
+ * date, NOT real "today" — lets staff check the account as of any date) AND it isn't already fully
+ * settled (unpaid Principal + Interest > 0). This is deliberately NOT `RepaymentInstallment.status
+ * === 'LATE'` (which is always relative to the real clock) — the whole point of a manual "as of"
+ * date is that Past Due must be evaluated against IT, not against right-now.
+ *
+ * **Penalty formula** — matches `btnApplyPenalties_Click`/`btnLoadSchedule_Click` exactly (confirmed
+ * 2026-07-19: use this flat legacy formula, not the system's own ADR-050 compounding/size-tiered/
+ * grace-period formula used elsewhere, e.g. the Loan Detail page - a deliberate choice specific to
+ * this document):
+ *
+ *   Penalty (per installment) = (unpaid Principal + Interest) x Days Late x (10% / 30)
+ *
+ * where Days Late = whole days from that installment's `dueDate` to `penaltyAsOfDate` (0, hence no
+ * penalty, for an installment due exactly on `penaltyAsOfDate`). Flat 10%/month for every loan
+ * regardless of size, no grace period, simple (non-compounding) daily proration.
+ *
+ * **Current Amortization Due** — the next unpaid installment whose `dueDate` is AFTER
+ * `penaltyAsOfDate` (mirrors `btnCreateSOA_Click`'s "current month" bucket, generalized from
+ * "the real calendar month" to "after the staff-chosen date").
+ *
+ * **Accrued Interest** — from the "NEW ACCRUED INTEREST FORMULA ENGINE" comment block in the VBA:
  *
  *   Accrued Interest = (Total Past Due [Principal + Interest + Penalty] x Contractual Rate) / 30 x Days Late
  *
  * where Days Late = whole days from the Maturity Date (last installment's due date) to
- * `accruedInterestAsOfDate`, clamped to 0 when that date has not yet reached maturity (no accrual
- * before then).
- *
- * `penaltyAsOfDate` and `accruedInterestAsOfDate` are two DELIBERATELY SEPARATE, manually-entered
- * dates (2026-07-19, user request, matching the legacy tool's own UI — its "Calculate Penalties"
- * and "Calculate Accrued" sections each have their own "To Date" field) — staff can check the
- * Penalty figure as of one date and the Accrued Interest figure as of a different date before
- * generating, rather than being forced to share a single "as of" date for both.
+ * `accruedInterestAsOfDate` — a SEPARATE, independent manually-entered date from `penaltyAsOfDate`
+ * (matches the legacy tool's own two independent "To Date" fields) — clamped to 0 when that date
+ * has not yet reached maturity (no accrual before then).
  *
  * Collection Fee and Other Fee are NOT computed here — confirmed (per the same legacy tool's
  * `txtCollectionFee`/`txtotherfee` manual text boxes) to be staff-entered per generation, so the
@@ -73,33 +76,47 @@ export class StatementOfAccountCalculator {
     contractualRate: Percentage | undefined,
     penaltyAsOfDate: Date,
     accruedInterestAsOfDate: Date,
-    penaltyContext: PenaltyComputationContext | undefined,
   ): StatementOfAccountFigures {
     const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    const unpaid = sorted.filter((i) => i.status !== 'PAID');
-    const lateInstallments = sorted.filter((i) => i.status === 'LATE');
     const lastInstallment = sorted[sorted.length - 1];
 
     const outstandingPrincipal = (i: RepaymentInstallment) => i.due.principal.subtract(i.paid.principal);
     const outstandingInterest = (i: RepaymentInstallment) => i.due.interest.subtract(i.paid.interest);
+    const outstandingBase = (i: RepaymentInstallment) => outstandingPrincipal(i).add(outstandingInterest(i));
 
-    const pastDuePrincipal = lateInstallments.reduce((sum, i) => sum.add(outstandingPrincipal(i)), Money.ZERO);
-    const pastDueInterest = lateInstallments.reduce((sum, i) => sum.add(outstandingInterest(i)), Money.ZERO);
-    const pastDuePenalty = lateInstallments.reduce((sum, i) => sum.add(effectivePenalty(i, penaltyContext, penaltyAsOfDate)), Money.ZERO);
+    let pastDuePrincipal = Money.ZERO;
+    let pastDueInterest = Money.ZERO;
+    let pastDuePenalty = Money.ZERO;
+
+    for (const installment of sorted) {
+      if (installment.dueDate.getTime() > penaltyAsOfDate.getTime()) continue; // not yet due as of the chosen date
+      const unpaidPrincipal = outstandingPrincipal(installment);
+      const unpaidInterest = outstandingInterest(installment);
+      const unpaidBase = unpaidPrincipal.add(unpaidInterest);
+      if (!unpaidBase.isPositive()) continue; // already fully settled as of this date
+
+      if (unpaidPrincipal.isPositive()) pastDuePrincipal = pastDuePrincipal.add(unpaidPrincipal);
+      if (unpaidInterest.isPositive()) pastDueInterest = pastDueInterest.add(unpaidInterest);
+
+      const daysLate = daysBetween(installment.dueDate, penaltyAsOfDate);
+      if (daysLate > 0) {
+        // Penalty = unpaidBase x daysLate x (10% / 30) - flat legacy formula, confirmed 2026-07-19.
+        const rowPenalty = Money.of(
+          unpaidBase.toDecimal().times(daysLate).times('0.1').dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+        );
+        pastDuePenalty = pastDuePenalty.add(rowPenalty);
+      }
+    }
+
     const totalPastDue = pastDuePrincipal.add(pastDueInterest).add(pastDuePenalty);
 
-    // "Current Amortization Due" = the next installment not yet past due (the first non-LATE,
-    // unpaid one in schedule order) — none if every remaining installment is already LATE.
-    const currentInstallment = unpaid.find((i) => i.status !== 'LATE');
-    const currentAmortizationDue = currentInstallment
-      ? currentInstallment.due.principal
-          .add(currentInstallment.due.interest)
-          .subtract(currentInstallment.paid.principal)
-          .subtract(currentInstallment.paid.interest)
-      : Money.ZERO;
+    const currentInstallment = sorted.find(
+      (i) => i.dueDate.getTime() > penaltyAsOfDate.getTime() && outstandingBase(i).isPositive(),
+    );
+    const currentAmortizationDue = currentInstallment ? outstandingBase(currentInstallment) : Money.ZERO;
 
     let accruedInterest = Money.ZERO;
-    if (lastInstallment && contractualRate && !contractualRate.isZero() && !totalPastDue.isZero()) {
+    if (lastInstallment && contractualRate && !contractualRate.isZero() && totalPastDue.isPositive()) {
       const daysLate = daysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
       if (daysLate > 0) {
         const dailyBase = totalPastDue.toDecimal().times(contractualRate.asFraction()).dividedBy(30);
@@ -107,12 +124,14 @@ export class StatementOfAccountCalculator {
       }
     }
 
-    const remainingSchedule: RemainingScheduleRow[] = unpaid.map((i) => ({
-      dueDate: i.dueDate,
-      principal: outstandingPrincipal(i),
-      interest: outstandingInterest(i),
-      totalDue: outstandingPrincipal(i).add(outstandingInterest(i)),
-    }));
+    const remainingSchedule: RemainingScheduleRow[] = sorted
+      .filter((i) => outstandingBase(i).isPositive())
+      .map((i) => ({
+        dueDate: i.dueDate,
+        principal: outstandingPrincipal(i),
+        interest: outstandingInterest(i),
+        totalDue: outstandingBase(i),
+      }));
 
     return {
       currentAmortizationDue,

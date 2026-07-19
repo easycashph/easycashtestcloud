@@ -10,13 +10,20 @@ data*, not the whole app anymore.
 
 ## 2026-07-19 — Statement of Account (SOA) Generation (ADR-052)
 
-New "Create SOA" action on the Loan Account detail page — opens a dialog (As Of Date, Collection
-Fee, Other Fee), generates a real PDF via a new backend module (`statement-of-account`), and lists
-past generations with Download. Deliberately separate from ADR-051's Documents pipeline (different
-lifecycle — on-demand at any point, not once after approval). Accrued Interest formula sourced
-directly from the user's own legacy Excel/VBA tool, confirmed with the user before implementation —
-see `docs/Architecture/ADR-052-statement-of-account-generation.md` for the full computation
-breakdown and the `.docx` placeholder list still needed (template file has no merge tags yet).
+New "Create SOA" action on the Loan Account detail page — opens a dialog (two independent "as of"
+dates for Penalty and Accrued Interest, Collection Fee, Other Fee), generates a real PDF via a new
+backend module (`statement-of-account`), and lists past generations with Preview/Download.
+Deliberately separate from ADR-051's Documents pipeline (different lifecycle — on-demand at any
+point, not once after approval).
+
+Same-day correction, after the user shared the legacy Excel/VBA tool's full source (not just a
+screenshot): SOA Number is a per-loan-account counter (not global), PN Value is the total
+Principal+Interest across the whole schedule (not just the principal amount), Past Due/Current
+Amortization are evaluated against the staff-entered Penalty date (not the real clock), and Penalty
+itself uses the legacy tool's own flat 10%/month formula rather than the system's ADR-050 formula —
+confirmed with the user as a deliberate, document-specific difference. See
+`docs/Architecture/ADR-052-statement-of-account-generation.md` for the full computation breakdown
+and the `.docx` placeholder list still needed (template file has no merge tags yet).
 
 ## 2026-07-12 (continued) — Mock Data Removal: Application→Client→Loan Lifecycle
 

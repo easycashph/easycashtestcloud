@@ -49,12 +49,13 @@ export class GenerateStatementOfAccountUseCase {
       throw new LoanNotYetApprovedError(loanAccount.status);
     }
 
-    // 2026-07-19 (user request): SOA Number is a GLOBAL running counter (`SOA-#####-MMDDYYYY`,
-    // matches the legacy tool's own numbering), read BEFORE generating the PDF since it's a
-    // placeholder on the document itself — same "max existing + 1" pattern as
-    // `CreateLoanAccountUseCase.generateLoanCode` (non-atomic, accepted for this low-frequency,
-    // staff-driven action; see `soaSequenceNumber`'s own doc comment in schema.prisma).
-    const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber()) + 1;
+    // 2026-07-19 (confirmed against the actual VBA source): SOA Number is a PER-LOAN-ACCOUNT
+    // running counter (`SOA-#####-MMDDYYYY`, matches `wsLoan.Cells(r, 26)` in the legacy tool),
+    // read BEFORE generating the PDF since it's a placeholder on the document itself — same "max
+    // existing + 1" pattern as `CreateLoanAccountUseCase.generateLoanCode` (non-atomic, accepted
+    // for this low-frequency, staff-driven action; see `soaSequenceNumber`'s own doc comment in
+    // schema.prisma).
+    const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber(input.loanAccountId)) + 1;
     const statementDate = new Date();
     const soaNumber = formatSoaNumber(soaSequenceNumber, statementDate);
     const { mergeData, figures } = await this.deps.mergeDataResolver.resolve(

@@ -19,6 +19,6 @@ export interface IGeneratedStatementOfAccountRepository {
   findById(id: string, ctx?: TransactionContext): Promise<GeneratedStatementOfAccount | null>;
   /** Newest first — mirrors `IGeneratedLoanDocumentRepository`'s history convention. */
   findAllForLoanAccount(loanAccountId: string, ctx?: TransactionContext): Promise<GeneratedStatementOfAccountView[]>;
-  /** Global running counter across every loan account — see `GeneratedStatementOfAccount.soaSequenceNumber`'s own doc comment (schema.prisma) for why this is a read-then-use pattern, not a native DB sequence. */
-  findMaxSoaSequenceNumber(ctx?: TransactionContext): Promise<number>;
+  /** PER-LOAN-ACCOUNT running counter (matches the legacy tool's own `wsLoan.Cells(r, 26)` column — confirmed 2026-07-19 against its actual VBA source, correcting an earlier "global" assumption) — see `GeneratedStatementOfAccount.soaSequenceNumber`'s own doc comment (schema.prisma) for why this is a read-then-use pattern, not a native DB sequence. */
+  findMaxSoaSequenceNumber(loanAccountId: string, ctx?: TransactionContext): Promise<number>;
 }

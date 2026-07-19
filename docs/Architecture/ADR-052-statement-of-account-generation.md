@@ -7,8 +7,13 @@ the Loan Account detail page) both implemented. Remaining: the user still needs 
 
 **Context documents:** `legacy/reports/SOA Template/StatementOfAccount.docx` (the user's own current
 layout — source of truth for wording/fields); `legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`'s
-`vbaProject.bin` VBA source (the user's own working SOA-generation tool — source of truth for the
-Accrued Interest formula and which fields are computed vs. staff-entered).
+`vbaProject.bin` VBA source — initially reverse-engineered by searching the compressed binary for
+printable ASCII strings (2026-07-19), then the user shared the FULL, real source directly (same
+session) for `frmSOAPreview`'s `btnCreateSOA_Click`, `btnApplyPenalties_Click`,
+`btnLoadSchedule_Click`, `btnApplyAccrued_Click`, `UpdateFinalAmount`, and `btnGenerateSOA_Click` —
+this full source is the actual source of truth for every formula/field below; the earlier
+binary-search pass only got the Accrued Interest formula right and got several other things wrong
+(flagged individually below), corrected once the full source was available.
 
 ---
 
@@ -56,24 +61,26 @@ no edit/overwrite operation on an existing `GeneratedStatementOfAccount`.
 
 ## 4. Field sourcing — confirmed vs. computed vs. staff-entered
 
-Confirmed directly with the user (2026-07-19), cross-checked against the legacy Excel/VBA tool:
+Confirmed directly with the user (2026-07-19), cross-checked against the legacy Excel/VBA tool's
+full source (see the "Context documents" note above — several of these were corrected the same day
+once the full source, not just a screenshot/binary-search, was available):
 
 | Field | Source |
 |---|---|
-| **SOA No.** | **Computed** — `SOA-{5-digit sequence}-{MMDDYYYY}` (e.g. `SOA-00001-07192026`), a GLOBAL running counter across every loan account. Originally set to `LoanAccount.loanCode` (2026-07-19), then corrected the same day after the user shared a real screenshot of the legacy tool showing this distinct numbering — see §5.3 |
-| PN No. | `LoanAccount.loanCode` (unchanged — distinct from SOA No.) |
+| **SOA No.** | **Computed** — `SOA-{5-digit sequence}-{MMDDYYYY}` (e.g. `SOA-00001-07192026`), a **PER-LOAN-ACCOUNT** running counter (`wsLoan.Cells(r, 26)` in the VBA — corrected from an earlier "global counter" assumption made from a screenshot alone) — see §5.3 |
+| PN No. | `LoanAccount.loanCode` (distinct from SOA No.) |
 | Loan Date | `LoanAccount.anticipatedDisbursementDate` |
-| Maturity Date | Last installment's `dueDate` |
-| PN Value | `LoanAccount.principalAmount` |
+| Maturity Date | Last installment's `dueDate` (VBA computes `firstRepaymentDate + (term-1) months`; the persisted schedule's actual last due date is equivalent for a normal monthly schedule and more robust against holiday/manual adjustments) |
+| **PN Value** | **Corrected 2026-07-19** — Principal + Interest summed across the ENTIRE original schedule (`btnCreateSOA_Click`'s `totalObligation`), NOT `LoanAccount.principalAmount` alone. Same computation already used as `TotalPrincipal`/`TotalInterest` in `LoanDocumentMergeDataResolver` |
 | Borrower / Co-Borrower + Address | Same resolution as `LoanDocumentMergeDataResolver` (blank co-borrower fields when none attached — not "Unknown") |
-| Current Amortization Due | The next unpaid installment that is **not yet LATE** (0 if every remaining installment is already LATE) — not date-dependent |
-| Past Due (Principal / Interest) | Summed across LATE installments only — not date-dependent (LATE status is always relative to real "now", per `RepaymentInstallment.status`) |
-| **Penalty** (part of Past Due) | Summed across LATE installments, using the same override-then-live-ADR-050-projection-then-frozen precedence as `RepaymentInstallmentPresenter`, **as of the staff-entered `penaltyAsOfDate`** — see §5.1 |
+| **Current Amortization Due** | **Corrected 2026-07-19** — the next unpaid installment whose due date is AFTER `penaltyAsOfDate` (0 if every installment is due on/before that date). Originally implemented as "not yet LATE per real `RepaymentInstallment.status`" — wrong, since that's relative to the real clock, not the staff-chosen date; see §5.1 |
+| **Past Due (Principal / Interest)** | **Corrected 2026-07-19** — summed across installments whose due date is ON OR BEFORE `penaltyAsOfDate` and that are not yet fully settled as of that date. Originally implemented as "LATE per real `RepaymentInstallment.status`" — same real-clock-vs-staff-date bug as above; see §5.1 |
+| **Penalty** (part of Past Due) | **Corrected 2026-07-19** — the legacy tool's own flat formula (unpaid Principal+Interest × Days Late × 10%/30, no grace period, non-compounding), confirmed by the user to use INSTEAD of the system's ADR-050 formula (compounding, size-tiered 5%/10%, 3-day grace) used elsewhere (e.g. Loan Detail's live penalty) — a deliberate, confirmed difference specific to this document. See §5.1 |
 | Total Past Due | Principal + Interest + Penalty past due (confirmed with the user: includes Penalty, not just Principal + Interest) |
-| **Accrued Interest** | **Computed, as of the staff-entered `accruedInterestAsOfDate`** — see §5.2 |
+| **Accrued Interest** | **Computed, as of the staff-entered `accruedInterestAsOfDate`** — see §5.2 (unaffected by the corrections above) |
 | Collection Fee / Other Fee | **Staff-entered per generation** — no system field for either. Confirmed from the legacy VBA tool's own `txtCollectionFee`/`txtotherfee` text boxes (`_Change`/`_AfterUpdate` event handlers — manual input, never computed there either) |
 | Total Amount Due | Current Amortization Due + Total Past Due + Accrued Interest + Collection Fee + Other Fee |
-| Remaining Amortization table | Every unpaid installment, oldest first (Due Date / Principal / Interest / Total Due) |
+| Remaining Amortization table | Every installment with a positive remaining balance, oldest first, regardless of date (Due Date / Principal / Interest / Total Due) — matches `btnGenerateSOA_Click`'s table-fill loop, which is unconditional on date |
 
 ## 5. Two independent "as of" dates, and the Accrued Interest formula
 
@@ -86,10 +93,30 @@ verify the computation is correct first. Implemented as `penaltyAsOfDate` and
 parameters, the `GeneratedStatementOfAccount` table's two `@db.Date` columns, the API request body,
 and the Create SOA dialog's two date inputs) — never conflated into one value.
 
-**5.1 Penalty** — `pastDuePenalty` is computed **as of `penaltyAsOfDate`**, via
-`resolveComputedPenalty()` (ADR-050's live daily formula) for an open, prospective-loan
-installment, falling back to any `penaltyOverride` or the frozen `due.penalty`, exactly like
-`RepaymentInstallmentPresenter`'s display logic.
+**5.1 Past Due bucket and Penalty formula** — matches `btnApplyPenalties_Click`/
+`btnLoadSchedule_Click` in the full VBA source (corrected 2026-07-19 after an earlier, wrong
+assumption that this should reuse the system's own `RepaymentInstallment.status`/ADR-050 penalty
+logic, which is always relative to the real clock — see below for why that's wrong here):
+
+- An installment counts toward **Past Due** (Principal, Interest, and is Penalty-eligible) when its
+  `dueDate <= penaltyAsOfDate` AND it isn't already fully settled as of that date (unpaid
+  Principal + Interest > 0). This is deliberately NOT `RepaymentInstallment.status === 'LATE'` —
+  that status is always relative to the real clock ("now"), but the whole point of a
+  manually-entered "as of" date is to let staff check the account as of ANY date (past, present, or
+  a projected future one), so Past Due must be evaluated against that chosen date, not real-time.
+- **Penalty per installment** = `(unpaid Principal + Interest) × Days Late × (10% / 30)`, where Days
+  Late = whole days from that installment's `dueDate` to `penaltyAsOfDate` (0 for an installment due
+  exactly on `penaltyAsOfDate`, hence no penalty yet). This is a flat 10%/month for every loan
+  regardless of size, no grace period, and simple (non-compounding) daily proration — **confirmed
+  with the user (2026-07-19) to be used INSTEAD of ADR-050's compounding/size-tiered/grace-period
+  formula**, even though that means this document's Penalty figure can differ from what the Loan
+  Detail page shows for the same loan on the same day. This was an explicit choice, not an
+  oversight: the legacy tool's own formula is the one being replicated for this specific document.
+- **Current Amortization Due** = the next unpaid installment whose `dueDate` is AFTER
+  `penaltyAsOfDate` (mirrors `btnCreateSOA_Click`'s "current calendar month" bucket, generalized
+  from "the real calendar month" to "after the staff-chosen date," since our system computes
+  everything live in one pass rather than the legacy tool's separate coarse-preview-then-recalculate
+  steps).
 
 **5.2 Accrued Interest formula** — found verbatim in
 `legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`'s `vbaProject.bin`, under a comment block literally
@@ -128,14 +155,15 @@ date's figure being affected directly).
 
 **5.3 SOA Number** — `SOA-{5-digit soaSequenceNumber}-{MMDDYYYY of generatedAt}` (e.g.
 `SOA-00001-07192026`), confirmed against a real screenshot of the legacy tool's own "Create SOA"
-form (2026-07-19). A GLOBAL running counter across every loan account, not per-loan (the legacy
-format has no loan-code prefix, unlike `LoanAccount.loanCode`/PN No.). Implemented the same way as
-`CreateLoanAccountUseCase.generateLoanCode` — read the current max `soaSequenceNumber` across all
-`GeneratedStatementOfAccount` rows, add 1, and use that value BEFORE filling the PDF (since the
-number is a placeholder on the document itself, it must be known ahead of the DB insert — a plain
-`Int` column, not a Postgres-native autoincrement/sequence, which would only yield a value after
-insert). This is a non-atomic read-then-use, same accepted tradeoff as the loan code precedent for
-this low-frequency, staff-driven action. `formatSoaNumber()` (pure, unit-tested in
+form, then against the full VBA source (`btnCreateSOA_Click`: `soaCount = wsLoan.Cells(r,
+26).Value + 1`) — a **PER-LOAN-ACCOUNT** running counter, corrected 2026-07-19 from an earlier
+"global counter" assumption (the screenshot alone didn't reveal the scope; the full source did).
+Implemented similarly to `CreateLoanAccountUseCase.generateLoanCode` — read the current max
+`soaSequenceNumber` FOR THIS LOAN ACCOUNT, add 1, and use that value BEFORE filling the PDF (since
+the number is a placeholder on the document itself, it must be known ahead of the DB insert — a
+plain `Int` column, not a Postgres-native autoincrement/sequence, which would only yield a value
+after insert). This is a non-atomic read-then-use, same accepted tradeoff as the loan code precedent
+for this low-frequency, staff-driven action. `formatSoaNumber()` (pure, unit-tested in
 `tests/unit/statement-of-account/formatSoaNumber.test.ts`) is the single place this format is
 computed, called from both the generation path (before filling the template) and read paths
 (`GeneratedStatementOfAccount.soaNumber` getter, `PrismaGeneratedStatementOfAccountRepository`'s

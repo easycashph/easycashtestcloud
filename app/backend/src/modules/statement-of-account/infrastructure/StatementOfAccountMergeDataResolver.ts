@@ -3,7 +3,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
-import type { Money } from '@shared/domain/Money';
+import { Money } from '@shared/domain/Money';
 import { StatementOfAccountCalculator } from '../application/services/StatementOfAccountCalculator';
 import type {
   IStatementOfAccountMergeDataResolver,
@@ -74,7 +74,16 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       loanAccount.contractualInterestRate,
       penaltyAsOfDate,
       accruedInterestAsOfDate,
-      { isProspectiveLoan: !loanAccount.legacyId, principalAmount: loanAccount.principalAmount },
+    );
+
+    // PN Amount (`btnCreateSOA_Click`'s `totalObligation`) = Principal + Interest summed across the
+    // ENTIRE original schedule (not just unpaid amounts, and excluding fees) — the loan's total
+    // repayment obligation over its life, not `LoanAccount.principalAmount` alone (corrected
+    // 2026-07-19 after the user shared the actual VBA source; same computation already used as
+    // `TotalPrincipal`/`TotalInterest` in `LoanDocumentMergeDataResolver`).
+    const pnValue = sortedInstallments.reduce(
+      (sum, installment) => sum.add(installment.due.principal).add(installment.due.interest),
+      Money.ZERO,
     );
 
     const totalAmountDue = figures.totalPastDue
@@ -94,7 +103,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       LoanDate: loanAccount.anticipatedDisbursementDate ? formatDate(loanAccount.anticipatedDisbursementDate) : '',
       Term: `${loanAccount.installmentCount} months`,
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
-      PNValue: loanAccount.principalAmount.toString(),
+      PNValue: pnValue.toString(),
 
       CurrentAmortizationDue: figures.currentAmortizationDue.toString(),
       PastDuePrincipal: figures.pastDuePrincipal.toString(),

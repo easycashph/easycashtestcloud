@@ -137,3 +137,37 @@ explicitly excluded SOA from that required/conditional matrix). Reuses the same 
   end-to-end in their own browser.
 - SOA history list UI exists (backend + a card on Loan Detail), but there's no dedicated
   cross-loan SOA browsing page — not requested, not built.
+
+## Addendum — SOA corrections after the user shared the full legacy VBA source
+
+After the initial SOA implementation above, the user asked for a "View SOA" preview button
+(implemented — Preview alongside Download in the history list, reusing a generalized
+`LoanDocumentPreviewModal`), then shared a screenshot of the legacy tool's actual popup UI and
+finally its complete VBA source (`frmSOAPreview`'s event handlers). Comparing against that ground
+truth surfaced several mistakes in the first pass, all corrected the same session:
+
+1. **SOA Number scope**: implemented as a global counter; the VBA (`wsLoan.Cells(r, 26)`) proved
+   it's per-loan-account. Fixed `findMaxSoaSequenceNumber` to filter by `loanAccountId`.
+2. **PN Value**: implemented as `LoanAccount.principalAmount`; the VBA's `totalObligation` is
+   Principal + Interest summed across the entire schedule. Fixed in the merge data resolver.
+3. **Past Due / Current Amortization bucketing**: implemented using `RepaymentInstallment.status`
+   (LATE/PENDING, always relative to the real clock); the VBA buckets by comparing each
+   installment's due date against the STAFF-ENTERED `penaltyAsOfDate`. Since the whole point of a
+   manual "as of" date is to let staff check the account as of any date, this was a real bug, not a
+   style choice — rewrote `StatementOfAccountCalculator` to bucket by date comparison instead of
+   installment status.
+4. **Penalty formula**: implemented using the system's own ADR-050 formula (compounding,
+   size-tiered 5%/10%, 3-day grace) so the SOA would agree with the Loan Detail page. The VBA uses a
+   different, flatter formula (10%/month flat, linear daily proration, no grace period,
+   non-compounding) specific to this legacy tool. Asked the user directly which to use — **user
+   chose the legacy formula** — implemented that exactly, documented in ADR-052 §5.1 as a
+   deliberate, confirmed difference from the rest of the system.
+
+`StatementOfAccountCalculator`'s test suite was rewritten from scratch to match (10 tests, up from
+7), plus a `formatSoaNumber` test (3 tests) — 742/742 backend tests passing overall.
+
+This is a good illustration of why "ask for the real source before implementing" matters even after
+a design has already been confirmed once: the first implementation was internally consistent and
+passed its own tests, but several of its computations were still guesses dressed as reasonable
+defaults (e.g. "match the Loan Detail page's live penalty" seemed like the safer, more consistent
+choice) until the actual legacy behavior was available to check against.

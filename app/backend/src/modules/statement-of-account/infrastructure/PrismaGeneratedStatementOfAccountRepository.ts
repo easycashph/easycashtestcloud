@@ -87,10 +87,13 @@ export class PrismaGeneratedStatementOfAccountRepository implements IGeneratedSt
     }));
   }
 
-  /** Global running counter across every loan account (not per-loan) — see `soaSequenceNumber`'s own doc comment in schema.prisma for why this is a plain "max + 1" read rather than a native DB sequence. */
-  async findMaxSoaSequenceNumber(ctx?: TransactionContext): Promise<number> {
+  /** PER-LOAN-ACCOUNT running counter — see `soaSequenceNumber`'s own doc comment in schema.prisma for why this is a plain "max + 1" read rather than a native DB sequence. */
+  async findMaxSoaSequenceNumber(loanAccountId: string, ctx?: TransactionContext): Promise<number> {
     const client = resolveClient(ctx);
-    const result = await client.generatedStatementOfAccount.aggregate({ _max: { soaSequenceNumber: true } });
+    const result = await client.generatedStatementOfAccount.aggregate({
+      where: { loanAccountId },
+      _max: { soaSequenceNumber: true },
+    });
     return result._max.soaSequenceNumber ?? 0;
   }
 }
