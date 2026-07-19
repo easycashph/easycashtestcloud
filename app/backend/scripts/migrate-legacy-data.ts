@@ -29,9 +29,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
 const APPLY = process.argv.includes('--apply');
-const DUMP_DIR = path.resolve(__dirname, '../../../legacy/MongoDB dump/extracted/07142026_ 84746/db-easycash');
+const DUMP_DIR = legacyDbEasycashDir();
 const HQ_BRANCH_CODE = 'HQ';
 
 // ----------------------------------------------------------------------------

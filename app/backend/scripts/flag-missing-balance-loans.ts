@@ -20,11 +20,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
-const DUMP_DIR = path.resolve(
-  __dirname,
-  '../../../legacy/MongoDB dump/extracted/07092026_ 92543/db-easycash',
-);
+const DUMP_DIR = legacyDbEasycashDir();
 const DRY_RUN = process.argv.includes('--dry-run');
 
 function readAll<T = any>(file: string): T[] {
