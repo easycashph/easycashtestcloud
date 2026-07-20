@@ -1610,6 +1610,7 @@ export function LoanApplicationDetailPage() {
           <ProfileActivityTimeline
             profileType="LOAN_APPLICATION"
             profileId={application.id}
+            showDetailsToggle={false}
           />
         </CardContent>
       </Card>

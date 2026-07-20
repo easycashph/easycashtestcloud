@@ -748,7 +748,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           <CardDescription className="text-xs">Log of all actions taken on this client profile by loan officers</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <ProfileActivityTimeline profileType="BORROWER" profileId={borrowerId} />
+          <ProfileActivityTimeline profileType="BORROWER" profileId={borrowerId} showDetailsToggle={false} />
         </CardContent>
       </Card>
 
