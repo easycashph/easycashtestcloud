@@ -73,50 +73,57 @@ once the full source, not just a screenshot/binary-search, was available):
 | Maturity Date | Last installment's `dueDate` (VBA computes `firstRepaymentDate + (term-1) months`; the persisted schedule's actual last due date is equivalent for a normal monthly schedule and more robust against holiday/manual adjustments) |
 | **PN Value** | **Corrected 2026-07-19** — Principal + Interest summed across the ENTIRE original schedule (`btnCreateSOA_Click`'s `totalObligation`), NOT `LoanAccount.principalAmount` alone. Same computation already used as `TotalPrincipal`/`TotalInterest` in `LoanDocumentMergeDataResolver` |
 | Borrower / Co-Borrower + Address | Same resolution as `LoanDocumentMergeDataResolver` (blank co-borrower fields when none attached — not "Unknown") |
-| **Current Amortization Due** | **Corrected 2026-07-19** — the next unpaid installment whose due date is AFTER `penaltyAsOfDate` (0 if every installment is due on/before that date). Originally implemented as "not yet LATE per real `RepaymentInstallment.status`" — wrong, since that's relative to the real clock, not the staff-chosen date; see §5.1 |
-| **Past Due (Principal / Interest)** | **Corrected 2026-07-19** — summed across installments whose due date is ON OR BEFORE `penaltyAsOfDate` and that are not yet fully settled as of that date. Originally implemented as "LATE per real `RepaymentInstallment.status`" — same real-clock-vs-staff-date bug as above; see §5.1 |
-| **Penalty** (part of Past Due) | **Corrected 2026-07-19** — the legacy tool's own flat formula (unpaid Principal+Interest × Days Late × 10%/30, no grace period, non-compounding), confirmed by the user to use INSTEAD of the system's ADR-050 formula (compounding, size-tiered 5%/10%, 3-day grace) used elsewhere (e.g. Loan Detail's live penalty) — a deliberate, confirmed difference specific to this document. See §5.1 |
+| **Current Amortization Due** | The next unpaid installment whose due date is AFTER `penaltyToDate` (0 if every installment is due on/before that date) — see §5.1 |
+| **Past Due (Principal / Interest)** | Summed across installments whose due date is ON OR BEFORE `penaltyToDate` and that are not yet fully settled as of that date — see §5.1 |
+| **Penalty** (part of Past Due) | **Reworked 2026-07-19** — `unpaid balance × Days(penaltyFromDate, penaltyToDate) × rate/30`, using ONE SHARED, manually-entered date range across every Past Due installment (not each installment's own due date) and a per-installment 5%/10% rate tier — deliberately different from BOTH the legacy tool's own per-installment day count AND the system's ADR-050 formula used elsewhere (e.g. Loan Detail's live penalty). See §5.1 |
 | Total Past Due | Principal + Interest + Penalty past due (confirmed with the user: includes Penalty, not just Principal + Interest) |
 | **Accrued Interest** | **Computed, as of the staff-entered `accruedInterestAsOfDate`** — see §5.2 (unaffected by the corrections above) |
 | Collection Fee / Other Fee | **Staff-entered per generation** — no system field for either. Confirmed from the legacy VBA tool's own `txtCollectionFee`/`txtotherfee` text boxes (`_Change`/`_AfterUpdate` event handlers — manual input, never computed there either) |
 | Total Amount Due | Current Amortization Due + Total Past Due + Accrued Interest + Collection Fee + Other Fee |
 | Remaining Amortization table | Every installment with a positive remaining balance, oldest first, regardless of date (Due Date / Principal / Interest / Total Due) — matches `btnGenerateSOA_Click`'s table-fill loop, which is unconditional on date |
 
-## 5. Two independent "as of" dates, and the Accrued Interest formula
+## 5. Three independent date inputs, and the Accrued Interest formula
 
-**5.0 Why two separate dates, not one shared "As Of Date"** (2026-07-19, user request): the legacy
-tool's own UI has independent "To Date" fields for Penalties and for Accrued Interest — staff can
-check the Penalty figure as of one date and the Accrued Interest figure as of a different date
-before generating, and both are manually entered (no silent server-side default), so staff can
-verify the computation is correct first. Implemented as `penaltyAsOfDate` and
-`accruedInterestAsOfDate` throughout the stack (`StatementOfAccountCalculator.calculate()`'s
-parameters, the `GeneratedStatementOfAccount` table's two `@db.Date` columns, the API request body,
-and the Create SOA dialog's two date inputs) — never conflated into one value.
+**5.0 Why three separate date inputs, not one shared "As Of Date"**: the legacy tool's own UI has
+independent "To Date" fields for Penalties and for Accrued Interest, both manually entered (no
+silent server-side default), so staff can verify each figure before generating. Reworked further
+2026-07-19 (user request, after reviewing a mockup): Penalty uses a manually-entered date **range**
+(`penaltyFromDate` → `penaltyToDate`), not a single date — applied as ONE SHARED range across every
+Past Due installment (not each installment's own due date, unlike the legacy tool itself). Accrued
+Interest keeps its own single, independent `accruedInterestAsOfDate`. Implemented throughout the
+stack (`StatementOfAccountCalculator.calculate()`'s parameters, `GeneratedStatementOfAccount`'s
+three `@db.Date` columns, the API request body, and the Create SOA dialog's three date inputs) —
+never conflated into one value.
 
-**5.1 Past Due bucket and Penalty formula** — matches `btnApplyPenalties_Click`/
-`btnLoadSchedule_Click` in the full VBA source (corrected 2026-07-19 after an earlier, wrong
-assumption that this should reuse the system's own `RepaymentInstallment.status`/ADR-050 penalty
-logic, which is always relative to the real clock — see below for why that's wrong here):
+**5.1 Past Due bucket and Penalty formula:**
 
 - An installment counts toward **Past Due** (Principal, Interest, and is Penalty-eligible) when its
-  `dueDate <= penaltyAsOfDate` AND it isn't already fully settled as of that date (unpaid
-  Principal + Interest > 0). This is deliberately NOT `RepaymentInstallment.status === 'LATE'` —
-  that status is always relative to the real clock ("now"), but the whole point of a
-  manually-entered "as of" date is to let staff check the account as of ANY date (past, present, or
-  a projected future one), so Past Due must be evaluated against that chosen date, not real-time.
-- **Penalty per installment** = `(unpaid Principal + Interest) × Days Late × (10% / 30)`, where Days
-  Late = whole days from that installment's `dueDate` to `penaltyAsOfDate` (0 for an installment due
-  exactly on `penaltyAsOfDate`, hence no penalty yet). This is a flat 10%/month for every loan
-  regardless of size, no grace period, and simple (non-compounding) daily proration — **confirmed
-  with the user (2026-07-19) to be used INSTEAD of ADR-050's compounding/size-tiered/grace-period
-  formula**, even though that means this document's Penalty figure can differ from what the Loan
-  Detail page shows for the same loan on the same day. This was an explicit choice, not an
-  oversight: the legacy tool's own formula is the one being replicated for this specific document.
+  `dueDate <= penaltyToDate` AND it isn't already fully settled as of that date (unpaid Principal +
+  Interest > 0). Deliberately NOT `RepaymentInstallment.status === 'LATE'` — that status is always
+  relative to the real clock ("now"), but the whole point of a manually-entered date is to let staff
+  check the account as of ANY date (past, present, or a projected future one).
+- **Penalty per installment** = `(unpaid Principal + Interest) × Days(penaltyFromDate,
+  penaltyToDate) × (rate / 30)`. Two deliberate departures from the legacy tool's own
+  `btnApplyPenalties_Click`/`btnLoadSchedule_Click` formula, both confirmed with the user
+  (2026-07-19):
+  1. The day count comes from the SAME staff-entered `penaltyFromDate`→`penaltyToDate` range for
+     every qualifying installment, NOT `DateDiff(installment's own dueDate, cutoffDate)` per
+     installment as the legacy tool computed it — lets staff preview "what if penalty only accrued
+     from this date" (e.g. a negotiated grace period or collection-intervention date).
+  2. `rate` is 5%/month when THAT installment's own unpaid balance is ≤ ₱10,000, else 10%/month —
+     the same ₱10,000 threshold as ADR-050, but evaluated per-installment here rather than against
+     the whole loan's principal (ADR-050's own basis). Still flat/non-compounding with no grace
+     period, unlike ADR-050's live formula used elsewhere (e.g. Loan Detail's penalty) — a
+     deliberate, confirmed difference specific to this document, not an oversight.
 - **Current Amortization Due** = the next unpaid installment whose `dueDate` is AFTER
-  `penaltyAsOfDate` (mirrors `btnCreateSOA_Click`'s "current calendar month" bucket, generalized
-  from "the real calendar month" to "after the staff-chosen date," since our system computes
-  everything live in one pass rather than the legacy tool's separate coarse-preview-then-recalculate
-  steps).
+  `penaltyToDate` (mirrors `btnCreateSOA_Click`'s "current calendar month" bucket, generalized from
+  "the real calendar month" to "after the staff-chosen date").
+- The Create SOA dialog shows a **live client-side preview** (Days, Penalty amount, Accrued
+  Interest amount) that recomputes as staff adjust the date inputs, mirroring
+  `StatementOfAccountCalculator`'s formula in JS against the already-loaded repayment schedule —
+  lets staff verify the figures before submitting. The backend recomputes independently at
+  generation time and remains the source of truth for what's actually persisted/printed; the
+  frontend preview is read-only convenience, not authoritative.
 
 **5.2 Accrued Interest formula** — found verbatim in
 `legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`'s `vbaProject.bin`, under a comment block literally
@@ -137,21 +144,21 @@ Accrued Interest = (Total Past Due [Principal + Interest + Penalty] × Contractu
 
 - **Total Past Due** = the same Principal + Interest + Penalty past-due figure as the template's own
   "Total Past Due" line (confirmed with the user — not a Principal+Interest-only base; note this
-  already reflects whatever `penaltyAsOfDate` was used for §5.1's Penalty figure).
+  already reflects whatever `penaltyFromDate`/`penaltyToDate` were used for §5.1's Penalty figure).
 - **Contractual Rate** = `LoanAccount.contractualInterestRate` (already stored per loan — no new
   field or lookup needed).
 - **Days Late** = whole calendar days from the **Maturity Date** (last installment's due date) to
-  **`accruedInterestAsOfDate`** (NOT `penaltyAsOfDate` — the two are independent), clamped to 0 when
-  that date hasn't reached maturity yet (no accrual before then, even if individual installments
-  are already past due).
+  **`accruedInterestAsOfDate`** (independent of the Penalty date range), clamped to 0 when that date
+  hasn't reached maturity yet (no accrual before then, even if individual installments are already
+  past due).
 - Divided by a flat 30 (not actual days-in-month), matching the legacy tool exactly.
 
-Verified against a worked example in
-`tests/unit/statement-of-account/StatementOfAccountCalculator.test.ts`: Total Past Due ₱1,150.00 ×
-3% ÷ 30 × 40 days late = ₱46.00; a second test confirms `penaltyAsOfDate` and
-`accruedInterestAsOfDate` genuinely act as two independent inputs (pushing one later changes its
-own figure — and, via the larger Total Past Due base, Accrued Interest too — without the other
-date's figure being affected directly).
+Verified against worked examples in
+`tests/unit/statement-of-account/StatementOfAccountCalculator.test.ts` (11 tests) — including a
+test confirming `penaltyFromDate`/`penaltyToDate` apply as ONE SHARED range across multiple
+installments regardless of each one's own due date, a test confirming the 5%/10% rate tier switches
+per-installment based on that installment's own unpaid balance, and a test confirming the Penalty
+range and `accruedInterestAsOfDate` act as fully independent inputs.
 
 **5.3 SOA Number** — `SOA-{5-digit soaSequenceNumber}-{MMDDYYYY of generatedAt}` (e.g.
 `SOA-00001-07192026`), confirmed against a real screenshot of the legacy tool's own "Create SOA"
@@ -184,10 +191,10 @@ Account Information: `{SOANumber}`, `{PNNumber}`, `{LoanDate}`, `{Term}`, `{Matu
 `{PNValue}`.
 
 Statement Summary: `{CurrentAmortizationDue}`, `{PastDuePrincipal}`, `{PastDueInterest}`,
-`{PastDuePenalty}`, `{PenaltyAsOfDate}` (the manually-entered date §5.1's Penalty figure was
-computed as of), `{TotalPastDue}`, `{AccruedInterest}`, `{AccruedInterestAsOfDate}` (the
-manually-entered date §5.2's Accrued Interest figure was computed as of — independent of
-`{PenaltyAsOfDate}`), `{CollectionFee}`, `{OtherFee}`, `{TotalAmountDue}`.
+`{PastDuePenalty}`, `{PenaltyFromDate}`/`{PenaltyToDate}` (the manually-entered date range §5.1's
+Penalty figure was computed against), `{TotalPastDue}`, `{AccruedInterest}`,
+`{AccruedInterestAsOfDate}` (the manually-entered date §5.2's Accrued Interest figure was computed
+as of — independent of the Penalty range), `{CollectionFee}`, `{OtherFee}`, `{TotalAmountDue}`.
 
 Remaining Amortization table (wrap the data row in `{#RemainingSchedule}`/`{/RemainingSchedule}` so
 docxtemplater repeats it once per unpaid installment): `{DueDate}`, `{Principal}`, `{Interest}`,
@@ -202,17 +209,22 @@ is a template-content gap, not a pipeline bug.
 
 ## 7. Frontend UI (implemented)
 
-"Create SOA" action on the Loan Account detail page opens a dialog with two date inputs (Penalty -
-As Of Date, Accrued Interest - As Of Date, both required, defaulting to today but editable),
-Collection Fee, and Other Fee, then generates. Below it, a history list (newest first) shows every
-past generation with both dates, Total Amount Due, who/when generated, and Preview (inline PDF,
-reusing `LoanDocumentPreviewModal` — generalized to take a `downloadPath` prop so both ADR-051's
-Documents and this feature share one component) and Download.
+"Create SOA" action on the Loan Account detail page opens a dialog with:
+- **Penalty (daily computation)**: From date / To date inputs (both required, default today,
+  editable), plus a live-computed Days / Penalty amount readout (see §5.1's client-side preview
+  note) and a static note explaining the 5%/10% threshold.
+- **Accrued interest**: a single As of date input, plus a live-computed amount readout.
+- Collection Fee and Other Fee inputs.
+
+Below it, a history list (newest first) shows every past generation with its Penalty date range,
+Accrued Interest date, Total Amount Due, who/when generated, and Preview (inline PDF, reusing
+`LoanDocumentPreviewModal` — generalized to take a `downloadPath` prop so both ADR-051's Documents
+and this feature share one component) and Download.
 
 ## 8. HTTP API
 
 ```
-POST /loan-accounts/:id/statements-of-account         — generate (body: penaltyAsOfDate, accruedInterestAsOfDate, collectionFee?, otherFee?)
+POST /loan-accounts/:id/statements-of-account         — generate (body: penaltyFromDate, penaltyToDate, accruedInterestAsOfDate, collectionFee?, otherFee?)
 GET  /loan-accounts/:id/statements-of-account         — list history for this loan, newest first
 GET  /loan-accounts/:id/statements-of-account/:generatedStatementId/download — download the PDF
 ```

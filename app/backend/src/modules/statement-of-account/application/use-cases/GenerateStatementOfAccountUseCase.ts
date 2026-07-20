@@ -30,9 +30,10 @@ export interface GenerateStatementOfAccountUseCaseDeps {
 
 export interface GenerateStatementOfAccountInput {
   loanAccountId: string;
-  /** Manually-entered "as of" date for the Penalty figure (2026-07-19, matches the legacy tool's separate "To Date" fields). */
-  penaltyAsOfDate: Date;
-  /** Manually-entered "as of" date for the Accrued Interest figure — independent of `penaltyAsOfDate`. */
+  /** Manually-entered date range applied uniformly across every Past Due installment for the Penalty computation (2026-07-19, user request — see `StatementOfAccountCalculator`'s own doc comment). */
+  penaltyFromDate: Date;
+  penaltyToDate: Date;
+  /** Manually-entered "as of" date for the Accrued Interest figure — independent of the Penalty range. */
   accruedInterestAsOfDate: Date;
   collectionFee: Money;
   otherFee: Money;
@@ -62,7 +63,8 @@ export class GenerateStatementOfAccountUseCase {
       input.loanAccountId,
       soaNumber,
       statementDate,
-      input.penaltyAsOfDate,
+      input.penaltyFromDate,
+      input.penaltyToDate,
       input.accruedInterestAsOfDate,
       input.collectionFee,
       input.otherFee,
@@ -82,7 +84,8 @@ export class GenerateStatementOfAccountUseCase {
     const statement = GeneratedStatementOfAccount.create({
       loanAccountId: input.loanAccountId,
       soaSequenceNumber,
-      penaltyAsOfDate: input.penaltyAsOfDate,
+      penaltyFromDate: input.penaltyFromDate,
+      penaltyToDate: input.penaltyToDate,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
       currentAmortizationDue: figures.currentAmortizationDue,
       pastDuePrincipal: figures.pastDuePrincipal,

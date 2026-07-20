@@ -11,6 +11,7 @@ import {
   FileCheck2,
   Mail,
   MessageSquareText,
+  Lock,
   MoreHorizontal,
   Receipt,
   Sparkles,
@@ -943,21 +944,106 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<{ items: GeneratedStatementOfAccountListItem[] }>(`/loan-accounts/${loanId}/statements-of-account`),
   });
   const [soaDialogOpen, setSoaDialogOpen] = React.useState(false);
-  // Two DELIBERATELY SEPARATE, manually-entered dates (2026-07-19, user request) - matches the
-  // legacy Excel/VBA tool's own UI, which has independent "To Date" fields for Penalties and for
-  // Accrued Interest, so staff can check each figure as of a different date before generating.
-  const [soaPenaltyAsOfDate, setSoaPenaltyAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  // Penalty uses a manually-entered FROM/TO date range applied uniformly across every Past Due
+  // installment (2026-07-19, user request - NOT each installment's own due date). Accrued Interest
+  // keeps its own separate "as of" date (matches the legacy tool's own independent "To Date" field
+  // for that section).
+  const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
   const [soaError, setSoaError] = React.useState<string | null>(null);
+
+  // Client-side preview only (mirrors StatementOfAccountCalculator's formula) - lets staff check
+  // the Penalty/Accrued Interest figures live as they adjust dates, before generating. The backend
+  // is still the source of truth for the actual PDF/persisted record; this preview reuses the
+  // already-loaded `installments` (same data as the Repayment Schedule table above).
+  const soaPreview = React.useMemo(() => {
+    const parseNum = (v: string | null | undefined) => Number.parseFloat(v ?? '') || 0;
+    const toDate = (s: string) => new Date(`${s}T00:00:00.000Z`);
+    const penaltyFrom = toDate(soaPenaltyFromDate);
+    const penaltyTo = toDate(soaPenaltyToDate);
+    const accruedTo = toDate(soaAccruedInterestAsOfDate);
+    const daysBetween = (from: Date, to: Date) =>
+      Math.max(0, Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86_400_000));
+    const penaltyDays = daysBetween(penaltyFrom, penaltyTo);
+
+    const previewInstallments = installmentsQuery.data?.items ?? [];
+    const sorted = [...previewInstallments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    let pastDuePrincipal = 0;
+    let pastDueInterest = 0;
+    let pastDuePenalty = 0;
+    for (const inst of sorted) {
+      if (new Date(inst.dueDate).getTime() > penaltyTo.getTime()) continue;
+      const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
+      const unpaidInterest = parseNum(inst.due.interest) - parseNum(inst.paid.interest);
+      const unpaidBase = unpaidPrincipal + unpaidInterest;
+      if (unpaidBase <= 0) continue;
+      if (unpaidPrincipal > 0) pastDuePrincipal += unpaidPrincipal;
+      if (unpaidInterest > 0) pastDueInterest += unpaidInterest;
+      if (penaltyDays > 0) {
+        const rate = unpaidBase > 10000 ? 0.1 : 0.05;
+        pastDuePenalty += Math.round(((unpaidBase * penaltyDays * rate) / 30) * 100) / 100;
+      }
+    }
+    const totalPastDue = pastDuePrincipal + pastDueInterest + pastDuePenalty;
+
+    // Current Amortization Due = next unpaid installment due AFTER penaltyToDate.
+    const currentInstallment = sorted.find((inst) => {
+      const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
+      const unpaidInterest = parseNum(inst.due.interest) - parseNum(inst.paid.interest);
+      return new Date(inst.dueDate).getTime() > penaltyTo.getTime() && unpaidPrincipal + unpaidInterest > 0;
+    });
+    const currentAmortizationDue = currentInstallment
+      ? parseNum(currentInstallment.due.principal) -
+        parseNum(currentInstallment.paid.principal) +
+        (parseNum(currentInstallment.due.interest) - parseNum(currentInstallment.paid.interest))
+      : 0;
+
+    // PN Amount = Principal + Interest summed across the whole original schedule (not just unpaid).
+    const pnValue = sorted.reduce((sum, inst) => sum + parseNum(inst.due.principal) + parseNum(inst.due.interest), 0);
+
+    const lastInstallment = sorted[sorted.length - 1];
+    const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
+    // Account must actually be matured (real "today" past the Maturity Date), not just the picked
+    // date — Accrued Interest is only applicable once the loan itself has matured.
+    const isMatured = maturityDate ? maturityDate.getTime() <= Date.now() : false;
+
+    const contractualRate = parseNum(loanQuery.data?.contractualInterestRate);
+    let accruedInterest = 0;
+    if (isMatured && lastInstallment && contractualRate > 0 && totalPastDue > 0) {
+      const accruedDays = daysBetween(new Date(lastInstallment.dueDate), accruedTo);
+      if (accruedDays > 0) {
+        accruedInterest = Math.round(((totalPastDue * (contractualRate / 100)) / 30) * accruedDays * 100) / 100;
+      }
+    }
+
+    const totalAmountDue =
+      currentAmortizationDue + totalPastDue + accruedInterest + (Number.parseFloat(soaCollectionFee) || 0) + (Number.parseFloat(soaOtherFee) || 0);
+
+    return {
+      pastDuePrincipal,
+      pastDueInterest,
+      pastDuePenalty,
+      penaltyDays,
+      totalPastDue,
+      currentAmortizationDue,
+      pnValue,
+      maturityDate,
+      isMatured,
+      accruedInterest,
+      totalAmountDue,
+    };
+  }, [installmentsQuery.data, loanQuery.data, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
 
   const generateStatementMutation = useMutation({
     mutationFn: () =>
       apiClient.post(
         `/loan-accounts/${loanId}/statements-of-account`,
         {
-          penaltyAsOfDate: soaPenaltyAsOfDate,
+          penaltyFromDate: soaPenaltyFromDate,
+          penaltyToDate: soaPenaltyToDate,
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
           collectionFee: soaCollectionFee,
           otherFee: soaOtherFee,
@@ -1680,7 +1766,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     <div>
                       <p className="text-sm font-medium">{item.soaNumber} · {formatPeso(num(item.totalAmountDue))}</p>
                       <p className="text-xs text-muted-foreground">
-                        Penalty as of {formatDate(item.penaltyAsOfDate)} · Accrued Interest as of {formatDate(item.accruedInterestAsOfDate)}
+                        Penalty {formatDate(item.penaltyFromDate)} – {formatDate(item.penaltyToDate)} · Accrued Interest as of {formatDate(item.accruedInterestAsOfDate)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Generated by {item.generatedByName} · {formatDate(item.generatedAt)}
@@ -1723,51 +1809,140 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Statement of Account</DialogTitle>
-            <DialogDescription>
-              Current Amortization and Past Due (Principal/Interest) are computed automatically. Penalty and Accrued Interest each
-              use their own "as of" date below, so you can check the figures before generating.
-            </DialogDescription>
+            <DialogDescription>Account details are filled in automatically. Review the figures below before generating.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Label htmlFor="soa-penalty-as-of-date">Penalty - As Of Date</Label>
-              <Input
-                id="soa-penalty-as-of-date"
-                type="date"
-                value={soaPenaltyAsOfDate}
-                onChange={(e) => setSoaPenaltyAsOfDate(e.target.value)}
-              />
+            <div className="rounded-md bg-secondary/40 p-3">
+              <p className="mb-2 text-sm font-medium">Account information</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Loan ID</p>
+                  <p className="font-medium">{loan.loanCode}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Loan date</p>
+                  <p className="font-medium">{loan.anticipatedDisbursementDate ? formatDate(loan.anticipatedDisbursementDate) : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Term</p>
+                  <p className="font-medium">{loan.installmentCount} months</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Maturity date</p>
+                  <p className="font-medium">{soaPreview.maturityDate ? formatDate(soaPreview.maturityDate) : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">PN amount</p>
+                  <p className="font-medium">{formatPeso(soaPreview.pnValue)}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="soa-accrued-as-of-date">Accrued Interest - As Of Date</Label>
+            <div className="rounded-md bg-secondary/40 p-3">
+              <p className="mb-2 text-sm font-medium">Balances</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Current amortization</p>
+                  <p className="font-medium">{formatPeso(soaPreview.currentAmortizationDue)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Principal past due</p>
+                  <p className="font-medium">{formatPeso(soaPreview.pastDuePrincipal)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Interest past due</p>
+                  <p className="font-medium">{formatPeso(soaPreview.pastDueInterest)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total past due</p>
+                  <p className="font-medium">{formatPeso(soaPreview.totalPastDue)}</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-md bg-secondary/40 p-3">
+              <p className="mb-2 text-sm font-medium">Penalty (daily computation)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="soa-penalty-from-date">From date</Label>
+                  <Input
+                    id="soa-penalty-from-date"
+                    type="date"
+                    value={soaPenaltyFromDate}
+                    onChange={(e) => setSoaPenaltyFromDate(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="soa-penalty-to-date">To date</Label>
+                  <Input
+                    id="soa-penalty-to-date"
+                    type="date"
+                    value={soaPenaltyToDate}
+                    onChange={(e) => setSoaPenaltyToDate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                <div>
+                  <p className="text-muted-foreground">Days</p>
+                  <p className="font-medium">{soaPreview.penaltyDays}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Penalty amount</p>
+                  <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.</p>
+            </div>
+            <div className={cn('rounded-md bg-secondary/40 p-3', !soaPreview.isMatured && 'opacity-60')}>
+              <p className="mb-2 text-sm font-medium">Accrued interest</p>
+              <Label htmlFor="soa-accrued-as-of-date">As of date</Label>
               <Input
                 id="soa-accrued-as-of-date"
                 type="date"
                 value={soaAccruedInterestAsOfDate}
                 onChange={(e) => setSoaAccruedInterestAsOfDate(e.target.value)}
+                disabled={!soaPreview.isMatured}
               />
+              {soaPreview.isMatured ? (
+                <div className="mt-2 border-t pt-2 text-xs">
+                  <p className="text-muted-foreground">Accrued interest amount</p>
+                  <p className="font-medium">{formatPeso(soaPreview.accruedInterest)}</p>
+                </div>
+              ) : (
+                <div className="mt-2 flex items-center gap-1.5 border-t pt-2 text-xs text-muted-foreground">
+                  <Lock className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Not applicable until maturity{soaPreview.maturityDate ? ` (${formatDate(soaPreview.maturityDate)})` : ''}
+                  </span>
+                </div>
+              )}
             </div>
-            <div>
-              <Label htmlFor="soa-collection-fee">Collection Fee</Label>
-              <Input
-                id="soa-collection-fee"
-                type="number"
-                step="0.01"
-                min="0"
-                value={soaCollectionFee}
-                onChange={(e) => setSoaCollectionFee(e.target.value)}
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="soa-collection-fee">Collection Fee</Label>
+                <Input
+                  id="soa-collection-fee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={soaCollectionFee}
+                  onChange={(e) => setSoaCollectionFee(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="soa-other-fee">Other Fee</Label>
+                <Input
+                  id="soa-other-fee"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={soaOtherFee}
+                  onChange={(e) => setSoaOtherFee(e.target.value)}
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="soa-other-fee">Other Fee</Label>
-              <Input
-                id="soa-other-fee"
-                type="number"
-                step="0.01"
-                min="0"
-                value={soaOtherFee}
-                onChange={(e) => setSoaOtherFee(e.target.value)}
-              />
+            <div className="flex items-center justify-between rounded-md bg-primary/10 p-3">
+              <p className="text-sm font-medium text-primary">Total amount due</p>
+              <p className="text-lg font-medium text-primary">{formatPeso(soaPreview.totalAmountDue)}</p>
             </div>
           </div>
           <DialogFooter>

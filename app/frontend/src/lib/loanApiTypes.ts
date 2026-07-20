@@ -396,7 +396,8 @@ export interface GeneratedStatementOfAccountListItem {
   id: string;
   loanAccountId: string;
   soaNumber: string;
-  penaltyAsOfDate: string;
+  penaltyFromDate: string;
+  penaltyToDate: string;
   accruedInterestAsOfDate: string;
   totalAmountDue: string;
   generatedByUserId: string;

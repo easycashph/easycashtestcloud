@@ -6,7 +6,8 @@ export interface GeneratedStatementOfAccountView {
   id: string;
   loanAccountId: string;
   soaNumber: string;
-  penaltyAsOfDate: Date;
+  penaltyFromDate: Date;
+  penaltyToDate: Date;
   accruedInterestAsOfDate: Date;
   totalAmountDue: string;
   generatedByUserId: string;

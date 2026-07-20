@@ -6,7 +6,8 @@ export interface GeneratedStatementOfAccountProps {
   id: string;
   loanAccountId: string;
   soaSequenceNumber: number;
-  penaltyAsOfDate: Date;
+  penaltyFromDate: Date;
+  penaltyToDate: Date;
   accruedInterestAsOfDate: Date;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
@@ -25,7 +26,8 @@ export interface GeneratedStatementOfAccountProps {
 export interface CreateGeneratedStatementOfAccountProps {
   loanAccountId: string;
   soaSequenceNumber: number;
-  penaltyAsOfDate: Date;
+  penaltyFromDate: Date;
+  penaltyToDate: Date;
   accruedInterestAsOfDate: Date;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
@@ -80,8 +82,12 @@ export class GeneratedStatementOfAccount {
     return formatSoaNumber(this.props.soaSequenceNumber, this.props.generatedAt);
   }
 
-  get penaltyAsOfDate(): Date {
-    return this.props.penaltyAsOfDate;
+  get penaltyFromDate(): Date {
+    return this.props.penaltyFromDate;
+  }
+
+  get penaltyToDate(): Date {
+    return this.props.penaltyToDate;
   }
 
   get accruedInterestAsOfDate(): Date {

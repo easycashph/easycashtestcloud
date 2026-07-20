@@ -48,7 +48,8 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     loanAccountId: string,
     soaNumber: string,
     statementDate: Date,
-    penaltyAsOfDate: Date,
+    penaltyFromDate: Date,
+    penaltyToDate: Date,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
@@ -72,7 +73,8 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const figures = StatementOfAccountCalculator.calculate(
       sortedInstallments,
       loanAccount.contractualInterestRate,
-      penaltyAsOfDate,
+      penaltyFromDate,
+      penaltyToDate,
       accruedInterestAsOfDate,
     );
 
@@ -109,7 +111,8 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       PastDuePrincipal: figures.pastDuePrincipal.toString(),
       PastDueInterest: figures.pastDueInterest.toString(),
       PastDuePenalty: figures.pastDuePenalty.toString(),
-      PenaltyAsOfDate: formatDate(penaltyAsOfDate),
+      PenaltyFromDate: formatDate(penaltyFromDate),
+      PenaltyToDate: formatDate(penaltyToDate),
       TotalPastDue: figures.totalPastDue.toString(),
       AccruedInterest: figures.accruedInterest.toString(),
       AccruedInterestAsOfDate: formatDate(accruedInterestAsOfDate),
