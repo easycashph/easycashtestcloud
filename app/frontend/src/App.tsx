@@ -100,7 +100,8 @@ export default function App() {
         <Route path="admin/members" element={<Navigate to="/admin/system?tab=members" replace />} />
         <Route path="admin/activity-logs" element={<Navigate to="/admin/system?tab=activity-logs" replace />} />
         <Route path="admin/system" element={<SystemPage />} />
-        <Route path="admin/about" element={<AboutPage />} />
+        <Route path="admin/about" element={<Navigate to="/support/about" replace />} />
+        <Route path="support/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

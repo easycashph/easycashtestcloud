@@ -83,7 +83,7 @@ export const HELP_TOPICS: Record<string, HelpTopic> = {
       'Reminders (MIS-only): turning a channel on affects every borrower, not just one - only enable once the message content and test sends have been verified.',
     ],
   },
-  '/admin/about': {
+  '/support/about': {
     title: 'About',
     summary: 'App version, changelog, and team credits - not a how-to guide (that\'s this Help panel).',
     tips: [],

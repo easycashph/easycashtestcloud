@@ -61,10 +61,11 @@ const NAV_GROUPS = [
   },
   {
     label: 'Administration',
-    items: [
-      { to: '/admin/system', label: 'System', icon: SlidersHorizontal, end: false },
-      { to: '/admin/about', label: 'About', icon: Info, end: false },
-    ],
+    items: [{ to: '/admin/system', label: 'System', icon: SlidersHorizontal, end: false }],
+  },
+  {
+    label: 'Support',
+    items: [{ to: '/support/about', label: 'About', icon: Info, end: false }],
   },
 ];
 
