@@ -73,25 +73,15 @@ export const HELP_TOPICS: Record<string, HelpTopic> = {
       'Notifications tab: mute specific notification types from your bell icon.',
     ],
   },
-  '/admin/members': {
-    title: 'User Accounts',
-    summary: 'MIS-only: create and manage staff accounts and their roles.',
-    tips: ['A role controls what a staff account can see and do across the whole app - assign the narrowest role that still lets someone do their job.'],
-  },
-  '/products': {
-    title: 'Loan Products',
-    summary: 'Read-only reference: every configured loan product and its versions (interest rate, fees, terms).',
-    tips: ['Editing a product creates a new version - it never changes the terms already locked into an existing approved loan.'],
-  },
-  '/admin/activity-logs': {
-    title: 'Activity Logs',
-    summary: 'MIS-only: a full audit trail of who did what, when, across the whole system.',
-    tips: ['Filter by section or search by staff name to trace a specific change.'],
-  },
   '/admin/system': {
     title: 'System',
-    summary: 'MIS-only: platform-wide switches, currently the SMS/Email automated payment reminder master toggles.',
-    tips: ['Turning a channel on here affects every borrower, not just one - only enable once the message content and test sends have been verified.'],
+    summary: 'Platform administration in one place, organized as tabs: Reminders (MIS-only SMS/Email master toggles), User Accounts, Loan Products, and Activity Logs.',
+    tips: [
+      'User Accounts: create and manage staff accounts and their roles - a role controls what a staff account can see and do across the whole app, so assign the narrowest one that still lets someone do their job.',
+      'Loan Products: read-only reference - editing a product creates a new version, it never changes the terms already locked into an existing approved loan.',
+      'Activity Logs (MIS-only): a full audit trail of who did what, when, across the whole system - filter by section or search by staff name to trace a specific change.',
+      'Reminders (MIS-only): turning a channel on affects every borrower, not just one - only enable once the message content and test sends have been verified.',
+    ],
   },
   '/admin/about': {
     title: 'About',

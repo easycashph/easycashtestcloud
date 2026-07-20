@@ -5,10 +5,7 @@ import {
   Wallet,
   Menu,
   Users,
-  Package,
   FileSpreadsheet,
-  ShieldCheck,
-  ScrollText,
   FileCheck2,
   BellRing,
   Settings,
@@ -65,9 +62,6 @@ const NAV_GROUPS = [
   {
     label: 'Administration',
     items: [
-      { to: '/admin/members', label: 'User Accounts', icon: ShieldCheck, end: false },
-      { to: '/products', label: 'Loan Products', icon: Package, end: false },
-      { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
       { to: '/admin/system', label: 'System', icon: SlidersHorizontal, end: false },
       { to: '/admin/about', label: 'About', icon: Info, end: false },
     ],
