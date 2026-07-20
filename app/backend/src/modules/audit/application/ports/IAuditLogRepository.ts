@@ -12,6 +12,8 @@ export interface AuditLogRecord {
   action: string;
   entityType: string;
   entityId: string;
+  /** Human-readable label for entityId (LoanAccount.loanCode, LoanApplication.applicantName) - null when entityType has no known label source, or the record no longer exists. */
+  entityLabel: string | null;
   previousValue: unknown;
   newValue: unknown;
   ipAddress: string | null;

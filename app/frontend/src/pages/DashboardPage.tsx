@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
-import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { RecentSystemActivityPanel } from '@/components/RecentSystemActivityPanel';
 import { LoanPortfolioVennDiagram, type PortfolioHealthSegment } from '@/components/LoanPortfolioVennDiagram';
 import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillDownDialog';
 import { TermTip } from '@/components/TermTip';
@@ -1247,7 +1247,7 @@ export function DashboardPage() {
 
       <LoanDrillDownDialog drillDown={drillDown} onClose={() => setDrillDown(null)} />
 
-      <RecentActivityPanel label="Dashboard" />
+      <RecentSystemActivityPanel />
     </div>
   );
 }

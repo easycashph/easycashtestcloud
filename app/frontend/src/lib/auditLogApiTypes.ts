@@ -11,6 +11,7 @@ export interface AuditLog {
   action: string;
   entityType: string;
   entityId: string;
+  entityLabel: string | null;
   previousValue: unknown;
   newValue: unknown;
   ipAddress: string | null;

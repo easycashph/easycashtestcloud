@@ -8,6 +8,7 @@ export interface AuditLogResponse {
   action: string;
   entityType: string;
   entityId: string;
+  entityLabel: string | null;
   previousValue: unknown;
   newValue: unknown;
   ipAddress: string | null;
@@ -24,6 +25,7 @@ export function presentAuditLog(record: AuditLogRecord): AuditLogResponse {
     action: record.action,
     entityType: record.entityType,
     entityId: record.entityId,
+    entityLabel: record.entityLabel,
     previousValue: record.previousValue,
     newValue: record.newValue,
     ipAddress: record.ipAddress,
