@@ -1,19 +1,23 @@
 import * as React from 'react';
-import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { AlertCircle, Check, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useRole } from '@/lib/roleContext';
 import { useSortableTable, type SortState } from '@/lib/useSortableTable';
-import { fetchAllPages } from '@/lib/apiClient';
+import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import type { LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
 import { formatPeso } from '@/lib/utils';
 import { classifyProductType, groupByProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
+import type { ProductTypeLabel } from '@/lib/productTypeLabelApiTypes';
 
 interface ProductRow {
   id: string;
@@ -48,6 +52,122 @@ function num(v: string | null): number {
   return v ? Number.parseFloat(v) || 0 : 0;
 }
 
+function ProductTypeLabelRow({ productTypeLabel, canRename }: { productTypeLabel: ProductTypeLabel; canRename: boolean }) {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = React.useState(false);
+  const [value, setValue] = React.useState(productTypeLabel.label);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const updateMutation = useMutation({
+    mutationFn: (label: string) => apiClient.patch<ProductTypeLabel>(`/product-type-labels/${productTypeLabel.id}`, { label }),
+    onSuccess: () => {
+      setEditing(false);
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ['product-type-labels'] });
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not rename this Product Type.'),
+  });
+
+  const save = () => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === productTypeLabel.label) {
+      setEditing(false);
+      setValue(productTypeLabel.label);
+      return;
+    }
+    updateMutation.mutate(trimmed);
+  };
+
+  return (
+    <li className="space-y-1.5 rounded-md border px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        {editing ? (
+          <form
+            className="flex flex-1 items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save();
+            }}
+          >
+            <Input value={value} onChange={(e) => setValue(e.target.value)} className="h-8 text-sm" autoFocus />
+            <Button type="submit" size="sm" className="h-8 shrink-0" disabled={updateMutation.isPending}>
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0"
+              onClick={() => {
+                setEditing(false);
+                setValue(productTypeLabel.label);
+              }}
+            >
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <>
+            <div className="text-sm">
+              <span className="font-medium">{productTypeLabel.label}</span>
+              {productTypeLabel.label !== productTypeLabel.canonicalKey && (
+                <span className="ml-2 text-xs text-muted-foreground">was &ldquo;{productTypeLabel.canonicalKey}&rdquo;</span>
+              )}
+            </div>
+            {canRename && (
+              <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setEditing(true)} aria-label={`Rename ${productTypeLabel.label}`}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </li>
+  );
+}
+
+/**
+ * Loan Products > Product Types (2026-07-20 user request, moved from Administration > System the
+ * same day - specifically about Loan Products, not a platform-wide System setting) - lets MIS
+ * rename the catalog's Product Type groupings (Business Loan, Salary Loan, etc.) without touching
+ * the underlying name-prefix classification rule (`productTypeClassification.ts`) - only the label
+ * shown to staff changes, everywhere it's displayed (this catalog, Create Loan Account's and Loan
+ * Application's Product Type pickers).
+ */
+function ProductTypesTab() {
+  const { canManageMembers } = useRole();
+  const query = useProductTypeLabels();
+  const productTypeLabels = query.data?.productTypeLabels ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Product Types</CardTitle>
+        <CardDescription>
+          Renames how each Loan Products category is labeled throughout the app - MIS only. The underlying grouping rule (which
+          products fall under which type) is unchanged.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {query.isError && (
+          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" /> Could not load Product Types. Is the backend running?
+          </div>
+        )}
+        <ul className="space-y-2">
+          {productTypeLabels.map((pt) => (
+            <ProductTypeLabelRow key={pt.id} productTypeLabel={pt} canRename={canManageMembers} />
+          ))}
+          {productTypeLabels.length === 0 && !query.isLoading && (
+            <li className="py-2 text-center text-xs text-muted-foreground">No Product Types found.</li>
+          )}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * Frontend↔Backend Wiring Pilot, extended 2026-07-09 after CP12. Real `GET /loan-products` replaces
  * `MOCK_LOAN_PRODUCTS`. Deliberately read-only: the real backend's `LoanProductVersion` is
@@ -62,6 +182,7 @@ function num(v: string | null): number {
 export function LoanProductsPage() {
   useLogPageView('Loan Products');
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const [pageTab, setPageTab] = React.useState<'catalog' | 'product-types'>('catalog');
 
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
@@ -250,47 +371,60 @@ export function LoanProductsPage() {
         </p>
       </div>
 
-      {productsQuery.isError && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan products. Is the backend running?
-        </div>
-      )}
+      <Tabs value={pageTab} onValueChange={(v) => setPageTab(v as 'catalog' | 'product-types')}>
+        <TabsList>
+          <TabsTrigger value="catalog">Catalog</TabsTrigger>
+          <TabsTrigger value="product-types">Product Types</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real product catalog, migrated from legacy data (CP12) - read-only. Loan product versions are
-        immutable by design (editing a product must never affect historical loans), so adding or
-        customizing a product here would need a proper create-version + activate workflow - not yet
-        built. Document templates are not yet wired to real data.
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Product Catalog</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Loading products…</p>
-          ) : (
-            <Tabs defaultValue="active">
-              <TabsList>
-                <TabsTrigger value="active">Active ({activeProducts.length})</TabsTrigger>
-                <TabsTrigger value="discontinued">Discontinued ({discontinuedProducts.length})</TabsTrigger>
-              </TabsList>
-              <TabsContent value="active">
-                {renderGroupedTables(activeSortState.sorted, activeSortState.sort, activeSortState.toggleSort)}
-              </TabsContent>
-              <TabsContent value="discontinued">
-                <p className="mb-3 text-xs text-muted-foreground">
-                  These products have no currently-active version but remain visible because real client loans still reference them.
-                </p>
-                {renderGroupedTables(discontinuedSortState.sorted, discontinuedSortState.sort, discontinuedSortState.toggleSort)}
-              </TabsContent>
-            </Tabs>
+      {pageTab === 'product-types' ? (
+        <ProductTypesTab />
+      ) : (
+        <>
+          {productsQuery.isError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" /> Could not load loan products. Is the backend running?
+            </div>
           )}
-        </CardContent>
-      </Card>
 
-      <RecentActivityPanel label="Loan Products" />
+          <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
+            Real product catalog, migrated from legacy data (CP12) - read-only. Loan product versions are
+            immutable by design (editing a product must never affect historical loans), so adding or
+            customizing a product here would need a proper create-version + activate workflow - not yet
+            built. Document templates are not yet wired to real data.
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Product Catalog</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">Loading products…</p>
+              ) : (
+                <Tabs defaultValue="active">
+                  <TabsList>
+                    <TabsTrigger value="active">Active ({activeProducts.length})</TabsTrigger>
+                    <TabsTrigger value="discontinued">Discontinued ({discontinuedProducts.length})</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="active">
+                    {renderGroupedTables(activeSortState.sorted, activeSortState.sort, activeSortState.toggleSort)}
+                  </TabsContent>
+                  <TabsContent value="discontinued">
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      These products have no currently-active version but remain visible because real client loans still reference them.
+                    </p>
+                    {renderGroupedTables(discontinuedSortState.sorted, discontinuedSortState.sort, discontinuedSortState.toggleSort)}
+                  </TabsContent>
+                </Tabs>
+              )}
+            </CardContent>
+          </Card>
+
+          <RecentActivityPanel label="Loan Products" />
+        </>
+      )}
     </div>
   );
 }
