@@ -35,7 +35,7 @@ function getSortValue(user: User, key: string): string | number | Date | null | 
     case 'name':
       return user.fullName;
     case 'role':
-      return user.roles[0] ?? '';
+      return user.roleClassName ?? '';
     case 'branchName':
       return user.branchName;
     case 'email':
@@ -634,7 +634,7 @@ export function MemberListPage() {
                   Name
                 </SortableTableHead>
                 <SortableTableHead sortKey="role" currentSort={sort} onSort={toggleSort}>
-                  Role
+                  Role Class
                 </SortableTableHead>
                 <SortableTableHead sortKey="branchName" currentSort={sort} onSort={toggleSort}>
                   Branch
@@ -674,9 +674,7 @@ export function MemberListPage() {
                     </button>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>
-                      {user.roles.length > 0 ? user.roles.map((r) => roleFullLabel(r)).join(', ') : '-'}
-                    </Badge>
+                    <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>{user.roleClassName ?? 'Not set'}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{user.branchName}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{user.email}</TableCell>
