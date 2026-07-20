@@ -317,9 +317,30 @@ async function main() {
     }
   }
 
+  // Product Type Labels (2026-07-20): renamable display labels for the Loan Products catalog's
+  // Product Type groupings - `canonicalKey` must match `productTypeClassification.ts`'s
+  // `PRODUCT_TYPE_DEFS[].type` exactly (the stable grouping key); `label` starts identical and is
+  // the only field officers can rename from Administration > System > Product Types.
+  const productTypeCanonicalKeys = [
+    'Business Loan',
+    'Purchase Financing Loan',
+    'Salary Loan',
+    'Seafarer Loan',
+    'Small and Medium-sized Enterprises Loan',
+  ];
+  let productTypeLabelCount = 0;
+  for (const canonicalKey of productTypeCanonicalKeys) {
+    await prisma.productTypeLabel.upsert({
+      where: { canonicalKey },
+      update: {},
+      create: { canonicalKey, label: canonicalKey },
+    });
+    productTypeLabelCount += 1;
+  }
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}. Document templates: ${documentTemplateRows.length}. Role Classes: ${roleClassCount}.`,
+    `Seed complete. Branch: ${headOffice.code}. Roles: ${roleNames.length}. Permissions: ${permissionCodes.length}. Interest rate chart rows: ${interestRateChartRows.length}. Document templates: ${documentTemplateRows.length}. Role Classes: ${roleClassCount}. Product Type Labels: ${productTypeLabelCount}.`,
   );
 }
 

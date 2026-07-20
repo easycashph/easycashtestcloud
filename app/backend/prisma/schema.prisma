@@ -305,6 +305,23 @@ model RoleClass {
   @@map("role_classes")
 }
 
+/// 2026-07-20 user request: make the Loan Products catalog's "Product Type" groupings (Business
+/// Loan, Salary Loan, Seafarer Loan, etc.) renamable. `canonicalKey` is the STABLE identifier -
+/// matches `productTypeClassification.ts`'s `PRODUCT_TYPE_DEFS[].type` exactly and is what
+/// grouping/filtering logic keys off of; it never changes. `label` is the only renamable field -
+/// what officers actually see. Deliberately no prefix/add/delete here (unlike Role Class) - the
+/// underlying name-prefix -> type classification rule is unchanged, only its display text is
+/// configurable. Seeded 1:1 with the 5 existing canonical types at migration time.
+model ProductTypeLabel {
+  id           String   @id @default(uuid())
+  canonicalKey String   @unique
+  label        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("product_type_labels")
+}
+
 /// AUDIT-3: permissions must be role-based and configurable in the
 /// database, not hard-coded `if role === "Admin"` checks in application code.
 model Permission {

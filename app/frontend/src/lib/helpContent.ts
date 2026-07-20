@@ -75,10 +75,12 @@ export const HELP_TOPICS: Record<string, HelpTopic> = {
   },
   '/admin/system': {
     title: 'System',
-    summary: 'Platform administration in one place, organized as tabs: Reminders (MIS-only SMS/Email master toggles), User Accounts, Loan Products, and Activity Logs.',
+    summary:
+      'Platform administration in one place, organized as tabs: Reminders (MIS-only SMS/Email master toggles), User Accounts, Loan Products, Product Types, and Activity Logs.',
     tips: [
       'User Accounts: create and manage staff accounts and their roles - a role controls what a staff account can see and do across the whole app, so assign the narrowest one that still lets someone do their job.',
       'Loan Products: read-only reference - editing a product creates a new version, it never changes the terms already locked into an existing approved loan.',
+      'Product Types (MIS-only): rename how each Loan Products category is labeled everywhere it appears - the underlying grouping rule stays the same, only the text shown to staff changes.',
       'Activity Logs (MIS-only): a full audit trail of who did what, when, across the whole system - filter by section or search by staff name to trace a specific change.',
       'Reminders (MIS-only): turning a channel on affects every borrower, not just one - only enable once the message content and test sends have been verified.',
     ],

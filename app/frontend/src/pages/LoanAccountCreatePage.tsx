@@ -24,6 +24,7 @@ import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError, fetchAllPages } from '@/lib/apiClient';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { classifyProductType, groupByProductType } from '@/lib/productTypeClassification';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import { formatDate, formatPeso } from '@/lib/utils';
 import type { Borrower, InterestRateChartEntry, LoanAccount, LoanProduct, LoanProductVersion, PaginatedResponse } from '@/lib/loanApiTypes';
 
@@ -265,6 +266,7 @@ export function LoanAccountForm({
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
     enabled: Boolean(selectedBorrower),
   });
+  const productTypeLabelsQuery = useProductTypeLabels();
   // Any active, non-hidden product is LISTED (matches the Loan Products catalog page's own
   // "Active" count for the same Product Type) - `activeSupportedVersion` alone would silently drop
   // Flat-rate products (e.g. "BL-Special"), which staff found confusing when a Product Type here
@@ -664,7 +666,7 @@ export function LoanAccountForm({
                     <SelectContent>
                       {productGroups.map((g) => (
                         <SelectItem key={g.type} value={g.type}>
-                          {g.type}
+                          {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, g.type)}
                         </SelectItem>
                       ))}
                     </SelectContent>

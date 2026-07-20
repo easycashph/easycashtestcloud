@@ -13,6 +13,7 @@ import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanProduct, LoanProductVersion } from '@/lib/loanApiTypes';
 import { formatPeso } from '@/lib/utils';
 import { classifyProductType, groupByProductType } from '@/lib/productTypeClassification';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 
 interface ProductRow {
   id: string;
@@ -66,6 +67,7 @@ export function LoanProductsPage() {
     queryKey: ['loan-products', 'all'],
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
   });
+  const productTypeLabelsQuery = useProductTypeLabels();
 
   const rows: ProductRow[] = React.useMemo(
     () =>
@@ -185,7 +187,8 @@ export function LoanProductsPage() {
         {groups.map((group) => (
           <div key={group.type}>
             <h3 className="mb-2 text-sm font-semibold">
-              {group.type} <span className="font-normal text-muted-foreground">({group.rows.length})</span>
+              {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, group.type)}{' '}
+              <span className="font-normal text-muted-foreground">({group.rows.length})</span>
             </h3>
             {renderTable(group.rows, sort, onSort)}
           </div>
