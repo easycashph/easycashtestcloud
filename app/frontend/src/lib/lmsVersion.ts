@@ -59,28 +59,39 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.12',
-    date: 'July 18, 2026',
+    version: '0.9.13',
+    date: 'July 19, 2026',
     highlights: [
-      'Automatic SMS payment reminders - the full 5-stage schedule (5/3/1 days before due, on due date, weekly past due) now sends real text messages through EasyCash\'s existing M360/Globe SMS account, on a daily schedule, with a delivery-status badge on each Loan Account.',
-      'Automatic Email payment reminders - the same reminder schedule now also sends from EasyCash\'s own collections@easycash.ph mailbox, with a matching status badge and a dedicated log page.',
-      'New Settings > System tab (MIS-only) - turn the SMS and Email reminder channels on or off from within the app, no server restart needed; both start switched off by default until MIS is ready to enable them.',
-      'New Reminder Logs pages (also on the Reports Hub) showing every SMS and Email reminder actually sent, with per-channel delivery status.',
       'Fixed the app shell so the sidebar menu and the main page now scroll independently of each other, instead of scrolling the side menu also moving the whole page.',
     ],
   },
   {
-    version: '0.9.11',
+    version: '0.9.12',
     date: 'July 18, 2026',
     highlights: [
       'New Topbar Global Search - search across Clients, Loan Accounts, and Loan Applications at once from a single search bar, with grouped results linking straight to each record.',
       'Notification Center now runs on a real background schedule - overdue-loan notifications are generated every 15 minutes automatically, instead of only when someone happened to open their notification bell.',
       'Loan Applications gained bulk actions - select multiple not-yet-decided applications and Decline Selected in one step (bulk-approve was deliberately left out, since each approval still needs its own product assignment).',
       'New in-app Help - a "?" button in the Topbar with contextual guidance for whichever page you\'re on, plus a browsable list covering every section of the platform.',
-      'New Dashboard "Loan Application Pipeline" funnel chart, built from real application counts at each stage (Submitted, Pre-approved, Approved, Disbursed).',
+      'Automatic SMS payment reminders - the full 5-stage schedule (5/3/1 days before due, on due date, weekly past due) now sends real text messages through EasyCash\'s existing M360/Globe SMS account, on a daily schedule, with a delivery-status badge on each Loan Account.',
+      'Automatic Email payment reminders - the same reminder schedule now also sends from EasyCash\'s own collections@easycash.ph mailbox, with a matching status badge.',
+      'SMS and Email reminder logs unified into one Reminder Logs page (also linked from the Reports Hub), showing every reminder actually sent with per-channel delivery status.',
+      'New MIS-only Settings > System toggle for the SMS/Email reminder channels - takes effect on the next scheduled run, no server restart needed; both default off, and were then temporarily locked in the UI to prevent accidentally switching either on before content and test sends are fully verified.',
+      'Fixed 16 backend tests left stale by the Under Review / Pre Approval pipeline refactor and a Borrower controller signature change - full backend test suite now passes 710/710 (711 after the reminder-settings tests landed).',
+    ],
+  },
+  {
+    version: '0.9.11',
+    date: 'July 17, 2026',
+    highlights: [
+      'Loan Application decision pipeline gained two real manual stages between the system\'s automatic pre-screen and the final call: "Under Review" (CRM/MIS records Credit Investigation notes, Credit Bureau result, and a document checklist as a structured Review Report) and "Pre Approval" (tagged once that report is complete) - matching the company\'s actual approval process instead of one direct Approve/Decline step. The final Approve is now restricted to MIS and Loan Operation Manager only - CRM\'s role stops at Pre Approval.',
+      'New Dashboard "Loan Application Pipeline" funnel chart - Total Applications through Released, with Declined branching off after Underwriting, built from real application counts at every stage.',
       'Settings > Appearance overhauled with five new personalization options, saved per staff account: Dashboard Layout (compact/comfortable, reorder or hide stat cards), Text Size (small/medium/large, scales the whole app), Landing Page (choose which page you land on after signing in), a Custom Accent Color picker, and the existing sidebar-collapsed preference is now per-account instead of shared on one machine.',
       'Notification Center added platform-wide - a bell icon with real, persisted notifications for application submitted, ready for final approval, approved/declined, and loan overdue, each linking straight to the record.',
-      'Fixed 16 backend tests left stale by recent pipeline and controller changes - full backend test suite now passes 710/710.',
+      'Widened several data-entry pop-up forms that felt cramped for how many fields they hold - Edit Client Details, Create Client Profile, Create Loan Application, Create Loan Account, and Record Payment now use noticeably more of the screen.',
+      'Fixed Record Payment sometimes not prefilling the payment amount - caused by the dialog auto-focusing the amount field the instant it opened, which the field mistook for an in-progress manual edit.',
+      'Fixed an overpaid loan\'s credit balance silently displaying as ₱0.00 instead of the real negative (credit) figure, in the loan list, loan summary, and the post-payment confirmation screen - the confirmation now also labels it clearly as "credit (overpaid)."',
+      'Fixed the Repayment Schedule\'s Balance column staying pinned at the full loan amount on every row until at least one payment was recorded, instead of declining installment by installment the way an amortization schedule should from day one.',
     ],
   },
   {
