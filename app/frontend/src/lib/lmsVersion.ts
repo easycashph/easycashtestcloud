@@ -59,6 +59,17 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.12',
+    date: 'July 18, 2026',
+    highlights: [
+      'Automatic SMS payment reminders - the full 5-stage schedule (5/3/1 days before due, on due date, weekly past due) now sends real text messages through EasyCash\'s existing M360/Globe SMS account, on a daily schedule, with a delivery-status badge on each Loan Account.',
+      'Automatic Email payment reminders - the same reminder schedule now also sends from EasyCash\'s own collections@easycash.ph mailbox, with a matching status badge and a dedicated log page.',
+      'New Settings > System tab (MIS-only) - turn the SMS and Email reminder channels on or off from within the app, no server restart needed; both start switched off by default until MIS is ready to enable them.',
+      'New Reminder Logs pages (also on the Reports Hub) showing every SMS and Email reminder actually sent, with per-channel delivery status.',
+      'Fixed the app shell so the sidebar menu and the main page now scroll independently of each other, instead of scrolling the side menu also moving the whole page.',
+    ],
+  },
+  {
     version: '0.9.11',
     date: 'July 18, 2026',
     highlights: [
