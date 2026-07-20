@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
@@ -422,6 +422,7 @@ export function MemberListPage() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<MemberDraft>(emptyDraft());
+  const [viewingUser, setViewingUser] = React.useState<User | null>(null);
   const [editingUser, setEditingUser] = React.useState<User | null>(null);
   const [deletingUser, setDeletingUser] = React.useState<User | null>(null);
   const [editDraft, setEditDraft] = React.useState<MemberDraft>(emptyDraft());
@@ -584,14 +585,17 @@ export function MemberListPage() {
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Created
                 </SortableTableHead>
-                {canManageMembers && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {sorted.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewingUser(user)}
+                      className="flex items-center gap-2 text-left hover:underline"
+                    >
                       <Avatar className="h-7 w-7">
                         <AvatarFallback className="text-xs">
                           {user.fullName
@@ -604,7 +608,7 @@ export function MemberListPage() {
                         </AvatarFallback>
                       </Avatar>
                       <span className="font-medium">{user.fullName}</span>
-                    </div>
+                    </button>
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>
@@ -626,18 +630,11 @@ export function MemberListPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDate(user.createdAt)}</TableCell>
-                  {canManageMembers && (
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => openEdit(user)}>
-                        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
-                      </Button>
-                    </TableCell>
-                  )}
                 </TableRow>
               ))}
               {sorted.length === 0 && !usersQuery.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={canManageMembers ? 7 : 6} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                     No staff accounts found.
                   </TableCell>
                 </TableRow>
@@ -657,6 +654,96 @@ export function MemberListPage() {
       </Card>
 
       <RecentActivityPanel label="Members" entityTypes={['Members', 'Member Details', 'LmsMember']} />
+
+      <Dialog open={viewingUser !== null} onOpenChange={(open) => !open && setViewingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewingUser?.fullName}</DialogTitle>
+            <DialogDescription>Full User Profile on file for this staff account.</DialogDescription>
+          </DialogHeader>
+          {viewingUser && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 sm:col-span-2">
+                <Avatar className="h-14 w-14">
+                  <AvatarFallback>
+                    {viewingUser.fullName
+                      .split(' ')
+                      .filter(Boolean)
+                      .map((p) => p[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-semibold">{viewingUser.fullName}</p>
+                  <Badge variant={viewingUser.status === 'ACTIVE' ? 'success' : viewingUser.status === 'SUSPENDED' ? 'destructive' : 'secondary'}>
+                    {viewingUser.status === 'ACTIVE' ? 'Active' : viewingUser.status === 'SUSPENDED' ? 'Suspended' : 'Inactive'}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Role</p>
+                <p className="text-sm">
+                  {viewingUser.roles.length > 0
+                    ? viewingUser.roles.map((r, i) => (
+                        <React.Fragment key={r}>
+                          {i > 0 && ', '}
+                          <RoleAbbr role={r} />
+                        </React.Fragment>
+                      ))
+                    : '—'}
+                  {viewingUser.roleClassName ? ` (${viewingUser.roleClassName})` : ''}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Branch</p>
+                <p className="text-sm">{viewingUser.branchName}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Email</p>
+                <p className="text-sm">{viewingUser.email}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Contact Number</p>
+                <p className="text-sm">{viewingUser.contactNumber || 'Not set'}</p>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Address</p>
+                <p className="text-sm">{viewingUser.address || 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Birthday</p>
+                <p className="text-sm">{viewingUser.birthday ? formatDate(viewingUser.birthday) : 'Not set'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Company ID</p>
+                <p className="text-sm">{viewingUser.companyId || 'Not set'}</p>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Account Created</p>
+                <p className="text-sm">{formatDate(viewingUser.createdAt)}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="sm:justify-between">
+            {canManageMembers && viewingUser && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  openEdit(viewingUser);
+                  setViewingUser(null);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" /> Edit Member
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setViewingUser(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>

@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ACCENT_OPTIONS, FONT_SIZE_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
 import { DASHBOARD_CARD_LABELS, useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
 import { LANDING_PAGE_OPTIONS, readLandingPage, writeLandingPage } from '@/lib/landingPagePreference';
@@ -104,6 +105,16 @@ function LanguageTab() {
   );
 }
 
+/** User.address is still a single free-text string on the wire (no structured region/province/
+ * city/barangay columns like Borrower's - that would need its own backend migration). Composes the
+ * cascading picker's parts into one formatted line for that existing field, PH-address-line style. */
+function composeAddressLine(draft: AddressDraft): string {
+  const line1 = [draft.houseUnitNumber, draft.street].filter(Boolean).join(' ');
+  return [line1, draft.barangay ? `Brgy. ${draft.barangay}` : '', draft.cityMunicipality, draft.province, draft.zipCode]
+    .filter(Boolean)
+    .join(', ');
+}
+
 function UserProfileTab() {
   const { currentAccount, refreshCurrentUser } = useRole();
   const queryClient = useQueryClient();
@@ -116,7 +127,10 @@ function UserProfileTab() {
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [contactNumber, setContactNumber] = React.useState('');
-  const [address, setAddress] = React.useState('');
+  // Starts blank rather than reverse-parsed from the existing free-text address (there's nothing
+  // reliable to split it back into region/province/city/barangay from) - saving leaves the existing
+  // address untouched unless the officer actively picks a new one below (see saveMutation).
+  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
   const [birthday, setBirthday] = React.useState('');
   const [saved, setSaved] = React.useState(false);
 
@@ -125,7 +139,6 @@ function UserProfileTab() {
     setFirstName(me.firstName);
     setLastName(me.lastName);
     setContactNumber(me.contactNumber ?? '');
-    setAddress(me.address ?? '');
     setBirthday(me.birthday ? me.birthday.slice(0, 10) : '');
   }, [me]);
 
@@ -133,11 +146,12 @@ function UserProfileTab() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const composedAddress = composeAddressLine(addressDraft);
       const body: UpdateOwnProfileRequest = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         contactNumber: contactNumber.trim() || null,
-        address: address.trim() || null,
+        address: composedAddress || me?.address || null,
         birthday: birthday || null,
       };
       return apiClient.patch<AuthenticatedUserView>('/users/me', body);
@@ -168,7 +182,7 @@ function UserProfileTab() {
         {meQuery.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
-          <form className="grid max-w-md gap-4" onSubmit={handleSave}>
+          <form className="grid max-w-xl gap-4" onSubmit={handleSave}>
             <div className="space-y-1.5">
               <Label>Profile Picture</Label>
               <div className="flex items-center gap-3">
@@ -198,8 +212,10 @@ function UserProfileTab() {
               <PhoneInput id="profile-contact" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="profile-address">Address</Label>
-              <Input id="profile-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <Label>Address</Label>
+              {me?.address && <p className="text-xs text-muted-foreground">Currently saved: {me.address}</p>}
+              <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
+              <p className="text-xs text-muted-foreground">Leave blank to keep the address above unchanged.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="profile-birthday">Birthday</Label>
