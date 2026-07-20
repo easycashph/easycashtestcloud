@@ -19,6 +19,8 @@ import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { formatDate, formatPeso } from '@/lib/utils';
 import { fetchAllPages } from '@/lib/apiClient';
+import { classifyProductType, PRODUCT_TYPE_ORDER } from '@/lib/productTypeClassification';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 
 const PAGE_SIZE = 25;
@@ -86,10 +88,14 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'MATURED' | 'ALL'; label: str
  * Real, server-side pagination (25 rows/page, Next/Previous - see `useCursorPagination`) replaced
  * the earlier "load every loan up front" approach that this doc comment used to flag as a temporary
  * stopgap - it became the actual frontend-lag problem it warned about. Borrower/loan-code search,
- * status, and product (2026-07-16) all go to backend query params, so a full page of up to 25
- * matching rows is always shown even with a filter applied - status is a direct equality filter;
- * product resolves the selected product name to every one of its LoanProductVersion ids client-side
- * (via the already-fetched full product catalog) and filters loan-accounts by that id set.
+ * status, Product Type, and Product Class (2026-07-16, Product Type added 2026-07-20) all go to
+ * backend query params, so a full page of up to 25 matching rows is always shown even with a
+ * filter applied - status is a direct equality filter; Product Type/Class resolve the selected
+ * product name(s) to every matching LoanProductVersion id client-side (via the already-fetched
+ * full product catalog, grouped by `classifyProductType` for the Type filter - same classification
+ * the Loan Products catalog and Create Loan Account's picker already use) and filter loan-accounts
+ * by that id set. Product Class narrows to the selected Product Type, same cascading UX as
+ * elsewhere in the app.
  */
 export function LoanListPage() {
   const navigate = useNavigate();
@@ -98,7 +104,9 @@ export function LoanListPage() {
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanAccountStatus | 'MATURED' | 'ALL'>('ALL');
+  const [productType, setProductType] = React.useState<string>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
+  const productTypeLabelsQuery = useProductTypeLabels();
 
   const productsQuery = useQuery({
     // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
@@ -120,11 +128,48 @@ export function LoanListPage() {
           versionIdsByProductName.set(p.name, [...(versionIdsByProductName.get(p.name) ?? []), v.id]);
         }
       }
-      return { versionToProduct, versionIdsByProductName, productNames: [...versionIdsByProductName.keys()].sort() };
+      const productNames = [...versionIdsByProductName.keys()].sort();
+      // 2026-07-20 (Product Type filter, user request): groups the same product names by
+      // `classifyProductType` - same classification the Loan Products catalog and Create Loan
+      // Account's own Product Type -> Product Class picker already use, so this filter behaves
+      // consistently with those instead of introducing a second definition of "type."
+      const productNamesByType = new Map<string, string[]>();
+      for (const name of productNames) {
+        const type = classifyProductType(name);
+        productNamesByType.set(type, [...(productNamesByType.get(type) ?? []), name]);
+      }
+      return { versionToProduct, versionIdsByProductName, productNames, productNamesByType };
     },
   });
 
-  const selectedProductVersionIds = product === 'ALL' ? undefined : productsQuery.data?.versionIdsByProductName.get(product);
+  const productTypeOptions = React.useMemo(
+    () => PRODUCT_TYPE_ORDER.filter((t) => productsQuery.data?.productNamesByType.has(t)),
+    [productsQuery.data],
+  );
+
+  // Product Class options narrow to the selected Product Type - mirrors the same cascading
+  // Product Type -> Product Class UX as Create Loan Account and Loan Application's picker.
+  const productOptions = React.useMemo(() => {
+    const data = productsQuery.data;
+    if (!data) return [];
+    return productType === 'ALL' ? data.productNames : (data.productNamesByType.get(productType) ?? []);
+  }, [productsQuery.data, productType]);
+
+  const handleProductTypeChange = (v: string) => {
+    setProductType(v);
+    setProduct('ALL');
+  };
+
+  const selectedProductVersionIds = React.useMemo(() => {
+    const data = productsQuery.data;
+    if (!data) return undefined;
+    if (product !== 'ALL') return data.versionIdsByProductName.get(product);
+    if (productType !== 'ALL') {
+      const names = data.productNamesByType.get(productType) ?? [];
+      return names.flatMap((n) => data.versionIdsByProductName.get(n) ?? []);
+    }
+    return undefined;
+  }, [productsQuery.data, product, productType]);
 
   const {
     items: loans,
@@ -143,10 +188,10 @@ export function LoanListPage() {
       loanProductVersionIds: selectedProductVersionIds && selectedProductVersionIds.length > 0 ? selectedProductVersionIds.join(',') : undefined,
     },
     PAGE_SIZE,
-    // Waits for the product catalog to load before the first fetch whenever a product filter is
-    // selected, so that request always carries the real version ids instead of firing once
-    // unfiltered and again a moment later once they resolve.
-    product === 'ALL' || Boolean(productsQuery.data),
+    // Waits for the product catalog to load before the first fetch whenever a product/product-type
+    // filter is selected, so that request always carries the real version ids instead of firing
+    // once unfiltered and again a moment later once they resolve.
+    (product === 'ALL' && productType === 'ALL') || Boolean(productsQuery.data),
   );
 
   // Still loaded in full for the name join - there's no batch "GET /borrowers?ids=" endpoint, and
@@ -182,11 +227,7 @@ export function LoanListPage() {
     });
   }, [loans, borrowerById, productsQuery.data]);
 
-  // From the full product catalog, not the current fetched page - every product stays selectable
-  // in the filter regardless of what's actually been paginated in yet.
-  const productOptions = React.useMemo(() => ['ALL', ...(productsQuery.data?.productNames ?? [])], [productsQuery.data]);
-
-  // status and product are already server-filtered above (via useCursorPagination's extraParams).
+  // status, product type, and product are already server-filtered above (via useCursorPagination's extraParams).
   const { sorted, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: 'createdAt', direction: 'desc' });
 
   return (
@@ -236,14 +277,28 @@ export function LoanListPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={product} onValueChange={setProduct}>
+            <Select value={productType} onValueChange={handleProductTypeChange}>
               <SelectTrigger className="w-full sm:w-52">
-                <SelectValue placeholder="All products" />
+                <SelectValue placeholder="All product types" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="ALL">All product types</SelectItem>
+                {productTypeOptions.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, t)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={product} onValueChange={setProduct}>
+              <SelectTrigger className="w-full sm:w-52">
+                <SelectValue placeholder="All product classes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All product classes</SelectItem>
                 {productOptions.map((p) => (
                   <SelectItem key={p} value={p}>
-                    {p === 'ALL' ? 'All products' : p}
+                    {p}
                   </SelectItem>
                 ))}
               </SelectContent>
