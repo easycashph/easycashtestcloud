@@ -1,12 +1,13 @@
 /**
- * Full meanings for role abbreviations shown across the LMS UI (see `RoleAbbr.tsx`).
- * Only roles that are actual abbreviations are listed here - "Finance", "Accounting", and
- * "Collection Officer" are already plain words and need no expansion.
+ * Full meanings/display labels for roles shown across the LMS UI (see `RoleAbbr.tsx`,
+ * `roleFullLabel()`). "Finance" and "Accounting" are already plain words and need no entry here.
  */
 export const ROLE_GLOSSARY: Record<string, { short: string; full: string }> = {
   MIS: { short: 'MIS', full: 'Management Information System' },
-  'Loan Operation Manager': { short: 'LOM', full: 'Loan Operation Manager' },
+  'Loan Operation Manager': { short: 'LOM', full: 'Loan Operation Management' },
   CRM: { short: 'CRM', full: 'Customer Relation Management' },
+  /** 2026-07-20 user request: shown as just "Collection" wherever the full label is used. */
+  'Collection Officer': { short: 'Collection Officer', full: 'Collection' },
 };
 
 /** Display label for a role - the short abbreviation where one exists, the role name otherwise. */
