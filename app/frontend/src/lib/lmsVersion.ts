@@ -59,6 +59,19 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.14',
+    date: 'July 20, 2026',
+    highlights: [
+      'Administration reorganized into one "System" page (Reminders, User Accounts, Loan Products, Product Types, Activity Logs as tabs) instead of several separate menu entries - and About moved out into its own new "Support" section so it\'s no longer buried under Administration.',
+      'Staff Accounts: clicking a member\'s name now opens their full Member Profile (contact number, address, birthday, company ID, and more) - the Actions column and per-row Edit button were removed from the table in favor of this.',
+      'Settings > Profile: Address is now the same Region → Province → City/Municipality → Barangay cascading picker used elsewhere in the app, instead of a free-text box.',
+      'Roles tab overhauled for easier setup: inline quick-add per Role Type (no dialog needed), a live staff-count badge on every Role Class, the ability to move a Role Class to a different Role Type, and a Delete option (blocked automatically if staff are still assigned to it).',
+      'New Product Types tab (Administration > System) - MIS can now rename how each Loan Products category is labeled (e.g. "Seafarer Loan"), and the new name shows up everywhere it\'s used - the Loan Products catalog, Create Loan Account, and Loan Applications.',
+      'Fixed a definition tooltip (the small "i" icon next to role abbreviations like MIS/LOM/CRM) getting visually cut off when it appeared inside a pop-up dialog.',
+      'Fixed the Dashboard occasionally failing to load entirely with a generic error screen after a backend update, caused by a newer chart expecting data an older backend deployment didn\'t send yet.',
+    ],
+  },
+  {
     version: '0.9.13',
     date: 'July 19, 2026',
     highlights: [
