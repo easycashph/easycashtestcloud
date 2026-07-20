@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 
@@ -61,5 +62,32 @@ export class PenaltyCalculator {
     }
 
     return balance.subtract(input.overdueAmount);
+  }
+
+  /**
+   * BSP Circular 1133 / SEC MC 3 (`ADR-053`, 2026-07-20): "5 percent per month on outstanding
+   * scheduled amount due" — read as SIMPLE (non-compounding), unlike `calculate()` above (ADR-050,
+   * used for loans NOT covered by SEC MC 3). Same grace-period/whole-months-late gating as
+   * `calculate()`, but `overdueAmount x rate x monthsLate` (linear), not compounded monthly.
+   * Applied only to loans confirmed SEC-MC3-covered by the caller (`CurrentPenaltyResolver`) — this
+   * method itself does not check coverage.
+   */
+  static calculateSimple(input: PenaltyCalculatorInput): Money {
+    const graceEndDate = addDays(input.dueDate, input.gracePeriodDays);
+    if (input.asOfDate.getTime() <= graceEndDate.getTime()) {
+      return Money.ZERO;
+    }
+
+    const monthsLate = wholeCalendarMonthsBetween(input.dueDate, input.asOfDate);
+    if (monthsLate <= 0) {
+      return Money.ZERO;
+    }
+
+    const amount = input.overdueAmount
+      .toDecimal()
+      .times(input.ratePercent.asFraction())
+      .times(monthsLate)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    return Money.of(amount);
   }
 }

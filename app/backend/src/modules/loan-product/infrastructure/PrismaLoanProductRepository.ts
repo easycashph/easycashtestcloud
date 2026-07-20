@@ -84,6 +84,7 @@ function toDomain(row: LoanProductRow): LoanProduct {
     code: row.code,
     name: row.name,
     description: row.description ?? undefined,
+    isUnsecuredGeneralPurpose: row.isUnsecuredGeneralPurpose,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     versions: row.versions.map(toVersionDomain),
@@ -94,8 +95,16 @@ function toDomain(row: LoanProductRow): LoanProduct {
 async function writeGraph(client: PrismaWriteClient, product: LoanProduct): Promise<void> {
   await client.loanProduct.upsert({
     where: { id: product.id },
-    create: { id: product.id, code: product.code, name: product.name, description: product.description, createdAt: product.createdAt, updatedAt: product.updatedAt },
-    update: { name: product.name, description: product.description, updatedAt: product.updatedAt },
+    create: {
+      id: product.id,
+      code: product.code,
+      name: product.name,
+      description: product.description,
+      isUnsecuredGeneralPurpose: product.isUnsecuredGeneralPurpose,
+      createdAt: product.createdAt,
+      updatedAt: product.updatedAt,
+    },
+    update: { name: product.name, description: product.description, isUnsecuredGeneralPurpose: product.isUnsecuredGeneralPurpose, updatedAt: product.updatedAt },
   });
 
   for (const version of product.versions) {

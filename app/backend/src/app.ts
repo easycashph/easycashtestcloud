@@ -598,6 +598,7 @@ export function createApp(): Express {
       reducePenaltyUseCase: new ReducePenaltyUseCase({
         repaymentInstallmentRepository,
         loanAccountRepository,
+        loanProductRepository,
         penaltyReductionRepository,
         financialAuditLogger,
         unitOfWork,
@@ -614,6 +615,7 @@ export function createApp(): Express {
         feeAdjustmentRepository,
       }),
       getLoanAccountUseCase, // H-1: branch check via the parent loan account.
+      loanProductRepository,
     },
     tokenService,
   );

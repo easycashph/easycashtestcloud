@@ -66,6 +66,7 @@ export function presentLoanProduct(loanProduct: LoanProduct) {
     code: loanProduct.code,
     name: loanProduct.name,
     description: loanProduct.description ?? null,
+    isUnsecuredGeneralPurpose: loanProduct.isUnsecuredGeneralPurpose,
     createdAt: loanProduct.createdAt.toISOString(),
     updatedAt: loanProduct.updatedAt.toISOString(),
     versions: loanProduct.versions.map(presentLoanProductVersion),

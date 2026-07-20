@@ -3,6 +3,8 @@ import type { Money } from '@shared/domain/Money';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
+import { resolveSecMc3Coverage } from '@modules/loan-account/application/services/SecMc3CoverageResolver';
+import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import { resolveComputedPenalty, resolveEffectivePenaltyDue } from '../../domain/CurrentPenaltyResolver';
 import { PenaltyReduction } from '../../domain/PenaltyReduction';
 import type { IRepaymentInstallmentRepository } from '../ports/IRepaymentInstallmentRepository';
@@ -11,6 +13,8 @@ import type { IPenaltyReductionRepository } from '../ports/IPenaltyReductionRepo
 export interface ReducePenaltyUseCaseDeps {
   repaymentInstallmentRepository: IRepaymentInstallmentRepository;
   loanAccountRepository: ILoanAccountRepository;
+  /** ADR-053: only needed to resolve the SEC MC 3 coverage ceiling for the reduction's validation amount. */
+  loanProductRepository: ILoanProductRepository;
   penaltyReductionRepository: IPenaltyReductionRepository;
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
@@ -52,6 +56,7 @@ export class ReducePenaltyUseCase {
     const currentPenalty = resolveComputedPenalty(installment, {
       isProspectiveLoan: !loanAccount.legacyId,
       principalAmount: loanAccount.principalAmount,
+      isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
     });
 
     const previousBalanceTrackedPenalty = resolveEffectivePenaltyDue(installment);

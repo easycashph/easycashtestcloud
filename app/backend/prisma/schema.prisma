@@ -358,6 +358,17 @@ model LoanProduct {
   name        String
   description String?
 
+  /// BSP Circular 1133 / SEC MC 3 (2022-07-20, confirmed with the user against
+  /// `legacy/SEC/BSP1133.pdf` and the SEC FAQ) — one of the four criteria that together determine
+  /// whether a loan is "covered" by the interest/penalty/EIR/total-cost ceilings: "unsecured,
+  /// general-purpose loan". A product-level classification (not per-version — whether a product is
+  /// secured/specific-purpose doesn't change across pricing versions). Confirmed true so far only
+  /// for SP-Flash, SL-LAZ, SML-REG, PFL-GAD (2026-07-20 user confirmation) — every other product
+  /// defaults to `false` (NOT confirmed unsecured/general-purpose, not "confirmed secured") pending
+  /// review; see ADR-053 §2 for the full list and status. Never inferred/guessed for a product not
+  /// explicitly confirmed by the user (CLAUDE.md: never fabricate financial/compliance logic).
+  isUnsecuredGeneralPurpose Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1341,11 +1352,13 @@ model GeneratedStatementOfAccount {
   /// that non-atomic read-then-use is an accepted tradeoff, same as the loan code precedent.
   soaSequenceNumber Int
 
-  /// Two DELIBERATELY SEPARATE, manually-entered "as of" dates (2026-07-19, user request) —
-  /// matches the legacy tool's own UI, which has independent "To Date" fields for Penalties and
-  /// for Accrued Interest, so staff can check each figure as of a different reference date before
-  /// generating rather than being forced to share one date for both.
-  penaltyAsOfDate         DateTime @db.Date
+  /// `penaltyFromDate`/`penaltyToDate` (2026-07-19, user request, corrected from a single
+  /// `penaltyAsOfDate`): a manually-entered date RANGE applied uniformly across every Past Due
+  /// installment for the Penalty computation (`unpaid balance x Days(from,to) x rate/30`) — NOT
+  /// each installment's own due date, unlike the legacy tool. `accruedInterestAsOfDate` remains
+  /// independent (matches the legacy tool's own separate "To Date" field for that section).
+  penaltyFromDate         DateTime @db.Date
+  penaltyToDate           DateTime @db.Date
   accruedInterestAsOfDate DateTime @db.Date
 
   currentAmortizationDue Decimal @db.Decimal(14, 2)
