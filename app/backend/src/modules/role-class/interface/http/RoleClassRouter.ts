@@ -15,6 +15,7 @@ export function createRoleClassRouter(controller: RoleClassController, tokenServ
   router.get('/role-classes', requireAuth, controller.list);
   router.post('/role-classes', requireAuth, requireMemberManagement, validateBody(createRoleClassSchema), controller.create);
   router.patch('/role-classes/:id', requireAuth, requireMemberManagement, validateBody(updateRoleClassSchema), controller.update);
+  router.delete('/role-classes/:id', requireAuth, requireMemberManagement, controller.delete);
 
   return router;
 }

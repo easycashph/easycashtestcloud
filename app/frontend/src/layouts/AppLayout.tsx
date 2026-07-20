@@ -5,14 +5,12 @@ import {
   Wallet,
   Menu,
   Users,
-  Package,
   FileSpreadsheet,
-  ShieldCheck,
-  ScrollText,
   FileCheck2,
   BellRing,
   Settings,
   Info,
+  SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -63,12 +61,11 @@ const NAV_GROUPS = [
   },
   {
     label: 'Administration',
-    items: [
-      { to: '/admin/members', label: 'User Accounts', icon: ShieldCheck, end: false },
-      { to: '/products', label: 'Loan Products', icon: Package, end: false },
-      { to: '/admin/activity-logs', label: 'Activity Logs', icon: ScrollText, end: false },
-      { to: '/admin/about', label: 'About', icon: Info, end: false },
-    ],
+    items: [{ to: '/admin/system', label: 'System', icon: SlidersHorizontal, end: false }],
+  },
+  {
+    label: 'Support',
+    items: [{ to: '/support/about', label: 'About', icon: Info, end: false }],
   },
 ];
 

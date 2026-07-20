@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, FilePlus2, Lock, Search, XCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle, AlertTriangle, ExternalLink, FilePlus2, Lock, Search, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Textarea } from '@/components/ui/textarea';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -138,17 +138,19 @@ export function LoanApplicationsPage() {
     canAccessLoanApplications,
   );
 
-  // Which of this page's applications' created loan accounts exist, and their status - an
-  // Approved application whose loan account has been created but not yet Activated shows as "For
-  // Disbursement" (matching the loan account's own APPROVED-status relabel); once Activated it
-  // shows as "Disbursed" instead. Mirrors the Loan Application Detail page's own relabel.
+  // Which of this page's applications' created loan accounts exist, their status, and loan code -
+  // status drives the "For Disbursement"/"Disbursed" relabel (an Approved application whose loan
+  // account has been created but not yet Activated shows as "For Disbursement", matching the loan
+  // account's own APPROVED-status relabel; once Activated it shows as "Disbursed" instead, mirrors
+  // the Loan Application Detail page's own relabel). loanCode (2026-07-20 user request) drives the
+  // new "Loan Account" column - the account an approved application actually turned into.
   const loanAccountsQuery = useQuery({
     queryKey: ['loan-accounts', 'all', 'statusOnly'],
-    queryFn: () => fetchAllPages<{ id: string; status: string }>('/loan-accounts'),
+    queryFn: () => fetchAllPages<{ id: string; status: string; loanCode: string }>('/loan-accounts'),
     enabled: canAccessLoanApplications,
   });
-  const loanAccountStatusById = React.useMemo(
-    () => new Map((loanAccountsQuery.data ?? []).map((l) => [l.id, l.status])),
+  const loanAccountById = React.useMemo(
+    () => new Map((loanAccountsQuery.data ?? []).map((l) => [l.id, l])),
     [loanAccountsQuery.data],
   );
 
@@ -158,10 +160,10 @@ export function LoanApplicationsPage() {
   const isForDisbursement = React.useCallback(
     (app: LoanApplication) => {
       if (app.status !== 'APPROVED' || !app.createdLoanAccountId) return false;
-      const loanAccountStatus = loanAccountStatusById.get(app.createdLoanAccountId);
+      const loanAccountStatus = loanAccountById.get(app.createdLoanAccountId)?.status;
       return loanAccountStatus === 'PENDING_APPROVAL' || loanAccountStatus === 'APPROVED';
     },
-    [loanAccountStatusById],
+    [loanAccountById],
   );
 
   // status and requestedCategory are already server-filtered above (via useCursorPagination's
@@ -378,6 +380,7 @@ export function LoanApplicationsPage() {
                 <SortableTableHead sortKey="status" currentSort={sort} onSort={toggleSort}>
                   Decision Status
                 </SortableTableHead>
+                <TableHead>Loan Account</TableHead>
                 <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
                   Submitted
                 </SortableTableHead>
@@ -429,13 +432,27 @@ export function LoanApplicationsPage() {
                       </Badge>
                     ) : (
                       (() => {
-                        const loanAccountStatus = app.createdLoanAccountId ? loanAccountStatusById.get(app.createdLoanAccountId) : undefined;
+                        const loanAccountStatus = app.createdLoanAccountId ? loanAccountById.get(app.createdLoanAccountId)?.status : undefined;
                         if (app.status === 'APPROVED' && loanAccountStatus) {
                           const isActivated = loanAccountStatus !== 'PENDING_APPROVAL' && loanAccountStatus !== 'APPROVED';
                           return <Badge variant="success">{isActivated ? 'Disbursed' : 'For Disbursement'}</Badge>;
                         }
                         return <Badge variant={STATUS_BADGE_VARIANT[app.status]}>{STATUS_DISPLAY_LABEL[app.status]}</Badge>;
                       })()
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {app.createdLoanAccountId ? (
+                      <Link
+                        to={`/loans/${app.createdLoanAccountId}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                      >
+                        {loanAccountById.get(app.createdLoanAccountId)?.loanCode ?? app.createdLoanAccountId}
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
                   <TableCell
@@ -448,7 +465,7 @@ export function LoanApplicationsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={canReviewLoanApplication ? 6 : 5} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={canReviewLoanApplication ? 7 : 6} className="py-10 text-center text-sm text-muted-foreground">
                     {applicationsQuery.isLoading ? 'Loading applications…' : 'No applications match your search/filter.'}
                   </TableCell>
                 </TableRow>

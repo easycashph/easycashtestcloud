@@ -15,7 +15,6 @@ import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
 import { ClientListPage } from '@/pages/ClientListPage';
 import { ClientCreatePage } from '@/pages/ClientCreatePage';
 import { ClientProfilePage } from '@/pages/ClientProfilePage';
-import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { StatementOfAccountPage } from '@/pages/StatementOfAccountPage';
 import { LoanReportPage } from '@/pages/LoanReportPage';
 import { CollectionReportPage } from '@/pages/CollectionReportPage';
@@ -30,9 +29,8 @@ import { FirstAmortizationReportPage } from '@/pages/FirstAmortizationReportPage
 import { DailyCollectionReportPage } from '@/pages/DailyCollectionReportPage';
 import { FullyPaidAccountsReportPage } from '@/pages/FullyPaidAccountsReportPage';
 import { ReportsHubPage } from '@/pages/ReportsHubPage';
-import { MemberListPage } from '@/pages/MemberListPage';
-import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { SystemPage } from '@/pages/SystemPage';
 import { AboutPage } from '@/pages/AboutPage';
 
 /**
@@ -82,7 +80,7 @@ export default function App() {
         <Route path="clients" element={<ClientListPage />} />
         <Route path="clients/new" element={<ClientCreatePage />} />
         <Route path="clients/:borrowerId" element={<ClientProfilePage />} />
-        <Route path="products" element={<LoanProductsPage />} />
+        <Route path="products" element={<Navigate to="/admin/system?tab=products" replace />} />
         <Route path="payments" element={<PaymentRecordingPage />} />
         <Route path="reports" element={<ReportsHubPage />} />
         <Route path="reports/loans" element={<LoanReportPage />} />
@@ -99,9 +97,11 @@ export default function App() {
         <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
         <Route path="reports/reminder-logs" element={<ReminderLogsPage />} />
         <Route path="configuration/settings" element={<SettingsPage />} />
-        <Route path="admin/members" element={<MemberListPage />} />
-        <Route path="admin/activity-logs" element={<ActivityLogPage />} />
-        <Route path="admin/about" element={<AboutPage />} />
+        <Route path="admin/members" element={<Navigate to="/admin/system?tab=members" replace />} />
+        <Route path="admin/activity-logs" element={<Navigate to="/admin/system?tab=activity-logs" replace />} />
+        <Route path="admin/system" element={<SystemPage />} />
+        <Route path="admin/about" element={<Navigate to="/support/about" replace />} />
+        <Route path="support/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

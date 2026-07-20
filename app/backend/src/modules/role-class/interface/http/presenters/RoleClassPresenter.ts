@@ -5,6 +5,7 @@ export interface RoleClassHTTPResponse {
   roleId: string;
   roleName: string;
   name: string;
+  userCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -16,6 +17,7 @@ export function presentRoleClass(roleClass: RoleClass): RoleClassHTTPResponse {
     roleId: props.roleId,
     roleName: props.roleName,
     name: props.name,
+    userCount: props.userCount,
     createdAt: props.createdAt.toISOString(),
     updatedAt: props.updatedAt.toISOString(),
   };

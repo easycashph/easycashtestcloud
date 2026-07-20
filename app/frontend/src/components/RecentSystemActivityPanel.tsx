@@ -3,14 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
-import type { AuditLog } from '@/lib/auditLogApiTypes';
 
 interface RecentSystemActivityPanelProps {
   limit?: number;
 }
 
-/** How many raw records to fetch to reliably end up with `limit` non-noise entries after filtering VIEW_SECTION out. */
-const FETCH_MULTIPLIER = 5;
+/** Stripped-down shape returned by the all-roles `/audit-logs/recent-activity` endpoint - see `RecentActivityPresenter` on the backend for why this omits previousValue/newValue/ipAddress/userAgent. */
+interface RecentActivityRecord {
+  id: string;
+  userName: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityLabel: string | null;
+  createdAt: string;
+}
 
 /** action -> verb phrase applied to "{userName} {verb} {entity link, if any}". No trailing punctuation. */
 const ACTION_VERB: Record<string, string> = {
@@ -30,7 +37,7 @@ const ACTION_VERB: Record<string, string> = {
   REDUCE_PENALTY: 'reduced a penalty on',
   REJECT_LOAN: 'rejected loan',
   REVERSE_PAYMENT: 'reversed a payment on',
-  REVERT_LOAN_APPLICATION_DECISION: "reverted the decision on",
+  REVERT_LOAN_APPLICATION_DECISION: 'reverted the decision on',
   START_LOAN_APPLICATION_REVIEW: 'started reviewing',
   TAG_LOAN_APPLICATION_PRE_APPROVAL: 'tagged pre-approval on',
   UNDO_ACTIVATE_LOAN: 'undid the disbursement of',
@@ -69,35 +76,35 @@ function formatRelative(dateString: string): string {
 }
 
 /**
- * Dashboard-wide "who's doing what right now" widget - MIS-only, backed by the same `/audit-logs`
- * audit trail as the per-record `RecentActivityPanel` and the full Administration > Activity Logs
- * page, but NOT scoped to one entity: shows the latest meaningful actions across every user and
- * every record. VIEW_SECTION (page-view) events are filtered out client-side - the backend has no
- * action-type filter, so this over-fetches and trims to `limit` after dropping the noise.
+ * Dashboard-wide "who's doing what right now" widget - visible to every role (unlike the MIS-only
+ * full audit trail at Administration > Activity Logs), backed by the stripped-down
+ * `/audit-logs/recent-activity` endpoint so no sensitive audit detail (previous/new values, IP,
+ * user agent) leaves the MIS-only surface. Shows the latest meaningful actions across every user
+ * and record; VIEW_SECTION (page-view) events are excluded server-side via `excludeActions`.
  */
 export function RecentSystemActivityPanel({ limit = 6 }: RecentSystemActivityPanelProps) {
   const { canViewActivityLogs } = useRole();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['audit-logs', 'recent-system', limit],
-    queryFn: () => apiClient.get<{ items: AuditLog[] }>(`/audit-logs?limit=${limit * FETCH_MULTIPLIER}`),
-    enabled: canViewActivityLogs,
+    queryKey: ['audit-logs', 'recent-activity', limit],
+    queryFn: () =>
+      apiClient.get<{ items: RecentActivityRecord[] }>(`/audit-logs/recent-activity?limit=${limit}&excludeActions=VIEW_SECTION`),
   });
 
-  if (!canViewActivityLogs) return null;
-
-  const recent = (data?.items ?? []).filter((log) => log.action !== 'VIEW_SECTION').slice(0, limit);
+  const recent = data?.items ?? [];
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <p className="text-base font-medium leading-none">Recent system activity</p>
-          <p className="mt-1.5 text-sm text-muted-foreground">MIS-only · all users, most recent first</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">All users, most recent first</p>
         </div>
-        <Link to="/admin/activity-logs" className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline">
-          View all
-        </Link>
+        {canViewActivityLogs && (
+          <Link to="/admin/activity-logs" className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline">
+            View all
+          </Link>
+        )}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -110,10 +117,7 @@ export function RecentSystemActivityPanel({ limit = 6 }: RecentSystemActivityPan
               const verb = ACTION_VERB[log.action] ?? log.action.toLowerCase().replaceAll('_', ' ');
               const routePrefix = ENTITY_ROUTE[log.entityType];
               return (
-                <li
-                  key={log.id}
-                  className={`flex items-center gap-3 py-2.5 ${index > 0 ? 'border-t' : ''}`}
-                >
+                <li key={log.id} className={`flex items-center gap-3 py-2.5 ${index > 0 ? 'border-t' : ''}`}>
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
                     {initials(log.userName)}
                   </div>

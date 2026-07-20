@@ -8,6 +8,8 @@ export interface RoleClass {
   roleId: string;
   roleName: string;
   name: string;
+  /** How many staff accounts currently hold this Role Class - a Role Class with a count above 0 cannot be deleted. */
+  userCount: number;
   createdAt: string;
   updatedAt: string;
 }

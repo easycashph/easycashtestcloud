@@ -33,6 +33,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import { classifyProductType } from '@/lib/productTypeClassification';
+import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type {
   CreditBureauResult,
   LoanApplication,
@@ -944,6 +945,7 @@ export function LoanApplicationDetailPage() {
   // from whatever the application is currently assigned to, if it falls under one of the 3 curated
   // types; otherwise starts unset so staff picks a type first.
   const [selectedProductType, setSelectedProductType] = React.useState<LoanTypeOption | ''>('');
+  const productTypeLabelsQuery = useProductTypeLabels();
   React.useEffect(() => {
     if (assignedProductName) {
       const resolvedType = findLoanTypeForProductName(assignedProductName);
@@ -1269,7 +1271,7 @@ export function LoanApplicationDetailPage() {
                       <SelectContent>
                         {LOAN_TYPE_OPTIONS.map((type) => (
                           <SelectItem key={type} value={type}>
-                            {type}
+                            {productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, type)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1310,12 +1312,26 @@ export function LoanApplicationDetailPage() {
                 <div className="grid gap-3 sm:grid-cols-2 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Assigned product type</p>
-                    <p className="font-medium">{selectedProductType || 'Not assigned'}</p>
+                    <p className="font-medium">
+                      {selectedProductType ? productTypeLabel(productTypeLabelsQuery.data?.productTypeLabels, selectedProductType) : 'Not assigned'}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Assigned product class</p>
                     <p className="font-mono">{assignedProductName ?? 'Not assigned'}</p>
                   </div>
+                  {application.createdLoanAccountId && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Loan Account</p>
+                      <Link
+                        to={`/loans/${application.createdLoanAccountId}`}
+                        className="inline-flex items-center gap-1.5 font-mono text-primary hover:underline"
+                      >
+                        <Landmark className="h-3.5 w-3.5" />
+                        {application.createdLoanAccountCode ?? application.createdLoanAccountId}
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

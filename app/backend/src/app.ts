@@ -124,6 +124,12 @@ import { RoleClassController } from '@modules/role-class/interface/http/RoleClas
 import { ListRoleClassesUseCase } from '@modules/role-class/application/use-cases/ListRoleClassesUseCase';
 import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
 import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
+import { DeleteRoleClassUseCase } from '@modules/role-class/application/use-cases/DeleteRoleClassUseCase';
+import { createProductTypeLabelRouter } from '@modules/product-type-label/interface/http/ProductTypeLabelRouter';
+import { ProductTypeLabelController } from '@modules/product-type-label/interface/http/ProductTypeLabelController';
+import { ListProductTypeLabelsUseCase } from '@modules/product-type-label/application/use-cases/ListProductTypeLabelsUseCase';
+import { UpdateProductTypeLabelUseCase } from '@modules/product-type-label/application/use-cases/UpdateProductTypeLabelUseCase';
+import { PrismaProductTypeLabelRepository } from '@modules/product-type-label/infrastructure/PrismaProductTypeLabelRepository';
 import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/PrismaRoleClassRepository';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
@@ -322,9 +328,19 @@ export function createApp(): Express {
     listRoleClassesUseCase: new ListRoleClassesUseCase({ roleClassRepository }),
     createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository, auditLogger }),
     updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository, auditLogger }),
+    deleteRoleClassUseCase: new DeleteRoleClassUseCase({ roleClassRepository, auditLogger }),
   });
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);
+
+  // --- product-type-label module wiring: renamable display labels for the Loan Products catalog's Product Type groupings ---
+  const productTypeLabelRepository = new PrismaProductTypeLabelRepository();
+  const productTypeLabelController = new ProductTypeLabelController({
+    listProductTypeLabelsUseCase: new ListProductTypeLabelsUseCase({ productTypeLabelRepository }),
+    updateProductTypeLabelUseCase: new UpdateProductTypeLabelUseCase({ productTypeLabelRepository, auditLogger }),
+  });
+  const productTypeLabelRouter = createProductTypeLabelRouter(productTypeLabelController, tokenService);
+  app.use('/api/v1', productTypeLabelRouter);
 
   // --- profile-activity module wiring: ADR-050 — track loan officer actions on profiles ---
   // Instantiated here early so it can be injected into borrower, loan-account, and loan-application use cases.

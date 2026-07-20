@@ -8,6 +8,7 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
     const where: Prisma.AuditLogWhereInput = {
       ...(options.entityTypes && options.entityTypes.length > 0 ? { entityType: { in: options.entityTypes } } : {}),
       ...(options.entityId ? { entityId: options.entityId } : {}),
+      ...(options.excludeActions && options.excludeActions.length > 0 ? { action: { notIn: options.excludeActions } } : {}),
       ...(options.search
         ? {
             OR: [

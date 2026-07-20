@@ -64,7 +64,7 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
           <CardDescription>MIS-only · recent to oldest</CardDescription>
         </div>
         {recent.length === limit && (
-          <Link to="/admin/activity-logs" className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline">
+          <Link to="/admin/system?tab=activity-logs" className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline">
             View All Activity
           </Link>
         )}
