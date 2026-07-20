@@ -7,6 +7,14 @@ interface CursorPage<T> {
   nextCursor: string | null;
 }
 
+/** Stable fallback reference for `items` while `query.data` is undefined (loading, or between a
+ * filter change and its first response) - `?? []` would otherwise create a brand-new array every
+ * render, and any caller's `useEffect` keyed on that array (e.g. resetting a selection whenever the
+ * page's data changes) would see a "changed" dependency on every single render and re-fire in a
+ * tight loop until the query actually resolves - observed live as React's "Maximum update depth
+ * exceeded" warning on the List of Loan Applications page (2026-07-20). */
+const EMPTY_ITEMS: never[] = [];
+
 /**
  * Real, cursor-driven Next/Previous pagination - replaces the earlier `fetchAllPages` "load
  * everything up front" pattern on list pages, which was the direct cause of frontend lag once a
@@ -72,7 +80,7 @@ export function useCursorPagination<T>(
   const goPrev = () => setPageIndex((i) => Math.max(0, i - 1));
 
   return {
-    items: query.data?.items ?? [],
+    items: query.data?.items ?? EMPTY_ITEMS,
     query,
     pageNumber: pageIndex + 1,
     hasNext: Boolean(query.data?.nextCursor),
