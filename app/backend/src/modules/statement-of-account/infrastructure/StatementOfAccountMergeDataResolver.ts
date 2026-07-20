@@ -102,7 +102,10 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       CoBorrowerAddress: formatAddress(coBorrower?.addresses[0]?.toProps()),
       SOANumber: soaNumber,
       PNNumber: loanAccount.loanCode,
-      LoanDate: loanAccount.anticipatedDisbursementDate ? formatDate(loanAccount.anticipatedDisbursementDate) : '',
+      LoanDate: (() => {
+        const loanDate = loanAccount.anticipatedDisbursementDate ?? loanAccount.activatedAt;
+        return loanDate ? formatDate(loanDate) : '';
+      })(),
       Term: `${loanAccount.installmentCount} months`,
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
       PNValue: pnValue.toString(),
