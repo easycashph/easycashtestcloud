@@ -59,6 +59,20 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.11',
+    date: 'July 18, 2026',
+    highlights: [
+      'New Topbar Global Search - search across Clients, Loan Accounts, and Loan Applications at once from a single search bar, with grouped results linking straight to each record.',
+      'Notification Center now runs on a real background schedule - overdue-loan notifications are generated every 15 minutes automatically, instead of only when someone happened to open their notification bell.',
+      'Loan Applications gained bulk actions - select multiple not-yet-decided applications and Decline Selected in one step (bulk-approve was deliberately left out, since each approval still needs its own product assignment).',
+      'New in-app Help - a "?" button in the Topbar with contextual guidance for whichever page you\'re on, plus a browsable list covering every section of the platform.',
+      'New Dashboard "Loan Application Pipeline" funnel chart, built from real application counts at each stage (Submitted, Pre-approved, Approved, Disbursed).',
+      'Settings > Appearance overhauled with five new personalization options, saved per staff account: Dashboard Layout (compact/comfortable, reorder or hide stat cards), Text Size (small/medium/large, scales the whole app), Landing Page (choose which page you land on after signing in), a Custom Accent Color picker, and the existing sidebar-collapsed preference is now per-account instead of shared on one machine.',
+      'Notification Center added platform-wide - a bell icon with real, persisted notifications for application submitted, ready for final approval, approved/declined, and loan overdue, each linking straight to the record.',
+      'Fixed 16 backend tests left stale by recent pipeline and controller changes - full backend test suite now passes 710/710.',
+    ],
+  },
+  {
     version: '0.9.10',
     date: 'July 16, 2026',
     highlights: [
