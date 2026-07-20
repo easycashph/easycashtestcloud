@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { PaginationControls } from '@/components/PaginationControls';
+import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -389,6 +390,8 @@ export function LoanListPage() {
           />
         </CardContent>
       </Card>
+
+      <RecentActivityPanel label="List of Loan Accounts" entityTypes={['LoanAccount', 'Loan Accounts']} />
     </div>
   );
 }
