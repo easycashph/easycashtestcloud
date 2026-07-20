@@ -1962,7 +1962,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <CardDescription>Log of all actions taken on this loan account by loan officers</CardDescription>
         </CardHeader>
         <CardContent>
-          <ProfileActivityTimeline profileType="LOAN_ACCOUNT" profileId={loan.id} />
+          <ProfileActivityTimeline profileType="LOAN_ACCOUNT" profileId={loan.id} showDetailsToggle={false} />
         </CardContent>
       </Card>
 

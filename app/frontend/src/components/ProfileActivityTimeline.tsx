@@ -20,6 +20,7 @@ interface ProfileActivityTimelineProps {
   profileId: string;
   limit?: number;
   onError?: (error: Error) => void;
+  showDetailsToggle?: boolean;
 }
 
 function activityBasePath(profileType: ProfileType): string {
@@ -43,7 +44,13 @@ function formatRelativeOrAbsolute(dateString: string): string {
   return formatDateTime(dateString);
 }
 
-export function ProfileActivityTimeline({ profileType, profileId, limit = 50, onError }: ProfileActivityTimelineProps) {
+export function ProfileActivityTimeline({
+  profileType,
+  profileId,
+  limit = 50,
+  onError,
+  showDetailsToggle = true,
+}: ProfileActivityTimelineProps) {
   const [cursor, setCursor] = React.useState<string | undefined>();
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
   // Cursor pagination fetches one page per queryKey - accumulated here across "Load more" clicks
@@ -139,7 +146,7 @@ export function ProfileActivityTimeline({ profileType, profileId, limit = 50, on
                   </span>
                 </div>
 
-                {hasDetails && (
+                {showDetailsToggle && hasDetails && (
                   <button
                     type="button"
                     onClick={() => toggleExpanded(activity.id)}
@@ -157,7 +164,7 @@ export function ProfileActivityTimeline({ profileType, profileId, limit = 50, on
                   </button>
                 )}
 
-                {isExpanded && (
+                {showDetailsToggle && isExpanded && (
                   <div className="mt-3 rounded-md border bg-secondary/30 p-3">
                     <pre className="max-h-64 overflow-auto font-mono text-xs text-muted-foreground">
                       {JSON.stringify(activity.details, null, 2)}
