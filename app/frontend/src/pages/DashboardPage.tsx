@@ -324,7 +324,11 @@ const PIPELINE_STAGE_STYLE: Record<string, { fill: string; text: string }> = {
  * taper and a "Declined 300%" reading. Now leads with an explicit "Total Applications" bar (every
  * stage + declined summed) as the taper's basis, so % is always relative to a real, non-zero total.
  */
-function LoanApplicationPipelineFunnel({ pipeline }: { pipeline: DashboardSummary['loanApplicationPipeline'] }) {
+function LoanApplicationPipelineFunnel({ pipeline: pipelineProp }: { pipeline: DashboardSummary['loanApplicationPipeline'] | undefined }) {
+  // Defensive against an older backend deployment that predates this field (would otherwise be
+  // `undefined` on the wire despite the type saying required) - falls back to an all-zero pipeline
+  // instead of crashing the whole Dashboard.
+  const pipeline = pipelineProp ?? { requirementCompliance: 0, underwriting: 0, review: 0, approved: 0, released: 0, declined: 0 };
   const totalApplications =
     pipeline.requirementCompliance + pipeline.underwriting + pipeline.review + pipeline.approved + pipeline.released + pipeline.declined;
   const stages: { key: keyof typeof PIPELINE_STAGE_STYLE; label: string; value: number }[] = [
