@@ -8,6 +8,9 @@ export interface RoleClassProps {
   roleId: string;
   roleName: string;
   name: string;
+  /** How many staff accounts currently hold this Role Class - shown in the UI, and what the
+   * delete guard checks (a Role Class still in use cannot be deleted). */
+  userCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +36,10 @@ export class RoleClass {
 
   get name(): string {
     return this.props.name;
+  }
+
+  get userCount(): number {
+    return this.props.userCount;
   }
 
   get createdAt(): Date {

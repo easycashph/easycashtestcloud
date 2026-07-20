@@ -11,7 +11,8 @@ export interface CreateRoleClassInput {
 }
 
 export interface UpdateRoleClassInput {
-  name: string;
+  name?: string;
+  roleId?: string;
 }
 
 export interface IRoleClassRepository {
@@ -21,4 +22,6 @@ export interface IRoleClassRepository {
   findById(id: string): Promise<RoleClass | null>;
   create(input: CreateRoleClassInput): Promise<RoleClass>;
   update(id: string, input: UpdateRoleClassInput): Promise<RoleClass>;
+  /** Guarded by the use case, not the repository - callers must confirm `userCount === 0` first. */
+  delete(id: string): Promise<void>;
 }

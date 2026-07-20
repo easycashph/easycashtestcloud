@@ -124,6 +124,7 @@ import { RoleClassController } from '@modules/role-class/interface/http/RoleClas
 import { ListRoleClassesUseCase } from '@modules/role-class/application/use-cases/ListRoleClassesUseCase';
 import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
 import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
+import { DeleteRoleClassUseCase } from '@modules/role-class/application/use-cases/DeleteRoleClassUseCase';
 import { PrismaRoleClassRepository } from '@modules/role-class/infrastructure/PrismaRoleClassRepository';
 import { ListUsersUseCase } from '@modules/identity/application/use-cases/ListUsersUseCase';
 import { CreateUserUseCase } from '@modules/identity/application/use-cases/CreateUserUseCase';
@@ -316,6 +317,7 @@ export function createApp(): Express {
     listRoleClassesUseCase: new ListRoleClassesUseCase({ roleClassRepository }),
     createRoleClassUseCase: new CreateRoleClassUseCase({ roleClassRepository, auditLogger }),
     updateRoleClassUseCase: new UpdateRoleClassUseCase({ roleClassRepository, auditLogger }),
+    deleteRoleClassUseCase: new DeleteRoleClassUseCase({ roleClassRepository, auditLogger }),
   });
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);

@@ -226,12 +226,20 @@ interface RoleClassDraft {
  * Role Types themselves). Wired to the real backend (`GET/POST /role-classes`, `PATCH
  * /role-classes/:id`).
  */
+/**
+ * 2026-07-20 user request - made this tab genuinely self-service for setting up Roles: inline
+ * quick-add per Role Type card (no dialog needed for the common case), a live staff-count badge per
+ * Role Class, moving a Role Class to a different Role Type (previously rename-only), and Delete -
+ * blocked server-side (`DeleteRoleClassUseCase`) whenever staff are still assigned to it, so a
+ * delete can never silently blank out someone's job title.
+ */
 function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
   const queryClient = useQueryClient();
-  const [addOpen, setAddOpen] = React.useState(false);
-  const [addDraft, setAddDraft] = React.useState<RoleClassDraft>({ roleId: '', name: '' });
+  const [quickAddName, setQuickAddName] = React.useState<Record<string, string>>({});
   const [editingClass, setEditingClass] = React.useState<RoleClass | null>(null);
-  const [editName, setEditName] = React.useState('');
+  const [editDraft, setEditDraft] = React.useState<RoleClassDraft>({ roleId: '', name: '' });
+  const [deletingClass, setDeletingClass] = React.useState<RoleClass | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ['role-classes'],
@@ -250,48 +258,59 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
     return map;
   }, [roleClasses]);
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['role-classes'] });
+
   const createMutation = useMutation({
-    mutationFn: () => apiClient.post<RoleClass>('/role-classes', { roleId: addDraft.roleId, name: addDraft.name }),
-    onSuccess: () => {
-      setAddOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['role-classes'] });
+    mutationFn: ({ roleId, name }: RoleClassDraft) => apiClient.post<RoleClass>('/role-classes', { roleId, name }),
+    onSuccess: (_created, variables) => {
+      setQuickAddName((prev) => ({ ...prev, [variables.roleId]: '' }));
+      invalidate();
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!editingClass) return Promise.reject(new Error('No Role Class selected'));
-      return apiClient.patch<RoleClass>(`/role-classes/${editingClass.id}`, { name: editName });
+      return apiClient.patch<RoleClass>(`/role-classes/${editingClass.id}`, { name: editDraft.name, roleId: editDraft.roleId });
     },
     onSuccess: () => {
       setEditingClass(null);
-      queryClient.invalidateQueries({ queryKey: ['role-classes'] });
+      invalidate();
     },
   });
 
-  const openAdd = (roleId?: string) => {
-    setAddDraft({ roleId: roleId ?? roleTypes[0]?.id ?? '', name: '' });
-    setAddOpen(true);
+  const deleteMutation = useMutation({
+    mutationFn: (roleClass: RoleClass) => apiClient.delete<void>(`/role-classes/${roleClass.id}`),
+    onSuccess: () => {
+      setDeletingClass(null);
+      setDeleteError(null);
+      invalidate();
+    },
+    onError: (err) => setDeleteError(err instanceof Error ? err.message : 'Could not delete the Role Class.'),
+  });
+
+  const submitQuickAdd = (roleId: string) => {
+    const name = (quickAddName[roleId] ?? '').trim();
+    if (!name || createMutation.isPending) return;
+    createMutation.mutate({ roleId, name });
   };
 
   const openEdit = (roleClass: RoleClass) => {
     setEditingClass(roleClass);
-    setEditName(roleClass.name);
+    setEditDraft({ roleId: roleClass.roleId, name: roleClass.name });
+  };
+
+  const openDelete = (roleClass: RoleClass) => {
+    setDeleteError(null);
+    setDeletingClass(roleClass);
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          Role Type - what a Role Class belongs under. Role Class - a job title within that Role Type. Organizational labels only; they
-          do not change LMS access.
-        </p>
-        {canManageMembers && (
-          <Button onClick={() => openAdd()}>
-            <Plus className="mr-2 h-4 w-4" /> Add Role Class
-          </Button>
-        )}
-      </div>
+      <p className="text-sm text-muted-foreground">
+        Role Type - what a Role Class belongs under. Role Class - a job title within that Role Type. Organizational labels only; they do
+        not change LMS access.
+      </p>
 
       {query.isError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -299,31 +318,47 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
         </div>
       )}
 
+      {createMutation.isError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the Role Class.'}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         {roleTypes.map((roleType: RoleType) => (
           <Card key={roleType.id}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <RoleAbbr role={roleType.name} />
-                </CardTitle>
-                <CardDescription>Role Type</CardDescription>
-              </div>
-              {canManageMembers && (
-                <Button variant="outline" size="sm" onClick={() => openAdd(roleType.id)}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add
-                </Button>
-              )}
+            <CardHeader className="space-y-0">
+              <CardTitle className="flex items-center gap-1.5 text-base">
+                <RoleAbbr role={roleType.name} />
+              </CardTitle>
+              <CardDescription>Role Type</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <ul className="space-y-1.5">
                 {(classesByRole.get(roleType.id) ?? []).map((rc) => (
                   <li key={rc.id} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
-                    <span>{rc.name}</span>
+                    <span className="flex items-center gap-2">
+                      {rc.name}
+                      <Badge variant="outline" className="text-[10px]">
+                        {rc.userCount} {rc.userCount === 1 ? 'staff member' : 'staff members'}
+                      </Badge>
+                    </span>
                     {canManageMembers && (
-                      <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => openEdit(rc)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <span className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => openEdit(rc)} aria-label={`Edit ${rc.name}`}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-destructive hover:text-destructive"
+                          onClick={() => openDelete(rc)}
+                          aria-label={`Delete ${rc.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </span>
                     )}
                   </li>
                 ))}
@@ -331,21 +366,46 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
                   <li className="py-2 text-center text-xs text-muted-foreground">No Role Classes yet.</li>
                 )}
               </ul>
+              {canManageMembers && (
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    submitQuickAdd(roleType.id);
+                  }}
+                >
+                  <Input
+                    value={quickAddName[roleType.id] ?? ''}
+                    onChange={(e) => setQuickAddName((prev) => ({ ...prev, [roleType.id]: e.target.value }))}
+                    placeholder="e.g. MIS Manager"
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0"
+                    disabled={!(quickAddName[roleType.id] ?? '').trim() || createMutation.isPending}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={editingClass !== null} onOpenChange={(open) => !open && setEditingClass(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Role Class</DialogTitle>
-            <DialogDescription>Creates a new job-title label under a Role Type.</DialogDescription>
+            <DialogTitle>Edit Role Class</DialogTitle>
+            <DialogDescription>Renames this job-title label, or moves it to a different Role Type.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="space-y-1.5">
               <Label>Role Type</Label>
-              <Select value={addDraft.roleId} onValueChange={(v) => setAddDraft((d) => ({ ...d, roleId: v }))}>
+              <Select value={editDraft.roleId} onValueChange={(v) => setEditDraft((d) => ({ ...d, roleId: v }))}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -360,35 +420,8 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
             </div>
             <div className="space-y-1.5">
               <Label>Role Class</Label>
-              <Input value={addDraft.name} onChange={(e) => setAddDraft((d) => ({ ...d, name: e.target.value }))} placeholder="e.g. MIS Manager" />
+              <Input value={editDraft.name} onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))} />
             </div>
-          </div>
-          {createMutation.isError && (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the Role Class.'}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => createMutation.mutate()} disabled={!addDraft.roleId || !addDraft.name.trim() || createMutation.isPending}>
-              Add Role Class
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={editingClass !== null} onOpenChange={(open) => !open && setEditingClass(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Role Class</DialogTitle>
-            <DialogDescription>Renames this job-title label.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label>Role Class</Label>
-            <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
           </div>
           {updateMutation.isError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -400,8 +433,41 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
             <Button variant="outline" onClick={() => setEditingClass(null)}>
               Cancel
             </Button>
-            <Button onClick={() => updateMutation.mutate()} disabled={!editName.trim() || updateMutation.isPending}>
+            <Button
+              onClick={() => updateMutation.mutate()}
+              disabled={!editDraft.roleId || !editDraft.name.trim() || updateMutation.isPending}
+            >
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deletingClass !== null} onOpenChange={(open) => !open && setDeletingClass(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Role Class</DialogTitle>
+            <DialogDescription>
+              {deletingClass && deletingClass.userCount > 0
+                ? `"${deletingClass.name}" is still assigned to ${deletingClass.userCount} staff account(s) - reassign them to a different Role Class first, then delete.`
+                : `Permanently removes "${deletingClass?.name}". This cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" /> {deleteError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingClass(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deletingClass && deleteMutation.mutate(deletingClass)}
+              disabled={!deletingClass || deletingClass.userCount > 0 || deleteMutation.isPending}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Delete Role Class
             </Button>
           </DialogFooter>
         </DialogContent>
