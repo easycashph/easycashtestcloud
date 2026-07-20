@@ -1320,6 +1320,18 @@ export function LoanApplicationDetailPage() {
                     <p className="text-xs text-muted-foreground">Assigned product class</p>
                     <p className="font-mono">{assignedProductName ?? 'Not assigned'}</p>
                   </div>
+                  {application.createdLoanAccountId && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Loan Account</p>
+                      <Link
+                        to={`/loans/${application.createdLoanAccountId}`}
+                        className="inline-flex items-center gap-1.5 font-mono text-primary hover:underline"
+                      >
+                        <Landmark className="h-3.5 w-3.5" />
+                        {application.createdLoanAccountCode ?? application.createdLoanAccountId}
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
