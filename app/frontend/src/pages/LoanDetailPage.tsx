@@ -951,6 +951,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const borrower = borrowerQuery.data;
   const installments = installmentsQuery.data?.items ?? [];
   const transactions = transactionsQuery.data ?? [];
+  // 2026-07-20 user request: the backend (UndoActivateLoanUseCase) already refuses Undo Disburse
+  // once a real payment exists (LoanAccountHasActivityError) - this mirrors that same check
+  // client-side so the button is disabled with an explanation up front, instead of only failing
+  // after the officer clicks it and gets a confirm dialog error.
+  const hasRepayment = transactions.some((t) => t.type === 'REPAYMENT');
   const installmentAdjustments = installmentAdjustmentsQuery.data ?? [];
   const num = (v: string) => Number.parseFloat(v) || 0;
   // 2026-07-16 (unified Payment History timeline): interleave real LoanTransactions with penalty
@@ -1030,7 +1035,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
           )}
           {currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE' && (
-            <Button size="sm" variant="outline" onClick={() => openConfirm('UNDO_ACTIVATE')}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={hasRepayment}
+              onClick={() => openConfirm('UNDO_ACTIVATE')}
+              title={hasRepayment ? 'Cannot undo - a payment has already been recorded against this loan.' : undefined}
+            >
               Undo Disburse
             </Button>
           )}
