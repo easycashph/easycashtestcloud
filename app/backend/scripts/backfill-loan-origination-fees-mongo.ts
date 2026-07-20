@@ -15,11 +15,12 @@
  *   npx tsx scripts/backfill-loan-origination-fees-mongo.ts --apply  (writes to the database)
  */
 import * as fs from 'fs';
+import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
-const BSON_PATH =
-  'C:/ECLC CLAUDE CODE/legacy/MongoDB dump/extracted/07092026_ 92543/db-easycash/monthly_loan_releases.bson';
+const BSON_PATH = path.join(legacyDbEasycashDir(), 'monthly_loan_releases.bson');
 
 interface MongoReleaseDoc {
   accountId: string;

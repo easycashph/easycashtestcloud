@@ -133,6 +133,17 @@ import { ChangeOwnPasswordUseCase } from '@modules/identity/application/use-case
 import { createPaymentReminderRouter } from '@modules/payment-reminder/interface/http/paymentReminderRouter';
 import { ListPaymentRemindersUseCase } from '@modules/payment-reminder/application/use-cases/ListPaymentRemindersUseCase';
 import { PrismaPaymentReminderRepository } from '@modules/payment-reminder/infrastructure/PrismaPaymentReminderRepository';
+import { createSmsReminderDlrRouter } from '@modules/sms-reminder/interface/http/smsReminderDlrRouter';
+import { createSmsReminderLogRouter } from '@modules/sms-reminder/interface/http/smsReminderLogRouter';
+import { ListSmsReminderLogsUseCase } from '@modules/sms-reminder/application/use-cases/ListSmsReminderLogsUseCase';
+import { PrismaSmsReminderRepository } from '@modules/sms-reminder/infrastructure/PrismaSmsReminderRepository';
+import { createEmailReminderLogRouter } from '@modules/email-reminder/interface/http/emailReminderLogRouter';
+import { ListEmailReminderLogsUseCase } from '@modules/email-reminder/application/use-cases/ListEmailReminderLogsUseCase';
+import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
+import { createReminderSettingsRouter } from '@modules/reminder-settings/interface/http/reminderSettingsRouter';
+import { GetReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/GetReminderSettingsUseCase';
+import { UpdateReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/UpdateReminderSettingsUseCase';
+import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
@@ -655,6 +666,34 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', paymentReminderRouter);
+
+  // --- sms-reminder module wiring: M360 DLR webhook (no requireAuth - see controller's own doc comment) ---
+  const smsReminderDlrRouter = createSmsReminderDlrRouter({ smsReminderRepository: new PrismaSmsReminderRepository() });
+  app.use('/api/v1', smsReminderDlrRouter);
+
+  // --- sms-reminder module wiring: Reports Hub visibility (who got texted, when, delivery status) ---
+  const smsReminderLogRouter = createSmsReminderLogRouter(
+    { listSmsReminderLogsUseCase: new ListSmsReminderLogsUseCase({ smsReminderRepository: new PrismaSmsReminderRepository() }) },
+    tokenService,
+  );
+  app.use('/api/v1', smsReminderLogRouter);
+
+  // --- email-reminder module wiring: Reports Hub visibility (mirrors sms-reminder, second channel) ---
+  const emailReminderLogRouter = createEmailReminderLogRouter(
+    { listEmailReminderLogsUseCase: new ListEmailReminderLogsUseCase({ emailReminderRepository: new PrismaEmailReminderRepository() }) },
+    tokenService,
+  );
+  app.use('/api/v1', emailReminderLogRouter);
+
+  // --- reminder-settings module wiring: MIS-only master switches for the SMS/Email cron jobs ---
+  const reminderSettingsRouter = createReminderSettingsRouter(
+    {
+      getReminderSettingsUseCase: new GetReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', reminderSettingsRouter);
 
   // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
   const interestRateChartRouter = createInterestRateChartRouter(

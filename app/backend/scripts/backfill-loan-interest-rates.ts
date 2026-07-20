@@ -21,9 +21,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
 const APPLY = process.argv.includes('--apply');
-const DUMP_DIR = path.resolve(__dirname, '../../../legacy/MongoDB dump/extracted/07092026_ 92543/db-easycash');
+const DUMP_DIR = legacyDbEasycashDir();
 
 function* iterDocs<T = Record<string, unknown>>(collection: string): Generator<T> {
   const file = path.join(DUMP_DIR, `${collection}.bson`);

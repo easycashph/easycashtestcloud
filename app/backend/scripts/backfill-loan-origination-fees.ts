@@ -15,10 +15,11 @@
  *   npx tsx scripts/backfill-loan-origination-fees.ts          (dry run - prints the plan only)
  *   npx tsx scripts/backfill-loan-origination-fees.ts --apply  (writes to the database)
  */
+import * as path from 'node:path';
 import ExcelJS from 'exceljs';
 import { prisma } from '../src/shared/database/prismaClient';
 
-const EXCEL_PATH = 'C:/ECLC CLAUDE CODE/legacy/reports/BETA 1.5.83 LMSv3.xlsm';
+const EXCEL_PATH = path.resolve(__dirname, '../../../legacy/reports/BETA 1.5.83 LMSv3.xlsm');
 
 interface ExcelFeeRow {
   loanAccountId: string;

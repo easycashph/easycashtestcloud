@@ -21,9 +21,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { legacyDbAddressApiDir } from './lib/legacyDumpPath';
 
 const APPLY = process.argv.includes('--apply');
-const DUMP_DIR = path.resolve(__dirname, '../../../legacy/mongodb/07012026_103239/db-address-api');
+const DUMP_DIR = legacyDbAddressApiDir();
 
 function* iterDocs<T = Record<string, unknown>>(collection: string): Generator<T> {
   const file = path.join(DUMP_DIR, `${collection}.bson`);

@@ -26,6 +26,8 @@ import type {
   PaymentAllocationDetail,
   RepaymentInstallment,
 } from '@/lib/loanApiTypes';
+import type { SmsReminderLog } from '@/lib/smsReminderApiTypes';
+import type { EmailReminderLog } from '@/lib/emailReminderApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,7 +53,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatPercentage, formatPeso } from '@/lib/utils';
+import { cn, formatDate, formatDateTime, formatPercentage, formatPeso } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -206,8 +208,9 @@ function TransactionTypeBadge({ type }: { type: string }) {
  * `NotesPanel` 2026-07-13 to disambiguate from the separate `loan-note` module's own,
  * differently-capable notes), Reminders
  * (`RealRemindersPanel` - real trigger schedule computed from the real repayment schedule,
- * business-confirmed 2026-07-12; SMS/Email sending itself stays "Coming Soon", no provider
- * connected yet), and Loan Documents (ADR-051 - Disclosure Statement, Promissory Note, etc.,
+ * business-confirmed 2026-07-12; SMS via M360 and Email via Google Workspace SMTP both real as of
+ * 2026-07-18, overlaid with real SmsReminderLog/EmailReminderLog send status), and Loan Documents
+ * (ADR-051 - Disclosure Statement, Promissory Note, etc.,
  * generated from the loan product's configured templates once the loan is APPROVED). See
  * `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for the wiring pattern this follows.
  */
@@ -264,52 +267,141 @@ function computeReminderTriggers(dueDate: Date, isLate: boolean): { type: Remind
   return triggers;
 }
 
-function buildRealReminderMessage(params: {
-  borrowerName: string;
-  loanCode: string;
-  installmentNumber: number;
-  installmentsTotalCount: number;
-  installmentsPaidCount: number;
-  amountDue: number;
-  dueDate: string;
-  penaltyDue: number;
-}): string {
-  const lines = [
-    `Hi ${params.borrowerName},`,
-    '',
-    `This is a reminder from Easycash Lending Company Inc. regarding your loan account ${params.loanCode}.`,
-    '',
-    `Installment #${params.installmentNumber} of ${params.installmentsTotalCount}: ${formatPeso(params.amountDue)} due ${formatDate(params.dueDate)}.`,
-    `Payment progress: ${params.installmentsPaidCount} of ${params.installmentsTotalCount} installments paid so far.`,
-  ];
-  if (params.penaltyDue > 0) {
-    lines.push(`Penalty fee for late payment: ${formatPeso(params.penaltyDue)}.`);
-  }
-  lines.push('', 'Please settle at your earliest convenience to avoid additional penalties. Thank you!', '- Easycash Lending Company Inc.');
-  return lines.join('\n');
+/**
+ * Client-side mirror of the backend's real per-trigger templates
+ * (`app/backend/src/modules/sms-reminder/application/reminderMessageTemplate.ts`'s
+ * `DEFAULT_TEMPLATES`, the 4 date-anchored ones only) - used ONLY as a preview before a real
+ * `SmsReminderLog` exists for that trigger (once one exists, the actual sent `log.message` is
+ * shown instead, verbatim). Kept in sync manually since this is a preview, not a second source of
+ * truth for what actually gets sent - if the backend wording changes, update both.
+ */
+const PREVIEW_TEMPLATES: Record<'FIVE_DAYS_BEFORE' | 'THREE_DAYS_BEFORE' | 'ONE_DAY_BEFORE' | 'DUE_DATE', string> = {
+  FIVE_DAYS_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+This is a friendly reminder regarding your loan account {loanCode} amounting to PHP {amountDue}, is due on {dueDate}.
+
+To avoid additional penalties and charges, please settle your payment on or before the due date.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  THREE_DAYS_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due in 3 days, on {dueDate}.
+
+Please settle your payment on or before the due date to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  ONE_DAY_BEFORE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due tomorrow, {dueDate}.
+
+Please settle your payment on or before the due date to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+  DUE_DATE: `Easycash Lending Company Inc. - Payment Reminder
+
+Hi {borrowerName}
+
+Your loan account {loanCode} amounting to PHP {amountDue} is due TODAY, {dueDate}.
+
+Please settle your payment today to avoid additional penalties and charges.
+
+If you have already made your payment, please disregard this reminder.
+Thank you for your continued trust in Easycash Lending Company Inc.`,
+};
+
+function renderPreviewMessage(
+  triggerType: keyof typeof PREVIEW_TEMPLATES,
+  params: { borrowerName: string; loanCode: string; amountDue: number; dueDate: string },
+): string {
+  return PREVIEW_TEMPLATES[triggerType]
+    .replace('{borrowerName}', params.borrowerName)
+    .replace('{loanCode}', params.loanCode)
+    .replace('{amountDue}', formatPeso(params.amountDue))
+    .replace('{dueDate}', formatDate(params.dueDate));
+}
+
+const REMINDER_STATUS_BADGE: Record<
+  SmsReminderLog['status'],
+  { variant: 'outline' | 'success' | 'destructive'; label: string }
+> = {
+  SENT: { variant: 'outline', label: 'Sent' },
+  DELIVERED: { variant: 'success', label: 'Delivered' },
+  UNDELIVERED: { variant: 'destructive', label: 'Undelivered' },
+  REJECTED: { variant: 'destructive', label: 'Rejected' },
+  FAILED: { variant: 'destructive', label: 'Failed' },
+};
+
+/** e.g. "Sent · Jul 18, 2026 6:09 AM" - DELIVERED shows the delivery timestamp (the more relevant moment once M360's DLR webhook confirms it), every other status shows when the send attempt itself happened. */
+function reminderStatusText(log: SmsReminderLog): string {
+  const label = REMINDER_STATUS_BADGE[log.status].label;
+  const timestamp = log.status === 'DELIVERED' && log.deliveredAt ? log.deliveredAt : log.sentAt;
+  return `${label} · ${formatDateTime(timestamp)}`;
+}
+
+const EMAIL_STATUS_BADGE: Record<EmailReminderLog['status'], { variant: 'outline' | 'destructive'; label: string }> = {
+  SENT: { variant: 'outline', label: 'Sent' },
+  FAILED: { variant: 'destructive', label: 'Failed' },
+};
+
+/** Mirrors reminderStatusText - no delivery-confirmation concept for plain SMTP, so always the send timestamp. */
+function emailReminderStatusText(log: EmailReminderLog): string {
+  return `${EMAIL_STATUS_BADGE[log.status].label} · ${formatDateTime(log.sentAt)}`;
 }
 
 /**
  * Real reminder trigger schedule (confirmed business policy, see `computeReminderTriggers`) for
- * this loan's next unpaid installment, computed from the already-fetched real repayment schedule
- * - no extra query needed. Deliberately does NOT claim any trigger was "Sent": no SMS/email
- * provider is connected yet (pending MIS/Nomer, per 2026-07-12 conversation), so every trigger is
- * shown as "Due" (its date has arrived) or "Upcoming", never as a notification that actually went
- * out. `PaymentRemindersPage.tsx`'s real worklist uses the same honest framing.
+ * this loan's next unpaid installment, overlaid with REAL send status from `SmsReminderLog`
+ * (2026-07-18: M360/Globe SMS integration shipped - see docs/SESSION_LOG_2026-07-18_*.md). The 4
+ * date-anchored triggers show the matching real log's status (SENT/DELIVERED/etc.) once one
+ * exists for this loan, or "Not sent yet" (the schedule's date hasn't been reached by the daily
+ * job, or `SMS_ENABLED` is still off) beforehand. PAST_DUE_WEEKLY is now uncapped and uses the
+ * loan's actual logged sends directly (one row per real Monday it fired), not a locally-simulated
+ * 3-occurrence list.
  */
 function RealRemindersPanel({
+  loanAccountId,
   loanCode,
   borrower,
   installments,
 }: {
+  loanAccountId: string;
   loanCode: string;
   borrower: RealBorrower | undefined;
   installments: RepaymentInstallment[];
 }) {
-  const [expandedType, setExpandedType] = React.useState<ReminderTriggerType | null>(null);
+  const [expandedKey, setExpandedKey] = React.useState<string | null>(null);
   const now = new Date();
+  // The OLDEST not-fully-paid installment by installmentNumber, whether its due date is in the
+  // future or already overdue - matches the backend's own "next-due installment" definition
+  // exactly (PrismaPaymentReminderRepository/PrismaSmsReminderRepository: first status != 'PAID'
+  // row ordered by installmentNumber asc). Previously this filtered to `dueDate >= now`, which
+  // skipped straight past an already-overdue installment to whichever LATER installment happened
+  // to have a future due date - showing this panel's reminder schedule for the wrong installment
+  // entirely whenever a loan was late (caught 2026-07-18 from a real screenshot: installment #2
+  // was overdue and unpaid, but the panel computed trigger dates for installment #3 instead).
   const unpaid = installments.filter((i) => i.status !== 'PAID');
-  const nextDue = unpaid.find((i) => new Date(i.dueDate) >= now) ?? unpaid[unpaid.length - 1];
+  const nextDue = unpaid[0];
+
+  const remindersQuery = useQuery({
+    queryKey: ['sms-reminder-logs', loanAccountId],
+    queryFn: () => apiClient.get<{ items: SmsReminderLog[] }>(`/sms-reminder-logs?loanAccountId=${loanAccountId}`),
+  });
+  const logs = remindersQuery.data?.items ?? [];
+
+  const emailRemindersQuery = useQuery({
+    queryKey: ['email-reminder-logs', loanAccountId],
+    queryFn: () => apiClient.get<{ items: EmailReminderLog[] }>(`/email-reminder-logs?loanAccountId=${loanAccountId}`),
+  });
+  const emailLogs = emailRemindersQuery.data?.items ?? [];
 
   if (!nextDue) {
     return (
@@ -328,19 +420,10 @@ function RealRemindersPanel({
 
   const num = (v: string) => Number.parseFloat(v) || 0;
   const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
-  const installmentsPaidCount = installments.filter((i) => i.status === 'PAID').length;
-  const triggers = computeReminderTriggers(new Date(nextDue.dueDate), nextDue.status === 'LATE');
+  const dateTriggers = computeReminderTriggers(new Date(nextDue.dueDate), false); // only the 4 date-anchored ones - PAST_DUE_WEEKLY handled separately below, from real logs
   const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
-  const message = buildRealReminderMessage({
-    borrowerName,
-    loanCode,
-    installmentNumber: nextDue.installmentNumber,
-    installmentsTotalCount: installments.length,
-    installmentsPaidCount,
-    amountDue,
-    dueDate: nextDue.dueDate,
-    penaltyDue: nextDue.status === 'LATE' ? num(nextDue.due.penalty) : 0,
-  });
+
+  const pastDueLogs = logs.filter((l) => l.triggerType === 'PAST_DUE_WEEKLY').sort((a, b) => a.triggerDate.localeCompare(b.triggerDate));
 
   return (
     <Card>
@@ -348,48 +431,75 @@ function RealRemindersPanel({
         <CardTitle className="flex items-center gap-2 text-base">
           <Bell className="h-4 w-4 text-muted-foreground" /> Reminders
         </CardTitle>
-        <CardDescription>
-          Trigger schedule for installment #{nextDue.installmentNumber} - no SMS/Email provider is connected yet, so nothing below has
-          actually been sent.
-        </CardDescription>
+        <CardDescription>Trigger schedule for installment #{nextDue.installmentNumber}, and every real Past Due send for this loan.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {triggers.map((trigger) => {
+        {nextDue.status === 'LATE' && (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            This installment is already past due - the 5/3/1-days-before and Due Date reminders no longer apply (their window has
+            passed). Only Past Due reminders send while this account stays overdue; the date-anchored schedule resumes once it's
+            current again.
+          </p>
+        )}
+        {nextDue.status !== 'LATE' &&
+          dateTriggers.map((trigger) => {
+          const log = logs.find((l) => l.triggerType === trigger.type);
+          const emailLog = emailLogs.find((l) => l.triggerType === trigger.type);
           const due = trigger.date <= now;
+          const key = trigger.type;
+          // dateTriggers only ever contains the 4 date-anchored types (computeReminderTriggers isLate=false) - never PAST_DUE_WEEKLY.
+          const previewMessage = renderPreviewMessage(trigger.type as keyof typeof PREVIEW_TEMPLATES, {
+            borrowerName,
+            loanCode,
+            amountDue,
+            dueDate: nextDue.dueDate,
+          });
           return (
-            <div key={trigger.type} className="rounded-md border">
+            <div key={key} className="rounded-md border">
               <button
                 type="button"
                 className="flex w-full items-center justify-between p-3 text-left"
-                onClick={() => setExpandedType((cur) => (cur === trigger.type ? null : trigger.type))}
+                onClick={() => setExpandedKey((cur) => (cur === key ? null : key))}
               >
                 <div className="flex items-center gap-2">
                   <Bell className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{REMINDER_TRIGGER_LABELS[trigger.type]}</span>
                   <span className="text-xs text-muted-foreground">{formatDate(trigger.date.toISOString())}</span>
                 </div>
-                <Badge variant={due ? 'warning' : 'outline'}>
-                  <span className="flex items-center gap-1">
-                    {due ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
-                    {due ? 'Due' : 'Upcoming'}
-                  </span>
-                </Badge>
+                {log ? (
+                  <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
+                ) : (
+                  <Badge variant={due ? 'warning' : 'outline'}>
+                    <span className="flex items-center gap-1">
+                      {due ? <AlertTriangle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+                      {due ? 'Not sent yet' : 'Upcoming'}
+                    </span>
+                  </Badge>
+                )}
               </button>
-              {expandedType === trigger.type && (
+              {expandedKey === key && (
                 <div className="space-y-3 border-t p-3">
-                  <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{message}</pre>
+                  <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{log?.message ?? previewMessage}</pre>
                   <div className="grid gap-1.5 sm:grid-cols-2">
                     <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
                       <span className="flex items-center gap-2">
                         <MessageSquareText className="h-4 w-4" /> SMS ({borrower?.mobilePhone1 ?? 'no number on file'})
                       </span>
-                      <Badge variant="secondary">Coming Soon</Badge>
+                      {log ? (
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Not sent yet</Badge>
+                      )}
                     </div>
                     <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
                       <span className="flex items-center gap-2">
                         <Mail className="h-4 w-4" /> Email ({borrower?.email ?? 'no email on file'})
                       </span>
-                      <Badge variant="secondary">Coming Soon</Badge>
+                      {emailLog ? (
+                        <Badge variant={EMAIL_STATUS_BADGE[emailLog.status].variant}>{emailReminderStatusText(emailLog)}</Badge>
+                      ) : (
+                        <Badge variant="secondary">Not sent yet</Badge>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -397,6 +507,44 @@ function RealRemindersPanel({
             </div>
           );
         })}
+
+        {nextDue.status === 'LATE' && (
+          <div className="rounded-md border">
+            <div className="flex items-center gap-2 border-b p-3">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Past Due (Weekly)</span>
+              <span className="text-xs text-muted-foreground">
+                {pastDueLogs.length > 0 ? `${pastDueLogs.length} sent so far` : 'not sent yet - runs every Monday while overdue'}
+              </span>
+            </div>
+            {pastDueLogs.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">No Past Due reminder has been sent yet for this loan.</p>
+            ) : (
+              <div className="divide-y">
+                {pastDueLogs.map((log) => {
+                  const key = `PAST_DUE_WEEKLY-${log.id}`;
+                  return (
+                    <div key={log.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between p-3 text-left"
+                        onClick={() => setExpandedKey((cur) => (cur === key ? null : key))}
+                      >
+                        <span className="text-xs text-muted-foreground">{formatDate(log.triggerDate)}</span>
+                        <Badge variant={REMINDER_STATUS_BADGE[log.status].variant}>{reminderStatusText(log)}</Badge>
+                      </button>
+                      {expandedKey === key && (
+                        <div className="border-t p-3">
+                          <pre className="whitespace-pre-wrap rounded-md border bg-secondary/40 p-3 text-sm">{log.message}</pre>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1316,7 +1464,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </Tabs>
       </Card>
 
-      <RealRemindersPanel loanCode={loan.loanCode} borrower={borrower} installments={installments} />
+      <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
 
       <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
 
