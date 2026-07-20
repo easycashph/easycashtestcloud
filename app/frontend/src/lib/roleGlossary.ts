@@ -13,3 +13,8 @@ export const ROLE_GLOSSARY: Record<string, { short: string; full: string }> = {
 export function roleShortLabel(role: string): string {
   return ROLE_GLOSSARY[role]?.short ?? role;
 }
+
+/** Full spelled-out label for a role (2026-07-20, Administration > System > User Accounts request) - the role name otherwise. */
+export function roleFullLabel(role: string): string {
+  return ROLE_GLOSSARY[role]?.full ?? role;
+}

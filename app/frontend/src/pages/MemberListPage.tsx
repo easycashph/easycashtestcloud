@@ -14,9 +14,8 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
-import { RoleAbbr } from '@/components/RoleAbbr';
 import { FieldLockToggle } from '@/components/FieldLockToggle';
-import { ROLE_GLOSSARY, roleShortLabel } from '@/lib/roleGlossary';
+import { roleFullLabel } from '@/lib/roleGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
@@ -177,8 +176,8 @@ function MemberForm({
           </SelectTrigger>
           <SelectContent>
             {LMS_ROLES.map((r) => (
-              <SelectItem key={r} value={r} title={ROLE_GLOSSARY[r]?.full}>
-                {roleShortLabel(r)}
+              <SelectItem key={r} value={r}>
+                {roleFullLabel(r)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -329,9 +328,7 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
         {roleTypes.map((roleType: RoleType) => (
           <Card key={roleType.id}>
             <CardHeader className="space-y-0">
-              <CardTitle className="flex items-center gap-1.5 text-base">
-                <RoleAbbr role={roleType.name} />
-              </CardTitle>
+              <CardTitle className="flex items-center gap-1.5 text-base">{roleFullLabel(roleType.name)}</CardTitle>
               <CardDescription>Role Type</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -411,8 +408,8 @@ function RolesTab({ canManageMembers }: { canManageMembers: boolean }) {
                 </SelectTrigger>
                 <SelectContent>
                   {roleTypes.map((rt: RoleType) => (
-                    <SelectItem key={rt.id} value={rt.id} title={ROLE_GLOSSARY[rt.name]?.full}>
-                      {roleShortLabel(rt.name)}
+                    <SelectItem key={rt.id} value={rt.id}>
+                      {roleFullLabel(rt.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -678,14 +675,7 @@ export function MemberListPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.roles.includes('MIS') ? 'default' : 'outline'}>
-                      {user.roles.length > 0
-                        ? user.roles.map((r, i) => (
-                            <React.Fragment key={r}>
-                              {i > 0 && ', '}
-                              <RoleAbbr role={r} />
-                            </React.Fragment>
-                          ))
-                        : '-'}
+                      {user.roles.length > 0 ? user.roles.map((r) => roleFullLabel(r)).join(', ') : '-'}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{user.branchName}</TableCell>
@@ -751,14 +741,7 @@ export function MemberListPage() {
               <div className="space-y-1">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Role</p>
                 <p className="text-sm">
-                  {viewingUser.roles.length > 0
-                    ? viewingUser.roles.map((r, i) => (
-                        <React.Fragment key={r}>
-                          {i > 0 && ', '}
-                          <RoleAbbr role={r} />
-                        </React.Fragment>
-                      ))
-                    : '—'}
+                  {viewingUser.roles.length > 0 ? viewingUser.roles.map((r) => roleFullLabel(r)).join(', ') : '—'}
                   {viewingUser.roleClassName ? ` (${viewingUser.roleClassName})` : ''}
                 </p>
               </div>
