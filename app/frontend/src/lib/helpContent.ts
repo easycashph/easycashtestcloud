@@ -88,6 +88,11 @@ export const HELP_TOPICS: Record<string, HelpTopic> = {
     summary: 'MIS-only: a full audit trail of who did what, when, across the whole system.',
     tips: ['Filter by section or search by staff name to trace a specific change.'],
   },
+  '/admin/system': {
+    title: 'System',
+    summary: 'MIS-only: platform-wide switches, currently the SMS/Email automated payment reminder master toggles.',
+    tips: ['Turning a channel on here affects every borrower, not just one - only enable once the message content and test sends have been verified.'],
+  },
   '/admin/about': {
     title: 'About',
     summary: 'App version, changelog, and team credits - not a how-to guide (that\'s this Help panel).',

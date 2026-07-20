@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Lock, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,14 +25,13 @@ import type { Language } from '@/lib/translations';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { AuthenticatedUserView } from '@/lib/authTypes';
 import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
-import type { ReminderSettings } from '@/lib/reminderSettingsApiTypes';
 import { cn } from '@/lib/utils';
 
 /** Cross-referenced against `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real
  * `MIN_LENGTH` so the two don't silently drift. */
 const PASSWORD_MIN_LENGTH = 12;
 
-type SettingsTab = 'profile' | 'security' | 'appearance' | 'notifications' | 'language' | 'system';
+type SettingsTab = 'profile' | 'security' | 'appearance' | 'notifications' | 'language';
 
 /**
  * Frontend↔Backend Wiring Pilot, Stage 0c, self-service Profile/Password wired to real endpoints
@@ -45,7 +44,6 @@ export function SettingsPage() {
   useLogPageView('Settings');
   const [tab, setTab] = React.useState<SettingsTab>('profile');
   const { t } = useLanguage();
-  const { canManageReminderSettings } = useRole();
 
   return (
     <div className="space-y-6">
@@ -55,13 +53,12 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)}>
-        <TabsList className={cn('grid w-full grid-cols-2', canManageReminderSettings ? 'sm:grid-cols-6' : 'sm:grid-cols-5')}>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="profile">{t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="security">{t('settings.tab.security')}</TabsTrigger>
           <TabsTrigger value="appearance">{t('settings.tab.appearance')}</TabsTrigger>
           <TabsTrigger value="notifications">{t('settings.tab.notifications')}</TabsTrigger>
           <TabsTrigger value="language">{t('settings.tab.language')}</TabsTrigger>
-          {canManageReminderSettings && <TabsTrigger value="system">System</TabsTrigger>}
         </TabsList>
       </Tabs>
 
@@ -70,7 +67,6 @@ export function SettingsPage() {
       {tab === 'appearance' && <AppearanceTab />}
       {tab === 'notifications' && <NotificationsTab />}
       {tab === 'language' && <LanguageTab />}
-      {tab === 'system' && canManageReminderSettings && <SystemTab />}
 
       <RecentActivityPanel label="Settings" />
     </div>
@@ -623,92 +619,3 @@ function NotificationsTab() {
   );
 }
 
-/**
- * MIS-only master switches for the SMS/Email automated daily reminder jobs (2026-07-18 user
- * request) - wired to `GET`/`PATCH /reminder-settings`, DB-backed so a toggle here takes effect on
- * the cron's next run without a server restart (see `ReminderSettings` Prisma model's own doc
- * comment). Defaults to both off - the manual test scripts (`test-send-sms-reminder.ts`/
- * `test-send-email-reminder.ts`) work regardless of these switches, which only gate the automated
- * job.
- */
-/** 2026-07-18 user request: temporarily prevent anyone from accidentally toggling these switches
- * on via the UI, without touching the backend gate or default state. UI-only (a direct API call
- * would still work) - flip back to `false` once ready to allow toggling again from Settings. */
-const REMINDER_TOGGLES_LOCKED = true;
-
-function SystemTab() {
-  const queryClient = useQueryClient();
-  const [error, setError] = React.useState<string | null>(null);
-
-  const settingsQuery = useQuery({
-    queryKey: ['reminder-settings'],
-    queryFn: () => apiClient.get<ReminderSettings>('/reminder-settings'),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (body: { smsEnabled?: boolean; emailEnabled?: boolean }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
-    onSuccess: (settings) => {
-      queryClient.setQueryData(['reminder-settings'], settings);
-      setError(null);
-    },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not update reminder settings.'),
-  });
-
-  const settings = settingsQuery.data;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Payment reminders</CardTitle>
-        <CardDescription>Turn on automated sending once you've verified the content and test sends.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-1 divide-y rounded-md border">
-        {error && (
-          <div className="flex items-center gap-2 p-3 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" /> {error}
-          </div>
-        )}
-        {REMINDER_TOGGLES_LOCKED && (
-          <div className="flex items-center gap-2 rounded-md bg-warning/20 p-3 text-xs text-warning-foreground">
-            <Lock className="h-4 w-4 shrink-0" /> Toggles are temporarily locked to prevent accidental enabling - by MIS - Nomer.
-          </div>
-        )}
-        <div className={cn('flex items-center justify-between gap-3 p-3', REMINDER_TOGGLES_LOCKED && 'opacity-60')}>
-          <div>
-            <p className="text-sm font-medium">SMS reminders</p>
-            <p className="text-xs text-muted-foreground">Sent via M360/Globe to borrowers' mobile numbers</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge variant={settings?.smsEnabled ? 'success' : 'warning'}>{settings?.smsEnabled ? 'On' : 'Off'}</Badge>
-            <Switch
-              checked={settings?.smsEnabled ?? false}
-              disabled={REMINDER_TOGGLES_LOCKED || settingsQuery.isLoading || updateMutation.isPending}
-              onCheckedChange={(checked) => updateMutation.mutate({ smsEnabled: checked })}
-              aria-label="Toggle SMS reminders"
-            />
-          </div>
-        </div>
-        <div className={cn('flex items-center justify-between gap-3 p-3', REMINDER_TOGGLES_LOCKED && 'opacity-60')}>
-          <div>
-            <p className="text-sm font-medium">Email reminders</p>
-            <p className="text-xs text-muted-foreground">Sent from collections@easycash.ph to borrowers' email</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge variant={settings?.emailEnabled ? 'success' : 'warning'}>{settings?.emailEnabled ? 'On' : 'Off'}</Badge>
-            <Switch
-              checked={settings?.emailEnabled ?? false}
-              disabled={REMINDER_TOGGLES_LOCKED || settingsQuery.isLoading || updateMutation.isPending}
-              onCheckedChange={(checked) => updateMutation.mutate({ emailEnabled: checked })}
-              aria-label="Toggle Email reminders"
-            />
-          </div>
-        </div>
-      </CardContent>
-      <CardContent className="pt-0">
-        <p className="text-xs text-muted-foreground">
-          Test sends (the manual scripts) still work regardless of these switches - this only controls the automated daily job.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}

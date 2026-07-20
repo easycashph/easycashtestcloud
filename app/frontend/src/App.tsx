@@ -33,6 +33,7 @@ import { ReportsHubPage } from '@/pages/ReportsHubPage';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { SystemPage } from '@/pages/SystemPage';
 import { AboutPage } from '@/pages/AboutPage';
 
 /**
@@ -101,6 +102,7 @@ export default function App() {
         <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<MemberListPage />} />
         <Route path="admin/activity-logs" element={<ActivityLogPage />} />
+        <Route path="admin/system" element={<SystemPage />} />
         <Route path="admin/about" element={<AboutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
