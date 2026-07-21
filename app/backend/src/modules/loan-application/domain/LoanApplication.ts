@@ -8,12 +8,6 @@ import { InvalidLoanApplicationTransitionError, ProductNotAssignedError } from '
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
-/** 2026-07-20 (Underwriting rework, user request) — the underwriter's own manual risk grade,
- * separate from the system's automated PREAPPROVED/PREDECLINED pre-qualification verdict. */
-export type UnderwriterRiskGrade = 'LOW' | 'MEDIUM' | 'HIGH';
-/** The underwriter's own recommendation - advisory, like everything else in ReviewReport; the
- * officer's real Approve/Decline call (LoanApplication.status) is what actually counts. */
-export type UnderwriterRecommendation = 'APPROVE' | 'DECLINE' | 'APPROVE_WITH_CONDITIONS';
 
 export interface DependantEntry {
   name: string;
@@ -27,6 +21,16 @@ export interface CreditBureauPartyCheck {
   cmap?: string;
   kyc?: string;
   myscore?: string;
+}
+
+/** 2026-07-21 (user request) — per-document underwriter verification, replacing the old plain
+ * `checkedDocuments` checkbox (checked = verified, nothing else representable). `reason` is only
+ * meaningful for REJECTED (e.g. "Only 1 month submitted - needs resubmission"). Keyed by the
+ * document name as it appears in `submittedDocuments`. */
+export type DocumentVerificationStatus = 'VERIFIED' | 'REJECTED';
+export interface DocumentVerificationEntry {
+  status: DocumentVerificationStatus;
+  reason?: string;
 }
 
 /** 2026-07-21 — "Mode of Payment and Mitigation" from the legacy CER: an optional ATM/allotment
@@ -83,31 +87,24 @@ export interface AgencyVerificationDetails {
  * `creditBureauScore` are kept only for backward compatibility with reports saved before this date
  * — the new UI writes `creditBureauBorrower`/`creditBureauCoBorrower` instead, matching the CER's
  * per-party CMAP/KYC/Myscore breakdown. `ciNotes` is likewise kept for old data; the new UI writes
- * `conditionsForApproval`/`crmRecommendation` instead, the CER's two distinct narrative fields.
- *
- * 2026-07-20 (Underwriting rework, user request): also added the underwriter's own risk grade,
- * recommendation (+ conditions when "approve with conditions"), and collateral/co-maker
- * assessment - same advisory posture as the rest of this report, still gated behind the officer's
- * real Approve/Decline decision. */
+ * `conditionsForApproval`/`crmRecommendation` instead, the CER's two distinct narrative fields. */
 export interface ReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments: string[];
+  /** Keyed by document name - see the type's own doc comment. Supersedes `checkedDocuments` for
+   * the new UI; that field is kept only for backward compatibility with reports saved before this
+   * date. */
+  documentVerifications?: Record<string, DocumentVerificationEntry>;
+  documentsVerifiedByUserId?: string;
+  documentsVerifiedAt?: string;
   creditBureauBorrower?: CreditBureauPartyCheck;
   creditBureauCoBorrower?: CreditBureauPartyCheck;
   mitigation?: MitigationDetails;
   agencyVerification?: AgencyVerificationDetails;
   conditionsForApproval?: string;
   crmRecommendation?: string;
-  underwriterRiskGrade?: UnderwriterRiskGrade;
-  underwriterRecommendation?: UnderwriterRecommendation;
-  /** Only meaningful when underwriterRecommendation is APPROVE_WITH_CONDITIONS - e.g. "Require a
-   * co-maker signature", "Cap loan amount at ₱50,000". */
-  recommendationConditions?: string;
-  collateralDescription?: string;
-  collateralValue?: number;
-  coMakerAssessment?: string;
 }
 
 export interface LoanApplicationProps {

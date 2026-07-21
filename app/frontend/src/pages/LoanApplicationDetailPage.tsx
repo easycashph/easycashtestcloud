@@ -51,11 +51,11 @@ import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels'
 import type {
   AgencyVerificationDetails,
   CreditBureauPartyCheck,
+  DocumentVerificationEntry,
+  DocumentVerificationStatus,
   LoanApplication,
   MitigationDetails,
   SubmitReviewReportRequest,
-  UnderwriterRecommendation,
-  UnderwriterRiskGrade,
   UpdateLoanApplicationRequest,
 } from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
@@ -607,24 +607,6 @@ function CreateLoanAccountDialog({
   );
 }
 
-const UNDERWRITER_RISK_GRADE_OPTIONS: { value: UnderwriterRiskGrade; label: string }[] = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-];
-
-const UNDERWRITER_RECOMMENDATION_OPTIONS: { value: UnderwriterRecommendation; label: string }[] = [
-  { value: 'APPROVE', label: 'Approve' },
-  { value: 'APPROVE_WITH_CONDITIONS', label: 'Approve with conditions' },
-  { value: 'DECLINE', label: 'Decline' },
-];
-
-const RISK_GRADE_BADGE_VARIANT: Record<UnderwriterRiskGrade, 'success' | 'warning' | 'destructive'> = {
-  LOW: 'success',
-  MEDIUM: 'warning',
-  HIGH: 'destructive',
-};
-
 /** General lending-industry rule of thumb (not an Easycash-specific policy, and not a hard
  * pass/fail gate here - purely informational context for the underwriter, same posture as every
  * other advisory figure on this card). */
@@ -705,6 +687,7 @@ function UnderwritingCard({
   canEditReview,
   showReview,
   assignedProductName,
+  documentsVerifiedByName,
 }: {
   application: LoanApplication;
   canEditRisk: boolean;
@@ -716,6 +699,9 @@ function UnderwritingCard({
   showReview: boolean;
   /** Drives the Agency/Contract/Allotment verification section's "required for Seafarer Loan" gate. */
   assignedProductName: string | null;
+  /** Display name for the Document checklist's "Verified by X" footer - resolved at page level, same
+   * pattern as encodedByName/reviewedByName. */
+  documentsVerifiedByName: string | null;
 }) {
   const queryClient = useQueryClient();
   const [editingRisk, setEditingRisk] = React.useState(false);
@@ -754,25 +740,26 @@ function UnderwritingCard({
   const [agencyVerification, setAgencyVerification] = React.useState<AgencyVerificationDetails>(report?.agencyVerification ?? {});
   const [conditionsForApproval, setConditionsForApproval] = React.useState(report?.conditionsForApproval ?? '');
   const [crmRecommendation, setCrmRecommendation] = React.useState(report?.crmRecommendation ?? '');
-  const [checkedDocuments, setCheckedDocuments] = React.useState<string[]>(report?.checkedDocuments ?? []);
-  const [underwriterRiskGrade, setUnderwriterRiskGrade] = React.useState<UnderwriterRiskGrade | ''>(report?.underwriterRiskGrade ?? '');
-  const [underwriterRecommendation, setUnderwriterRecommendation] = React.useState<UnderwriterRecommendation | ''>(
-    report?.underwriterRecommendation ?? '',
+  const [documentVerifications, setDocumentVerifications] = React.useState<Record<string, DocumentVerificationEntry>>(
+    report?.documentVerifications ?? {},
   );
-  const [recommendationConditions, setRecommendationConditions] = React.useState(report?.recommendationConditions ?? '');
-  const [collateralDescription, setCollateralDescription] = React.useState(report?.collateralDescription ?? '');
-  const [collateralValue, setCollateralValue] = React.useState(String(report?.collateralValue ?? ''));
-  const [coMakerAssessment, setCoMakerAssessment] = React.useState(report?.coMakerAssessment ?? '');
-
   const isSeafarerLoan = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
   const hasMitigationData = MITIGATION_FIELDS.some((f) => mitigation[f.key]?.trim());
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
   const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
 
-  const toggleDocument = (doc: string, checked: boolean) => {
-    setCheckedDocuments((prev) => (checked ? [...prev, doc] : prev.filter((d) => d !== doc)));
+  const setDocumentStatus = (doc: string, status: DocumentVerificationStatus, reason?: string) => {
+    setDocumentVerifications((prev) => ({ ...prev, [doc]: { status, reason } }));
   };
+  const clearDocumentStatus = (doc: string) => {
+    setDocumentVerifications((prev) => {
+      const next = { ...prev };
+      delete next[doc];
+      return next;
+    });
+  };
+  const verifiedCount = application.submittedDocuments.filter((d) => documentVerifications[d]?.status === 'VERIFIED').length;
 
   const saveReviewMutation = useMutation({
     mutationFn: () =>
@@ -783,13 +770,7 @@ function UnderwritingCard({
         agencyVerification,
         conditionsForApproval: conditionsForApproval.trim() || undefined,
         crmRecommendation: crmRecommendation.trim() || undefined,
-        checkedDocuments,
-        underwriterRiskGrade: underwriterRiskGrade || undefined,
-        underwriterRecommendation: underwriterRecommendation || undefined,
-        recommendationConditions: recommendationConditions.trim() || undefined,
-        collateralDescription: collateralDescription.trim() || undefined,
-        collateralValue: Number(collateralValue) > 0 ? Number(collateralValue) : undefined,
-        coMakerAssessment: coMakerAssessment.trim() || undefined,
+        documentVerifications,
       } satisfies SubmitReviewReportRequest),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
   });
@@ -1074,138 +1055,82 @@ function UnderwritingCard({
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Document checklist</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Document checklist</Label>
+            {application.submittedDocuments.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {verifiedCount} of {application.submittedDocuments.length} verified
+              </span>
+            )}
+          </div>
           {application.submittedDocuments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No documents were recorded as submitted at intake.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {application.submittedDocuments.map((doc) => (
-                <li key={doc} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={checkedDocuments.includes(doc)}
-                    disabled={!canEditReview}
-                    onChange={(e) => toggleDocument(doc, e.target.checked)}
-                  />
-                  {doc}
-                </li>
-              ))}
+            <ul className="divide-y rounded-md border">
+              {application.submittedDocuments.map((doc) => {
+                const entry = documentVerifications[doc];
+                return (
+                  <li key={doc} className="space-y-1.5 p-2.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="flex-1">{doc}</span>
+                      {canEditReview ? (
+                        <div className="flex gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={entry?.status === 'VERIFIED' ? 'default' : 'outline'}
+                            className="h-7 px-2 text-xs"
+                            onClick={() => (entry?.status === 'VERIFIED' ? clearDocumentStatus(doc) : setDocumentStatus(doc, 'VERIFIED'))}
+                          >
+                            <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={entry?.status === 'REJECTED' ? 'destructive' : 'outline'}
+                            className="h-7 px-2 text-xs"
+                            onClick={() =>
+                              entry?.status === 'REJECTED' ? clearDocumentStatus(doc) : setDocumentStatus(doc, 'REJECTED', entry?.reason)
+                            }
+                          >
+                            <XCircle className="mr-1 h-3 w-3" /> Rejected
+                          </Button>
+                        </div>
+                      ) : entry?.status === 'VERIFIED' ? (
+                        <Badge variant="success" className="text-[10px]">
+                          <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
+                        </Badge>
+                      ) : entry?.status === 'REJECTED' ? (
+                        <Badge variant="destructive" className="text-[10px]">
+                          <XCircle className="mr-1 h-3 w-3" /> Rejected
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          Not reviewed
+                        </Badge>
+                      )}
+                    </div>
+                    {entry?.status === 'REJECTED' &&
+                      (canEditReview ? (
+                        <Input
+                          className="h-8 text-xs"
+                          value={entry.reason ?? ''}
+                          onChange={(e) => setDocumentStatus(doc, 'REJECTED', e.target.value)}
+                          placeholder="Why was this rejected? (e.g. only 1 month submitted)"
+                        />
+                      ) : (
+                        entry.reason && <p className="text-xs text-destructive">{entry.reason}</p>
+                      ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
-        </div>
-
-        <Separator />
-
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Underwriter Assessment</p>
-          <p className="text-xs text-muted-foreground">
-            The underwriter's own findings from this review - advisory, same as the rest of this report.
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Risk grade</Label>
-            {canEditReview ? (
-              <Select value={underwriterRiskGrade} onValueChange={(v) => setUnderwriterRiskGrade(v as UnderwriterRiskGrade)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNDERWRITER_RISK_GRADE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : underwriterRiskGrade ? (
-              <div>
-                <Badge variant={RISK_GRADE_BADGE_VARIANT[underwriterRiskGrade]}>
-                  {UNDERWRITER_RISK_GRADE_OPTIONS.find((o) => o.value === underwriterRiskGrade)?.label}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Not yet graded.</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Recommendation</Label>
-            {canEditReview ? (
-              <Select
-                value={underwriterRecommendation}
-                onValueChange={(v) => setUnderwriterRecommendation(v as UnderwriterRecommendation)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNDERWRITER_RECOMMENDATION_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm">
-                {UNDERWRITER_RECOMMENDATION_OPTIONS.find((o) => o.value === underwriterRecommendation)?.label ?? 'Not yet recommended.'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {(underwriterRecommendation === 'APPROVE_WITH_CONDITIONS' || (!canEditReview && recommendationConditions)) && (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Conditions</Label>
-            {canEditReview ? (
-              <Textarea
-                rows={2}
-                value={recommendationConditions}
-                onChange={(e) => setRecommendationConditions(e.target.value)}
-                placeholder="e.g. Require a co-maker signature, cap loan amount at ₱50,000"
-              />
-            ) : (
-              <p className="text-sm">{recommendationConditions}</p>
-            )}
-          </div>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Collateral description</Label>
-            {canEditReview ? (
-              <Input
-                value={collateralDescription}
-                onChange={(e) => setCollateralDescription(e.target.value)}
-                placeholder="e.g. Motorcycle, OR/CR attached"
-              />
-            ) : (
-              <p className="text-sm">{collateralDescription || 'None on record.'}</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Collateral value (₱)</Label>
-            {canEditReview ? (
-              <NumberInput min="0" value={collateralValue} onChange={(e) => setCollateralValue(e.target.value)} />
-            ) : (
-              <p className="text-sm">{Number(collateralValue) > 0 ? formatPeso(Number(collateralValue)) : '-'}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Co-maker assessment</Label>
-          {canEditReview ? (
-            <Textarea
-              rows={2}
-              value={coMakerAssessment}
-              onChange={(e) => setCoMakerAssessment(e.target.value)}
-              placeholder="Creditworthiness/capacity of the co-maker, if any"
-            />
-          ) : (
-            <p className="text-sm">{coMakerAssessment || 'None on record.'}</p>
+          {documentsVerifiedByName && (
+            <p className="text-xs text-muted-foreground">
+              Last verified by {documentsVerifiedByName}
+              {report?.documentsVerifiedAt ? ` · ${formatDate(report.documentsVerifiedAt)}` : ''}
+            </p>
           )}
         </div>
 
@@ -1348,6 +1273,9 @@ export function LoanApplicationDetailPage() {
   const userNameById = React.useMemo(() => new Map((usersQuery.data ?? []).map((u) => [u.id, u.fullName])), [usersQuery.data]);
   const encodedByName = application?.encodedByUserId ? (userNameById.get(application.encodedByUserId) ?? 'Unknown account') : null;
   const reviewedByName = application?.reviewedByUserId ? (userNameById.get(application.reviewedByUserId) ?? 'Unknown account') : null;
+  const documentsVerifiedByName = application?.reviewReport?.documentsVerifiedByUserId
+    ? (userNameById.get(application.reviewReport.documentsVerifiedByUserId) ?? 'Unknown account')
+    : null;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['loan-application', applicationId] });
@@ -1948,6 +1876,7 @@ export function LoanApplicationDetailPage() {
           canEditReview={isUnderReview && canReviewLoanApplication}
           showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
           assignedProductName={assignedProductName}
+          documentsVerifiedByName={documentsVerifiedByName}
         />
       )}
 

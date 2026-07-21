@@ -112,6 +112,11 @@ const agencyVerificationDetailsSchema = z.object({
   sourcePosition: z.string().optional(),
 });
 
+const documentVerificationEntrySchema = z.object({
+  status: z.enum(['VERIFIED', 'REJECTED']),
+  reason: z.string().optional(),
+});
+
 /** 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template; see
  * `LoanApplication.ts`'s `ReviewReport` doc comment for what replaced what. */
 export const reviewReportSchema = z.object({
@@ -119,18 +124,13 @@ export const reviewReportSchema = z.object({
   creditBureauResult: z.enum(['CLEAR', 'FLAGGED', 'NO_RECORD_FOUND']).optional(),
   creditBureauScore: z.string().optional(),
   checkedDocuments: z.array(z.string()).optional(),
+  documentVerifications: z.record(z.string(), documentVerificationEntrySchema).optional(),
   creditBureauBorrower: creditBureauPartyCheckSchema.optional(),
   creditBureauCoBorrower: creditBureauPartyCheckSchema.optional(),
   mitigation: mitigationDetailsSchema.optional(),
   agencyVerification: agencyVerificationDetailsSchema.optional(),
   conditionsForApproval: z.string().optional(),
   crmRecommendation: z.string().optional(),
-  underwriterRiskGrade: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-  underwriterRecommendation: z.enum(['APPROVE', 'DECLINE', 'APPROVE_WITH_CONDITIONS']).optional(),
-  recommendationConditions: z.string().optional(),
-  collateralDescription: z.string().optional(),
-  collateralValue: z.coerce.number().nonnegative().optional(),
-  coMakerAssessment: z.string().optional(),
 });
 
 export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;
