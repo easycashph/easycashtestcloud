@@ -686,6 +686,10 @@ model PsgcBarangay {
   code                 String               @id
   name                 String
   cityMunicipalityCode String
+  /// Best-effort suggestion only (see scripts/import-ph-zip-codes.ts) - populated for NCR, where a
+  /// single city has multiple ZIP codes depending on barangay (e.g. Makati). Null everywhere a
+  /// single city-level ZIP already covers the area (PsgcCityMunicipality.zipCode).
+  zipCode              String?
   cityMunicipality     PsgcCityMunicipality @relation(fields: [cityMunicipalityCode], references: [code])
 
   @@index([cityMunicipalityCode])

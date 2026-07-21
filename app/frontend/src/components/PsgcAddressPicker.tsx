@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiClient } from '@/lib/apiClient';
-import type { PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '@/lib/psgcApiTypes';
+import type { PsgcBarangayOption, PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '@/lib/psgcApiTypes';
 import { toProperCase } from '@/lib/utils';
 
 export interface AddressDraft {
@@ -52,7 +52,7 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
   const regionsQuery = usePsgcOptions('/psgc/regions', true);
   const provincesQuery = usePsgcOptions(`/psgc/provinces?regionCode=${regionCode}`, Boolean(regionCode));
   const citiesQuery = usePsgcOptions<PsgcCityOption>(`/psgc/cities?provinceCode=${provinceCode}`, Boolean(provinceCode));
-  const barangaysQuery = usePsgcOptions(`/psgc/barangays?cityMunicipalityCode=${cityCode}`, Boolean(cityCode));
+  const barangaysQuery = usePsgcOptions<PsgcBarangayOption>(`/psgc/barangays?cityMunicipalityCode=${cityCode}`, Boolean(cityCode));
 
   // One-time reverse lookup for an already-populated `value` - `enabled` turns itself off once
   // `regionCode` is set (whether from this resolution or from the user's own picks), so this never
@@ -73,19 +73,31 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
     if (resolveQuery.data.barangayCode) setBarangayCode(resolveQuery.data.barangayCode);
   }, [resolveQuery.data]);
 
-  // 2026-07-21 bug fix: ZIP Code auto-fill only ever ran inside `pickCity` below - fine for a
-  // fresh manual selection, but the reverse-lookup path above sets `cityCode` directly (an
-  // existing address being loaded, e.g. editing a client whose address was captured before this
-  // auto-fill existed, or was captured with no ZIP), so the ZIP field silently stayed blank even
-  // though Region/Province/City/Barangay all resolved correctly. Backfills it as soon as the
-  // matching city's data has loaded, same "best-effort suggestion, still a plain editable Input"
-  // posture as pickCity - only fires while `value.zipCode` is still empty, so it never clobbers a
-  // ZIP the officer already has on file or has since corrected.
+  // Tracks the last ZIP *this component* suggested (city- or barangay-level), so the backfill
+  // effect below can safely upgrade a city-level guess to a more precise barangay-level one
+  // without clobbering a ZIP the officer has since typed in themselves.
+  const lastSuggestedZip = React.useRef<string | null>(null);
+
+  // 2026-07-21 bug fix: ZIP Code auto-fill only ever ran inside `pickCity`/`pickBarangay` below -
+  // fine for a fresh manual selection, but the reverse-lookup path above sets `cityCode`/
+  // `barangayCode` directly (an existing address being loaded, e.g. editing a client whose address
+  // was captured before this auto-fill existed, or was captured with no ZIP), so the ZIP field
+  // silently stayed blank even though Region/Province/City/Barangay all resolved correctly.
+  // Backfills it as soon as the matching city's (and, once loaded, barangay's) data is available -
+  // barangay-level wins when present, since a single city like Makati genuinely has 30+ ZIP codes
+  // depending on barangay (see scripts/import-ncr-barangay-zip-codes.ts). Only overwrites while
+  // `value.zipCode` is still empty or still equal to this component's own last suggestion, so it
+  // never clobbers a ZIP the officer already has on file or has since corrected.
   React.useEffect(() => {
-    if (!cityCode || value.zipCode) return;
+    if (!cityCode) return;
     const city = citiesQuery.data?.find((c) => c.code === cityCode);
-    if (city?.zipCode) onChange({ zipCode: city.zipCode });
-  }, [cityCode, citiesQuery.data, value.zipCode]);
+    const barangay = barangayCode ? barangaysQuery.data?.find((b) => b.code === barangayCode) : undefined;
+    const bestZip = barangay?.zipCode ?? city?.zipCode ?? null;
+    if (!bestZip || bestZip === value.zipCode) return;
+    if (value.zipCode && value.zipCode !== lastSuggestedZip.current) return;
+    lastSuggestedZip.current = bestZip;
+    onChange({ zipCode: bestZip });
+  }, [cityCode, citiesQuery.data, barangayCode, barangaysQuery.data, value.zipCode]);
 
   const pickRegion = (code: string) => {
     setRegionCode(code);
@@ -110,13 +122,22 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
     const name = toProperCase(city?.name ?? '');
     // Best-effort suggestion (see scripts/import-ph-zip-codes.ts) - still a plain editable Input
     // below, so staff can correct it (e.g. a city spanning multiple ZIP codes).
+    lastSuggestedZip.current = city?.zipCode ?? null;
     onChange({ cityMunicipality: name, barangay: '', zipCode: city?.zipCode ?? '' });
   };
 
   const pickBarangay = (code: string) => {
     setBarangayCode(code);
-    const name = toProperCase(barangaysQuery.data?.find((b) => b.code === code)?.name ?? '');
-    onChange({ barangay: name });
+    const barangay = barangaysQuery.data?.find((b) => b.code === code);
+    const name = toProperCase(barangay?.name ?? '');
+    // Barangay-level ZIP (NCR only, see scripts/import-ncr-barangay-zip-codes.ts) is more precise
+    // than the city-level guess `pickCity` already applied - upgrade it when available.
+    const patch: Partial<AddressDraft> = { barangay: name };
+    if (barangay?.zipCode) {
+      lastSuggestedZip.current = barangay.zipCode;
+      patch.zipCode = barangay.zipCode;
+    }
+    onChange(patch);
   };
 
   return (
