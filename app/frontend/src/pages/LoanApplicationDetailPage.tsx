@@ -892,7 +892,7 @@ function UnderwritingCard({
         <Separator />
 
         <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Review Report</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Credit Evaluation Report</p>
           <p className="text-xs text-muted-foreground">Credit Investigation, Credit Bureau checking, and document verification.</p>
         </div>
 
