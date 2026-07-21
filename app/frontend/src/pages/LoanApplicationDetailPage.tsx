@@ -1435,6 +1435,13 @@ export function LoanApplicationDetailPage() {
               )}
             </dl>
 
+            {/* 2026-07-21 (user request) - same "not until a review has actually started" gate as
+                the Underwriting card/Notes panel below; product type/class assignment is a
+                reviewer task, not something relevant while the application is still just
+                PREAPPROVED/PREDECLINED. Doesn't block Start Review itself (see the button below,
+                only gated on canReviewLoanApplication) - it reappears the moment the review starts. */}
+            {Boolean(application.reviewStartedAt) && (
+            <>
             <Separator className="my-4" />
 
             <div className="space-y-3">
@@ -1519,6 +1526,8 @@ export function LoanApplicationDetailPage() {
                 </div>
               )}
             </div>
+            </>
+            )}
 
             <Separator className="my-4" />
 
