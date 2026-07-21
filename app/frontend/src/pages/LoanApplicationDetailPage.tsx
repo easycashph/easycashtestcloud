@@ -631,14 +631,17 @@ const MITIGATION_FIELDS: { key: keyof MitigationDetails; label: string }[] = [
   { key: 'allotmentAmount', label: 'Assigned allotment amount' },
 ];
 
-const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label: string }[] = [
-  { key: 'agencyName', label: 'Agency name' },
+/** `required: true` on agencyName/position/vessel mirrors the backend's
+ * `MissingAgencyVerificationError` gate in TagLoanApplicationPreApprovalUseCase - keep both in
+ * sync if that gate's required subset ever changes. */
+const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
+  { key: 'agencyName', label: 'Agency name', required: true },
   { key: 'agencyAddress', label: 'Agency address' },
   { key: 'agencyContactNumbers', label: 'Agency contact number/s' },
   { key: 'yearsWithAgency', label: 'Years with agency' },
   { key: 'basicMonthlySalary', label: 'Basic monthly salary' },
-  { key: 'position', label: 'Position' },
-  { key: 'vessel', label: 'Vessel' },
+  { key: 'position', label: 'Position', required: true },
+  { key: 'vessel', label: 'Vessel', required: true },
   { key: 'contractDuration', label: 'Contract duration' },
   { key: 'joiningPort', label: 'Joining port' },
   { key: 'dateOfDeparture', label: 'Date of departure' },
@@ -1009,17 +1012,26 @@ function UnderwritingCard({
             <div className="grid gap-3 pt-1 sm:grid-cols-2">
               {AGENCY_VERIFICATION_FIELDS.map((f) => (
                 <div key={f.key} className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    {f.label}
+                    {f.required && isSeafarerLoan && <span className="ml-0.5 text-destructive">*</span>}
+                  </Label>
                   {canEditReview ? (
                     <Input
                       value={agencyVerification[f.key] ?? ''}
                       onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
                     />
                   ) : (
                     <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
                   )}
                 </div>
               ))}
+              {isSeafarerLoan && canEditReview && (
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  <span className="text-destructive">*</span> Required before this application can be tagged Pre Approval
+                </p>
+              )}
             </div>
           )}
         </div>
