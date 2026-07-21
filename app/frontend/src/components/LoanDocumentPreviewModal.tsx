@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Download, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
@@ -55,9 +55,18 @@ export function LoanDocumentPreviewModal({
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle className="truncate">{target?.title}</DialogTitle>
+          <div className="flex items-center gap-2 pr-6">
+            <DialogTitle className="min-w-0 flex-1 truncate">{target?.title}</DialogTitle>
+            {objectUrl && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={objectUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open in new tab
+                </a>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {loading && (
@@ -74,7 +83,7 @@ export function LoanDocumentPreviewModal({
 
         {!loading && !error && objectUrl && target && (
           <>
-            <iframe src={objectUrl} className="h-[70vh] w-full rounded-md border" title={target.title} />
+            <iframe src={objectUrl} className="h-[85vh] w-full rounded-md border" title={target.title} />
             <div className="flex justify-end">
               <Button
                 variant="outline"

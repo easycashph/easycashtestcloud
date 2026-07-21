@@ -13,45 +13,97 @@
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
-/** 2026-07-20 (Underwriting rework, user request) — the underwriter's own manual risk grade,
- * separate from the system's automated PREAPPROVED/PREDECLINED pre-qualification verdict. */
-export type UnderwriterRiskGrade = 'LOW' | 'MEDIUM' | 'HIGH';
-/** The underwriter's own recommendation - advisory, like the rest of the review report; the
- * officer's real Approve/Decline call (application.status) is what actually counts. */
-export type UnderwriterRecommendation = 'APPROVE' | 'DECLINE' | 'APPROVE_WITH_CONDITIONS';
+
+export interface CreditBureauPartyCheck {
+  cmap?: string;
+  kyc?: string;
+  myscore?: string;
+}
+
+export interface MitigationDetails {
+  bank?: string;
+  branch?: string;
+  accountName?: string;
+  accountNumber?: string;
+  atmCardNumber?: string;
+  allotmentAmount?: string;
+}
+
+export interface AgencyVerificationDetails {
+  agencyName?: string;
+  agencyAddress?: string;
+  agencyContactNumbers?: string;
+  yearsWithAgency?: string;
+  basicMonthlySalary?: string;
+  position?: string;
+  vessel?: string;
+  contractDuration?: string;
+  joiningPort?: string;
+  dateOfDeparture?: string;
+  departureStatus?: string;
+  expectedSignOffDate?: string;
+  monthlySalary?: string;
+  allottee1Name?: string;
+  allottee1Bank?: string;
+  allottee1AccountNumber?: string;
+  allottee1Amount?: string;
+  allottee2Name?: string;
+  allottee2Bank?: string;
+  allottee2AccountNumber?: string;
+  allottee2Amount?: string;
+  payrollSchedule?: string;
+  firstFullAllotmentDate?: string;
+  cashAdvance?: string;
+  mannerOfDeduction?: string;
+  sourceName?: string;
+  sourcePosition?: string;
+}
 
 /** 2026-07-17 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
  * captured while UNDER_REVIEW. `checkedDocuments` is the subset of `submittedDocuments` the
  * reviewer has verified, not an independent list.
  *
- * 2026-07-20 (Underwriting rework, user request): added the underwriter's own risk grade,
- * recommendation (+ conditions when APPROVE_WITH_CONDITIONS), and collateral/co-maker assessment. */
+ * 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template.
+ * `creditBureauResult`/`creditBureauScore`/`ciNotes` are kept only so reports saved before this
+ * date still round-trip; the current form writes `creditBureauBorrower`/`creditBureauCoBorrower`,
+ * `mitigation`, `agencyVerification`, `conditionsForApproval`, and `crmRecommendation` instead. */
+export type DocumentVerificationStatus = 'VERIFIED' | 'REJECTED';
+export interface DocumentVerificationEntry {
+  status: DocumentVerificationStatus;
+  reason?: string;
+}
+
 export interface LoanApplicationReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments: string[];
-  underwriterRiskGrade?: UnderwriterRiskGrade;
-  underwriterRecommendation?: UnderwriterRecommendation;
-  recommendationConditions?: string;
-  collateralDescription?: string;
-  collateralValue?: number;
-  coMakerAssessment?: string;
+  documentVerifications?: Record<string, DocumentVerificationEntry>;
+  documentsVerifiedByUserId?: string;
+  documentsVerifiedAt?: string;
+  creditBureauBorrower?: CreditBureauPartyCheck;
+  creditBureauCoBorrower?: CreditBureauPartyCheck;
+  mitigation?: MitigationDetails;
+  agencyVerification?: AgencyVerificationDetails;
+  conditionsForApproval?: string;
+  crmRecommendation?: string;
 }
 
 /** Body for `PATCH /loan-applications/:id/review-report` — PATCH semantics, send only what
- * changed. `checkedDocuments`, when present, replaces the full checklist state. */
+ * changed. `checkedDocuments`/`documentVerifications`, when present, replace the full checklist
+ * state. */
 export interface SubmitReviewReportRequest {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments?: string[];
-  underwriterRiskGrade?: UnderwriterRiskGrade;
-  underwriterRecommendation?: UnderwriterRecommendation;
-  recommendationConditions?: string;
-  collateralDescription?: string;
-  collateralValue?: number;
-  coMakerAssessment?: string;
+  documentVerifications?: Record<string, DocumentVerificationEntry>;
+  creditBureauBorrower?: CreditBureauPartyCheck;
+  creditBureauCoBorrower?: CreditBureauPartyCheck;
+  mitigation?: MitigationDetails;
+  agencyVerification?: AgencyVerificationDetails;
+  conditionsForApproval?: string;
+  crmRecommendation?: string;
 }
 
 export interface PreQualificationCheck {

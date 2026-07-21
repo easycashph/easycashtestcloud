@@ -1,7 +1,20 @@
 import * as React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, ArrowLeft, CheckCircle2, Landmark, Lock, RotateCcw, ShieldCheck, UserPlus, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Landmark,
+  Lock,
+  RotateCcw,
+  ShieldCheck,
+  UserPlus,
+  XCircle,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,11 +49,13 @@ import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import { classifyProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type {
-  CreditBureauResult,
+  AgencyVerificationDetails,
+  CreditBureauPartyCheck,
+  DocumentVerificationEntry,
+  DocumentVerificationStatus,
   LoanApplication,
+  MitigationDetails,
   SubmitReviewReportRequest,
-  UnderwriterRecommendation,
-  UnderwriterRiskGrade,
   UpdateLoanApplicationRequest,
 } from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
@@ -592,24 +607,6 @@ function CreateLoanAccountDialog({
   );
 }
 
-const UNDERWRITER_RISK_GRADE_OPTIONS: { value: UnderwriterRiskGrade; label: string }[] = [
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-];
-
-const UNDERWRITER_RECOMMENDATION_OPTIONS: { value: UnderwriterRecommendation; label: string }[] = [
-  { value: 'APPROVE', label: 'Approve' },
-  { value: 'APPROVE_WITH_CONDITIONS', label: 'Approve with conditions' },
-  { value: 'DECLINE', label: 'Decline' },
-];
-
-const RISK_GRADE_BADGE_VARIANT: Record<UnderwriterRiskGrade, 'success' | 'warning' | 'destructive'> = {
-  LOW: 'success',
-  MEDIUM: 'warning',
-  HIGH: 'destructive',
-};
-
 /** General lending-industry rule of thumb (not an Easycash-specific policy, and not a hard
  * pass/fail gate here - purely informational context for the underwriter, same posture as every
  * other advisory figure on this card). */
@@ -618,6 +615,54 @@ function dtiBandClass(dtiPercent: number): string {
   if (dtiPercent <= 40) return 'text-warning';
   return 'text-destructive';
 }
+
+const CREDIT_BUREAU_PARTY_FIELDS: { key: keyof CreditBureauPartyCheck; label: string }[] = [
+  { key: 'cmap', label: 'CMAP' },
+  { key: 'kyc', label: 'KYC' },
+  { key: 'myscore', label: 'Myscore' },
+];
+
+const MITIGATION_FIELDS: { key: keyof MitigationDetails; label: string }[] = [
+  { key: 'bank', label: 'Bank' },
+  { key: 'branch', label: 'Branch' },
+  { key: 'accountName', label: 'Account name' },
+  { key: 'accountNumber', label: 'Account number' },
+  { key: 'atmCardNumber', label: 'ATM card number' },
+  { key: 'allotmentAmount', label: 'Assigned allotment amount' },
+];
+
+/** `required: true` on agencyName/position/vessel mirrors the backend's
+ * `MissingAgencyVerificationError` gate in TagLoanApplicationPreApprovalUseCase - keep both in
+ * sync if that gate's required subset ever changes. */
+const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
+  { key: 'agencyName', label: 'Agency name', required: true },
+  { key: 'agencyAddress', label: 'Agency address' },
+  { key: 'agencyContactNumbers', label: 'Agency contact number/s' },
+  { key: 'yearsWithAgency', label: 'Years with agency' },
+  { key: 'basicMonthlySalary', label: 'Basic monthly salary' },
+  { key: 'position', label: 'Position', required: true },
+  { key: 'vessel', label: 'Vessel', required: true },
+  { key: 'contractDuration', label: 'Contract duration' },
+  { key: 'joiningPort', label: 'Joining port' },
+  { key: 'dateOfDeparture', label: 'Date of departure' },
+  { key: 'departureStatus', label: 'Departure details (Ticketed/Booked/For booking/Tentative)' },
+  { key: 'expectedSignOffDate', label: 'Expected date of sign-off' },
+  { key: 'monthlySalary', label: 'Monthly salary' },
+  { key: 'allottee1Name', label: 'Allottee 1 - name' },
+  { key: 'allottee1Bank', label: 'Allottee 1 - bank / branch' },
+  { key: 'allottee1AccountNumber', label: 'Allottee 1 - account number' },
+  { key: 'allottee1Amount', label: 'Allottee 1 - allotment amount' },
+  { key: 'allottee2Name', label: 'Allottee 2 - name (optional)' },
+  { key: 'allottee2Bank', label: 'Allottee 2 - bank / branch' },
+  { key: 'allottee2AccountNumber', label: 'Allottee 2 - account number' },
+  { key: 'allottee2Amount', label: 'Allottee 2 - allotment amount' },
+  { key: 'payrollSchedule', label: 'Payroll / allotment schedule' },
+  { key: 'firstFullAllotmentDate', label: 'First full allotment date' },
+  { key: 'cashAdvance', label: 'Cash advance/s' },
+  { key: 'mannerOfDeduction', label: 'Manner of deduction of CA' },
+  { key: 'sourceName', label: 'Source/s name' },
+  { key: 'sourcePosition', label: 'Position' },
+];
 
 /**
  * Underwriting (2026-07-20 rework, user request - "gusto ko mag karoon ng underwriter features",
@@ -628,8 +673,11 @@ function dtiBandClass(dtiPercent: number): string {
  *   still purely advisory context, never a gate.
  * - The editable inputs that feed pre-qualification (income, credit score, properties owned) -
  *   editable any time by canEditRisk, same as the old RiskManagementSummaryCard.
- * - The CRM/credit-risk team's Review Report (CI notes, Credit Bureau result/score, document
- *   checklist) - editable only while UNDER_REVIEW by canEditReview, same as the old
+ * - The CRM/credit-risk team's Review Report, redesigned 2026-07-21 against the legacy Credit
+ *   Evaluation Report (CER) template (`legacy/reports/Credit Evaluation Report Template/CER.docx`):
+ *   per-party CMAP/KYC/Myscore, an optional Mode of Payment/Mitigation section, an Agency/Contract/
+ *   Allotment verification section required only for Seafarer Loans, and Conditions for Approval +
+ *   CRM Recommendation - editable only while UNDER_REVIEW by canEditReview, same as the old
  *   ReviewReportCard.
  * - New underwriter fields (risk grade, recommendation + conditions, collateral, co-maker
  *   assessment) - same UNDER_REVIEW-only editability as the Review Report, since they're findings
@@ -641,6 +689,8 @@ function UnderwritingCard({
   canEditRisk,
   canEditReview,
   showReview,
+  assignedProductName,
+  documentsVerifiedByName,
 }: {
   application: LoanApplication;
   canEditRisk: boolean;
@@ -650,6 +700,11 @@ function UnderwritingCard({
    * or already decided with a report on file). Decision scoring/DTI and the risk-input fields
    * above them stay visible at every stage, unchanged from the old RiskManagementSummaryCard. */
   showReview: boolean;
+  /** Drives the Agency/Contract/Allotment verification section's "required for Seafarer Loan" gate. */
+  assignedProductName: string | null;
+  /** Display name for the Document checklist's "Verified by X" footer - resolved at page level, same
+   * pattern as encodedByName/reviewedByName. */
+  documentsVerifiedByName: string | null;
 }) {
   const queryClient = useQueryClient();
   const [editingRisk, setEditingRisk] = React.useState(false);
@@ -680,36 +735,45 @@ function UnderwritingCard({
   });
 
   const report = application.reviewReport;
-  const [ciNotes, setCiNotes] = React.useState(report?.ciNotes ?? '');
-  const [creditBureauResult, setCreditBureauResult] = React.useState<CreditBureauResult | ''>(report?.creditBureauResult ?? '');
-  const [creditBureauScore, setCreditBureauScore] = React.useState(report?.creditBureauScore ?? '');
-  const [checkedDocuments, setCheckedDocuments] = React.useState<string[]>(report?.checkedDocuments ?? []);
-  const [underwriterRiskGrade, setUnderwriterRiskGrade] = React.useState<UnderwriterRiskGrade | ''>(report?.underwriterRiskGrade ?? '');
-  const [underwriterRecommendation, setUnderwriterRecommendation] = React.useState<UnderwriterRecommendation | ''>(
-    report?.underwriterRecommendation ?? '',
+  const [creditBureauBorrower, setCreditBureauBorrower] = React.useState<CreditBureauPartyCheck>(report?.creditBureauBorrower ?? {});
+  const [creditBureauCoBorrower, setCreditBureauCoBorrower] = React.useState<CreditBureauPartyCheck>(
+    report?.creditBureauCoBorrower ?? {},
   );
-  const [recommendationConditions, setRecommendationConditions] = React.useState(report?.recommendationConditions ?? '');
-  const [collateralDescription, setCollateralDescription] = React.useState(report?.collateralDescription ?? '');
-  const [collateralValue, setCollateralValue] = React.useState(String(report?.collateralValue ?? ''));
-  const [coMakerAssessment, setCoMakerAssessment] = React.useState(report?.coMakerAssessment ?? '');
+  const [mitigation, setMitigation] = React.useState<MitigationDetails>(report?.mitigation ?? {});
+  const [agencyVerification, setAgencyVerification] = React.useState<AgencyVerificationDetails>(report?.agencyVerification ?? {});
+  const [conditionsForApproval, setConditionsForApproval] = React.useState(report?.conditionsForApproval ?? '');
+  const [crmRecommendation, setCrmRecommendation] = React.useState(report?.crmRecommendation ?? '');
+  const [documentVerifications, setDocumentVerifications] = React.useState<Record<string, DocumentVerificationEntry>>(
+    report?.documentVerifications ?? {},
+  );
+  const isSeafarerLoan = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
+  const hasMitigationData = MITIGATION_FIELDS.some((f) => mitigation[f.key]?.trim());
+  const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
+  const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
+  const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
 
-  const toggleDocument = (doc: string, checked: boolean) => {
-    setCheckedDocuments((prev) => (checked ? [...prev, doc] : prev.filter((d) => d !== doc)));
+  const setDocumentStatus = (doc: string, status: DocumentVerificationStatus, reason?: string) => {
+    setDocumentVerifications((prev) => ({ ...prev, [doc]: { status, reason } }));
   };
+  const clearDocumentStatus = (doc: string) => {
+    setDocumentVerifications((prev) => {
+      const next = { ...prev };
+      delete next[doc];
+      return next;
+    });
+  };
+  const verifiedCount = application.submittedDocuments.filter((d) => documentVerifications[d]?.status === 'VERIFIED').length;
 
   const saveReviewMutation = useMutation({
     mutationFn: () =>
       apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/review-report`, {
-        ciNotes: ciNotes.trim() || undefined,
-        creditBureauResult: creditBureauResult || undefined,
-        creditBureauScore: creditBureauScore.trim() || undefined,
-        checkedDocuments,
-        underwriterRiskGrade: underwriterRiskGrade || undefined,
-        underwriterRecommendation: underwriterRecommendation || undefined,
-        recommendationConditions: recommendationConditions.trim() || undefined,
-        collateralDescription: collateralDescription.trim() || undefined,
-        collateralValue: Number(collateralValue) > 0 ? Number(collateralValue) : undefined,
-        coMakerAssessment: coMakerAssessment.trim() || undefined,
+        creditBureauBorrower,
+        creditBureauCoBorrower,
+        mitigation,
+        agencyVerification,
+        conditionsForApproval: conditionsForApproval.trim() || undefined,
+        crmRecommendation: crmRecommendation.trim() || undefined,
+        documentVerifications,
       } satisfies SubmitReviewReportRequest),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
   });
@@ -828,7 +892,7 @@ function UnderwritingCard({
         <Separator />
 
         <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Review Report</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Credit Evaluation Report</p>
           <p className="text-xs text-muted-foreground">Credit Investigation, Credit Bureau checking, and document verification.</p>
         </div>
 
@@ -839,180 +903,246 @@ function UnderwritingCard({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Credit investigation notes</Label>
-          {canEditReview ? (
-            <Textarea rows={3} value={ciNotes} onChange={(e) => setCiNotes(e.target.value)} placeholder="Findings from the CI visit or call" />
-          ) : (
-            <p className="text-sm">{ciNotes || 'None on record.'}</p>
+        <div className="space-y-2">
+          <Label className="text-xs">Credit bureau check</Label>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-secondary/30">
+                  <th className="p-2 text-left text-xs font-medium text-muted-foreground"></th>
+                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Borrower</th>
+                  <th className="p-2 text-left text-xs font-medium text-muted-foreground">Co-borrower</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CREDIT_BUREAU_PARTY_FIELDS.map((f) => (
+                  <tr key={f.key} className="border-b last:border-0">
+                    <td className="p-2 text-xs text-muted-foreground">{f.label}</td>
+                    <td className="p-2">
+                      {canEditReview ? (
+                        <Input
+                          className="h-8"
+                          value={creditBureauBorrower[f.key] ?? ''}
+                          onChange={(e) => setCreditBureauBorrower((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        />
+                      ) : (
+                        <span>{creditBureauBorrower[f.key] || '-'}</span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      {canEditReview ? (
+                        <Input
+                          className="h-8"
+                          value={creditBureauCoBorrower[f.key] ?? ''}
+                          onChange={(e) => setCreditBureauCoBorrower((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        />
+                      ) : (
+                        <span>{creditBureauCoBorrower[f.key] || '-'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Mode of payment and mitigation</Label>
+            <Badge variant="outline" className="text-[10px]">
+              Optional
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">Only if the borrower is surrendering an ATM/allotment as security.</p>
+          {(canEditReview || hasMitigationData) && (
+            <button
+              type="button"
+              onClick={() => setMitigationOpen((v) => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-primary"
+            >
+              {mitigationOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {mitigationOpen ? 'Hide bank / ATM details' : 'Add bank / ATM details'}
+            </button>
           )}
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Credit bureau result</Label>
-            {canEditReview ? (
-              <Select value={creditBureauResult} onValueChange={(v) => setCreditBureauResult(v as CreditBureauResult)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CREDIT_BUREAU_RESULT_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm">
-                {CREDIT_BUREAU_RESULT_OPTIONS.find((o) => o.value === creditBureauResult)?.label ?? 'Not yet checked'}
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Credit bureau score (optional)</Label>
-            {canEditReview ? (
-              <Input value={creditBureauScore} onChange={(e) => setCreditBureauScore(e.target.value)} />
-            ) : (
-              <p className="text-sm">{creditBureauScore || '-'}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs">Document checklist</Label>
-          {application.submittedDocuments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No documents were recorded as submitted at intake.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {application.submittedDocuments.map((doc) => (
-                <li key={doc} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={checkedDocuments.includes(doc)}
-                    disabled={!canEditReview}
-                    onChange={(e) => toggleDocument(doc, e.target.checked)}
-                  />
-                  {doc}
-                </li>
+          {mitigationOpen && (
+            <div className="grid gap-3 pt-1 sm:grid-cols-2">
+              {MITIGATION_FIELDS.map((f) => (
+                <div key={f.key} className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                  {canEditReview ? (
+                    <Input
+                      value={mitigation[f.key] ?? ''}
+                      onChange={(e) => setMitigation((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    />
+                  ) : (
+                    <p className="text-sm">{mitigation[f.key] || '-'}</p>
+                  )}
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
 
-        <Separator />
-
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Underwriter Assessment</p>
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Agency / contract / allotment verification</Label>
+            {isSeafarerLoan && (
+              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[10px] text-warning">
+                Required - Seafarer loan
+              </Badge>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
-            The underwriter's own findings from this review - advisory, same as the rest of this report.
+            {isSeafarerLoan
+              ? 'Assigned product is a Seaman/OFW loan - must be completed before Tag as Pre Approval.'
+              : 'Shown for Seaman/OFW loans only - not applicable to this product.'}
           </p>
+          {(canEditReview || hasAgencyData) && (
+            <button
+              type="button"
+              onClick={() => setAgencyOpen((v) => !v)}
+              className="flex items-center gap-1 text-xs font-medium text-primary"
+            >
+              {agencyOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {agencyOpen ? 'Hide section' : 'Expand section (vessel, contract dates, allottees)'}
+            </button>
+          )}
+          {agencyOpen && (
+            <div className="grid gap-3 pt-1 sm:grid-cols-2">
+              {AGENCY_VERIFICATION_FIELDS.map((f) => (
+                <div key={f.key} className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">
+                    {f.label}
+                    {f.required && isSeafarerLoan && <span className="ml-0.5 text-destructive">*</span>}
+                  </Label>
+                  {canEditReview ? (
+                    <Input
+                      value={agencyVerification[f.key] ?? ''}
+                      onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                      className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
+                    />
+                  ) : (
+                    <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
+                  )}
+                </div>
+              ))}
+              {isSeafarerLoan && canEditReview && (
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  <span className="text-destructive">*</span> Required before this application can be tagged Pre Approval
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-3 rounded-md border p-3">
+          <Label className="text-xs">Conditions and recommendation</Label>
           <div className="space-y-1.5">
-            <Label className="text-xs">Risk grade</Label>
-            {canEditReview ? (
-              <Select value={underwriterRiskGrade} onValueChange={(v) => setUnderwriterRiskGrade(v as UnderwriterRiskGrade)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNDERWRITER_RISK_GRADE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : underwriterRiskGrade ? (
-              <div>
-                <Badge variant={RISK_GRADE_BADGE_VARIANT[underwriterRiskGrade]}>
-                  {UNDERWRITER_RISK_GRADE_OPTIONS.find((o) => o.value === underwriterRiskGrade)?.label}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Not yet graded.</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Recommendation</Label>
-            {canEditReview ? (
-              <Select
-                value={underwriterRecommendation}
-                onValueChange={(v) => setUnderwriterRecommendation(v as UnderwriterRecommendation)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNDERWRITER_RECOMMENDATION_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm">
-                {UNDERWRITER_RECOMMENDATION_OPTIONS.find((o) => o.value === underwriterRecommendation)?.label ?? 'Not yet recommended.'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {(underwriterRecommendation === 'APPROVE_WITH_CONDITIONS' || (!canEditReview && recommendationConditions)) && (
-          <div className="space-y-1.5">
-            <Label className="text-xs">Conditions</Label>
+            <Label className="text-xs text-muted-foreground">Conditions for approval</Label>
             {canEditReview ? (
               <Textarea
                 rows={2}
-                value={recommendationConditions}
-                onChange={(e) => setRecommendationConditions(e.target.value)}
-                placeholder="e.g. Require a co-maker signature, cap loan amount at ₱50,000"
+                value={conditionsForApproval}
+                onChange={(e) => setConditionsForApproval(e.target.value)}
+                placeholder="Conditions/considerations before this can be approved"
               />
             ) : (
-              <p className="text-sm">{recommendationConditions}</p>
-            )}
-          </div>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Collateral description</Label>
-            {canEditReview ? (
-              <Input
-                value={collateralDescription}
-                onChange={(e) => setCollateralDescription(e.target.value)}
-                placeholder="e.g. Motorcycle, OR/CR attached"
-              />
-            ) : (
-              <p className="text-sm">{collateralDescription || 'None on record.'}</p>
+              <p className="text-sm">{conditionsForApproval || 'None on record.'}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Collateral value (₱)</Label>
+            <Label className="text-xs text-muted-foreground">CRM recommendation</Label>
             {canEditReview ? (
-              <NumberInput min="0" value={collateralValue} onChange={(e) => setCollateralValue(e.target.value)} />
+              <Textarea
+                rows={2}
+                value={crmRecommendation}
+                onChange={(e) => setCrmRecommendation(e.target.value)}
+                placeholder="Final recommendation for the approving officer"
+              />
             ) : (
-              <p className="text-sm">{Number(collateralValue) > 0 ? formatPeso(Number(collateralValue)) : '-'}</p>
+              <p className="text-sm">{crmRecommendation || 'None on record.'}</p>
             )}
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Co-maker assessment</Label>
-          {canEditReview ? (
-            <Textarea
-              rows={2}
-              value={coMakerAssessment}
-              onChange={(e) => setCoMakerAssessment(e.target.value)}
-              placeholder="Creditworthiness/capacity of the co-maker, if any"
-            />
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Document checklist</Label>
+            {application.submittedDocuments.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {verifiedCount} of {application.submittedDocuments.length} verified
+              </span>
+            )}
+          </div>
+          {application.submittedDocuments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No documents were recorded as submitted at intake.</p>
           ) : (
-            <p className="text-sm">{coMakerAssessment || 'None on record.'}</p>
+            <ul className="divide-y rounded-md border">
+              {application.submittedDocuments.map((doc) => {
+                const entry = documentVerifications[doc];
+                return (
+                  <li key={doc} className="space-y-1.5 p-2.5">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="flex-1">{doc}</span>
+                      {canEditReview ? (
+                        <div className="flex gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={entry?.status === 'VERIFIED' ? 'default' : 'outline'}
+                            className="h-7 px-2 text-xs"
+                            onClick={() => (entry?.status === 'VERIFIED' ? clearDocumentStatus(doc) : setDocumentStatus(doc, 'VERIFIED'))}
+                          >
+                            <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={entry?.status === 'REJECTED' ? 'destructive' : 'outline'}
+                            className="h-7 px-2 text-xs"
+                            onClick={() =>
+                              entry?.status === 'REJECTED' ? clearDocumentStatus(doc) : setDocumentStatus(doc, 'REJECTED', entry?.reason)
+                            }
+                          >
+                            <XCircle className="mr-1 h-3 w-3" /> Rejected
+                          </Button>
+                        </div>
+                      ) : entry?.status === 'VERIFIED' ? (
+                        <Badge variant="success" className="text-[10px]">
+                          <CheckCircle2 className="mr-1 h-3 w-3" /> Verified
+                        </Badge>
+                      ) : entry?.status === 'REJECTED' ? (
+                        <Badge variant="destructive" className="text-[10px]">
+                          <XCircle className="mr-1 h-3 w-3" /> Rejected
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          Not reviewed
+                        </Badge>
+                      )}
+                    </div>
+                    {entry?.status === 'REJECTED' &&
+                      (canEditReview ? (
+                        <Input
+                          className="h-8 text-xs"
+                          value={entry.reason ?? ''}
+                          onChange={(e) => setDocumentStatus(doc, 'REJECTED', e.target.value)}
+                          placeholder="Why was this rejected? (e.g. only 1 month submitted)"
+                        />
+                      ) : (
+                        entry.reason && <p className="text-xs text-destructive">{entry.reason}</p>
+                      ))}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {documentsVerifiedByName && (
+            <p className="text-xs text-muted-foreground">
+              Last verified by {documentsVerifiedByName}
+              {report?.documentsVerifiedAt ? ` · ${formatDate(report.documentsVerifiedAt)}` : ''}
+            </p>
           )}
         </div>
 
@@ -1027,12 +1157,6 @@ function UnderwritingCard({
     </Card>
   );
 }
-
-const CREDIT_BUREAU_RESULT_OPTIONS: { value: CreditBureauResult; label: string }[] = [
-  { value: 'CLEAR', label: 'Clear' },
-  { value: 'FLAGGED', label: 'Flagged' },
-  { value: 'NO_RECORD_FOUND', label: 'No record found' },
-];
 
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
@@ -1125,6 +1249,13 @@ export function LoanApplicationDetailPage() {
     ? (productNameByVersionId.get(application.assignedLoanProductVersionId) ?? null)
     : null;
 
+  // 2026-07-21: mirrors the backend's TagLoanApplicationPreApprovalUseCase gate - a Seafarer Loan
+  // can't be tagged Pre Approval until Agency Verification's 3 required fields are filled in.
+  const agencyVerificationRequired = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
+  const agency = application?.reviewReport?.agencyVerification;
+  const agencyVerificationMissing =
+    agencyVerificationRequired && !(agency?.agencyName?.trim() && agency?.position?.trim() && agency?.vessel?.trim());
+
   // Local UI-only step - narrows which product classes the second dropdown offers. Initialized
   // from whatever the application is currently assigned to, if it falls under one of the 3 curated
   // types; otherwise starts unset so staff picks a type first.
@@ -1154,6 +1285,9 @@ export function LoanApplicationDetailPage() {
   const userNameById = React.useMemo(() => new Map((usersQuery.data ?? []).map((u) => [u.id, u.fullName])), [usersQuery.data]);
   const encodedByName = application?.encodedByUserId ? (userNameById.get(application.encodedByUserId) ?? 'Unknown account') : null;
   const reviewedByName = application?.reviewedByUserId ? (userNameById.get(application.reviewedByUserId) ?? 'Unknown account') : null;
+  const documentsVerifiedByName = application?.reviewReport?.documentsVerifiedByUserId
+    ? (userNameById.get(application.reviewReport.documentsVerifiedByUserId) ?? 'Unknown account')
+    : null;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['loan-application', applicationId] });
@@ -1563,7 +1697,8 @@ export function LoanApplicationDetailPage() {
                 <div className="flex gap-2">
                   <Button
                     onClick={() => setConfirmAction('PRE_APPROVAL')}
-                    disabled={!canReviewLoanApplication || tagPreApprovalMutation.isPending}
+                    disabled={!canReviewLoanApplication || tagPreApprovalMutation.isPending || agencyVerificationMissing}
+                    title={agencyVerificationMissing ? 'Complete Agency Verification in the Review Report first (Seafarer Loan)' : undefined}
                   >
                     Tag as Pre Approval
                   </Button>
@@ -1752,6 +1887,8 @@ export function LoanApplicationDetailPage() {
           canEditRisk={canAccessLoanApplications}
           canEditReview={isUnderReview && canReviewLoanApplication}
           showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
+          assignedProductName={assignedProductName}
+          documentsVerifiedByName={documentsVerifiedByName}
         />
       )}
 
@@ -1815,6 +1952,7 @@ export function LoanApplicationDetailPage() {
           <ProfileActivityTimeline
             profileType="LOAN_APPLICATION"
             profileId={application.id}
+            showDetailsToggle={false}
           />
         </CardContent>
       </Card>

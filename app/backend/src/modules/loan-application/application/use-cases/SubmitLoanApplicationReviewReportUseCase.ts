@@ -21,7 +21,14 @@ export class SubmitLoanApplicationReviewReportUseCase {
       throw new NotFoundError('LoanApplication', id);
     }
 
-    application.updateReviewReport(patch);
+    // 2026-07-21: stamp who/when the document checklist was last touched, whenever the caller
+    // actually sends a documentVerifications patch - matches the mockup's single "Verified by X -
+    // date" footer for the whole checklist, not a per-document audit trail.
+    const stampedPatch: Partial<ReviewReport> = patch.documentVerifications
+      ? { ...patch, documentsVerifiedByUserId: submittedByUserId, documentsVerifiedAt: new Date().toISOString() }
+      : patch;
+
+    application.updateReviewReport(stampedPatch);
     await this.deps.loanApplicationRepository.save(application);
     await this.deps.auditLogger.log({
       userId: submittedByUserId,

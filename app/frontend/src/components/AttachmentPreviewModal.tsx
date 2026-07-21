@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Download, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
@@ -45,9 +45,18 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
 
   return (
     <Dialog open={attachment !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle className="truncate">{attachment?.fileName}</DialogTitle>
+          <div className="flex items-center gap-2 pr-6">
+            <DialogTitle className="min-w-0 flex-1 truncate">{attachment?.fileName}</DialogTitle>
+            {objectUrl && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={objectUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open in new tab
+                </a>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {loading && (
@@ -65,9 +74,9 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
         {!loading && !error && objectUrl && attachment && (
           <>
             {attachment.fileType === 'application/pdf' ? (
-              <iframe src={objectUrl} className="h-[70vh] w-full rounded-md border" title={attachment.fileName} />
+              <iframe src={objectUrl} className="h-[85vh] w-full rounded-md border" title={attachment.fileName} />
             ) : previewable ? (
-              <img src={objectUrl} alt={attachment.fileName} className="mx-auto max-h-[70vh] w-auto rounded-md object-contain" />
+              <img src={objectUrl} alt={attachment.fileName} className="mx-auto max-h-[85vh] w-auto rounded-md object-contain" />
             ) : (
               <div className="space-y-3 py-8 text-center">
                 <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
