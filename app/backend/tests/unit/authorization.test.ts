@@ -91,7 +91,9 @@ describe('Router-level authorization wiring (H-3)', () => {
     });
   });
 
-  describe('POST /api/v1/loan-accounts/:id/approve (approval roles: MIS, Loan Operation Manager, CRM)', () => {
+  // Corrected 2026-07-21 (business clarification): approval is MIS and Loan Operation Manager
+  // only - CRM's role stops at Tag Pre Approval on the application.
+  describe('POST /api/v1/loan-accounts/:id/approve (approval roles: MIS, Loan Operation Manager)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-accounts/loan-1/approve');
       expect(res.status).toBe(401);
@@ -101,6 +103,13 @@ describe('Router-level authorization wiring (H-3)', () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/approve')
         .set('Authorization', `Bearer ${signToken([UNPRIVILEGED_ROLE])}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects with 403 for CRM - no longer an approval role', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/approve')
+        .set('Authorization', `Bearer ${signToken(['CRM'])}`);
       expect(res.status).toBe(403);
     });
 
@@ -114,7 +123,7 @@ describe('Router-level authorization wiring (H-3)', () => {
     });
   });
 
-  describe('POST /api/v1/loan-accounts/:id/reject (approval roles: MIS, Loan Operation Manager, CRM)', () => {
+  describe('POST /api/v1/loan-accounts/:id/reject (approval roles: MIS, Loan Operation Manager)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-accounts/loan-1/reject').send({});
       expect(res.status).toBe(401);
@@ -161,8 +170,9 @@ describe('Router-level authorization wiring (H-3)', () => {
     });
   });
 
-  // Milestone 9.1/9.2 CP13, ADR-038 §3.6.
-  describe('POST /api/v1/loan-accounts/:id/activate (activation roles: MIS, Loan Operation Manager, CRM)', () => {
+  // Corrected 2026-07-21 (business clarification): activation/disbursement is MIS, Loan
+  // Operation Manager, and Accounting - CRM no longer included (superseded ADR-038 §3.6 note).
+  describe('POST /api/v1/loan-accounts/:id/activate (activation roles: MIS, Loan Operation Manager, Accounting)', () => {
     it('rejects with 401 when unauthenticated', async () => {
       const res = await request(app).post('/api/v1/loan-accounts/loan-1/activate');
       expect(res.status).toBe(401);
@@ -175,10 +185,17 @@ describe('Router-level authorization wiring (H-3)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('passes the authorization gate for CRM', async () => {
+    it('rejects with 403 for CRM - no longer an activation role', async () => {
       const res = await request(app)
         .post('/api/v1/loan-accounts/loan-1/activate')
         .set('Authorization', `Bearer ${signToken(['CRM'])}`);
+      expect(res.status).toBe(403);
+    });
+
+    it('passes the authorization gate for Accounting', async () => {
+      const res = await request(app)
+        .post('/api/v1/loan-accounts/loan-1/activate')
+        .set('Authorization', `Bearer ${signToken(['Accounting'])}`);
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
       expect(prismaMock.loanAccount.findUnique).toHaveBeenCalled();

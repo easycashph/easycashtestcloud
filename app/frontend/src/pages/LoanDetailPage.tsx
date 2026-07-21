@@ -208,8 +208,7 @@ function TransactionTypeBadge({ type }: { type: string }) {
  * append-only - see `reverseMutation` below), Approve/Activate actions (`POST
  * /loan-accounts/:id/approve` and `/activate`, same role tier as loan origination per ADR-038
  * §3.1/§3.6), Attachments (`RealAttachmentsPanel`), Notes (`ProfileNotesPanel`, renamed from
- * `NotesPanel` 2026-07-13 to disambiguate from the separate `loan-note` module's own,
- * differently-capable notes), Reminders
+ * `NotesPanel` 2026-07-13), Reminders
  * (`RealRemindersPanel` - real trigger schedule computed from the real repayment schedule,
  * business-confirmed 2026-07-12; SMS via M360 and Email via Google Workspace SMTP both real as of
  * 2026-07-18, overlaid with real SmsReminderLog/EmailReminderLog send status), and Loan Documents
@@ -556,7 +555,7 @@ function RealRemindersPanel({
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentAccount, canCreateLoanAccount } = useRole();
+  const { currentAccount, canCreateLoanAccount, canApproveLoanAccount, canActivateLoanAccount } = useRole();
   const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -1157,7 +1156,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Record Payment
             </Button>
           )}
-          {canCreateLoanAccount && loan.status === 'APPROVED' && (
+          {canActivateLoanAccount && loan.status === 'APPROVED' && (
             <Button size="sm" onClick={() => openConfirm('ACTIVATE')}>
               Disburse Loan
             </Button>
@@ -1186,7 +1185,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Edit
             </Button>
           )}
-          {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
+          {canApproveLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" onClick={() => openConfirm('APPROVE')}>
               Approve Loan
             </Button>
