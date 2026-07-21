@@ -62,11 +62,6 @@ import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases
 import { ListPaymentAllocationsForTransactionUseCase } from '@modules/ledger/application/use-cases/ListPaymentAllocationsForTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
 import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
-import { createLoanNoteRouter } from '@modules/loan-note/interface/http/loanNoteRouter';
-import { CreateLoanNoteUseCase } from '@modules/loan-note/application/use-cases/CreateLoanNoteUseCase';
-import { ListLoanNotesUseCase } from '@modules/loan-note/application/use-cases/ListLoanNotesUseCase';
-import { DeleteLoanNoteUseCase } from '@modules/loan-note/application/use-cases/DeleteLoanNoteUseCase';
-import { PrismaLoanNoteRepository } from '@modules/loan-note/infrastructure/PrismaLoanNoteRepository';
 import { createNotificationRouter } from '@modules/notification/interface/http/notificationRouter';
 import { NotificationService } from '@modules/notification/application/NotificationService';
 import { ListNotificationsUseCase } from '@modules/notification/application/use-cases/ListNotificationsUseCase';
@@ -479,19 +474,6 @@ export function createApp(): Express {
   );
   app.use('/api/v1', loanAccountRouter);
 
-  // --- loan-note module wiring (2026-07-11, Collections use case) ---
-  const loanNoteRepository = new PrismaLoanNoteRepository();
-  const loanNoteRouter = createLoanNoteRouter(
-    {
-      createLoanNoteUseCase: new CreateLoanNoteUseCase({ loanNoteRepository, loanAccountRepository }),
-      listLoanNotesUseCase: new ListLoanNotesUseCase({ loanNoteRepository }),
-      deleteLoanNoteUseCase: new DeleteLoanNoteUseCase({ loanNoteRepository, auditLogger }),
-      getLoanAccountUseCase,
-    },
-    tokenService,
-  );
-  app.use('/api/v1', loanNoteRouter);
-
   // --- notification module wiring (Notification Center, 2026-07-17) ---
   const notificationRouter = createNotificationRouter(
     {
@@ -805,9 +787,9 @@ export function createApp(): Express {
   app.use('/api/v1', documentRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
-  // polymorphic ownerType/ownerId shape as the document module above. Distinct from the loan-note
-  // module above (loan-account-only, MIS-deletable, audit-trailed) - renamed from "note" 2026-07-13
-  // to make that distinction unmistakable. ---
+  // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"
+  // 2026-07-13 (the never-wired-to-any-frontend-page "loan-note" module it was distinguished from
+  // at the time was removed entirely 2026-07-21 as dead code). ---
   const profileNoteRepository = new PrismaProfileNoteRepository();
   const profileNoteRouter = createProfileNoteRouter(
     {

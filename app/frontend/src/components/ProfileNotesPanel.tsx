@@ -14,9 +14,9 @@ import { formatDateTime } from '@/lib/utils';
  * Real, persisted running log (`POST/GET /profile-notes`) - built generically against
  * `ProfileNoteOwnerType` (`BORROWER` | `LOAN_ACCOUNT` | `LOAN_APPLICATION`), same
  * polymorphic-owner pattern as `AttachmentsPanel`, so it can be dropped onto any of those detail
- * pages. No edit/delete: an append-only log, not a wiki. Renamed from `NotesPanel.tsx`
- * (2026-07-13) to disambiguate from the separate `loan-note` module's own, differently-capable
- * notes (loan-account-only, MIS-deletable, audit-trailed) surfaced elsewhere.
+ * pages. No edit/delete: an append-only log, not a wiki. The only notes system in this app - the
+ * once-parallel `loan-note` module (loan-account-only, MIS-deletable, audit-trailed) was never
+ * wired to any frontend page and was removed as dead code 2026-07-21.
  */
 export function ProfileNotesPanel({ ownerType, ownerId }: { ownerType: ProfileNoteOwnerType; ownerId: string }) {
   const queryClient = useQueryClient();

@@ -1,9 +1,9 @@
 /**
- * Renamed from the original `note` module (2026-07-13) to disambiguate from the separate
- * `loan-note` module (Nomer's session, `/loan-accounts/:id/notes`) that coexists in this backend -
- * that one is loan-account-only, MIS-deletable, and audit-trailed; this one is a simple,
- * undeletable running log shared across Borrower/LoanAccount/LoanApplication profiles, mirroring
- * the existing `ProfileActivityLog` naming convention for "spans multiple profile types".
+ * Renamed from the original `note` module (2026-07-13) - a simple, undeletable running log shared
+ * across Borrower/LoanAccount/LoanApplication profiles, mirroring the existing
+ * `ProfileActivityLog` naming convention for "spans multiple profile types". The once-parallel
+ * `loan-note` module (loan-account-only, MIS-deletable, audit-trailed) was never wired to any
+ * frontend page and was removed as dead code 2026-07-21.
  */
 export type ProfileNoteOwnerType = 'BORROWER' | 'LOAN_ACCOUNT' | 'LOAN_APPLICATION';
 
