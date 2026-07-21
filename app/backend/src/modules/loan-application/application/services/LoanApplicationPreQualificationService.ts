@@ -41,6 +41,10 @@ export interface PreQualificationBreakdown {
     income: PreQualificationCheck;
     distance: PreQualificationCheck;
   };
+  /** Same estimate the income check's own `detail` text already describes in words - exposed as a
+   * raw number too (2026-07-20, Underwriting rework) so the Detail page can compute a Debt-to-
+   * Income ratio without parsing it back out of that sentence. */
+  estimatedMonthlyAmortization: number;
 }
 
 /**
@@ -112,6 +116,7 @@ export class LoanApplicationPreQualificationService {
     return {
       status: ageCheck.passed && incomeCheck.passed && distanceCheck.passed ? 'PREAPPROVED' : 'PREDECLINED',
       checks: { age: ageCheck, income: incomeCheck, distance: distanceCheck },
+      estimatedMonthlyAmortization: amortization,
     };
   }
 

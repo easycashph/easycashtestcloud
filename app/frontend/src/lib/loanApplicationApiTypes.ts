@@ -13,15 +13,30 @@
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
+/** 2026-07-20 (Underwriting rework, user request) — the underwriter's own manual risk grade,
+ * separate from the system's automated PREAPPROVED/PREDECLINED pre-qualification verdict. */
+export type UnderwriterRiskGrade = 'LOW' | 'MEDIUM' | 'HIGH';
+/** The underwriter's own recommendation - advisory, like the rest of the review report; the
+ * officer's real Approve/Decline call (application.status) is what actually counts. */
+export type UnderwriterRecommendation = 'APPROVE' | 'DECLINE' | 'APPROVE_WITH_CONDITIONS';
 
 /** 2026-07-17 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
  * captured while UNDER_REVIEW. `checkedDocuments` is the subset of `submittedDocuments` the
- * reviewer has verified, not an independent list. */
+ * reviewer has verified, not an independent list.
+ *
+ * 2026-07-20 (Underwriting rework, user request): added the underwriter's own risk grade,
+ * recommendation (+ conditions when APPROVE_WITH_CONDITIONS), and collateral/co-maker assessment. */
 export interface LoanApplicationReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments: string[];
+  underwriterRiskGrade?: UnderwriterRiskGrade;
+  underwriterRecommendation?: UnderwriterRecommendation;
+  recommendationConditions?: string;
+  collateralDescription?: string;
+  collateralValue?: number;
+  coMakerAssessment?: string;
 }
 
 /** Body for `PATCH /loan-applications/:id/review-report` — PATCH semantics, send only what
@@ -31,6 +46,12 @@ export interface SubmitReviewReportRequest {
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments?: string[];
+  underwriterRiskGrade?: UnderwriterRiskGrade;
+  underwriterRecommendation?: UnderwriterRecommendation;
+  recommendationConditions?: string;
+  collateralDescription?: string;
+  collateralValue?: number;
+  coMakerAssessment?: string;
 }
 
 export interface PreQualificationCheck {
@@ -49,6 +70,10 @@ export interface PreQualificationBreakdown {
     income: PreQualificationCheck;
     distance: PreQualificationCheck;
   };
+  /** Same figure the income check's own `detail` text already describes in words - a raw number
+   * too (2026-07-20, Underwriting rework) so the Debt-to-Income ratio can be computed without
+   * parsing it back out of that sentence. */
+  estimatedMonthlyAmortization: number;
 }
 
 export interface LoanApplicationDependant {

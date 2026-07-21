@@ -72,6 +72,12 @@ export const reviewReportSchema = z.object({
   creditBureauResult: z.enum(['CLEAR', 'FLAGGED', 'NO_RECORD_FOUND']).optional(),
   creditBureauScore: z.string().optional(),
   checkedDocuments: z.array(z.string()).optional(),
+  underwriterRiskGrade: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+  underwriterRecommendation: z.enum(['APPROVE', 'DECLINE', 'APPROVE_WITH_CONDITIONS']).optional(),
+  recommendationConditions: z.string().optional(),
+  collateralDescription: z.string().optional(),
+  collateralValue: z.coerce.number().nonnegative().optional(),
+  coMakerAssessment: z.string().optional(),
 });
 
 export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;

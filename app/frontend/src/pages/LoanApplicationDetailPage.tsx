@@ -28,6 +28,7 @@ import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { type AddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
+import { TermTip } from '@/components/TermTip';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
@@ -38,6 +39,8 @@ import type {
   CreditBureauResult,
   LoanApplication,
   SubmitReviewReportRequest,
+  UnderwriterRecommendation,
+  UnderwriterRiskGrade,
   UpdateLoanApplicationRequest,
 } from '@/lib/loanApplicationApiTypes';
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
@@ -589,35 +592,78 @@ function CreateLoanAccountDialog({
   );
 }
 
+const UNDERWRITER_RISK_GRADE_OPTIONS: { value: UnderwriterRiskGrade; label: string }[] = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+];
+
+const UNDERWRITER_RECOMMENDATION_OPTIONS: { value: UnderwriterRecommendation; label: string }[] = [
+  { value: 'APPROVE', label: 'Approve' },
+  { value: 'APPROVE_WITH_CONDITIONS', label: 'Approve with conditions' },
+  { value: 'DECLINE', label: 'Decline' },
+];
+
+const RISK_GRADE_BADGE_VARIANT: Record<UnderwriterRiskGrade, 'success' | 'warning' | 'destructive'> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'destructive',
+};
+
+/** General lending-industry rule of thumb (not an Easycash-specific policy, and not a hard
+ * pass/fail gate here - purely informational context for the underwriter, same posture as every
+ * other advisory figure on this card). */
+function dtiBandClass(dtiPercent: number): string {
+  if (dtiPercent <= 30) return 'text-success';
+  if (dtiPercent <= 40) return 'text-warning';
+  return 'text-destructive';
+}
+
 /**
- * Shows both the "why" behind the system's PREAPPROVED/PREDECLINED verdict (a live-recomputed
- * decision-scoring breakdown from the backend's `LoanApplicationPreQualificationService` -
- * age/income/distance, each pass or fail) and the editable inputs that feed it (income, credit
- * score, properties owned) - moved here from the Create form's old "Verification Inputs" section,
- * since these are no longer officer-encoded at intake. Saving re-runs the same classification
- * server-side (see `UpdateLoanApplicationUseCase`), so this card's breakdown always matches the
- * status badge shown at the top of the page.
+ * Underwriting (2026-07-20 rework, user request - "gusto ko mag karoon ng underwriter features",
+ * consolidating the old separate "Risk Management Summary" and "Review Report" cards into one).
+ * Combines:
+ * - The system's PREAPPROVED/PREDECLINED decision-scoring breakdown (age/income/distance, each
+ *   pass/fail) plus a Debt-to-Income ratio derived from the same estimated amortization - both
+ *   still purely advisory context, never a gate.
+ * - The editable inputs that feed pre-qualification (income, credit score, properties owned) -
+ *   editable any time by canEditRisk, same as the old RiskManagementSummaryCard.
+ * - The CRM/credit-risk team's Review Report (CI notes, Credit Bureau result/score, document
+ *   checklist) - editable only while UNDER_REVIEW by canEditReview, same as the old
+ *   ReviewReportCard.
+ * - New underwriter fields (risk grade, recommendation + conditions, collateral, co-maker
+ *   assessment) - same UNDER_REVIEW-only editability as the Review Report, since they're findings
+ *   from that same review pass. All advisory: the officer's real Approve/Decline call below is
+ *   what actually counts, same disclosure as everything else on this card.
  */
-function RiskManagementSummaryCard({
+function UnderwritingCard({
   application,
-  canEdit,
+  canEditRisk,
+  canEditReview,
+  showReview,
 }: {
   application: LoanApplication;
-  canEdit: boolean;
+  canEditRisk: boolean;
+  canEditReview: boolean;
+  /** Review Report + Underwriter Assessment only make sense once a manual review has actually
+   * started - matches the old ReviewReportCard's own visibility rule (Under Review, Pre Approval,
+   * or already decided with a report on file). Decision scoring/DTI and the risk-input fields
+   * above them stay visible at every stage, unchanged from the old RiskManagementSummaryCard. */
+  showReview: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = React.useState(false);
+  const [editingRisk, setEditingRisk] = React.useState(false);
   const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
   const [creditScore, setCreditScore] = React.useState(String(application.creditScore ?? ''));
   const [propertiesOwned, setPropertiesOwned] = React.useState(application.propertiesOwned.join(', '));
 
-  const resetDraft = () => {
+  const resetRiskDraft = () => {
     setMonthlyIncome(String(application.monthlyIncome ?? ''));
     setCreditScore(String(application.creditScore ?? ''));
     setPropertiesOwned(application.propertiesOwned.join(', '));
   };
 
-  const saveMutation = useMutation({
+  const saveRiskMutation = useMutation({
     mutationFn: () =>
       apiClient.patch<LoanApplication>(`/loan-applications/${application.id}`, {
         monthlyIncome: Number(monthlyIncome) > 0 ? Number(monthlyIncome) : undefined,
@@ -629,37 +675,95 @@ function RiskManagementSummaryCard({
       } satisfies UpdateLoanApplicationRequest),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] });
-      setEditing(false);
+      setEditingRisk(false);
     },
   });
+
+  const report = application.reviewReport;
+  const [ciNotes, setCiNotes] = React.useState(report?.ciNotes ?? '');
+  const [creditBureauResult, setCreditBureauResult] = React.useState<CreditBureauResult | ''>(report?.creditBureauResult ?? '');
+  const [creditBureauScore, setCreditBureauScore] = React.useState(report?.creditBureauScore ?? '');
+  const [checkedDocuments, setCheckedDocuments] = React.useState<string[]>(report?.checkedDocuments ?? []);
+  const [underwriterRiskGrade, setUnderwriterRiskGrade] = React.useState<UnderwriterRiskGrade | ''>(report?.underwriterRiskGrade ?? '');
+  const [underwriterRecommendation, setUnderwriterRecommendation] = React.useState<UnderwriterRecommendation | ''>(
+    report?.underwriterRecommendation ?? '',
+  );
+  const [recommendationConditions, setRecommendationConditions] = React.useState(report?.recommendationConditions ?? '');
+  const [collateralDescription, setCollateralDescription] = React.useState(report?.collateralDescription ?? '');
+  const [collateralValue, setCollateralValue] = React.useState(String(report?.collateralValue ?? ''));
+  const [coMakerAssessment, setCoMakerAssessment] = React.useState(report?.coMakerAssessment ?? '');
+
+  const toggleDocument = (doc: string, checked: boolean) => {
+    setCheckedDocuments((prev) => (checked ? [...prev, doc] : prev.filter((d) => d !== doc)));
+  };
+
+  const saveReviewMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/review-report`, {
+        ciNotes: ciNotes.trim() || undefined,
+        creditBureauResult: creditBureauResult || undefined,
+        creditBureauScore: creditBureauScore.trim() || undefined,
+        checkedDocuments,
+        underwriterRiskGrade: underwriterRiskGrade || undefined,
+        underwriterRecommendation: underwriterRecommendation || undefined,
+        recommendationConditions: recommendationConditions.trim() || undefined,
+        collateralDescription: collateralDescription.trim() || undefined,
+        collateralValue: Number(collateralValue) > 0 ? Number(collateralValue) : undefined,
+        coMakerAssessment: coMakerAssessment.trim() || undefined,
+      } satisfies SubmitReviewReportRequest),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+  });
+
+  const breakdown = application.preQualificationBreakdown;
+  const dtiPercent =
+    breakdown && application.monthlyIncome ? (breakdown.estimatedMonthlyAmortization / application.monthlyIncome) * 100 : null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Risk Management Summary
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Underwriting
         </CardTitle>
         <CardDescription>
-          Computed by the LMS itself from age, income, and address - a deterministic rule-based calculation. Advisory only; the
-          officer's Approve/Decline decision below is what actually counts.
+          System pre-qualification, credit investigation, and the underwriter's own risk assessment - all advisory. The officer's
+          Approve/Decline decision below is what actually counts.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {application.preQualificationBreakdown && (
+      <CardContent className="space-y-4">
+        {breakdown && (
           <div className="rounded-md border p-3">
             <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Decision scoring</p>
-            <DecisionScoringRow {...application.preQualificationBreakdown.checks.age} />
-            <DecisionScoringRow {...application.preQualificationBreakdown.checks.income} />
-            <DecisionScoringRow {...application.preQualificationBreakdown.checks.distance} />
+            <DecisionScoringRow {...breakdown.checks.age} />
+            <DecisionScoringRow {...breakdown.checks.income} />
+            <DecisionScoringRow {...breakdown.checks.distance} />
+            {dtiPercent !== null && (
+              <div className="mt-2 border-t pt-2">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-medium">Debt-to-Income ratio</p>
+                  <TermTip
+                    term="DTI"
+                    definition="Estimated monthly loan amortization as a share of monthly income. A common lending-industry rule of thumb: under ~30% is comfortable, 30-40% warrants a closer look, above 40% is high - not an Easycash policy threshold, informational only."
+                  />
+                </div>
+                <p className={`text-sm font-semibold ${dtiBandClass(dtiPercent)}`}>{dtiPercent.toFixed(1)}%</p>
+                <p className="text-xs text-muted-foreground">
+                  Estimated ₱{breakdown.estimatedMonthlyAmortization.toFixed(2)}/month amortization vs. ₱
+                  {application.monthlyIncome!.toFixed(2)} monthly income.
+                </p>
+              </div>
+            )}
           </div>
         )}
-        {saveMutation.isError && (
+
+        <Separator />
+
+        {saveRiskMutation.isError && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save these values.'}
+            {saveRiskMutation.error instanceof Error ? saveRiskMutation.error.message : 'Could not save these values.'}
           </div>
         )}
-        {editing ? (
+        {editingRisk ? (
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Monthly income (₱)</Label>
@@ -693,93 +797,51 @@ function RiskManagementSummaryCard({
           </dl>
         )}
 
-        {canEdit && (
+        {canEditRisk && (
           <div className="flex items-center gap-2">
-            {editing ? (
+            {editingRisk ? (
               <>
-                <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                  {saveMutation.isPending ? 'Saving…' : 'Save'}
+                <Button size="sm" disabled={saveRiskMutation.isPending} onClick={() => saveRiskMutation.mutate()}>
+                  {saveRiskMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    resetDraft();
-                    setEditing(false);
+                    resetRiskDraft();
+                    setEditingRisk(false);
                   }}
                 >
                   Cancel
                 </Button>
               </>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              <Button variant="outline" size="sm" onClick={() => setEditingRisk(true)}>
                 Edit
               </Button>
             )}
           </div>
         )}
-      </CardContent>
-    </Card>
-  );
-}
 
-const CREDIT_BUREAU_RESULT_OPTIONS: { value: CreditBureauResult; label: string }[] = [
-  { value: 'CLEAR', label: 'Clear' },
-  { value: 'FLAGGED', label: 'Flagged' },
-  { value: 'NO_RECORD_FOUND', label: 'No record found' },
-];
+        {showReview && (
+          <>
+        <Separator />
 
-/**
- * 2026-07-17 (Under Review / Pre Approval stages) - the CRM/credit-risk team's structured Review
- * Report: Credit Investigation notes, Credit Bureau result + score, and a document checklist
- * sourced from `application.submittedDocuments` (not an independently invented list). Editable
- * only while UNDER_REVIEW and `canEdit`; read-only once PRE_APPROVAL/APPROVED/DECLINED, matching
- * the backend's `updateReviewReport()` guard. Modeled after `RiskManagementSummaryCard` above, but
- * always-editable rather than an edit-toggle, since this is a draft form saved repeatedly while
- * the reviewer works through it.
- */
-function ReviewReportCard({ application, canEdit }: { application: LoanApplication; canEdit: boolean }) {
-  const queryClient = useQueryClient();
-  const report = application.reviewReport;
-  const [ciNotes, setCiNotes] = React.useState(report?.ciNotes ?? '');
-  const [creditBureauResult, setCreditBureauResult] = React.useState<CreditBureauResult | ''>(report?.creditBureauResult ?? '');
-  const [creditBureauScore, setCreditBureauScore] = React.useState(report?.creditBureauScore ?? '');
-  const [checkedDocuments, setCheckedDocuments] = React.useState<string[]>(report?.checkedDocuments ?? []);
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Review Report</p>
+          <p className="text-xs text-muted-foreground">Credit Investigation, Credit Bureau checking, and document verification.</p>
+        </div>
 
-  const toggleDocument = (doc: string, checked: boolean) => {
-    setCheckedDocuments((prev) => (checked ? [...prev, doc] : prev.filter((d) => d !== doc)));
-  };
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/review-report`, {
-        ciNotes: ciNotes.trim() || undefined,
-        creditBureauResult: creditBureauResult || undefined,
-        creditBureauScore: creditBureauScore.trim() || undefined,
-        checkedDocuments,
-      } satisfies SubmitReviewReportRequest),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
-  });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Review Report
-        </CardTitle>
-        <CardDescription>Credit Investigation, Credit Bureau checking, and document verification.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {saveMutation.isError && (
+        {saveReviewMutation.isError && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {saveMutation.error instanceof Error ? saveMutation.error.message : 'Could not save the review report.'}
+            {saveReviewMutation.error instanceof Error ? saveReviewMutation.error.message : 'Could not save the underwriting details.'}
           </div>
         )}
 
         <div className="space-y-1.5">
           <Label className="text-xs">Credit investigation notes</Label>
-          {canEdit ? (
+          {canEditReview ? (
             <Textarea rows={3} value={ciNotes} onChange={(e) => setCiNotes(e.target.value)} placeholder="Findings from the CI visit or call" />
           ) : (
             <p className="text-sm">{ciNotes || 'None on record.'}</p>
@@ -789,7 +851,7 @@ function ReviewReportCard({ application, canEdit }: { application: LoanApplicati
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-xs">Credit bureau result</Label>
-            {canEdit ? (
+            {canEditReview ? (
               <Select value={creditBureauResult} onValueChange={(v) => setCreditBureauResult(v as CreditBureauResult)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select" />
@@ -810,7 +872,7 @@ function ReviewReportCard({ application, canEdit }: { application: LoanApplicati
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Credit bureau score (optional)</Label>
-            {canEdit ? (
+            {canEditReview ? (
               <Input value={creditBureauScore} onChange={(e) => setCreditBureauScore(e.target.value)} />
             ) : (
               <p className="text-sm">{creditBureauScore || '-'}</p>
@@ -830,7 +892,7 @@ function ReviewReportCard({ application, canEdit }: { application: LoanApplicati
                     type="checkbox"
                     className="h-4 w-4 rounded border-input"
                     checked={checkedDocuments.includes(doc)}
-                    disabled={!canEdit}
+                    disabled={!canEditReview}
                     onChange={(e) => toggleDocument(doc, e.target.checked)}
                   />
                   {doc}
@@ -840,15 +902,137 @@ function ReviewReportCard({ application, canEdit }: { application: LoanApplicati
           )}
         </div>
 
-        {canEdit && (
-          <Button size="sm" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-            {saveMutation.isPending ? 'Saving…' : 'Save Review Report'}
+        <Separator />
+
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Underwriter Assessment</p>
+          <p className="text-xs text-muted-foreground">
+            The underwriter's own findings from this review - advisory, same as the rest of this report.
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Risk grade</Label>
+            {canEditReview ? (
+              <Select value={underwriterRiskGrade} onValueChange={(v) => setUnderwriterRiskGrade(v as UnderwriterRiskGrade)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNDERWRITER_RISK_GRADE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : underwriterRiskGrade ? (
+              <div>
+                <Badge variant={RISK_GRADE_BADGE_VARIANT[underwriterRiskGrade]}>
+                  {UNDERWRITER_RISK_GRADE_OPTIONS.find((o) => o.value === underwriterRiskGrade)?.label}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Not yet graded.</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Recommendation</Label>
+            {canEditReview ? (
+              <Select
+                value={underwriterRecommendation}
+                onValueChange={(v) => setUnderwriterRecommendation(v as UnderwriterRecommendation)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNDERWRITER_RECOMMENDATION_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm">
+                {UNDERWRITER_RECOMMENDATION_OPTIONS.find((o) => o.value === underwriterRecommendation)?.label ?? 'Not yet recommended.'}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {(underwriterRecommendation === 'APPROVE_WITH_CONDITIONS' || (!canEditReview && recommendationConditions)) && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Conditions</Label>
+            {canEditReview ? (
+              <Textarea
+                rows={2}
+                value={recommendationConditions}
+                onChange={(e) => setRecommendationConditions(e.target.value)}
+                placeholder="e.g. Require a co-maker signature, cap loan amount at ₱50,000"
+              />
+            ) : (
+              <p className="text-sm">{recommendationConditions}</p>
+            )}
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Collateral description</Label>
+            {canEditReview ? (
+              <Input
+                value={collateralDescription}
+                onChange={(e) => setCollateralDescription(e.target.value)}
+                placeholder="e.g. Motorcycle, OR/CR attached"
+              />
+            ) : (
+              <p className="text-sm">{collateralDescription || 'None on record.'}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Collateral value (₱)</Label>
+            {canEditReview ? (
+              <NumberInput min="0" value={collateralValue} onChange={(e) => setCollateralValue(e.target.value)} />
+            ) : (
+              <p className="text-sm">{Number(collateralValue) > 0 ? formatPeso(Number(collateralValue)) : '-'}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Co-maker assessment</Label>
+          {canEditReview ? (
+            <Textarea
+              rows={2}
+              value={coMakerAssessment}
+              onChange={(e) => setCoMakerAssessment(e.target.value)}
+              placeholder="Creditworthiness/capacity of the co-maker, if any"
+            />
+          ) : (
+            <p className="text-sm">{coMakerAssessment || 'None on record.'}</p>
+          )}
+        </div>
+
+        {canEditReview && (
+          <Button size="sm" disabled={saveReviewMutation.isPending} onClick={() => saveReviewMutation.mutate()}>
+            {saveReviewMutation.isPending ? 'Saving…' : 'Save Underwriting Details'}
           </Button>
+        )}
+          </>
         )}
       </CardContent>
     </Card>
   );
 }
+
+const CREDIT_BUREAU_RESULT_OPTIONS: { value: CreditBureauResult; label: string }[] = [
+  { value: 'CLEAR', label: 'Clear' },
+  { value: 'FLAGGED', label: 'Flagged' },
+  { value: 'NO_RECORD_FOUND', label: 'No record found' },
+];
 
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
@@ -1547,11 +1731,12 @@ export function LoanApplicationDetailPage() {
         </CardContent>
       </Card>
 
-      {(isUnderReview || isPreApproval || (isDecided && application.reviewReport)) && (
-        <ReviewReportCard application={application} canEdit={isUnderReview && canReviewLoanApplication} />
-      )}
-
-      <RiskManagementSummaryCard application={application} canEdit={canAccessLoanApplications} />
+      <UnderwritingCard
+        application={application}
+        canEditRisk={canAccessLoanApplications}
+        canEditReview={isUnderReview && canReviewLoanApplication}
+        showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
+      />
 
       <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />
 
