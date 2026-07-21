@@ -59,6 +59,17 @@ export class UserInactiveError extends DomainError {
   }
 }
 
+/** Settings > Security > Active Sessions (2026-07-21) - thrown for BOTH a nonexistent session id
+ * AND one that belongs to a different user. Deliberately the same error/status for both, same
+ * enumeration-avoidance reasoning as InvalidCredentialsError above - a caller must never be able
+ * to distinguish "that session doesn't exist" from "that session isn't yours" by probing ids. */
+export class SessionNotFoundError extends DomainError {
+  constructor() {
+    super('SESSION_NOT_FOUND', 'Session not found.', undefined, 404);
+    this.name = 'SessionNotFoundError';
+  }
+}
+
 export class UserNotFoundError extends DomainError {
   constructor() {
     super('USER_NOT_FOUND', 'User not found.', undefined, 404);

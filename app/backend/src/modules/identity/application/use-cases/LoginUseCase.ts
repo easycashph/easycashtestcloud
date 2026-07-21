@@ -66,19 +66,25 @@ export class LoginUseCase {
       throw new AccountInactiveError();
     }
 
+    // Issued before the access token so its row id is available for the `sid` claim below
+    // (Settings > Security > Active Sessions, 2026-07-21) - the access token needs to know which
+    // session it belongs to, not the other way around.
+    const refreshTokenExpiresAt = new Date(Date.now() + (this.deps.refreshTokenTtlMs ?? REFRESH_TOKEN_TTL_MS));
+    const issued = await refreshTokenRepository.issue({
+      userId: user.id,
+      expiresAt: refreshTokenExpiresAt,
+      createdByIp: input.ipAddress,
+      userAgent: input.userAgent,
+    });
+    const refreshToken = issued.rawToken;
+
     const { token: accessToken, expiresAt: accessTokenExpiresAt } = tokenService.signAccessToken({
       sub: user.id,
       email: user.email,
       roles: user.roles,
       branchId: user.branchId,
       jti: randomUUID(),
-    });
-
-    const refreshTokenExpiresAt = new Date(Date.now() + (this.deps.refreshTokenTtlMs ?? REFRESH_TOKEN_TTL_MS));
-    const { rawToken: refreshToken } = await refreshTokenRepository.issue({
-      userId: user.id,
-      expiresAt: refreshTokenExpiresAt,
-      createdByIp: input.ipAddress,
+      sid: issued.id,
     });
 
     await auditLogger.log({

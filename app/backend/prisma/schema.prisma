@@ -354,6 +354,11 @@ model RefreshToken {
   expiresAt   DateTime
   revokedAt   DateTime?
   createdByIp String?
+  /// Settings > Security > Active Sessions (2026-07-21) - captured once at issuance (login) and
+  /// carried forward on every rotation (refresh), never re-parsed from a later request. Each
+  /// non-revoked, non-expired row IS effectively one logged-in device's "session" - rotation
+  /// replaces a device's row in place rather than creating parallel rows for it.
+  userAgent   String?
   createdAt   DateTime  @default(now())
 
   @@map("refresh_tokens")

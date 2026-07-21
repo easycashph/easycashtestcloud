@@ -4,6 +4,10 @@ export interface AccessTokenClaims {
   roles: string[];
   branchId: string;
   jti: string;
+  /** The current RefreshToken row's id (Settings > Security > Active Sessions, 2026-07-21) - lets
+   * the sessions list mark "this device" without the access token ever carrying the raw refresh
+   * secret itself. Set at login/refresh time from IssuedRefreshToken.id. */
+  sid: string;
 }
 
 export interface SignedAccessToken {

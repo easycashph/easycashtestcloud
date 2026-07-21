@@ -26,3 +26,13 @@ export interface RefreshResponse {
   accessToken: string;
   accessTokenExpiresAt: string;
 }
+
+/** Settings > Security > Active Sessions (2026-07-21) - `GET /auth/sessions` item shape. Mirrors
+ * `AuthDtos.ts`'s `SessionView`. */
+export interface SessionView {
+  id: string;
+  createdAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  isCurrent: boolean;
+}

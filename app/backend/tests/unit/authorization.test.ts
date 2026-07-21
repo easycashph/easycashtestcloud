@@ -47,6 +47,7 @@ function signToken(roles: string[]): string {
     roles,
     branchId: 'branch-1',
     jti: 'jti-1',
+    sid: 'session-1',
   }).token;
 }
 

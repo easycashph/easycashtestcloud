@@ -28,17 +28,18 @@ export class JwtTokenService implements ITokenService {
       if (typeof payload !== 'object' || payload === null) {
         return null;
       }
-      const { sub, email, roles, branchId, jti } = payload as Record<string, unknown>;
+      const { sub, email, roles, branchId, jti, sid } = payload as Record<string, unknown>;
       if (
         typeof sub !== 'string' ||
         typeof email !== 'string' ||
         typeof branchId !== 'string' ||
         typeof jti !== 'string' ||
+        typeof sid !== 'string' ||
         !Array.isArray(roles)
       ) {
         return null;
       }
-      return { sub, email, branchId, jti, roles: roles as string[] };
+      return { sub, email, branchId, jti, sid, roles: roles as string[] };
     } catch (error) {
       // Expired, malformed, or tampered signature — all treated as "not
       // authenticated," not a server error. Logged at debug level only

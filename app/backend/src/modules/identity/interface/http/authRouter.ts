@@ -57,6 +57,8 @@ export function createAuthRouter(deps: AuthControllerDeps, tokenService: ITokenS
   router.post('/logout', controller.logout);
   router.post('/logout-all', requireAuth, controller.logoutAll);
   router.get('/me', requireAuth, controller.me);
+  router.get('/sessions', requireAuth, controller.listSessions);
+  router.delete('/sessions/:id', requireAuth, controller.revokeSession);
 
   return router;
 }

@@ -14,6 +14,8 @@ import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/Ref
 import { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
+import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import { BcryptPasswordHasher } from '@modules/identity/infrastructure/BcryptPasswordHasher';
 import { JwtTokenService } from '@modules/identity/infrastructure/JwtTokenService';
 import { PrismaUserRepository } from '@modules/identity/infrastructure/PrismaUserRepository';
@@ -304,6 +306,8 @@ export function createApp(): Express {
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
       getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),
+      listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
+      revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
     },
     tokenService,
   );

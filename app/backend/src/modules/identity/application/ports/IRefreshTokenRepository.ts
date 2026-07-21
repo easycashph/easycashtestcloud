@@ -9,12 +9,23 @@ export interface IssueRefreshTokenInput {
   userId: string;
   expiresAt: Date;
   createdByIp?: string;
+  userAgent?: string;
 }
 
 export interface IssuedRefreshToken {
   id: string;
   /** Plaintext token — only ever available at issuance time; never stored. */
   rawToken: string;
+}
+
+/** Settings > Security > Active Sessions (2026-07-21) - the richer shape `listActiveByUser`
+ * returns for display, as opposed to `RefreshTokenRecord`'s minimal shape used by the
+ * login/refresh/reuse-detection validation paths above. */
+export interface SessionRecord {
+  id: string;
+  createdAt: Date;
+  createdByIp: string | null;
+  userAgent: string | null;
 }
 
 /**
@@ -28,6 +39,14 @@ export interface IssuedRefreshToken {
 export interface IRefreshTokenRepository {
   issue(input: IssueRefreshTokenInput): Promise<IssuedRefreshToken>;
   findByRawToken(rawToken: string): Promise<RefreshTokenRecord | null>;
+  /** Settings > Security > Active Sessions (2026-07-21) - looked up by the *token's own row id*
+   * (the JWT's `sid` claim / the URL param on the revoke endpoint), never the raw token itself -
+   * this is what lets `RevokeSessionUseCase` verify ownership (`record.userId === requester`)
+   * before revoking, without the caller ever presenting the raw secret. */
+  findById(id: string): Promise<RefreshTokenRecord | null>;
+  /** Active = not revoked AND not yet expired. Ordered newest-first. Each row is effectively one
+   * logged-in device (see `SessionRecord`'s doc comment) - safe to show directly as "sessions". */
+  listActiveByUser(userId: string): Promise<SessionRecord[]>;
   /**
    * Revoke a single token, with no replacement issued. Used by logout
    * (single-session) and by reuse-detection's "kill everything" response.

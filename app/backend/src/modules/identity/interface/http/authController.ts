@@ -5,6 +5,8 @@ import type { RefreshTokenUseCase } from '@modules/identity/application/use-case
 import type { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import type { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import type { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import type { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
+import type { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import type { LoginRequestBody } from './authSchemas';
 import { clearRefreshTokenCookie, readRefreshTokenCookie, setRefreshTokenCookie } from './cookies';
 import { TokenNotFoundError, TokenExpiredError } from '@modules/identity/application/errors/AuthErrors';
@@ -15,6 +17,8 @@ export interface AuthControllerDeps {
   logoutUseCase: LogoutUseCase;
   logoutAllUseCase: LogoutAllUseCase;
   getCurrentUserUseCase: GetCurrentUserUseCase;
+  listSessionsUseCase: ListSessionsUseCase;
+  revokeSessionUseCase: RevokeSessionUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture). */
@@ -49,7 +53,11 @@ export class AuthController {
         throw new TokenNotFoundError();
       }
 
-      const result = await this.deps.refreshTokenUseCase.execute({ rawRefreshToken });
+      const result = await this.deps.refreshTokenUseCase.execute({
+        rawRefreshToken,
+        ipAddress: req.ip,
+        userAgent: req.header('user-agent'),
+      });
 
       setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenExpiresAt);
       res.status(200).json({
@@ -93,6 +101,26 @@ export class AuthController {
       const currentUser = getCurrentUser(req);
       const result = await this.deps.getCurrentUserUseCase.execute({ userId: currentUser.sub });
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const items = await this.deps.listSessionsUseCase.execute({ userId: currentUser.sub, currentSessionId: currentUser.sid });
+      res.status(200).json({ items });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revokeSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.revokeSessionUseCase.execute({ userId: currentUser.sub, sessionId: req.params.id! });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

@@ -91,3 +91,40 @@ export function toProperCase(value: string | null | undefined): string {
     return word.toLowerCase().replace(/(^|')\p{L}/gu, (c) => c.toUpperCase());
   });
 }
+
+/**
+ * Settings > Security > Active Sessions (2026-07-21) - turns a raw User-Agent string into a short
+ * "Browser on OS" label for display. Deliberately a small heuristic regex parser, not a dependency
+ * (CLAUDE.md "avoid unnecessary dependencies") - good enough for "which of my devices is this",
+ * not meant to be a precise UA-sniffing library. Order matters: Edge/Opera/Chrome all include
+ * "Chrome" in their UA string, so the more specific browser must be checked first.
+ */
+export function describeUserAgent(userAgent: string | null | undefined): string {
+  if (!userAgent) return 'Unknown device';
+
+  const browser = /Edg\//.test(userAgent)
+    ? 'Edge'
+    : /OPR\//.test(userAgent)
+      ? 'Opera'
+      : /Chrome\//.test(userAgent)
+        ? 'Chrome'
+        : /Firefox\//.test(userAgent)
+          ? 'Firefox'
+          : /Safari\//.test(userAgent)
+            ? 'Safari'
+            : 'Unknown browser';
+
+  const os = /Windows/.test(userAgent)
+    ? 'Windows'
+    : /Mac OS X/.test(userAgent)
+      ? 'macOS'
+      : /Android/.test(userAgent)
+        ? 'Android'
+        : /iPhone|iPad/.test(userAgent)
+          ? 'iOS'
+          : /Linux/.test(userAgent)
+            ? 'Linux'
+            : 'Unknown OS';
+
+  return `${browser} on ${os}`;
+}

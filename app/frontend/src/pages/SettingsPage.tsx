@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,9 +24,9 @@ import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
 import type { Language } from '@/lib/translations';
 import { apiClient, ApiError } from '@/lib/apiClient';
-import type { AuthenticatedUserView } from '@/lib/authTypes';
+import type { AuthenticatedUserView, SessionView } from '@/lib/authTypes';
 import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
-import { cn } from '@/lib/utils';
+import { cn, describeUserAgent, formatDateTime } from '@/lib/utils';
 
 /** Cross-referenced against `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real
  * `MIN_LENGTH` so the two don't silently drift. */
@@ -329,7 +329,105 @@ function SecurityTab() {
           </form>
         </CardContent>
       </Card>
+
+      <SessionsCard />
     </div>
+  );
+}
+
+/**
+ * Settings > Security > Active Sessions (2026-07-21 user request) - every device currently logged
+ * into this account, backed by the non-revoked, non-expired `RefreshToken` rows for this user
+ * (`GET /auth/sessions`). "This device" (the row matching the access token's own `sid` claim) has
+ * no Revoke button - ending your own current session here would leave a dead refresh cookie behind
+ * (the button that actually does that safely is the normal Log Out in the account menu, which also
+ * clears the cookie). Revoking any other row signs that device out the next time it tries to
+ * refresh its access token - not instantly, since access tokens are stateless JWTs valid until
+ * they naturally expire.
+ */
+function SessionsCard() {
+  const queryClient = useQueryClient();
+  const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [revokingAll, setRevokingAll] = React.useState(false);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['auth-sessions'],
+    queryFn: () => apiClient.get<{ items: SessionView[] }>('/auth/sessions'),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (sessionId: string) => apiClient.delete(`/auth/sessions/${sessionId}`),
+    onMutate: (sessionId) => setRevokingId(sessionId),
+    onSettled: () => {
+      setRevokingId(null);
+      queryClient.invalidateQueries({ queryKey: ['auth-sessions'] });
+    },
+  });
+
+  const sessions = sessionsQuery.data?.items ?? [];
+  const otherSessions = sessions.filter((s) => !s.isCurrent);
+
+  const revokeAllOthers = async () => {
+    setRevokingAll(true);
+    try {
+      await Promise.all(otherSessions.map((s) => apiClient.delete(`/auth/sessions/${s.id}`)));
+    } finally {
+      setRevokingAll(false);
+      queryClient.invalidateQueries({ queryKey: ['auth-sessions'] });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div className="flex flex-row items-center gap-2">
+          <Laptop className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Active Sessions</CardTitle>
+            <CardDescription>Devices currently signed in to your account.</CardDescription>
+          </div>
+        </div>
+        {otherSessions.length > 0 && (
+          <Button type="button" variant="outline" size="sm" disabled={revokingAll} onClick={revokeAllOthers}>
+            <LogOut className="mr-1.5 h-3.5 w-3.5" /> {revokingAll ? 'Signing out…' : 'Sign out all other devices'}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {sessionsQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No active sessions found.</p>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {sessions.map((session) => (
+              <div key={session.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{describeUserAgent(session.userAgent)}</span>
+                    {session.isCurrent && <Badge variant="outline">This device</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {session.ipAddress ?? 'Unknown IP'} · Signed in {formatDateTime(session.createdAt)}
+                  </p>
+                </div>
+                {!session.isCurrent && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={revokeMutation.isPending && revokingId === session.id}
+                    onClick={() => revokeMutation.mutate(session.id)}
+                  >
+                    {revokeMutation.isPending && revokingId === session.id ? 'Signing out…' : 'Sign out'}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
