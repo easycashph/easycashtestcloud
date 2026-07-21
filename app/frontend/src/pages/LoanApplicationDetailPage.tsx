@@ -1746,7 +1746,10 @@ export function LoanApplicationDetailPage() {
         />
       )}
 
-      <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />
+      {/* 2026-07-21 (user request) - same "not until a review has actually started" gate as the
+          Underwriting card above; the running Notes log is a reviewer/staff tool, not something
+          relevant while the application is still just PREAPPROVED/PREDECLINED. */}
+      {Boolean(application.reviewStartedAt) && <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />}
 
       <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
 
