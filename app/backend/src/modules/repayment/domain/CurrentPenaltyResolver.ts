@@ -1,6 +1,7 @@
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { PenaltyCalculator } from '@shared/domain/calculation/PenaltyCalculator';
+import { SEC_MC3_PENALTY_RATE_PERCENT_PER_MONTH } from '@shared/domain/compliance/SecMc3Coverage';
 import type { RepaymentInstallment } from './RepaymentInstallment';
 
 /**
@@ -15,6 +16,9 @@ const SMALL_LOAN_RATE = Percentage.of('5');
 const STANDARD_RATE = Percentage.of('10');
 const GRACE_PERIOD_DAYS = 3;
 
+/** BSP Circular 1133 / SEC MC 3 (`ADR-053`) — the ceiling used INSTEAD of the ADR-050 rates above, for a loan confirmed SEC-MC3-covered. */
+const SEC_MC3_PENALTY_RATE = Percentage.of(String(SEC_MC3_PENALTY_RATE_PERCENT_PER_MONTH));
+
 function resolvePenaltyRatePercent(principalAmount: Money): Percentage {
   return principalAmount.greaterThan(SMALL_LOAN_THRESHOLD) ? STANDARD_RATE : SMALL_LOAN_RATE;
 }
@@ -28,6 +32,8 @@ export interface PenaltyComputationContext {
   /** `true` when the loan has no `legacyId` — i.e. originated through this system, not migrated. */
   isProspectiveLoan: boolean;
   principalAmount: Money;
+  /** `ADR-053` — when true, use the SEC MC 3 ceiling (5%/month, simple/non-compounding) instead of the ADR-050 rates. Resolved by the caller via `isSecMc3Covered()` against the loan's product/principal/tenor/origination date. */
+  isSecMc3Covered: boolean;
 }
 
 /**
@@ -46,10 +52,24 @@ export function resolveComputedPenalty(
   asOfDate: Date = new Date(),
 ): Money {
   if (penaltyContext?.isProspectiveLoan && installment.status !== 'PAID') {
+    const overdueAmount = installment.due.principal
+      .add(installment.due.interest)
+      .subtract(installment.paid.principal.add(installment.paid.interest));
+
+    if (penaltyContext.isSecMc3Covered) {
+      // ADR-053: SEC MC 3's own 5%/month ceiling, simple/non-compounding — replaces the ADR-050
+      // rates below entirely for a covered loan, not layered on top of them.
+      return PenaltyCalculator.calculateSimple({
+        overdueAmount,
+        dueDate: installment.dueDate,
+        asOfDate,
+        ratePercent: SEC_MC3_PENALTY_RATE,
+        gracePeriodDays: GRACE_PERIOD_DAYS,
+      });
+    }
+
     return PenaltyCalculator.calculate({
-      overdueAmount: installment.due.principal
-        .add(installment.due.interest)
-        .subtract(installment.paid.principal.add(installment.paid.interest)),
+      overdueAmount,
       dueDate: installment.dueDate,
       asOfDate,
       ratePercent: resolvePenaltyRatePercent(penaltyContext.principalAmount),

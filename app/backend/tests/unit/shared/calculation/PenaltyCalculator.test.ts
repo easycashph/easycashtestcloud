@@ -93,3 +93,52 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12)', () => {
     expect(result.isZero()).toBe(true);
   });
 });
+
+// ADR-053 — BSP Circular 1133 / SEC MC 3's "5 percent per month on outstanding scheduled amount
+// due", read as SIMPLE (non-compounding), for loans confirmed SEC-MC3-covered.
+describe('PenaltyCalculator.calculateSimple (ADR-053)', () => {
+  it('is LINEAR (not compounding) across multiple whole months, unlike calculate()', () => {
+    const result = PenaltyCalculator.calculateSimple({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-09-01T00:00:00Z'), // 2 whole months late
+      ratePercent: Percentage.of('5'),
+      gracePeriodDays: 3,
+    });
+    // Simple: 10000 x 5% x 2 = 1000.00 (vs. calculate()'s compounding 1025.00 for the same inputs).
+    expect(result.toString()).toBe('1000.00');
+  });
+
+  it('matches calculate() for exactly one whole month (compounding and simple are identical at month 1)', () => {
+    const simple = PenaltyCalculator.calculateSimple({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-08-01T00:00:00Z'),
+      ratePercent: Percentage.of('5'),
+      gracePeriodDays: 3,
+    });
+    expect(simple.toString()).toBe('500.00');
+  });
+
+  it('charges zero penalty within the grace period', () => {
+    const result = PenaltyCalculator.calculateSimple({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-07-04T00:00:00Z'),
+      ratePercent: Percentage.of('5'),
+      gracePeriodDays: 3,
+    });
+    expect(result.isZero()).toBe(true);
+  });
+
+  it('charges zero penalty before a whole month has passed (no proration), same as calculate()', () => {
+    const result = PenaltyCalculator.calculateSimple({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-07-25T00:00:00Z'),
+      ratePercent: Percentage.of('5'),
+      gracePeriodDays: 3,
+    });
+    expect(result.isZero()).toBe(true);
+  });
+});

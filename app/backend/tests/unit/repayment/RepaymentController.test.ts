@@ -16,6 +16,11 @@ function buildDeps() {
     listRepaymentInstallmentsForLoanUseCase: { execute: vi.fn() },
     getRepaymentInstallmentUseCase: { execute: vi.fn() },
     getLoanAccountUseCase: { execute: vi.fn() },
+    // ADR-053: resolveSecMc3Coverage() looks this up to build PenaltyComputationContext.isSecMc3Covered.
+    loanProductRepository: {
+      findVersionById: vi.fn().mockResolvedValue({ id: 'version-1', loanProductId: 'product-1' }),
+      findById: vi.fn().mockResolvedValue({ id: 'product-1', isUnsecuredGeneralPurpose: false }),
+    },
   } as never as ConstructorParameters<typeof RepaymentController>[0];
 }
 
@@ -48,6 +53,9 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
       branchId: 'branch-1',
       principalAmount: Money.of('50000.00'),
       legacyId: undefined,
+      loanProductVersionId: 'version-1',
+      installmentCount: 4,
+      firstRepaymentDate: new Date('2023-01-01'),
     });
     const controller = new RepaymentController(deps);
     const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
@@ -70,6 +78,9 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
       branchId: 'branch-1',
       principalAmount: Money.of('50000.00'),
       legacyId: undefined,
+      loanProductVersionId: 'version-1',
+      installmentCount: 4,
+      firstRepaymentDate: new Date('2023-01-01'),
     });
     const controller = new RepaymentController(deps);
     const req = { params: { id: installment.id }, authUser: authUser(['Loan Operation Manager'], 'branch-1') } as unknown as Request;
@@ -131,7 +142,13 @@ describe('RepaymentController (read-only per D-2 — no write method exists on t
     it('allows a global caller to read any branch\'s schedule', async () => {
       const deps = buildDeps();
       (deps.listRepaymentInstallmentsForLoanUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ branchId: 'branch-2' });
+      (deps.getLoanAccountUseCase.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
+        branchId: 'branch-2',
+        legacyId: undefined,
+        loanProductVersionId: 'version-1',
+        installmentCount: 4,
+        firstRepaymentDate: new Date('2023-01-01'),
+      });
       const controller = new RepaymentController(deps);
       const req = { params: { loanAccountId: 'loan-1' }, authUser: authUser(['MIS'], 'branch-1') } as unknown as Request;
       const res = buildResponse();

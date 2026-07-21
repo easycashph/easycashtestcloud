@@ -1,16 +1,14 @@
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, ExternalLink, FilePlus2, Lock, Search, XCircle } from 'lucide-react';
+import { AlertCircle, ExternalLink, FilePlus2, Lock, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
-import { Textarea } from '@/components/ui/textarea';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { RoleAbbr } from '@/components/RoleAbbr';
@@ -21,8 +19,8 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { useQuery } from '@tanstack/react-query';
+import { fetchAllPages } from '@/lib/apiClient';
 import type { LoanApplication, LoanApplicationStatus } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -34,7 +32,6 @@ const PAGE_SIZE = 25;
  * one bulk action worth building here (not bulk-approve): approve requires a product sub-type
  * assigned per application first, which isn't uniform across a multi-select, so there's no safe
  * single "Approve Selected" action - decline has no such per-row precondition. */
-const DECLINE_ELIGIBLE_STATUSES = new Set<LoanApplicationStatus>(['PREAPPROVED', 'PREDECLINED', 'UNDER_REVIEW', 'PRE_APPROVAL']);
 
 /** Matches LoanApplicationCreatePage's LOAN_TYPE_OPTIONS exactly - every application's
  * `requestedCategory` comes from that same fixed dropdown, so a static list here (rather than
@@ -104,17 +101,12 @@ const STATUS_BADGE_VARIANT: Record<LoanApplicationStatus, 'secondary' | 'warning
  */
 export function LoanApplicationsPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { canAccessLoanApplications, canReviewLoanApplication, currentAccount } = useRole();
+  const { canAccessLoanApplications, currentAccount } = useRole();
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [status, setStatus] = React.useState<LoanApplicationStatus | 'FOR_DISBURSEMENT' | 'ALL'>('ALL');
   const [category, setCategory] = React.useState('ALL');
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-  const [bulkDeclineOpen, setBulkDeclineOpen] = React.useState(false);
-  const [bulkDecisionNote, setBulkDecisionNote] = React.useState('');
-  const [bulkResult, setBulkResult] = React.useState<{ succeeded: number; failed: number } | null>(null);
 
   useLogPageView('List of Loan Applications');
 
@@ -174,50 +166,6 @@ export function LoanApplicationsPage() {
   // useSortableTable's hook call is never skipped on some renders.
   const filtered = status === 'FOR_DISBURSEMENT' ? applications.filter(isForDisbursement) : applications;
   const { sorted, sort, toggleSort } = useSortableTable(filtered, getSortValue, { key: 'createdAt', direction: 'desc' });
-
-  // Clears the selection whenever the page's own data changes (page nav, filter change, refetch)
-  // - a stale selection referencing rows no longer on screen would be confusing to act on.
-  React.useEffect(() => {
-    setSelectedIds(new Set());
-  }, [applications]);
-
-  const eligibleOnPage = sorted.filter((a) => DECLINE_ELIGIBLE_STATUSES.has(a.status));
-  const allEligibleSelected = eligibleOnPage.length > 0 && eligibleOnPage.every((a) => selectedIds.has(a.id));
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAllEligible = () => {
-    setSelectedIds(allEligibleSelected ? new Set() : new Set(eligibleOnPage.map((a) => a.id)));
-  };
-
-  // Fires the same single-application POST /decline endpoint once per selected id - no dedicated
-  // bulk backend endpoint, since this is a straightforward fan-out with per-row independent
-  // success/failure (one declined application shouldn't block the rest from going through).
-  const bulkDeclineMutation = useMutation({
-    mutationFn: async () => {
-      const results = await Promise.allSettled(
-        [...selectedIds].map((id) =>
-          apiClient.post(`/loan-applications/${id}/decline`, { decisionNote: bulkDecisionNote.trim() || undefined }),
-        ),
-      );
-      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-      const failed = results.length - succeeded;
-      return { succeeded, failed };
-    },
-    onSuccess: (result) => {
-      setBulkResult(result);
-      setSelectedIds(new Set());
-      setBulkDecisionNote('');
-      queryClient.invalidateQueries({ queryKey: ['loan-applications'] });
-    },
-  });
 
   if (!canAccessLoanApplications) {
     return (
@@ -290,28 +238,6 @@ export function LoanApplicationsPage() {
         </div>
       )}
 
-      {canReviewLoanApplication && selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border bg-secondary/30 p-3">
-          <p className="text-sm font-medium">{selectedIds.size} selected</p>
-          <Button size="sm" variant="destructive" onClick={() => setBulkDeclineOpen(true)}>
-            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Decline Selected
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-            Clear selection
-          </Button>
-        </div>
-      )}
-
-      {bulkResult && (
-        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          Declined {bulkResult.succeeded} application{bulkResult.succeeded === 1 ? '' : 's'}.
-          {bulkResult.failed > 0 ? ` ${bulkResult.failed} could not be declined - refresh and retry those individually.` : ''}
-          <Button variant="ghost" size="sm" className="ml-auto h-6 px-2" onClick={() => setBulkResult(null)}>
-            Dismiss
-          </Button>
-        </div>
-      )}
-
       <Card>
         <CardHeader className="flex flex-col gap-3">
           <CardTitle className="text-base">Search &amp; Filter</CardTitle>
@@ -355,19 +281,6 @@ export function LoanApplicationsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                {canReviewLoanApplication && (
-                  <TableCell className="w-10">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-input"
-                      checked={allEligibleSelected}
-                      disabled={eligibleOnPage.length === 0}
-                      onChange={toggleSelectAllEligible}
-                      aria-label="Select all declinable applications on this page"
-                      title="Selects only applications not yet decided (Approved/Declined excluded)"
-                    />
-                  </TableCell>
-                )}
                 <SortableTableHead sortKey="applicantName" currentSort={sort} onSort={toggleSort}>
                   Applicant
                 </SortableTableHead>
@@ -389,20 +302,6 @@ export function LoanApplicationsPage() {
             <TableBody>
               {sorted.map((app) => (
                 <TableRow key={app.id}>
-                  {canReviewLoanApplication && (
-                    <TableCell>
-                      {DECLINE_ELIGIBLE_STATUSES.has(app.status) ? (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input"
-                          checked={selectedIds.has(app.id)}
-                          onChange={() => toggleSelected(app.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Select ${app.applicantName}`}
-                        />
-                      ) : null}
-                    </TableCell>
-                  )}
                   <TableCell className="cursor-pointer" onClick={() => navigate(`/applications/${app.id}`)}>
                     <div className="flex items-center gap-2">
                       <ApplicantAvatar
@@ -465,7 +364,7 @@ export function LoanApplicationsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={canReviewLoanApplication ? 7 : 6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                     {applicationsQuery.isLoading ? 'Loading applications…' : 'No applications match your search/filter.'}
                   </TableCell>
                 </TableRow>
@@ -485,51 +384,6 @@ export function LoanApplicationsPage() {
       </Card>
 
       <RecentActivityPanel label="List of Loan Applications" entityTypes={['LoanApplication', 'Loan Applications']} />
-
-      <Dialog open={bulkDeclineOpen} onOpenChange={(open) => !open && setBulkDeclineOpen(false)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Confirm bulk decline
-            </DialogTitle>
-            <DialogDescription>
-              This will decline {selectedIds.size} application{selectedIds.size === 1 ? '' : 's'}. This cannot be undone from here -
-              a declined application can only be reverted one at a time (MIS only), from its own Detail page.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="bulk-decision-note">Decision note (optional, applied to all selected)</Label>
-            <Textarea
-              id="bulk-decision-note"
-              value={bulkDecisionNote}
-              onChange={(e) => setBulkDecisionNote(e.target.value)}
-              placeholder="e.g. Does not meet income requirement"
-              rows={2}
-            />
-          </div>
-          {bulkDeclineMutation.isError && (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" /> Could not decline the selected applications.
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkDeclineOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={bulkDeclineMutation.isPending}
-              onClick={() =>
-                bulkDeclineMutation.mutate(undefined, {
-                  onSuccess: () => setBulkDeclineOpen(false),
-                })
-              }
-            >
-              {bulkDeclineMutation.isPending ? 'Declining…' : 'Yes, decline all'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

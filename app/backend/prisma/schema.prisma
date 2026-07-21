@@ -238,23 +238,24 @@ model User {
   roles                         UserRole[]
   refreshTokens                 RefreshToken[]
   auditLogs                     AuditLog[]
-  profileActivityLogs           ProfileActivityLog[]    @relation("ProfileActivityLogUser")
-  borrowersAsLoanOfficer        Borrower[]              @relation("BorrowerLoanOfficer")
-  loanAccountsAsOfficer         LoanAccount[]           @relation("LoanAccountOfficer")
-  loanAccountsApproved          LoanAccount[]           @relation("LoanAccountApprovedBy")
-  transactionsPosted            LoanTransaction[]       @relation("LoanTransactionPostedBy")
-  attachmentsUploaded           Attachment[]            @relation("AttachmentUploadedBy")
-  profileNotesAuthored          ProfileNote[]           @relation("ProfileNoteAuthor")
+  profileActivityLogs           ProfileActivityLog[]          @relation("ProfileActivityLogUser")
+  borrowersAsLoanOfficer        Borrower[]                    @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer         LoanAccount[]                 @relation("LoanAccountOfficer")
+  loanAccountsApproved          LoanAccount[]                 @relation("LoanAccountApprovedBy")
+  transactionsPosted            LoanTransaction[]             @relation("LoanTransactionPostedBy")
+  attachmentsUploaded           Attachment[]                  @relation("AttachmentUploadedBy")
+  profileNotesAuthored          ProfileNote[]                 @relation("ProfileNoteAuthor")
   idempotencyKeys               IdempotencyKey[]
-  loanApplicationsEncoded       LoanApplication[]       @relation("LoanApplicationEncodedBy")
-  loanApplicationsReviewed      LoanApplication[]       @relation("LoanApplicationReviewedBy")
-  loanApplicationReviewsStarted LoanApplication[]       @relation("LoanApplicationReviewStartedBy")
-  loanApplicationsPreApproved   LoanApplication[]       @relation("LoanApplicationPreApprovedBy")
+  loanApplicationsEncoded       LoanApplication[]             @relation("LoanApplicationEncodedBy")
+  loanApplicationsReviewed      LoanApplication[]             @relation("LoanApplicationReviewedBy")
+  loanApplicationReviewsStarted LoanApplication[]             @relation("LoanApplicationReviewStartedBy")
+  loanApplicationsPreApproved   LoanApplication[]             @relation("LoanApplicationPreApprovedBy")
   loanNotesAuthored             LoanNote[]
-  loanDocumentsGenerated        GeneratedLoanDocument[] @relation("LoanDocumentGeneratedBy")
-  penaltyOverridesSet           RepaymentSchedule[]     @relation("PenaltyOverrideBy")
+  loanDocumentsGenerated        GeneratedLoanDocument[]       @relation("LoanDocumentGeneratedBy")
+  statementsOfAccountGenerated  GeneratedStatementOfAccount[] @relation("StatementOfAccountGeneratedBy")
+  penaltyOverridesSet           RepaymentSchedule[]           @relation("PenaltyOverrideBy")
   penaltyReductionsMade         PenaltyReduction[]
-  feesOverridesSet              RepaymentSchedule[]     @relation("FeesOverrideBy")
+  feesOverridesSet              RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade            FeeAdjustment[]
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
@@ -373,6 +374,17 @@ model LoanProduct {
   code        String  @unique
   name        String
   description String?
+
+  /// BSP Circular 1133 / SEC MC 3 (2022-07-20, confirmed with the user against
+  /// `legacy/SEC/BSP1133.pdf` and the SEC FAQ) — one of the four criteria that together determine
+  /// whether a loan is "covered" by the interest/penalty/EIR/total-cost ceilings: "unsecured,
+  /// general-purpose loan". A product-level classification (not per-version — whether a product is
+  /// secured/specific-purpose doesn't change across pricing versions). Confirmed true so far only
+  /// for SP-Flash, SL-LAZ, SML-REG, PFL-GAD (2026-07-20 user confirmation) — every other product
+  /// defaults to `false` (NOT confirmed unsecured/general-purpose, not "confirmed secured") pending
+  /// review; see ADR-053 §2 for the full list and status. Never inferred/guessed for a product not
+  /// explicitly confirmed by the user (CLAUDE.md: never fabricate financial/compliance logic).
+  isUnsecuredGeneralPurpose Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -914,14 +926,15 @@ model LoanAccount {
   /// `ConcurrencyConflictError`, never a silent overwrite.
   version Int @default(0)
 
-  transactions       LoanTransaction[]
-  repaymentSchedule  RepaymentSchedule[]
-  appliedFees        AppliedFee[]
-  coBorrowers        LoanAccountCoBorrower[]
-  notes              LoanNote[]
-  generatedDocuments GeneratedLoanDocument[]
-  smsReminderLogs    SmsReminderLog[]
-  emailReminderLogs  EmailReminderLog[]
+  transactions                 LoanTransaction[]
+  repaymentSchedule            RepaymentSchedule[]
+  appliedFees                  AppliedFee[]
+  coBorrowers                  LoanAccountCoBorrower[]
+  notes                        LoanNote[]
+  generatedDocuments           GeneratedLoanDocument[]
+  smsReminderLogs              SmsReminderLog[]
+  emailReminderLogs            EmailReminderLog[]
+  generatedStatementsOfAccount GeneratedStatementOfAccount[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1329,6 +1342,61 @@ model GeneratedLoanDocument {
 
   @@index([loanAccountId])
   @@map("generated_loan_documents")
+}
+
+/// Statement of Account (ADR-051 §1/§9: explicitly out of scope for the 11-document required/
+/// conditional pipeline above — a separate, on-demand, per-request document, not tied to
+/// `DocumentTemplate`/`DocumentTemplateMapping`). Append-only like `GeneratedLoanDocument`: every
+/// generation is its own permanent, immutable snapshot of the figures shown to/sent to the
+/// borrower at that moment — a later payment or penalty accrual must never silently change what an
+/// already-generated SOA says. Collection Fee and Other Fee are staff-entered per generation (no
+/// system field for either, confirmed against the legacy Excel/VBA tool's own `txtCollectionFee`/
+/// `txtotherfee` manual input boxes), so they're stored here rather than derived.
+model GeneratedStatementOfAccount {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+
+  /// Display format `SOA-{5-digit soaSequenceNumber}-{MMDDYYYY of generatedAt}` (e.g.
+  /// `SOA-00001-07192026`), matching the legacy Excel/VBA tool's own numbering. A PER-LOAN-ACCOUNT
+  /// running counter (confirmed 2026-07-19 against the tool's actual VBA source -
+  /// `wsLoan.Cells(r, 26)`, incremented per the specific loan account row found - correcting an
+  /// earlier "global counter" assumption made from a screenshot alone). Computed similarly to
+  /// `LoanAccount.loanCode` (`CreateLoanAccountUseCase.generateLoanCode`'s own doc comment) - plain
+  /// "max existing + 1 for this loanAccountId" at generation time, not a Postgres-native sequence/
+  /// autoincrement column - because the number must be known BEFORE the PDF is filled (it's a
+  /// placeholder on the document itself), and this is a low-frequency, staff-driven action where
+  /// that non-atomic read-then-use is an accepted tradeoff, same as the loan code precedent.
+  soaSequenceNumber Int
+
+  /// `penaltyFromDate`/`penaltyToDate` (2026-07-19, user request, corrected from a single
+  /// `penaltyAsOfDate`): a manually-entered date RANGE applied uniformly across every Past Due
+  /// installment for the Penalty computation (`unpaid balance x Days(from,to) x rate/30`) — NOT
+  /// each installment's own due date, unlike the legacy tool. `accruedInterestAsOfDate` remains
+  /// independent (matches the legacy tool's own separate "To Date" field for that section).
+  penaltyFromDate         DateTime @db.Date
+  penaltyToDate           DateTime @db.Date
+  accruedInterestAsOfDate DateTime @db.Date
+
+  currentAmortizationDue Decimal @db.Decimal(14, 2)
+  pastDuePrincipal       Decimal @db.Decimal(14, 2)
+  pastDueInterest        Decimal @db.Decimal(14, 2)
+  pastDuePenalty         Decimal @db.Decimal(14, 2)
+  totalPastDue           Decimal @db.Decimal(14, 2)
+  accruedInterest        Decimal @db.Decimal(14, 2)
+  collectionFee          Decimal @db.Decimal(14, 2)
+  otherFee               Decimal @db.Decimal(14, 2)
+  totalAmountDue         Decimal @db.Decimal(14, 2)
+
+  /// Key into the existing local storage abstraction (DOC-3, `app/backend/storage/`).
+  storageKey String
+
+  generatedByUserId String
+  generatedBy       User     @relation("StatementOfAccountGeneratedBy", fields: [generatedByUserId], references: [id])
+  generatedAt       DateTime @default(now())
+
+  @@index([loanAccountId])
+  @@map("generated_statements_of_account")
 }
 
 // ----------------------------------------------------------------------------

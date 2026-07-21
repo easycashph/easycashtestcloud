@@ -391,6 +391,20 @@ export interface LoanDocumentListItem {
   } | null;
 }
 
+/** ADR-052 — one row per generated Statement of Account (append-only history, newest first). */
+export interface GeneratedStatementOfAccountListItem {
+  id: string;
+  loanAccountId: string;
+  soaNumber: string;
+  penaltyFromDate: string;
+  penaltyToDate: string;
+  accruedInterestAsOfDate: string;
+  totalAmountDue: string;
+  generatedByUserId: string;
+  generatedByName: string;
+  generatedAt: string;
+}
+
 /** One installment a payment actually touched — from `payment_allocations`, the same rows Reverse Payment reads. */
 export interface PaymentAllocationDetail {
   repaymentInstallmentId: string;

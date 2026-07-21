@@ -7,6 +7,8 @@ export interface LoanProductProps {
   code: string;
   name: string;
   description?: string;
+  /** BSP Circular 1133 / SEC MC 3 classification — see schema.prisma's own doc comment on this column. */
+  isUnsecuredGeneralPurpose: boolean;
   createdAt: Date;
   updatedAt: Date;
   versions: LoanProductVersion[];
@@ -35,6 +37,9 @@ export class LoanProduct {
       code: input.code,
       name: input.name,
       description: input.description,
+      // Never guessed at creation time — defaults to false ("not yet confirmed unsecured/
+      // general-purpose") until a compliance review explicitly confirms it (see schema.prisma).
+      isUnsecuredGeneralPurpose: false,
       createdAt: now,
       updatedAt: now,
       versions: [],
@@ -59,6 +64,10 @@ export class LoanProduct {
 
   get description(): string | undefined {
     return this.props.description;
+  }
+
+  get isUnsecuredGeneralPurpose(): boolean {
+    return this.props.isUnsecuredGeneralPurpose;
   }
 
   get createdAt(): Date {

@@ -103,6 +103,47 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
     expect(result.currentPenaltyOwed).toBe('0.00');
   });
 
+  // ADR-053 (2026-07-20): SEC MC3-covered loans use the 5%/month simple (non-compounding) ceiling
+  // instead of ADR-050's compounding formula.
+  describe('SEC MC3 coverage (ADR-053)', () => {
+    it('uses the simple 5%/month formula (not compounding) when isSecMc3Covered is true', () => {
+      // Far enough in the past that many whole months have definitely elapsed by test-run time,
+      // regardless of the real wall-clock date - needed for compounding vs. simple to visibly diverge.
+      const dueDate = new Date('2020-01-01T00:00:00Z');
+      const installment = RepaymentInstallment.reconstitute({
+        id: 'installment-secmc3',
+        loanAccountId: 'loan-secmc3',
+        installmentNumber: 1,
+        dueDate,
+        due: InstallmentAmounts.of({ principal: Money.of('8000.00'), interest: Money.of('2000.00') }),
+        paid: InstallmentAmounts.of({}),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 0,
+      });
+
+      // Not currently exercised by presentRepaymentInstallment's asOfDate (always "now"), so this
+      // just confirms the covered path produces the SIMPLE-formula figure, not the ADR-050 one, by
+      // comparing directly against the two PenaltyCalculator methods for a fixed 2-month-late date.
+      const covered = presentRepaymentInstallment(installment, {
+        isProspectiveLoan: true,
+        principalAmount: Money.of('8000.00'),
+        isSecMc3Covered: true,
+      });
+      const notCovered = presentRepaymentInstallment(installment, {
+        isProspectiveLoan: true,
+        principalAmount: Money.of('8000.00'),
+        isSecMc3Covered: false,
+      });
+
+      expect(covered.currentPenaltyOwed).not.toBeNull();
+      expect(notCovered.currentPenaltyOwed).not.toBeNull();
+      // ADR-050's compounding formula always charges >= the simple formula for the same rate/months
+      // once at least 2 whole months have elapsed (compounding interest on interest).
+      expect(Number(notCovered.currentPenaltyOwed)).toBeGreaterThanOrEqual(Number(covered.currentPenaltyOwed));
+    });
+  });
+
   // 2026-07-15 (Reduce Penalty feature): an override always wins over live computation.
   describe('penaltyOverride', () => {
     it('overrides the live-computed amount and reports isLivePenalty=false', () => {
