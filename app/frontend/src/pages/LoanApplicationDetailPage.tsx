@@ -1731,12 +1731,20 @@ export function LoanApplicationDetailPage() {
         </CardContent>
       </Card>
 
-      <UnderwritingCard
-        application={application}
-        canEditRisk={canAccessLoanApplications}
-        canEditReview={isUnderReview && canReviewLoanApplication}
-        showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
-      />
+      {/* 2026-07-21 (user request) - underwriter features (Decision Scoring/DTI, risk-input
+          fields, review report) shouldn't be visible at all until a manual review has actually
+          started - PREAPPROVED/PREDECLINED is only the system's advisory pre-qualification verdict,
+          not a real underwriting pass yet. `reviewStartedAt` is set exactly once by "Start Review"
+          (see LoanApplication.startReview in the backend domain model) and never unset again, so
+          it's a reliable "has review ever started" flag across every later stage. */}
+      {Boolean(application.reviewStartedAt) && (
+        <UnderwritingCard
+          application={application}
+          canEditRisk={canAccessLoanApplications}
+          canEditReview={isUnderReview && canReviewLoanApplication}
+          showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
+        />
+      )}
 
       <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />
 
