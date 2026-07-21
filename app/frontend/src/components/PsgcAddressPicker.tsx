@@ -73,6 +73,20 @@ export function PsgcAddressPicker({ value, onChange }: { value: AddressDraft; on
     if (resolveQuery.data.barangayCode) setBarangayCode(resolveQuery.data.barangayCode);
   }, [resolveQuery.data]);
 
+  // 2026-07-21 bug fix: ZIP Code auto-fill only ever ran inside `pickCity` below - fine for a
+  // fresh manual selection, but the reverse-lookup path above sets `cityCode` directly (an
+  // existing address being loaded, e.g. editing a client whose address was captured before this
+  // auto-fill existed, or was captured with no ZIP), so the ZIP field silently stayed blank even
+  // though Region/Province/City/Barangay all resolved correctly. Backfills it as soon as the
+  // matching city's data has loaded, same "best-effort suggestion, still a plain editable Input"
+  // posture as pickCity - only fires while `value.zipCode` is still empty, so it never clobbers a
+  // ZIP the officer already has on file or has since corrected.
+  React.useEffect(() => {
+    if (!cityCode || value.zipCode) return;
+    const city = citiesQuery.data?.find((c) => c.code === cityCode);
+    if (city?.zipCode) onChange({ zipCode: city.zipCode });
+  }, [cityCode, citiesQuery.data, value.zipCode]);
+
   const pickRegion = (code: string) => {
     setRegionCode(code);
     setProvinceCode('');
