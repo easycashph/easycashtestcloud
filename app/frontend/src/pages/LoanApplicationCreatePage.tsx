@@ -516,6 +516,15 @@ export function LoanApplicationForm({
     setOtherDocumentFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // 2026-07-21 (user request) - drives the Underwriting card's Document checklist, which was
+  // always empty system-wide (0 of 13 real applications) because nothing populated it: derived
+  // from the same categorized upload slots below rather than a separate/divergent checklist, so it
+  // always matches what was actually attached, not a duplicate manual tick-list.
+  const submittedDocumentLabels = [
+    ...Object.keys(documentFiles).map((category) => DOCUMENT_CATEGORY_LABELS[category as AttachmentDocumentCategory]),
+    ...(otherDocumentFiles.length > 0 ? ['Other Supporting Document'] : []),
+  ];
+
   const createMutation = useMutation({
     mutationFn: () =>
       apiClient.post<LoanApplication>('/loan-applications', {
@@ -565,6 +574,7 @@ export function LoanApplicationForm({
         referralSource: referralDetail.trim() ? `${referralSource} - ${referralDetail.trim()}` : referralSource,
         accountType,
         loanPurpose: loanPurpose.trim() || undefined,
+        submittedDocuments: submittedDocumentLabels.length > 0 ? submittedDocumentLabels : undefined,
       } satisfies CreateLoanApplicationRequest),
     onSuccess: async (application) => {
       // Best-effort: auto-save the AI Auto-fill upload and every Applicant Document slot as real
