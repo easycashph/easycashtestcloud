@@ -13,6 +13,12 @@
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
+/** 2026-07-20 (Underwriting rework, user request) — the underwriter's own manual risk grade,
+ * separate from the system's automated PREAPPROVED/PREDECLINED pre-qualification verdict. */
+export type UnderwriterRiskGrade = 'LOW' | 'MEDIUM' | 'HIGH';
+/** The underwriter's own recommendation - advisory, like the rest of the review report; the
+ * officer's real Approve/Decline call (application.status) is what actually counts. */
+export type UnderwriterRecommendation = 'APPROVE' | 'DECLINE' | 'APPROVE_WITH_CONDITIONS';
 
 export interface CreditBureauPartyCheck {
   cmap?: string;
@@ -66,7 +72,10 @@ export interface AgencyVerificationDetails {
  * 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template.
  * `creditBureauResult`/`creditBureauScore`/`ciNotes` are kept only so reports saved before this
  * date still round-trip; the current form writes `creditBureauBorrower`/`creditBureauCoBorrower`,
- * `mitigation`, `agencyVerification`, `conditionsForApproval`, and `crmRecommendation` instead. */
+ * `mitigation`, `agencyVerification`, `conditionsForApproval`, and `crmRecommendation` instead.
+ *
+ * 2026-07-20 (Underwriting rework, user request): also added the underwriter's own risk grade,
+ * recommendation (+ conditions when APPROVE_WITH_CONDITIONS), and collateral/co-maker assessment. */
 export interface LoanApplicationReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
@@ -78,6 +87,12 @@ export interface LoanApplicationReviewReport {
   agencyVerification?: AgencyVerificationDetails;
   conditionsForApproval?: string;
   crmRecommendation?: string;
+  underwriterRiskGrade?: UnderwriterRiskGrade;
+  underwriterRecommendation?: UnderwriterRecommendation;
+  recommendationConditions?: string;
+  collateralDescription?: string;
+  collateralValue?: number;
+  coMakerAssessment?: string;
 }
 
 /** Body for `PATCH /loan-applications/:id/review-report` — PATCH semantics, send only what
@@ -93,6 +108,12 @@ export interface SubmitReviewReportRequest {
   agencyVerification?: AgencyVerificationDetails;
   conditionsForApproval?: string;
   crmRecommendation?: string;
+  underwriterRiskGrade?: UnderwriterRiskGrade;
+  underwriterRecommendation?: UnderwriterRecommendation;
+  recommendationConditions?: string;
+  collateralDescription?: string;
+  collateralValue?: number;
+  coMakerAssessment?: string;
 }
 
 export interface PreQualificationCheck {
@@ -111,6 +132,10 @@ export interface PreQualificationBreakdown {
     income: PreQualificationCheck;
     distance: PreQualificationCheck;
   };
+  /** Same figure the income check's own `detail` text already describes in words - a raw number
+   * too (2026-07-20, Underwriting rework) so the Debt-to-Income ratio can be computed without
+   * parsing it back out of that sentence. */
+  estimatedMonthlyAmortization: number;
 }
 
 export interface LoanApplicationDependant {

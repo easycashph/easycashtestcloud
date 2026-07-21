@@ -10,6 +10,13 @@ export interface PsgcCityOption extends PsgcOption {
   zipCode: string | null;
 }
 
+/** `GET /psgc/barangays` additionally carries a best-effort `zipCode` - only populated in NCR,
+ * where a single city has multiple ZIP codes depending on barangay (e.g. Makati). Takes priority
+ * over PsgcCityOption.zipCode when present - see PsgcAddressPicker's zip backfill effect. */
+export interface PsgcBarangayOption extends PsgcOption {
+  zipCode: string | null;
+}
+
 /** `GET /psgc/resolve-address` - reverse-looks-up plain address names back into PSGC codes, so an
  * existing address (e.g. loaded from a LoanApplication/Borrower) can pre-select
  * PsgcAddressPicker's cascading dropdowns instead of showing them blank. Each level is null if

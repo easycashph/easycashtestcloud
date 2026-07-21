@@ -125,6 +125,12 @@ export const reviewReportSchema = z.object({
   agencyVerification: agencyVerificationDetailsSchema.optional(),
   conditionsForApproval: z.string().optional(),
   crmRecommendation: z.string().optional(),
+  underwriterRiskGrade: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+  underwriterRecommendation: z.enum(['APPROVE', 'DECLINE', 'APPROVE_WITH_CONDITIONS']).optional(),
+  recommendationConditions: z.string().optional(),
+  collateralDescription: z.string().optional(),
+  collateralValue: z.coerce.number().nonnegative().optional(),
+  coMakerAssessment: z.string().optional(),
 });
 
 export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;

@@ -59,6 +59,19 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.15',
+    date: 'July 20, 2026',
+    highlights: [
+      'List of Loan Accounts gained Product Type and Product Class filters (Product Class narrows to the selected Product Type, same as the Create Loan Account picker).',
+      'List of Loan Applications gained a "Loan Account" column, linking straight to the loan account an approved application turned into - also added as its own field on the application\'s own detail page.',
+      'Loan Account details: "Undo Disburse" is now disabled with an explanation once a payment has already been recorded against the loan, instead of only failing after being clicked.',
+      'Staff Accounts table now shows each member\'s Role Class (their specific job title, e.g. "MIS Manager") instead of their broader Role Type.',
+      'Role Type names spelled out in full on User Accounts instead of abbreviated (e.g. "Management Information System" instead of "MIS"), and two were renamed at MIS\'s request: "Loan Operation Manager" is now "Loan Operation Management", and "Collection Officer" is now just "Collection".',
+      'Product Types moved from Administration > System into its own tab under Loan Products, since it\'s specifically about the Loan Products catalog.',
+      'Fixed a console warning ("Maximum update depth exceeded") on List of Loan Applications caused by an unstable reference in the shared pagination helper - also benefits every other paginated list page.',
+    ],
+  },
+  {
     version: '0.9.14',
     date: 'July 20, 2026',
     highlights: [

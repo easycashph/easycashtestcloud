@@ -10,6 +10,14 @@ export interface PsgcCityOption extends PsgcOption {
   zipCode: string | null;
 }
 
+/** Barangays additionally carry a best-effort `zipCode` - only populated in NCR, where a single
+ * city has multiple ZIP codes depending on barangay (e.g. Makati - see
+ * scripts/import-ncr-barangay-zip-codes.ts). Null everywhere else, where the city-level ZIP
+ * (`PsgcCityOption.zipCode`) already covers the area. */
+export interface PsgcBarangayOption extends PsgcOption {
+  zipCode: string | null;
+}
+
 export interface ResolvedAddressCodes {
   regionCode: string | null;
   provinceCode: string | null;
@@ -21,7 +29,7 @@ export interface IPsgcRepository {
   listRegions(): Promise<PsgcOption[]>;
   listProvinces(regionCode: string): Promise<PsgcOption[]>;
   listCities(provinceCode: string): Promise<PsgcCityOption[]>;
-  listBarangays(cityMunicipalityCode: string): Promise<PsgcOption[]>;
+  listBarangays(cityMunicipalityCode: string): Promise<PsgcBarangayOption[]>;
   /** Reverse lookup: given the plain address *names* already stored on an Address/Borrower/
    * LoanApplication record (this API's own write shape - see PsgcAddressPicker.tsx's doc comment
    * for why only names are stored, never codes), resolves them back to PSGC codes so a caller can
