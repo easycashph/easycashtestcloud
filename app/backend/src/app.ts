@@ -695,6 +695,7 @@ export function createApp(): Express {
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,
+        loanProductRepository,
         auditLogger,
         profileActivityLogService,
         notificationService,

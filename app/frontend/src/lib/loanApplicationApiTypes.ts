@@ -14,14 +14,70 @@ export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIE
 export type LoanApplicationAccountType = 'NEW' | 'RENEWAL';
 export type CreditBureauResult = 'CLEAR' | 'FLAGGED' | 'NO_RECORD_FOUND';
 
+export interface CreditBureauPartyCheck {
+  cmap?: string;
+  kyc?: string;
+  myscore?: string;
+}
+
+export interface MitigationDetails {
+  bank?: string;
+  branch?: string;
+  accountName?: string;
+  accountNumber?: string;
+  atmCardNumber?: string;
+  allotmentAmount?: string;
+}
+
+export interface AgencyVerificationDetails {
+  agencyName?: string;
+  agencyAddress?: string;
+  agencyContactNumbers?: string;
+  yearsWithAgency?: string;
+  basicMonthlySalary?: string;
+  position?: string;
+  vessel?: string;
+  contractDuration?: string;
+  joiningPort?: string;
+  dateOfDeparture?: string;
+  departureStatus?: string;
+  expectedSignOffDate?: string;
+  monthlySalary?: string;
+  allottee1Name?: string;
+  allottee1Bank?: string;
+  allottee1AccountNumber?: string;
+  allottee1Amount?: string;
+  allottee2Name?: string;
+  allottee2Bank?: string;
+  allottee2AccountNumber?: string;
+  allottee2Amount?: string;
+  payrollSchedule?: string;
+  firstFullAllotmentDate?: string;
+  cashAdvance?: string;
+  mannerOfDeduction?: string;
+  sourceName?: string;
+  sourcePosition?: string;
+}
+
 /** 2026-07-17 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
  * captured while UNDER_REVIEW. `checkedDocuments` is the subset of `submittedDocuments` the
- * reviewer has verified, not an independent list. */
+ * reviewer has verified, not an independent list.
+ *
+ * 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template.
+ * `creditBureauResult`/`creditBureauScore`/`ciNotes` are kept only so reports saved before this
+ * date still round-trip; the current form writes `creditBureauBorrower`/`creditBureauCoBorrower`,
+ * `mitigation`, `agencyVerification`, `conditionsForApproval`, and `crmRecommendation` instead. */
 export interface LoanApplicationReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments: string[];
+  creditBureauBorrower?: CreditBureauPartyCheck;
+  creditBureauCoBorrower?: CreditBureauPartyCheck;
+  mitigation?: MitigationDetails;
+  agencyVerification?: AgencyVerificationDetails;
+  conditionsForApproval?: string;
+  crmRecommendation?: string;
 }
 
 /** Body for `PATCH /loan-applications/:id/review-report` — PATCH semantics, send only what
@@ -31,6 +87,12 @@ export interface SubmitReviewReportRequest {
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments?: string[];
+  creditBureauBorrower?: CreditBureauPartyCheck;
+  creditBureauCoBorrower?: CreditBureauPartyCheck;
+  mitigation?: MitigationDetails;
+  agencyVerification?: AgencyVerificationDetails;
+  conditionsForApproval?: string;
+  crmRecommendation?: string;
 }
 
 export interface PreQualificationCheck {

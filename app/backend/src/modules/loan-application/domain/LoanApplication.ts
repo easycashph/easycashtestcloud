@@ -15,14 +15,80 @@ export interface DependantEntry {
   relationship?: string;
 }
 
+/** 2026-07-21 (Credit Evaluation Report redesign) — CMAP/KYC/Myscore, captured separately per
+ * party since the legacy CER template checks both the borrower and co-borrower independently. */
+export interface CreditBureauPartyCheck {
+  cmap?: string;
+  kyc?: string;
+  myscore?: string;
+}
+
+/** 2026-07-21 — "Mode of Payment and Mitigation" from the legacy CER: an optional ATM/allotment
+ * surrender arrangement, not applicable to every loan. */
+export interface MitigationDetails {
+  bank?: string;
+  branch?: string;
+  accountName?: string;
+  accountNumber?: string;
+  atmCardNumber?: string;
+  allotmentAmount?: string;
+}
+
+/** 2026-07-21 — Agency/contract/allotment verification from the legacy CER, required only for
+ * Seafarer Loan applications (enforced in `TagLoanApplicationPreApprovalUseCase`, not here — this
+ * entity has no concept of "which product is Seafarer", same reasoning as the role checks noted on
+ * `revert()` below). */
+export interface AgencyVerificationDetails {
+  agencyName?: string;
+  agencyAddress?: string;
+  agencyContactNumbers?: string;
+  yearsWithAgency?: string;
+  basicMonthlySalary?: string;
+  position?: string;
+  vessel?: string;
+  contractDuration?: string;
+  joiningPort?: string;
+  dateOfDeparture?: string;
+  departureStatus?: string;
+  expectedSignOffDate?: string;
+  monthlySalary?: string;
+  allottee1Name?: string;
+  allottee1Bank?: string;
+  allottee1AccountNumber?: string;
+  allottee1Amount?: string;
+  allottee2Name?: string;
+  allottee2Bank?: string;
+  allottee2AccountNumber?: string;
+  allottee2Amount?: string;
+  payrollSchedule?: string;
+  firstFullAllotmentDate?: string;
+  cashAdvance?: string;
+  mannerOfDeduction?: string;
+  sourceName?: string;
+  sourcePosition?: string;
+}
+
 /** 2026-07-16 (Under Review / Pre Approval stages) — CI/Credit Bureau/document-checklist findings
  * captured while UNDER_REVIEW. `checkedDocuments` holds the subset of `submittedDocuments` the
- * reviewer has verified, not an independent list. */
+ * reviewer has verified, not an independent list.
+ *
+ * 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template
+ * (`legacy/reports/Credit Evaluation Report Template/CER.docx`): `creditBureauResult`/
+ * `creditBureauScore` are kept only for backward compatibility with reports saved before this date
+ * — the new UI writes `creditBureauBorrower`/`creditBureauCoBorrower` instead, matching the CER's
+ * per-party CMAP/KYC/Myscore breakdown. `ciNotes` is likewise kept for old data; the new UI writes
+ * `conditionsForApproval`/`crmRecommendation` instead, the CER's two distinct narrative fields. */
 export interface ReviewReport {
   ciNotes?: string;
   creditBureauResult?: CreditBureauResult;
   creditBureauScore?: string;
   checkedDocuments: string[];
+  creditBureauBorrower?: CreditBureauPartyCheck;
+  creditBureauCoBorrower?: CreditBureauPartyCheck;
+  mitigation?: MitigationDetails;
+  agencyVerification?: AgencyVerificationDetails;
+  conditionsForApproval?: string;
+  crmRecommendation?: string;
 }
 
 export interface LoanApplicationProps {

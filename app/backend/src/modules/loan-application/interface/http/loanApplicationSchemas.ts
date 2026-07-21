@@ -67,11 +67,64 @@ export type DecideLoanApplicationRequestBody = z.infer<typeof decideLoanApplicat
 /** 2026-07-16 (Under Review / Pre Approval stages) — PATCH semantics, send only what changed.
  * `checkedDocuments` always replaces (the caller sends the full current checklist state, same
  * convention as updateLoanApplicationSchema's `propertiesOwned`). */
+const creditBureauPartyCheckSchema = z.object({
+  cmap: z.string().optional(),
+  kyc: z.string().optional(),
+  myscore: z.string().optional(),
+});
+
+const mitigationDetailsSchema = z.object({
+  bank: z.string().optional(),
+  branch: z.string().optional(),
+  accountName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  atmCardNumber: z.string().optional(),
+  allotmentAmount: z.string().optional(),
+});
+
+const agencyVerificationDetailsSchema = z.object({
+  agencyName: z.string().optional(),
+  agencyAddress: z.string().optional(),
+  agencyContactNumbers: z.string().optional(),
+  yearsWithAgency: z.string().optional(),
+  basicMonthlySalary: z.string().optional(),
+  position: z.string().optional(),
+  vessel: z.string().optional(),
+  contractDuration: z.string().optional(),
+  joiningPort: z.string().optional(),
+  dateOfDeparture: z.string().optional(),
+  departureStatus: z.string().optional(),
+  expectedSignOffDate: z.string().optional(),
+  monthlySalary: z.string().optional(),
+  allottee1Name: z.string().optional(),
+  allottee1Bank: z.string().optional(),
+  allottee1AccountNumber: z.string().optional(),
+  allottee1Amount: z.string().optional(),
+  allottee2Name: z.string().optional(),
+  allottee2Bank: z.string().optional(),
+  allottee2AccountNumber: z.string().optional(),
+  allottee2Amount: z.string().optional(),
+  payrollSchedule: z.string().optional(),
+  firstFullAllotmentDate: z.string().optional(),
+  cashAdvance: z.string().optional(),
+  mannerOfDeduction: z.string().optional(),
+  sourceName: z.string().optional(),
+  sourcePosition: z.string().optional(),
+});
+
+/** 2026-07-21 — redesigned against the legacy Credit Evaluation Report (CER) template; see
+ * `LoanApplication.ts`'s `ReviewReport` doc comment for what replaced what. */
 export const reviewReportSchema = z.object({
   ciNotes: z.string().optional(),
   creditBureauResult: z.enum(['CLEAR', 'FLAGGED', 'NO_RECORD_FOUND']).optional(),
   creditBureauScore: z.string().optional(),
   checkedDocuments: z.array(z.string()).optional(),
+  creditBureauBorrower: creditBureauPartyCheckSchema.optional(),
+  creditBureauCoBorrower: creditBureauPartyCheckSchema.optional(),
+  mitigation: mitigationDetailsSchema.optional(),
+  agencyVerification: agencyVerificationDetailsSchema.optional(),
+  conditionsForApproval: z.string().optional(),
+  crmRecommendation: z.string().optional(),
 });
 
 export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;
