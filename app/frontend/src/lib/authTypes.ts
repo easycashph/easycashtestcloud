@@ -36,3 +36,13 @@ export interface SessionView {
   userAgent: string | null;
   isCurrent: boolean;
 }
+
+/** Settings > Security > Recent Sign-in Activity (2026-07-21) - `GET /audit-logs/my-login-activity`
+ * item shape. Mirrors the backend's `LoginActivityResponse`. */
+export interface LoginActivityView {
+  id: string;
+  action: 'LOGIN_SUCCESS' | 'LOGIN_FAILED';
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}

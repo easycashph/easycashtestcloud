@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
 import type { Language } from '@/lib/translations';
 import { apiClient, ApiError } from '@/lib/apiClient';
-import type { AuthenticatedUserView, SessionView } from '@/lib/authTypes';
+import type { AuthenticatedUserView, LoginActivityView, SessionView } from '@/lib/authTypes';
 import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
 import { cn, describeUserAgent, formatDateTime } from '@/lib/utils';
 
@@ -331,6 +331,7 @@ function SecurityTab() {
       </Card>
 
       <SessionsCard />
+      <LoginActivityCard />
     </div>
   );
 }
@@ -422,6 +423,62 @@ function SessionsCard() {
                     {revokeMutation.isPending && revokingId === session.id ? 'Signing out…' : 'Sign out'}
                   </Button>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Settings > Security > Recent Sign-in Activity (2026-07-21 user request) - the last 20
+ * LOGIN_SUCCESS/LOGIN_FAILED events for this account, self-scoped server-side
+ * (`GET /audit-logs/my-login-activity` - never a userId param the caller could tamper with). A
+ * run of LOGIN_FAILED entries the user doesn't recognize is the "someone's guessing my password"
+ * signal this card exists to surface.
+ */
+function LoginActivityCard() {
+  const activityQuery = useQuery({
+    queryKey: ['auth-login-activity'],
+    queryFn: () => apiClient.get<{ items: LoginActivityView[] }>('/audit-logs/my-login-activity?limit=20'),
+  });
+
+  const events = activityQuery.data?.items ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <History className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Recent Sign-in Activity</CardTitle>
+          <CardDescription>Your last 20 sign-in attempts, successful or not.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {activityQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sign-in activity on record.</p>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {events.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {event.action === 'LOGIN_SUCCESS' ? (
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{event.action === 'LOGIN_SUCCESS' ? 'Signed in' : 'Failed sign-in attempt'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {describeUserAgent(event.userAgent)} · {event.ipAddress ?? 'Unknown IP'}
+                    </p>
+                  </div>
+                </div>
+                <p className="shrink-0 text-xs text-muted-foreground">{formatDateTime(event.createdAt)}</p>
               </div>
             ))}
           </div>

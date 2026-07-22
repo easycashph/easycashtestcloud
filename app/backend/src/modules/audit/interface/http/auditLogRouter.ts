@@ -19,6 +19,10 @@ export function createAuditLogRouter(deps: AuditLogControllerDeps, tokenService:
    */
   router.get('/audit-logs/recent-activity', requireAuth, controller.listRecentActivity);
 
+  /** Any authenticated user may see their OWN sign-in history (Settings > Security) - self-scoped
+   * server-side, unlike `GET /audit-logs` which is MIS-only precisely because it isn't scoped. */
+  router.get('/audit-logs/my-login-activity', requireAuth, controller.listMyLoginActivity);
+
   /** Any authenticated user may log their own page view — not MIS-gated, unlike reading the list back. */
   router.post('/audit-logs/view', requireAuth, controller.logView);
 

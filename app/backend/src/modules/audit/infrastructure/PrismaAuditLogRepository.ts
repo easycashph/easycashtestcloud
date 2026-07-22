@@ -9,6 +9,8 @@ export class PrismaAuditLogRepository implements IAuditLogRepository {
       ...(options.entityTypes && options.entityTypes.length > 0 ? { entityType: { in: options.entityTypes } } : {}),
       ...(options.entityId ? { entityId: options.entityId } : {}),
       ...(options.excludeActions && options.excludeActions.length > 0 ? { action: { notIn: options.excludeActions } } : {}),
+      ...(options.actions && options.actions.length > 0 ? { action: { in: options.actions } } : {}),
+      ...(options.userId ? { userId: options.userId } : {}),
       ...(options.search
         ? {
             OR: [

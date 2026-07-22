@@ -5,6 +5,7 @@ import type { ListAuditLogsUseCase } from '../../application/use-cases/ListAudit
 import type { LogSectionViewUseCase } from '../../application/use-cases/LogSectionViewUseCase';
 import { presentAuditLog } from './presenters/AuditLogPresenter';
 import { presentRecentActivity } from './presenters/RecentActivityPresenter';
+import { presentLoginActivity } from './presenters/LoginActivityPresenter';
 
 export interface AuditLogControllerDeps {
   listAuditLogsUseCase: ListAuditLogsUseCase;
@@ -49,6 +50,24 @@ export class AuditLogController {
           : undefined;
       const records = await this.deps.listAuditLogsUseCase.execute({ limit, entityTypes, excludeActions });
       res.status(200).json({ items: records.map(presentRecentActivity) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Settings > Security > Recent Sign-in Activity (2026-07-21) - self-scoped to the caller
+   * (`userId` is always `req.authUser.sub`, never a query param - a caller cannot request someone
+   * else's sign-in history from this endpoint) and fixed to LOGIN_SUCCESS/LOGIN_FAILED only. */
+  listMyLoginActivity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const { limit } = parsePaginationParams(req.query);
+      const records = await this.deps.listAuditLogsUseCase.execute({
+        limit,
+        userId: currentUser.sub,
+        actions: ['LOGIN_SUCCESS', 'LOGIN_FAILED'],
+      });
+      res.status(200).json({ items: records.map(presentLoginActivity) });
     } catch (error) {
       next(error);
     }

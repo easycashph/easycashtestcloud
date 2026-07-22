@@ -32,6 +32,12 @@ export interface FindManyAuditLogsOptions {
   entityId?: string;
   /** Excludes rows whose action is in this list (e.g. ["VIEW_SECTION"] for a widget that only wants write actions - page views vastly outnumber them, so filtering client-side after the fact starves `limit`). */
   excludeActions?: string[];
+  /** Inclusive counterpart to `excludeActions` (2026-07-21, Settings > Security > Recent Sign-in
+   * Activity) - only rows whose action is in this list, e.g. ["LOGIN_SUCCESS", "LOGIN_FAILED"]. */
+  actions?: string[];
+  /** Exact match against the *acting* user (2026-07-21, same feature as `actions` above) - lets a
+   * caller self-scope to "my own" entries without a separate query method. */
+  userId?: string;
 }
 
 export interface IAuditLogRepository {
