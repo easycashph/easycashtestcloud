@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
 import { ConcurrencyConflictDialog, type ConcurrencyConflictField } from '@/components/ConcurrencyConflictDialog';
+import type { LoanSigningSessionStatus } from '@/lib/loanSigningApiTypes';
 import type {
   Borrower as RealBorrower,
   GeneratedStatementOfAccountListItem,
@@ -370,6 +371,92 @@ function emailReminderStatusText(log: EmailReminderLog): string {
  * loan's actual logged sends directly (one row per real Monday it fired), not a locally-simulated
  * 3-occurrence list.
  */
+/** 2026-07-22 (e-signature, phase 1 - required documents only). Sends every required document
+ * (generating any not already on file) as one batch, one SMS link, one OTP verification covering
+ * the whole client visit. See `docs/Claude_API_Cost_Reference.docx`-adjacent design discussion -
+ * this is unrelated to that AI feature, just noting the same session's design-first pattern. */
+function LoanSigningPanel({ loanId, defaultPhoneNumber, canSend }: { loanId: string; defaultPhoneNumber?: string; canSend: boolean }) {
+  const queryClient = useQueryClient();
+  const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
+  const [sendError, setSendError] = React.useState<string | null>(null);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['loan-signing-sessions', loanId],
+    queryFn: () => apiClient.get<{ items: LoanSigningSessionStatus[] }>(`/loan-accounts/${loanId}/signing-sessions`),
+    enabled: canSend,
+  });
+  const sessions = sessionsQuery.data?.items ?? [];
+
+  const sendMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, { phoneNumber }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  if (!canSend) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>E-signature</CardTitle>
+        <CardDescription>
+          Send this loan's applicable documents (required plus any conditional on its product) to the client for signature via SMS - one
+          link, one code, every document signed in the same visit.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {sendError && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{sendError}</span>
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="signing-phone" className="text-xs">
+              Client mobile number
+            </Label>
+            <Input id="signing-phone" placeholder="09XX XXX XXXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+          </div>
+          <Button onClick={() => sendMutation.mutate()} disabled={!phoneNumber.trim() || sendMutation.isPending}>
+            {sendMutation.isPending ? 'Sending…' : 'Send for signature'}
+          </Button>
+        </div>
+
+        {sessionsQuery.isLoading ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : sessions.length === 0 ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">No signing links sent yet.</p>
+        ) : (
+          <ul className="divide-y rounded-md border text-sm">
+            {sessions.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 p-2.5">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.signedDocuments} of {s.totalDocuments} signed
+                    {s.otpVerifiedAt ? ' · opened' : ' · not yet opened'}
+                  </p>
+                </div>
+                <Badge variant={s.fullySigned ? 'success' : s.revokedAt ? 'destructive' : 'outline'}>
+                  {s.fullySigned ? 'Fully signed' : s.revokedAt ? 'Revoked' : 'Awaiting signature'}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function RealRemindersPanel({
   loanAccountId,
   loanCode,
@@ -1800,6 +1887,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
+
+      <LoanSigningPanel loanId={loan.id} defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined} canSend={canGenerateDocuments} />
 
       {/* ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection document,
           distinct from the required/conditional Documents above (ADR-051 §1). */}

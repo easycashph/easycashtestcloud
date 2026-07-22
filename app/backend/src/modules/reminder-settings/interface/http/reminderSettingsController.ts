@@ -25,7 +25,11 @@ export class ReminderSettingsController {
 
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { smsEnabled, emailEnabled } = req.body as { smsEnabled?: unknown; emailEnabled?: unknown };
+      const { smsEnabled, emailEnabled, signingSmsEnabled } = req.body as {
+        smsEnabled?: unknown;
+        emailEnabled?: unknown;
+        signingSmsEnabled?: unknown;
+      };
       if (smsEnabled !== undefined && typeof smsEnabled !== 'boolean') {
         res.status(400).json({ error: 'smsEnabled must be a boolean.' });
         return;
@@ -34,11 +38,16 @@ export class ReminderSettingsController {
         res.status(400).json({ error: 'emailEnabled must be a boolean.' });
         return;
       }
+      if (signingSmsEnabled !== undefined && typeof signingSmsEnabled !== 'boolean') {
+        res.status(400).json({ error: 'signingSmsEnabled must be a boolean.' });
+        return;
+      }
 
       const currentUser = getCurrentUser(req);
       const settings = await this.deps.updateReminderSettingsUseCase.execute({
         smsEnabled,
         emailEnabled,
+        signingSmsEnabled,
         updatedByUserId: currentUser.sub,
       });
       res.status(200).json(presentReminderSettings(settings));

@@ -5,6 +5,7 @@
 export interface ReminderSettings {
   smsEnabled: boolean;
   emailEnabled: boolean;
+  signingSmsEnabled: boolean;
   updatedAt: string;
   updatedByUserId: string | null;
 }

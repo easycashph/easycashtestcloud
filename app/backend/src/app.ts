@@ -182,6 +182,19 @@ import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/in
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
 import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
 import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
+import { createLoanSigningRouter } from '@modules/loan-signing/interface/http/loanSigningRouter';
+import { createPublicLoanSigningRouter } from '@modules/loan-signing/interface/http/publicLoanSigningRouter';
+import { CreateLoanSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/CreateLoanSigningSessionUseCase';
+import { ListLoanSigningSessionsUseCase } from '@modules/loan-signing/application/use-cases/ListLoanSigningSessionsUseCase';
+import { RequestSigningOtpUseCase } from '@modules/loan-signing/application/use-cases/RequestSigningOtpUseCase';
+import { VerifySigningOtpUseCase } from '@modules/loan-signing/application/use-cases/VerifySigningOtpUseCase';
+import { GetLoanSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningSessionUseCase';
+import { GetLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningDocumentFileUseCase';
+import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase';
+import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
+import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
+import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
+import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
 import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
 import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
 import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
@@ -534,6 +547,77 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanDocumentRouter);
+
+  // --- loan-signing module wiring (e-signature, 2026-07-22, phase 1: required documents only) ---
+  // Reuses documentTemplateRepository/generatedLoanDocumentRepository/loanDocumentFileStorage/
+  // loanAccountRepository/borrowerRepository from the loan-document wiring above and this file's
+  // top-level borrower wiring - same underlying documents, just batched for signature.
+  const loanSigningSessionRepository = new PrismaLoanSigningSessionRepository();
+  const signatureStamper = new PdfLibDocumentSignatureStamper();
+  // Constructed directly here (not shared with server.ts's cron-scheduler instance) - app.ts is
+  // the HTTP composition root, server.ts is the cron composition root; tests import createApp()
+  // directly and must never depend on server.ts's own wiring, same reasoning as the SMS reminder
+  // scheduler's own M360SmsGateway instance.
+  const signingSmsGateway = new DryRunAwareSmsGateway(
+    new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    new PrismaReminderSettingsRepository(),
+  );
+  const loanSigningRouter = createLoanSigningRouter(
+    {
+      createLoanSigningSessionUseCase: new CreateLoanSigningSessionUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+        generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
+          loanAccountRepository,
+          loanProductRepository,
+          documentTemplateRepository,
+          generatedLoanDocumentRepository,
+          mergeDataResolver,
+          documentFiller,
+          docxToPdfConverter,
+          fileStorage: loanDocumentFileStorage,
+        }),
+        loanSigningSessionRepository,
+        smsGateway: signingSmsGateway,
+      }),
+      listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({ loanSigningSessionRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanSigningRouter);
+
+  const publicLoanSigningRouter = createPublicLoanSigningRouter({
+    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway }),
+    verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository }),
+    getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({
+      loanSigningSessionRepository,
+      loanAccountRepository,
+      borrowerRepository,
+      generatedLoanDocumentRepository,
+      documentTemplateRepository,
+    }),
+    getLoanSigningDocumentFileUseCase: new GetLoanSigningDocumentFileUseCase({
+      loanSigningSessionRepository,
+      generatedLoanDocumentRepository,
+      fileStorage: loanDocumentFileStorage,
+    }),
+    signLoanSigningDocumentUseCase: new SignLoanSigningDocumentUseCase({
+      loanSigningSessionRepository,
+      loanAccountRepository,
+      borrowerRepository,
+      generatedLoanDocumentRepository,
+      fileStorage: loanDocumentFileStorage,
+      signatureStamper,
+    }),
+  });
+  app.use('/api/v1/public', publicLoanSigningRouter);
 
   // --- statement-of-account module wiring (ADR-052, 2026-07-19: Statement of Account Generation) ---
   // Deliberately separate from the loan-document module above — ADR-051 §1/§9 explicitly excluded

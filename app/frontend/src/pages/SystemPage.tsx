@@ -35,7 +35,8 @@ function ReminderSettingsCard() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (body: { smsEnabled?: boolean; emailEnabled?: boolean }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
+    mutationFn: (body: { smsEnabled?: boolean; emailEnabled?: boolean; signingSmsEnabled?: boolean }) =>
+      apiClient.patch<ReminderSettings>('/reminder-settings', body),
     onSuccess: (settings) => {
       queryClient.setQueryData(['reminder-settings'], settings);
       setError(null);
@@ -103,6 +104,23 @@ function ReminderSettingsCard() {
               disabled={REMINDER_TOGGLES_LOCKED || settingsQuery.isLoading || updateMutation.isPending}
               onCheckedChange={(checked) => updateMutation.mutate({ emailEnabled: checked })}
               aria-label="Toggle Email reminders"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">E-signature SMS</p>
+            <p className="text-xs text-muted-foreground">
+              Sent via M360/Globe for signing links and OTP codes - separate from Payment reminders above.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.signingSmsEnabled ? 'success' : 'warning'}>{settings?.signingSmsEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.signingSmsEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ signingSmsEnabled: checked })}
+              aria-label="Toggle e-signature SMS"
             />
           </div>
         </div>
