@@ -41,7 +41,10 @@ export const LMS_CLIENT_PORTAL = {
 
 export const LMS_BUILD_STAGE = 'Preview';
 export const LMS_RELEASED_ON = 'July 5, 2026';
-export const LMS_ENVIRONMENT = 'Milestone 9.1 - internal UI preview (sample data, not connected to live systems)';
+/** 2026-07-23 bug fix: previously said "sample data, not connected to live systems" - stale since
+ * the 2026-07-12 mock-removal pass (see PreviewBanner.tsx's own doc comment); every page has read
+ * real, live production data for many releases now. */
+export const LMS_ENVIRONMENT = 'Milestone 9.1 - internal preview build, wired to real production data';
 
 export interface LmsChangelogEntry {
   version: string;
@@ -59,7 +62,10 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.15',
+    // 2026-07-23: merged from two same-day entries (was separately 0.9.15 and 0.9.14, both dated
+    // July 20, 2026) - one release, one version bump, one changelog entry per calendar day (same
+    // convention as the 0.9.6 entry further below).
+    version: '0.9.14',
     date: 'July 20, 2026',
     highlights: [
       'List of Loan Accounts gained Product Type and Product Class filters (Product Class narrows to the selected Product Type, same as the Create Loan Account picker).',
@@ -69,12 +75,6 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'Role Type names spelled out in full on User Accounts instead of abbreviated (e.g. "Management Information System" instead of "MIS"), and two were renamed at MIS\'s request: "Loan Operation Manager" is now "Loan Operation Management", and "Collection Officer" is now just "Collection".',
       'Product Types moved from Administration > System into its own tab under Loan Products, since it\'s specifically about the Loan Products catalog.',
       'Fixed a console warning ("Maximum update depth exceeded") on List of Loan Applications caused by an unstable reference in the shared pagination helper - also benefits every other paginated list page.',
-    ],
-  },
-  {
-    version: '0.9.14',
-    date: 'July 20, 2026',
-    highlights: [
       'Administration reorganized into one "System" page (Reminders, User Accounts, Loan Products, Product Types, Activity Logs as tabs) instead of several separate menu entries - and About moved out into its own new "Support" section so it\'s no longer buried under Administration.',
       'Staff Accounts: clicking a member\'s name now opens their full Member Profile (contact number, address, birthday, company ID, and more) - the Actions column and per-row Edit button were removed from the table in favor of this.',
       'Settings > Profile: Address is now the same Region → Province → City/Municipality → Barangay cascading picker used elsewhere in the app, instead of a free-text box.',

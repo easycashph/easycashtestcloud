@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useLogPageView } from '@/lib/activityLog';
+import { PreviewFooterNote } from '@/components/PreviewBanner';
 import {
   LMS_ABOUT_FACTS,
   LMS_ABOUT_SECTIONS,
@@ -172,9 +173,12 @@ export function AboutPage() {
         </CardContent>
       </Card>
 
-      <p className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
-        Preview build - displays sample data and is not connected to live systems. © 2026 {LMS_COMPANY}. For internal review only.
-      </p>
+      {/* 2026-07-23 bug fix: this used to be its own hardcoded paragraph claiming "sample data...
+          not connected to live systems" - stale since the 2026-07-12 mock-removal pass, and
+          drifted out of sync with the accurate, actively-maintained disclosure already shown
+          platform-wide (PreviewBanner.tsx). Reusing that single source of truth here instead of
+          maintaining a second, separately-worded copy that can go stale again. */}
+      <PreviewFooterNote />
     </div>
   );
 }
