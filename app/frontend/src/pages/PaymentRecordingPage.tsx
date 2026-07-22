@@ -27,7 +27,7 @@ import { useSortableTable } from '@/lib/useSortableTable';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { ACTIVE_PAYMENT_METHODS } from '@/lib/staticConfig';
 import { previewCrossInstallmentAllocation, type InstallmentAllocationPreviewRow } from '@/lib/paymentAllocationPreview';
-import { formatDate, formatPeso } from '@/lib/utils';
+import { formatDate, formatPeso, generateUuid } from '@/lib/utils';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, PaginatedResponse, ProcessPaymentResponse, RepaymentInstallment } from '@/lib/loanApiTypes';
 
@@ -347,7 +347,7 @@ export function PaymentRecordingForm({
 
   const paymentMutation = useMutation({
     mutationFn: async () => {
-      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = generateUuid();
       const base = {
         paymentAmount: amount,
         paidAt,

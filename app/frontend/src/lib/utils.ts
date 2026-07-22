@@ -5,6 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** `crypto.randomUUID()` only exists in secure contexts (HTTPS, or `localhost`) - it's `undefined`
+ * when the app is opened over plain `http://<lan-ip>:5173` (e.g. a phone on the same office WiFi,
+ * or a PC reached by its LAN IP instead of `localhost`), which throws before any request is even
+ * sent. Idempotency keys don't need cryptographic randomness, just uniqueness, so a plain
+ * Math.random()-based v4 fallback is fine here. */
+export function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /** PHP currency formatting, used throughout the app for real money figures. */
 export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);
