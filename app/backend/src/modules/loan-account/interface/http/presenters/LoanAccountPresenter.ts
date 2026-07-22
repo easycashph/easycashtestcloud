@@ -21,6 +21,10 @@ export function presentLoanAccount(loanAccount: LoanAccount, isMatured = false) 
   const originationFees = loanAccount.originationFees.toProps();
   return {
     id: loanAccount.id,
+    /** 2026-07-22 (optimistic concurrency, client-facing) - the caller's own next edit must echo
+     * this back as `expectedVersion` on `PATCH /loan-accounts/:id`. See
+     * `UpdateLoanAccountInput.expectedVersion`'s doc comment. */
+    version: loanAccount.version,
     loanCode: loanAccount.loanCode,
     borrowerId: loanAccount.borrowerId,
     loanProductVersionId: loanAccount.loanProductVersionId,

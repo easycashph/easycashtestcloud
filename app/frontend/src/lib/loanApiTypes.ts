@@ -32,6 +32,10 @@ export type LoanAccountStatus =
 
 export interface LoanAccount {
   id: string;
+  /** 2026-07-22 (optimistic concurrency) - echo this back as `expectedVersion` on
+   * `PATCH /loan-accounts/:id`. A mismatch means someone else changed the record since this was
+   * fetched; the server rejects with 409 `CONCURRENCY_CONFLICT` before applying anything. */
+  version: number;
   loanCode: string;
   borrowerId: string;
   loanProductVersionId: string;

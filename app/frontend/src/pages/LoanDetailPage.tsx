@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
+import { ConcurrencyConflictDialog, type ConcurrencyConflictField } from '@/components/ConcurrencyConflictDialog';
 import type {
   Borrower as RealBorrower,
   GeneratedStatementOfAccountListItem,
@@ -578,6 +579,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // amount, dapat pwede ko ito i-edit hangga't before ma-approve" — same ORIGINATION_ROLES gate
   // as "Create Loan Account"/"Approve Loan" (canCreateLoanAccount), only while PENDING_APPROVAL.
   const [editOpen, setEditOpen] = React.useState(false);
+  // 2026-07-22 (optimistic concurrency, phase 1) - the `version` this form last saw, echoed back
+  // as `expectedVersion` on save. `editOriginalLoan` is the full loan snapshot at that same
+  // moment, kept separately from `editForm` (which the officer may go on editing) so a conflict
+  // can diff "what the officer last saw" against "what's on the server now."
+  const [editExpectedVersion, setEditExpectedVersion] = React.useState<number | null>(null);
+  const [editOriginalLoan, setEditOriginalLoan] = React.useState<LoanAccount | null>(null);
+  const [editConflict, setEditConflict] = React.useState<{ fresh: LoanAccount; fields: ConcurrencyConflictField[] } | null>(null);
   const [editForm, setEditForm] = React.useState({
     principalAmount: '',
     addOnRate: '',
@@ -642,31 +650,39 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     }
   };
 
-  const openEdit = () => {
-    if (!loan) return;
-    const principalNum = Number.parseFloat(loan.principalAmount) || 0;
+  // Shared by `openEdit` and the conflict dialog's "Reload the latest version" action - both
+  // populate the same form shape from a LoanAccount snapshot.
+  const populateEditForm = (source: LoanAccount) => {
+    const principalNum = Number.parseFloat(source.principalAmount) || 0;
     // Reverse-derives a display percent from the stored peso amount — the loan's own source of
     // truth is the peso fee, not a percent, so this is a "best starting point," same as every
     // other "default then editable" field elsewhere in this codebase.
     const feePercent = (fee: string) =>
       principalNum > 0 ? (((Number.parseFloat(fee) || 0) / principalNum) * 100).toFixed(3) : '0';
     setEditForm({
-      principalAmount: loan.principalAmount,
-      addOnRate: loan.addOnInterestRate ?? '',
-      interestRate: loan.interestRate,
-      installmentCount: String(loan.installmentCount),
-      firstRepaymentDate: loan.firstRepaymentDate.slice(0, 10),
-      anticipatedDisbursementDate: loan.anticipatedDisbursementDate ? loan.anticipatedDisbursementDate.slice(0, 10) : '',
-      processingFeePercent: feePercent(loan.originationFees.processingFee),
-      advanceInterestFee: loan.originationFees.advanceInterestFee,
-      outstandingBalancePayoff: loan.originationFees.outstandingBalancePayoff,
-      docStampFee: loan.originationFees.docStampFee,
-      accountManagementFeePercent: feePercent(loan.originationFees.accountManagementFee),
-      otherFees: loan.originationFees.otherFees,
-      notarialFee: loan.originationFees.notarialFee,
-      webFee: loan.originationFees.webFee,
-      insuranceFee: loan.originationFees.insuranceFee,
+      principalAmount: source.principalAmount,
+      addOnRate: source.addOnInterestRate ?? '',
+      interestRate: source.interestRate,
+      installmentCount: String(source.installmentCount),
+      firstRepaymentDate: source.firstRepaymentDate.slice(0, 10),
+      anticipatedDisbursementDate: source.anticipatedDisbursementDate ? source.anticipatedDisbursementDate.slice(0, 10) : '',
+      processingFeePercent: feePercent(source.originationFees.processingFee),
+      advanceInterestFee: source.originationFees.advanceInterestFee,
+      outstandingBalancePayoff: source.originationFees.outstandingBalancePayoff,
+      docStampFee: source.originationFees.docStampFee,
+      accountManagementFeePercent: feePercent(source.originationFees.accountManagementFee),
+      otherFees: source.originationFees.otherFees,
+      notarialFee: source.originationFees.notarialFee,
+      webFee: source.originationFees.webFee,
+      insuranceFee: source.originationFees.insuranceFee,
     });
+    setEditExpectedVersion(source.version);
+    setEditOriginalLoan(source);
+  };
+
+  const openEdit = () => {
+    if (!loan) return;
+    populateEditForm(loan);
     setActionError(null);
     setEditOpen(true);
   };
@@ -716,9 +732,43 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   ).toFixed(2);
   const editNetProceeds = (editPrincipalNum - Number.parseFloat(editTotalFees)).toFixed(2);
 
+  // 2026-07-22: field labels/values compared between what this form last saw (`editOriginalLoan`)
+  // and a freshly re-fetched copy, shown in the conflict dialog's "what changed" list. Only
+  // fields that actually differ are included.
+  const peso = (value: string) => formatPeso(Number.parseFloat(value) || 0);
+  const buildConflictFields = (before: LoanAccount, after: LoanAccount): ConcurrencyConflictField[] => {
+    const rows: [string, string, string][] = [
+      ['Principal amount', peso(before.principalAmount), peso(after.principalAmount)],
+      ['Add-on rate', before.addOnInterestRate ?? '-', after.addOnInterestRate ?? '-'],
+      ['Interest rate', before.interestRate, after.interestRate],
+      ['Installment count', String(before.installmentCount), String(after.installmentCount)],
+      ['First repayment date', formatDate(before.firstRepaymentDate), formatDate(after.firstRepaymentDate)],
+      [
+        'Anticipated disbursement date',
+        before.anticipatedDisbursementDate ? formatDate(before.anticipatedDisbursementDate) : '-',
+        after.anticipatedDisbursementDate ? formatDate(after.anticipatedDisbursementDate) : '-',
+      ],
+      ['Processing fee', peso(before.originationFees.processingFee), peso(after.originationFees.processingFee)],
+      ['Advance interest fee', peso(before.originationFees.advanceInterestFee), peso(after.originationFees.advanceInterestFee)],
+      [
+        'Outstanding balance payoff',
+        peso(before.originationFees.outstandingBalancePayoff),
+        peso(after.originationFees.outstandingBalancePayoff),
+      ],
+      ['Doc stamp fee', peso(before.originationFees.docStampFee), peso(after.originationFees.docStampFee)],
+      ['Account management fee', peso(before.originationFees.accountManagementFee), peso(after.originationFees.accountManagementFee)],
+      ['Other fees', peso(before.originationFees.otherFees), peso(after.originationFees.otherFees)],
+      ['Notarial fee', peso(before.originationFees.notarialFee), peso(after.originationFees.notarialFee)],
+      ['Web fee', peso(before.originationFees.webFee), peso(after.originationFees.webFee)],
+      ['Insurance fee', peso(before.originationFees.insuranceFee), peso(after.originationFees.insuranceFee)],
+    ];
+    return rows.filter(([, b, a]) => b !== a).map(([label, before2, after2]) => ({ label, before: before2, after: after2 }));
+  };
+
   const editMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars: { expectedVersion: number }) =>
       apiClient.patch<LoanAccount>(`/loan-accounts/${loanId}`, {
+        expectedVersion: vars.expectedVersion,
         principalAmount: editForm.principalAmount,
         addOnInterestRate: editForm.addOnRate || undefined,
         interestRate: editForm.interestRate,
@@ -737,9 +787,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       }),
     onSuccess: () => {
       setEditOpen(false);
+      setEditConflict(null);
       onActionSuccess();
     },
-    onError: onActionError,
+    onError: async (error: unknown) => {
+      if (error instanceof ApiError && error.code === 'CONCURRENCY_CONFLICT' && editOriginalLoan) {
+        const fresh = await apiClient.get<LoanAccount>(`/loan-accounts/${loanId}`);
+        setEditConflict({ fresh, fields: buildConflictFields(editOriginalLoan, fresh) });
+        return;
+      }
+      onActionError(error);
+    },
   });
 
   const approveMutation = useMutation({
@@ -2154,12 +2212,29 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>
+            <Button
+              onClick={() => editExpectedVersion !== null && editMutation.mutate({ expectedVersion: editExpectedVersion })}
+              disabled={editMutation.isPending || editExpectedVersion === null}
+            >
               {editMutation.isPending ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {editConflict && (
+        <ConcurrencyConflictDialog
+          open={Boolean(editConflict)}
+          onOpenChange={(open) => !open && setEditConflict(null)}
+          changedFields={editConflict.fields}
+          overwritePending={editMutation.isPending}
+          onReload={() => {
+            populateEditForm(editConflict.fresh);
+            setEditConflict(null);
+          }}
+          onOverwrite={() => editMutation.mutate({ expectedVersion: editConflict.fresh.version })}
+        />
+      )}
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && !actionPending && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">
