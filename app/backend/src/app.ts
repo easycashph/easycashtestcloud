@@ -517,7 +517,7 @@ export function createApp(): Express {
     prisma,
   });
   const documentFiller = new DocxtemplaterDocumentFiller();
-  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter();
+  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter(env.LIBREOFFICE_BINARY_PATH);
   const loanDocumentRouter = createLoanDocumentRouter(
     {
       generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({

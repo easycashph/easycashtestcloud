@@ -29,6 +29,13 @@ const envSchema = z.object({
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./storage'),
 
+  // ADR-051 §4: LibreOfficeDocxToPdfConverter shells out to headless LibreOffice. The Docker image
+  // installs it on PATH so "soffice" (the default) resolves there unmodified; a local Windows dev
+  // machine's install (e.g. via `winget install TheDocumentFoundation.LibreOffice`) is not added to
+  // PATH by default, so this lets a dev point straight at the installed soffice.exe without editing
+  // the machine/user PATH.
+  LIBREOFFICE_BINARY_PATH: z.string().default('soffice'),
+
   // AI-assisted attachment extraction (2026-07-10) — local Ollama only, no cloud AI service, per
   // CLAUDE.md "avoid unnecessary paid cloud services". `host.docker.internal` is the Docker
   // Desktop DNS name for reaching the Windows/Mac host from inside a container; on native Linux
