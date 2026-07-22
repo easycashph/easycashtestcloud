@@ -1689,6 +1689,17 @@ model LoanApplication {
   cityMunicipality        String?
   province                String?
   zipCode                 String?
+  /// 2026-07-22 - captured only at intake (create form), like the fields above; never edited
+  /// afterward. Defaults true - most applicants haven't moved. When false, the previous* fields
+  /// below hold a distinct address, same flat-field shape as the present address above.
+  previousAddressSameAsPresent Boolean @default(true)
+  previousAddress         String?
+  previousHouseUnitNumber String?
+  previousStreet          String?
+  previousBarangay        String?
+  previousCityMunicipality String?
+  previousProvince        String?
+  previousZipCode         String?
   monthlyIncome           Decimal?  @db.Decimal(14, 2)
   employer                String?
   occupation              String?

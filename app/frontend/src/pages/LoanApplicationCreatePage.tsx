@@ -309,6 +309,8 @@ export function LoanApplicationForm({
       : emptyAddressDraft(),
   );
   const [aiSuggestedAddress, setAiSuggestedAddress] = React.useState<string | null>(null);
+  const [sameAsPresentAddress, setSameAsPresentAddress] = React.useState(true);
+  const [previousAddressDraft, setPreviousAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
   const [homeOwnership, setHomeOwnership] = React.useState(prefillFrom?.homeOwnership ?? '');
   const [mobileNo, setMobileNo] = React.useState(prefillFrom?.mobilePhone ?? '');
   const [email, setEmail] = React.useState(prefillFrom?.email ?? '');
@@ -480,6 +482,16 @@ export function LoanApplicationForm({
     .map((p) => p.trim())
     .filter(Boolean)
     .join(', ');
+  const previousAddress = [
+    previousAddressDraft.houseUnitNumber,
+    previousAddressDraft.street,
+    previousAddressDraft.barangay,
+    previousAddressDraft.cityMunicipality,
+    previousAddressDraft.province,
+  ]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(', ');
   const applicantName = [firstName, middleName, lastName].map((p) => p.trim()).filter(Boolean).join(' ');
   const amount = Number(requestedAmount);
   const term = Number(requestedTermMonths);
@@ -545,6 +557,18 @@ export function LoanApplicationForm({
         cityMunicipality: addressDraft.cityMunicipality.trim() || undefined,
         province: addressDraft.province.trim() || undefined,
         zipCode: addressDraft.zipCode.trim() || undefined,
+        previousAddressSameAsPresent: sameAsPresentAddress,
+        ...(sameAsPresentAddress
+          ? {}
+          : {
+              previousAddress: previousAddress.trim() || undefined,
+              previousHouseUnitNumber: previousAddressDraft.houseUnitNumber.trim() || undefined,
+              previousStreet: previousAddressDraft.street.trim() || undefined,
+              previousBarangay: previousAddressDraft.barangay.trim() || undefined,
+              previousCityMunicipality: previousAddressDraft.cityMunicipality.trim() || undefined,
+              previousProvince: previousAddressDraft.province.trim() || undefined,
+              previousZipCode: previousAddressDraft.zipCode.trim() || undefined,
+            }),
         employer: employer.trim() || undefined,
         occupation: occupation.trim() || undefined,
         officeAddress: officeAddress.trim() || undefined,
@@ -862,6 +886,23 @@ export function LoanApplicationForm({
               </p>
             )}
             <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
+          </div>
+          <div className="space-y-1.5 border-t pt-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Previous address</Label>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-input"
+                  checked={sameAsPresentAddress}
+                  onChange={(e) => setSameAsPresentAddress(e.target.checked)}
+                />
+                Same as present address
+              </label>
+            </div>
+            {!sameAsPresentAddress && (
+              <PsgcAddressPicker value={previousAddressDraft} onChange={(patch) => setPreviousAddressDraft((prev) => ({ ...prev, ...patch }))} />
+            )}
           </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">

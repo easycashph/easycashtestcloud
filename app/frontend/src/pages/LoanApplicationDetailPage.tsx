@@ -1649,6 +1649,10 @@ export function LoanApplicationDetailPage() {
               <dd className="text-right font-medium">{application.age ?? '-'}</dd>
               <dt className="text-muted-foreground">Address</dt>
               <dd className="text-right font-medium">{toProperCase(application.address) || '-'}</dd>
+              <dt className="text-muted-foreground">Previous address</dt>
+              <dd className="text-right font-medium">
+                {application.previousAddressSameAsPresent ? 'Same as present address' : toProperCase(application.previousAddress) || '-'}
+              </dd>
               <dt className="text-muted-foreground">Contact Number</dt>
               <dd className="text-right font-medium">{formatMobileNumber(application.mobilePhone)}</dd>
               <dt className="text-muted-foreground">Email</dt>
