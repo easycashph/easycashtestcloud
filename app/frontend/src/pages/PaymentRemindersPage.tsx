@@ -97,7 +97,7 @@ function getSortValue(r: PaymentReminder, key: string): string | number | Date |
   }
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
 const STATUS_OPTIONS: { value: PaymentReminderStatus | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All statuses' },
