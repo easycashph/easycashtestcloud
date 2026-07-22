@@ -958,6 +958,21 @@ export function PaymentRecordingForm({
                 >
                   Close
                 </Button>
+                {/* 2026-07-22 (user request, "Record another payment" quick-add): keeps the same
+                    client/loan selected instead of bouncing back to Find Client - useful on
+                    collection days where several payments come in one after another for the same
+                    or different loans of the same borrower. Allowed to re-auto-fill the amount
+                    field since the oldest unpaid installment has likely changed after this
+                    payment posted. */}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSuccessInfo(null);
+                    hasAutoFilledAmountRef.current = false;
+                  }}
+                >
+                  Record another payment
+                </Button>
                 {!lockedLoan && <Button onClick={() => navigate(`/loans/${successInfo.loanId}`)}>View loan</Button>}
               </DialogFooter>
             </>
