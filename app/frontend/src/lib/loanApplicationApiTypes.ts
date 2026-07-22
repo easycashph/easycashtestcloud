@@ -106,6 +106,21 @@ export interface SubmitReviewReportRequest {
   crmRecommendation?: string;
 }
 
+/** Response shape for `POST /loan-applications/:id/ai-document-review`.
+ *
+ * MOCKED (2026-07-22) — the backend returns a deterministic placeholder, not a real model call
+ * (local Ollama vs. cloud Claude API is still an open decision). `mock: true` and the
+ * "[Preview]" prefixes on every user-facing string exist so this is never mistaken for a real
+ * assessment before the real model integration lands. */
+export interface AiDocumentReviewResult {
+  mock: true;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  recommendation: string;
+  keyFactors: string[];
+  crossChecks: Array<{ label: string; result: string; flagged: boolean }>;
+  documentChecklist: Array<{ document: string; status: 'OK' | 'NEEDS_ATTENTION'; note: string }>;
+}
+
 export interface PreQualificationCheck {
   passed: boolean;
   label: string;
