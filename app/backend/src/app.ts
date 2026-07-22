@@ -190,6 +190,7 @@ import { RequestSigningOtpUseCase } from '@modules/loan-signing/application/use-
 import { VerifySigningOtpUseCase } from '@modules/loan-signing/application/use-cases/VerifySigningOtpUseCase';
 import { GetLoanSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningSessionUseCase';
 import { GetLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningDocumentFileUseCase';
+import { GetSignedLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetSignedLoanSigningDocumentFileUseCase';
 import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase';
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
 import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
@@ -587,7 +588,15 @@ export function createApp(): Express {
         loanSigningSessionRepository,
         smsGateway: signingSmsGateway,
       }),
-      listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({ loanSigningSessionRepository }),
+      listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({
+        loanSigningSessionRepository,
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+      }),
+      getSignedLoanSigningDocumentFileUseCase: new GetSignedLoanSigningDocumentFileUseCase({
+        loanSigningSessionRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
     },
     tokenService,
   );

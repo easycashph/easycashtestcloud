@@ -20,6 +20,11 @@ export function createLoanSigningRouter(deps: LoanSigningControllerDeps, tokenSe
     controller.create,
   );
   router.get('/loan-accounts/:loanAccountId/signing-sessions', requireAuth, controller.list);
+  router.get(
+    '/loan-accounts/:loanAccountId/signing-sessions/:sessionId/documents/:documentId/file',
+    requireAuth,
+    controller.getDocumentFile,
+  );
 
   return router;
 }

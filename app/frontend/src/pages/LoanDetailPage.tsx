@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Eye,
   FileCheck2,
   Mail,
   MessageSquareText,
@@ -58,7 +59,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatDateTime, formatPercentage, formatPeso } from '@/lib/utils';
+import { cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -379,11 +380,21 @@ function LoanSigningPanel({ loanId, defaultPhoneNumber, canSend }: { loanId: str
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
   const [sendError, setSendError] = React.useState<string | null>(null);
+  const [signedDocPreview, setSignedDocPreview] = React.useState<LoanDocumentPreviewTarget | null>(null);
 
   const sessionsQuery = useQuery({
     queryKey: ['loan-signing-sessions', loanId],
     queryFn: () => apiClient.get<{ items: LoanSigningSessionStatus[] }>(`/loan-accounts/${loanId}/signing-sessions`),
     enabled: canSend,
+    // 2026-07-22: signing happens on the client's own phone, not this browser - poll while any
+    // session is still in progress so the staff view catches up without a manual refresh. Stops
+    // once every session is fully signed (or revoked) so an idle, fully-signed loan doesn't keep
+    // polling forever.
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      const stillInProgress = items.some((s) => !s.fullySigned && !s.revokedAt);
+      return stillInProgress ? 5000 : false;
+    },
   });
   const sessions = sessionsQuery.data?.items ?? [];
 
@@ -435,24 +446,54 @@ function LoanSigningPanel({ loanId, defaultPhoneNumber, canSend }: { loanId: str
         ) : (
           <ul className="divide-y rounded-md border text-sm">
             {sessions.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 p-2.5">
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {s.signedDocuments} of {s.totalDocuments} signed
-                    {s.otpVerifiedAt ? ' · opened' : ' · not yet opened'}
-                  </p>
+              <li key={s.id} className="space-y-2 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {s.signedDocuments} of {s.totalDocuments} signed
+                      {s.otpVerifiedAt ? ' · opened' : ' · not yet opened'}
+                    </p>
+                  </div>
+                  <Badge variant={s.fullySigned ? 'success' : s.revokedAt ? 'destructive' : 'outline'}>
+                    {s.fullySigned ? 'Fully signed' : s.revokedAt ? 'Revoked' : 'Awaiting signature'}
+                  </Badge>
                 </div>
-                <Badge variant={s.fullySigned ? 'success' : s.revokedAt ? 'destructive' : 'outline'}>
-                  {s.fullySigned ? 'Fully signed' : s.revokedAt ? 'Revoked' : 'Awaiting signature'}
-                </Badge>
+                {s.documents && s.documents.length > 0 && (
+                  <ul className="space-y-1 rounded-md bg-muted/40 p-2">
+                    {s.documents.map((d) => (
+                      <li key={d.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className={d.signed ? 'text-foreground' : 'text-muted-foreground'}>{d.name}</span>
+                        {d.signed ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() =>
+                              setSignedDocPreview({
+                                downloadPath: `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
+                                title: d.name,
+                                fileName: `${d.name}-signed.pdf`,
+                              })
+                            }
+                          >
+                            <Eye className="mr-1 h-3 w-3" /> View signed document
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">Not yet signed</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
         )}
       </CardContent>
+      <LoanDocumentPreviewModal target={signedDocPreview} onClose={() => setSignedDocPreview(null)} />
     </Card>
   );
 }
@@ -895,7 +936,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const activateMutation = useMutation({
     mutationFn: () => {
-      if (!activateIdempotencyKeyRef.current) activateIdempotencyKeyRef.current = crypto.randomUUID();
+      if (!activateIdempotencyKeyRef.current) activateIdempotencyKeyRef.current = generateUuid();
       return apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/activate`, {}, {
         'Idempotency-Key': activateIdempotencyKeyRef.current,
       });
@@ -1042,7 +1083,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const generateDocumentMutation = useMutation({
     mutationFn: (documentTemplateCode: string) =>
-      apiClient.post(`/loan-accounts/${loanId}/documents`, { documentTemplateCode }, { 'Idempotency-Key': crypto.randomUUID() }),
+      apiClient.post(`/loan-accounts/${loanId}/documents`, { documentTemplateCode }, { 'Idempotency-Key': generateUuid() }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['loan-documents', loanId] });
     },
@@ -1192,7 +1233,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           collectionFee: soaCollectionFee,
           otherFee: soaOtherFee,
         },
-        { 'Idempotency-Key': crypto.randomUUID() },
+        { 'Idempotency-Key': generateUuid() },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['statements-of-account', loanId] });

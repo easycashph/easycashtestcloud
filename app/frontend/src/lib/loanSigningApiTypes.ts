@@ -1,5 +1,13 @@
-/** Staff-side (authenticated) view of a signing session - see `LoanSigningSessionPresenter`. Never
- * carries the raw link token, only status. */
+/** Staff-side (authenticated) per-document status - see `ListLoanSigningSessionsUseCase`. */
+export interface LoanSigningSessionDocumentStatus {
+  id: string;
+  name: string;
+  signed: boolean;
+}
+
+/** Staff-side (authenticated) view of a signing session - see `ListLoanSigningSessionsUseCase` /
+ * `LoanSigningSessionPresenter`. Never carries the raw link token, only status. `documents` is
+ * only populated by the list endpoint - the create endpoint's response omits it (not rendered). */
 export interface LoanSigningSessionStatus {
   id: string;
   loanAccountId: string;
@@ -11,6 +19,7 @@ export interface LoanSigningSessionStatus {
   totalDocuments: number;
   signedDocuments: number;
   fullySigned: boolean;
+  documents?: LoanSigningSessionDocumentStatus[];
 }
 
 export interface CreateLoanSigningSessionRequest {
