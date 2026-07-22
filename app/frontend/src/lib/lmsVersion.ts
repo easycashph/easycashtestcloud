@@ -62,6 +62,28 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.16',
+    date: 'July 22, 2026',
+    highlights: [
+      'New Settings > Security > Recent Sign-in Activity - shows your last 20 sign-in attempts, successful or not, so a run of failed attempts you don\'t recognize is visible directly on your own account.',
+      'New Settings > Security > Two-Factor Authentication - optionally require a one-time code, sent by email or SMS, on top of your password when signing in. Off by default for every account; turning it on requires confirming a real code first, so a mistyped phone number or an unreachable inbox can never lock an account out.',
+      'Merged two "What\'s New" entries that had landed on the same calendar day into one, and fixed this About page\'s own "sample data, not connected to live systems" wording, which had gone stale since the platform was wired to real data many releases ago.',
+    ],
+  },
+  {
+    version: '0.9.15',
+    date: 'July 21, 2026',
+    highlights: [
+      'New Settings > Security > Active Sessions - see every device currently signed in to your account (browser/OS, IP, when it signed in) and sign any of them out individually, or all other devices at once.',
+      'Loan Application\'s Review Report redesigned to match the company\'s official Credit Evaluation Report template and renamed to match - per-party CMAP/KYC/Myscore checks for the borrower and co-borrower, ATM/allotment payment-mode details, and a dedicated Agency/Contract/Allotment verification section for Seafarer Loans, whose Agency Name/Position/Vessel fields are now required (and enforced by the system, not just noted) before a Seafarer Loan application can be tagged Pre Approval.',
+      'The Document Checklist on a Loan Application now tracks Verified/Rejected per document (with a reason, and who/when last touched it) instead of a plain checkbox, and now starts already populated from the documents actually uploaded during intake instead of empty every time.',
+      'Removed the Underwriter Assessment section (risk grade, recommendation, collateral, co-maker) added the day before - no real data behind it yet, so it was cleanly dropped rather than left half-finished.',
+      'The Underwriting section (Decision Scoring, Credit Evaluation Report, Document Checklist, product type/class assignment) and the Notes log no longer appear on a Loan Application until Start Review has actually been clicked - previously visible even on a brand-new, not-yet-reviewed application.',
+      'Fixed the ZIP Code field not auto-filling when editing an existing client\'s already-saved address (previously only worked when picking a brand-new address); Metro Manila addresses (e.g. Makati) now auto-fill the correct barangay-specific ZIP code instead of staying blank, since a single Metro Manila city can have 30+ different ZIP codes depending on the barangay.',
+      'Attachment, Statement of Account, and generated Loan Document preview pop-ups enlarged, and gained an "Open in new tab" option for a full-size view.',
+    ],
+  },
+  {
     // 2026-07-23: merged from two same-day entries (was separately 0.9.15 and 0.9.14, both dated
     // July 20, 2026) - one release, one version bump, one changelog entry per calendar day (same
     // convention as the 0.9.6 entry further below).
