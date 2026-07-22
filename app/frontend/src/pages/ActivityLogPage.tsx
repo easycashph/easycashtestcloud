@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Lock, Search } from 'lucide-react';
+import { AlertCircle, Lock, Search, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -58,6 +58,10 @@ export function ActivityLogPage() {
   const [action, setAction] = React.useState<string>('ALL');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
+  // 2026-07-23 (user request) - clicking a user's name in the table below filters the whole list
+  // down to just that person's activity, server-side (not just this page's 100 rows) - cleared via
+  // the chip's "x" or by starting a new text search.
+  const [userFilter, setUserFilter] = React.useState<{ id: string; name: string } | null>(null);
 
   const {
     items: logs,
@@ -67,7 +71,13 @@ export function ActivityLogPage() {
     hasPrev,
     goNext,
     goPrev,
-  } = useCursorPagination<AuditLog>(['audit-logs'], '/audit-logs', { search: debouncedSearch }, PAGE_SIZE, canViewActivityLogs);
+  } = useCursorPagination<AuditLog>(
+    ['audit-logs'],
+    '/audit-logs',
+    { search: debouncedSearch, userId: userFilter?.id },
+    PAGE_SIZE,
+    canViewActivityLogs,
+  );
 
   const actionOptions = React.useMemo(() => ['ALL', ...[...new Set(logs.map((l) => l.action))].sort()], [logs]);
   const filtered = logs.filter((log) => action === 'ALL' || log.action === action);
@@ -114,7 +124,22 @@ export function ActivityLogPage() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Recorded Actions</CardTitle>
-            <CardDescription>{filtered.length} of {logs.length} entries on this page.</CardDescription>
+            <CardDescription className="flex flex-wrap items-center gap-2">
+              <span>{filtered.length} of {logs.length} entries on this page.</span>
+              {userFilter && (
+                <Badge variant="secondary" className="gap-1">
+                  {userFilter.name}
+                  <button
+                    type="button"
+                    onClick={() => setUserFilter(null)}
+                    aria-label={`Clear filter for ${userFilter.name}`}
+                    className="rounded-full hover:bg-black/10"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+            </CardDescription>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative">
@@ -165,7 +190,20 @@ export function ActivityLogPage() {
               {sorted.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</TableCell>
-                  <TableCell className="font-medium">{log.userName ?? '-'}</TableCell>
+                  <TableCell className="font-medium">
+                    {log.userId && log.userName ? (
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-2 hover:underline"
+                        onClick={() => setUserFilter({ id: log.userId!, name: log.userName! })}
+                        title={`Show all activity for ${log.userName}`}
+                      >
+                        {log.userName}
+                      </button>
+                    ) : (
+                      (log.userName ?? '-')
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={ACTION_VARIANT[log.action] ?? 'outline'}>{log.action.replaceAll('_', ' ')}</Badge>
                   </TableCell>

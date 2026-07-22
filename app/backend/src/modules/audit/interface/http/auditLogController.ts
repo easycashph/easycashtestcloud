@@ -29,7 +29,12 @@ export class AuditLogController {
         typeof req.query.excludeActions === 'string'
           ? req.query.excludeActions.split(',').map((value) => value.trim()).filter(Boolean)
           : undefined;
-      const records = await this.deps.listAuditLogsUseCase.execute({ limit, cursor, search, entityTypes, entityId, excludeActions });
+      // Administration > System > Activity Logs (2026-07-23) - click a user's name to see every
+      // entry they're the actor of. Safe to accept as a caller-supplied filter here (unlike
+      // `listMyLoginActivity`'s hardcoded self-scoping) since this whole route is already
+      // MIS-only (see auditLogRouter.ts) - an MIS user is allowed to look up any user's activity.
+      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const records = await this.deps.listAuditLogsUseCase.execute({ limit, cursor, search, entityTypes, entityId, excludeActions, userId });
       res.status(200).json(toPaginatedResponse(records.map(presentAuditLog), limit, (item) => item.id));
     } catch (error) {
       next(error);
