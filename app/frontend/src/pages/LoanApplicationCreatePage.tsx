@@ -66,6 +66,17 @@ const DOCUMENT_SLOTS: {
   { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
 ];
 
+/** Uppercases the free-text parts of an address patch (house/unit number, street) - matches the
+ * printed loan application form convention (ECLC-LOFN01). Region/province/city/barangay come
+ * from PSGC picker Selects, not free typing, so they're left as-is. */
+function upperAddressPatch(patch: Partial<AddressDraft>): Partial<AddressDraft> {
+  return {
+    ...patch,
+    ...(patch.houseUnitNumber !== undefined ? { houseUnitNumber: patch.houseUnitNumber.toUpperCase() } : {}),
+    ...(patch.street !== undefined ? { street: patch.street.toUpperCase() } : {}),
+  };
+}
+
 /** Splits a single extracted full name into the form's separate first/middle/last inputs - a
  * plain heuristic (first token / last token / everything between), not a name-parsing library.
  * Always a suggestion the officer reviews, never submitted as-is without their say. */
@@ -828,16 +839,16 @@ export function LoanApplicationForm({
       <SectionCard number="3" title="Personal Information">
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="First name *" tooltip="Applicant's legal first name, as shown on a valid ID.">
-            <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            <Input value={firstName} onChange={(e) => setFirstName(e.target.value.toUpperCase())} />
           </Field>
           <Field label="Middle name" tooltip="Applicant's legal middle name, if any.">
-            <Input value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
+            <Input value={middleName} onChange={(e) => setMiddleName(e.target.value.toUpperCase())} />
           </Field>
           <Field label="Last name *" tooltip="Applicant's legal surname, as shown on a valid ID.">
-            <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            <Input value={lastName} onChange={(e) => setLastName(e.target.value.toUpperCase())} />
           </Field>
           <Field label="Nickname" tooltip="Optional - what the applicant is commonly called.">
-            <Input value={nickname} onChange={(e) => setNickname(e.target.value)} />
+            <Input value={nickname} onChange={(e) => setNickname(e.target.value.toUpperCase())} />
           </Field>
           <Field label="Gender" tooltip="Applicant's gender, as shown on a valid ID.">
             <Select value={gender} onValueChange={setGender}>
@@ -885,7 +896,10 @@ export function LoanApplicationForm({
                 AI-suggested (from the uploaded document, verify and select manually): {aiSuggestedAddress}
               </p>
             )}
-            <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
+            <PsgcAddressPicker
+              value={addressDraft}
+              onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...upperAddressPatch(patch) }))}
+            />
           </div>
           <div className="space-y-1.5 border-t pt-3">
             <div className="flex items-center justify-between">
@@ -901,7 +915,10 @@ export function LoanApplicationForm({
               </label>
             </div>
             {!sameAsPresentAddress && (
-              <PsgcAddressPicker value={previousAddressDraft} onChange={(patch) => setPreviousAddressDraft((prev) => ({ ...prev, ...patch }))} />
+              <PsgcAddressPicker
+                value={previousAddressDraft}
+                onChange={(patch) => setPreviousAddressDraft((prev) => ({ ...prev, ...upperAddressPatch(patch) }))}
+              />
             )}
           </div>
         </div>
