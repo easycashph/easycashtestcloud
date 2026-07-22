@@ -1,6 +1,9 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableSection } from '@/components/SortableSection';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Download,
   Eye,
   FileCheck2,
   Mail,
@@ -59,7 +63,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid } from '@/lib/utils';
+import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -86,6 +90,18 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
  * time (the same data Reverse Payment uses). Migrated/legacy REPAYMENTs predate allocation
  * recording, so an empty result is a normal state, not an error.
  */
+/** Order these render in by default, and the only valid section ids for the drag-to-reorder
+ * feature below (see `RealLoanDetailView`'s `cardOrder` state). */
+const DEFAULT_CARD_ORDER = ['reminders', 'notes', 'attachments', 'documents', 'esignature', 'soa', 'activityTimeline', 'recentActivity'];
+
+const CARD_ORDER_KEY_PREFIX = 'lms.loanDetailCardOrder';
+
+/** Per-user like `sidebarCollapsedKey` in AppLayout.tsx - one officer's preferred section order on
+ * a shared machine shouldn't silently apply to whoever logs in next. */
+function cardOrderKey(userId: string): string {
+  return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
+}
+
 function TransactionAllocationsPanel({ transactionId }: { transactionId: string }) {
   const num = (v: string) => Number.parseFloat(v) || 0;
   const query = useQuery({
@@ -376,7 +392,17 @@ function emailReminderStatusText(log: EmailReminderLog): string {
  * (generating any not already on file) as one batch, one SMS link, one OTP verification covering
  * the whole client visit. See `docs/Claude_API_Cost_Reference.docx`-adjacent design discussion -
  * this is unrelated to that AI feature, just noting the same session's design-first pattern. */
-function LoanSigningPanel({ loanId, defaultPhoneNumber, canSend }: { loanId: string; defaultPhoneNumber?: string; canSend: boolean }) {
+function LoanSigningPanel({
+  loanId,
+  loanCode,
+  defaultPhoneNumber,
+  canSend,
+}: {
+  loanId: string;
+  loanCode: string;
+  defaultPhoneNumber?: string;
+  canSend: boolean;
+}) {
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
   const [sendError, setSendError] = React.useState<string | null>(null);
@@ -467,20 +493,35 @@ function LoanSigningPanel({ loanId, defaultPhoneNumber, canSend }: { loanId: str
                       <li key={d.id} className="flex items-center justify-between gap-2 text-xs">
                         <span className={d.signed ? 'text-foreground' : 'text-muted-foreground'}>{d.name}</span>
                         {d.signed ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-xs"
-                            onClick={() =>
-                              setSignedDocPreview({
-                                downloadPath: `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
-                                title: d.name,
-                                fileName: `${d.name}-signed.pdf`,
-                              })
-                            }
-                          >
-                            <Eye className="mr-1 h-3 w-3" /> View signed document
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() =>
+                                setSignedDocPreview({
+                                  downloadPath: `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
+                                  title: d.name,
+                                  fileName: buildDocumentFileName(loanCode, d.name, 'signed'),
+                                })
+                              }
+                            >
+                              <Eye className="mr-1 h-3 w-3" /> View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() =>
+                                void downloadFile(
+                                  `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
+                                  buildDocumentFileName(loanCode, d.name, 'signed'),
+                                ).catch(() => setSendError('Could not download the file. Please try again.'))
+                              }
+                            >
+                              Download
+                            </Button>
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">Not yet signed</span>
                         )}
@@ -685,6 +726,39 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { currentAccount, canCreateLoanAccount, canApproveLoanAccount, canActivateLoanAccount } = useRole();
+
+  // 2026-07-22 (user request): the lower sections of this page (Reminders through Recent Activity)
+  // are drag-to-reorder - each staff member's own arrangement, saved per-user like the sidebar
+  // collapse preference (AppLayout.tsx), so one officer's preferred layout doesn't affect anyone
+  // else logged into the same machine.
+  const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
+    try {
+      const saved = window.localStorage.getItem(cardOrderKey(currentAccount.id));
+      if (!saved) return DEFAULT_CARD_ORDER;
+      const parsed = JSON.parse(saved) as string[];
+      // Guard against a stale saved order missing a section added since (or naming a section that
+      // no longer exists) - always fall back to the full default set rather than silently drop one.
+      const isValid = Array.isArray(parsed) && DEFAULT_CARD_ORDER.every((id) => parsed.includes(id)) && parsed.length === DEFAULT_CARD_ORDER.length;
+      return isValid ? parsed : DEFAULT_CARD_ORDER;
+    } catch {
+      return DEFAULT_CARD_ORDER;
+    }
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(cardOrderKey(currentAccount.id), JSON.stringify(cardOrder));
+  }, [cardOrder, currentAccount.id]);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setCardOrder((order) => {
+      const oldIndex = order.indexOf(String(active.id));
+      const newIndex = order.indexOf(String(over.id));
+      return oldIndex === -1 || newIndex === -1 ? order : arrayMove(order, oldIndex, newIndex);
+    });
+  };
+
   const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -1796,14 +1870,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </Tabs>
       </Card>
 
-      <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
-
-      <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
-
-      <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />
-
-      {/* ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory Note,
-          and other legal documents applicable to this loan's product, available once APPROVED. */}
+      {(() => {
+        // 2026-07-22: everything from here to Recent Activity is drag-to-reorder (see cardOrder
+        // state above) - each section's JSX lives as one entry in this map so it can be rendered
+        // in whatever order the current user saved, instead of a fixed sequence.
+        const cardsById: Record<string, React.ReactNode> = {
+          reminders: (
+            <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
+          ),
+          notes: <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />,
+          attachments: <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />,
+          // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory
+          // Note, and other legal documents applicable to this loan's product, available once
+          // APPROVED.
+          documents: (
       <Card>
         <CardHeader>
           <CardTitle>Documents</CardTitle>
@@ -1872,7 +1952,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 setPreviewTarget({
                                   downloadPath: `/loan-accounts/${loanId}/documents/${doc.latestGeneration!.id}/download`,
                                   title: doc.documentTemplateName,
-                                  fileName: `${doc.documentTemplateName}.pdf`,
+                                  fileName: buildDocumentFileName(loan.loanCode, doc.documentTemplateName),
                                 })
                               }
                             >
@@ -1881,7 +1961,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => downloadDocument(doc.latestGeneration!.id, `${doc.documentTemplateName}.pdf`)}
+                              onClick={() =>
+                                downloadDocument(doc.latestGeneration!.id, buildDocumentFileName(loan.loanCode, doc.documentTemplateName))
+                              }
                             >
                               Download
                             </Button>
@@ -1928,11 +2010,18 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
-
-      <LoanSigningPanel loanId={loan.id} defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined} canSend={canGenerateDocuments} />
-
-      {/* ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection document,
-          distinct from the required/conditional Documents above (ADR-051 §1). */}
+          ),
+          esignature: (
+            <LoanSigningPanel
+              loanId={loan.id}
+              loanCode={loan.loanCode}
+              defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined}
+              canSend={canGenerateDocuments}
+            />
+          ),
+          // ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection
+          // document, distinct from the required/conditional Documents above (ADR-051 §1).
+          soa: (
       <Card>
         <CardHeader className="flex-row items-start justify-between space-y-0">
           <div>
@@ -1978,18 +2067,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           setPreviewTarget({
                             downloadPath: `/loan-accounts/${loanId}/statements-of-account/${item.id}/download`,
                             title: item.soaNumber,
-                            fileName: `${item.soaNumber}.pdf`,
+                            fileName: buildDocumentFileName(loan.loanCode, 'Statement_of_Account', item.soaNumber),
                           })
                         }
                       >
-                        Preview
+                        <Eye className="mr-1.5 h-3.5 w-3.5" /> View
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => downloadStatement(item.id, `${item.soaNumber}.pdf`)}
+                        onClick={() =>
+                          downloadStatement(item.id, buildDocumentFileName(loan.loanCode, 'Statement_of_Account', item.soaNumber))
+                        }
                       >
-                        Download
+                        <Download className="mr-1.5 h-3.5 w-3.5" /> Download
                       </Button>
                     </div>
                   </li>
@@ -2002,7 +2093,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
+          ),
+        };
 
+        // The Create-SOA dialog is a portal (renders detached from this DOM position when open),
+        // so it doesn't need to live inside the reorderable cardsById map above - it's tied to the
+        // "soa" card's own state/button regardless of where "soa" lands in the current order.
+        const soaDialog = (
       <Dialog open={soaDialogOpen} onOpenChange={(open) => { setSoaDialogOpen(open); if (!open) setSoaError(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -2153,7 +2250,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        );
 
+        cardsById.activityTimeline = (
       <Card>
         <CardHeader>
           <CardTitle>Activity Timeline</CardTitle>
@@ -2163,8 +2262,24 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <ProfileActivityTimeline profileType="LOAN_ACCOUNT" profileId={loan.id} showDetailsToggle={false} />
         </CardContent>
       </Card>
+        );
+        cardsById.recentActivity = <RecentActivityPanel label="Loan Account" entityId={loan.id} />;
 
-      <RecentActivityPanel label="Loan Account" entityId={loan.id} />
+        return (
+          <>
+            <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
+              <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
+                {cardOrder.map((id) => (
+                  <SortableSection key={id} id={id}>
+                    {cardsById[id]}
+                  </SortableSection>
+                ))}
+              </SortableContext>
+            </DndContext>
+            {soaDialog}
+          </>
+        );
+      })()}
 
       <Dialog open={editOpen} onOpenChange={(open) => !open && !editMutation.isPending && setEditOpen(false)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
