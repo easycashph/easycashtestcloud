@@ -72,7 +72,11 @@ export class LoanDocumentController {
         throw new NotFoundError('GeneratedLoanDocument', req.params.generatedDocumentId as string);
       }
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${file.fileName.replace(/"/g, '')}"`);
+      // No filename= here (2026-07-22) - the frontend always fetches this as a blob and forces the
+      // save via a synthetic `<a download>` link (see apiClient.ts's downloadFile), so the actual
+      // saved name comes from there (buildDocumentFileName's `{LoanCode}_{DocumentName}.pdf`
+      // convention), not this raw internal storage filename.
+      res.setHeader('Content-Disposition', 'attachment');
       res.status(200).send(file.buffer);
     } catch (error) {
       next(error);
