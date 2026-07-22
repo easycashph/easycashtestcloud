@@ -622,6 +622,7 @@ export function createApp(): Express {
       loanAccountRepository,
       borrowerRepository,
       generatedLoanDocumentRepository,
+      documentTemplateRepository,
       fileStorage: loanDocumentFileStorage,
       signatureStamper,
     }),

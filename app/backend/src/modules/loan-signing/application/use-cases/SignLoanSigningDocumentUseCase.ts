@@ -3,6 +3,7 @@ import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { IGeneratedLoanDocumentRepository } from '@modules/loan-document/application/ports/IGeneratedLoanDocumentRepository';
+import type { IDocumentTemplateRepository } from '@modules/loan-document/application/ports/IDocumentTemplateRepository';
 import {
   ConsentRequiredError,
   OtpVerificationRequiredError,
@@ -26,6 +27,7 @@ export interface SignLoanSigningDocumentUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
   borrowerRepository: IBorrowerRepository;
   generatedLoanDocumentRepository: IGeneratedLoanDocumentRepository;
+  documentTemplateRepository: IDocumentTemplateRepository;
   fileStorage: IFileStorage;
   signatureStamper: IDocumentSignatureStamper;
 }
@@ -55,6 +57,8 @@ export class SignLoanSigningDocumentUseCase {
     if (!loanAccount) throw new NotFoundError('LoanAccount', session.loanAccountId);
     const borrower = await this.deps.borrowerRepository.findById(loanAccount.borrowerId);
 
+    const template = await this.deps.documentTemplateRepository.findById(generatedDoc.documentTemplateId);
+
     const originalPdf = await this.deps.fileStorage.read(generatedDoc.storageKey);
     const signedAt = new Date();
     const stampedPdf = await this.deps.signatureStamper.stamp({
@@ -63,6 +67,7 @@ export class SignLoanSigningDocumentUseCase {
       signerName: borrower?.name.fullName() ?? 'Client',
       signedAtIso: signedAt.toISOString(),
       ipAddress: input.ipAddress,
+      templateCode: template?.code,
     });
 
     const signedStorageKey = `loan-signing/${session.id}/${entry.id}-signed.pdf`;

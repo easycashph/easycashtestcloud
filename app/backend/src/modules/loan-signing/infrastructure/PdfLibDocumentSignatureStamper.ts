@@ -13,6 +13,21 @@ const PDF2JSON_UNITS_PER_POINT = 16;
 
 const SIGNATURE_ANCHOR_TEXT = '[[SIGNATURE_ANCHOR]]';
 
+/** 2026-07-22 - small hand-tuned per-template nudges on top of the generic anchor position, from
+ * direct visual review of signed output (user feedback, several rounds). `dx` positive = right,
+ * `dy` positive = up (pdf-lib's y already increases upward, same sense here). Keep these modest -
+ * they're corrections for that one template's specific layout quirk, not a substitute for the
+ * anchor itself being roughly right. */
+const TEMPLATE_OFFSETS: Record<string, { dx?: number; dy?: number }> = {
+  PROMISSORY_NOTE: { dx: 30 },
+  DISCLOSURE_STATEMENT: { dy: -8 },
+  // ACKNOWLEDGEMENT_RECEIPT: no offset - 2026-07-22 the anchor itself moved (see the template) from
+  // the "Received by" line to sit directly above "Signature Over Printed Name" (the "Issued by"
+  // row), which is the line this document is actually meant to be signed on.
+  DATA_PRIVACY_CONSENT: { dy: -10 },
+  LOAN_AGREEMENT_SALARY: { dx: 30 },
+};
+
 interface AnchorLocation {
   pageIndex: number;
   /** PDF points, bottom-left origin (pdf-lib's coordinate system). */
@@ -51,13 +66,21 @@ async function findSignatureAnchor(pdfBuffer: Buffer): Promise<AnchorLocation | 
   });
 }
 
-/** 2026-07-22 (e-signature, phase 1). Draws onto the page the signature image plus a short audit
- * line (signer name, timestamp, IP) - never touches the original document's own content.
+/** 2026-07-22 (e-signature, phase 1). Draws onto the page the signature image, plus a short audit
+ * line (signer name, timestamp, IP) tucked into the page's bottom margin - never touches the
+ * original document's own content.
  *
  * Placement: if the template has a `[[SIGNATURE_ANCHOR]]` marker (see `findSignatureAnchor` above),
- * the signature is drawn directly above it - i.e. above the printed name / "Signature over printed
- * name" line, matching where a physically-signed copy would actually be signed. Templates that
- * don't have an anchor yet fall back to the original fixed bottom-left-of-last-page placement. */
+ * the signature is drawn directly AT that spot - the anchor marks the actual blank ink-signature
+ * space the template already reserves (either its own blank line, or sitting right beside the
+ * printed name), so the image is sized small and placed right on it rather than computed as an
+ * offset above it. An offset-based stack (image + a multi-line audit block, both growing upward)
+ * was tried first and consistently overshot into whatever paragraph happened to sit above the
+ * signature line - tight legal-document line spacing rarely leaves 60-80pt of genuinely blank
+ * space above a signature line. The audit text is therefore NOT stacked next to the signature at
+ * all anymore - it's a single fixed spot in the page's bottom margin, which is always safely clear
+ * of content regardless of where on the page the anchor sits. Templates without an anchor yet fall
+ * back to the original fixed bottom-left-of-last-page placement for the image too. */
 export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper {
   async stamp(input: StampSignatureInput): Promise<Buffer> {
     const pdfDoc = await PDFDocument.load(input.pdfBuffer);
@@ -72,34 +95,28 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
     const signatureImageBytes = decodeBase64Png(input.signatureImagePng);
     const signatureImage = await pdfDoc.embedPng(signatureImageBytes);
 
-    const maxImageWidth = anchor ? 100 : 200;
-    const scale = Math.min(1, maxImageWidth / signatureImage.width);
+    // Constrained by height as much as width: these templates' signature lines/rows are often
+    // tightly packed (as little as ~20pt of actual blank space in a compact form like the
+    // Acknowledgement Receipt), so scaling by width alone let a wide-but-short canvas capture
+    // still produce an image tall enough to bleed into the row above.
+    const maxImageWidth = anchor ? 90 : 200;
+    const maxImageHeight = anchor ? 22 : 200;
+    const scale = Math.min(1, maxImageWidth / signatureImage.width, maxImageHeight / signatureImage.height);
     const imageWidth = signatureImage.width * scale;
     const imageHeight = signatureImage.height * scale;
 
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const auditLines = [
-      `Signed by: ${input.signerName}`,
-      `Date: ${input.signedAtIso}`,
-      input.ipAddress ? `IP address: ${input.ipAddress}` : undefined,
-    ].filter((line): line is string => Boolean(line));
-
     let imageX: number;
     let imageY: number;
-    const lineHeight = 10;
 
     if (anchor) {
-      // Stack (bottom to top): the anchor/name line, then the audit text (Signed by / Date / IP -
-      // closest to the anchor so it reads naturally as a caption right under the signature), then
-      // the signature image on top. Left-aligned starting at the anchor's own x (not centered on
-      // it) - centering pushed the image's left edge past the printed name's own left edge in
-      // narrower 2-column templates (Borrower/Co-Borrower side by side), bleeding into the margin
-      // or the neighboring column.
-      const gapAboveAnchor = 4;
-      const gapBetweenTextAndImage = 6;
-      imageX = anchor.x;
-      const auditBlockHeight = auditLines.length * lineHeight;
-      imageY = anchor.y + gapAboveAnchor + auditBlockHeight + gapBetweenTextAndImage;
+      // Left-aligned at the anchor's own x (not centered on it) - centering pushed the image's
+      // left edge past the printed name's own left edge in narrower 2-column templates
+      // (Borrower/Co-Borrower side by side), bleeding into the margin or the neighboring column.
+      // A small lift (not a large computed gap) keeps it sitting on/around the anchor's own line -
+      // the blank ink space the template already reserves - rather than floating well above it.
+      const offset = input.templateCode ? TEMPLATE_OFFSETS[input.templateCode] : undefined;
+      imageX = anchor.x + (offset?.dx ?? 0);
+      imageY = anchor.y + 2 + (offset?.dy ?? 0);
     } else {
       imageX = 48;
       imageY = 72;
@@ -107,28 +124,27 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
 
     targetPage.drawImage(signatureImage, { x: imageX, y: imageY, width: imageWidth, height: imageHeight });
 
-    // Anchored case: text sits BELOW the image, immediately above the anchor line - drawn top to
-    // bottom in natural reading order (Signed by / Date / IP), ending closest to the anchor.
-    // Fallback (no anchor) case: unchanged, text below the image growing downward.
-    let textY = anchor ? imageY - lineHeight : imageY - 12;
-    const textX = anchor ? imageX : 48;
-    const textDirection = -1;
-    // `width - textX * 2` (the original formula) assumes textX sits near the left margin - it goes
-    // negative once an anchor lands in a right-hand column (e.g. a Co-Borrower/Assignor block),
-    // which made pdf-lib wrap the audit lines into garbled, overlapping fragments. These lines are
-    // always short (~30-45 chars at 8pt), so a fixed budget clamped to whatever room is actually
-    // left before the page's right edge is enough, and never goes negative.
-    const auditTextMaxWidth = Math.max(100, Math.min(220, width - textX - 24));
+    // Audit trail (Signed by / Date / IP) - always in the page's bottom margin, independent of the
+    // anchor's position, so it can never overlap unrelated content or (on a right-hand-column
+    // anchor) compute a negative text width.
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const auditLines = [
+      `Signed by: ${input.signerName}`,
+      `Date: ${input.signedAtIso}`,
+      input.ipAddress ? `IP address: ${input.ipAddress}` : undefined,
+    ].filter((line): line is string => Boolean(line));
+    const auditX = 40;
+    let auditY = 20 + (auditLines.length - 1) * 9;
     for (const line of auditLines) {
       targetPage.drawText(line, {
-        x: textX,
-        y: textY,
-        size: 8,
+        x: auditX,
+        y: auditY,
+        size: 7,
         font,
-        color: rgb(0.35, 0.35, 0.35),
-        maxWidth: auditTextMaxWidth,
+        color: rgb(0.45, 0.45, 0.45),
+        maxWidth: width - auditX * 2,
       });
-      textY += textDirection * lineHeight;
+      auditY -= 9;
     }
 
     const stampedBytes = await pdfDoc.save();

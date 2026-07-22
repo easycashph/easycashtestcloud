@@ -7,6 +7,10 @@ export interface StampSignatureInput {
   signerName: string;
   signedAtIso: string;
   ipAddress?: string;
+  /** The `DocumentTemplate.code` this PDF was generated from (e.g. `PROMISSORY_NOTE`) - lets the
+   * stamper apply small per-template placement nudges (see `TEMPLATE_OFFSETS` in
+   * `PdfLibDocumentSignatureStamper`) on top of the generic anchor-based positioning. */
+  templateCode?: string;
 }
 
 export interface IDocumentSignatureStamper {
