@@ -1055,6 +1055,37 @@ model LoanTransaction {
   @@map("loan_transactions")
 }
 
+/// CP12 follow-up (2026-07-23, user request): permanent record of the 244,242 legacy
+/// `loan_transactions` rows (46.5% of the 524,724-row legacy ledger) whose `parent_account_key`
+/// matches no row in the legacy `loan_accounts` export - confirmed via scripts/
+/// analyze-orphaned-transactions.ts to be a genuine legacy data gap (the referenced accounts don't
+/// exist anywhere in the legacy dump, not merely excluded by migration scope - see
+/// docs/Architecture/CP12-legacy-migration-report.md's "Known gaps" section). These can never be
+/// linked to a `LoanAccount` (there is no account to link to), so they live in their own table
+/// instead of `LoanTransaction` - imported once by scripts/export-orphaned-transactions.ts so the
+/// raw data survives even though the legacy `legacy/mongodb/` dump itself is gitignored and was
+/// briefly lost once already before this table existed.
+model LegacyOrphanedTransaction {
+  id                String    @id @default(uuid())
+  /// The legacy transaction's own `uid`/`_id` - unique per source row, used as the idempotency key
+  /// for re-running the export script.
+  legacyTransactionId String  @unique
+  /// The legacy `parent_account_key` this transaction pointed to - confirmed to match no
+  /// `LoanAccount.legacyId` and no row in the legacy loan_accounts export at all.
+  parentAccountKey  String
+  legacyType        String?
+  amount            Decimal?  @db.Decimal(14, 2)
+  entryDate         DateTime?
+  comment           String?
+  /// The full original BSON document, converted to JSON - nothing explicitly mapped above is ever
+  /// the only copy of a field; anything not surfaced as its own column is still recoverable here.
+  rawDocument       Json
+  importedAt        DateTime  @default(now())
+
+  @@index([parentAccountKey])
+  @@map("legacy_orphaned_transactions")
+}
+
 /// REPAY-1..4. Note: legacy tax_* / organization-commission / funders-interest
 /// fields are intentionally dropped (ADR-028: consistently zero across all
 /// sampled legacy records — YAGNI; can be reintroduced if a genuine
