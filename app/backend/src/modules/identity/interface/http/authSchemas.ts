@@ -26,3 +26,11 @@ export const loginSchema = z.object({
 });
 
 export type LoginRequestBody = z.infer<typeof loginSchema>;
+
+/** Settings > Security > Two-Factor Authentication (2026-07-22). */
+export const verifyLoginOtpSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().min(1),
+});
+
+export type VerifyLoginOtpRequestBody = z.infer<typeof verifyLoginOtpSchema>;

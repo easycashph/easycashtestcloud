@@ -14,13 +14,27 @@ export interface AuthenticatedUserView {
   contactNumber: string | null;
   address: string | null;
   birthday: string | null;
+  /** Settings > Security > Two-Factor Authentication (2026-07-22). */
+  twoFactorEnabled: boolean;
+  twoFactorChannel: 'EMAIL' | 'SMS' | null;
 }
 
-export interface LoginResponse {
+export interface LoginSuccessResponse {
   accessToken: string;
   accessTokenExpiresAt: string;
   user: AuthenticatedUserView;
 }
+
+/** Settings > Security > Two-Factor Authentication (2026-07-22) - `POST /auth/login`'s other
+ * possible result for a 2FA-enabled account: no tokens yet, just enough to show the OTP entry
+ * step. Complete the login with `POST /auth/verify-login-otp` (see `LoginPage.tsx`). */
+export interface TwoFactorRequiredResponse {
+  twoFactorRequired: true;
+  challengeId: string;
+  channel: 'EMAIL' | 'SMS';
+}
+
+export type LoginResponse = LoginSuccessResponse | TwoFactorRequiredResponse;
 
 export interface RefreshResponse {
   accessToken: string;

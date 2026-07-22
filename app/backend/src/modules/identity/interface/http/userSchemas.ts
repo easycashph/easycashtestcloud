@@ -49,3 +49,23 @@ export const changeOwnPasswordSchema = z.object({
 });
 
 export type ChangeOwnPasswordRequestBody = z.infer<typeof changeOwnPasswordSchema>;
+
+/** Settings > Security > Two-Factor Authentication (2026-07-22). */
+export const requestTwoFactorSetupSchema = z.object({
+  channel: z.enum(['EMAIL', 'SMS']),
+});
+
+export type RequestTwoFactorSetupRequestBody = z.infer<typeof requestTwoFactorSetupSchema>;
+
+export const confirmTwoFactorSetupSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().min(1),
+});
+
+export type ConfirmTwoFactorSetupRequestBody = z.infer<typeof confirmTwoFactorSetupSchema>;
+
+export const disableTwoFactorSchema = z.object({
+  currentPassword: z.string().min(1),
+});
+
+export type DisableTwoFactorRequestBody = z.infer<typeof disableTwoFactorSchema>;

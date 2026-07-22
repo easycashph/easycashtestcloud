@@ -108,6 +108,39 @@ export class EmailAlreadyInUseError extends DomainError {
   }
 }
 
+/** Settings > Security > Two-Factor Authentication (2026-07-22). Deliberately the same error/
+ * status for "wrong code," "expired challenge," and "already used challenge" - never lets a caller
+ * distinguish which one occurred (same enumeration-avoidance posture as InvalidCredentialsError -
+ * a stolen challengeId shouldn't leak timing/state information either). */
+export class InvalidOtpError extends DomainError {
+  constructor() {
+    super('INVALID_OTP', 'That code is incorrect or has expired.', undefined, 401);
+    this.name = 'InvalidOtpError';
+  }
+}
+
+export class TooManyOtpAttemptsError extends DomainError {
+  constructor() {
+    super('TOO_MANY_OTP_ATTEMPTS', 'Too many incorrect attempts. Request a new code.', undefined, 429);
+    this.name = 'TooManyOtpAttemptsError';
+  }
+}
+
+/** Thrown by RequestTwoFactorSetupUseCase when the chosen channel has no destination on file
+ * (e.g. SMS chosen but the user has no contactNumber saved) - never silently falls back to the
+ * other channel, since that could send the code somewhere the user didn't expect. */
+export class TwoFactorChannelUnavailableError extends DomainError {
+  constructor(channel: string) {
+    super(
+      'TWO_FACTOR_CHANNEL_UNAVAILABLE',
+      `Cannot send a code via ${channel} - no ${channel === 'SMS' ? 'mobile number' : 'email address'} is on file for this account.`,
+      undefined,
+      422,
+    );
+    this.name = 'TwoFactorChannelUnavailableError';
+  }
+}
+
 export class RoleNotFoundError extends DomainError {
   constructor(missingRoleNames: string[]) {
     super(

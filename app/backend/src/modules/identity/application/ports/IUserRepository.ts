@@ -20,6 +20,10 @@ export interface UserRecord {
   contactNumber: string | null;
   address: string | null;
   birthday: Date | null;
+  /** Settings > Security > Two-Factor Authentication (2026-07-22). `twoFactorChannel` is null
+   * until 2FA is first enabled. */
+  twoFactorEnabled: boolean;
+  twoFactorChannel: 'EMAIL' | 'SMS' | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +62,10 @@ export interface UpdateUserInput {
   contactNumber?: string | null;
   address?: string | null;
   birthday?: Date | null;
+  /** Set together by ConfirmTwoFactorSetupUseCase (enabling) and DisableTwoFactorUseCase
+   * (disabling, both fields reset to false/null). */
+  twoFactorEnabled?: boolean;
+  twoFactorChannel?: 'EMAIL' | 'SMS' | null;
 }
 
 export interface IUserRepository {

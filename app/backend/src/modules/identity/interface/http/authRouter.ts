@@ -5,7 +5,7 @@ import type { ITokenService } from '@modules/identity/application/ports/ITokenSe
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { AuthController, type AuthControllerDeps } from './authController';
-import { loginSchema } from './authSchemas';
+import { loginSchema, verifyLoginOtpSchema } from './authSchemas';
 
 /**
  * Milestone 6 plan §4/§8: stricter than the global rate limiter already
@@ -47,12 +47,23 @@ const refreshRateLimiter = rateLimit({
   message: { error: { code: 'RATE_LIMITED', message: 'Too many refresh attempts. Try again later.' } },
 });
 
+/** Settings > Security > Two-Factor Authentication (2026-07-22) - same ceiling as `/login` itself:
+ * guessing a 6-digit OTP is exactly the brute-force threat this class of limiter exists for. */
+const verifyOtpRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: env.NODE_ENV === 'development' ? 1000 : 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' } },
+});
+
 export function createAuthRouter(deps: AuthControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new AuthController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
   router.post('/login', loginRateLimiter, validateBody(loginSchema), controller.login);
+  router.post('/verify-login-otp', verifyOtpRateLimiter, validateBody(verifyLoginOtpSchema), controller.verifyLoginOtp);
   router.post('/refresh', refreshRateLimiter, controller.refresh);
   router.post('/logout', controller.logout);
   router.post('/logout-all', requireAuth, controller.logoutAll);

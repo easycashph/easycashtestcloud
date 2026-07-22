@@ -219,6 +219,14 @@ model User {
   address       String?
   birthday      DateTime?
 
+  /// Settings > Security > Two-Factor Authentication (2026-07-22, user request). `twoFactorChannel`
+  /// is null until `twoFactorEnabled` is first turned on (ConfirmTwoFactorSetupUseCase sets both
+  /// together) - "EMAIL" or "SMS", never both at once, matching the picker in Settings. Defaults to
+  /// disabled: 2FA changes login behavior app-wide, so it must be an explicit per-user opt-in, not
+  /// a silent migration-time flip that could lock anyone out.
+  twoFactorEnabled Boolean @default(false)
+  twoFactorChannel String?
+
   /// Internal employee/company ID (HR identifier) - distinct from `id` (the DB primary key) and
   /// `legacyId` (the migrated-system's own ID). Optional - existing migrated/seeded staff don't
   /// have one recorded yet.
@@ -237,6 +245,7 @@ model User {
 
   roles                         UserRole[]
   refreshTokens                 RefreshToken[]
+  twoFactorChallenges           TwoFactorChallenge[]
   auditLogs                     AuditLog[]
   profileActivityLogs           ProfileActivityLog[]          @relation("ProfileActivityLogUser")
   borrowersAsLoanOfficer        Borrower[]                    @relation("BorrowerLoanOfficer")
@@ -362,6 +371,30 @@ model RefreshToken {
   createdAt   DateTime  @default(now())
 
   @@map("refresh_tokens")
+}
+
+/// Settings > Security > Two-Factor Authentication (2026-07-22, user request) - a short-lived OTP
+/// challenge, for either enabling 2FA (`purpose: "ENABLE"`, RequestTwoFactorSetupUseCase /
+/// ConfirmTwoFactorSetupUseCase) or completing a 2FA-gated login (`purpose: "LOGIN"`, LoginUseCase
+/// / VerifyLoginOtpUseCase). One row per attempt to send a code - never reused across purposes or
+/// across a retry, so an old challenge can't be replayed once a fresh one has been issued.
+model TwoFactorChallenge {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose    String
+  channel    String
+  /// HMAC-SHA256(code, JWT_REFRESH_SECRET) - same keyed-hash approach as RefreshToken.tokenHash,
+  /// not bcrypt: this is compared at most a handful of times (rate-limited by `attempts` below)
+  /// against a 6-digit, 5-minute-lived code, so bcrypt's deliberate slowness buys nothing here.
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("two_factor_challenges")
 }
 
 // ----------------------------------------------------------------------------

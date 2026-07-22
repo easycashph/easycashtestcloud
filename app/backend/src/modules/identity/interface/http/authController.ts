@@ -7,7 +7,8 @@ import type { LogoutAllUseCase } from '@modules/identity/application/use-cases/L
 import type { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
 import type { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import type { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
-import type { LoginRequestBody } from './authSchemas';
+import type { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
+import type { LoginRequestBody, VerifyLoginOtpRequestBody } from './authSchemas';
 import { clearRefreshTokenCookie, readRefreshTokenCookie, setRefreshTokenCookie } from './cookies';
 import { TokenNotFoundError, TokenExpiredError } from '@modules/identity/application/errors/AuthErrors';
 
@@ -19,6 +20,7 @@ export interface AuthControllerDeps {
   getCurrentUserUseCase: GetCurrentUserUseCase;
   listSessionsUseCase: ListSessionsUseCase;
   revokeSessionUseCase: RevokeSessionUseCase;
+  verifyLoginOtpUseCase: VerifyLoginOtpUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture). */
@@ -31,6 +33,36 @@ export class AuthController {
       const result = await this.deps.loginUseCase.execute({
         email,
         password,
+        ipAddress: req.ip,
+        userAgent: req.header('user-agent'),
+      });
+
+      // 2026-07-22 (Two-Factor Authentication) - LoginUseCase's other possible result: no cookie,
+      // no tokens yet, just enough for the frontend to show the OTP entry step.
+      if ('twoFactorRequired' in result) {
+        res.status(200).json({ twoFactorRequired: true, challengeId: result.challengeId, channel: result.channel });
+        return;
+      }
+
+      setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenExpiresAt);
+      res.status(200).json({
+        accessToken: result.accessToken,
+        accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
+        user: result.user,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Settings > Security > Two-Factor Authentication (2026-07-22) - completes a login LoginUseCase
+   * paused on `twoFactorRequired`. Same response shape as a normal `login` success. */
+  verifyLoginOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { challengeId, code } = req.body as VerifyLoginOtpRequestBody;
+      const result = await this.deps.verifyLoginOtpUseCase.execute({
+        challengeId,
+        code,
         ipAddress: req.ip,
         userAgent: req.header('user-agent'),
       });

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -330,9 +330,202 @@ function SecurityTab() {
         </CardContent>
       </Card>
 
+      <TwoFactorAuthCard />
       <SessionsCard />
       <LoginActivityCard />
     </div>
+  );
+}
+
+/**
+ * Settings > Security > Two-Factor Authentication (2026-07-22 user request). Two states:
+ *  - Disabled (default - CLAUDE.md/security posture: an opt-in, never silently turned on): pick a
+ *    channel, send a code, confirm it - only on a CORRECT confirmation does the backend actually
+ *    flip `twoFactorEnabled` (ConfirmTwoFactorSetupUseCase), so a wrong number/inbox can never
+ *    leave the account in a broken "2FA on, code never arrives" state.
+ *  - Enabled: shows which channel, with a Disable control that only needs the current password
+ *    (no OTP) - the account's own "get me unstuck" escape hatch if the enabled channel ever stops
+ *    being reachable.
+ */
+function TwoFactorAuthCard() {
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiClient.get<AuthenticatedUserView>('/auth/me'),
+  });
+
+  const [channel, setChannel] = React.useState<'EMAIL' | 'SMS'>('EMAIL');
+  const [challengeId, setChallengeId] = React.useState<string | null>(null);
+  const [code, setCode] = React.useState('');
+  const [disablePassword, setDisablePassword] = React.useState('');
+  const [showDisableForm, setShowDisableForm] = React.useState(false);
+  const [message, setMessage] = React.useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+
+  const refetchMe = () => queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+
+  const requestSetupMutation = useMutation({
+    mutationFn: () => apiClient.post<{ challengeId: string }>('/users/me/two-factor/setup', { channel }),
+    onSuccess: (result) => {
+      setChallengeId(result.challengeId);
+      setMessage({ tone: 'success', text: `Code sent via ${channel === 'EMAIL' ? 'email' : 'SMS'}.` });
+    },
+    onError: (error: unknown) => setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not send a code.' }),
+  });
+
+  const confirmSetupMutation = useMutation({
+    mutationFn: () => apiClient.post('/users/me/two-factor/confirm', { challengeId, code: code.trim() }),
+    onSuccess: () => {
+      setChallengeId(null);
+      setCode('');
+      setMessage({ tone: 'success', text: 'Two-factor authentication is now enabled.' });
+      refetchMe();
+    },
+    onError: (error: unknown) => setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not confirm that code.' }),
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: () => apiClient.post('/users/me/two-factor/disable', { currentPassword: disablePassword }),
+    onSuccess: () => {
+      setShowDisableForm(false);
+      setDisablePassword('');
+      setMessage({ tone: 'success', text: 'Two-factor authentication is now disabled.' });
+      refetchMe();
+    },
+    onError: (error: unknown) =>
+      setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not disable two-factor authentication.' }),
+  });
+
+  const me = meQuery.data;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <ShieldQuestion className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Two-Factor Authentication</CardTitle>
+          <CardDescription>Require a one-time code, sent by email or SMS, on top of your password when signing in.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {meQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : me?.twoFactorEnabled ? (
+          <>
+            <div className="flex items-center justify-between rounded-md border p-4">
+              <div>
+                <p className="text-sm font-medium">Enabled</p>
+                <p className="text-xs text-muted-foreground">
+                  Codes are sent via {me.twoFactorChannel === 'EMAIL' ? 'email' : 'SMS'} on every sign-in.
+                </p>
+              </div>
+              <Badge variant="success">On</Badge>
+            </div>
+
+            {showDisableForm ? (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="disable-2fa-password">Current Password</Label>
+                  <Input
+                    id="disable-2fa-password"
+                    type="password"
+                    value={disablePassword}
+                    onChange={(e) => setDisablePassword(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={!disablePassword || disableMutation.isPending}
+                    onClick={() => disableMutation.mutate()}
+                  >
+                    {disableMutation.isPending ? 'Disabling…' : 'Disable 2FA'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDisableForm(false);
+                      setDisablePassword('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowDisableForm(true)}>
+                Disable
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-md border p-4">
+              <div>
+                <p className="text-sm font-medium">Disabled</p>
+                <p className="text-xs text-muted-foreground">Your account only requires a password to sign in.</p>
+              </div>
+              <Badge variant="outline">Off</Badge>
+            </div>
+
+            {!challengeId ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1.5">
+                  <Label>Send code via</Label>
+                  <Select value={channel} onValueChange={(v) => setChannel(v as 'EMAIL' | 'SMS')}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EMAIL">Email</SelectItem>
+                      <SelectItem value="SMS">SMS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="button" size="sm" disabled={requestSetupMutation.isPending} onClick={() => requestSetupMutation.mutate()}>
+                  {requestSetupMutation.isPending ? 'Sending…' : 'Send Code'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm-2fa-code">Verification Code</Label>
+                  <Input id="confirm-2fa-code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!code || confirmSetupMutation.isPending}
+                    onClick={() => confirmSetupMutation.mutate()}
+                  >
+                    {confirmSetupMutation.isPending ? 'Confirming…' : 'Confirm & Enable'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setChallengeId(null);
+                      setCode('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {message && (
+          <p className={cn('text-xs', message.tone === 'error' ? 'text-destructive' : 'text-success')}>{message.text}</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

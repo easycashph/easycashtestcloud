@@ -16,6 +16,9 @@ export interface AuthenticatedUserView {
   contactNumber: string | null;
   address: string | null;
   birthday: string | null;
+  /** Settings > Security > Two-Factor Authentication (2026-07-22). */
+  twoFactorEnabled: boolean;
+  twoFactorChannel: 'EMAIL' | 'SMS' | null;
 }
 
 export interface TokenPairOutput {
@@ -28,6 +31,44 @@ export interface TokenPairOutput {
 
 export interface LoginOutput extends TokenPairOutput {
   user: AuthenticatedUserView;
+}
+
+/** Settings > Security > Two-Factor Authentication (2026-07-22) - LoginUseCase's alternate
+ * "credentials were correct, but an OTP is needed before any token is issued" result. No
+ * accessToken/refreshToken here at all - the caller must complete VerifyLoginOtpUseCase first. */
+export interface TwoFactorRequiredOutput {
+  twoFactorRequired: true;
+  challengeId: string;
+  channel: 'EMAIL' | 'SMS';
+}
+
+export type LoginResult = LoginOutput | TwoFactorRequiredOutput;
+
+export interface VerifyLoginOtpInput {
+  challengeId: string;
+  code: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export interface RequestTwoFactorSetupInput {
+  userId: string;
+  channel: 'EMAIL' | 'SMS';
+}
+
+export interface RequestTwoFactorSetupOutput {
+  challengeId: string;
+}
+
+export interface ConfirmTwoFactorSetupInput {
+  userId: string;
+  challengeId: string;
+  code: string;
+}
+
+export interface DisableTwoFactorInput {
+  userId: string;
+  currentPassword: string;
 }
 
 export interface RefreshInput {

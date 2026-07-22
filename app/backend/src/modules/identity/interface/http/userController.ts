@@ -6,7 +6,18 @@ import type { CreateUserUseCase } from '../../application/use-cases/CreateUserUs
 import type { UpdateUserUseCase } from '../../application/use-cases/UpdateUserUseCase';
 import type { UpdateOwnProfileUseCase } from '../../application/use-cases/UpdateOwnProfileUseCase';
 import type { ChangeOwnPasswordUseCase } from '../../application/use-cases/ChangeOwnPasswordUseCase';
-import type { ChangeOwnPasswordRequestBody, CreateUserRequestBody, UpdateOwnProfileRequestBody, UpdateUserRequestBody } from './userSchemas';
+import type { RequestTwoFactorSetupUseCase } from '../../application/use-cases/RequestTwoFactorSetupUseCase';
+import type { ConfirmTwoFactorSetupUseCase } from '../../application/use-cases/ConfirmTwoFactorSetupUseCase';
+import type { DisableTwoFactorUseCase } from '../../application/use-cases/DisableTwoFactorUseCase';
+import type {
+  ChangeOwnPasswordRequestBody,
+  ConfirmTwoFactorSetupRequestBody,
+  CreateUserRequestBody,
+  DisableTwoFactorRequestBody,
+  RequestTwoFactorSetupRequestBody,
+  UpdateOwnProfileRequestBody,
+  UpdateUserRequestBody,
+} from './userSchemas';
 import { presentUser } from './presenters/UserPresenter';
 
 export interface UserControllerDeps {
@@ -15,6 +26,9 @@ export interface UserControllerDeps {
   updateUserUseCase: UpdateUserUseCase;
   updateOwnProfileUseCase: UpdateOwnProfileUseCase;
   changeOwnPasswordUseCase: ChangeOwnPasswordUseCase;
+  requestTwoFactorSetupUseCase: RequestTwoFactorSetupUseCase;
+  confirmTwoFactorSetupUseCase: ConfirmTwoFactorSetupUseCase;
+  disableTwoFactorUseCase: DisableTwoFactorUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -70,6 +84,42 @@ export class UserController {
       const body = req.body as ChangeOwnPasswordRequestBody;
       const currentUser = getCurrentUser(req);
       await this.deps.changeOwnPasswordUseCase.execute(currentUser.sub, body);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Settings > Security > Two-Factor Authentication (2026-07-22) - step 1: send a code. */
+  requestTwoFactorSetup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as RequestTwoFactorSetupRequestBody;
+      const currentUser = getCurrentUser(req);
+      const result = await this.deps.requestTwoFactorSetupUseCase.execute({ userId: currentUser.sub, channel: body.channel });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Settings > Security > Two-Factor Authentication (2026-07-22) - step 2: confirm the code, turn 2FA on. */
+  confirmTwoFactorSetup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as ConfirmTwoFactorSetupRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.confirmTwoFactorSetupUseCase.execute({ userId: currentUser.sub, challengeId: body.challengeId, code: body.code });
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Settings > Security > Two-Factor Authentication (2026-07-22) - the toggle-off escape hatch. */
+  disableTwoFactor = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as DisableTwoFactorRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.disableTwoFactorUseCase.execute({ userId: currentUser.sub, currentPassword: body.currentPassword });
       res.status(204).send();
     } catch (error) {
       next(error);
