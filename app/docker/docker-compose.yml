@@ -49,6 +49,14 @@ services:
     restart: unless-stopped
     ports:
       - '5173:80'
+      - '443:443'
+    volumes:
+      # 2026-07-22 (Tailscale HTTPS) - cert/key issued via `tailscale cert` on the host, mounted
+      # read-only into the container for nginx to terminate TLS with. Machine-specific and
+      # gitignored (app/docker/tailscale-certs/) - re-issue with `tailscale cert <hostname>` on any
+      # other machine this gets deployed to.
+      - ./tailscale-certs/cert.pem:/etc/nginx/tailscale/cert.pem:ro
+      - ./tailscale-certs/key.pem:/etc/nginx/tailscale/key.pem:ro
     depends_on:
       - backend
 

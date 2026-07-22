@@ -21,6 +21,17 @@ export function generateUuid(): string {
   });
 }
 
+/** Builds a safe, consistent download filename: `{LoanCode}_{Label}_{suffix}.pdf` (e.g.
+ * `SL-REG_00114_Disclosure_Statement_signed.pdf`) - spaces become underscores and anything not
+ * alphanumeric/dash/underscore is stripped, so the file always saves cleanly regardless of OS and
+ * is easy to tell apart once several loan accounts' documents pile up in the same Downloads
+ * folder. */
+export function buildDocumentFileName(loanCode: string, label: string, suffix?: string): string {
+  const slug = (s: string) => s.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+  const parts = [slug(loanCode), slug(label), suffix ? slug(suffix) : undefined].filter(Boolean);
+  return `${parts.join('_')}.pdf`;
+}
+
 /** PHP currency formatting, used throughout the app for real money figures. */
 export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);

@@ -92,6 +92,10 @@ legacy/db-exports/
 # username/password (root/sdevtech2021) in plain text. Never committed to git history.
 legacy/mongodb-ELCI-LMS_batchfile-source-code.zip
 
+# Tailscale HTTPS cert/key for the frontend nginx container (2026-07-22) — machine-specific,
+# reissued locally via `tailscale cert`, never committed.
+app/docker/tailscale-certs/
+
 # Reverse-engineered MongoDB remote backup script (2026-07-10) — same hardcoded remote
 # credentials as the zip above, structurally required for mongodump to connect. Never committed.
 backup-mongodb.bat
