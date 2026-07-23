@@ -41,6 +41,7 @@ import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/applic
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
+import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
@@ -1006,6 +1007,15 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalLoanApplicationRouter);
+
+  // Portal-facing PSGC address lookups (cascading region/province/city/barangay + ZIP auto-fill
+  // on the loan application form) - see portalPsgcRouter.ts's doc comment for why this can't just
+  // reuse the staff-facing psgcRouter mounted above.
+  const portalPsgcRouter = createPortalPsgcRouter(
+    { listPsgcOptionsUseCase: new ListPsgcOptionsUseCase({ psgcRepository: new PrismaPsgcRepository() }) },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalPsgcRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
   // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"
