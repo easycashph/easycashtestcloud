@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -8,9 +8,10 @@ import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import type { PortalBranch, PortalDocumentCategory, PortalLoanApplicationSummary, SubmitLoanApplicationRequest } from '@/lib/portalApiTypes';
 
-const LOAN_CATEGORIES = ['Seafarer Loan', 'Personal Loan', 'SME Loan', 'Salary Loan', 'Purchase Financing'];
+const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
 const GENDER_OPTIONS = ['Female', 'Male'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Renting', 'Living with family'];
@@ -138,8 +139,16 @@ const INITIAL_FORM: FormState = {
  * then (optionally) attach supporting documents to the freshly-created record. */
 export function LoanApplicationFormPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [branches, setBranches] = React.useState<PortalBranch[]>([]);
-  const [form, setForm] = React.useState<FormState>(INITIAL_FORM);
+  // Pre-selects the product when arriving from LoanProductsPage's "Apply Now" (?category=...) -
+  // only honored if it's a real, currently-offered category, never trusted blindly from the URL.
+  const [form, setForm] = React.useState<FormState>(() => {
+    const requestedCategory = searchParams.get('category');
+    return requestedCategory && (LOAN_CATEGORIES as string[]).includes(requestedCategory)
+      ? { ...INITIAL_FORM, requestedCategory }
+      : INITIAL_FORM;
+  });
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState<PortalLoanApplicationSummary | null>(null);

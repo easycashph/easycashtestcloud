@@ -1,8 +1,9 @@
 import * as React from 'react';
-import { FileText, LogOut, User } from 'lucide-react';
+import { FileText, ShoppingBag, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PortalHeader } from '@/components/PortalHeader';
 import { useAuth } from '@/lib/authContext';
 import { apiClient } from '@/lib/apiClient';
 import type { PortalLoanApplicationSummary } from '@/lib/portalApiTypes';
@@ -28,7 +29,7 @@ const STATUS_TONE: Record<PortalLoanApplicationSummary['status'], string> = {
 /** Phase 2 (2026-07-23): "Create Loan Application" now routes to the real form, and this page
  * shows the client's own submitted applications and their current status. */
 export function DashboardPage() {
-  const { account, logout } = useAuth();
+  const { account } = useAuth();
   const navigate = useNavigate();
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
 
@@ -39,30 +40,26 @@ export function DashboardPage() {
       .catch(() => setApplications([]));
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
   return (
     <div className="min-h-screen bg-secondary/30">
-      <header className="border-b border-border bg-background">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="./logo-easycash.png" alt="Easycash" className="h-8 w-8 rounded-lg object-contain" />
-            <span className="text-base font-bold tracking-tight">Easycash Portal</span>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" /> Log Out
-          </Button>
-        </div>
-      </header>
+      <PortalHeader />
 
       <main className="container py-10">
         <h1 className="text-2xl font-bold tracking-tight">Welcome back{account ? `, ${account.email}` : ''}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
 
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        <div className="mt-8 grid gap-5 sm:grid-cols-3">
+          <Card className="p-6">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <h2 className="mt-4 text-base font-semibold">Loan Products</h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">Browse our loan products and find the one that fits your needs.</p>
+            <Button variant="outline" className="mt-4" onClick={() => navigate('/products')}>
+              Browse Products
+            </Button>
+          </Card>
+
           <Card className="p-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <FileText className="h-5 w-5" />

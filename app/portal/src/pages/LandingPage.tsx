@@ -1,36 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Anchor, Briefcase, CheckCircle2, Landmark, Menu, ShieldCheck, Smartphone, User, Wallet, X } from 'lucide-react';
+import { CheckCircle2, Menu, ShieldCheck, Smartphone, X } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/authContext';
-
-const PRODUCTS = [
-  {
-    icon: Anchor,
-    name: 'Seafarer Loan',
-    blurb: 'Lower rates and faster approvals, tailored around irregular allotment income.',
-  },
-  {
-    icon: User,
-    name: 'Personal Loan',
-    blurb: 'Tuition, bills, home improvement, or the unexpected - competitive rates, no surprises.',
-  },
-  {
-    icon: Briefcase,
-    name: 'SME Loan',
-    blurb: 'Flexible financing and a simpler process for growing your business.',
-  },
-  {
-    icon: Landmark,
-    name: 'Salary Loan',
-    blurb: 'A quick cash advance against your salary, approved fast.',
-  },
-  {
-    icon: Wallet,
-    name: 'Purchase Financing',
-    blurb: 'Gadgets and appliances now, pay over time.',
-  },
-];
+import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 
 const STEPS = [
   { title: 'Create an account', body: 'Sign up with your email in under a minute.' },
@@ -173,12 +146,12 @@ export function LandingPage() {
             <p className="mt-3 text-muted-foreground">Whatever you're working toward, there's an Easycash product built for it.</p>
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {PRODUCTS.map((product) => (
-              <div key={product.name} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            {LOAN_PRODUCTS.map((product) => (
+              <div key={product.category} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <product.icon className="h-5 w-5" />
                 </div>
-                <h3 className="mt-4 text-base font-semibold">{product.name}</h3>
+                <h3 className="mt-4 text-base font-semibold">{product.category}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
               </div>
             ))}
