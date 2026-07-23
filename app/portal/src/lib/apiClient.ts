@@ -12,7 +12,7 @@
  * portal's own JWT is short-lived-ish (PORTAL_JWT_TTL, 24h) and scoped to a lower-stakes account
  * than a staff login, per the Phase 1 design notes.
  */
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
 const TOKEN_STORAGE_KEY = 'easycash-portal-token';
 
 export class ApiError extends Error {

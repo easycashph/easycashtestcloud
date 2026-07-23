@@ -45,7 +45,7 @@ function AppRoutes() {
  * remove once VITE_API_BASE_URL is pointed at a real public backend URL and the deploy workflow's
  * repo variable is set accordingly. */
 function PreviewBanner() {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
   if (!apiBaseUrl.includes('localhost')) return null;
   return (
     <div className="bg-amber-100 text-amber-900 text-center text-sm py-2 px-4">
