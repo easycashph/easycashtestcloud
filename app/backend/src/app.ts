@@ -205,7 +205,6 @@ import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/applicatio
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
 import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
 import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
-import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
 import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
 import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
 import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
