@@ -2664,7 +2664,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <Label htmlFor="reduce-reason">Reason / external approval reference</Label>
             <Textarea
               id="reduce-reason"
-              placeholder="e.g. Approved by Branch Manager J. Santos, memo #2026-0714"
+              placeholder="e.g. Approved by Branch Manager, memo #2026-0714"
               value={reduceReason}
               onChange={(e) => setReduceReason(e.target.value)}
               disabled={reduceMutation.isPending}
@@ -2739,7 +2739,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <Label htmlFor="adjust-fees-reason">Reason / external approval reference</Label>
             <Textarea
               id="adjust-fees-reason"
-              placeholder="e.g. Approved by Branch Manager J. Santos, memo #2026-0714"
+              placeholder="e.g. Approved by Branch Manager, memo #2026-0714"
               value={adjustFeesReason}
               onChange={(e) => setAdjustFeesReason(e.target.value)}
               disabled={adjustFeesMutation.isPending}
