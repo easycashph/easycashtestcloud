@@ -244,6 +244,12 @@ export class RepaymentInstallment {
    * repository), same division of responsibility as `ProcessPaymentUseCase` building
    * `PaymentAllocation` rows alongside this entity's own `recordPayment()` call.
    */
+  /**
+   * 2026-07-15 (Reduce Penalty) / 2026-07-23 (Adjust Penalty, user-confirmed): may raise OR lower
+   * the penalty override — unlike the original reduce-only rule, staff can now correct a penalty
+   * upward too. Still bounded by the live ADR-050/SEC-MC3-computed ceiling (`currentPenaltyAmount`)
+   * on both ends: never negative, never above what the formula would actually produce today.
+   */
   reducePenalty(newAmount: Money, currentPenaltyAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
     if (this.props.paid.penalty.isPositive()) {
       throw new PenaltyAlreadyPaidError(this.props.id);

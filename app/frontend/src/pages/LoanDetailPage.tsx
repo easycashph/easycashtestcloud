@@ -1696,11 +1696,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      disabled={!canReduceThisRow || penaltyDisplay <= 0}
-                                      onSelect={() => openReduceConfirm(i, penaltyDisplay)}
-                                    >
-                                      Reduce penalty
+                                    <DropdownMenuItem disabled={!canReduceThisRow} onSelect={() => openReduceConfirm(i, penaltyDisplay)}>
+                                      Adjust penalty
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={!canAdjustFeesThisRow}
@@ -2640,10 +2637,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reduce penalty</DialogTitle>
+            <DialogTitle>Adjust penalty</DialogTitle>
             <DialogDescription>
               {reduceTarget &&
-                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Freezes this installment's penalty at the amount entered — it stops recalculating day over day until paid or reduced again. Approved outside this system; the reason below records that reference.`}
+                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Can't go above what the penalty formula would produce today. Approved outside this system; the reason below records that reference.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -2695,7 +2692,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               onClick={() => reduceMutation.mutate()}
               disabled={reduceMutation.isPending || reduceReason.trim().length === 0 || reduceAmount.trim().length === 0}
             >
-              {reduceMutation.isPending ? 'Reducing…' : 'Reduce penalty'}
+              {reduceMutation.isPending ? 'Adjusting…' : 'Adjust penalty'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,11 +1,11 @@
 import { DomainError } from '@shared/errors/DomainError';
 
-/** 2026-07-15 (Reduce Penalty feature, user-confirmed): a reduction can never exceed what would otherwise be owed — it lowers the penalty, it never invents a higher one. */
+/** 2026-07-15 (Reduce Penalty feature) / 2026-07-23 (Adjust Penalty, user-confirmed): the override may raise or lower the amount, but never past the live ADR-050/SEC-MC3-computed ceiling — it can never invent a penalty higher than what the formula would actually produce today. */
 export class PenaltyReductionExceedsCurrentAmountError extends DomainError {
   constructor(newAmount: string, currentAmount: string) {
     super(
       'PENALTY_REDUCTION_EXCEEDS_CURRENT_AMOUNT',
-      `New penalty amount ${newAmount} must not exceed the current penalty ${currentAmount} — a reduction can only lower the amount owed.`,
+      `New penalty amount ${newAmount} must not exceed the current penalty ceiling ${currentAmount}.`,
       undefined,
       400,
     );

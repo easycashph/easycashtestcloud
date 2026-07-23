@@ -25,8 +25,9 @@ export interface ReducePenaltyUseCaseDeps {
  * business rules," every rule here was asked, not assumed):
  * - Only Accounting/MIS may call this (enforced by the HTTP layer's `requireRole`, not here —
  *   same division of concerns as every other role-gated use case in this codebase).
- * - Partial or full reduction, down to ₱0 — never above what's currently owed (`RepaymentInstallment.
- *   reducePenalty()`'s own validation).
+ * - 2026-07-23 (Adjust Penalty, user-confirmed): may raise OR lower the penalty, never below ₱0 and
+ *   never above the live ADR-050/SEC-MC3 ceiling (`RepaymentInstallment.reducePenalty()`'s own
+ *   validation) — previously reduce-only, now bidirectional like `AdjustFeesUseCase`.
  * - A reduction FREEZES the penalty; it does not resume growing per ADR-050's daily formula.
  * - Cannot reduce an installment whose penalty has already been paid — approval happens outside
  *   this system; an already-collected amount is a refund/credit decision, explicitly out of scope.
