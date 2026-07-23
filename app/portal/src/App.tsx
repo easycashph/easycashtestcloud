@@ -41,10 +41,24 @@ function AppRoutes() {
   );
 }
 
+/** Shown whenever the backend isn't reachable from the public internet yet (still localhost) -
+ * remove once VITE_API_BASE_URL is pointed at a real public backend URL and the deploy workflow's
+ * repo variable is set accordingly. */
+function PreviewBanner() {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
+  if (!apiBaseUrl.includes('localhost')) return null;
+  return (
+    <div className="bg-amber-100 text-amber-900 text-center text-sm py-2 px-4">
+      Preview build - sign up, login, and other account actions are not yet live.
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <PreviewBanner />
         <AppRoutes />
       </AuthProvider>
     </HashRouter>
