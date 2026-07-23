@@ -456,6 +456,7 @@ function SummaryCard({
   onClick,
   trend,
   compact = false,
+  highlight = false,
 }: {
   title: string;
   value: string;
@@ -468,10 +469,18 @@ function SummaryCard({
   /** Settings > Appearance > Dashboard Layout "Compact" density preference (2026-07-17) - tighter
    * padding and a smaller value figure so more cards fit above the fold. */
   compact?: boolean;
+  /** 2026-07-23 (user request, "more advance and sophisticated" color direction "C"): reserves the
+   * accent color for exactly one "hero" card instead of spraying success/destructive-tinted color
+   * across every stat. Uses `--primary` (not a hardcoded hex) so it still tracks whichever Theme
+   * Color preset is active in Settings > Appearance, in both light and dark mode. */
+  highlight?: boolean;
 }) {
   return (
     <Card
-      className={onClick ? 'cursor-pointer transition-colors hover:border-primary/60' : undefined}
+      className={cn(
+        onClick && 'cursor-pointer transition-colors hover:border-primary/60',
+        highlight && 'border-primary/40 bg-primary/5',
+      )}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
@@ -488,17 +497,17 @@ function SummaryCard({
       title={onClick ? 'View the loan accounts behind this figure' : undefined}
     >
       <CardHeader className={cn('flex flex-row items-center justify-between space-y-0', compact ? 'pb-1' : 'pb-2')}>
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className={cn('text-sm font-medium', highlight ? 'text-primary' : 'text-muted-foreground')}>{title}</CardTitle>
         <Icon className={tone === 'destructive' ? 'h-4 w-4 text-destructive' : 'h-4 w-4 text-primary'} />
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-2">
-          <div className={compact ? 'text-xl font-bold' : 'text-2xl font-bold'}>{value}</div>
+          <div className={cn(compact ? 'text-xl font-bold' : 'text-2xl font-bold', highlight && 'text-primary')}>{value}</div>
           {trend && trend.changePercent !== null && (
             <span
               className={cn(
                 'inline-flex items-center gap-0.5 text-xs font-medium',
-                trend.changePercent >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive',
+                trend.changePercent >= 0 ? 'text-success' : 'text-destructive',
               )}
             >
               {trend.changePercent >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
@@ -506,7 +515,7 @@ function SummaryCard({
             </span>
           )}
         </div>
-        {!compact && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+        {!compact && <p className={cn('mt-1 text-xs', highlight ? 'text-primary/70' : 'text-muted-foreground')}>{hint}</p>}
         {!compact && trend && trend.changePercent !== null && <p className="text-[11px] text-muted-foreground">{trend.label}</p>}
       </CardContent>
     </Card>
@@ -1008,6 +1017,7 @@ export function DashboardPage() {
               hint={portfolioGrowthPercent === null ? 'Not enough disbursement history yet' : 'Month-over-month disbursement, portfolio-wide'}
               icon={TrendingUp}
               compact={compact}
+              highlight
             />
           ),
         };
