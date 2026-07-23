@@ -55,6 +55,10 @@ export interface LoanAccount {
   closedAt: string | null;
   /** CP12 migration follow-up (2026-07-09): true means every `balances` field is 0.00 only because the legacy record had no balance snapshot at all - NOT because the loan is settled. See docs/Architecture/CP12-missing-balance-loans.md. */
   legacyBalanceDataMissing: boolean;
+  /** ADR-007 §4 (2026-07-08 decision, backfilled 2026-07-23): true for one of the 79 legacy CLOSED
+   * loans whose migrated balance columns don't sum to zero despite being marked fully settled -
+   * migrated as-is, flagged for manual accounting review rather than a fabricated correction. */
+  legacyNonReconcilingClosedBalance: boolean;
   /** 2026-07-13: "Matured" per Investopedia's definition - the loan's full scheduled term has
    * ended (last installment's due date passed) and it's still unpaid, distinct from "in arrears"
    * (still mid-term with a missed payment). Computed server-side, not a `status` enum value - only
