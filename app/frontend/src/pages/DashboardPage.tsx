@@ -1324,22 +1324,27 @@ export function DashboardPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 lg:grid-cols-3">
-            {PORTFOLIO_HEALTH_PLANS.map((plan) => (
-              <div key={plan.key} className="rounded-md border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <plan.icon className={`h-4 w-4 ${plan.iconClass}`} />
-                    <span className="text-sm font-semibold">{plan.title}</span>
+            {PORTFOLIO_HEALTH_PLANS.map((plan) => {
+              const segmentCount = filteredPortfolioHealth[plan.key as 'good' | 'activeInArrears' | 'matured'].count;
+              return (
+                <div key={plan.key} className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <plan.icon className={`h-4 w-4 ${plan.iconClass}`} />
+                      <span className="text-sm font-semibold">{plan.title}</span>
+                    </div>
+                    <Badge variant={plan.badgeVariant}>
+                      {segmentCount} {plan.segment}
+                    </Badge>
                   </div>
-                  <Badge variant={plan.badgeVariant}>{plan.segment}</Badge>
+                  <p className="mt-2 text-xs text-muted-foreground">{plan.body}</p>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{plan.body}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
-            AI-Assisted - these are draft discussion points for management, not automated actions. This output is a static mock; the
-            LMS is not yet connected to an API for a real AI Assist engine.
+            Computed by the LMS from this portfolio's real Good/Arrears/Matured segment counts above - a deterministic rule-based
+            grouping, not an external AI model. The Loan Officer/Collector still makes the final call.
           </p>
         </CardContent>
       </Card>
