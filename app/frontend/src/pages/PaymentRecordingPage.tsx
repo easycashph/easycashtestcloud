@@ -725,7 +725,7 @@ export function PaymentRecordingForm({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="payment-method" className="flex items-center gap-1">
-                    Mode of payment <FieldTooltip text="How the borrower is paying - cash, bank transfer, over-the-counter, etc." />
+                    Channel <FieldTooltip text="How the borrower is paying - cash, bank transfer, over-the-counter, etc." />
                   </Label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                     <SelectTrigger id="payment-method">

@@ -27,6 +27,17 @@ export const ACTIVE_PAYMENT_METHODS: PaymentMethod[] = [
   { code: 'BANK_TRANSFER', label: 'Bank Transfer', isActive: true },
   { code: 'PDC', label: 'Post-Dated Check (PDC)', isActive: true },
   { code: 'AUTO_DEBIT', label: 'Auto Debit', isActive: true },
+  { code: 'RESTRUCTURE', label: 'Restructure', isActive: true },
+  { code: 'SUSPENSE_ACCOUNT', label: 'Suspense Account', isActive: true },
+  { code: 'ADA', label: 'ADA', isActive: true },
+  { code: 'LAZADA_WALLET', label: 'Lazada Wallet', isActive: true },
+  { code: 'UNEARNED_INCOME', label: 'Unearned Income', isActive: true },
+  { code: 'ADJUSTMENT', label: 'Adjustment', isActive: true },
+  { code: 'BANK', label: 'Bank', isActive: true },
+  { code: 'RECEIPT', label: 'Receipt', isActive: true },
+  { code: 'CHECK', label: 'Check', isActive: true },
+  { code: 'LOAN_DEDUCT', label: 'Loan Deduct', isActive: true },
+  { code: 'ATM', label: 'ATM', isActive: true },
 ];
 
 const LEGACY_NOTE =
