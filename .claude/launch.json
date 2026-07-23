@@ -13,6 +13,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "app/backend"],
       "port": 4000
+    },
+    {
+      "name": "portal-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "app/portal"],
+      "port": 5199
     }
   ]
 }

@@ -13,6 +13,7 @@ function toDomain(row: LoanApplicationRow): LoanApplication {
     id: row.id,
     branchId: row.branchId,
     borrowerId: row.borrowerId ?? undefined,
+    portalAccountId: row.portalAccountId ?? undefined,
     applicantName: row.applicantName,
     age: row.age ?? undefined,
     gender: row.gender ?? undefined,
@@ -90,6 +91,7 @@ async function write(client: PrismaWriteClient, application: LoanApplication): P
       id: p.id,
       branchId: p.branchId,
       borrowerId: p.borrowerId,
+      portalAccountId: p.portalAccountId,
       applicantName: p.applicantName,
       age: p.age,
       gender: p.gender,
@@ -208,6 +210,13 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
   async findByBorrowerId(borrowerId: string, ctx?: TransactionContext): Promise<LoanApplication[]> {
     const client = resolveClient(ctx);
     const rows = await client.loanApplication.findMany({ where: { borrowerId }, orderBy: { createdAt: 'desc' } });
+    return rows.map(toDomain);
+  }
+
+  /** Used by the Easycash Portal's "My Applications" list (ListPortalLoanApplicationsUseCase). */
+  async findByPortalAccountId(portalAccountId: string, ctx?: TransactionContext): Promise<LoanApplication[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanApplication.findMany({ where: { portalAccountId }, orderBy: { createdAt: 'desc' } });
     return rows.map(toDomain);
   }
 

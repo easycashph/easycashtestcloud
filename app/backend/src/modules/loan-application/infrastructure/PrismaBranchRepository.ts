@@ -1,7 +1,16 @@
 import { prisma } from '@shared/database/prismaClient';
-import type { BranchLocation, IBranchRepository } from '../application/ports/IBranchRepository';
+import type { BranchLocation, BranchSummary, IBranchRepository } from '../application/ports/IBranchRepository';
 
 export class PrismaBranchRepository implements IBranchRepository {
+  async findAllActive(): Promise<BranchSummary[]> {
+    const rows = await prisma.branch.findMany({
+      where: { isActive: true },
+      select: { id: true, code: true, name: true, address: true },
+      orderBy: { name: 'asc' },
+    });
+    return rows;
+  }
+
   async findById(id: string): Promise<BranchLocation | null> {
     const row = await prisma.branch.findUnique({
       where: { id },

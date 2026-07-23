@@ -39,8 +39,13 @@ function ReminderSettingsCard() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (body: { smsEnabled?: boolean; emailEnabled?: boolean; signingSmsEnabled?: boolean }) =>
-      apiClient.patch<ReminderSettings>('/reminder-settings', body),
+    mutationFn: (body: {
+      smsEnabled?: boolean;
+      emailEnabled?: boolean;
+      signingSmsEnabled?: boolean;
+      portalEmailEnabled?: boolean;
+      portalSmsEnabled?: boolean;
+    }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
     onSuccess: (settings) => {
       queryClient.setQueryData(['reminder-settings'], settings);
       setError(null);
@@ -125,6 +130,40 @@ function ReminderSettingsCard() {
               disabled={settingsQuery.isLoading || updateMutation.isPending}
               onCheckedChange={(checked) => updateMutation.mutate({ signingSmsEnabled: checked })}
               aria-label="Toggle e-signature SMS"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">Portal email verification</p>
+            <p className="text-xs text-muted-foreground">
+              Easycash Portal signup/password-reset OTP email - separate from staff 2FA, which always uses its own delivery flags.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.portalEmailEnabled ? 'success' : 'warning'}>{settings?.portalEmailEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.portalEmailEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ portalEmailEnabled: checked })}
+              aria-label="Toggle Portal email verification"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">Portal SMS verification</p>
+            <p className="text-xs text-muted-foreground">
+              Easycash Portal signup/password-reset OTP SMS - separate from staff 2FA, which always uses its own delivery flags.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.portalSmsEnabled ? 'success' : 'warning'}>{settings?.portalSmsEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.portalSmsEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ portalSmsEnabled: checked })}
+              aria-label="Toggle Portal SMS verification"
             />
           </div>
         </div>

@@ -3,6 +3,9 @@ import type { DependantEntry, LoanApplicationAccountType } from '../../domain/Lo
 export interface CreateLoanApplicationInput {
   branchId: string;
   borrowerId?: string;
+  /** Set when this application was submitted through the Easycash Portal by a client, as opposed
+   * to encoded by staff (encodedByUserId) or a legacy walk-in. */
+  portalAccountId?: string;
   applicantName: string;
   age?: number;
   gender?: string;

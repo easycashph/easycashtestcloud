@@ -399,6 +399,64 @@ model TwoFactorChallenge {
 }
 
 // ----------------------------------------------------------------------------
+// Easycash Portal — client-facing self-service (2026-07-23, Phase 1: auth foundation only)
+// Deliberately its own auth realm, never the `User`/`RefreshToken`/staff-side identity module -
+// see PORTAL_JWT_SECRET's doc comment in shared/config/env.ts for why. A PortalAccount is never
+// required to have a linked Borrower (open sign-up, per user decision 2026-07-23) - linkage
+// happens once/if the account holder's first loan application is approved.
+// ----------------------------------------------------------------------------
+
+enum PortalAccountStatus {
+  /// Just signed up - email not yet verified via PortalAccountChallenge, cannot log in yet.
+  PENDING_VERIFICATION
+  ACTIVE
+}
+
+model PortalAccount {
+  id              String              @id @default(uuid())
+  email           String              @unique
+  passwordHash    String
+  contactNumber   String?
+  status          PortalAccountStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt DateTime?
+
+  /// Set once this account is linked to a real Borrower (their first application gets approved
+  /// and "Create Client Profile" is run, or an existing client is matched) - null until then.
+  borrowerId String?   @unique
+  borrower   Borrower? @relation(fields: [borrowerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  challenges       PortalAccountChallenge[]
+  loanApplications LoanApplication[]
+
+  @@map("portal_accounts")
+}
+
+/// Same opaque-OTP-challenge shape as `TwoFactorChallenge` (see that model's own doc comment for
+/// the hashing rationale) - a separate table rather than a shared/polymorphic one because it
+/// belongs to a PortalAccount, not a User, and these two auth realms must never share storage any
+/// more than they share JWT secrets.
+model PortalAccountChallenge {
+  id              String        @id @default(uuid())
+  portalAccountId String
+  portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  /// 'SIGNUP' (verify email/contact before first login) | 'PASSWORD_RESET'.
+  purpose         String
+  /// 'EMAIL' | 'SMS' - which channel the code was sent to.
+  channel         String
+  codeHash        String
+  expiresAt       DateTime
+  attempts        Int           @default(0)
+  consumedAt      DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([portalAccountId])
+  @@map("portal_account_challenges")
+}
+
+// ----------------------------------------------------------------------------
 // Loan Product — LP-1..5, LPV-1..4
 // ADR-002: no retroactive reconstruction of legacy product-version history
 // (recommended option adopted) — versioning is formal starting now.
@@ -596,6 +654,12 @@ model Borrower {
   /// Reverse side of LoanApplication.borrowerId (renewal applications started from this client's
   /// own profile) - see that field's doc comment.
   loanApplications LoanApplication[] @relation("LoanApplicationBorrower")
+
+  /// Easycash Portal (2026-07-23, Phase 1) - the client-facing self-service account linked to this
+  /// Borrower, once one exists. Null for every Borrower migrated from legacy data or created by
+  /// staff without the client ever having signed up on the portal - this is an opt-in linkage, not
+  /// a requirement to have a Borrower record at all.
+  portalAccount PortalAccount?
 
   firstName     String
   middleName    String?
@@ -1078,21 +1142,21 @@ model LoanTransaction {
 /// raw data survives even though the legacy `legacy/mongodb/` dump itself is gitignored and was
 /// briefly lost once already before this table existed.
 model LegacyOrphanedTransaction {
-  id                String    @id @default(uuid())
+  id                  String    @id @default(uuid())
   /// The legacy transaction's own `uid`/`_id` - unique per source row, used as the idempotency key
   /// for re-running the export script.
-  legacyTransactionId String  @unique
+  legacyTransactionId String    @unique
   /// The legacy `parent_account_key` this transaction pointed to - confirmed to match no
   /// `LoanAccount.legacyId` and no row in the legacy loan_accounts export at all.
-  parentAccountKey  String
-  legacyType        String?
-  amount            Decimal?  @db.Decimal(14, 2)
-  entryDate         DateTime?
-  comment           String?
+  parentAccountKey    String
+  legacyType          String?
+  amount              Decimal?  @db.Decimal(14, 2)
+  entryDate           DateTime?
+  comment             String?
   /// The full original BSON document, converted to JSON - nothing explicitly mapped above is ever
   /// the only copy of a field; anything not surfaced as its own column is still recoverable here.
-  rawDocument       Json
-  importedAt        DateTime  @default(now())
+  rawDocument         Json
+  importedAt          DateTime  @default(now())
 
   @@index([parentAccountKey])
   @@map("legacy_orphaned_transactions")
@@ -1810,6 +1874,12 @@ model LoanApplication {
   borrowerId String?
   borrower   Borrower? @relation("LoanApplicationBorrower", fields: [borrowerId], references: [id])
 
+  /// 2026-07-23 (Easycash Portal Phase 2) - set when this application was submitted by a client
+  /// through the portal, as opposed to encoded by staff (encodedByUserId) or a legacy walk-in.
+  /// Lets the client see their own submitted applications' status without a Borrower link yet.
+  portalAccountId String?
+  portalAccount   PortalAccount? @relation(fields: [portalAccountId], references: [id])
+
   applicantName           String
   age                     Int?
   gender                  String?
@@ -1935,6 +2005,7 @@ model LoanApplication {
   @@index([branchId])
   @@index([borrowerId])
   @@index([status])
+  @@index([portalAccountId])
   @@map("loan_applications")
 }
 
@@ -1975,6 +2046,15 @@ model ReminderSettings {
   /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
   /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
   signingSmsEnabled Boolean  @default(false)
+  /// 2026-07-23 - Easycash Portal signup/password-reset OTP email. SEPARATE from emailEnabled
+  /// above (payment reminders) and from staff 2FA (identity module's LoginUseCase/
+  /// RequestTwoFactorSetupUseCase, which are NOT gated by this row at all - they keep using the
+  /// static SMS_ENABLED/EMAIL_ENABLED env vars via the original shared OtpSender instance). Checked
+  /// fresh on every send (PortalOtpSender), no server restart needed.
+  portalEmailEnabled Boolean @default(false)
+  /// 2026-07-23 - Easycash Portal signup/password-reset OTP SMS. Same "separate from staff 2FA"
+  /// reasoning as portalEmailEnabled above.
+  portalSmsEnabled   Boolean @default(false)
   updatedAt       DateTime @updatedAt
   updatedByUserId String?
   updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])

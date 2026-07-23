@@ -18,6 +18,16 @@ const envSchema = z.object({
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
 
+  // Easycash Portal (2026-07-23, Phase 1) - a DELIBERATELY separate secret from the staff
+  // JWT_ACCESS_SECRET above, never derived from it: a client-portal token must never verify
+  // successfully against the internal staff API's requireAuth, and vice versa - two fully
+  // independent trust boundaries, one public-facing (borrowers), one internal (staff). v1 scope:
+  // a single longer-lived access token, no refresh-token rotation yet (unlike the staff system's
+  // RefreshToken/rotate-on-use) - acceptable for a lower-stakes "log back in occasionally" portal
+  // flow; can be hardened to match the staff system's rotation later if warranted.
+  PORTAL_JWT_SECRET: z.string().min(32, 'PORTAL_JWT_SECRET must be at least 32 characters'),
+  PORTAL_JWT_TTL: z.string().default('24h'),
+
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 
   // Audit finding C-02: must match actual deployment topology. Default

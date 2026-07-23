@@ -6,6 +6,8 @@ export interface ReminderSettings {
   smsEnabled: boolean;
   emailEnabled: boolean;
   signingSmsEnabled: boolean;
+  portalEmailEnabled: boolean;
+  portalSmsEnabled: boolean;
   updatedAt: string;
   updatedByUserId: string | null;
 }
