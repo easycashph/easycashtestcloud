@@ -29,6 +29,15 @@ import { OtpSender } from '@modules/identity/infrastructure/OtpSender';
 import { PrismaAuditLogger } from '@modules/identity/infrastructure/PrismaAuditLogger';
 import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
 import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
+import { createPortalAuthRouter } from '@modules/client-portal/interface/http/portalAuthRouter';
+import { SignUpUseCase } from '@modules/client-portal/application/use-cases/SignUpUseCase';
+import { VerifySignUpUseCase } from '@modules/client-portal/application/use-cases/VerifySignUpUseCase';
+import { PortalLoginUseCase } from '@modules/client-portal/application/use-cases/PortalLoginUseCase';
+import { RequestPasswordResetUseCase } from '@modules/client-portal/application/use-cases/RequestPasswordResetUseCase';
+import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/use-cases/ConfirmPasswordResetUseCase';
+import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
+import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
+import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
@@ -367,6 +376,25 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', userRouter);
+
+  // --- Easycash Portal module wiring (2026-07-23, Phase 1: auth foundation only) - a fully
+  // separate auth realm from the staff identity module above (own JwtPortalTokenService/
+  // PORTAL_JWT_SECRET, own PortalAccount/PortalAccountChallenge tables) - only passwordHasher and
+  // otpSender are shared, since both are already generic, stateless infrastructure. ---
+  const portalAccountRepository = new PrismaPortalAccountRepository();
+  const portalAccountChallengeRepository = new PrismaPortalAccountChallengeRepository();
+  const portalTokenService = new JwtPortalTokenService();
+  const portalAuthRouter = createPortalAuthRouter(
+    {
+      signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender }),
+      verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
+      portalLoginUseCase: new PortalLoginUseCase({ portalAccountRepository, passwordHasher, portalTokenService }),
+      requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender }),
+      confirmPasswordResetUseCase: new ConfirmPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalAuthRouter);
 
   // --- role-class module wiring: organizational job-title labels under a Role (Administration > Member Details > Roles tab) ---
   const roleClassRepository = new PrismaRoleClassRepository();
