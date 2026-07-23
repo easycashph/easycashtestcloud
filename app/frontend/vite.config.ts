@@ -11,6 +11,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // 2026-07-22: bind all interfaces (not just 127.0.0.1) so a phone on the same LAN can reach the
+    // client signing page (/sign/:token) from an SMS link - localhost only means "this device".
+    host: true,
   },
   test: {
     environment: 'jsdom',

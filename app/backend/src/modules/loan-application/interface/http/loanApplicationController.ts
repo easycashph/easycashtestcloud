@@ -12,6 +12,7 @@ import type { DeclineLoanApplicationUseCase } from '../../application/use-cases/
 import type { RevertLoanApplicationDecisionUseCase } from '../../application/use-cases/RevertLoanApplicationDecisionUseCase';
 import type { StartLoanApplicationReviewUseCase } from '../../application/use-cases/StartLoanApplicationReviewUseCase';
 import type { SubmitLoanApplicationReviewReportUseCase } from '../../application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
@@ -36,6 +37,7 @@ export interface LoanApplicationControllerDeps {
   revertLoanApplicationDecisionUseCase: RevertLoanApplicationDecisionUseCase;
   startLoanApplicationReviewUseCase: StartLoanApplicationReviewUseCase;
   submitLoanApplicationReviewReportUseCase: SubmitLoanApplicationReviewReportUseCase;
+  generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
@@ -229,6 +231,17 @@ export class LoanApplicationController {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.submitLoanApplicationReviewReportUseCase.execute(req.params.id as string, currentUser.sub, body);
       res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Mocked (2026-07-22) — see `AiDocumentReviewResult`'s doc comment. Read-only, nothing is
+   * persisted here; the officer decides whether to insert the draft into CRM recommendation. */
+  aiDocumentReview = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.deps.generateAiDocumentReviewUseCase.execute(req.params.id as string);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

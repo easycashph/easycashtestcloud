@@ -48,6 +48,7 @@ export type CreateLoanAccountRequestBody = z.infer<typeof createLoanAccountSchem
  * once the loan is past PENDING_APPROVAL, not this schema — see those doc comments.
  */
 export const updateLoanAccountSchema = z.object({
+  expectedVersion: z.coerce.number().int().min(0).optional(),
   loanProductVersionId: z.string().min(1).optional(),
   principalAmount: decimalStringSchema.optional(),
   interestRate: decimalStringSchema.optional(),

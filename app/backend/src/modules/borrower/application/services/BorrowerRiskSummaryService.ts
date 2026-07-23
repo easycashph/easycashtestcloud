@@ -90,12 +90,12 @@ function buildRecommendation(
   level: RiskLevel,
   ctx: { activeLoanCount: number; totalExposure: string; onTimePaymentRate: number | null },
 ): string {
-  const rateText = ctx.onTimePaymentRate === null ? 'wala pang kasaysayan ng bayaran' : `${Math.round(ctx.onTimePaymentRate * 100)}% on-time`;
+  const rateText = ctx.onTimePaymentRate === null ? 'no payment history yet' : `${Math.round(ctx.onTimePaymentRate * 100)}% on-time`;
   if (level === 'HIGH') {
-    return `${ctx.activeLoanCount} aktibong loan na may ₱${ctx.totalExposure} na exposure; ${rateText} sa track record. Mataas ang panganib - irekomenda ang malapit na pagsubaybay ng collections team.`;
+    return `${ctx.activeLoanCount} active loan(s) with ₱${ctx.totalExposure} exposure; ${rateText} track record. High risk - recommend close monitoring by the collections team.`;
   }
   if (level === 'MEDIUM') {
-    return `${ctx.activeLoanCount} aktibong loan (₱${ctx.totalExposure} exposure), ${rateText}. Katamtaman ang panganib - regular na follow-up.`;
+    return `${ctx.activeLoanCount} active loan(s) (₱${ctx.totalExposure} exposure), ${rateText}. Medium risk - regular follow-up recommended.`;
   }
-  return `${ctx.activeLoanCount} aktibong loan (₱${ctx.totalExposure} exposure), ${rateText}. Mababa ang panganib batay sa kasalukuyang datos.`;
+  return `${ctx.activeLoanCount} active loan(s) (₱${ctx.totalExposure} exposure), ${rateText}. Low risk based on current data.`;
 }

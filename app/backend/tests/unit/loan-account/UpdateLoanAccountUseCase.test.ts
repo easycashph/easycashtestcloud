@@ -5,7 +5,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import { LoanProductVersion } from '@modules/loan-product/domain/LoanProductVersion';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
-import { NotFoundError } from '@shared/errors/DomainError';
+import { ConcurrencyConflictError, NotFoundError } from '@shared/errors/DomainError';
 import {
   InstallmentCountOutOfRangeError,
   LoanAccountNotEditableError,
@@ -140,6 +140,30 @@ describe('UpdateLoanAccountUseCase (2026-07-16, Edit Loan Account)', () => {
     expect(result.originationFees.notarialFee.equals(Money.of('500.00'))).toBe(true);
     // 10000 - (1000 processing + 500 notarial) = 8500
     expect(result.netProceeds.equals(Money.of('8500.00'))).toBe(true);
+  });
+
+  it('rejects with ConcurrencyConflictError when expectedVersion does not match the loaded aggregate (2026-07-22)', async () => {
+    const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00' });
+    const loan = buildPendingLoan();
+    const { loanAccountRepository, loanProductRepository } = buildRepos(version, loan);
+    const useCase = new UpdateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+    await expect(useCase.execute(loan.id, { principalAmount: '20000.00', expectedVersion: loan.version + 1 })).rejects.toThrow(
+      ConcurrencyConflictError,
+    );
+    expect(loanAccountRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('applies the edit when expectedVersion matches the loaded aggregate', async () => {
+    const version = buildVersion({ loanAmountMin: '1000.00', loanAmountMax: '50000.00' });
+    const loan = buildPendingLoan();
+    const { loanAccountRepository, loanProductRepository } = buildRepos(version, loan);
+    const useCase = new UpdateLoanAccountUseCase({ loanAccountRepository, loanProductRepository });
+
+    const result = await useCase.execute(loan.id, { principalAmount: '20000.00', expectedVersion: loan.version });
+
+    expect(result.principalAmount.equals(Money.of('20000.00'))).toBe(true);
+    expect(loanAccountRepository.save).toHaveBeenCalledWith(loan);
   });
 
   it('leaves originationFees/netProceeds untouched when no fee field was supplied', async () => {

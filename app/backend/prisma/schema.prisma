@@ -261,6 +261,7 @@ model User {
   loanApplicationsPreApproved   LoanApplication[]             @relation("LoanApplicationPreApprovedBy")
   loanNotesAuthored             LoanNote[]
   loanDocumentsGenerated        GeneratedLoanDocument[]       @relation("LoanDocumentGeneratedBy")
+  loanSigningSessionsCreated    LoanSigningSession[]          @relation("LoanSigningSessionCreatedBy")
   statementsOfAccountGenerated  GeneratedStatementOfAccount[] @relation("StatementOfAccountGeneratedBy")
   penaltyOverridesSet           RepaymentSchedule[]           @relation("PenaltyOverrideBy")
   penaltyReductionsMade         PenaltyReduction[]
@@ -1050,6 +1051,7 @@ model LoanAccount {
   smsReminderLogs              SmsReminderLog[]
   emailReminderLogs            EmailReminderLog[]
   generatedStatementsOfAccount GeneratedStatementOfAccount[]
+  loanSigningSessions          LoanSigningSession[]
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1486,8 +1488,66 @@ model GeneratedLoanDocument {
   generatedBy       User     @relation("LoanDocumentGeneratedBy", fields: [generatedByUserId], references: [id])
   generatedAt       DateTime @default(now())
 
+  signingDocuments LoanSigningDocument[]
+
   @@index([loanAccountId])
   @@map("generated_loan_documents")
+}
+
+/// 2026-07-22 (e-signature, phase 1 - required documents only, see ADR-051 §1 for the
+/// required/conditional split): batches a loan's required `GeneratedLoanDocument` rows into ONE
+/// signing session sent to the client via a single SMS link. The raw link token and OTP code are
+/// NEVER stored - only HMAC-SHA256 hashes (same scheme as `RefreshToken.tokenHash`), so a DB leak
+/// alone can't forge either. `otpVerifiedAt` covers the WHOLE session (client verifies once,
+/// signs every document in the same visit) - resuming after it ages past the reverify window
+/// requires a fresh OTP (2026-07-22 user decision), not a brand-new link/session.
+model LoanSigningSession {
+  id            String      @id @default(uuid())
+  loanAccountId String
+  loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+
+  /// Where the SMS link and OTP are sent - captured at send time, not re-read from the borrower
+  /// record later, so a later profile edit can't silently redirect an in-flight signing session.
+  phoneNumber String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  otpCodeHash   String?
+  otpExpiresAt  DateTime?
+  otpVerifiedAt DateTime?
+
+  createdByUserId String
+  createdBy       User     @relation("LoanSigningSessionCreatedBy", fields: [createdByUserId], references: [id])
+  createdByIp     String?
+  createdAt       DateTime @default(now())
+
+  documents LoanSigningDocument[]
+
+  @@index([loanAccountId])
+  @@map("loan_signing_sessions")
+}
+
+/// One row per document in the batch, in signing order (`sortIndex`). `signedStorageKey` is a NEW
+/// PDF (the original `GeneratedLoanDocument`'s PDF with the signature image + audit text stamped
+/// onto the last page via pdf-lib) - the original row/file is never modified, matching its own
+/// append-only convention (see `GeneratedLoanDocument`'s doc comment).
+model LoanSigningDocument {
+  id        String             @id @default(uuid())
+  sessionId String
+  session   LoanSigningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  generatedLoanDocumentId String
+  generatedLoanDocument   GeneratedLoanDocument @relation(fields: [generatedLoanDocumentId], references: [id])
+  sortIndex               Int
+
+  signedAt         DateTime?
+  signedStorageKey String?
+  signedByIp       String?
+  signedUserAgent  String?
+
+  @@unique([sessionId, generatedLoanDocumentId])
+  @@map("loan_signing_documents")
 }
 
 /// Statement of Account (ADR-051 §1/§9: explicitly out of scope for the 11-document required/
@@ -1831,6 +1891,17 @@ model LoanApplication {
   cityMunicipality        String?
   province                String?
   zipCode                 String?
+  /// 2026-07-22 - captured only at intake (create form), like the fields above; never edited
+  /// afterward. Defaults true - most applicants haven't moved. When false, the previous* fields
+  /// below hold a distinct address, same flat-field shape as the present address above.
+  previousAddressSameAsPresent Boolean @default(true)
+  previousAddress         String?
+  previousHouseUnitNumber String?
+  previousStreet          String?
+  previousBarangay        String?
+  previousCityMunicipality String?
+  previousProvince        String?
+  previousZipCode         String?
   monthlyIncome           Decimal?  @db.Decimal(14, 2)
   employer                String?
   occupation              String?
@@ -1962,6 +2033,11 @@ model ReminderSettings {
   id              String   @id @default("singleton")
   smsEnabled      Boolean  @default(false)
   emailEnabled    Boolean  @default(false)
+  /// 2026-07-22 - e-signature signing-link/OTP SMS. A SEPARATE switch from smsEnabled above
+  /// (which also gates the payment-reminder cron, reaching many real clients at once) - lets MIS
+  /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
+  /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
+  signingSmsEnabled Boolean  @default(false)
   updatedAt       DateTime @updatedAt
   updatedByUserId String?
   updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])

@@ -32,6 +32,13 @@ interface RoleContextValue {
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
   canCreateLoanAccount: boolean;
+  /** Only MIS and Loan Operation Manager may Approve a Loan Account - excludes CRM (2026-07-21
+   * user correction): CRM's role stops at Tag Pre Approval on the application; the Manager gives
+   * the separate, later approval on the created account, a distinct separation-of-duties check. */
+  canApproveLoanAccount: boolean;
+  /** MIS, Loan Operation Manager, and Accounting may Activate/Disburse a Loan Account (2026-07-21
+   * user correction) - excludes CRM, which has no role past Tag Pre Approval/Approve. */
+  canActivateLoanAccount: boolean;
   /** MIS, Loan Operation Manager, and CRM may Start Review, save the Review Report, and Tag Pre
    * Approval (2026-07-17, Under Review / Pre Approval stages) - the same role set as
    * canAccessLoanApplications today, kept as its own named boolean so a future change to one
@@ -205,6 +212,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canRevertLoanApplicationDecision: currentAccount.roles.includes('MIS'),
     canViewActivityLogs: currentAccount.roles.includes('MIS'),
     canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
+    canApproveLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
+    canActivateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'Accounting'),
     canReviewLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
     canApproveLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
     canManageReminderSettings: currentAccount.roles.includes('MIS'),

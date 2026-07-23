@@ -27,13 +27,20 @@ services:
       - ../backend/.env
     environment:
       DATABASE_URL: postgresql://easycash:easycash@postgres:5432/easycash?schema=public
+      # ../backend/.env's LIBREOFFICE_BINARY_PATH is the Windows path for a host-run `npm run dev`
+      # - this Linux container has its own apk-installed LibreOffice at a different path, same
+      # reasoning as the DATABASE_URL override above.
+      LIBREOFFICE_BINARY_PATH: /usr/bin/soffice
     ports:
       - '4000:4000'
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - backend_storage:/app/storage
+      # 2026-07-22: bind mount (not a named volume) so `docker compose` and a host-run `npm run
+      # dev` both read/write the exact same folder - avoids the two silently diverging, which
+      # caused signed loan documents generated under one runtime to 404 under the other.
+      - ../backend/storage:/app/storage
 
   frontend:
     build:
@@ -42,9 +49,16 @@ services:
     restart: unless-stopped
     ports:
       - '5173:80'
+      - '443:443'
+    volumes:
+      # 2026-07-22 (Tailscale HTTPS) - cert/key issued via `tailscale cert` on the host, mounted
+      # read-only into the container for nginx to terminate TLS with. Machine-specific and
+      # gitignored (app/docker/tailscale-certs/) - re-issue with `tailscale cert <hostname>` on any
+      # other machine this gets deployed to.
+      - ./tailscale-certs/cert.pem:/etc/nginx/tailscale/cert.pem:ro
+      - ./tailscale-certs/key.pem:/etc/nginx/tailscale/key.pem:ro
     depends_on:
       - backend
 
 volumes:
   postgres_data:
-  backend_storage:

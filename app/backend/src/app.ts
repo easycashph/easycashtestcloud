@@ -81,11 +81,6 @@ import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases
 import { ListPaymentAllocationsForTransactionUseCase } from '@modules/ledger/application/use-cases/ListPaymentAllocationsForTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
 import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
-import { createLoanNoteRouter } from '@modules/loan-note/interface/http/loanNoteRouter';
-import { CreateLoanNoteUseCase } from '@modules/loan-note/application/use-cases/CreateLoanNoteUseCase';
-import { ListLoanNotesUseCase } from '@modules/loan-note/application/use-cases/ListLoanNotesUseCase';
-import { DeleteLoanNoteUseCase } from '@modules/loan-note/application/use-cases/DeleteLoanNoteUseCase';
-import { PrismaLoanNoteRepository } from '@modules/loan-note/infrastructure/PrismaLoanNoteRepository';
 import { createNotificationRouter } from '@modules/notification/interface/http/notificationRouter';
 import { NotificationService } from '@modules/notification/application/NotificationService';
 import { ListNotificationsUseCase } from '@modules/notification/application/use-cases/ListNotificationsUseCase';
@@ -114,6 +109,7 @@ import { DeclineLoanApplicationUseCase } from '@modules/loan-application/applica
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
@@ -205,6 +201,19 @@ import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/in
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
 import { DocxtemplaterDocumentFiller } from '@modules/loan-document/infrastructure/DocxtemplaterDocumentFiller';
 import { LibreOfficeDocxToPdfConverter } from '@modules/loan-document/infrastructure/LibreOfficeDocxToPdfConverter';
+import { createLoanSigningRouter } from '@modules/loan-signing/interface/http/loanSigningRouter';
+import { createPublicLoanSigningRouter } from '@modules/loan-signing/interface/http/publicLoanSigningRouter';
+import { CreateLoanSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/CreateLoanSigningSessionUseCase';
+import { ListLoanSigningSessionsUseCase } from '@modules/loan-signing/application/use-cases/ListLoanSigningSessionsUseCase';
+import { RequestSigningOtpUseCase } from '@modules/loan-signing/application/use-cases/RequestSigningOtpUseCase';
+import { VerifySigningOtpUseCase } from '@modules/loan-signing/application/use-cases/VerifySigningOtpUseCase';
+import { GetLoanSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningSessionUseCase';
+import { GetLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningDocumentFileUseCase';
+import { GetSignedLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetSignedLoanSigningDocumentFileUseCase';
+import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase';
+import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
+import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
+import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
 import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
 import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
 import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
@@ -553,19 +562,6 @@ export function createApp(): Express {
   );
   app.use('/api/v1', loanAccountRouter);
 
-  // --- loan-note module wiring (2026-07-11, Collections use case) ---
-  const loanNoteRepository = new PrismaLoanNoteRepository();
-  const loanNoteRouter = createLoanNoteRouter(
-    {
-      createLoanNoteUseCase: new CreateLoanNoteUseCase({ loanNoteRepository, loanAccountRepository }),
-      listLoanNotesUseCase: new ListLoanNotesUseCase({ loanNoteRepository }),
-      deleteLoanNoteUseCase: new DeleteLoanNoteUseCase({ loanNoteRepository, auditLogger }),
-      getLoanAccountUseCase,
-    },
-    tokenService,
-  );
-  app.use('/api/v1', loanNoteRouter);
-
   // --- notification module wiring (Notification Center, 2026-07-17) ---
   const notificationRouter = createNotificationRouter(
     {
@@ -595,7 +591,7 @@ export function createApp(): Express {
     prisma,
   });
   const documentFiller = new DocxtemplaterDocumentFiller();
-  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter();
+  const docxToPdfConverter = new LibreOfficeDocxToPdfConverter(env.LIBREOFFICE_BINARY_PATH);
   const loanDocumentRouter = createLoanDocumentRouter(
     {
       generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
@@ -625,6 +621,86 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanDocumentRouter);
+
+  // --- loan-signing module wiring (e-signature, 2026-07-22, phase 1: required documents only) ---
+  // Reuses documentTemplateRepository/generatedLoanDocumentRepository/loanDocumentFileStorage/
+  // loanAccountRepository/borrowerRepository from the loan-document wiring above and this file's
+  // top-level borrower wiring - same underlying documents, just batched for signature.
+  const loanSigningSessionRepository = new PrismaLoanSigningSessionRepository();
+  const signatureStamper = new PdfLibDocumentSignatureStamper();
+  // Constructed directly here (not shared with server.ts's cron-scheduler instance) - app.ts is
+  // the HTTP composition root, server.ts is the cron composition root; tests import createApp()
+  // directly and must never depend on server.ts's own wiring, same reasoning as the SMS reminder
+  // scheduler's own M360SmsGateway instance.
+  const signingSmsGateway = new DryRunAwareSmsGateway(
+    new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    new PrismaReminderSettingsRepository(),
+  );
+  const loanSigningRouter = createLoanSigningRouter(
+    {
+      createLoanSigningSessionUseCase: new CreateLoanSigningSessionUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        documentTemplateRepository,
+        generatedLoanDocumentRepository,
+        generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
+          loanAccountRepository,
+          loanProductRepository,
+          documentTemplateRepository,
+          generatedLoanDocumentRepository,
+          mergeDataResolver,
+          documentFiller,
+          docxToPdfConverter,
+          fileStorage: loanDocumentFileStorage,
+        }),
+        loanSigningSessionRepository,
+        smsGateway: signingSmsGateway,
+      }),
+      listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({
+        loanSigningSessionRepository,
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+      }),
+      getSignedLoanSigningDocumentFileUseCase: new GetSignedLoanSigningDocumentFileUseCase({
+        loanSigningSessionRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', loanSigningRouter);
+
+  const publicLoanSigningRouter = createPublicLoanSigningRouter({
+    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway }),
+    verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository }),
+    getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({
+      loanSigningSessionRepository,
+      loanAccountRepository,
+      borrowerRepository,
+      generatedLoanDocumentRepository,
+      documentTemplateRepository,
+    }),
+    getLoanSigningDocumentFileUseCase: new GetLoanSigningDocumentFileUseCase({
+      loanSigningSessionRepository,
+      generatedLoanDocumentRepository,
+      fileStorage: loanDocumentFileStorage,
+    }),
+    signLoanSigningDocumentUseCase: new SignLoanSigningDocumentUseCase({
+      loanSigningSessionRepository,
+      loanAccountRepository,
+      borrowerRepository,
+      generatedLoanDocumentRepository,
+      documentTemplateRepository,
+      fileStorage: loanDocumentFileStorage,
+      signatureStamper,
+    }),
+  });
+  app.use('/api/v1/public', publicLoanSigningRouter);
 
   // --- statement-of-account module wiring (ADR-052, 2026-07-19: Statement of Account Generation) ---
   // Deliberately separate from the loan-document module above — ADR-051 §1/§9 explicitly excluded
@@ -767,6 +843,7 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
+      generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,
         loanProductRepository,
@@ -879,9 +956,9 @@ export function createApp(): Express {
   app.use('/api/v1', documentRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
-  // polymorphic ownerType/ownerId shape as the document module above. Distinct from the loan-note
-  // module above (loan-account-only, MIS-deletable, audit-trailed) - renamed from "note" 2026-07-13
-  // to make that distinction unmistakable. ---
+  // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"
+  // 2026-07-13 (the never-wired-to-any-frontend-page "loan-note" module it was distinguished from
+  // at the time was removed entirely 2026-07-21 as dead code). ---
   const profileNoteRepository = new PrismaProfileNoteRepository();
   const profileNoteRouter = createProfileNoteRouter(
     {

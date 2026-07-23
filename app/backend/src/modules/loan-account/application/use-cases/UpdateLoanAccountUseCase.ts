@@ -1,4 +1,4 @@
-import { NotFoundError } from '@shared/errors/DomainError';
+import { ConcurrencyConflictError, NotFoundError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
@@ -43,6 +43,13 @@ export class UpdateLoanAccountUseCase {
     const loanAccount = await this.deps.loanAccountRepository.findById(id);
     if (!loanAccount) {
       throw new NotFoundError('LoanAccount', id);
+    }
+
+    // 2026-07-22: rejects a save against a stale client view BEFORE any mutation is applied - see
+    // `UpdateLoanAccountInput.expectedVersion`'s own doc comment for why this is necessary in
+    // addition to (not a duplicate of) the repository's own conditional-update guard.
+    if (input.expectedVersion !== undefined && input.expectedVersion !== loanAccount.version) {
+      throw new ConcurrencyConflictError('LoanAccount', id);
     }
 
     const loanProductVersionId = input.loanProductVersionId ?? loanAccount.loanProductVersionId;

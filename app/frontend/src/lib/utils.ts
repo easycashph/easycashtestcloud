@@ -5,6 +5,33 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** `crypto.randomUUID()` only exists in secure contexts (HTTPS, or `localhost`) - it's `undefined`
+ * when the app is opened over plain `http://<lan-ip>:5173` (e.g. a phone on the same office WiFi,
+ * or a PC reached by its LAN IP instead of `localhost`), which throws before any request is even
+ * sent. Idempotency keys don't need cryptographic randomness, just uniqueness, so a plain
+ * Math.random()-based v4 fallback is fine here. */
+export function generateUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/** Builds a safe, consistent download filename: `{LoanCode}_{Label}_{suffix}.pdf` (e.g.
+ * `SL-REG_00114_Disclosure_Statement_signed.pdf`) - spaces become underscores and anything not
+ * alphanumeric/dash/underscore is stripped, so the file always saves cleanly regardless of OS and
+ * is easy to tell apart once several loan accounts' documents pile up in the same Downloads
+ * folder. */
+export function buildDocumentFileName(loanCode: string, label: string, suffix?: string): string {
+  const slug = (s: string) => s.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+  const parts = [slug(loanCode), slug(label), suffix ? slug(suffix) : undefined].filter(Boolean);
+  return `${parts.join('_')}.pdf`;
+}
+
 /** PHP currency formatting, used throughout the app for real money figures. */
 export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);

@@ -1,6 +1,9 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableSection } from '@/components/SortableSection';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +11,8 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Download,
+  Eye,
   FileCheck2,
   Mail,
   MessageSquareText,
@@ -17,6 +22,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
+import { ConcurrencyConflictDialog, type ConcurrencyConflictField } from '@/components/ConcurrencyConflictDialog';
+import type { LoanSigningSessionStatus } from '@/lib/loanSigningApiTypes';
 import type {
   Borrower as RealBorrower,
   GeneratedStatementOfAccountListItem,
@@ -56,7 +63,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { cn, formatDate, formatDateTime, formatPercentage, formatPeso } from '@/lib/utils';
+import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -83,6 +90,18 @@ const RISK_LEVEL_LABEL: Record<RiskLevel, string> = {
  * time (the same data Reverse Payment uses). Migrated/legacy REPAYMENTs predate allocation
  * recording, so an empty result is a normal state, not an error.
  */
+/** Order these render in by default, and the only valid section ids for the drag-to-reorder
+ * feature below (see `RealLoanDetailView`'s `cardOrder` state). */
+const DEFAULT_CARD_ORDER = ['reminders', 'notes', 'attachments', 'documents', 'esignature', 'soa', 'activityTimeline', 'recentActivity'];
+
+const CARD_ORDER_KEY_PREFIX = 'lms.loanDetailCardOrder';
+
+/** Per-user like `sidebarCollapsedKey` in AppLayout.tsx - one officer's preferred section order on
+ * a shared machine shouldn't silently apply to whoever logs in next. */
+function cardOrderKey(userId: string): string {
+  return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
+}
+
 function TransactionAllocationsPanel({ transactionId }: { transactionId: string }) {
   const num = (v: string) => Number.parseFloat(v) || 0;
   const query = useQuery({
@@ -208,8 +227,7 @@ function TransactionTypeBadge({ type }: { type: string }) {
  * append-only - see `reverseMutation` below), Approve/Activate actions (`POST
  * /loan-accounts/:id/approve` and `/activate`, same role tier as loan origination per ADR-038
  * §3.1/§3.6), Attachments (`RealAttachmentsPanel`), Notes (`ProfileNotesPanel`, renamed from
- * `NotesPanel` 2026-07-13 to disambiguate from the separate `loan-note` module's own,
- * differently-capable notes), Reminders
+ * `NotesPanel` 2026-07-13), Reminders
  * (`RealRemindersPanel` - real trigger schedule computed from the real repayment schedule,
  * business-confirmed 2026-07-12; SMS via M360 and Email via Google Workspace SMTP both real as of
  * 2026-07-18, overlaid with real SmsReminderLog/EmailReminderLog send status), and Loan Documents
@@ -370,6 +388,157 @@ function emailReminderStatusText(log: EmailReminderLog): string {
  * loan's actual logged sends directly (one row per real Monday it fired), not a locally-simulated
  * 3-occurrence list.
  */
+/** 2026-07-22 (e-signature, phase 1 - required documents only). Sends every required document
+ * (generating any not already on file) as one batch, one SMS link, one OTP verification covering
+ * the whole client visit. See `docs/Claude_API_Cost_Reference.docx`-adjacent design discussion -
+ * this is unrelated to that AI feature, just noting the same session's design-first pattern. */
+function LoanSigningPanel({
+  loanId,
+  loanCode,
+  defaultPhoneNumber,
+  canSend,
+}: {
+  loanId: string;
+  loanCode: string;
+  defaultPhoneNumber?: string;
+  canSend: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
+  const [sendError, setSendError] = React.useState<string | null>(null);
+  const [signedDocPreview, setSignedDocPreview] = React.useState<LoanDocumentPreviewTarget | null>(null);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['loan-signing-sessions', loanId],
+    queryFn: () => apiClient.get<{ items: LoanSigningSessionStatus[] }>(`/loan-accounts/${loanId}/signing-sessions`),
+    enabled: canSend,
+    // 2026-07-22: signing happens on the client's own phone, not this browser - poll while any
+    // session is still in progress so the staff view catches up without a manual refresh. Stops
+    // once every session is fully signed (or revoked) so an idle, fully-signed loan doesn't keep
+    // polling forever.
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      const stillInProgress = items.some((s) => !s.fullySigned && !s.revokedAt);
+      return stillInProgress ? 5000 : false;
+    },
+  });
+  const sessions = sessionsQuery.data?.items ?? [];
+
+  const sendMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, { phoneNumber }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  if (!canSend) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>E-signature</CardTitle>
+        <CardDescription>
+          Send this loan's applicable documents (required plus any conditional on its product) to the client for signature via SMS - one
+          link, one code, every document signed in the same visit.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {sendError && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{sendError}</span>
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="signing-phone" className="text-xs">
+              Client mobile number
+            </Label>
+            <Input id="signing-phone" placeholder="09XX XXX XXXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+          </div>
+          <Button onClick={() => sendMutation.mutate()} disabled={!phoneNumber.trim() || sendMutation.isPending}>
+            {sendMutation.isPending ? 'Sending…' : 'Send for signature'}
+          </Button>
+        </div>
+
+        {sessionsQuery.isLoading ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : sessions.length === 0 ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">No signing links sent yet.</p>
+        ) : (
+          <ul className="divide-y rounded-md border text-sm">
+            {sessions.map((s) => (
+              <li key={s.id} className="space-y-2 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {s.signedDocuments} of {s.totalDocuments} signed
+                      {s.otpVerifiedAt ? ' · opened' : ' · not yet opened'}
+                    </p>
+                  </div>
+                  <Badge variant={s.fullySigned ? 'success' : s.revokedAt ? 'destructive' : 'outline'}>
+                    {s.fullySigned ? 'Fully signed' : s.revokedAt ? 'Revoked' : 'Awaiting signature'}
+                  </Badge>
+                </div>
+                {s.documents && s.documents.length > 0 && (
+                  <ul className="space-y-1 rounded-md bg-muted/40 p-2">
+                    {s.documents.map((d) => (
+                      <li key={d.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className={d.signed ? 'text-foreground' : 'text-muted-foreground'}>{d.name}</span>
+                        {d.signed ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() =>
+                                setSignedDocPreview({
+                                  downloadPath: `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
+                                  title: d.name,
+                                  fileName: buildDocumentFileName(loanCode, d.name, 'signed'),
+                                })
+                              }
+                            >
+                              <Eye className="mr-1 h-3 w-3" /> View
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs"
+                              onClick={() =>
+                                void downloadFile(
+                                  `/loan-accounts/${loanId}/signing-sessions/${s.id}/documents/${d.id}/file`,
+                                  buildDocumentFileName(loanCode, d.name, 'signed'),
+                                ).catch(() => setSendError('Could not download the file. Please try again.'))
+                              }
+                            >
+                              Download
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Not yet signed</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+      <LoanDocumentPreviewModal target={signedDocPreview} onClose={() => setSignedDocPreview(null)} />
+    </Card>
+  );
+}
+
 function RealRemindersPanel({
   loanAccountId,
   loanCode,
@@ -556,7 +725,40 @@ function RealRemindersPanel({
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentAccount, canCreateLoanAccount } = useRole();
+  const { currentAccount, canCreateLoanAccount, canApproveLoanAccount, canActivateLoanAccount } = useRole();
+
+  // 2026-07-22 (user request): the lower sections of this page (Reminders through Recent Activity)
+  // are drag-to-reorder - each staff member's own arrangement, saved per-user like the sidebar
+  // collapse preference (AppLayout.tsx), so one officer's preferred layout doesn't affect anyone
+  // else logged into the same machine.
+  const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
+    try {
+      const saved = window.localStorage.getItem(cardOrderKey(currentAccount.id));
+      if (!saved) return DEFAULT_CARD_ORDER;
+      const parsed = JSON.parse(saved) as string[];
+      // Guard against a stale saved order missing a section added since (or naming a section that
+      // no longer exists) - always fall back to the full default set rather than silently drop one.
+      const isValid = Array.isArray(parsed) && DEFAULT_CARD_ORDER.every((id) => parsed.includes(id)) && parsed.length === DEFAULT_CARD_ORDER.length;
+      return isValid ? parsed : DEFAULT_CARD_ORDER;
+    } catch {
+      return DEFAULT_CARD_ORDER;
+    }
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(cardOrderKey(currentAccount.id), JSON.stringify(cardOrder));
+  }, [cardOrder, currentAccount.id]);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setCardOrder((order) => {
+      const oldIndex = order.indexOf(String(active.id));
+      const newIndex = order.indexOf(String(over.id));
+      return oldIndex === -1 || newIndex === -1 ? order : arrayMove(order, oldIndex, newIndex);
+    });
+  };
+
   const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -579,6 +781,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // amount, dapat pwede ko ito i-edit hangga't before ma-approve" — same ORIGINATION_ROLES gate
   // as "Create Loan Account"/"Approve Loan" (canCreateLoanAccount), only while PENDING_APPROVAL.
   const [editOpen, setEditOpen] = React.useState(false);
+  // 2026-07-22 (optimistic concurrency, phase 1) - the `version` this form last saw, echoed back
+  // as `expectedVersion` on save. `editOriginalLoan` is the full loan snapshot at that same
+  // moment, kept separately from `editForm` (which the officer may go on editing) so a conflict
+  // can diff "what the officer last saw" against "what's on the server now."
+  const [editExpectedVersion, setEditExpectedVersion] = React.useState<number | null>(null);
+  const [editOriginalLoan, setEditOriginalLoan] = React.useState<LoanAccount | null>(null);
+  const [editConflict, setEditConflict] = React.useState<{ fresh: LoanAccount; fields: ConcurrencyConflictField[] } | null>(null);
   const [editForm, setEditForm] = React.useState({
     principalAmount: '',
     addOnRate: '',
@@ -643,31 +852,39 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     }
   };
 
-  const openEdit = () => {
-    if (!loan) return;
-    const principalNum = Number.parseFloat(loan.principalAmount) || 0;
+  // Shared by `openEdit` and the conflict dialog's "Reload the latest version" action - both
+  // populate the same form shape from a LoanAccount snapshot.
+  const populateEditForm = (source: LoanAccount) => {
+    const principalNum = Number.parseFloat(source.principalAmount) || 0;
     // Reverse-derives a display percent from the stored peso amount — the loan's own source of
     // truth is the peso fee, not a percent, so this is a "best starting point," same as every
     // other "default then editable" field elsewhere in this codebase.
     const feePercent = (fee: string) =>
       principalNum > 0 ? (((Number.parseFloat(fee) || 0) / principalNum) * 100).toFixed(3) : '0';
     setEditForm({
-      principalAmount: loan.principalAmount,
-      addOnRate: loan.addOnInterestRate ?? '',
-      interestRate: loan.interestRate,
-      installmentCount: String(loan.installmentCount),
-      firstRepaymentDate: loan.firstRepaymentDate.slice(0, 10),
-      anticipatedDisbursementDate: loan.anticipatedDisbursementDate ? loan.anticipatedDisbursementDate.slice(0, 10) : '',
-      processingFeePercent: feePercent(loan.originationFees.processingFee),
-      advanceInterestFee: loan.originationFees.advanceInterestFee,
-      outstandingBalancePayoff: loan.originationFees.outstandingBalancePayoff,
-      docStampFee: loan.originationFees.docStampFee,
-      accountManagementFeePercent: feePercent(loan.originationFees.accountManagementFee),
-      otherFees: loan.originationFees.otherFees,
-      notarialFee: loan.originationFees.notarialFee,
-      webFee: loan.originationFees.webFee,
-      insuranceFee: loan.originationFees.insuranceFee,
+      principalAmount: source.principalAmount,
+      addOnRate: source.addOnInterestRate ?? '',
+      interestRate: source.interestRate,
+      installmentCount: String(source.installmentCount),
+      firstRepaymentDate: source.firstRepaymentDate.slice(0, 10),
+      anticipatedDisbursementDate: source.anticipatedDisbursementDate ? source.anticipatedDisbursementDate.slice(0, 10) : '',
+      processingFeePercent: feePercent(source.originationFees.processingFee),
+      advanceInterestFee: source.originationFees.advanceInterestFee,
+      outstandingBalancePayoff: source.originationFees.outstandingBalancePayoff,
+      docStampFee: source.originationFees.docStampFee,
+      accountManagementFeePercent: feePercent(source.originationFees.accountManagementFee),
+      otherFees: source.originationFees.otherFees,
+      notarialFee: source.originationFees.notarialFee,
+      webFee: source.originationFees.webFee,
+      insuranceFee: source.originationFees.insuranceFee,
     });
+    setEditExpectedVersion(source.version);
+    setEditOriginalLoan(source);
+  };
+
+  const openEdit = () => {
+    if (!loan) return;
+    populateEditForm(loan);
     setActionError(null);
     setEditOpen(true);
   };
@@ -717,9 +934,43 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   ).toFixed(2);
   const editNetProceeds = (editPrincipalNum - Number.parseFloat(editTotalFees)).toFixed(2);
 
+  // 2026-07-22: field labels/values compared between what this form last saw (`editOriginalLoan`)
+  // and a freshly re-fetched copy, shown in the conflict dialog's "what changed" list. Only
+  // fields that actually differ are included.
+  const peso = (value: string) => formatPeso(Number.parseFloat(value) || 0);
+  const buildConflictFields = (before: LoanAccount, after: LoanAccount): ConcurrencyConflictField[] => {
+    const rows: [string, string, string][] = [
+      ['Principal amount', peso(before.principalAmount), peso(after.principalAmount)],
+      ['Add-on rate', before.addOnInterestRate ?? '-', after.addOnInterestRate ?? '-'],
+      ['Interest rate', before.interestRate, after.interestRate],
+      ['Installment count', String(before.installmentCount), String(after.installmentCount)],
+      ['First repayment date', formatDate(before.firstRepaymentDate), formatDate(after.firstRepaymentDate)],
+      [
+        'Anticipated disbursement date',
+        before.anticipatedDisbursementDate ? formatDate(before.anticipatedDisbursementDate) : '-',
+        after.anticipatedDisbursementDate ? formatDate(after.anticipatedDisbursementDate) : '-',
+      ],
+      ['Processing fee', peso(before.originationFees.processingFee), peso(after.originationFees.processingFee)],
+      ['Advance interest fee', peso(before.originationFees.advanceInterestFee), peso(after.originationFees.advanceInterestFee)],
+      [
+        'Outstanding balance payoff',
+        peso(before.originationFees.outstandingBalancePayoff),
+        peso(after.originationFees.outstandingBalancePayoff),
+      ],
+      ['Doc stamp fee', peso(before.originationFees.docStampFee), peso(after.originationFees.docStampFee)],
+      ['Account management fee', peso(before.originationFees.accountManagementFee), peso(after.originationFees.accountManagementFee)],
+      ['Other fees', peso(before.originationFees.otherFees), peso(after.originationFees.otherFees)],
+      ['Notarial fee', peso(before.originationFees.notarialFee), peso(after.originationFees.notarialFee)],
+      ['Web fee', peso(before.originationFees.webFee), peso(after.originationFees.webFee)],
+      ['Insurance fee', peso(before.originationFees.insuranceFee), peso(after.originationFees.insuranceFee)],
+    ];
+    return rows.filter(([, b, a]) => b !== a).map(([label, before2, after2]) => ({ label, before: before2, after: after2 }));
+  };
+
   const editMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars: { expectedVersion: number }) =>
       apiClient.patch<LoanAccount>(`/loan-accounts/${loanId}`, {
+        expectedVersion: vars.expectedVersion,
         principalAmount: editForm.principalAmount,
         addOnInterestRate: editForm.addOnRate || undefined,
         interestRate: editForm.interestRate,
@@ -738,9 +989,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       }),
     onSuccess: () => {
       setEditOpen(false);
+      setEditConflict(null);
       onActionSuccess();
     },
-    onError: onActionError,
+    onError: async (error: unknown) => {
+      if (error instanceof ApiError && error.code === 'CONCURRENCY_CONFLICT' && editOriginalLoan) {
+        const fresh = await apiClient.get<LoanAccount>(`/loan-accounts/${loanId}`);
+        setEditConflict({ fresh, fields: buildConflictFields(editOriginalLoan, fresh) });
+        return;
+      }
+      onActionError(error);
+    },
   });
 
   const approveMutation = useMutation({
@@ -751,7 +1010,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const activateMutation = useMutation({
     mutationFn: () => {
-      if (!activateIdempotencyKeyRef.current) activateIdempotencyKeyRef.current = crypto.randomUUID();
+      if (!activateIdempotencyKeyRef.current) activateIdempotencyKeyRef.current = generateUuid();
       return apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/activate`, {}, {
         'Idempotency-Key': activateIdempotencyKeyRef.current,
       });
@@ -898,7 +1157,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
   const generateDocumentMutation = useMutation({
     mutationFn: (documentTemplateCode: string) =>
-      apiClient.post(`/loan-accounts/${loanId}/documents`, { documentTemplateCode }, { 'Idempotency-Key': crypto.randomUUID() }),
+      apiClient.post(`/loan-accounts/${loanId}/documents`, { documentTemplateCode }, { 'Idempotency-Key': generateUuid() }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['loan-documents', loanId] });
     },
@@ -1048,7 +1307,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           collectionFee: soaCollectionFee,
           otherFee: soaOtherFee,
         },
-        { 'Idempotency-Key': crypto.randomUUID() },
+        { 'Idempotency-Key': generateUuid() },
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['statements-of-account', loanId] });
@@ -1157,7 +1416,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Record Payment
             </Button>
           )}
-          {canCreateLoanAccount && loan.status === 'APPROVED' && (
+          {canActivateLoanAccount && loan.status === 'APPROVED' && (
             <Button size="sm" onClick={() => openConfirm('ACTIVATE')}>
               Disburse Loan
             </Button>
@@ -1186,7 +1445,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Edit
             </Button>
           )}
-          {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
+          {canApproveLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" onClick={() => openConfirm('APPROVE')}>
               Approve Loan
             </Button>
@@ -1626,14 +1885,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </Tabs>
       </Card>
 
-      <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
-
-      <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />
-
-      <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />
-
-      {/* ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory Note,
-          and other legal documents applicable to this loan's product, available once APPROVED. */}
+      {(() => {
+        // 2026-07-22: everything from here to Recent Activity is drag-to-reorder (see cardOrder
+        // state above) - each section's JSX lives as one entry in this map so it can be rendered
+        // in whatever order the current user saved, instead of a fixed sequence.
+        const cardsById: Record<string, React.ReactNode> = {
+          reminders: (
+            <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
+          ),
+          notes: <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />,
+          attachments: <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />,
+          // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory
+          // Note, and other legal documents applicable to this loan's product, available once
+          // APPROVED.
+          documents: (
       <Card>
         <CardHeader>
           <CardTitle>Documents</CardTitle>
@@ -1702,7 +1967,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 setPreviewTarget({
                                   downloadPath: `/loan-accounts/${loanId}/documents/${doc.latestGeneration!.id}/download`,
                                   title: doc.documentTemplateName,
-                                  fileName: `${doc.documentTemplateName}.pdf`,
+                                  fileName: buildDocumentFileName(loan.loanCode, doc.documentTemplateName),
                                 })
                               }
                             >
@@ -1711,7 +1976,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => downloadDocument(doc.latestGeneration!.id, `${doc.documentTemplateName}.pdf`)}
+                              onClick={() =>
+                                downloadDocument(doc.latestGeneration!.id, buildDocumentFileName(loan.loanCode, doc.documentTemplateName))
+                              }
                             >
                               Download
                             </Button>
@@ -1758,9 +2025,18 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
-
-      {/* ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection document,
-          distinct from the required/conditional Documents above (ADR-051 §1). */}
+          ),
+          esignature: (
+            <LoanSigningPanel
+              loanId={loan.id}
+              loanCode={loan.loanCode}
+              defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined}
+              canSend={canGenerateDocuments}
+            />
+          ),
+          // ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection
+          // document, distinct from the required/conditional Documents above (ADR-051 §1).
+          soa: (
       <Card>
         <CardHeader className="flex-row items-start justify-between space-y-0">
           <div>
@@ -1806,18 +2082,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           setPreviewTarget({
                             downloadPath: `/loan-accounts/${loanId}/statements-of-account/${item.id}/download`,
                             title: item.soaNumber,
-                            fileName: `${item.soaNumber}.pdf`,
+                            fileName: buildDocumentFileName(loan.loanCode, 'Statement_of_Account', item.soaNumber),
                           })
                         }
                       >
-                        Preview
+                        <Eye className="mr-1.5 h-3.5 w-3.5" /> View
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => downloadStatement(item.id, `${item.soaNumber}.pdf`)}
+                        onClick={() =>
+                          downloadStatement(item.id, buildDocumentFileName(loan.loanCode, 'Statement_of_Account', item.soaNumber))
+                        }
                       >
-                        Download
+                        <Download className="mr-1.5 h-3.5 w-3.5" /> Download
                       </Button>
                     </div>
                   </li>
@@ -1830,7 +2108,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
         </CardContent>
       </Card>
+          ),
+        };
 
+        // The Create-SOA dialog is a portal (renders detached from this DOM position when open),
+        // so it doesn't need to live inside the reorderable cardsById map above - it's tied to the
+        // "soa" card's own state/button regardless of where "soa" lands in the current order.
+        const soaDialog = (
       <Dialog open={soaDialogOpen} onOpenChange={(open) => { setSoaDialogOpen(open); if (!open) setSoaError(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -1981,7 +2265,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        );
 
+        cardsById.activityTimeline = (
       <Card>
         <CardHeader>
           <CardTitle>Activity Timeline</CardTitle>
@@ -1991,8 +2277,24 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <ProfileActivityTimeline profileType="LOAN_ACCOUNT" profileId={loan.id} showDetailsToggle={false} />
         </CardContent>
       </Card>
+        );
+        cardsById.recentActivity = <RecentActivityPanel label="Loan Account" entityId={loan.id} />;
 
-      <RecentActivityPanel label="Loan Account" entityId={loan.id} />
+        return (
+          <>
+            <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
+              <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
+                {cardOrder.map((id) => (
+                  <SortableSection key={id} id={id}>
+                    {cardsById[id]}
+                  </SortableSection>
+                ))}
+              </SortableContext>
+            </DndContext>
+            {soaDialog}
+          </>
+        );
+      })()}
 
       <Dialog open={editOpen} onOpenChange={(open) => !open && !editMutation.isPending && setEditOpen(false)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
@@ -2170,12 +2472,29 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={editMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={() => editMutation.mutate()} disabled={editMutation.isPending}>
+            <Button
+              onClick={() => editExpectedVersion !== null && editMutation.mutate({ expectedVersion: editExpectedVersion })}
+              disabled={editMutation.isPending || editExpectedVersion === null}
+            >
               {editMutation.isPending ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {editConflict && (
+        <ConcurrencyConflictDialog
+          open={Boolean(editConflict)}
+          onOpenChange={(open) => !open && setEditConflict(null)}
+          changedFields={editConflict.fields}
+          overwritePending={editMutation.isPending}
+          onReload={() => {
+            populateEditForm(editConflict.fresh);
+            setEditConflict(null);
+          }}
+          onOverwrite={() => editMutation.mutate({ expectedVersion: editConflict.fresh.version })}
+        />
+      )}
 
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && !actionPending && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">

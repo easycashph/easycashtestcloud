@@ -4,9 +4,7 @@ import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { ProfileNoteController, type ProfileNoteControllerDeps } from './profileNoteController';
 
 /** `/profile-notes` - a simple, undeletable running log shared across Borrower/LoanAccount/
- * LoanApplication profiles (renamed from `/notes` on 2026-07-13 to disambiguate from the separate
- * `loan-note` module's `/loan-accounts/:id/notes`, which is loan-account-only, MIS-deletable, and
- * audit-trailed). */
+ * LoanApplication profiles (renamed from `/notes` on 2026-07-13). */
 export function createProfileNoteRouter(deps: ProfileNoteControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new ProfileNoteController(deps);

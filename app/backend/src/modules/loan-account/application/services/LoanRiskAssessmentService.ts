@@ -71,10 +71,10 @@ export class LoanRiskAssessmentService {
 
 function buildRecommendation(level: RiskLevel, maxDaysPastDue: number, lateInstallmentCount: number): string {
   if (level === 'HIGH') {
-    return `${maxDaysPastDue} araw nang overdue ang pinaka-lumang balanse, ${lateInstallmentCount} late na installment sa kasaysayan ng account na ito. I-eskalate sa collections team para sa agarang follow-up.`;
+    return `The oldest balance is ${maxDaysPastDue} day(s) overdue, with ${lateInstallmentCount} late installment(s) in this account's history. Escalate to the collections team for immediate follow-up.`;
   }
   if (level === 'MEDIUM') {
-    return `May ${lateInstallmentCount} late na installment sa kasaysayan (${maxDaysPastDue} araw ang kasalukuyang pinaka-mataas na overdue). Katamtaman ang panganib - irekomenda ang regular na follow-up.`;
+    return `${lateInstallmentCount} late installment(s) on record (currently ${maxDaysPastDue} day(s) overdue at worst). Medium risk - regular follow-up recommended.`;
   }
-  return 'Walang overdue balance at maayos ang kasaysayan ng bayaran. Mababa ang panganib batay sa kasalukuyang datos.';
+  return 'No overdue balance and a clean payment history. Low risk based on current data.';
 }

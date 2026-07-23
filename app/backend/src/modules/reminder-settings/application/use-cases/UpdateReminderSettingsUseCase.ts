@@ -3,6 +3,7 @@ import type { IReminderSettingsRepository, ReminderSettings } from '../ports/IRe
 export interface UpdateReminderSettingsCommand {
   smsEnabled?: boolean;
   emailEnabled?: boolean;
+  signingSmsEnabled?: boolean;
   updatedByUserId: string;
 }
 

@@ -75,7 +75,8 @@ export class StatementOfAccountController {
         throw new NotFoundError('GeneratedStatementOfAccount', req.params.generatedStatementId as string);
       }
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${file.fileName.replace(/"/g, '')}"`);
+      // No filename= here (2026-07-22) - see the matching comment in LoanDocumentController.ts.
+      res.setHeader('Content-Disposition', 'attachment');
       res.status(200).send(file.buffer);
     } catch (error) {
       next(error);

@@ -12,6 +12,7 @@ import {
   Lock,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   UserPlus,
   XCircle,
 } from 'lucide-react';
@@ -50,6 +51,7 @@ import { classifyProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type {
   AgencyVerificationDetails,
+  AiDocumentReviewResult,
   CreditBureauPartyCheck,
   DocumentVerificationEntry,
   DocumentVerificationStatus,
@@ -684,28 +686,141 @@ const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label:
  *   from that same review pass. All advisory: the officer's real Approve/Decline call below is
  *   what actually counts, same disclosure as everything else on this card.
  */
-function UnderwritingCard({
-  application,
-  canEditRisk,
-  canEditReview,
-  showReview,
-  assignedProductName,
-  documentsVerifiedByName,
-}: {
-  application: LoanApplication;
-  canEditRisk: boolean;
-  canEditReview: boolean;
-  /** Review Report + Underwriter Assessment only make sense once a manual review has actually
-   * started - matches the old ReviewReportCard's own visibility rule (Under Review, Pre Approval,
-   * or already decided with a report on file). Decision scoring/DTI and the risk-input fields
-   * above them stay visible at every stage, unchanged from the old RiskManagementSummaryCard. */
-  showReview: boolean;
-  /** Drives the Agency/Contract/Allotment verification section's "required for Seafarer Loan" gate. */
-  assignedProductName: string | null;
-  /** Display name for the Document checklist's "Verified by X" footer - resolved at page level, same
-   * pattern as encodedByName/reviewedByName. */
-  documentsVerifiedByName: string | null;
-}) {
+/** "Assist" card shown above the Credit Evaluation Report. Triggered on demand (never automatic)
+ * by whoever can edit the review - calls the backend's MOCKED ai-document-review endpoint (see
+ * `AiDocumentReviewResult`'s doc comment: no real model is wired up yet, every field is a
+ * deterministic placeholder). The officer can edit the draft before inserting it into CRM
+ * recommendation via `onInsert` - nothing here saves on its own. */
+function AiDocumentReviewCard({ application, onInsert }: { application: LoanApplication; onInsert: (text: string) => void }) {
+  const [result, setResult] = React.useState<AiDocumentReviewResult | null>(null);
+  const [draft, setDraft] = React.useState('');
+  const [inserted, setInserted] = React.useState(false);
+
+  const assistMutation = useMutation({
+    mutationFn: () => apiClient.post<AiDocumentReviewResult>(`/loan-applications/${application.id}/ai-document-review`, {}),
+    onSuccess: (data) => {
+      setResult(data);
+      setDraft(data.recommendation);
+      setInserted(false);
+    },
+  });
+
+  const riskBadgeVariant = result?.riskLevel === 'HIGH' ? 'destructive' : result?.riskLevel === 'LOW' ? 'success' : 'outline';
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <Sparkles className="h-4 w-4 text-primary" /> AI-assisted document review
+            </CardTitle>
+            <CardDescription>Draft only - a placeholder preview until a model is wired up. Always review before using.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" disabled={assistMutation.isPending} onClick={() => assistMutation.mutate()}>
+            {assistMutation.isPending ? 'Assisting…' : result ? 'Re-run assist' : 'Assist'}
+          </Button>
+        </div>
+      </CardHeader>
+      {result && (
+        <CardContent className="space-y-4">
+          {assistMutation.isError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5" />
+              {assistMutation.error instanceof Error ? assistMutation.error.message : 'Could not generate a draft. Try again.'}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-md bg-background p-3 text-center">
+              <p className="text-xs text-muted-foreground">Risk level (preview)</p>
+              <Badge variant={riskBadgeVariant} className="mt-1">
+                {result.riskLevel}
+              </Badge>
+            </div>
+            <div className="rounded-md bg-background p-3 text-center">
+              <p className="text-xs text-muted-foreground">Documents on file</p>
+              <p className="mt-1 text-sm font-medium">{result.documentChecklist.length}</p>
+            </div>
+          </div>
+
+          {result.crossChecks.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Cross-checks against the application</Label>
+              <ul className="divide-y rounded-md border text-sm">
+                {result.crossChecks.map((c) => (
+                  <li key={c.label} className="flex items-center justify-between p-2">
+                    <span>{c.label}</span>
+                    <span className={c.flagged ? 'text-destructive' : 'text-muted-foreground'}>{c.result}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.keyFactors.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Key factors</Label>
+              <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+                {result.keyFactors.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Draft recommendation</Label>
+            <Textarea rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Edit before inserting" />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  onInsert(draft);
+                  setInserted(true);
+                }}
+              >
+                Insert into credit evaluation report
+              </Button>
+              {inserted && <span className="self-center text-xs text-muted-foreground">Inserted into CRM recommendation below.</span>}
+            </div>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+/** Imperative handle so a sibling component (the AI Assist card, rendered above this one) can
+ * insert a draft into the CRM recommendation field without lifting all of this card's other
+ * review-report state up to the parent - see `AiDocumentReviewCard`. */
+export interface UnderwritingCardHandle {
+  /** Appends to the existing CRM recommendation text if it's non-empty, otherwise replaces it
+   * (2026-07-22 user instruction). Does not save - the officer still reviews/edits, then clicks
+   * "Save Underwriting Details" like any other change to this card. */
+  insertCrmRecommendation: (text: string) => void;
+}
+
+const UnderwritingCard = React.forwardRef<
+  UnderwritingCardHandle,
+  {
+    application: LoanApplication;
+    canEditRisk: boolean;
+    canEditReview: boolean;
+    /** Review Report + Underwriter Assessment only make sense once a manual review has actually
+     * started - matches the old ReviewReportCard's own visibility rule (Under Review, Pre Approval,
+     * or already decided with a report on file). Decision scoring/DTI and the risk-input fields
+     * above them stay visible at every stage, unchanged from the old RiskManagementSummaryCard. */
+    showReview: boolean;
+    /** Drives the Agency/Contract/Allotment verification section's "required for Seafarer Loan" gate. */
+    assignedProductName: string | null;
+    /** Display name for the Document checklist's "Verified by X" footer - resolved at page level, same
+     * pattern as encodedByName/reviewedByName. */
+    documentsVerifiedByName: string | null;
+  }
+>(function UnderwritingCard(
+  { application, canEditRisk, canEditReview, showReview, assignedProductName, documentsVerifiedByName },
+  ref,
+) {
   const queryClient = useQueryClient();
   const [editingRisk, setEditingRisk] = React.useState(false);
   const [monthlyIncome, setMonthlyIncome] = React.useState(String(application.monthlyIncome ?? ''));
@@ -743,6 +858,14 @@ function UnderwritingCard({
   const [agencyVerification, setAgencyVerification] = React.useState<AgencyVerificationDetails>(report?.agencyVerification ?? {});
   const [conditionsForApproval, setConditionsForApproval] = React.useState(report?.conditionsForApproval ?? '');
   const [crmRecommendation, setCrmRecommendation] = React.useState(report?.crmRecommendation ?? '');
+  React.useImperativeHandle(
+    ref,
+    (): UnderwritingCardHandle => ({
+      insertCrmRecommendation: (text) =>
+        setCrmRecommendation((prev) => (prev.trim() ? `${prev.trim()}\n\n${text}` : text)),
+    }),
+    [],
+  );
   const [documentVerifications, setDocumentVerifications] = React.useState<Record<string, DocumentVerificationEntry>>(
     report?.documentVerifications ?? {},
   );
@@ -1156,7 +1279,7 @@ function UnderwritingCard({
       </CardContent>
     </Card>
   );
-}
+});
 
 /**
  * Wired to the real backend Loan Applications module (`GET/POST /loan-applications/:id/...`).
@@ -1188,6 +1311,7 @@ export function LoanApplicationDetailPage() {
   const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
   const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
+  const underwritingCardRef = React.useRef<UnderwritingCardHandle>(null);
 
   useLogPageView('Loan Application Detail', applicationId);
 
@@ -1525,6 +1649,10 @@ export function LoanApplicationDetailPage() {
               <dd className="text-right font-medium">{application.age ?? '-'}</dd>
               <dt className="text-muted-foreground">Address</dt>
               <dd className="text-right font-medium">{toProperCase(application.address) || '-'}</dd>
+              <dt className="text-muted-foreground">Previous address</dt>
+              <dd className="text-right font-medium">
+                {application.previousAddressSameAsPresent ? 'Same as present address' : toProperCase(application.previousAddress) || '-'}
+              </dd>
               <dt className="text-muted-foreground">Contact Number</dt>
               <dd className="text-right font-medium">{formatMobileNumber(application.mobilePhone)}</dd>
               <dt className="text-muted-foreground">Email</dt>
@@ -1882,14 +2010,23 @@ export function LoanApplicationDetailPage() {
           (see LoanApplication.startReview in the backend domain model) and never unset again, so
           it's a reliable "has review ever started" flag across every later stage. */}
       {Boolean(application.reviewStartedAt) && (
-        <UnderwritingCard
-          application={application}
-          canEditRisk={canAccessLoanApplications}
-          canEditReview={isUnderReview && canReviewLoanApplication}
-          showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
-          assignedProductName={assignedProductName}
-          documentsVerifiedByName={documentsVerifiedByName}
-        />
+        <>
+          {isUnderReview && canReviewLoanApplication && (
+            <AiDocumentReviewCard
+              application={application}
+              onInsert={(text) => underwritingCardRef.current?.insertCrmRecommendation(text)}
+            />
+          )}
+          <UnderwritingCard
+            ref={underwritingCardRef}
+            application={application}
+            canEditRisk={canAccessLoanApplications}
+            canEditReview={isUnderReview && canReviewLoanApplication}
+            showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
+            assignedProductName={assignedProductName}
+            documentsVerifiedByName={documentsVerifiedByName}
+          />
+        </>
       )}
 
       {/* 2026-07-21 (user request) - same "not until a review has actually started" gate as the

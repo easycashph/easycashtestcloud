@@ -3,8 +3,14 @@ import type { IReminderSettingsRepository, ReminderSettings, UpdateReminderSetti
 
 const SINGLETON_ID = 'singleton';
 
-function toDomain(row: { smsEnabled: boolean; emailEnabled: boolean; updatedAt: Date; updatedByUserId: string | null }): ReminderSettings {
-  return { smsEnabled: row.smsEnabled, emailEnabled: row.emailEnabled, updatedAt: row.updatedAt, updatedByUserId: row.updatedByUserId };
+function toDomain(row: { smsEnabled: boolean; emailEnabled: boolean; signingSmsEnabled: boolean; updatedAt: Date; updatedByUserId: string | null }): ReminderSettings {
+  return {
+    smsEnabled: row.smsEnabled,
+    emailEnabled: row.emailEnabled,
+    signingSmsEnabled: row.signingSmsEnabled,
+    updatedAt: row.updatedAt,
+    updatedByUserId: row.updatedByUserId,
+  };
 }
 
 export class PrismaReminderSettingsRepository implements IReminderSettingsRepository {
@@ -24,11 +30,13 @@ export class PrismaReminderSettingsRepository implements IReminderSettingsReposi
         id: SINGLETON_ID,
         smsEnabled: input.smsEnabled ?? false,
         emailEnabled: input.emailEnabled ?? false,
+        signingSmsEnabled: input.signingSmsEnabled ?? false,
         updatedByUserId: input.updatedByUserId,
       },
       update: {
         ...(input.smsEnabled !== undefined ? { smsEnabled: input.smsEnabled } : {}),
         ...(input.emailEnabled !== undefined ? { emailEnabled: input.emailEnabled } : {}),
+        ...(input.signingSmsEnabled !== undefined ? { signingSmsEnabled: input.signingSmsEnabled } : {}),
         updatedByUserId: input.updatedByUserId,
       },
     });

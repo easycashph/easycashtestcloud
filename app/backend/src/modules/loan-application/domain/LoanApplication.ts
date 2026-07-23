@@ -129,6 +129,17 @@ export interface LoanApplicationProps {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  /** 2026-07-22 - captured only at intake (create form), like the present-address fields above;
+   * never edited afterward. Defaults true - most applicants haven't moved. When false, the
+   * `previous*` fields below hold a distinct address, same flat-field shape as present address. */
+  previousAddressSameAsPresent: boolean;
+  previousAddress?: string;
+  previousHouseUnitNumber?: string;
+  previousStreet?: string;
+  previousBarangay?: string;
+  previousCityMunicipality?: string;
+  previousProvince?: string;
+  previousZipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
@@ -199,6 +210,14 @@ export interface CreateLoanApplicationProps {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  previousAddressSameAsPresent?: boolean;
+  previousAddress?: string;
+  previousHouseUnitNumber?: string;
+  previousStreet?: string;
+  previousBarangay?: string;
+  previousCityMunicipality?: string;
+  previousProvince?: string;
+  previousZipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
@@ -266,6 +285,14 @@ export class LoanApplication {
       cityMunicipality: input.cityMunicipality,
       province: input.province,
       zipCode: input.zipCode,
+      previousAddressSameAsPresent: input.previousAddressSameAsPresent ?? true,
+      previousAddress: input.previousAddress,
+      previousHouseUnitNumber: input.previousHouseUnitNumber,
+      previousStreet: input.previousStreet,
+      previousBarangay: input.previousBarangay,
+      previousCityMunicipality: input.previousCityMunicipality,
+      previousProvince: input.previousProvince,
+      previousZipCode: input.previousZipCode,
       monthlyIncome: input.monthlyIncome,
       employer: input.employer,
       occupation: input.occupation,

@@ -13,23 +13,26 @@ import {
 } from './loanAccountSchemas';
 
 /**
- * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination and
- * approval/rejection both use the same tier — MIS, Loan Operation Manager,
- * CRM mirror the confirmed Loan-Application assign/approve/decline access,
- * i.e. the same real-world job function does both. Supersedes ADR-043's
- * interim placeholder allow-lists (which had origination and approval as
- * different tiers under a separation-of-duties assumption never confirmed
- * by the business).
+ * ADR-038 §3.1 origination tier (business-confirmed, 2026-07-06): MIS, Loan Operation Manager,
+ * CRM — mirrors the confirmed Loan-Application assign access.
+ *
+ * Approval is a NARROWER, separate tier (corrected 2026-07-21, business clarification): only
+ * MIS and Loan Operation Manager may approve a Loan Account — CRM's role in the pipeline stops
+ * at Tag Pre Approval on the Loan Application; the Manager gives a distinct, later approval on
+ * the created account. This reinstates the separation-of-duties ADR-038 §3.1's original note
+ * described as "never confirmed by the business" — it has now been confirmed, for approval only
+ * (origination and activation are unaffected).
  */
 const ORIGINATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
-const APPROVAL_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+const APPROVAL_ROLES = ['MIS', 'Loan Operation Manager'];
 
 /**
- * ADR-038 §3.6 (business-confirmed, 2026-07-06, ahead of CP13
- * implementation): activation uses the identical tier as approval — the
- * same real-world job function does both, immediately in sequence.
+ * Corrected 2026-07-21 (business clarification): activation/disbursement is a distinct tier from
+ * approval — MIS, Loan Operation Manager, and Accounting (the function that actually releases
+ * funds) may activate a Loan Account. Drops CRM, which has no role past Tag Pre Approval/Approve.
+ * Supersedes the 2026-07-06 note that activation mirrored approval's tier exactly.
  */
-const ACTIVATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+const ACTIVATION_ROLES = ['MIS', 'Loan Operation Manager', 'Accounting'];
 
 /**
  * ADR-038 §3.6: payment recording is a different tier from origination/
