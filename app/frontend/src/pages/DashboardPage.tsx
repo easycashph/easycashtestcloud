@@ -1108,7 +1108,7 @@ export function DashboardPage() {
                 <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
                 <Bar
                   dataKey="disbursed"
-                  fill="hsl(var(--chart-1))"
+                  fill="hsl(var(--primary))"
                   radius={[4, 4, 0, 0]}
                   cursor="pointer"
                   onClick={(data) => {
@@ -1136,7 +1136,7 @@ export function DashboardPage() {
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={pesoTooltipFormatter} contentStyle={TOOLTIP_CONTENT_STYLE} labelStyle={TOOLTIP_LABEL_STYLE} />
                 <Line type="monotone" dataKey="target" stroke="hsl(var(--muted-foreground))" strokeDasharray="4 4" dot={false} />
-                <Line type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" strokeWidth={2} />
+                <Line type="monotone" dataKey="actual" stroke="hsl(var(--primary))" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1159,7 +1159,7 @@ export function DashboardPage() {
                     type="monotone"
                     dataKey={(d: { scheduledAmount: string }) => Number.parseFloat(d.scheduledAmount) || 0}
                     name="Scheduled"
-                    stroke="hsl(var(--chart-4))"
+                    stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     strokeDasharray="6 3"
                   />
@@ -1197,7 +1197,7 @@ export function DashboardPage() {
             }
           >
             <LineChart data={loanReleasesPreviewQuery.data?.items ?? []}>
-              <Line type="monotone" dataKey="loansOriginated" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="loansOriginated" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
             </LineChart>
           </ReportPreviewCard>
 
@@ -1212,7 +1212,7 @@ export function DashboardPage() {
             }
           >
             <BarChart data={collectionsPreviewQuery.data?.items ?? []}>
-              <Bar dataKey={(d: CollectionReportRow) => Number(d.amountCollected)} fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />
+              <Bar dataKey={(d: CollectionReportRow) => Number(d.amountCollected)} fill="hsl(var(--primary))" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ReportPreviewCard>
         </CardContent>
