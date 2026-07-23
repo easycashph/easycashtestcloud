@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { arrayMove } from '@dnd-kit/sortable';
 
 /** The 4 stat cards at the top of the Dashboard - reorder/show-hide/density is a personal,
  * per-user preference (2026-07-17), same storage pattern as `theme-provider.tsx`'s theme/accent. */
@@ -29,6 +30,10 @@ interface DashboardLayoutContextValue {
   density: DashboardDensity;
   toggleCardVisibility: (id: DashboardCardId) => void;
   moveCard: (id: DashboardCardId, direction: 'up' | 'down') => void;
+  /** 2026-07-23: drag-to-reorder directly on the Dashboard cards (dnd-kit) - reorders within the
+   * full `cards` list (not just the visible ones), same as `moveCard`, so a hidden card keeps its
+   * relative position if later re-shown. */
+  reorderCards: (activeId: DashboardCardId, overId: DashboardCardId) => void;
   setDensity: (density: DashboardDensity) => void;
   resetLayout: () => void;
   /** Switches whose saved preference is active - same contract as ThemeProvider's, called from
@@ -113,6 +118,14 @@ export function DashboardLayoutProvider({ children }: { children: React.ReactNod
     });
   }, []);
 
+  const reorderCards = React.useCallback((activeId: DashboardCardId, overId: DashboardCardId) => {
+    setCards((prev) => {
+      const oldIndex = prev.findIndex((c) => c.id === activeId);
+      const newIndex = prev.findIndex((c) => c.id === overId);
+      return oldIndex === -1 || newIndex === -1 ? prev : arrayMove(prev, oldIndex, newIndex);
+    });
+  }, []);
+
   const resetLayout = React.useCallback(() => {
     setCards(DEFAULT_CARDS);
     setDensity(DEFAULT_DENSITY);
@@ -126,7 +139,7 @@ export function DashboardLayoutProvider({ children }: { children: React.ReactNod
 
   return (
     <DashboardLayoutContext.Provider
-      value={{ cards, density, toggleCardVisibility, moveCard, setDensity, resetLayout, loadPreferenceFor }}
+      value={{ cards, density, toggleCardVisibility, moveCard, reorderCards, setDensity, resetLayout, loadPreferenceFor }}
     >
       {children}
     </DashboardLayoutContext.Provider>

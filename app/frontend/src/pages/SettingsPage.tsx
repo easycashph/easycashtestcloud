@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, Check, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -854,12 +854,16 @@ function AppearanceTab() {
   );
 }
 
-/** Settings > Appearance > Dashboard Layout (2026-07-17 user request) - lets each officer hide,
- * reorder, and set the density of the 4 stat cards at the top of the Dashboard. No drag-and-drop
- * library in this codebase yet, so reordering uses simple up/down buttons - consistent with the
- * rest of the app's dependency footprint. */
+/** Settings > Appearance > Dashboard Layout (2026-07-17 user request) - lets each officer hide and
+ * set the density of the 4 stat cards at the top of the Dashboard.
+ *
+ * 2026-07-23: reordering moved to drag-and-drop directly on the cards themselves (Dashboard's
+ * `DraggableStatCard`) - the up/down-arrow buttons that used to live here are gone, since dragging
+ * the card in place is the more direct interaction. `moveCard` stays on the provider (still used by
+ * `resetLayout`'s consumers indirectly through `cards`/`reorderCards`), only this settings UI
+ * dropped the buttons. */
 function DashboardLayoutCard() {
-  const { cards, density, toggleCardVisibility, moveCard, setDensity, resetLayout } = useDashboardLayout();
+  const { cards, density, toggleCardVisibility, setDensity, resetLayout } = useDashboardLayout();
 
   return (
     <Card>
@@ -868,7 +872,8 @@ function DashboardLayoutCard() {
         <div>
           <CardTitle>Dashboard Layout</CardTitle>
           <CardDescription>
-            Show/hide and reorder the stat cards at the top of your Dashboard, and pick a density. Your personal preference only.
+            Show/hide the stat cards at the top of your Dashboard and pick a density. Drag a card by its handle on the Dashboard itself to
+            reorder. Your personal preference only.
           </CardDescription>
         </div>
       </CardHeader>
@@ -888,32 +893,10 @@ function DashboardLayoutCard() {
         </div>
 
         <div className="divide-y rounded-md border">
-          {cards.map((card, index) => (
+          {cards.map((card) => (
             <div key={card.id} className={cn('flex items-center justify-between gap-3 p-3', !card.visible && 'opacity-50')}>
               <span className="text-sm font-medium">{DASHBOARD_CARD_LABELS[card.id as DashboardCardId]}</span>
               <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={index === 0}
-                  onClick={() => moveCard(card.id, 'up')}
-                  aria-label={`Move ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]} up`}
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={index === cards.length - 1}
-                  onClick={() => moveCard(card.id, 'down')}
-                  aria-label={`Move ${DASHBOARD_CARD_LABELS[card.id as DashboardCardId]} down`}
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
                 <Button
                   type="button"
                   variant="ghost"

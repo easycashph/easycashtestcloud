@@ -2,6 +2,9 @@ import * as React from 'react';
 import type { ComponentType } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Bar,
   BarChart,
@@ -21,6 +24,7 @@ import {
   ArrowUpRight,
   Banknote,
   Filter,
+  GripVertical,
   Landmark,
   RotateCcw,
   ShieldCheck,
@@ -41,7 +45,7 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useLanguage } from '@/lib/languageContext';
-import { useDashboardLayout } from '@/components/dashboard-layout-provider';
+import { useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
@@ -410,6 +414,57 @@ function LoanApplicationPipelineFunnel({ pipeline: pipelineProp }: { pipeline: D
   );
 }
 
+/**
+ * 2026-07-23 (user request - "meron na tayong drag sa card"): drag handle for the 4 top stat
+ * cards, replacing Settings > Appearance > Dashboard Layout's old up/down-arrow reorder buttons
+ * (still keeps hide/show + density + reset there - only the reorder mechanism moved here). Not
+ * `SortableSection` (used by LoanDetailPage) - that component pins its handle to the left with a
+ * full-width translate-out, which only makes sense for a vertical stack of full-width sections.
+ * These cards sit in a `sm:grid-cols-2 lg:grid-cols-4` grid, so the handle is an inline overlay in
+ * the card's own top-right corner instead - it stays inside the card regardless of grid position.
+ *
+ * 2026-07-23 v2: always-visible, not hover-reveal (`opacity-0 group-hover:opacity-100`) - user
+ * testing found the hover-only handle effectively undiscoverable (a 24x24px hit target that's
+ * fully invisible until the pointer lands exactly on it gives no hint it exists). Dimmed by
+ * default, full opacity on hover/focus for affordance, same as every other icon-only control in
+ * this app (see the sidebar/topbar icon buttons) rather than a novel hide-until-hover pattern.
+ *
+ * 2026-07-23 v3: moved from the top-RIGHT corner to top-LEFT - `SummaryCard`'s own topic icon
+ * (Landmark/Banknote/AlertOctagon/TrendingUp) already lives in the header's top-right via
+ * `justify-between`, so the two icons visually collided there. Top-left only has the card title
+ * text, which starts well clear of an 8px-inset 24px handle.
+ *
+ * 2026-07-23 v4: `h-full [&>*]:h-full` - before this wrapper existed, the grid's direct child was
+ * the `Card` itself (passed through a bare `React.Fragment`), so CSS grid's default
+ * `align-items: stretch` made every card match the row's tallest sibling automatically. Now the
+ * grid's direct child is this wrapper `div`, which stretches per grid rules, but the `Card` inside
+ * it doesn't inherit that height on its own - cards with less content (e.g. no trend badge, a
+ * one-line hint) rendered visibly shorter than taller siblings. `h-full` makes the wrapper fill the
+ * stretched cell; `[&>*]:h-full` forces the `Card` child to fill the wrapper in turn, without
+ * having to add a height prop to `SummaryCard` itself.
+ */
+function DraggableStatCard({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn('relative h-full [&>*]:h-full', isDragging && 'z-10 opacity-70')}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder this card"
+        className="absolute left-1 top-1.5 z-10 flex h-5 w-5 cursor-grab items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:text-foreground active:cursor-grabbing"
+      >
+        <GripVertical className="h-3 w-3" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 function SummaryCard({
   title,
   value,
@@ -547,7 +602,13 @@ const EMPTY_DATE_RANGE: DateRange = { from: '', to: '' };
 export function DashboardPage() {
   useLogPageView('Dashboard');
   const { t } = useLanguage();
-  const { cards: cardLayout, density } = useDashboardLayout();
+  const { cards: cardLayout, density, reorderCards } = useDashboardLayout();
+  const statCardDndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleStatCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorderCards(String(active.id) as DashboardCardId, String(over.id) as DashboardCardId);
+  };
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
 
   // Live portfolio-wide totals from the real backend (GET /dashboard/summary) - backs the three
@@ -934,11 +995,17 @@ export function DashboardPage() {
         const visibleCards = cardLayout.filter((c) => c.visible);
         if (visibleCards.length === 0) return null;
         return (
+          <DndContext sensors={statCardDndSensors} collisionDetection={closestCenter} onDragEnd={handleStatCardDragEnd}>
+          <SortableContext items={visibleCards.map((c) => c.id)} strategy={rectSortingStrategy}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {visibleCards.map((c) => (
-              <React.Fragment key={c.id}>{cardById[c.id]}</React.Fragment>
+              <DraggableStatCard key={c.id} id={c.id}>
+                {cardById[c.id]}
+              </DraggableStatCard>
             ))}
           </div>
+          </SortableContext>
+          </DndContext>
         );
       })()}
 
