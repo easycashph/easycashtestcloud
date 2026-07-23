@@ -428,7 +428,8 @@ model PortalAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  challenges PortalAccountChallenge[]
+  challenges       PortalAccountChallenge[]
+  loanApplications LoanApplication[]
 
   @@map("portal_accounts")
 }
@@ -1873,6 +1874,12 @@ model LoanApplication {
   borrowerId String?
   borrower   Borrower? @relation("LoanApplicationBorrower", fields: [borrowerId], references: [id])
 
+  /// 2026-07-23 (Easycash Portal Phase 2) - set when this application was submitted by a client
+  /// through the portal, as opposed to encoded by staff (encodedByUserId) or a legacy walk-in.
+  /// Lets the client see their own submitted applications' status without a Borrower link yet.
+  portalAccountId String?
+  portalAccount   PortalAccount? @relation(fields: [portalAccountId], references: [id])
+
   applicantName           String
   age                     Int?
   gender                  String?
@@ -1998,6 +2005,7 @@ model LoanApplication {
   @@index([branchId])
   @@index([borrowerId])
   @@index([status])
+  @@index([portalAccountId])
   @@map("loan_applications")
 }
 

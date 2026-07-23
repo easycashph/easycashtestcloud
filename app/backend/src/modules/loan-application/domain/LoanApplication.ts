@@ -113,6 +113,8 @@ export interface LoanApplicationProps {
   /** Set only when this application was created FROM an existing client's profile (renewal flow)
    * - see schema.prisma's LoanApplication.borrowerId doc comment for the full explanation. */
   borrowerId?: string;
+  /** Set when submitted through the Easycash Portal - see schema.prisma's doc comment. */
+  portalAccountId?: string;
 
   applicantName: string;
   age?: number;
@@ -195,6 +197,7 @@ export interface LoanApplicationProps {
 export interface CreateLoanApplicationProps {
   branchId: string;
   borrowerId?: string;
+  portalAccountId?: string;
   applicantName: string;
   age?: number;
   gender?: string;
@@ -270,6 +273,7 @@ export class LoanApplication {
       id: randomUUID(),
       branchId: input.branchId,
       borrowerId: input.borrowerId,
+      portalAccountId: input.portalAccountId,
       applicantName: input.applicantName,
       age: input.age,
       gender: input.gender,
@@ -357,6 +361,10 @@ export class LoanApplication {
 
   get borrowerId(): string | undefined {
     return this.props.borrowerId;
+  }
+
+  get portalAccountId(): string | undefined {
+    return this.props.portalAccountId;
   }
 
   get status(): LoanApplicationStatus {

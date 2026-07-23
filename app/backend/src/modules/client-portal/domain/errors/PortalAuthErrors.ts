@@ -52,3 +52,12 @@ export class PortalWeakPasswordError extends DomainError {
     this.name = 'PortalWeakPasswordError';
   }
 }
+
+/** Same shape whether the application truly doesn't exist or simply belongs to a different
+ * account - never lets a caller probe for other clients' application IDs. */
+export class PortalLoanApplicationNotFoundError extends DomainError {
+  constructor() {
+    super('PORTAL_LOAN_APPLICATION_NOT_FOUND', 'Loan application not found.', undefined, 404);
+    this.name = 'PortalLoanApplicationNotFoundError';
+  }
+}

@@ -71,7 +71,31 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return data as T;
 }
 
+/** Multipart upload (loan application document attachments) - always authenticated, so it doesn't
+ * share `request()`'s JSON `Content-Type` header (the browser sets the multipart boundary itself). */
+async function postFile<T>(path: string, file: File, fields: Record<string, string> = {}): Promise<T> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  for (const [key, value] of Object.entries(fields)) formData.append(key, value);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', headers, body: formData });
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const code = data?.error?.code ?? 'UNKNOWN_ERROR';
+    const message = data?.error?.message ?? 'Something went wrong. Please try again.';
+    throw new ApiError(res.status, code, message);
+  }
+
+  return data as T;
+}
+
 export const apiClient = {
   get: <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, auth = false): Promise<T> => request<T>(path, { method: 'POST', body, auth }),
+  postFile: <T>(path: string, file: File, fields?: Record<string, string>): Promise<T> => postFile<T>(path, file, fields),
 };

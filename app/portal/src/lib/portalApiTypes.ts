@@ -52,3 +52,68 @@ export interface ResetPasswordRequest {
 }
 
 export type MeResponse = PortalAccountView;
+
+/** Mirrors app/backend's client-portal Phase 2 (loan application submission) DTOs. */
+export interface PortalBranch {
+  id: string;
+  code: string;
+  name: string;
+  address: string | null;
+}
+
+/** Core-fields-only subset - see backend's PortalLoanApplicationDtos.ts for why the full
+ * staff-facing field set (credit score, TIN/SSS, dependants, etc.) isn't exposed here. */
+export interface SubmitLoanApplicationRequest {
+  branchId: string;
+  applicantName: string;
+  birthDate?: string;
+  gender?: string;
+  civilStatus?: string;
+  homeOwnership?: string;
+  address?: string;
+  houseUnitNumber?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  zipCode?: string;
+  monthlyIncome?: number;
+  employer?: string;
+  occupation?: string;
+  officeAddress?: string;
+  coBorrowerName?: string;
+  coBorrowerEmployer?: string;
+  coBorrowerContactNumber?: string;
+  coBorrowerEmail?: string;
+  coBorrowerAddress?: string;
+  mobilePhone?: string;
+  email?: string;
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
+  loanPurpose?: string;
+  requestedCategory: string;
+  requestedAmount: number;
+  requestedTermMonths: number;
+}
+
+export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';
+
+export interface PortalLoanApplicationSummary {
+  id: string;
+  branchId: string;
+  status: LoanApplicationStatus;
+  requestedCategory: string;
+  requestedAmount: number;
+  requestedTermMonths: number;
+  createdAt: string;
+}
+
+export type PortalDocumentCategory = 'VALID_ID_BORROWER' | 'PROOF_OF_BILLING' | 'CORPORATE_PAYSLIP';
+
+export interface UploadedDocument {
+  id: string;
+  fileName: string;
+  documentCategory: PortalDocumentCategory | null;
+}
