@@ -12,7 +12,9 @@
 # never touches GitHub or the remote MongoDB server.
 #
 # Order follows docs/Architecture/MIGRATION_LEDGER.md, plus the later fee/interest-rate/net-proceeds
-# backfills (found 2026-07-19 to still be needed on a fresh database, undocumented in that ledger).
+# backfills (found 2026-07-19 to still be needed on a fresh database, undocumented in that ledger),
+# plus the ZIP code backfills (found 2026-07-23 missing after a fresh reset - the address picker's
+# ZIP auto-fill silently stayed blank for every address until these ran).
 
 set -uo pipefail
 
@@ -73,31 +75,33 @@ run_step() {
 }
 
 echo ""
-echo "[1/16] Chinicheck kung tumatakbo ang Postgres..."
+echo "[1/18] Chinicheck kung tumatakbo ang Postgres..."
 if ! docker inspect -f '{{.State.Running}}' easycash-postgres-1 >/dev/null 2>&1; then
   (cd "$ROOT_DIR/app/docker" && docker compose up -d postgres)
   sleep 5
 fi
 
-run_step "[2/16] Resetting database (schema + seed)" npx prisma migrate reset --force
-run_step "[3/16] CP12 core migration (products, borrowers, loans, transactions, attachments)" npx tsx scripts/migrate-legacy-data.ts --apply
-run_step "[4/16] PSGC reference data" npx tsx scripts/import-psgc-reference-data.ts --apply
-run_step "[5/16] Resolve coded addresses (PSGC lookup)" npx tsx scripts/fix-coded-addresses.ts --apply
-run_step "[6/16] Resolve remaining coded addresses (address-api fallback)" npx tsx scripts/resolve-address-codes.ts
-run_step "[7/16] Repayment schedules" npx tsx scripts/migrate-repayment-schedules.ts --apply
-run_step "[8/16] Flag loans with missing legacy balance data" npx tsx scripts/flag-missing-balance-loans.ts --apply
-run_step "[9/16] Recompute active-loan balances from schedule" npx tsx scripts/recompute-active-loan-balances-from-schedule.ts
-run_step "[10/16] Document template mappings (BL)" npx tsx scripts/map-bl-document-templates.ts
-run_step "[11/16] Document template mappings (SL)" npx tsx scripts/map-sl-document-templates.ts
-run_step "[12/16] Document template mappings (SML)" npx tsx scripts/map-sml-document-templates.ts
-run_step "[13/16] Origination fees (Excel source)" npx tsx scripts/backfill-loan-origination-fees.ts --apply
-run_step "[13b/16] Origination fees (MongoDB source, wider coverage)" npx tsx scripts/backfill-loan-origination-fees-mongo.ts --apply
-run_step "[13c/16] Origination fees (inferred stragglers)" npx tsx scripts/backfill-loan-origination-fees-inferred.ts --apply
-run_step "[14/16] Add-on / contractual interest rates" npx tsx scripts/backfill-loan-interest-rates.ts --apply
-run_step "[15/16] Net proceeds recompute" npx tsx scripts/backfill-net-proceeds.ts
+run_step "[2/18] Resetting database (schema + seed)" npx prisma migrate reset --force
+run_step "[3/18] CP12 core migration (products, borrowers, loans, transactions, attachments)" npx tsx scripts/migrate-legacy-data.ts --apply
+run_step "[4/18] PSGC reference data" npx tsx scripts/import-psgc-reference-data.ts --apply
+run_step "[5/18] Resolve coded addresses (PSGC lookup)" npx tsx scripts/fix-coded-addresses.ts --apply
+run_step "[6/18] Resolve remaining coded addresses (address-api fallback)" npx tsx scripts/resolve-address-codes.ts
+run_step "[7/18] Repayment schedules" npx tsx scripts/migrate-repayment-schedules.ts --apply
+run_step "[8/18] Flag loans with missing legacy balance data" npx tsx scripts/flag-missing-balance-loans.ts --apply
+run_step "[9/18] Recompute active-loan balances from schedule" npx tsx scripts/recompute-active-loan-balances-from-schedule.ts
+run_step "[10/18] Document template mappings (BL)" npx tsx scripts/map-bl-document-templates.ts
+run_step "[11/18] Document template mappings (SL)" npx tsx scripts/map-sl-document-templates.ts
+run_step "[12/18] Document template mappings (SML)" npx tsx scripts/map-sml-document-templates.ts
+run_step "[13/18] Origination fees (Excel source)" npx tsx scripts/backfill-loan-origination-fees.ts --apply
+run_step "[13b/18] Origination fees (MongoDB source, wider coverage)" npx tsx scripts/backfill-loan-origination-fees-mongo.ts --apply
+run_step "[13c/18] Origination fees (inferred stragglers)" npx tsx scripts/backfill-loan-origination-fees-inferred.ts --apply
+run_step "[14/18] Add-on / contractual interest rates" npx tsx scripts/backfill-loan-interest-rates.ts --apply
+run_step "[15/18] Net proceeds recompute" npx tsx scripts/backfill-net-proceeds.ts
+run_step "[16/18] City/municipality ZIP codes" npx tsx scripts/import-ph-zip-codes.ts --apply
+run_step "[17/18] NCR barangay-level ZIP codes" npx tsx scripts/import-ncr-barangay-zip-codes.ts --apply
 
 echo ""
-echo "[16/16] Final verification..."
+echo "[18/18] Final verification..."
 (cd "$BACKEND_DIR" && npx tsx scripts/check-migration-status.ts)
 
 echo ""

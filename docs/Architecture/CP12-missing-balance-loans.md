@@ -1,8 +1,8 @@
 # CP12 Follow-up — Loans Flagged for Missing Balance Data
 
-Generated 2026-07-19T00:59:21.176Z by `scripts/flag-missing-balance-loans.ts`.
+Generated 2026-07-23T03:47:46.469Z by `scripts/flag-missing-balance-loans.ts`.
 
-616 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
+619 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
 no principal/interest/fees/penalty balance snapshot at all (not zero — absent). All balance
 columns on these rows read 0.00 but do NOT mean the loan is settled; each requires manual
 reconciliation against other records (e.g. the loan's own transaction history's running
@@ -15,7 +15,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | CLOSED | 425 |
 | ACTIVE_IN_ARREARS | 52 |
 | ACTIVE | 135 |
-| APPROVED | 1 |
+| APPROVED | 4 |
 | PENDING_APPROVAL | 3 |
 
 ## Full list (loan code, status)
@@ -143,6 +143,9 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-CORP_00114 | ACTIVE |
 | SL-CORP_00115 | ACTIVE |
 | SL-CORP_00116 | ACTIVE |
+| SL-CORP_00118 | APPROVED |
+| SL-CORP_00121 | APPROVED |
+| SL-CORP_00123 | APPROVED |
 | SL-LAZ_00001 | ACTIVE |
 | SL-LAZ_00004 | ACTIVE |
 | SL-LAZ_00004-LEGACY2 | CLOSED |
