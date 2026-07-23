@@ -2046,6 +2046,15 @@ model ReminderSettings {
   /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
   /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
   signingSmsEnabled Boolean  @default(false)
+  /// 2026-07-23 - Easycash Portal signup/password-reset OTP email. SEPARATE from emailEnabled
+  /// above (payment reminders) and from staff 2FA (identity module's LoginUseCase/
+  /// RequestTwoFactorSetupUseCase, which are NOT gated by this row at all - they keep using the
+  /// static SMS_ENABLED/EMAIL_ENABLED env vars via the original shared OtpSender instance). Checked
+  /// fresh on every send (PortalOtpSender), no server restart needed.
+  portalEmailEnabled Boolean @default(false)
+  /// 2026-07-23 - Easycash Portal signup/password-reset OTP SMS. Same "separate from staff 2FA"
+  /// reasoning as portalEmailEnabled above.
+  portalSmsEnabled   Boolean @default(false)
   updatedAt       DateTime @updatedAt
   updatedByUserId String?
   updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])

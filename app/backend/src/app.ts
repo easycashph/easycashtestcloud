@@ -41,6 +41,7 @@ import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/applic
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
+import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
@@ -399,12 +400,33 @@ export function createApp(): Express {
   const portalAccountRepository = new PrismaPortalAccountRepository();
   const portalAccountChallengeRepository = new PrismaPortalAccountChallengeRepository();
   const portalTokenService = new JwtPortalTokenService();
+  // Portal signup/password-reset OTP uses its OWN sender (portalOtpSender), NOT the shared
+  // `otpSender` above - gated by the MIS-toggleable portalEmailEnabled/portalSmsEnabled switches
+  // (Settings > System > Reminders) instead of the static SMS_ENABLED/EMAIL_ENABLED env vars, so
+  // enabling real portal OTP delivery never also flips on staff 2FA delivery. See
+  // PortalOtpSender's own doc comment.
+  const portalOtpSender = new PortalOtpSender({
+    smsGateway: new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+    reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+  });
   const portalAuthRouter = createPortalAuthRouter(
     {
-      signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender }),
+      signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender: portalOtpSender }),
       verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
       portalLoginUseCase: new PortalLoginUseCase({ portalAccountRepository, passwordHasher, portalTokenService }),
-      requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender }),
+      requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       confirmPasswordResetUseCase: new ConfirmPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher }),
       getPortalAccountUseCase: new GetPortalAccountUseCase({ portalAccountRepository }),
     },

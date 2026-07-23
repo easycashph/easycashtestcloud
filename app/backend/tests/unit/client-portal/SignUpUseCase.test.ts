@@ -18,7 +18,9 @@ const EXISTING: PortalAccountRecord = {
 
 function buildDeps(existing: PortalAccountRecord | null = null) {
   const portalAccountRepository: IPortalAccountRepository = {
-    create: vi.fn().mockResolvedValue({ ...EXISTING, id: 'new-acct', email: 'new@example.com', status: 'PENDING_VERIFICATION' }),
+    create: vi.fn().mockImplementation((input: { email: string; contactNumber?: string }) =>
+      Promise.resolve({ ...EXISTING, id: 'new-acct', email: input.email, contactNumber: input.contactNumber ?? null, status: 'PENDING_VERIFICATION' }),
+    ),
     findByEmail: vi.fn().mockResolvedValue(existing),
     findById: vi.fn(),
     update: vi.fn(),
@@ -69,6 +71,19 @@ describe('SignUpUseCase', () => {
       PortalEmailAlreadyInUseError,
     );
     expect(deps.portalAccountRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('resumes an abandoned (PENDING_VERIFICATION) sign-up instead of rejecting it - refreshes the password and issues a fresh challenge for the same account', async () => {
+    const pending: PortalAccountRecord = { ...EXISTING, id: 'acct-pending', status: 'PENDING_VERIFICATION', contactNumber: '09171234567' };
+    const deps = buildDeps(pending);
+    deps.portalAccountRepository.update = vi.fn().mockResolvedValue({ ...pending, passwordHash: 'hashed' });
+
+    const result = await new SignUpUseCase(deps).execute({ email: pending.email, password: 'a-new-strong-password-123' });
+
+    expect(deps.portalAccountRepository.create).not.toHaveBeenCalled();
+    expect(deps.portalAccountRepository.update).toHaveBeenCalledWith('acct-pending', { passwordHash: 'hashed' });
+    expect(deps.otpSender.send).toHaveBeenCalledWith('EMAIL', pending.email, '123456');
+    expect(result).toEqual({ challengeId: 'challenge-1', channel: 'EMAIL' });
   });
 
   it('throws PortalWeakPasswordError for a too-short password, without creating an account', async () => {
