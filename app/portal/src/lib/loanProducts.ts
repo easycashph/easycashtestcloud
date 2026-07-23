@@ -1,27 +1,20 @@
-import { Anchor, Briefcase, Landmark, User, Wallet } from 'lucide-react';
+import { Anchor, Briefcase, Landmark } from 'lucide-react';
 
 /** Shared between LandingPage (public marketing) and LoanProductsPage (logged-in "which loan
  * should I apply for" browser) - single source of truth so the two never drift, and so
  * `category` here always matches LOAN_CATEGORIES in LoanApplicationFormPage.tsx exactly (it's
- * passed straight through as the `requestedCategory` query param when a client clicks Apply Now). */
+ * passed straight through as the `requestedCategory` query param when a client clicks Apply Now).
+ *
+ * 2026-07-23 (user correction): only 3 products are actually active in Easycash's catalog today -
+ * Business Loan, Salary Loan, Seafarer Loan - matching app/frontend's staff-facing form's own
+ * LOAN_TYPE_OPTIONS exactly. Personal Loan/SME Loan/Purchase Financing were never real offerings;
+ * removed rather than just hidden, since they don't exist as loan-application categories at all. */
 export const LOAN_PRODUCTS = [
   {
-    icon: Anchor,
-    category: 'Seafarer Loan',
-    blurb: 'Lower rates and faster approvals, tailored around irregular allotment income.',
-    details: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
-  },
-  {
-    icon: User,
-    category: 'Personal Loan',
-    blurb: 'Tuition, bills, home improvement, or the unexpected - competitive rates, no surprises.',
-    details: 'For everyday needs - school fees, medical expenses, home repairs, or anything else life throws your way.',
-  },
-  {
     icon: Briefcase,
-    category: 'SME Loan',
+    category: 'Business Loan',
     blurb: 'Flexible financing and a simpler process for growing your business.',
-    details: 'Working capital, equipment, or expansion financing for small and medium business owners.',
+    details: 'Working capital, equipment, or expansion financing for business owners.',
   },
   {
     icon: Landmark,
@@ -30,9 +23,9 @@ export const LOAN_PRODUCTS = [
     details: 'A short-term cash advance for employees, repaid against your regular paycheck.',
   },
   {
-    icon: Wallet,
-    category: 'Purchase Financing',
-    blurb: 'Gadgets and appliances now, pay over time.',
-    details: 'Get the gadget or appliance you need today and pay it off in manageable installments.',
+    icon: Anchor,
+    category: 'Seafarer Loan',
+    blurb: 'Lower rates and faster approvals, tailored around irregular allotment income.',
+    details: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
   },
 ] as const;
