@@ -96,6 +96,21 @@ const DEFAULT_CARD_ORDER = ['reminders', 'notes', 'attachments', 'documents', 'e
 
 const CARD_ORDER_KEY_PREFIX = 'lms.loanDetailCardOrder';
 
+/** 2026-07-23 (user request): shown in the "Confirm disbursement" dialog so the officer sees the
+ * actual amount being released, not just the principal - only non-zero fees are listed (see the
+ * dialog's own filter), since most loans don't carry every fee type. */
+const DISBURSEMENT_FEE_FIELDS: { key: keyof LoanAccount['originationFees']; label: string }[] = [
+  { key: 'processingFee', label: 'Processing fee' },
+  { key: 'advanceInterestFee', label: 'Advance interest fee' },
+  { key: 'outstandingBalancePayoff', label: 'Outstanding balance payoff' },
+  { key: 'docStampFee', label: 'Doc stamp fee' },
+  { key: 'accountManagementFee', label: 'Account management fee' },
+  { key: 'otherFees', label: 'Other fees' },
+  { key: 'notarialFee', label: 'Notarial fee' },
+  { key: 'webFee', label: 'Web fee' },
+  { key: 'insuranceFee', label: 'Insurance fee' },
+];
+
 /** Per-user like `sidebarCollapsedKey` in AppLayout.tsx - one officer's preferred section order on
  * a shared machine shouldn't silently apply to whoever logs in next. */
 function cardOrderKey(userId: string): string {
@@ -1894,7 +1909,18 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <RealRemindersPanel loanAccountId={loan.id} loanCode={loan.loanCode} borrower={borrower} installments={installments} />
           ),
           notes: <ProfileNotesPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} />,
-          attachments: <RealAttachmentsPanel ownerType="LOAN_ACCOUNT" ownerId={loan.id} canUpload />,
+          attachments: (
+            <RealAttachmentsPanel
+              ownerType="LOAN_ACCOUNT"
+              ownerId={loan.id}
+              canUpload
+              // 2026-07-23 (user request, same as ClientProfilePage): also surface documents
+              // uploaded during this loan's own originating application - `sourceApplicationId`
+              // is a direct 1:1 link (unlike a Borrower, which can have many applications over
+              // time), so there's no "which one" ambiguity here.
+              secondaryOwner={loan.sourceApplicationId ? { ownerType: 'LOAN_APPLICATION', ownerId: loan.sourceApplicationId } : undefined}
+            />
+          ),
           // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory
           // Note, and other legal documents applicable to this loan's product, available once
           // APPROVED.
@@ -2521,6 +2547,24 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 `This will move ${loan.loanCode} back from Active to Approved — its repayment schedule will be deleted and balances reset to zero. Only allowed while no payment or penalty/fee adjustment has been recorded yet. The original disbursement stays in Payment History as a record of what happened.`}
             </DialogDescription>
           </DialogHeader>
+          {confirmAction === 'ACTIVATE' && (
+            <div className="space-y-1.5 rounded-md border p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Principal amount</span>
+                <span>{formatPeso(Number(loan.principalAmount))}</span>
+              </div>
+              {DISBURSEMENT_FEE_FIELDS.filter(({ key }) => Number(loan.originationFees[key]) > 0).map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between text-muted-foreground">
+                  <span>Less: {label}</span>
+                  <span>-{formatPeso(Number(loan.originationFees[key]))}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between border-t pt-1.5 font-medium">
+                <span>Net proceeds (amount to disburse)</span>
+                <span>{formatPeso(Number(loan.netProceeds))}</span>
+              </div>
+            </div>
+          )}
           {actionError && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

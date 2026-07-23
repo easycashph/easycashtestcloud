@@ -82,6 +82,9 @@ export interface LoanAccount {
   };
   netProceeds: string;
   createdAt: string;
+  /** Set at "Create Loan Account" time to the LoanApplication this account was actually produced
+   * from - null for legacy-migrated accounts and any account created before this field existed. */
+  sourceApplicationId: string | null;
 }
 
 export interface BorrowerIncomeDetail {

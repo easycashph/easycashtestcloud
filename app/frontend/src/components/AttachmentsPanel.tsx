@@ -21,19 +21,40 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Label shown on a merged-in attachment that didn't come from this panel's own primary owner -
+ * see `secondaryOwner` below. */
+const SECONDARY_OWNER_LABELS: Record<AttachmentOwnerType, string> = {
+  BORROWER: 'From client profile',
+  LOAN_ACCOUNT: 'From loan account',
+  LOAN_APPLICATION: 'From application',
+};
+
 /**
  * Reusable attachment list + upload widget - first wired for Loan Application intake
  * (`LoanApplicationDetailPage`), built generically against `AttachmentOwnerType` so
  * Borrower/LoanAccount detail pages can adopt it later without change.
+ *
+ * 2026-07-23 (user request): documents uploaded during a Loan Application's intake stayed
+ * permanently scoped to that application (`ownerType: 'LOAN_APPLICATION'`) even after it produced
+ * a Borrower/LoanAccount - the Client profile's own Attachments panel (`ownerType: 'BORROWER'`)
+ * never saw them, since these are separate storage scopes with no automatic copy-forward. Read-only
+ * merge, not a move: `secondaryOwner` fetches a second owner's attachments and lists them alongside
+ * the primary owner's, labeled where they came from - upload/download/preview all still address
+ * whichever owner each attachment actually belongs to, so the original application's own record
+ * (and this component elsewhere) stays untouched. Caller decides which secondary owner to pass -
+ * e.g. `ClientProfilePage` passes only the client's MOST RECENT loan application, not every one
+ * they've ever had, to avoid piling up every renewal's old ID scans in one list.
  */
 export function AttachmentsPanel({
   ownerType,
   ownerId,
   canUpload,
+  secondaryOwner,
 }: {
   ownerType: AttachmentOwnerType;
   ownerId: string;
   canUpload: boolean;
+  secondaryOwner?: { ownerType: AttachmentOwnerType; ownerId: string };
 }) {
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -43,6 +64,14 @@ export function AttachmentsPanel({
   const attachmentsQuery = useQuery({
     queryKey,
     queryFn: () => apiClient.get<Attachment[]>(`/attachments?ownerType=${ownerType}&ownerId=${ownerId}`),
+  });
+
+  const secondaryQueryKey = secondaryOwner ? ['attachments', secondaryOwner.ownerType, secondaryOwner.ownerId] : undefined;
+  const secondaryAttachmentsQuery = useQuery({
+    queryKey: secondaryQueryKey ?? ['attachments', 'none'],
+    queryFn: () =>
+      apiClient.get<Attachment[]>(`/attachments?ownerType=${secondaryOwner!.ownerType}&ownerId=${secondaryOwner!.ownerId}`),
+    enabled: Boolean(secondaryOwner),
   });
 
   const uploadMutation = useMutation({
@@ -90,7 +119,12 @@ export function AttachmentsPanel({
     uploadMutation.mutate(file);
   };
 
-  const attachments = attachmentsQuery.data ?? [];
+  // Merged, newest-first - a secondary-owner attachment carries its own `ownerType` on the wire
+  // already, so no extra flag is needed to tell primary from merged-in when rendering the badge.
+  const attachments = [...(attachmentsQuery.data ?? []), ...(secondaryOwner ? (secondaryAttachmentsQuery.data ?? []) : [])].sort(
+    (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime(),
+  );
+  const isLoading = attachmentsQuery.isLoading || (Boolean(secondaryOwner) && secondaryAttachmentsQuery.isLoading);
   const error = localError ?? (uploadMutation.error instanceof Error ? uploadMutation.error.message : null);
 
   return (
@@ -108,7 +142,7 @@ export function AttachmentsPanel({
           </div>
         )}
 
-        {attachmentsQuery.isLoading ? (
+        {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading attachments…</p>
         ) : attachments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No attachments uploaded yet.</p>
@@ -122,6 +156,11 @@ export function AttachmentsPanel({
                     {a.documentCategory && (
                       <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-normal text-primary">
                         {DOCUMENT_CATEGORY_LABELS[a.documentCategory]}
+                      </span>
+                    )}
+                    {a.ownerType !== ownerType && (
+                      <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[11px] font-normal text-secondary-foreground">
+                        {SECONDARY_OWNER_LABELS[a.ownerType]}
                       </span>
                     )}
                   </p>

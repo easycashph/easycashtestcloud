@@ -739,7 +739,16 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         </CardContent>
       </Card>
 
-      <AttachmentsPanel ownerType="BORROWER" ownerId={borrower.id} canUpload />
+      <AttachmentsPanel
+        ownerType="BORROWER"
+        ownerId={borrower.id}
+        canUpload
+        // 2026-07-23 (user request): also surface documents uploaded during this client's most
+        // recent Loan Application intake - see AttachmentsPanel's own doc comment for why only
+        // the latest (myApplications[0], already sorted newest-first) rather than every
+        // application this client has ever had.
+        secondaryOwner={myApplications[0] ? { ownerType: 'LOAN_APPLICATION', ownerId: myApplications[0].id } : undefined}
+      />
 
       {/* Activity Timeline - ADR-050 */}
       <Card>

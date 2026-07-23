@@ -78,6 +78,7 @@ export function presentLoanAccount(loanAccount: LoanAccount, isMatured = false) 
     },
     netProceeds: loanAccount.netProceeds.toString(),
     legacyId: loanAccount.legacyId ?? null,
+    sourceApplicationId: loanAccount.sourceApplicationId ?? null,
     createdAt: loanAccount.createdAt.toISOString(),
     updatedAt: loanAccount.updatedAt.toISOString(),
     appliedFees: loanAccount.appliedFees.map(presentAppliedFee),
