@@ -35,6 +35,7 @@ import { VerifySignUpUseCase } from '@modules/client-portal/application/use-case
 import { PortalLoginUseCase } from '@modules/client-portal/application/use-cases/PortalLoginUseCase';
 import { RequestPasswordResetUseCase } from '@modules/client-portal/application/use-cases/RequestPasswordResetUseCase';
 import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/use-cases/ConfirmPasswordResetUseCase';
+import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
@@ -400,6 +401,7 @@ export function createApp(): Express {
       portalLoginUseCase: new PortalLoginUseCase({ portalAccountRepository, passwordHasher, portalTokenService }),
       requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender }),
       confirmPasswordResetUseCase: new ConfirmPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher }),
+      getPortalAccountUseCase: new GetPortalAccountUseCase({ portalAccountRepository }),
     },
     portalTokenService,
   );

@@ -4,6 +4,7 @@ import type { VerifySignUpUseCase } from '../../application/use-cases/VerifySign
 import type { PortalLoginUseCase } from '../../application/use-cases/PortalLoginUseCase';
 import type { RequestPasswordResetUseCase } from '../../application/use-cases/RequestPasswordResetUseCase';
 import type { ConfirmPasswordResetUseCase } from '../../application/use-cases/ConfirmPasswordResetUseCase';
+import type { GetPortalAccountUseCase } from '../../application/use-cases/GetPortalAccountUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   PortalConfirmPasswordResetRequestBody,
@@ -19,6 +20,7 @@ export interface PortalAuthControllerDeps {
   portalLoginUseCase: PortalLoginUseCase;
   requestPasswordResetUseCase: RequestPasswordResetUseCase;
   confirmPasswordResetUseCase: ConfirmPasswordResetUseCase;
+  getPortalAccountUseCase: GetPortalAccountUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -79,11 +81,13 @@ export class PortalAuthController {
     }
   };
 
-  /** Simple "am I logged in, and as who" check - the frontend's own session bootstrap. */
-  me = (req: Request, res: Response, next: NextFunction): void => {
+  /** The frontend's own session bootstrap ("am I logged in, and as who") - also used by the
+   * dashboard to show contactNumber/borrowerId without a second round trip. */
+  me = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const account = getCurrentPortalAccount(req);
-      res.status(200).json({ id: account.sub, email: account.email });
+      const result = await this.deps.getPortalAccountUseCase.execute(account.sub);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
