@@ -18,8 +18,11 @@ import { ActivityLogPage } from '@/pages/ActivityLogPage';
 /** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
  * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
  * both channels still default OFF (backend `ReminderSettings` row default, untouched by this
- * change), so nothing starts sending automatically just because the switch is clickable again. */
-const REMINDER_TOGGLES_LOCKED = false;
+ * change), so nothing starts sending automatically just because the switch is clickable again.
+ * 2026-07-23 (user request, later same day): re-locked - same reasoning as the original lock,
+ * prevent an accidental click from flipping either channel on/off. Whatever on/off state each
+ * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
+const REMINDER_TOGGLES_LOCKED = true;
 
 type SystemTab = 'reminders' | 'members' | 'products' | 'activity-logs';
 const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'activity-logs'];
@@ -75,7 +78,7 @@ function ReminderSettingsCard() {
         )}
         {REMINDER_TOGGLES_LOCKED && (
           <div className="flex items-center gap-2 rounded-md bg-warning/20 p-3 text-xs text-warning-foreground">
-            <Lock className="h-4 w-4 shrink-0" /> Toggles are temporarily locked to prevent accidental enabling - by MIS - Nomer.
+            <Lock className="h-4 w-4 shrink-0" /> Toggles are temporarily locked to prevent accidental enabling.
           </div>
         )}
         <div className={cn('flex items-center justify-between gap-3 p-3', REMINDER_TOGGLES_LOCKED && 'opacity-60')}>
