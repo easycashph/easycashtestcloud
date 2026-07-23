@@ -45,16 +45,17 @@ docker compose up -d --build backend frontend
 popd
 
 echo.
-echo [4/4] Tapos na!
+echo [4/4] Tapos na! Binubuksan sa browser...
 echo ============================================
 echo   Bagong URL: http://%NEW_IP%:5173
 echo ============================================
 echo.
-echo Buksan ang URL na ito sa PC o sa phone mo (basta
+echo Sa phone mo, buksan din ang URL na ito (basta
 echo parehong WiFi/network) para ma-access ang LMS system.
 echo.
 echo Kung may "insecure download" warning ang Chrome sa
 echo pag-download ng file, normal iyan sa plain HTTP + LAN
 echo IP setup - pindutin lang ang "Download insecure file".
 echo.
+start "" "http://%NEW_IP%:5173/"
 pause
