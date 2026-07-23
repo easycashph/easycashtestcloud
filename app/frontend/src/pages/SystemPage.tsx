@@ -15,10 +15,11 @@ import { MemberListPage } from '@/pages/MemberListPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 
-/** 2026-07-18 user request: temporarily prevent anyone from accidentally toggling these switches
- * on via the UI, without touching the backend gate or default state. UI-only (a direct API call
- * would still work) - flip back to `false` once ready to allow toggling again. */
-const REMINDER_TOGGLES_LOCKED = true;
+/** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
+ * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
+ * both channels still default OFF (backend `ReminderSettings` row default, untouched by this
+ * change), so nothing starts sending automatically just because the switch is clickable again. */
+const REMINDER_TOGGLES_LOCKED = false;
 
 type SystemTab = 'reminders' | 'members' | 'products' | 'activity-logs';
 const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'activity-logs'];

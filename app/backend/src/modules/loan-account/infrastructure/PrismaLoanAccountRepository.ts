@@ -58,6 +58,7 @@ function toDomain(row: LoanAccountRow): LoanAccount {
     closedAt: row.closedAt ?? undefined,
     closedReason: row.closedReason ?? undefined,
     legacyBalanceDataMissing: row.legacyBalanceDataMissing,
+    legacyNonReconcilingClosedBalance: row.legacyNonReconcilingClosedBalance,
     sourceApplicationId: row.sourceApplicationId ?? undefined,
     originationFees: OriginationFees.of({
       processingFee: Money.of(row.processingFee),

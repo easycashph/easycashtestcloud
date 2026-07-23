@@ -62,10 +62,22 @@ Core loan data only: `Borrower` (+ income detail, ID documents, character refere
 - **`RepaymentSchedule` not migrated** — the legacy `payment_schedules` collection is empty in
   this export (0 documents). Schedules for migrated loans will need to be regenerated or
   reconstructed separately if historical installment-level detail is required.
-- **244,403 `loan_transactions` (47%) skipped** — these reference `loan_accounts` that exist in
-  the transaction history but are absent from the current `loan_accounts.bson` export (older/
-  archived accounts not present in this particular dump). Not fabricated or dropped silently —
-  logged and counted.
+- **244,242 `loan_transactions` (46.5%) skipped — CONFIRMED CLOSED 2026-07-23, permanent legacy
+  gap, not recoverable.** Follow-up investigation (`scripts/analyze-orphaned-transactions.ts`,
+  run against the 2026-07-23 legacy MongoDB dump) settled the open question from this report's
+  original 2026-07-09 version: these 4,377 distinct `parent_account_key` values (i) are the same
+  32-character key format as every successfully-matched account (ruling out a join-key/format
+  bug), and (ii) do not exist in ANY other legacy collection either — `closed_accounts.bson` (the
+  one collection that might plausibly hold archived/excluded accounts) is empty (0 documents) in
+  this dump, and the migration's own account scope has no product/branch/date filter to begin
+  with (see this doc's earlier "Loan Accounts" section — every non-skip-condition `loan_accounts`
+  row is already migrated). These accounts are simply absent from the legacy `loan_accounts`
+  export itself, plausibly deleted/archived before this dump was taken (Excel → Mambu → SDevTech
+  transition, as originally theorized) — not fabricated, not silently dropped, and not a migration
+  bug. The full raw transaction data for all 244,242 rows is preserved permanently in Postgres
+  (`legacy_orphaned_transactions` table, populated by `scripts/export-orphaned-transactions.ts`,
+  idempotent/re-runnable) for historical/audit reference, even though none of it can ever be
+  linked to a `LoanAccount` record.
 - **15 `loan_accounts` skipped** — unresolved borrower or product linkage.
 - **12 legacy loan accounts share a duplicate `id` (loan code)** with another account — a real
   legacy data-quality issue. The 2nd+ occurrence was migrated with a deterministic `-DUPn` suffix

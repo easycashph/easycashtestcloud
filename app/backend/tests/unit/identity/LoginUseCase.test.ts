@@ -16,6 +16,8 @@ const activeUser: UserRecord = {
   lastName: 'Reyes',
   status: 'ACTIVE',
   roles: ['CRM'],
+  twoFactorEnabled: false,
+  twoFactorChannel: null,
 };
 
 function buildDeps(overrides: { user?: UserRecord | null; passwordMatches?: boolean } = {}) {
@@ -40,8 +42,15 @@ function buildDeps(overrides: { user?: UserRecord | null; passwordMatches?: bool
     revokeAllForUser: vi.fn(),
   };
   const auditLogger: IAuditLogger = { log: vi.fn() };
+  const twoFactorChallengeRepository = {
+    create: vi.fn().mockResolvedValue({ id: 'challenge-1', code: '123456' }),
+    findById: vi.fn(),
+    verifyAndConsume: vi.fn(),
+    incrementAttempts: vi.fn(),
+  };
+  const otpSender = { send: vi.fn() };
 
-  return { userRepository, passwordHasher, tokenService, refreshTokenRepository, auditLogger };
+  return { userRepository, passwordHasher, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, otpSender };
 }
 
 describe('LoginUseCase', () => {
@@ -77,5 +86,19 @@ describe('LoginUseCase', () => {
     await expect(new LoginUseCase(deps).execute({ email: activeUser.email, password: 'correct' })).rejects.toThrow(
       AccountInactiveError,
     );
+  });
+
+  it('2026-07-22 (Two-Factor Authentication) - returns a twoFactorRequired challenge instead of tokens for a 2FA-enabled account, and issues no LOGIN_SUCCESS audit entry yet', async () => {
+    const deps = buildDeps({ user: { ...activeUser, twoFactorEnabled: true, twoFactorChannel: 'EMAIL' } });
+
+    const result = await new LoginUseCase(deps).execute({ email: activeUser.email, password: 'correct' });
+
+    expect(result).toEqual({ twoFactorRequired: true, challengeId: 'challenge-1', channel: 'EMAIL' });
+    expect(deps.twoFactorChallengeRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: activeUser.id, purpose: 'LOGIN', channel: 'EMAIL' }),
+    );
+    expect(deps.otpSender.send).toHaveBeenCalledWith('EMAIL', activeUser.email, '123456');
+    expect(deps.refreshTokenRepository.issue).not.toHaveBeenCalled();
+    expect(deps.auditLogger.log).not.toHaveBeenCalled();
   });
 });

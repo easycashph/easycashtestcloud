@@ -56,6 +56,12 @@ loans, see below, account for the gap from 1,799 source rows).
   accept the gap for this pass** — nothing is lost, the full 524,463-row source ledger remains
   intact and untouched in the gitignored dump for future investigation if the cause is ever
   identified and a fuller migration becomes worthwhile.
+  **UPDATE 2026-07-23 (CONFIRMED CLOSED):** that future investigation happened — see
+  `docs/Architecture/CP12-legacy-migration-report.md`'s "Known gaps" section. Confirmed genuine,
+  permanent legacy data gap (the referenced accounts exist nowhere in the legacy export, not just
+  excluded by migration scope), not recoverable. The 244,242-row figure re-verified against a
+  fresh 2026-07-23 dump (`scripts/analyze-orphaned-transactions.ts`) and permanently preserved in
+  Postgres (`legacy_orphaned_transactions` table, via `scripts/export-orphaned-transactions.ts`).
 
 **One implementation bug found and fixed during the real run:** 12 legacy loan codes are each
 reused across exactly 2 real records (different `uid`/`creationDate` — a renewal-style reuse

@@ -34,6 +34,8 @@ export class GetCurrentUserUseCase {
       contactNumber: user.contactNumber,
       address: user.address,
       birthday: user.birthday ? user.birthday.toISOString() : null,
+      twoFactorEnabled: user.twoFactorEnabled,
+      twoFactorChannel: user.twoFactorChannel,
     };
   }
 }

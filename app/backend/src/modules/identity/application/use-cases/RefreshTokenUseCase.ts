@@ -69,6 +69,8 @@ export class RefreshTokenUseCase {
     const rotated = await refreshTokenRepository.rotate(existing.id, {
       userId: user.id,
       expiresAt: refreshTokenExpiresAt,
+      createdByIp: input.ipAddress,
+      userAgent: input.userAgent,
     });
 
     if (!rotated) {
@@ -85,6 +87,7 @@ export class RefreshTokenUseCase {
       roles: user.roles,
       branchId: user.branchId,
       jti: randomUUID(),
+      sid: rotated.id,
     });
 
     return { accessToken, accessTokenExpiresAt, refreshToken: rotated.rawToken, refreshTokenExpiresAt };

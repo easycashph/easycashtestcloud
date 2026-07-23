@@ -64,6 +64,7 @@ export function presentLoanAccount(loanAccount: LoanAccount, isMatured = false) 
     closedAt: loanAccount.closedAt?.toISOString() ?? null,
     closedReason: loanAccount.closedReason ?? null,
     legacyBalanceDataMissing: loanAccount.legacyBalanceDataMissing,
+    legacyNonReconcilingClosedBalance: loanAccount.legacyNonReconcilingClosedBalance,
     originationFees: {
       processingFee: originationFees.processingFee.toString(),
       advanceInterestFee: originationFees.advanceInterestFee.toString(),

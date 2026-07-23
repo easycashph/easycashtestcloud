@@ -35,6 +35,8 @@ function toUserRecord(row: UserWithRoles): UserRecord {
     contactNumber: row.contactNumber,
     address: row.address,
     birthday: row.birthday,
+    twoFactorEnabled: row.twoFactorEnabled,
+    twoFactorChannel: row.twoFactorChannel as 'EMAIL' | 'SMS' | null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -134,6 +136,8 @@ export class PrismaUserRepository implements IUserRepository {
         contactNumber: patch.contactNumber,
         address: patch.address,
         birthday: patch.birthday,
+        twoFactorEnabled: patch.twoFactorEnabled,
+        twoFactorChannel: patch.twoFactorChannel,
         ...(roleIds
           ? {
               roles: {

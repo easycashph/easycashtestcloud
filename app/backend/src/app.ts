@@ -14,11 +14,21 @@ import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/Ref
 import { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
+import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
+import { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
+import { RequestTwoFactorSetupUseCase } from '@modules/identity/application/use-cases/RequestTwoFactorSetupUseCase';
+import { ConfirmTwoFactorSetupUseCase } from '@modules/identity/application/use-cases/ConfirmTwoFactorSetupUseCase';
+import { DisableTwoFactorUseCase } from '@modules/identity/application/use-cases/DisableTwoFactorUseCase';
 import { BcryptPasswordHasher } from '@modules/identity/infrastructure/BcryptPasswordHasher';
 import { JwtTokenService } from '@modules/identity/infrastructure/JwtTokenService';
 import { PrismaUserRepository } from '@modules/identity/infrastructure/PrismaUserRepository';
 import { PrismaRefreshTokenRepository } from '@modules/identity/infrastructure/PrismaRefreshTokenRepository';
+import { PrismaTwoFactorChallengeRepository } from '@modules/identity/infrastructure/PrismaTwoFactorChallengeRepository';
+import { OtpSender } from '@modules/identity/infrastructure/OtpSender';
 import { PrismaAuditLogger } from '@modules/identity/infrastructure/PrismaAuditLogger';
+import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
+import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
@@ -285,6 +295,27 @@ export function createApp(): Express {
   const userRepository = new PrismaUserRepository();
   const refreshTokenRepository = new PrismaRefreshTokenRepository();
   const auditLogger = new PrismaAuditLogger();
+  const twoFactorChallengeRepository = new PrismaTwoFactorChallengeRepository();
+  // Settings > Security > Two-Factor Authentication (2026-07-22) - the same M360/SMTP gateways
+  // Payment Reminders already uses, gated by the same SMS_ENABLED/EMAIL_ENABLED dry-run flags
+  // (see OtpSender's own doc comment) - safe to enable 2FA on any account in every environment.
+  const otpSender = new OtpSender({
+    smsGateway: new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+    smsEnabled: env.SMS_ENABLED,
+    emailEnabled: env.EMAIL_ENABLED,
+  });
 
   // --- notification module wiring (Notification Center, 2026-07-17) - built early, before other
   // modules, since `notificationService` is injected as an optional side-effect dep into several
@@ -303,6 +334,8 @@ export function createApp(): Express {
         tokenService,
         refreshTokenRepository,
         auditLogger,
+        twoFactorChallengeRepository,
+        otpSender,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       refreshTokenUseCase: new RefreshTokenUseCase({
@@ -314,6 +347,16 @@ export function createApp(): Express {
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
       getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),
+      listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
+      revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
+      verifyLoginOtpUseCase: new VerifyLoginOtpUseCase({
+        userRepository,
+        tokenService,
+        refreshTokenRepository,
+        auditLogger,
+        twoFactorChallengeRepository,
+        refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
+      }),
     },
     tokenService,
   );
@@ -327,6 +370,9 @@ export function createApp(): Express {
       updateUserUseCase: new UpdateUserUseCase({ userRepository, passwordHasher, auditLogger }),
       updateOwnProfileUseCase: new UpdateOwnProfileUseCase({ userRepository }),
       changeOwnPasswordUseCase: new ChangeOwnPasswordUseCase({ userRepository, passwordHasher, auditLogger }),
+      requestTwoFactorSetupUseCase: new RequestTwoFactorSetupUseCase({ userRepository, twoFactorChallengeRepository, otpSender }),
+      confirmTwoFactorSetupUseCase: new ConfirmTwoFactorSetupUseCase({ userRepository, twoFactorChallengeRepository }),
+      disableTwoFactorUseCase: new DisableTwoFactorUseCase({ userRepository, passwordHasher }),
     },
     tokenService,
   );

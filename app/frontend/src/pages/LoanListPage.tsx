@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Plus, Search } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Plus, Search } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ interface LoanRow {
   principalAmount: number;
   collectionsBalance: number;
   createdAt: string;
+  legacyNonReconcilingClosedBalance: boolean;
 }
 
 function getSortValue(loan: LoanRow, key: string): string | number | Date | null | undefined {
@@ -223,6 +224,7 @@ export function LoanListPage() {
         principalAmount: Number.parseFloat(l.principalAmount) || 0,
         collectionsBalance: Number.parseFloat(l.collectionsBalance) || 0,
         createdAt: l.createdAt,
+        legacyNonReconcilingClosedBalance: l.legacyNonReconcilingClosedBalance,
       };
     });
   }, [loans, borrowerById, productsQuery.data]);
@@ -348,7 +350,17 @@ export function LoanListPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
+                    <div className="flex items-center gap-1.5">
+                      <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
+                      {/* ADR-007 §4 (backfilled 2026-07-23) - flags one of the 79 legacy CLOSED
+                          loans whose migrated balance doesn't sum to zero; full explanation on the
+                          loan's own detail page. */}
+                      {loan.legacyNonReconcilingClosedBalance && (
+                        <span title="Legacy migration flag (ADR-007 §4): balance doesn't sum to ₱0.00 despite being Closed - needs manual accounting review">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">{formatPeso(loan.principalAmount)}</TableCell>
                   <TableCell className="text-right">

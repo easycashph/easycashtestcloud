@@ -8,6 +8,7 @@ const claims: AccessTokenClaims = {
   roles: ['CRM'],
   branchId: 'branch-1',
   jti: 'jti-1',
+  sid: 'session-1',
 };
 
 describe('JwtTokenService', () => {

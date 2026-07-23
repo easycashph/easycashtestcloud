@@ -6,6 +6,7 @@ import type {
   IssueRefreshTokenInput,
   IssuedRefreshToken,
   RefreshTokenRecord,
+  SessionRecord,
 } from '../application/ports/IRefreshTokenRepository';
 
 /**
@@ -36,6 +37,7 @@ export class PrismaRefreshTokenRepository implements IRefreshTokenRepository {
         tokenHash,
         expiresAt: input.expiresAt,
         createdByIp: input.createdByIp,
+        userAgent: input.userAgent,
       },
     });
 
@@ -46,6 +48,20 @@ export class PrismaRefreshTokenRepository implements IRefreshTokenRepository {
     const tokenHash = hashToken(rawToken);
     const row = await prisma.refreshToken.findUnique({ where: { tokenHash } });
     return row ? toRecord(row) : null;
+  }
+
+  async findById(id: string): Promise<RefreshTokenRecord | null> {
+    const row = await prisma.refreshToken.findUnique({ where: { id } });
+    return row ? toRecord(row) : null;
+  }
+
+  async listActiveByUser(userId: string): Promise<SessionRecord[]> {
+    const rows = await prisma.refreshToken.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { id: true, createdAt: true, createdByIp: true, userAgent: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows;
   }
 
   async revoke(id: string): Promise<boolean> {
@@ -108,6 +124,7 @@ export class PrismaRefreshTokenRepository implements IRefreshTokenRepository {
           tokenHash,
           expiresAt: newToken.expiresAt,
           createdByIp: newToken.createdByIp,
+          userAgent: newToken.userAgent,
         },
       });
 

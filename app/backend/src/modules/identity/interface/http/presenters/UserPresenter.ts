@@ -16,6 +16,8 @@ export interface UserResponse {
   contactNumber: string | null;
   address: string | null;
   birthday: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorChannel: 'EMAIL' | 'SMS' | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +40,8 @@ export function presentUser(record: UserRecord): UserResponse {
     contactNumber: record.contactNumber,
     address: record.address,
     birthday: record.birthday ? record.birthday.toISOString() : null,
+    twoFactorEnabled: record.twoFactorEnabled,
+    twoFactorChannel: record.twoFactorChannel,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };

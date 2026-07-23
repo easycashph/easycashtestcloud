@@ -219,6 +219,14 @@ model User {
   address       String?
   birthday      DateTime?
 
+  /// Settings > Security > Two-Factor Authentication (2026-07-22, user request). `twoFactorChannel`
+  /// is null until `twoFactorEnabled` is first turned on (ConfirmTwoFactorSetupUseCase sets both
+  /// together) - "EMAIL" or "SMS", never both at once, matching the picker in Settings. Defaults to
+  /// disabled: 2FA changes login behavior app-wide, so it must be an explicit per-user opt-in, not
+  /// a silent migration-time flip that could lock anyone out.
+  twoFactorEnabled Boolean @default(false)
+  twoFactorChannel String?
+
   /// Internal employee/company ID (HR identifier) - distinct from `id` (the DB primary key) and
   /// `legacyId` (the migrated-system's own ID). Optional - existing migrated/seeded staff don't
   /// have one recorded yet.
@@ -237,6 +245,7 @@ model User {
 
   roles                         UserRole[]
   refreshTokens                 RefreshToken[]
+  twoFactorChallenges           TwoFactorChallenge[]
   auditLogs                     AuditLog[]
   profileActivityLogs           ProfileActivityLog[]          @relation("ProfileActivityLogUser")
   borrowersAsLoanOfficer        Borrower[]                    @relation("BorrowerLoanOfficer")
@@ -355,9 +364,38 @@ model RefreshToken {
   expiresAt   DateTime
   revokedAt   DateTime?
   createdByIp String?
+  /// Settings > Security > Active Sessions (2026-07-21) - captured once at issuance (login) and
+  /// carried forward on every rotation (refresh), never re-parsed from a later request. Each
+  /// non-revoked, non-expired row IS effectively one logged-in device's "session" - rotation
+  /// replaces a device's row in place rather than creating parallel rows for it.
+  userAgent   String?
   createdAt   DateTime  @default(now())
 
   @@map("refresh_tokens")
+}
+
+/// Settings > Security > Two-Factor Authentication (2026-07-22, user request) - a short-lived OTP
+/// challenge, for either enabling 2FA (`purpose: "ENABLE"`, RequestTwoFactorSetupUseCase /
+/// ConfirmTwoFactorSetupUseCase) or completing a 2FA-gated login (`purpose: "LOGIN"`, LoginUseCase
+/// / VerifyLoginOtpUseCase). One row per attempt to send a code - never reused across purposes or
+/// across a retry, so an old challenge can't be replayed once a fresh one has been issued.
+model TwoFactorChallenge {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose    String
+  channel    String
+  /// HMAC-SHA256(code, JWT_REFRESH_SECRET) - same keyed-hash approach as RefreshToken.tokenHash,
+  /// not bcrypt: this is compared at most a handful of times (rate-limited by `attempts` below)
+  /// against a 6-digit, 5-minute-lived code, so bcrypt's deliberate slowness buys nothing here.
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@map("two_factor_challenges")
 }
 
 // ----------------------------------------------------------------------------
@@ -898,6 +936,16 @@ model LoanAccount {
   /// ActivateLoanUseCase/ProcessPaymentUseCase, which always populate real balances.
   legacyBalanceDataMissing Boolean @default(false)
 
+  /// ADR-007 §4 (2026-07-08 decision, "Option A"): true for exactly the 79 legacy `CLOSED` loans
+  /// whose migrated balance columns (principal+interest+fees+penalty) don't sum to zero, despite
+  /// being marked fully settled - migrated as-is per that decision (never fabricated a corrected
+  /// figure), flagged here so accounting can manually review each one individually. Backfilled
+  /// once by scripts/flag-non-reconciling-closed-loans.ts (2026-07-23) - never set for a loan
+  /// created going forward through this system's own use cases, same posture as
+  /// legacyBalanceDataMissing above (mutually exclusive: that flag is for accounts with NO balance
+  /// snapshot at all, this one is for accounts with a present-but-non-zero balance on a closed loan).
+  legacyNonReconcilingClosedBalance Boolean @default(false)
+
   /// 2026-07-11 (Create Loan Account, origination fees): one-time deductions taken at
   /// disbursement — distinct from feesBalance/feesPaid/feesDue above, which track recurring
   /// per-installment fees. Staff-entered amounts, not auto-computed from a fixed formula, per
@@ -1017,6 +1065,37 @@ model LoanTransaction {
   @@index([postedByUserId])
   @@index([branchId])
   @@map("loan_transactions")
+}
+
+/// CP12 follow-up (2026-07-23, user request): permanent record of the 244,242 legacy
+/// `loan_transactions` rows (46.5% of the 524,724-row legacy ledger) whose `parent_account_key`
+/// matches no row in the legacy `loan_accounts` export - confirmed via scripts/
+/// analyze-orphaned-transactions.ts to be a genuine legacy data gap (the referenced accounts don't
+/// exist anywhere in the legacy dump, not merely excluded by migration scope - see
+/// docs/Architecture/CP12-legacy-migration-report.md's "Known gaps" section). These can never be
+/// linked to a `LoanAccount` (there is no account to link to), so they live in their own table
+/// instead of `LoanTransaction` - imported once by scripts/export-orphaned-transactions.ts so the
+/// raw data survives even though the legacy `legacy/mongodb/` dump itself is gitignored and was
+/// briefly lost once already before this table existed.
+model LegacyOrphanedTransaction {
+  id                String    @id @default(uuid())
+  /// The legacy transaction's own `uid`/`_id` - unique per source row, used as the idempotency key
+  /// for re-running the export script.
+  legacyTransactionId String  @unique
+  /// The legacy `parent_account_key` this transaction pointed to - confirmed to match no
+  /// `LoanAccount.legacyId` and no row in the legacy loan_accounts export at all.
+  parentAccountKey  String
+  legacyType        String?
+  amount            Decimal?  @db.Decimal(14, 2)
+  entryDate         DateTime?
+  comment           String?
+  /// The full original BSON document, converted to JSON - nothing explicitly mapped above is ever
+  /// the only copy of a field; anything not surfaced as its own column is still recoverable here.
+  rawDocument       Json
+  importedAt        DateTime  @default(now())
+
+  @@index([parentAccountKey])
+  @@map("legacy_orphaned_transactions")
 }
 
 /// REPAY-1..4. Note: legacy tax_* / organization-commission / funders-interest

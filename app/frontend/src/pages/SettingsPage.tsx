@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, KeyRound, LayoutGrid, Moon, Palette, RotateCcw, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, Check, ChevronDown, ChevronUp, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,9 +24,9 @@ import { useRole } from '@/lib/roleContext';
 import { useLanguage } from '@/lib/languageContext';
 import type { Language } from '@/lib/translations';
 import { apiClient, ApiError } from '@/lib/apiClient';
-import type { AuthenticatedUserView } from '@/lib/authTypes';
+import type { AuthenticatedUserView, LoginActivityView, SessionView } from '@/lib/authTypes';
 import type { UpdateOwnProfileRequest } from '@/lib/userApiTypes';
-import { cn } from '@/lib/utils';
+import { cn, describeUserAgent, formatDateTime } from '@/lib/utils';
 
 /** Cross-referenced against `app/backend/src/modules/identity/domain/PasswordPolicy.ts`'s real
  * `MIN_LENGTH` so the two don't silently drift. */
@@ -329,7 +329,355 @@ function SecurityTab() {
           </form>
         </CardContent>
       </Card>
+
+      <TwoFactorAuthCard />
+      <SessionsCard />
+      <LoginActivityCard />
     </div>
+  );
+}
+
+/**
+ * Settings > Security > Two-Factor Authentication (2026-07-22 user request). Two states:
+ *  - Disabled (default - CLAUDE.md/security posture: an opt-in, never silently turned on): pick a
+ *    channel, send a code, confirm it - only on a CORRECT confirmation does the backend actually
+ *    flip `twoFactorEnabled` (ConfirmTwoFactorSetupUseCase), so a wrong number/inbox can never
+ *    leave the account in a broken "2FA on, code never arrives" state.
+ *  - Enabled: shows which channel, with a Disable control that only needs the current password
+ *    (no OTP) - the account's own "get me unstuck" escape hatch if the enabled channel ever stops
+ *    being reachable.
+ */
+function TwoFactorAuthCard() {
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: () => apiClient.get<AuthenticatedUserView>('/auth/me'),
+  });
+
+  const [channel, setChannel] = React.useState<'EMAIL' | 'SMS'>('EMAIL');
+  const [challengeId, setChallengeId] = React.useState<string | null>(null);
+  const [code, setCode] = React.useState('');
+  const [disablePassword, setDisablePassword] = React.useState('');
+  const [showDisableForm, setShowDisableForm] = React.useState(false);
+  const [message, setMessage] = React.useState<{ tone: 'error' | 'success'; text: string } | null>(null);
+
+  const refetchMe = () => queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+
+  const requestSetupMutation = useMutation({
+    mutationFn: () => apiClient.post<{ challengeId: string }>('/users/me/two-factor/setup', { channel }),
+    onSuccess: (result) => {
+      setChallengeId(result.challengeId);
+      setMessage({ tone: 'success', text: `Code sent via ${channel === 'EMAIL' ? 'email' : 'SMS'}.` });
+    },
+    onError: (error: unknown) => setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not send a code.' }),
+  });
+
+  const confirmSetupMutation = useMutation({
+    mutationFn: () => apiClient.post('/users/me/two-factor/confirm', { challengeId, code: code.trim() }),
+    onSuccess: () => {
+      setChallengeId(null);
+      setCode('');
+      setMessage({ tone: 'success', text: 'Two-factor authentication is now enabled.' });
+      refetchMe();
+    },
+    onError: (error: unknown) => setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not confirm that code.' }),
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: () => apiClient.post('/users/me/two-factor/disable', { currentPassword: disablePassword }),
+    onSuccess: () => {
+      setShowDisableForm(false);
+      setDisablePassword('');
+      setMessage({ tone: 'success', text: 'Two-factor authentication is now disabled.' });
+      refetchMe();
+    },
+    onError: (error: unknown) =>
+      setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Could not disable two-factor authentication.' }),
+  });
+
+  const me = meQuery.data;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <ShieldQuestion className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Two-Factor Authentication</CardTitle>
+          <CardDescription>Require a one-time code, sent by email or SMS, on top of your password when signing in.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {meQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : me?.twoFactorEnabled ? (
+          <>
+            <div className="flex items-center justify-between rounded-md border p-4">
+              <div>
+                <p className="text-sm font-medium">Enabled</p>
+                <p className="text-xs text-muted-foreground">
+                  Codes are sent via {me.twoFactorChannel === 'EMAIL' ? 'email' : 'SMS'} on every sign-in.
+                </p>
+              </div>
+              <Badge variant="success">On</Badge>
+            </div>
+
+            {showDisableForm ? (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="disable-2fa-password">Current Password</Label>
+                  <Input
+                    id="disable-2fa-password"
+                    type="password"
+                    value={disablePassword}
+                    onChange={(e) => setDisablePassword(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={!disablePassword || disableMutation.isPending}
+                    onClick={() => disableMutation.mutate()}
+                  >
+                    {disableMutation.isPending ? 'Disabling…' : 'Disable 2FA'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDisableForm(false);
+                      setDisablePassword('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowDisableForm(true)}>
+                Disable
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-md border p-4">
+              <div>
+                <p className="text-sm font-medium">Disabled</p>
+                <p className="text-xs text-muted-foreground">Your account only requires a password to sign in.</p>
+              </div>
+              <Badge variant="outline">Off</Badge>
+            </div>
+
+            {!challengeId ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1.5">
+                  <Label>Send code via</Label>
+                  <Select value={channel} onValueChange={(v) => setChannel(v as 'EMAIL' | 'SMS')}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EMAIL">Email</SelectItem>
+                      <SelectItem value="SMS">SMS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="button" size="sm" disabled={requestSetupMutation.isPending} onClick={() => requestSetupMutation.mutate()}>
+                  {requestSetupMutation.isPending ? 'Sending…' : 'Send Code'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm-2fa-code">Verification Code</Label>
+                  <Input id="confirm-2fa-code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!code || confirmSetupMutation.isPending}
+                    onClick={() => confirmSetupMutation.mutate()}
+                  >
+                    {confirmSetupMutation.isPending ? 'Confirming…' : 'Confirm & Enable'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setChallengeId(null);
+                      setCode('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {message && (
+          <p className={cn('text-xs', message.tone === 'error' ? 'text-destructive' : 'text-success')}>{message.text}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Settings > Security > Active Sessions (2026-07-21 user request) - every device currently logged
+ * into this account, backed by the non-revoked, non-expired `RefreshToken` rows for this user
+ * (`GET /auth/sessions`). "This device" (the row matching the access token's own `sid` claim) has
+ * no Revoke button - ending your own current session here would leave a dead refresh cookie behind
+ * (the button that actually does that safely is the normal Log Out in the account menu, which also
+ * clears the cookie). Revoking any other row signs that device out the next time it tries to
+ * refresh its access token - not instantly, since access tokens are stateless JWTs valid until
+ * they naturally expire.
+ */
+function SessionsCard() {
+  const queryClient = useQueryClient();
+  const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [revokingAll, setRevokingAll] = React.useState(false);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['auth-sessions'],
+    queryFn: () => apiClient.get<{ items: SessionView[] }>('/auth/sessions'),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (sessionId: string) => apiClient.delete(`/auth/sessions/${sessionId}`),
+    onMutate: (sessionId) => setRevokingId(sessionId),
+    onSettled: () => {
+      setRevokingId(null);
+      queryClient.invalidateQueries({ queryKey: ['auth-sessions'] });
+    },
+  });
+
+  const sessions = sessionsQuery.data?.items ?? [];
+  const otherSessions = sessions.filter((s) => !s.isCurrent);
+
+  const revokeAllOthers = async () => {
+    setRevokingAll(true);
+    try {
+      await Promise.all(otherSessions.map((s) => apiClient.delete(`/auth/sessions/${s.id}`)));
+    } finally {
+      setRevokingAll(false);
+      queryClient.invalidateQueries({ queryKey: ['auth-sessions'] });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div className="flex flex-row items-center gap-2">
+          <Laptop className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Active Sessions</CardTitle>
+            <CardDescription>Devices currently signed in to your account.</CardDescription>
+          </div>
+        </div>
+        {otherSessions.length > 0 && (
+          <Button type="button" variant="outline" size="sm" disabled={revokingAll} onClick={revokeAllOthers}>
+            <LogOut className="mr-1.5 h-3.5 w-3.5" /> {revokingAll ? 'Signing out…' : 'Sign out all other devices'}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {sessionsQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No active sessions found.</p>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {sessions.map((session) => (
+              <div key={session.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{describeUserAgent(session.userAgent)}</span>
+                    {session.isCurrent && <Badge variant="outline">This device</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {session.ipAddress ?? 'Unknown IP'} · Signed in {formatDateTime(session.createdAt)}
+                  </p>
+                </div>
+                {!session.isCurrent && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={revokeMutation.isPending && revokingId === session.id}
+                    onClick={() => revokeMutation.mutate(session.id)}
+                  >
+                    {revokeMutation.isPending && revokingId === session.id ? 'Signing out…' : 'Sign out'}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Settings > Security > Recent Sign-in Activity (2026-07-21 user request) - the last 20
+ * LOGIN_SUCCESS/LOGIN_FAILED events for this account, self-scoped server-side
+ * (`GET /audit-logs/my-login-activity` - never a userId param the caller could tamper with). A
+ * run of LOGIN_FAILED entries the user doesn't recognize is the "someone's guessing my password"
+ * signal this card exists to surface.
+ */
+function LoginActivityCard() {
+  const activityQuery = useQuery({
+    queryKey: ['auth-login-activity'],
+    queryFn: () => apiClient.get<{ items: LoginActivityView[] }>('/audit-logs/my-login-activity?limit=20'),
+  });
+
+  const events = activityQuery.data?.items ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <History className="h-4 w-4 text-primary" />
+        <div>
+          <CardTitle>Recent Sign-in Activity</CardTitle>
+          <CardDescription>Your last 20 sign-in attempts, successful or not.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {activityQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sign-in activity on record.</p>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {events.map((event) => (
+              <div key={event.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {event.action === 'LOGIN_SUCCESS' ? (
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-success" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{event.action === 'LOGIN_SUCCESS' ? 'Signed in' : 'Failed sign-in attempt'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {describeUserAgent(event.userAgent)} · {event.ipAddress ?? 'Unknown IP'}
+                    </p>
+                  </div>
+                </div>
+                <p className="shrink-0 text-xs text-muted-foreground">{formatDateTime(event.createdAt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

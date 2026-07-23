@@ -1460,6 +1460,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </div>
       )}
 
+      {/* ADR-007 §4 (2026-07-08 decision, backfilled 2026-07-23) - one of the 79 legacy CLOSED
+          loans whose migrated balance doesn't sum to zero despite being marked fully settled.
+          Migrated as-is per that decision (no figure here was corrected or invented); this banner
+          is the actual "flag for manual accounting review" the decision called for, since nothing
+          surfaced it in the UI until now. */}
+      {loan.legacyNonReconcilingClosedBalance && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Legacy migration flag (ADR-007 §4): this loan is marked Closed, but its migrated balance does not sum to ₱0.00. Migrated
+            as-is from the legacy system without correction - needs manual accounting review before being treated as fully settled.
+          </span>
+        </div>
+      )}
+
       <RiskAssessmentCard loanId={loan.id} />
 
       <Card>

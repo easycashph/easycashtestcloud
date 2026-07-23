@@ -101,6 +101,13 @@ export interface LoanAccountProps {
    */
   legacyBalanceDataMissing: boolean;
   /**
+   * ADR-007 §4 (2026-07-08 decision): true for one of the 79 legacy `CLOSED` loans whose migrated
+   * balance columns don't sum to zero despite being marked fully settled — migrated as-is, flagged
+   * for manual accounting review rather than a fabricated correction. Same read-only,
+   * backfill-script-only posture as `legacyBalanceDataMissing` above.
+   */
+  legacyNonReconcilingClosedBalance: boolean;
+  /**
    * 2026-07-16: the LoanApplication this account was actually created from, if any — see the
    * Prisma schema field's own doc comment for why this replaced a "borrower's most recent loan
    * account" heuristic in `loanApplicationController.buildLinkage()`. Undefined for a loan
@@ -229,6 +236,7 @@ export class LoanAccount {
         firstRepaymentDate: input.firstRepaymentDate,
         anticipatedDisbursementDate: input.anticipatedDisbursementDate,
         legacyBalanceDataMissing: false,
+        legacyNonReconcilingClosedBalance: false,
         sourceApplicationId: input.sourceApplicationId,
         originationFees,
         netProceeds,
@@ -372,6 +380,10 @@ export class LoanAccount {
 
   get legacyBalanceDataMissing(): boolean {
     return this.props.legacyBalanceDataMissing;
+  }
+
+  get legacyNonReconcilingClosedBalance(): boolean {
+    return this.props.legacyNonReconcilingClosedBalance;
   }
 
   get originationFees(): OriginationFees {

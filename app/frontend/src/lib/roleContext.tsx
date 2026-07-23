@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { apiClient, ApiError, setAccessToken, setOnSessionExpired } from './apiClient';
-import type { AuthenticatedUserView, LoginResponse, RefreshResponse } from './authTypes';
+import type { AuthenticatedUserView, LoginResponse, LoginSuccessResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
 import { useDashboardLayout } from '@/components/dashboard-layout-provider';
 import type { LmsRole } from './staticConfig';
@@ -123,9 +123,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = React.useCallback(
-    async (email: string, password: string) => {
-      const result = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+  const applySuccessfulLogin = React.useCallback(
+    (result: LoginSuccessResponse) => {
       loggedInRef.current = true;
       setAccessToken(result.accessToken);
       setUser(result.user);
@@ -134,6 +133,27 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       setStatus('authenticated');
     },
     [loadPreferenceFor, loadDashboardLayoutFor],
+  );
+
+  const login = React.useCallback(
+    async (email: string, password: string): Promise<LoginResponse> => {
+      const result = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+      // 2026-07-22 (Two-Factor Authentication) - LoginPage handles the `twoFactorRequired` branch
+      // itself (shows the OTP entry step); only a genuine success is applied to session state here.
+      if (!('twoFactorRequired' in result)) {
+        applySuccessfulLogin(result);
+      }
+      return result;
+    },
+    [applySuccessfulLogin],
+  );
+
+  const verifyLoginOtp = React.useCallback(
+    async (challengeId: string, code: string) => {
+      const result = await apiClient.post<LoginSuccessResponse>('/auth/verify-login-otp', { challengeId, code });
+      applySuccessfulLogin(result);
+    },
+    [applySuccessfulLogin],
   );
 
   const refreshCurrentUser = React.useCallback(async () => {
@@ -179,7 +199,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }
 
   if (status === 'unauthenticated' || !user) {
-    return <LoginPage onLogin={login} />;
+    return <LoginPage onLogin={login} onVerifyOtp={verifyLoginOtp} />;
   }
 
   const currentAccount = toAccount(user);
