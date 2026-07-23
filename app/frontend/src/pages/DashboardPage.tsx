@@ -52,24 +52,6 @@ import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
 
-/**
- * Placeholder pending a business decision on how a real monthly collection target gets set (no
- * target-setting feature exists yet - see docs/SESSION_LOG_2026-07-12.md Addendum 3/4). Only the
- * `target` line below is fabricated; the `actual` line this feeds (`scaledCollectionsVsTarget`)
- * is a real, disclosed-as-estimated figure derived from `GET /dashboard/summary`. Deliberately
- * inlined here (not in a shared "mock data" module) since this is the one remaining placeholder
- * left after 2026-07-12's mock-removal pass - moving it would suggest more sample data exists
- * than actually does.
- */
-const COLLECTIONS_VS_TARGET: { month: string; target: number; actual: number }[] = [
-  { month: 'Feb', target: 1_128_140, actual: 1_057_320 },
-  { month: 'Mar', target: 1_119_870, actual: 993_450 },
-  { month: 'Apr', target: 1_134_220, actual: 1_142_680 },
-  { month: 'May', target: 1_108_960, actual: 1_021_390 },
-  { month: 'Jun', target: 1_126_500, actual: 1_088_710 },
-  { month: 'Jul', target: 1_121_330, actual: 1_004_260 },
-];
-
 /** Loan row shape every portfolio widget below reads - assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
 interface PortfolioLoanRow {
@@ -636,6 +618,23 @@ export function DashboardPage() {
     queryFn: () => apiClient.get<{ items: CollectionReportRow[] }>(`/reports/collections?granularity=DAILY&from=${reportsPreviewFrom}`),
   });
 
+  /** 2026-07-23 (user request): Collections vs. Target - "target" auto-computed as a trailing
+   * 3-month rolling average of this same portfolio's own real monthly collections, replacing the
+   * old hardcoded placeholder numbers (no target-setting feature exists, so this is the business
+   * decision landed on: base it on recent actual performance rather than a manually-entered goal).
+   * Needs 9 months of real MONTHLY collections history to show 6 months of target/actual pairs
+   * (each displayed month's target draws on the 3 real months immediately before it). */
+  const targetHistoryFrom = React.useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 9);
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const monthlyCollectionsHistoryQuery = useQuery({
+    queryKey: ['reports', 'collections', 'MONTHLY', targetHistoryFrom, 'dashboard-target-history'],
+    queryFn: () => apiClient.get<{ items: CollectionReportRow[] }>(`/reports/collections?granularity=MONTHLY&from=${targetHistoryFrom}`),
+  });
+
   // Full portfolio, fetched once and aggregated client-side - same pattern LoanListPage already
   // uses for the borrower/product name join. Every filterable card below (Quality Metrics,
   // Disbursement Trend, Portfolio Breakdown, Portfolio Health, and every drill-down) reacts to
@@ -744,6 +743,17 @@ export function DashboardPage() {
     () => buildRealDisbursementTrend(portfolioFilteredLoans, 6),
     [portfolioFilteredLoans],
   );
+  /** 2026-07-23: real month-over-month disbursement growth (replaces the old hardcoded "+4.8%
+   * sample data"). Reuses the same buildRealDisbursementTrend helper the Disbursement Trend chart
+   * below already calls, on the full portfolio-wide loan set (not scoped to the Portfolio Filter
+   * above) - same "portfolio-wide by design" treatment as Collections This Month. `null` when
+   * there's no prior-month disbursement to compare against (division by zero), matching the
+   * backend's own collectionsThisMonth.trend.changePercent null convention. */
+  const portfolioGrowthPercent = React.useMemo(() => {
+    const [previous, current] = buildRealDisbursementTrend(allPortfolioLoans, 2);
+    if (!previous || !current || previous.disbursed === 0) return null;
+    return Math.round(((current.disbursed - previous.disbursed) / previous.disbursed) * 10000) / 100;
+  }, [allPortfolioLoans]);
   const liveSummary = !isFiltered ? summaryQuery.data : undefined;
   const filteredActiveCount =
     filteredPortfolioHealth.good.count + filteredPortfolioHealth.activeInArrears.count + filteredPortfolioHealth.matured.count;
@@ -780,15 +790,24 @@ export function DashboardPage() {
   );
   const filterRatio = totalPortfolioValue > 0 ? filteredOutstandingTotal / totalPortfolioValue : 1;
   const scaledCollectionsThisMonth = round2Peso(Number(summaryQuery.data?.collectionsThisMonth.amount ?? 0) * filterRatio);
-  const scaledCollectionsVsTarget = React.useMemo(
-    () =>
-      COLLECTIONS_VS_TARGET.map((m) => ({
-        month: m.month,
-        target: round2Peso(m.target * filterRatio),
-        actual: round2Peso(m.actual * filterRatio),
-      })),
-    [filterRatio],
-  );
+  // 2026-07-23: real trailing-3-month-average target vs. real actual, portfolio-wide by design
+  // (same "not affected by the Portfolio Filter" treatment as Collections Forecast below) - see
+  // monthlyCollectionsHistoryQuery's own doc comment.
+  const collectionsVsTarget = React.useMemo(() => {
+    const byPeriod = new Map(
+      (monthlyCollectionsHistoryQuery.data?.items ?? []).map((r) => [r.period, Number(r.amountCollected)]),
+    );
+    const now = new Date();
+    const months = Array.from({ length: 9 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (8 - i), 1);
+      return { month: MONTH_SHORT_NAMES[d.getMonth()]!, period: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` };
+    });
+    return months.slice(3).map((m, i) => {
+      const priorActuals = months.slice(i, i + 3).map((p) => byPeriod.get(p.period) ?? 0);
+      const target = priorActuals.reduce((sum, v) => sum + v, 0) / priorActuals.length;
+      return { month: m.month, target: round2Peso(target), actual: round2Peso(byPeriod.get(m.period) ?? 0) };
+    });
+  }, [monthlyCollectionsHistoryQuery.data]);
 
   const openDelinquentAccounts = () =>
     setDrillDown({
@@ -985,8 +1004,8 @@ export function DashboardPage() {
           portfolioGrowth: (
             <SummaryCard
               title={t('dashboard.stat.portfolioGrowth')}
-              value="+4.8%"
-              hint="Month-over-month disbursement (portfolio-wide) - sample data"
+              value={portfolioGrowthPercent === null ? '—' : `${portfolioGrowthPercent >= 0 ? '+' : ''}${portfolioGrowthPercent.toFixed(1)}%`}
+              hint={portfolioGrowthPercent === null ? 'Not enough disbursement history yet' : 'Month-over-month disbursement, portfolio-wide'}
               icon={TrendingUp}
               compact={compact}
             />
@@ -1096,13 +1115,12 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>{t('dashboard.collectionsVsTarget.title')}</CardTitle>
             <CardDescription>
-              Monthly actual collections against target
-              {isFiltered ? ' · estimated for the selected filter, scaled proportionally to outstanding principal' : ''}
+              Monthly actual collections against a trailing 3-month average target - portfolio-wide, not affected by the Portfolio Filter above
             </CardDescription>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={scaledCollectionsVsTarget}>
+              <LineChart data={collectionsVsTarget}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
