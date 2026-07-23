@@ -636,34 +636,69 @@ const MITIGATION_FIELDS: { key: keyof MitigationDetails; label: string }[] = [
 /** `required: true` on agencyName/position/vessel mirrors the backend's
  * `MissingAgencyVerificationError` gate in TagLoanApplicationPreApprovalUseCase - keep both in
  * sync if that gate's required subset ever changes. */
-const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
+const AGENCY_CORE_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
   { key: 'agencyName', label: 'Agency name', required: true },
-  { key: 'agencyAddress', label: 'Agency address' },
-  { key: 'agencyContactNumbers', label: 'Agency contact number/s' },
-  { key: 'yearsWithAgency', label: 'Years with agency' },
-  { key: 'basicMonthlySalary', label: 'Basic monthly salary' },
   { key: 'position', label: 'Position', required: true },
   { key: 'vessel', label: 'Vessel', required: true },
-  { key: 'contractDuration', label: 'Contract duration' },
-  { key: 'joiningPort', label: 'Joining port' },
-  { key: 'dateOfDeparture', label: 'Date of departure' },
-  { key: 'departureStatus', label: 'Departure details (Ticketed/Booked/For booking/Tentative)' },
-  { key: 'expectedSignOffDate', label: 'Expected date of sign-off' },
-  { key: 'monthlySalary', label: 'Monthly salary' },
-  { key: 'allottee1Name', label: 'Allottee 1 - name' },
-  { key: 'allottee1Bank', label: 'Allottee 1 - bank / branch' },
-  { key: 'allottee1AccountNumber', label: 'Allottee 1 - account number' },
-  { key: 'allottee1Amount', label: 'Allottee 1 - allotment amount' },
-  { key: 'allottee2Name', label: 'Allottee 2 - name (optional)' },
-  { key: 'allottee2Bank', label: 'Allottee 2 - bank / branch' },
-  { key: 'allottee2AccountNumber', label: 'Allottee 2 - account number' },
-  { key: 'allottee2Amount', label: 'Allottee 2 - allotment amount' },
-  { key: 'payrollSchedule', label: 'Payroll / allotment schedule' },
-  { key: 'firstFullAllotmentDate', label: 'First full allotment date' },
-  { key: 'cashAdvance', label: 'Cash advance/s' },
-  { key: 'mannerOfDeduction', label: 'Manner of deduction of CA' },
-  { key: 'sourceName', label: 'Source/s name' },
-  { key: 'sourcePosition', label: 'Position' },
+  { key: 'agencyContactNumbers', label: 'Agency contact number/s' },
+  { key: 'agencyAddress', label: 'Agency address' },
+];
+
+/**
+ * 2026-07-23: everything past the 3 required fields (+ contact/address) used to render as one
+ * flat 27-field grid, all expanded at once whenever the section was opened - felt like "fill in
+ * everything" even though only 3 fields ever block Pre Approval. Regrouped into collapsible
+ * sections (rendered below AGENCY_CORE_FIELDS) so only a handful of fields show by default; no
+ * field was renamed, removed, or made required/optional differently than before.
+ */
+const AGENCY_FIELD_GROUPS: { key: string; label: string; fields: { key: keyof AgencyVerificationDetails; label: string }[] }[] = [
+  {
+    key: 'employment',
+    label: 'Employment and contract',
+    fields: [
+      { key: 'yearsWithAgency', label: 'Years with agency' },
+      { key: 'basicMonthlySalary', label: 'Basic monthly salary' },
+      { key: 'contractDuration', label: 'Contract duration' },
+      { key: 'joiningPort', label: 'Joining port' },
+      { key: 'dateOfDeparture', label: 'Date of departure' },
+      { key: 'departureStatus', label: 'Departure details (Ticketed/Booked/For booking/Tentative)' },
+      { key: 'expectedSignOffDate', label: 'Expected date of sign-off' },
+      { key: 'monthlySalary', label: 'Monthly salary' },
+    ],
+  },
+  {
+    key: 'allotment',
+    label: 'Allotment and payroll',
+    fields: [
+      { key: 'allottee1Name', label: 'Allottee 1 - name' },
+      { key: 'allottee1Bank', label: 'Allottee 1 - bank / branch' },
+      { key: 'allottee1AccountNumber', label: 'Allottee 1 - account number' },
+      { key: 'allottee1Amount', label: 'Allottee 1 - allotment amount' },
+      { key: 'allottee2Name', label: 'Allottee 2 - name (optional)' },
+      { key: 'allottee2Bank', label: 'Allottee 2 - bank / branch' },
+      { key: 'allottee2AccountNumber', label: 'Allottee 2 - account number' },
+      { key: 'allottee2Amount', label: 'Allottee 2 - allotment amount' },
+      { key: 'payrollSchedule', label: 'Payroll / allotment schedule' },
+      { key: 'firstFullAllotmentDate', label: 'First full allotment date' },
+    ],
+  },
+  {
+    key: 'cashAdvance',
+    label: 'Cash advance and source',
+    fields: [
+      { key: 'cashAdvance', label: 'Cash advance/s' },
+      { key: 'mannerOfDeduction', label: 'Manner of deduction of CA' },
+      { key: 'sourceName', label: 'Source/s name' },
+      { key: 'sourcePosition', label: 'Position' },
+    ],
+  },
+];
+
+/** Flat view of every agency-verification field (core + every group) - used only for the
+ * "does this application already have any agency data on file" check below. */
+const AGENCY_VERIFICATION_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
+  ...AGENCY_CORE_FIELDS,
+  ...AGENCY_FIELD_GROUPS.flatMap((g) => g.fields),
 ];
 
 /**
@@ -874,6 +909,12 @@ const UnderwritingCard = React.forwardRef<
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
   const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
+  /** 2026-07-23: per-group collapse state for AGENCY_FIELD_GROUPS - each group starts open only if
+   * it already has data on file (e.g. loaded from an existing review report), collapsed otherwise. */
+  const [openAgencyGroups, setOpenAgencyGroups] = React.useState<Record<string, boolean>>(() =>
+    Object.fromEntries(AGENCY_FIELD_GROUPS.map((g) => [g.key, g.fields.some((f) => agencyVerification[f.key]?.trim())])),
+  );
+  const toggleAgencyGroup = (key: string) => setOpenAgencyGroups((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const setDocumentStatus = (doc: string, status: DocumentVerificationStatus, reason?: string) => {
     setDocumentVerifications((prev) => ({ ...prev, [doc]: { status, reason } }));
@@ -1132,26 +1173,65 @@ const UnderwritingCard = React.forwardRef<
             </button>
           )}
           {agencyOpen && (
-            <div className="grid gap-3 pt-1 sm:grid-cols-2">
-              {AGENCY_VERIFICATION_FIELDS.map((f) => (
-                <div key={f.key} className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">
-                    {f.label}
-                    {f.required && isSeafarerLoan && <span className="ml-0.5 text-destructive">*</span>}
-                  </Label>
-                  {canEditReview ? (
-                    <Input
-                      value={agencyVerification[f.key] ?? ''}
-                      onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                      className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
-                    />
-                  ) : (
-                    <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
+            <div className="space-y-1 pt-1">
+              <div className="grid gap-3 border-b pb-3 sm:grid-cols-2">
+                {AGENCY_CORE_FIELDS.map((f) => (
+                  <div key={f.key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      {f.label}
+                      {f.required && isSeafarerLoan && <span className="ml-0.5 text-destructive">*</span>}
+                    </Label>
+                    {canEditReview ? (
+                      <Input
+                        value={agencyVerification[f.key] ?? ''}
+                        onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        className={f.required && isSeafarerLoan && !agencyVerification[f.key]?.trim() ? 'border-destructive/50' : undefined}
+                      />
+                    ) : (
+                      <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {/* 2026-07-23: optional detail fields, grouped and collapsed by default so the
+               * section doesn't read as "26 required-looking boxes" when only the 3 core fields
+               * above ever gate Pre Approval - see AGENCY_FIELD_GROUPS' own doc comment. */}
+              {AGENCY_FIELD_GROUPS.map((group) => (
+                <div key={group.key} className="border-b py-1 last:border-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleAgencyGroup(group.key)}
+                    className="flex w-full items-center gap-1.5 py-1.5 text-xs font-medium"
+                  >
+                    {openAgencyGroups[group.key] ? (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    )}
+                    {group.label}
+                    <span className="ml-auto text-[10px] font-normal text-muted-foreground">{group.fields.length} fields</span>
+                  </button>
+                  {openAgencyGroups[group.key] && (
+                    <div className="grid gap-3 pb-2 sm:grid-cols-2">
+                      {group.fields.map((f) => (
+                        <div key={f.key} className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                          {canEditReview ? (
+                            <Input
+                              value={agencyVerification[f.key] ?? ''}
+                              onChange={(e) => setAgencyVerification((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                            />
+                          ) : (
+                            <p className="text-sm">{agencyVerification[f.key] || '-'}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               ))}
               {isSeafarerLoan && canEditReview && (
-                <p className="text-xs text-muted-foreground sm:col-span-2">
+                <p className="pt-2 text-xs text-muted-foreground">
                   <span className="text-destructive">*</span> Required before this application can be tagged Pre Approval
                 </p>
               )}
