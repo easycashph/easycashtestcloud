@@ -37,14 +37,27 @@ export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);
 }
 
+/** 2026-07-24 bug fix: `Intl.DateTimeFormat().format()` throws `RangeError: Invalid time value` on
+ * an Invalid Date - e.g. `new Date('')`, which is exactly what a controlled `<input type="date">`
+ * reports mid-keystroke while manually typing a date (browsers emit an empty-string `onChange`
+ * until every digit is filled in). That crashed the whole page's render, caught only by the
+ * top-level error boundary ("Something went wrong loading this page") - a jarring failure for a
+ * value that's about to become valid the moment typing finishes. Both formatters return '—'
+ * instead of throwing whenever the input is empty/unparseable. */
+function isValidDate(date: Date): boolean {
+  return !Number.isNaN(date.getTime());
+}
+
 export function formatDate(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
+  if (!isValidDate(date)) return '—';
   return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
 /** Date AND time - used where the exact moment matters, e.g. Activity Logs (every entry must be timestamped, not just dated). */
 export function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
+  if (!isValidDate(date)) return '—';
   return new Intl.DateTimeFormat('en-PH', {
     year: 'numeric',
     month: 'short',

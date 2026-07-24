@@ -744,7 +744,7 @@ export function PaymentRecordingForm({
 
                 <Button
                   className="w-full"
-                  disabled={!selectedLoan || paymentAmount <= 0 || (allocationMode === 'MANUAL' && manualMismatch)}
+                  disabled={!selectedLoan || paymentAmount <= 0 || !paidAt || (allocationMode === 'MANUAL' && manualMismatch)}
                   onClick={openConfirm}
                 >
                   Submit Payment
