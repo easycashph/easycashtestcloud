@@ -29,7 +29,8 @@ export type LoanAccountStatus =
   | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED'
-  | 'CLOSED_RESTRUCTURED';
+  | 'CLOSED_RESTRUCTURED'
+  | 'CLOSED_ADJUSTED';
 
 /** 2026-07-24 (Loan Restructure feature) - mirrors `LoanRestructurePresenter`'s output. Fetched via
  * `GET /loan-accounts/:id/restructure`, null unless this loan account was either side of one. */
@@ -44,6 +45,22 @@ export interface LoanRestructureView {
   reason: string | null;
   restructuredByUserId: string;
   restructuredByName: string | null;
+  createdAt: string;
+}
+
+/** 2026-07-24 (Loan Adjustment feature) - mirrors `LoanAdjustmentPresenter`'s output. Fetched via
+ * `GET /loan-accounts/:id/adjust`, null unless this loan account was either side of one. */
+export interface LoanAdjustmentView {
+  id: string;
+  oldLoanAccountId: string;
+  oldLoanCode: string;
+  newLoanAccountId: string;
+  newLoanCode: string;
+  previousFirstRepaymentDate: string;
+  newFirstRepaymentDate: string;
+  reason: string | null;
+  adjustedByUserId: string;
+  adjustedByName: string | null;
   createdAt: string;
 }
 

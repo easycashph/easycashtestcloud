@@ -33,6 +33,7 @@ import type {
   LoanAccount,
   LoanDocumentListItem,
   LoanRestructureView,
+  LoanAdjustmentView,
   LoanTransaction,
   PaginatedResponse,
   PaymentAllocationDetail,
@@ -804,6 +805,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [restructureInstallmentCount, setRestructureInstallmentCount] = React.useState('12');
   const [restructureFirstRepaymentDate, setRestructureFirstRepaymentDate] = React.useState('');
   const [restructureReason, setRestructureReason] = React.useState('');
+  const adjustIdempotencyKeyRef = React.useRef<string | null>(null);
+  // 2026-07-24 (Loan Adjustment feature, user-confirmed): same MIS/Accounting-only gate as
+  // Restructure. Unlike Restructure, term is NOT staff-entered (copied verbatim from this loan) -
+  // only the first repayment date changes.
+  const [adjustOpen, setAdjustOpen] = React.useState(false);
+  const [adjustFirstRepaymentDate, setAdjustFirstRepaymentDate] = React.useState('');
+  const [adjustReason, setAdjustReason] = React.useState('');
   // 2026-07-16 (Edit Loan Account, user request): "may kailangan baguhin katulad ng term or
   // amount, dapat pwede ko ito i-edit hangga't before ma-approve" — same ORIGINATION_ROLES gate
   // as "Create Loan Account"/"Approve Loan" (canCreateLoanAccount), only while PENDING_APPROVAL.
@@ -1140,6 +1148,29 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const adjustMutation = useMutation({
+    mutationFn: () => {
+      if (!adjustIdempotencyKeyRef.current) adjustIdempotencyKeyRef.current = generateUuid();
+      return apiClient.post<{ oldLoanAccount: LoanAccount; newLoanAccount: LoanAccount }>(
+        `/loan-accounts/${loanId}/adjust`,
+        {
+          firstRepaymentDate: adjustFirstRepaymentDate,
+          reason: adjustReason.trim() || undefined,
+        },
+        { 'Idempotency-Key': adjustIdempotencyKeyRef.current },
+      );
+    },
+    onSuccess: ({ newLoanAccount }) => {
+      adjustIdempotencyKeyRef.current = null;
+      setAdjustOpen(false);
+      setAdjustReason('');
+      void queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+      // The current loan is now CLOSED_ADJUSTED - jump straight to the new one it produced.
+      navigate(`/loans/${newLoanAccount.id}`);
+    },
+    onError: onActionError,
+  });
+
   const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
@@ -1172,6 +1203,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setRestructureReason('');
     setRestructureOpen(true);
   };
+  const openAdjustConfirm = () => {
+    setActionError(null);
+    // Pre-fills to one month from today (the standard amortization first-due-date convention) -
+    // editable, per ADR-045's "explicit input, never silently derived" stance.
+    const oneMonthFromNow = new Date();
+    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+    setAdjustFirstRepaymentDate(oneMonthFromNow.toISOString().slice(0, 10));
+    setAdjustReason('');
+    setAdjustOpen(true);
+  };
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
     else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
@@ -1196,6 +1237,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const restructureQuery = useQuery({
     queryKey: ['loan-restructure', loanId],
     queryFn: () => apiClient.get<LoanRestructureView | null>(`/loan-accounts/${loanId}/restructure`),
+  });
+
+  // 2026-07-24 (Loan Adjustment feature): null unless this loan account was either side of an
+  // adjustment - gates the "Loan Adjustment" button (already-old-side -> disabled, "isang beses
+  // lang") and drives the banner showing which loan it links to.
+  const adjustmentQuery = useQuery({
+    queryKey: ['loan-adjustment', loanId],
+    queryFn: () => apiClient.get<LoanAdjustmentView | null>(`/loan-accounts/${loanId}/adjust`),
   });
 
   // 2026-07-24 (user-confirmed): once a loan matures (last installment's due date passed) with an
@@ -1467,6 +1516,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     restructureOpen && restructureFirstRepaymentDate
       ? previewLoanSchedule(restructureNewPrincipalNum, num(loan.interestRate), restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
       : null;
+  // 2026-07-24 (Loan Adjustment feature): same client-side preview convention as Restructure -
+  // principal, rate, and term are all copied verbatim from this loan, only the date changes.
+  const adjustPreview =
+    adjustOpen && adjustFirstRepaymentDate
+      ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(adjustFirstRepaymentDate))
+      : null;
   // Every balance column (and the collectionsBalance/accountingBalance getters derived from them)
   // is genuinely 0 before Activation - not because there's no obligation, but because
   // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
@@ -1484,6 +1539,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
   const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
   const canRestructure = canManageInstallments && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
+  // 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
+  // account... kailangan before ng 1st due date lang pwede i Loan Adjust ang account" - ACTIVE
+  // only, zero payments recorded on any installment, and still before the first installment's own
+  // due date. "isang beses lang" - once this loan is the OLD side of an adjustment, never offered
+  // again.
+  const adjustInstallments = installmentsQuery.data?.items ?? [];
+  const hasAnyPayment = adjustInstallments.some((i) => num(i.paid.total) > 0);
+  const firstInstallmentDueDate = adjustInstallments.reduce<Date | null>(
+    (earliest, i) => (earliest === null || new Date(i.dueDate) < earliest ? new Date(i.dueDate) : earliest),
+    null,
+  );
+  const isBeforeFirstDueDate = firstInstallmentDueDate === null || new Date() < firstInstallmentDueDate;
+  const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id;
+  const canAdjust = canManageInstallments && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
   const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const documents = documentsQuery.data?.items ?? [];
@@ -1545,6 +1614,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Restructure
             </Button>
           )}
+          {canAdjust && (
+            <Button size="sm" variant="outline" onClick={openAdjustConfirm}>
+              Loan Adjustment
+            </Button>
+          )}
           {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" variant="outline" onClick={openEdit}>
               Edit
@@ -1600,6 +1674,31 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {restructureQuery.data.oldLoanCode}
               </Link>
               {' '}on {formatDate(restructureQuery.data.createdAt)} ({formatPeso(num(restructureQuery.data.previousCollectionsBalance))} prior balance).
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 2026-07-24 (Loan Adjustment feature): this loan participated in an adjustment, on either
+          side - link to whichever loan it isn't. */}
+      {adjustmentQuery.data && (
+        <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-2.5 text-xs text-primary">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {adjustmentQuery.data.oldLoanAccountId === loan.id ? (
+            <span>
+              This loan was adjusted into{' '}
+              <Link to={`/loans/${adjustmentQuery.data.newLoanAccountId}`} className="underline underline-offset-2">
+                {adjustmentQuery.data.newLoanCode}
+              </Link>
+              {' '}on {formatDate(adjustmentQuery.data.createdAt)}.
+            </span>
+          ) : (
+            <span>
+              This loan was created by adjusting{' '}
+              <Link to={`/loans/${adjustmentQuery.data.oldLoanAccountId}`} className="underline underline-offset-2">
+                {adjustmentQuery.data.oldLoanCode}
+              </Link>
+              {' '}on {formatDate(adjustmentQuery.data.createdAt)} (was {formatDate(adjustmentQuery.data.previousFirstRepaymentDate)}).
             </span>
           )}
         </div>
@@ -3038,6 +3137,114 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               }
             >
               {restructureMutation.isPending ? 'Restructuring…' : 'Restructure loan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adjustOpen} onOpenChange={(open) => !open && !adjustMutation.isPending && setAdjustOpen(false)}>
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Loan Adjustment</DialogTitle>
+            <DialogDescription>
+              Creates a brand new loan account with the same principal, interest rate, term, and product as this loan - only the
+              first repayment date changes. This loan closes as Adjusted. Only allowed before this loan's first installment is due,
+              and only while no payments have been made. Can only be done once per loan account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">Principal</p>
+              <p className="font-semibold">{formatPeso(num(loan.principalAmount))}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Interest rate</p>
+              <p className="font-semibold">{formatPercentage(loan.interestRate)} / month</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Term</p>
+              <p className="font-semibold">{loan.installmentCount} installments</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Current first repayment date</Label>
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">{formatDate(loan.firstRepaymentDate)}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="adjust-first-repayment-date">New first repayment date</Label>
+              <Input
+                id="adjust-first-repayment-date"
+                type="date"
+                value={adjustFirstRepaymentDate}
+                onChange={(e) => setAdjustFirstRepaymentDate(e.target.value)}
+                disabled={adjustMutation.isPending}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-reason">Reason (optional)</Label>
+            <Textarea
+              id="adjust-reason"
+              placeholder="e.g. Wrong due date encoded at origination"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+              disabled={adjustMutation.isPending}
+            />
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium">Schedule preview</p>
+            {!adjustPreview ? (
+              <p className="rounded-md border py-6 text-center text-sm text-muted-foreground">Enter a valid date to preview the schedule.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Preview only - final schedule is generated by the server on submit. Monthly payment:{' '}
+                  <span className="font-semibold text-foreground">{formatPeso(adjustPreview.monthlyPayment)}</span>
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {adjustPreview.schedule.map((entry) => (
+                      <TableRow key={entry.installmentNumber}>
+                        <TableCell>{entry.installmentNumber}</TableCell>
+                        <TableCell>{formatDate(entry.dueDate)}</TableCell>
+                        <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
+                        <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
+            )}
+          </div>
+
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjustOpen(false)} disabled={adjustMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || !adjustFirstRepaymentDate}>
+              {adjustMutation.isPending ? 'Adjusting…' : 'Adjust loan'}
             </Button>
           </DialogFooter>
         </DialogContent>

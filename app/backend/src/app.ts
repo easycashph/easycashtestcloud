@@ -83,10 +83,13 @@ import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cas
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
 import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
+import { AdjustLoanUseCase } from '@modules/loan-account/application/use-cases/AdjustLoanUseCase';
+import { GetLoanAdjustmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanAdjustmentUseCase';
 import { GetAccruedInterestUseCase } from '@modules/loan-account/application/use-cases/GetAccruedInterestUseCase';
 import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { PrismaLoanRestructureRepository } from '@modules/loan-account/infrastructure/PrismaLoanRestructureRepository';
+import { PrismaLoanAdjustmentRepository } from '@modules/loan-account/infrastructure/PrismaLoanAdjustmentRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
@@ -535,6 +538,8 @@ export function createApp(): Express {
   const loanRiskAssessmentService = new LoanRiskAssessmentService();
   // 2026-07-24 (Loan Restructure feature)
   const loanRestructureRepository = new PrismaLoanRestructureRepository();
+  // 2026-07-24 (Loan Adjustment feature)
+  const loanAdjustmentRepository = new PrismaLoanAdjustmentRepository();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -606,6 +611,19 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
+      // 2026-07-24 (Loan Adjustment feature, user-confirmed): same local-repository-instance
+      // precedent as restructureLoanUseCase above.
+      adjustLoanUseCase: new AdjustLoanUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        loanAdjustmentRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
+      getLoanAdjustmentUseCase: new GetLoanAdjustmentUseCase({ loanAdjustmentRepository }),
       getAccruedInterestUseCase: new GetAccruedInterestUseCase({ loanAccountRepository, repaymentInstallmentRepository, loanProductRepository }),
       idempotencyKeyStore,
     },

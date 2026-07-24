@@ -5,6 +5,7 @@ import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requireRole } from '@shared/middleware/requireRole';
 import { LoanAccountController, type LoanAccountControllerDeps } from './loanAccountController';
 import {
+  adjustLoanSchema,
   createLoanAccountSchema,
   processPaymentSchema,
   rejectLoanSchema,
@@ -51,6 +52,12 @@ const PAYMENT_RECORDING_ROLES = ['MIS', 'Loan Operation Manager', 'Accounting', 
  * LoanAccount, closes the old one), so deliberately not widened to any other tier.
  */
 const RESTRUCTURE_ROLES = ['MIS', 'Accounting'];
+
+/**
+ * 2026-07-24 (Loan Adjustment feature, user-confirmed): same tier as Restructure — MIS and
+ * Accounting only.
+ */
+const ADJUSTMENT_ROLES = ['MIS', 'Accounting'];
 
 export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -123,6 +130,18 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
   );
   router.get('/loan-accounts/:id/restructure', requireAuth, controller.getRestructure);
   router.get('/loan-accounts/:id/accrued-interest', requireAuth, controller.accruedInterest);
+
+  // 2026-07-24 (Loan Adjustment feature, user-confirmed): offered only for a zero-payment ACTIVE
+  // loan before its first installment's due date, exactly once - eligibility enforced by
+  // AdjustLoanUseCase, not this router.
+  router.post(
+    '/loan-accounts/:id/adjust',
+    requireAuth,
+    requireRole(...ADJUSTMENT_ROLES),
+    validateBody(adjustLoanSchema),
+    controller.adjust,
+  );
+  router.get('/loan-accounts/:id/adjust', requireAuth, controller.getAdjustment);
 
   return router;
 }

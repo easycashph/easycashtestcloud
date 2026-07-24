@@ -113,6 +113,32 @@ export class LoanAlreadyRestructuredError extends DomainError {
 }
 
 /**
+ * 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
+ * account... kailangan before ng 1st due date lang pwede i Loan Adjust ang account" - only an
+ * ACTIVE loan with zero payments recorded on ANY installment, and only before its first
+ * installment's own due date, is eligible. A loan with even one payment, or one whose first
+ * installment has already come due, is refused.
+ */
+export class LoanNotEligibleForAdjustmentError extends DomainError {
+  constructor(loanAccountId: string, reason: string) {
+    super('LOAN_NOT_ELIGIBLE_FOR_ADJUSTMENT', `LoanAccount ${loanAccountId} is not eligible for adjustment: ${reason}.`, undefined, 400);
+    this.name = 'LoanNotEligibleForAdjustmentError';
+  }
+}
+
+/**
+ * 2026-07-24 (Loan Adjustment feature, user-confirmed): same "exactly once" posture as
+ * `LoanAlreadyRestructuredError` - a specific LoanAccount may be the OLD side of at most one
+ * adjustment ever.
+ */
+export class LoanAlreadyAdjustedError extends DomainError {
+  constructor(loanAccountId: string) {
+    super('LOAN_ALREADY_ADJUSTED', `LoanAccount ${loanAccountId} has already been adjusted once.`, undefined, 409);
+    this.name = 'LoanAlreadyAdjustedError';
+  }
+}
+
+/**
  * Milestone 9.1 checkpoint 8 / `CALCULATION_ENGINE_SPEC.md` §4: only
  * `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` are `STATUS: CONFIRMED`
  * and implemented (`AmortizationScheduleGenerator`, CP3) - both are

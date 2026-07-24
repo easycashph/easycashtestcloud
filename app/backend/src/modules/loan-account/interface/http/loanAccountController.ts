@@ -21,9 +21,12 @@ import type { ReversePaymentUseCase } from '../../application/use-cases/ReverseP
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
 import type { RestructureLoanUseCase } from '../../application/use-cases/RestructureLoanUseCase';
 import type { GetLoanRestructureUseCase } from '../../application/use-cases/GetLoanRestructureUseCase';
+import type { AdjustLoanUseCase } from '../../application/use-cases/AdjustLoanUseCase';
+import type { GetLoanAdjustmentUseCase } from '../../application/use-cases/GetLoanAdjustmentUseCase';
 import type { GetAccruedInterestUseCase } from '../../application/use-cases/GetAccruedInterestUseCase';
 import { presentAccruedInterest } from './presenters/AccruedInterestPresenter';
 import type {
+  AdjustLoanRequestBody,
   CreateLoanAccountRequestBody,
   ProcessPaymentRequestBody,
   RejectLoanRequestBody,
@@ -33,6 +36,7 @@ import type {
 } from './loanAccountSchemas';
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 import { presentLoanRestructure } from './presenters/LoanRestructurePresenter';
+import { presentLoanAdjustment } from './presenters/LoanAdjustmentPresenter';
 
 export interface LoanAccountControllerDeps {
   createLoanAccountUseCase: CreateLoanAccountUseCase;
@@ -50,6 +54,8 @@ export interface LoanAccountControllerDeps {
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   restructureLoanUseCase: RestructureLoanUseCase;
   getLoanRestructureUseCase: GetLoanRestructureUseCase;
+  adjustLoanUseCase: AdjustLoanUseCase;
+  getLoanAdjustmentUseCase: GetLoanAdjustmentUseCase;
   getAccruedInterestUseCase: GetAccruedInterestUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
@@ -360,6 +366,46 @@ export class LoanAccountController {
       assertBranchAccess(scope, existing.branchId);
       const view = await this.deps.getLoanRestructureUseCase.execute(req.params.id as string);
       res.status(200).json(view ? presentLoanRestructure(view) : null);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-24 (Loan Adjustment feature, user-confirmed): MIS/Accounting-only, same idempotency-guarded shape as restructure() above — a financially consequential, one-time-only action. */
+  adjust = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/:id/adjust';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as AdjustLoanRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId); // H-1: same as restructure() above.
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const { oldLoanAccount, newLoanAccount } = await this.deps.adjustLoanUseCase.execute({
+          oldLoanAccountId: req.params.id as string,
+          firstRepaymentDate: body.firstRepaymentDate,
+          reason: body.reason,
+          adjustedByUserId: currentUser.sub,
+        });
+        return {
+          statusCode: 200,
+          body: { oldLoanAccount: presentLoanAccount(oldLoanAccount), newLoanAccount: presentLoanAccount(newLoanAccount) },
+        };
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-24 (Loan Adjustment feature) — null unless this loan account was either side of an adjustment. */
+  getAdjustment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const view = await this.deps.getLoanAdjustmentUseCase.execute(req.params.id as string);
+      res.status(200).json(view ? presentLoanAdjustment(view) : null);
     } catch (error) {
       next(error);
     }

@@ -147,6 +147,12 @@ enum LoanAccountStatus {
   /// CLOSED_WRITTEN_OFF (loss realized) — this loan's balance was neither collected nor lost, it
   /// moved to a new account.
   CLOSED_RESTRUCTURED
+  /// 2026-07-24 (Loan Adjustment feature, user-confirmed): an ACTIVE loan with zero payments made
+  /// and still before its first installment's due date, closed because a brand new LoanAccount was
+  /// created with the exact same principal/rate/term/product, only the first due date changed (see
+  /// the LoanAdjustment model). Distinct from CLOSED_RESTRUCTURED - no balance/principal change at
+  /// all here, purely a due-date correction.
+  CLOSED_ADJUSTED
 }
 
 /// TXN-1..2: append-only ledger entry types. Note: "DISBURSEMENT" is
@@ -274,6 +280,7 @@ model User {
   feesOverridesSet              RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade            FeeAdjustment[]
   loanRestructuresMade          LoanRestructure[]
+  loanAdjustmentsMade           LoanAdjustment[]
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
 
@@ -1064,6 +1071,10 @@ model LoanAccount {
   restructuredFromRecord       LoanRestructure?              @relation("OldLoanRestructure")
   /// 2026-07-24 (Loan Restructure) — set on the NEW account created by a restructure.
   restructuredIntoRecord       LoanRestructure?              @relation("NewLoanRestructure")
+  /// 2026-07-24 (Loan Adjustment) — set on the OLD account when it was closed via adjustment.
+  adjustedFromRecord           LoanAdjustment?               @relation("OldLoanAdjustment")
+  /// 2026-07-24 (Loan Adjustment) — set on the NEW account created by an adjustment.
+  adjustedIntoRecord           LoanAdjustment?               @relation("NewLoanAdjustment")
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1308,6 +1319,31 @@ model LoanRestructure {
   createdAt            DateTime @default(now())
 
   @@map("loan_restructures")
+}
+
+/// 2026-07-24 (Loan Adjustment feature, user-confirmed): one immutable row per adjustment action —
+/// same "historical record, never edited" posture as LoanRestructure. Unlike LoanRestructure, no
+/// balance/principal fields at all - only the schedule's due dates change (same principal, rate,
+/// term, product copied verbatim onto the new account). A loan account may be the OLD side of at
+/// most one adjustment ever (@@unique on oldLoanAccountId).
+model LoanAdjustment {
+  id String @id @default(uuid())
+
+  oldLoanAccountId String      @unique
+  oldLoanAccount   LoanAccount @relation("OldLoanAdjustment", fields: [oldLoanAccountId], references: [id])
+  newLoanAccountId String      @unique
+  newLoanAccount   LoanAccount @relation("NewLoanAdjustment", fields: [newLoanAccountId], references: [id])
+
+  previousFirstRepaymentDate DateTime
+  newFirstRepaymentDate      DateTime
+
+  reason String?
+
+  adjustedByUserId String
+  adjustedBy       User     @relation(fields: [adjustedByUserId], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@map("loan_adjustments")
 }
 
 /// 2026-07-15 (Adjust Fees feature) — one immutable row per adjustment action, same posture as

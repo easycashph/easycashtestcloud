@@ -1421,7 +1421,8 @@ export function LoanApplicationDetailPage() {
       l.status !== 'CLOSED' &&
       l.status !== 'CLOSED_WRITTEN_OFF' &&
       l.status !== 'CLOSED_REJECTED' &&
-      l.status !== 'CLOSED_RESTRUCTURED',
+      l.status !== 'CLOSED_RESTRUCTURED' &&
+      l.status !== 'CLOSED_ADJUSTED',
   );
   // Once the loan account created from this application has been Activated (disbursed - status
   // past PENDING_APPROVAL/APPROVED), the decision that produced it can no longer be reverted -

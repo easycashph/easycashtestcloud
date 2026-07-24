@@ -140,3 +140,16 @@ export const restructureLoanSchema = z.object({
 });
 
 export type RestructureLoanRequestBody = z.infer<typeof restructureLoanSchema>;
+
+/**
+ * 2026-07-24 (Loan Adjustment feature, user-confirmed): POST /loan-accounts/:id/adjust request
+ * body. Unlike Restructure, `installmentCount` is NOT staff-entered here — term is copied
+ * verbatim from the old loan, only `firstRepaymentDate` changes. `reason` is optional, same
+ * posture as `restructureLoanSchema.reason`.
+ */
+export const adjustLoanSchema = z.object({
+  firstRepaymentDate: z.coerce.date(),
+  reason: z.string().trim().min(1).optional(),
+});
+
+export type AdjustLoanRequestBody = z.infer<typeof adjustLoanSchema>;

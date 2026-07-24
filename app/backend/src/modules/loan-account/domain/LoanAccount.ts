@@ -15,7 +15,8 @@ export type LoanAccountStatus =
   | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED'
-  | 'CLOSED_RESTRUCTURED';
+  | 'CLOSED_RESTRUCTURED'
+  | 'CLOSED_ADJUSTED';
 
 export type RepaymentPeriodUnit = 'MONTHS';
 
@@ -45,19 +46,25 @@ export type RepaymentPeriodUnit = 'MONTHS';
  * CLOSED_RESTRUCTURED`, mirroring `CLOSED_WRITTEN_OFF`'s identical shape (reachable from either,
  * no outbound transitions of its own — a restructured loan's balance moved to a brand new
  * LoanAccount, it never comes back to life the way `CLOSED` can via `reopen()`).
+ *
+ * 2026-07-24 (Loan Adjustment feature, user-confirmed): `ACTIVE -> CLOSED_ADJUSTED` only (not
+ * `ACTIVE_IN_ARREARS` - by definition a loan eligible for adjustment has zero payments and hasn't
+ * reached its first due date yet, so it can never have been in arrears). Same "no outbound
+ * transitions" shape as CLOSED_RESTRUCTURED - the new account it produced is the live one now.
  */
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
   APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
-  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'APPROVED'],
+  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED', 'APPROVED'],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED'],
   // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
   // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
-  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED/CLOSED_RESTRUCTURED - those aren't "fully paid" closures
-  // to begin with.
+  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED/CLOSED_RESTRUCTURED/CLOSED_ADJUSTED - those aren't "fully
+  // paid" closures to begin with.
   CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],
+  CLOSED_ADJUSTED: [],
   CLOSED_RESTRUCTURED: [],
 };
 
@@ -659,6 +666,19 @@ export class LoanAccount {
     this.transitionTo('CLOSED_RESTRUCTURED');
     this.props.closedAt = new Date();
     this.props.closedReason = 'Restructured';
+  }
+
+  /**
+   * 2026-07-24 (Loan Adjustment feature, user-confirmed): marks an ACTIVE loan CLOSED_ADJUSTED —
+   * mechanical transition only, mirroring `restructureClose()`. The use-case layer
+   * (`AdjustLoanUseCase`) decides eligibility (zero payments made, before the first installment's
+   * due date, not already adjusted) and creates the new `LoanAccount` + `LoanAdjustment` audit
+   * row; this entity has no schedule/audit-trail access and cannot check either itself.
+   */
+  adjustClose(): void {
+    this.transitionTo('CLOSED_ADJUSTED');
+    this.props.closedAt = new Date();
+    this.props.closedReason = 'Adjusted';
   }
 
   /**
