@@ -207,7 +207,7 @@ export function SystemPage() {
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-          <TabsTrigger value="reminders">Reminders</TabsTrigger>
+          <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
           <TabsTrigger value="members">User Accounts</TabsTrigger>
           <TabsTrigger value="products">Loan Products</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
