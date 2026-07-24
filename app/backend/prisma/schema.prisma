@@ -141,6 +141,12 @@ enum LoanAccountStatus {
   CLOSED
   CLOSED_WRITTEN_OFF
   CLOSED_REJECTED
+  /// 2026-07-24 (Loan Restructure feature, user-confirmed): a past-due/matured ACTIVE or
+  /// ACTIVE_IN_ARREARS loan closed because its remaining balance became the principal of a brand
+  /// new LoanAccount (see the LoanRestructure model). Distinct from CLOSED (fully paid off) and
+  /// CLOSED_WRITTEN_OFF (loss realized) — this loan's balance was neither collected nor lost, it
+  /// moved to a new account.
+  CLOSED_RESTRUCTURED
 }
 
 /// TXN-1..2: append-only ledger entry types. Note: "DISBURSEMENT" is
@@ -267,6 +273,7 @@ model User {
   penaltyReductionsMade         PenaltyReduction[]
   feesOverridesSet              RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade            FeeAdjustment[]
+  loanRestructuresMade          LoanRestructure[]
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
 
@@ -1053,6 +1060,10 @@ model LoanAccount {
   emailReminderLogs            EmailReminderLog[]
   generatedStatementsOfAccount GeneratedStatementOfAccount[]
   loanSigningSessions          LoanSigningSession[]
+  /// 2026-07-24 (Loan Restructure) — set on the OLD account when it was closed via restructure.
+  restructuredFromRecord       LoanRestructure?              @relation("OldLoanRestructure")
+  /// 2026-07-24 (Loan Restructure) — set on the NEW account created by a restructure.
+  restructuredIntoRecord       LoanRestructure?              @relation("NewLoanRestructure")
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1263,6 +1274,40 @@ model PenaltyReduction {
 
   @@index([repaymentInstallmentId])
   @@map("penalty_reductions")
+}
+
+/// 2026-07-24 (Loan Restructure feature, user-confirmed): one immutable row per restructure
+/// action — same "historical record, never edited" posture as PenaltyReduction/FeeAdjustment.
+/// A loan account may be the OLD side of at most one restructure ever (@@unique on
+/// oldLoanAccountId — "isang beses lang pwede gawin per loan account"), but the resulting NEW
+/// account is an ordinary loan account and may itself be restructured again later if it too
+/// falls past due/matured.
+model LoanRestructure {
+  id String @id @default(uuid())
+
+  oldLoanAccountId String      @unique
+  oldLoanAccount   LoanAccount @relation("OldLoanRestructure", fields: [oldLoanAccountId], references: [id])
+  newLoanAccountId String      @unique
+  newLoanAccount   LoanAccount @relation("NewLoanRestructure", fields: [newLoanAccountId], references: [id])
+
+  /// The old loan's full Collections Balance (principal + interest + fees + penalty) at the
+  /// moment of restructure — user-confirmed to become the new loan's entire principal amount,
+  /// carried here as a snapshot since the old account's own balance columns are frozen as of
+  /// closedAt and shouldn't be re-read to explain a historical restructure later.
+  previousCollectionsBalance Decimal @db.Decimal(14, 2)
+  /// = previousCollectionsBalance at creation (LA-4-style snapshot) — kept as its own column
+  /// rather than re-deriving from the new loan's principalAmount, which could theoretically be
+  /// edited later while PENDING_APPROVAL (not applicable here since restructure activates the
+  /// new loan directly, but keeping this as an explicit snapshot avoids relying on that).
+  newPrincipalAmount         Decimal @db.Decimal(14, 2)
+
+  reason String?
+
+  restructuredByUserId String
+  restructuredBy       User     @relation(fields: [restructuredByUserId], references: [id])
+  createdAt            DateTime @default(now())
+
+  @@map("loan_restructures")
 }
 
 /// 2026-07-15 (Adjust Fees feature) — one immutable row per adjustment action, same posture as
@@ -1880,60 +1925,60 @@ model LoanApplication {
   portalAccountId String?
   portalAccount   PortalAccount? @relation(fields: [portalAccountId], references: [id])
 
-  applicantName           String
-  age                     Int?
-  gender                  String?
-  civilStatus             String?
-  birthDate               DateTime?
-  placeOfBirth            String?
-  nationality             String?
-  homeOwnership           String?
+  applicantName                String
+  age                          Int?
+  gender                       String?
+  civilStatus                  String?
+  birthDate                    DateTime?
+  placeOfBirth                 String?
+  nationality                  String?
+  homeOwnership                String?
   /// Flattened, human-readable join of the structured fields below - kept for existing display
   /// code/history. The structured fields are what "Create Client Profile" copies into a real
   /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
-  address                 String?
-  houseUnitNumber         String?
-  street                  String?
-  barangay                String?
-  cityMunicipality        String?
-  province                String?
-  zipCode                 String?
+  address                      String?
+  houseUnitNumber              String?
+  street                       String?
+  barangay                     String?
+  cityMunicipality             String?
+  province                     String?
+  zipCode                      String?
   /// 2026-07-22 - captured only at intake (create form), like the fields above; never edited
   /// afterward. Defaults true - most applicants haven't moved. When false, the previous* fields
   /// below hold a distinct address, same flat-field shape as the present address above.
-  previousAddressSameAsPresent Boolean @default(true)
-  previousAddress         String?
-  previousHouseUnitNumber String?
-  previousStreet          String?
-  previousBarangay        String?
-  previousCityMunicipality String?
-  previousProvince        String?
-  previousZipCode         String?
-  monthlyIncome           Decimal?  @db.Decimal(14, 2)
-  employer                String?
-  occupation              String?
-  officeAddress           String?
-  tinNumber               String?
-  sssNumber               String?
-  propertiesOwned         String[]  @default([])
-  creditScore             Int?
-  coBorrowerName          String?
-  coBorrowerEmployer      String?
-  coBorrowerContactNumber String?
-  coBorrowerEmail         String?
-  coBorrowerAddress       String?
-  mobilePhone             String?
-  email                   String?
+  previousAddressSameAsPresent Boolean   @default(true)
+  previousAddress              String?
+  previousHouseUnitNumber      String?
+  previousStreet               String?
+  previousBarangay             String?
+  previousCityMunicipality     String?
+  previousProvince             String?
+  previousZipCode              String?
+  monthlyIncome                Decimal?  @db.Decimal(14, 2)
+  employer                     String?
+  occupation                   String?
+  officeAddress                String?
+  tinNumber                    String?
+  sssNumber                    String?
+  propertiesOwned              String[]  @default([])
+  creditScore                  Int?
+  coBorrowerName               String?
+  coBorrowerEmployer           String?
+  coBorrowerContactNumber      String?
+  coBorrowerEmail              String?
+  coBorrowerAddress            String?
+  mobilePhone                  String?
+  email                        String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
-  dependants              Json?
-  reference1Name          String?
-  reference1Mobile        String?
-  reference2Name          String?
-  reference2Mobile        String?
+  dependants                   Json?
+  reference1Name               String?
+  reference1Mobile             String?
+  reference2Name               String?
+  reference2Mobile             String?
   /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
   /// field - carried over as-is into the Client Profile's own `note` field on creation.
-  note                    String?
+  note                         String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?
@@ -2038,26 +2083,26 @@ model IdempotencyKey {
 /// it always wins. MIS-only to change (enforced by the HTTP layer's `requireRole('MIS')`, not
 /// here), matching every other system-wide toggle in this codebase.
 model ReminderSettings {
-  id              String   @id @default("singleton")
-  smsEnabled      Boolean  @default(false)
-  emailEnabled    Boolean  @default(false)
+  id                 String   @id @default("singleton")
+  smsEnabled         Boolean  @default(false)
+  emailEnabled       Boolean  @default(false)
   /// 2026-07-22 - e-signature signing-link/OTP SMS. A SEPARATE switch from smsEnabled above
   /// (which also gates the payment-reminder cron, reaching many real clients at once) - lets MIS
   /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
   /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
-  signingSmsEnabled Boolean  @default(false)
+  signingSmsEnabled  Boolean  @default(false)
   /// 2026-07-23 - Easycash Portal signup/password-reset OTP email. SEPARATE from emailEnabled
   /// above (payment reminders) and from staff 2FA (identity module's LoginUseCase/
   /// RequestTwoFactorSetupUseCase, which are NOT gated by this row at all - they keep using the
   /// static SMS_ENABLED/EMAIL_ENABLED env vars via the original shared OtpSender instance). Checked
   /// fresh on every send (PortalOtpSender), no server restart needed.
-  portalEmailEnabled Boolean @default(false)
+  portalEmailEnabled Boolean  @default(false)
   /// 2026-07-23 - Easycash Portal signup/password-reset OTP SMS. Same "separate from staff 2FA"
   /// reasoning as portalEmailEnabled above.
-  portalSmsEnabled   Boolean @default(false)
-  updatedAt       DateTime @updatedAt
-  updatedByUserId String?
-  updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])
+  portalSmsEnabled   Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  updatedByUserId    String?
+  updatedBy          User?    @relation(fields: [updatedByUserId], references: [id])
 
   @@map("reminder_settings")
 }

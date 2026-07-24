@@ -31,6 +31,7 @@ import type {
   InterestRateChartEntry,
   LoanAccount,
   LoanDocumentListItem,
+  LoanRestructureView,
   LoanTransaction,
   PaginatedResponse,
   PaymentAllocationDetail,
@@ -777,6 +778,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
+  const restructureIdempotencyKeyRef = React.useRef<string | null>(null);
   // 2026-07-11 (Reverse Payment feature, user request): correcting a wrongly-entered payment.
   // MIS-only (matches the backend's requireRole('MIS') gate) — see reverseMutation below.
   const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
@@ -792,6 +794,15 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [adjustFeesTarget, setAdjustFeesTarget] = React.useState<RepaymentInstallment | null>(null);
   const [adjustFeesAmount, setAdjustFeesAmount] = React.useState('');
   const [adjustFeesReason, setAdjustFeesReason] = React.useState('');
+  // 2026-07-24 (Loan Restructure feature, user-confirmed): same MIS/Accounting-only gate as Adjust
+  // Penalty/Adjust Fees. Term is staff-entered (product/interest rate are copied from this loan
+  // automatically, not part of this form) - firstRepaymentDate pre-fills to one month from today
+  // (the standard amortization convention) but is editable, per ADR-045's "explicit input, never
+  // silently derived" stance.
+  const [restructureOpen, setRestructureOpen] = React.useState(false);
+  const [restructureInstallmentCount, setRestructureInstallmentCount] = React.useState('12');
+  const [restructureFirstRepaymentDate, setRestructureFirstRepaymentDate] = React.useState('');
+  const [restructureReason, setRestructureReason] = React.useState('');
   // 2026-07-16 (Edit Loan Account, user request): "may kailangan baguhin katulad ng term or
   // amount, dapat pwede ko ito i-edit hangga't before ma-approve" — same ORIGINATION_ROLES gate
   // as "Create Loan Account"/"Approve Loan" (canCreateLoanAccount), only while PENDING_APPROVAL.
@@ -1104,6 +1115,30 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const restructureMutation = useMutation({
+    mutationFn: () => {
+      if (!restructureIdempotencyKeyRef.current) restructureIdempotencyKeyRef.current = generateUuid();
+      return apiClient.post<{ oldLoanAccount: LoanAccount; newLoanAccount: LoanAccount }>(
+        `/loan-accounts/${loanId}/restructure`,
+        {
+          installmentCount: Number.parseInt(restructureInstallmentCount, 10),
+          firstRepaymentDate: restructureFirstRepaymentDate,
+          reason: restructureReason.trim() || undefined,
+        },
+        { 'Idempotency-Key': restructureIdempotencyKeyRef.current },
+      );
+    },
+    onSuccess: ({ newLoanAccount }) => {
+      restructureIdempotencyKeyRef.current = null;
+      setRestructureOpen(false);
+      setRestructureReason('');
+      void queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+      // The current loan is now CLOSED_RESTRUCTURED - jump straight to the new one it produced.
+      navigate(`/loans/${newLoanAccount.id}`);
+    },
+    onError: onActionError,
+  });
+
   const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE') => {
     setActionError(null);
     setConfirmAction(action);
@@ -1125,6 +1160,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setAdjustFeesReason('');
     setAdjustFeesTarget(installment);
   };
+  const openRestructureConfirm = () => {
+    setActionError(null);
+    setRestructureInstallmentCount('12');
+    // Pre-fills to one month from today (the standard amortization first-due-date convention) -
+    // editable, per ADR-045's "explicit input, never silently derived" stance.
+    const oneMonthFromNow = new Date();
+    oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+    setRestructureFirstRepaymentDate(oneMonthFromNow.toISOString().slice(0, 10));
+    setRestructureReason('');
+    setRestructureOpen(true);
+  };
   const confirmLoanStatusChange = () => {
     if (confirmAction === 'APPROVE') approveMutation.mutate();
     else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
@@ -1141,6 +1187,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const installmentsQuery = useQuery({
     queryKey: ['repayment-schedule', loanId],
     queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
+  });
+
+  // 2026-07-24 (Loan Restructure feature): null unless this loan account was either side of a
+  // restructure - gates the "Restructure" button (already-old-side -> disabled, "isang beses
+  // lang") and drives the banner showing which loan it links to.
+  const restructureQuery = useQuery({
+    queryKey: ['loan-restructure', loanId],
+    queryFn: () => apiClient.get<LoanRestructureView | null>(`/loan-accounts/${loanId}/restructure`),
   });
 
   const transactionsQuery = useQuery({
@@ -1399,6 +1453,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // officer" - matches the backend's REDUCE_PENALTY_ROLES/ADJUST_FEES_ROLES gates (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
   const canManageInstallments = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
+  // 2026-07-24 (Loan Restructure feature, user-confirmed): "Ino offer lang ito sa mga past due at
+  // matured account" - any installment currently `LATE` (RepaymentInstallment.status's own live
+  // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
+  // account" - once this loan is the OLD side of a restructure, never offered again.
+  const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
+  const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
+  const canRestructure = canManageInstallments && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
   const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const documents = documentsQuery.data?.items ?? [];
@@ -1455,6 +1516,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Undo Disburse
             </Button>
           )}
+          {canRestructure && (
+            <Button size="sm" variant="outline" onClick={openRestructureConfirm}>
+              Restructure
+            </Button>
+          )}
           {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" variant="outline" onClick={openEdit}>
               Edit
@@ -1487,6 +1553,31 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             Legacy migration flag (ADR-007 §4): this loan is marked Closed, but its migrated balance does not sum to ₱0.00. Migrated
             as-is from the legacy system without correction - needs manual accounting review before being treated as fully settled.
           </span>
+        </div>
+      )}
+
+      {/* 2026-07-24 (Loan Restructure feature): this loan participated in a restructure, on
+          either side - link to whichever loan it isn't. */}
+      {restructureQuery.data && (
+        <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-2.5 text-xs text-primary">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {restructureQuery.data.oldLoanAccountId === loan.id ? (
+            <span>
+              This loan was restructured into{' '}
+              <Link to={`/loans/${restructureQuery.data.newLoanAccountId}`} className="underline underline-offset-2">
+                {restructureQuery.data.newLoanCode}
+              </Link>
+              {' '}on {formatDate(restructureQuery.data.createdAt)}.
+            </span>
+          ) : (
+            <span>
+              This loan was created by restructuring{' '}
+              <Link to={`/loans/${restructureQuery.data.oldLoanAccountId}`} className="underline underline-offset-2">
+                {restructureQuery.data.oldLoanCode}
+              </Link>
+              {' '}on {formatDate(restructureQuery.data.createdAt)} ({formatPeso(num(restructureQuery.data.previousCollectionsBalance))} prior balance).
+            </span>
+          )}
         </div>
       )}
 
@@ -2768,6 +2859,73 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={adjustFeesMutation.isPending || adjustFeesReason.trim().length === 0 || adjustFeesAmount.trim().length === 0}
             >
               {adjustFeesMutation.isPending ? 'Adjusting…' : 'Adjust fees'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={restructureOpen} onOpenChange={(open) => !open && !restructureMutation.isPending && setRestructureOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Restructure loan</DialogTitle>
+            <DialogDescription>
+              Creates a brand new loan account with this loan's full Collections Balance (
+              {formatPeso(num(loan.collectionsBalance))}) as its principal, using the same product and interest rate. This loan closes as
+              Restructured. Can only be done once per loan account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="restructure-installment-count">New term (installments)</Label>
+            <Input
+              id="restructure-installment-count"
+              type="number"
+              min="1"
+              step="1"
+              value={restructureInstallmentCount}
+              onChange={(e) => setRestructureInstallmentCount(e.target.value)}
+              disabled={restructureMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="restructure-first-repayment-date">First repayment date</Label>
+            <Input
+              id="restructure-first-repayment-date"
+              type="date"
+              value={restructureFirstRepaymentDate}
+              onChange={(e) => setRestructureFirstRepaymentDate(e.target.value)}
+              disabled={restructureMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="restructure-reason">Reason (optional)</Label>
+            <Textarea
+              id="restructure-reason"
+              placeholder="e.g. Client requested a lower monthly amount"
+              value={restructureReason}
+              onChange={(e) => setRestructureReason(e.target.value)}
+              disabled={restructureMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestructureOpen(false)} disabled={restructureMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => restructureMutation.mutate()}
+              disabled={
+                restructureMutation.isPending ||
+                !restructureInstallmentCount.trim() ||
+                Number.parseInt(restructureInstallmentCount, 10) <= 0 ||
+                !restructureFirstRepaymentDate
+              }
+            >
+              {restructureMutation.isPending ? 'Restructuring…' : 'Restructure loan'}
             </Button>
           </DialogFooter>
         </DialogContent>

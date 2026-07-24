@@ -14,7 +14,8 @@ export type LoanAccountStatus =
   | 'ACTIVE_IN_ARREARS'
   | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
-  | 'CLOSED_REJECTED';
+  | 'CLOSED_REJECTED'
+  | 'CLOSED_RESTRUCTURED';
 
 export type RepaymentPeriodUnit = 'MONTHS';
 
@@ -39,18 +40,25 @@ export type RepaymentPeriodUnit = 'MONTHS';
  * financial has happened yet at APPROVED). `undoActivate()` is guarded at the use-case layer
  * (`UndoActivateLoanUseCase`) against a loan that already has a recorded payment or a penalty/fee
  * override — see `LoanAccountHasActivityError`'s own doc comment.
+ *
+ * 2026-07-24 (Loan Restructure feature, user-confirmed): `ACTIVE`/`ACTIVE_IN_ARREARS ->
+ * CLOSED_RESTRUCTURED`, mirroring `CLOSED_WRITTEN_OFF`'s identical shape (reachable from either,
+ * no outbound transitions of its own — a restructured loan's balance moved to a brand new
+ * LoanAccount, it never comes back to life the way `CLOSED` can via `reopen()`).
  */
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
   APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
-  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'APPROVED'],
-  ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF'],
+  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'APPROVED'],
+  ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED'],
   // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
   // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
-  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED - those aren't "fully paid" closures to begin with.
+  // CLOSED_WRITTEN_OFF/CLOSED_REJECTED/CLOSED_RESTRUCTURED - those aren't "fully paid" closures
+  // to begin with.
   CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],
+  CLOSED_RESTRUCTURED: [],
 };
 
 export interface LoanAccountProps {
@@ -636,6 +644,21 @@ export class LoanAccount {
   close(): void {
     this.transitionTo('CLOSED');
     this.props.closedAt = new Date();
+  }
+
+  /**
+   * 2026-07-24 (Loan Restructure feature, user-confirmed): marks a past-due/matured ACTIVE or
+   * ACTIVE_IN_ARREARS loan CLOSED_RESTRUCTURED — mechanical transition only, mirroring `close()`/
+   * `reject()`. The use-case layer (`RestructureLoanUseCase`) decides eligibility (past due or
+   * matured, not already restructured) and creates the new `LoanAccount` + `LoanRestructure`
+   * audit row; this entity has no schedule/audit-trail access and cannot check either itself.
+   * Balances are deliberately left untouched (frozen as of the moment of restructure) — the old
+   * loan's remaining balance moved to a new account, it was neither collected nor written off.
+   */
+  restructureClose(): void {
+    this.transitionTo('CLOSED_RESTRUCTURED');
+    this.props.closedAt = new Date();
+    this.props.closedReason = 'Restructured';
   }
 
   /**

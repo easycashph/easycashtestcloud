@@ -81,8 +81,11 @@ import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
 import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
+import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
+import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
 import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
+import { PrismaLoanRestructureRepository } from '@modules/loan-account/infrastructure/PrismaLoanRestructureRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
 import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases/GetLoanTransactionUseCase';
@@ -529,6 +532,8 @@ export function createApp(): Express {
   // and ReversePaymentUseCase (reads it back) below — see PaymentAllocation's own doc comment.
   const paymentAllocationRepository = new PrismaPaymentAllocationRepository();
   const loanRiskAssessmentService = new LoanRiskAssessmentService();
+  // 2026-07-24 (Loan Restructure feature)
+  const loanRestructureRepository = new PrismaLoanRestructureRepository();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -586,6 +591,20 @@ export function createApp(): Express {
         repaymentInstallmentRepository,
         riskAssessmentService: loanRiskAssessmentService,
       }),
+      // 2026-07-24 (Loan Restructure feature, user-confirmed): local repository instance here,
+      // same "cheap, stateless, fine to construct locally" precedent as
+      // undoActivateLoanUseCase's penaltyReductionRepository/feeAdjustmentRepository above.
+      restructureLoanUseCase: new RestructureLoanUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        loanRestructureRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
+      getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
       idempotencyKeyStore,
     },
     tokenService,

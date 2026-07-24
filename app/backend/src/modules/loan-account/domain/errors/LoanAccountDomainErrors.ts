@@ -87,6 +87,32 @@ export class InstallmentCountOutOfRangeError extends DomainError {
 }
 
 /**
+ * 2026-07-24 (Loan Restructure feature, user-confirmed): only ACTIVE/ACTIVE_IN_ARREARS loans that
+ * are currently past due or matured are eligible - "Ino offer lang ito sa mga past due at matured
+ * account." A current/good-standing loan, or one in any other status (PENDING_APPROVAL/APPROVED/
+ * already-CLOSED*), is refused.
+ */
+export class LoanNotEligibleForRestructureError extends DomainError {
+  constructor(loanAccountId: string, reason: string) {
+    super('LOAN_NOT_ELIGIBLE_FOR_RESTRUCTURE', `LoanAccount ${loanAccountId} is not eligible for restructure: ${reason}.`, undefined, 400);
+    this.name = 'LoanNotEligibleForRestructureError';
+  }
+}
+
+/**
+ * 2026-07-24 (Loan Restructure feature, user-confirmed): "isang beses lang pwede gawin per loan
+ * account" - a specific LoanAccount may be the OLD side of at most one restructure ever. Enforced
+ * both here (fast, pre-transaction check) and by the `LoanRestructure.oldLoanAccountId` unique
+ * constraint (the real guarantee under concurrent requests).
+ */
+export class LoanAlreadyRestructuredError extends DomainError {
+  constructor(loanAccountId: string) {
+    super('LOAN_ALREADY_RESTRUCTURED', `LoanAccount ${loanAccountId} has already been restructured once.`, undefined, 409);
+    this.name = 'LoanAlreadyRestructuredError';
+  }
+}
+
+/**
  * Milestone 9.1 checkpoint 8 / `CALCULATION_ENGINE_SPEC.md` §4: only
  * `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` are `STATUS: CONFIRMED`
  * and implemented (`AmortizationScheduleGenerator`, CP3) - both are

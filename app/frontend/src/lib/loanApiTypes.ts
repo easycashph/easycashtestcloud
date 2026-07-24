@@ -28,7 +28,24 @@ export type LoanAccountStatus =
   | 'ACTIVE_IN_ARREARS'
   | 'CLOSED'
   | 'CLOSED_WRITTEN_OFF'
-  | 'CLOSED_REJECTED';
+  | 'CLOSED_REJECTED'
+  | 'CLOSED_RESTRUCTURED';
+
+/** 2026-07-24 (Loan Restructure feature) - mirrors `LoanRestructurePresenter`'s output. Fetched via
+ * `GET /loan-accounts/:id/restructure`, null unless this loan account was either side of one. */
+export interface LoanRestructureView {
+  id: string;
+  oldLoanAccountId: string;
+  oldLoanCode: string;
+  newLoanAccountId: string;
+  newLoanCode: string;
+  previousCollectionsBalance: string;
+  newPrincipalAmount: string;
+  reason: string | null;
+  restructuredByUserId: string;
+  restructuredByName: string | null;
+  createdAt: string;
+}
 
 export interface LoanAccount {
   id: string;

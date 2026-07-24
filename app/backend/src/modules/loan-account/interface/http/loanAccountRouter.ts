@@ -8,6 +8,7 @@ import {
   createLoanAccountSchema,
   processPaymentSchema,
   rejectLoanSchema,
+  restructureLoanSchema,
   reversePaymentSchema,
   updateLoanAccountSchema,
 } from './loanAccountSchemas';
@@ -43,6 +44,13 @@ const ACTIVATION_ROLES = ['MIS', 'Loan Operation Manager', 'Accounting'];
  * binding allow-list per that ADR section.
  */
 const PAYMENT_RECORDING_ROLES = ['MIS', 'Loan Operation Manager', 'Accounting', 'Collection Officer'];
+
+/**
+ * 2026-07-24 (Loan Restructure feature, user-confirmed): same tier as Adjust Penalty/Adjust Fees
+ * — MIS and Accounting only. A bigger financial action than either of those (creates a whole new
+ * LoanAccount, closes the old one), so deliberately not widened to any other tier.
+ */
+const RESTRUCTURE_ROLES = ['MIS', 'Accounting'];
 
 export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -102,6 +110,18 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     validateBody(reversePaymentSchema),
     controller.reversePayment,
   );
+
+  // 2026-07-24 (Loan Restructure feature, user-confirmed): offered only for a past-due/matured
+  // ACTIVE/ACTIVE_IN_ARREARS loan, exactly once - eligibility enforced by RestructureLoanUseCase,
+  // not this router.
+  router.post(
+    '/loan-accounts/:id/restructure',
+    requireAuth,
+    requireRole(...RESTRUCTURE_ROLES),
+    validateBody(restructureLoanSchema),
+    controller.restructure,
+  );
+  router.get('/loan-accounts/:id/restructure', requireAuth, controller.getRestructure);
 
   return router;
 }

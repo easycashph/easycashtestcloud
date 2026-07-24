@@ -124,3 +124,19 @@ export const reversePaymentSchema = z.object({
 });
 
 export type ReversePaymentRequestBody = z.infer<typeof reversePaymentSchema>;
+
+/**
+ * 2026-07-24 (Loan Restructure feature, user-confirmed): POST /loan-accounts/:id/restructure
+ * request body. `installmentCount`/`firstRepaymentDate` are staff-entered (product/interest rate
+ * are copied from the old loan automatically, not part of this body) — same ADR-045 "explicit
+ * input, never derived" posture as `createLoanAccountSchema.firstRepaymentDate`. `reason` is
+ * optional, unlike `reversePaymentSchema.reason` - this isn't an external-approval-reference
+ * field the way Reduce Penalty's is, just an optional staff note.
+ */
+export const restructureLoanSchema = z.object({
+  installmentCount: z.coerce.number().int().positive(),
+  firstRepaymentDate: z.coerce.date(),
+  reason: z.string().trim().min(1).optional(),
+});
+
+export type RestructureLoanRequestBody = z.infer<typeof restructureLoanSchema>;
