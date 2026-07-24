@@ -61,14 +61,24 @@ export interface PortalBranch {
   address: string | null;
 }
 
-/** Core-fields-only subset - see backend's PortalLoanApplicationDtos.ts for why the full
- * staff-facing field set (credit score, TIN/SSS, dependants, etc.) isn't exposed here. */
+/** 2026-07-24 (user request): mirrors the staff-facing form's full field set - see backend's
+ * PortalLoanApplicationDtos.ts doc comment for exactly what's excluded (AI Auto-fill, "use a
+ * previous co-borrower", encodedByUserId) and why. */
+export interface DependantEntry {
+  name: string;
+  age?: string;
+  relationship?: string;
+}
+
 export interface SubmitLoanApplicationRequest {
   branchId: string;
   applicantName: string;
-  birthDate?: string;
+  age?: number;
   gender?: string;
   civilStatus?: string;
+  birthDate?: string;
+  placeOfBirth?: string;
+  nationality?: string;
   homeOwnership?: string;
   address?: string;
   houseUnitNumber?: string;
@@ -77,10 +87,20 @@ export interface SubmitLoanApplicationRequest {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  previousAddressSameAsPresent?: boolean;
+  previousAddress?: string;
+  previousHouseUnitNumber?: string;
+  previousStreet?: string;
+  previousBarangay?: string;
+  previousCityMunicipality?: string;
+  previousProvince?: string;
+  previousZipCode?: string;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;
   officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
   coBorrowerName?: string;
   coBorrowerEmployer?: string;
   coBorrowerContactNumber?: string;
@@ -88,10 +108,14 @@ export interface SubmitLoanApplicationRequest {
   coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
+  dependants?: DependantEntry[];
   reference1Name?: string;
   reference1Mobile?: string;
   reference2Name?: string;
   reference2Mobile?: string;
+  note?: string;
+  referralSource?: string;
+  accountType?: 'NEW' | 'RENEWAL';
   loanPurpose?: string;
   requestedCategory: string;
   requestedAmount: number;
@@ -110,7 +134,15 @@ export interface PortalLoanApplicationSummary {
   createdAt: string;
 }
 
-export type PortalDocumentCategory = 'VALID_ID_BORROWER' | 'PROOF_OF_BILLING' | 'CORPORATE_PAYSLIP';
+export type PortalDocumentCategory =
+  | 'VALID_ID_BORROWER'
+  | 'VALID_ID_CO_BORROWER'
+  | 'PROOF_OF_BILLING'
+  | 'EMPLOYEE_ID'
+  | 'BUSINESS_CLEARANCE'
+  | 'CORPORATE_PAYSLIP'
+  | 'SEAMANS_BOOK'
+  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE';
 
 export interface UploadedDocument {
   id: string;
