@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
+import { PortalAddressPicker } from '@/components/PortalAddressPicker';
 import type { PortalBranch, PortalDocumentCategory, PortalLoanApplicationSummary, SubmitLoanApplicationRequest } from '@/lib/portalApiTypes';
 
 const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
@@ -394,26 +395,17 @@ export function LoanApplicationFormPage() {
 
               <div className="space-y-3 border-t border-border pt-4">
                 <Label>Present address</Label>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="House/Unit number" className="sm:col-span-2">
-                    <Input id="houseUnitNumber" value={form.houseUnitNumber} onChange={(e) => update('houseUnitNumber', e.target.value)} />
-                  </Field>
-                  <Field label="Street" className="sm:col-span-2">
-                    <Input id="street" value={form.street} onChange={(e) => update('street', e.target.value)} />
-                  </Field>
-                  <Field label="Barangay">
-                    <Input id="barangay" value={form.barangay} onChange={(e) => update('barangay', e.target.value)} />
-                  </Field>
-                  <Field label="City / Municipality">
-                    <Input id="cityMunicipality" value={form.cityMunicipality} onChange={(e) => update('cityMunicipality', e.target.value)} />
-                  </Field>
-                  <Field label="Province">
-                    <Input id="province" value={form.province} onChange={(e) => update('province', e.target.value)} />
-                  </Field>
-                  <Field label="ZIP code">
-                    <Input id="zipCode" value={form.zipCode} onChange={(e) => update('zipCode', e.target.value)} />
-                  </Field>
-                </div>
+                <PortalAddressPicker
+                  value={{
+                    houseUnitNumber: form.houseUnitNumber,
+                    street: form.street,
+                    barangay: form.barangay,
+                    cityMunicipality: form.cityMunicipality,
+                    province: form.province,
+                    zipCode: form.zipCode,
+                  }}
+                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

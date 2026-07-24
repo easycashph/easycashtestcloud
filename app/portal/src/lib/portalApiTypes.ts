@@ -117,3 +117,25 @@ export interface UploadedDocument {
   fileName: string;
   documentCategory: PortalDocumentCategory | null;
 }
+
+/** Mirrors app/backend's psgc module (IPsgcRepository.ts) - powers the loan application form's
+ * cascading region/province/city/barangay address picker with ZIP auto-fill. */
+export interface PsgcOption {
+  code: string;
+  name: string;
+}
+
+export interface PsgcCityOption extends PsgcOption {
+  zipCode: string | null;
+}
+
+export interface PsgcBarangayOption extends PsgcOption {
+  zipCode: string | null;
+}
+
+export interface ResolvedAddressCodes {
+  regionCode: string | null;
+  provinceCode: string | null;
+  cityMunicipalityCode: string | null;
+  barangayCode: string | null;
+}
