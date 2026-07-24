@@ -1443,6 +1443,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const schedulePreview = showSchedulePreview
     ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(loan.firstRepaymentDate))
     : null;
+  // 2026-07-24 (Loan Restructure feature, user request): same client-side preview convention as
+  // Create Loan Account/the block above - principal is this loan's Collections Balance (frozen,
+  // never editable), rate is copied from this loan, only term/date come from the dialog's inputs.
+  const restructureInstallmentCountNum = Number.parseInt(restructureInstallmentCount, 10);
+  const restructurePreview =
+    restructureOpen && restructureFirstRepaymentDate
+      ? previewLoanSchedule(num(loan.collectionsBalance), num(loan.interestRate), restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
+      : null;
   // Every balance column (and the collectionsBalance/accountingBalance getters derived from them)
   // is genuinely 0 before Activation - not because there's no obligation, but because
   // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
@@ -2865,36 +2873,53 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       </Dialog>
 
       <Dialog open={restructureOpen} onOpenChange={(open) => !open && !restructureMutation.isPending && setRestructureOpen(false)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Restructure loan</DialogTitle>
             <DialogDescription>
-              Creates a brand new loan account with this loan's full Collections Balance (
-              {formatPeso(num(loan.collectionsBalance))}) as its principal, using the same product and interest rate. This loan closes as
-              Restructured. Can only be done once per loan account.
+              Creates a brand new loan account with this loan's full Collections Balance as its principal, using the same product and
+              interest rate. This loan closes as Restructured. Can only be done once per loan account.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="restructure-installment-count">New term (installments)</Label>
-            <Input
-              id="restructure-installment-count"
-              type="number"
-              min="1"
-              step="1"
-              value={restructureInstallmentCount}
-              onChange={(e) => setRestructureInstallmentCount(e.target.value)}
-              disabled={restructureMutation.isPending}
-            />
+
+          <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
+            <div>
+              <p className="text-xs text-muted-foreground">New principal</p>
+              <p className="font-semibold">{formatPeso(num(loan.collectionsBalance))}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Interest rate</p>
+              <p className="font-semibold">{formatPercentage(loan.interestRate)} / month</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Product</p>
+              <p className="font-semibold">Same as {loan.loanCode}</p>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="restructure-first-repayment-date">First repayment date</Label>
-            <Input
-              id="restructure-first-repayment-date"
-              type="date"
-              value={restructureFirstRepaymentDate}
-              onChange={(e) => setRestructureFirstRepaymentDate(e.target.value)}
-              disabled={restructureMutation.isPending}
-            />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="restructure-installment-count">New term (installments)</Label>
+              <Input
+                id="restructure-installment-count"
+                type="number"
+                min="1"
+                step="1"
+                value={restructureInstallmentCount}
+                onChange={(e) => setRestructureInstallmentCount(e.target.value)}
+                disabled={restructureMutation.isPending}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="restructure-first-repayment-date">First repayment date</Label>
+              <Input
+                id="restructure-first-repayment-date"
+                type="date"
+                value={restructureFirstRepaymentDate}
+                onChange={(e) => setRestructureFirstRepaymentDate(e.target.value)}
+                disabled={restructureMutation.isPending}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="restructure-reason">Reason (optional)</Label>
@@ -2906,6 +2931,45 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={restructureMutation.isPending}
             />
           </div>
+
+          <div>
+            <p className="mb-2 text-sm font-medium">Schedule preview</p>
+            {!restructurePreview ? (
+              <p className="rounded-md border py-6 text-center text-sm text-muted-foreground">Enter a valid term and date to preview the schedule.</p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Preview only - final schedule is generated by the server on submit. Monthly payment:{' '}
+                  <span className="font-semibold text-foreground">{formatPeso(restructurePreview.monthlyPayment)}</span>
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {restructurePreview.schedule.map((entry) => (
+                      <TableRow key={entry.installmentNumber}>
+                        <TableCell>{entry.installmentNumber}</TableCell>
+                        <TableCell>{formatDate(entry.dueDate)}</TableCell>
+                        <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
+                        <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
+            )}
+          </div>
+
           {actionError && (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
