@@ -60,4 +60,40 @@ describe('CreateBorrowerUseCase', () => {
     ).rejects.toThrow(DuplicateClientProfileError);
     expect(borrowerRepository.save).not.toHaveBeenCalled();
   });
+
+  // Phase D (2026-07-24): links the source application's PortalAccount to the new Borrower.
+  it('links the PortalAccount to the new Borrower when the source application was portal-submitted', async () => {
+    const borrowerRepository = buildRepo();
+    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue({ portalAccountId: 'portal-account-1' }) };
+    const portalAccountRepository = { findById: vi.fn(), findByEmail: vi.fn(), create: vi.fn(), update: vi.fn().mockResolvedValue({}) };
+    const useCase = new CreateBorrowerUseCase({ borrowerRepository, loanApplicationRepository, portalAccountRepository });
+
+    const borrower = await useCase.execute({ branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz', sourceApplicationId: 'app-1' });
+
+    expect(loanApplicationRepository.findById).toHaveBeenCalledWith('app-1');
+    expect(portalAccountRepository.update).toHaveBeenCalledWith('portal-account-1', { borrowerId: borrower.id });
+  });
+
+  it('does not attempt to link when the source application was staff-encoded (no portalAccountId)', async () => {
+    const borrowerRepository = buildRepo();
+    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue({ portalAccountId: null }) };
+    const portalAccountRepository = { findById: vi.fn(), findByEmail: vi.fn(), create: vi.fn(), update: vi.fn() };
+    const useCase = new CreateBorrowerUseCase({ borrowerRepository, loanApplicationRepository, portalAccountRepository });
+
+    await useCase.execute({ branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz', sourceApplicationId: 'app-1' });
+
+    expect(portalAccountRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt to link when there is no sourceApplicationId', async () => {
+    const borrowerRepository = buildRepo();
+    const loanApplicationRepository = { findById: vi.fn() };
+    const portalAccountRepository = { findById: vi.fn(), findByEmail: vi.fn(), create: vi.fn(), update: vi.fn() };
+    const useCase = new CreateBorrowerUseCase({ borrowerRepository, loanApplicationRepository, portalAccountRepository });
+
+    await useCase.execute({ branchId: 'branch-1', firstName: 'Juan', lastName: 'Dela Cruz' });
+
+    expect(loanApplicationRepository.findById).not.toHaveBeenCalled();
+    expect(portalAccountRepository.update).not.toHaveBeenCalled();
+  });
 });

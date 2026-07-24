@@ -47,6 +47,16 @@ export class CreateLoanApplicationUseCase {
 
       const hasActiveLoan = existingLoans.some((loan) => !CLOSED_LOAN_ACCOUNT_STATUSES.has(loan.status));
       if (hasActiveLoan) throw new BorrowerHasInFlightLoanError('ACTIVE_LOAN');
+    } else if (input.portalAccountId) {
+      // 2026-07-24 (user request): the same "one in-flight application at a time" rule as above,
+      // for an Easycash Portal client who hasn't been converted into a real Borrower yet (no
+      // borrowerId). There's no LoanAccount to check yet at this stage - a portal-only applicant
+      // can't have one until staff runs "Create Client Profile" on an APPROVED application, which
+      // is exactly when `borrowerId` starts being set and the branch above takes over instead.
+      // Re-submission is allowed only once every prior application for this account is DECLINED.
+      const existingApplications = await this.deps.loanApplicationRepository.findByPortalAccountId(input.portalAccountId);
+      const hasPendingApplication = existingApplications.some((app) => app.status !== 'DECLINED');
+      if (hasPendingApplication) throw new BorrowerHasInFlightLoanError('PENDING_APPLICATION');
     }
 
     const classification = await this.deps.preQualificationService.classify({

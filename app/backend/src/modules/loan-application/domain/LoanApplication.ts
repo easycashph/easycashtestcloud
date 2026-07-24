@@ -178,6 +178,10 @@ export interface LoanApplicationProps {
   /** Cached from LoanApplicationPreQualificationService's geocoding — null if unresolved (distance
    * rule fails open in that case). */
   distanceFromBranchKm?: number;
+  /** 2026-07-24 — the applicant's device GPS coordinates at submission time (portal only,
+   * optional/best-effort). See schema.prisma's doc comment. */
+  submissionLatitude?: number;
+  submissionLongitude?: number;
   assignedLoanProductVersionId?: string;
 
   reviewedByUserId?: string;
@@ -254,6 +258,8 @@ export interface CreateLoanApplicationProps {
    * lookup is I/O and does not belong in this domain layer. */
   status: 'PREAPPROVED' | 'PREDECLINED';
   distanceFromBranchKm?: number;
+  submissionLatitude?: number;
+  submissionLongitude?: number;
 }
 
 /**
@@ -328,6 +334,8 @@ export class LoanApplication {
       encodedByUserId: input.encodedByUserId,
       status: input.status,
       distanceFromBranchKm: input.distanceFromBranchKm,
+      submissionLatitude: input.submissionLatitude,
+      submissionLongitude: input.submissionLongitude,
       createdAt: now,
       updatedAt: now,
     });
@@ -405,6 +413,80 @@ export class LoanApplication {
     if (patch.monthlyIncome !== undefined) this.props.monthlyIncome = patch.monthlyIncome;
     if (patch.creditScore !== undefined) this.props.creditScore = patch.creditScore;
     if (patch.propertiesOwned !== undefined) this.props.propertiesOwned = patch.propertiesOwned;
+    this.props.updatedAt = new Date();
+  }
+
+  /** 2026-07-24 (user request) — lets the Easycash Portal client who submitted this application
+   * correct anything on it (typos, an address that changed, etc.) up until a human starts
+   * reviewing it. Same "no decision made yet" guard as updateApplicantFinancials above, just over
+   * the full self-service field set instead of only the 3 risk-input fields - branchId/status/id/
+   * portalAccountId/borrowerId/encodedByUserId/review-and-decision fields are deliberately NOT
+   * part of this patch shape, so they can never be touched through this path regardless of what a
+   * caller sends. Only the provided fields are touched (PATCH semantics, matching
+   * updateApplicantFinancials' own convention) - does not itself recompute `status`, same reasoning
+   * as that method. */
+  updateSelfServiceIntake(
+    patch: Partial<
+      Pick<
+        LoanApplicationProps,
+        | 'applicantName'
+        | 'age'
+        | 'gender'
+        | 'civilStatus'
+        | 'birthDate'
+        | 'placeOfBirth'
+        | 'nationality'
+        | 'homeOwnership'
+        | 'address'
+        | 'houseUnitNumber'
+        | 'street'
+        | 'barangay'
+        | 'cityMunicipality'
+        | 'province'
+        | 'zipCode'
+        | 'previousAddressSameAsPresent'
+        | 'previousAddress'
+        | 'previousHouseUnitNumber'
+        | 'previousStreet'
+        | 'previousBarangay'
+        | 'previousCityMunicipality'
+        | 'previousProvince'
+        | 'previousZipCode'
+        | 'monthlyIncome'
+        | 'employer'
+        | 'occupation'
+        | 'officeAddress'
+        | 'tinNumber'
+        | 'sssNumber'
+        | 'coBorrowerName'
+        | 'coBorrowerEmployer'
+        | 'coBorrowerContactNumber'
+        | 'coBorrowerEmail'
+        | 'coBorrowerAddress'
+        | 'mobilePhone'
+        | 'email'
+        | 'dependants'
+        | 'reference1Name'
+        | 'reference1Mobile'
+        | 'reference2Name'
+        | 'reference2Mobile'
+        | 'note'
+        | 'referralSource'
+        | 'accountType'
+        | 'loanPurpose'
+        | 'requestedCategory'
+        | 'requestedAmount'
+        | 'requestedTermMonths'
+      >
+    >,
+  ): void {
+    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'edit');
+    }
+    for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
+      const value = patch[key];
+      if (value !== undefined) (this.props as unknown as Record<string, unknown>)[key] = value;
+    }
     this.props.updatedAt = new Date();
   }
 

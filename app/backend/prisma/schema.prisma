@@ -444,8 +444,34 @@ model PortalAccount {
 
   challenges       PortalAccountChallenge[]
   loanApplications LoanApplication[]
+  notifications    PortalNotification[]
 
   @@map("portal_accounts")
+}
+
+/// Notification Center for the Easycash Portal (2026-07-24 user request) - same append-only-
+/// except-`read` shape as the staff Notification model, scoped to a PortalAccount instead of a
+/// User. Created as a side effect of a real domain event (today: only the loan application
+/// Approve/Decline decisions - see ApproveLoanApplicationUseCase/DeclineLoanApplicationUseCase's
+/// optional `portalNotificationService` dep), never fabricated.
+model PortalNotification {
+  id              String        @id @default(uuid())
+  portalAccountId String
+  portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  /// 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED' - the only two triggers today (user's
+  /// explicit choice, 2026-07-24: not every intermediate review stage, just the client-facing
+  /// milestones).
+  type       String
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  read       Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([portalAccountId, read, createdAt])
+  @@map("portal_notifications")
 }
 
 /// Same opaque-OTP-challenge shape as `TwoFactorChallenge` (see that model's own doc comment for
@@ -2037,6 +2063,15 @@ model LoanApplication {
   /// coordinates — null if geocoding failed/was inconclusive (the distance rule fails open in that
   /// case; see LoanApplicationPreQualificationService).
   distanceFromBranchKm Decimal?              @db.Decimal(6, 2)
+
+  /// 2026-07-24 (user request) — the applicant's DEVICE GPS coordinates at the moment of
+  /// submission, captured only for a portal (self-service) submission via the browser's
+  /// Geolocation API. Deliberately optional/best-effort: if the applicant denies the permission
+  /// prompt or their browser doesn't support it, submission still proceeds with both null - this
+  /// is a supporting signal for staff review, never a gate. Distinct from distanceFromBranchKm
+  /// above, which is geocoded from the typed address text, not the device's actual location.
+  submissionLatitude  Decimal? @db.Decimal(9, 6)
+  submissionLongitude Decimal? @db.Decimal(9, 6)
 
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).

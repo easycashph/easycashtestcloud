@@ -38,13 +38,24 @@ import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/
 import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
 import { SubmitLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/SubmitLoanApplicationUseCase';
 import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationsUseCase';
+import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationUseCase';
+import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
+import { createPortalNotificationRouter } from '@modules/client-portal/interface/http/portalNotificationRouter';
+import { createPortalProfileRouter } from '@modules/client-portal/interface/http/portalProfileRouter';
+import { GetPortalProfileUseCase } from '@modules/client-portal/application/use-cases/GetPortalProfileUseCase';
+import { UpdatePortalProfileUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalProfileUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
+import { PrismaPortalNotificationRepository } from '@modules/client-portal/infrastructure/PrismaPortalNotificationRepository';
+import { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
+import { ListPortalNotificationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalNotificationsUseCase';
+import { MarkPortalNotificationReadUseCase } from '@modules/client-portal/application/use-cases/MarkPortalNotificationReadUseCase';
+import { MarkAllPortalNotificationsReadUseCase } from '@modules/client-portal/application/use-cases/MarkAllPortalNotificationsReadUseCase';
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
@@ -127,6 +138,7 @@ import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-applicat
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
+import { UpdateLoanApplicationSelfServiceUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationSelfServiceUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
 import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
 import { LoanApplicationPreQualificationService } from '@modules/loan-application/application/services/LoanApplicationPreQualificationService';
@@ -477,7 +489,17 @@ export function createApp(): Express {
   const borrowerRiskSummaryService = new BorrowerRiskSummaryService(new LoanRiskAssessmentService());
   const borrowerRouter = createBorrowerRouter(
     {
-      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+      createBorrowerUseCase: new CreateBorrowerUseCase({
+        borrowerRepository,
+        profileActivityLogService,
+        // Phase D (2026-07-24): links the source application's PortalAccount to the new Borrower,
+        // if any - see CreateBorrowerUseCase's own doc comment. A fresh repository instance is
+        // fine here (stateless Prisma wrapper, same pattern used for reminderSettingsRepository
+        // elsewhere in this file) since loanApplicationRepository itself isn't declared until
+        // further down this file.
+        loanApplicationRepository: new PrismaLoanApplicationRepository(),
+        portalAccountRepository,
+      }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
       updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
@@ -876,6 +898,30 @@ export function createApp(): Express {
   const branchRepository = new PrismaBranchRepository();
   const geocodingService = new NominatimGeocodingService();
   const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
+
+  // Easycash Portal Notification Center (2026-07-24, Phase C): reuses portalAccountRepository from
+  // the Phase 1 wiring above; own smsGateway/emailGateway instances (same pattern as portalOtpSender)
+  // so portal notification delivery never shares a gateway instance with staff-facing notifications.
+  const portalNotificationRepository = new PrismaPortalNotificationRepository();
+  const portalNotificationService = new PortalNotificationService({
+    portalNotificationRepository,
+    portalAccountRepository,
+    reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+    smsGateway: new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+  });
+
   const loanApplicationRouter = createLoanApplicationRouter(
     {
       createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
@@ -893,12 +939,14 @@ export function createApp(): Express {
         auditLogger,
         profileActivityLogService,
         notificationService,
+        portalNotificationService,
       }),
       declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
         loanApplicationRepository,
         auditLogger,
         profileActivityLogService,
         notificationService,
+        portalNotificationService,
       }),
       revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
         loanApplicationRepository,
@@ -1037,6 +1085,11 @@ export function createApp(): Express {
         createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, notificationService }),
       }),
       listPortalLoanApplicationsUseCase: new ListPortalLoanApplicationsUseCase({ loanApplicationRepository }),
+      getPortalLoanApplicationUseCase: new GetPortalLoanApplicationUseCase({ loanApplicationRepository }),
+      updatePortalLoanApplicationUseCase: new UpdatePortalLoanApplicationUseCase({
+        loanApplicationRepository,
+        updateLoanApplicationSelfServiceUseCase: new UpdateLoanApplicationSelfServiceUseCase({ loanApplicationRepository, preQualificationService }),
+      }),
       listPortalBranchesUseCase: new ListPortalBranchesUseCase({ branchRepository }),
       uploadPortalLoanApplicationDocumentUseCase: new UploadPortalLoanApplicationDocumentUseCase({
         loanApplicationRepository,
@@ -1046,6 +1099,35 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalLoanApplicationRouter);
+
+  // Easycash Portal Notification Center, Phase C (2026-07-24): bell notifications for Approved/
+  // Declined decisions, mounted at the same /api/v1/portal prefix.
+  const portalNotificationRouter = createPortalNotificationRouter(
+    {
+      listPortalNotificationsUseCase: new ListPortalNotificationsUseCase({ portalNotificationRepository }),
+      markPortalNotificationReadUseCase: new MarkPortalNotificationReadUseCase({ portalNotificationRepository }),
+      markAllPortalNotificationsReadUseCase: new MarkAllPortalNotificationsReadUseCase({ portalNotificationRepository }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalNotificationRouter);
+
+  // Easycash Portal client profile, Phase D (2026-07-24): view/edit own contact info once linked
+  // to a real Borrower record (PortalAccount.borrowerId, set at "Create Client Profile" time).
+  // Delegates writes to the same UpdateBorrowerUseCase staff uses (own instance here, same
+  // stateless-Prisma-wrapper reuse pattern as elsewhere in this file) so both surfaces share one
+  // write path and one activity-log trail.
+  const portalProfileRouter = createPortalProfileRouter(
+    {
+      getPortalProfileUseCase: new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository }),
+      updatePortalProfileUseCase: new UpdatePortalProfileUseCase({
+        portalAccountRepository,
+        updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+      }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalProfileRouter);
 
   // Portal-facing PSGC address lookups (cascading region/province/city/barangay + ZIP auto-fill
   // on the loan application form) - see portalPsgcRouter.ts's doc comment for why this can't just

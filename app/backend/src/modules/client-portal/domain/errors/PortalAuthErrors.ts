@@ -61,3 +61,13 @@ export class PortalLoanApplicationNotFoundError extends DomainError {
     this.name = 'PortalLoanApplicationNotFoundError';
   }
 }
+
+/** Phase D (2026-07-24): the account hasn't been converted into a real client yet (no MIS staff
+ * has run "Create Client Profile" on one of its approved applications) - there's no Borrower
+ * record to show/edit yet. */
+export class PortalAccountNotLinkedError extends DomainError {
+  constructor() {
+    super('PORTAL_ACCOUNT_NOT_LINKED', 'Your account is not yet linked to a client profile.', undefined, 404);
+    this.name = 'PortalAccountNotLinkedError';
+  }
+}

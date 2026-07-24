@@ -1656,6 +1656,19 @@ export function LoanApplicationDetailPage() {
               <p className="font-mono text-xs text-muted-foreground">
                 {application.requestedCategory} · Submitted {formatDate(application.createdAt)}
                 {encodedByName ? ` · Encoded by ${encodedByName}` : ''}
+                {application.submissionLatitude !== null && application.submissionLongitude !== null && (
+                  <>
+                    {' · '}
+                    <a
+                      href={`https://www.google.com/maps?q=${application.submissionLatitude},${application.submissionLongitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                    >
+                      View submission location
+                    </a>
+                  </>
+                )}
               </p>
               {isPreApprovalStage && (
                 <p className="text-xs text-muted-foreground">

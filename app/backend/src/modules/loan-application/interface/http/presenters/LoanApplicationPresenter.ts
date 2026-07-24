@@ -76,6 +76,8 @@ export function presentLoanApplication(application: LoanApplication, breakdown?:
     encodedByUserId: p.encodedByUserId ?? null,
     status: p.status,
     distanceFromBranchKm: p.distanceFromBranchKm ?? null,
+    submissionLatitude: p.submissionLatitude ?? null,
+    submissionLongitude: p.submissionLongitude ?? null,
     assignedLoanProductVersionId: p.assignedLoanProductVersionId ?? null,
     reviewedByUserId: p.reviewedByUserId ?? null,
     reviewedAt: p.reviewedAt?.toISOString() ?? null,
