@@ -1615,40 +1615,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               penalty.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2">
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-semibold">{formatPeso(num(accruedInterestQuery.data.accruedInterest))}</span>
               <span className="text-xs text-muted-foreground">as of today</span>
-            </div>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Due date</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Unpaid principal</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Unpaid interest</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Frozen penalty</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {accruedInterestQuery.data.breakdown.map((row) => (
-                    <TableRow key={row.installmentNumber}>
-                      <TableCell>{row.installmentNumber}</TableCell>
-                      <TableCell>{formatDate(row.dueDate)}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(row.unpaidPrincipal))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(row.unpaidInterest))}</TableCell>
-                      <TableCell className="text-right">{formatPeso(num(row.frozenPenalty))}</TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="font-semibold">
-                    <TableCell colSpan={2}>Total</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDuePrincipal))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDueInterest))}</TableCell>
-                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDuePenalty))}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
             </div>
             <p className="text-xs text-muted-foreground">
               Total past due ({formatPeso(num(accruedInterestQuery.data.totalPastDue))}) × contractual rate (
