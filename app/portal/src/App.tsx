@@ -9,6 +9,7 @@ import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LoanApplicationFormPage } from '@/pages/LoanApplicationFormPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 
 /** HashRouter, not BrowserRouter: GitHub Pages serves static files only (no server-side rewrite
  * to index.html for a deep link/refresh on a client-side route), and hash-based routes
@@ -59,6 +60,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LoanProductsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

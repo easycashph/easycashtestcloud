@@ -44,6 +44,9 @@ import { ListPortalBranchesUseCase } from '@modules/client-portal/application/us
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
 import { createPortalNotificationRouter } from '@modules/client-portal/interface/http/portalNotificationRouter';
+import { createPortalProfileRouter } from '@modules/client-portal/interface/http/portalProfileRouter';
+import { GetPortalProfileUseCase } from '@modules/client-portal/application/use-cases/GetPortalProfileUseCase';
+import { UpdatePortalProfileUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalProfileUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
@@ -479,7 +482,17 @@ export function createApp(): Express {
   const borrowerRiskSummaryService = new BorrowerRiskSummaryService(new LoanRiskAssessmentService());
   const borrowerRouter = createBorrowerRouter(
     {
-      createBorrowerUseCase: new CreateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+      createBorrowerUseCase: new CreateBorrowerUseCase({
+        borrowerRepository,
+        profileActivityLogService,
+        // Phase D (2026-07-24): links the source application's PortalAccount to the new Borrower,
+        // if any - see CreateBorrowerUseCase's own doc comment. A fresh repository instance is
+        // fine here (stateless Prisma wrapper, same pattern used for reminderSettingsRepository
+        // elsewhere in this file) since loanApplicationRepository itself isn't declared until
+        // further down this file.
+        loanApplicationRepository: new PrismaLoanApplicationRepository(),
+        portalAccountRepository,
+      }),
       getBorrowerUseCase: new GetBorrowerUseCase({ borrowerRepository }),
       listBorrowersUseCase: new ListBorrowersUseCase({ borrowerRepository }),
       updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
@@ -1059,6 +1072,23 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalNotificationRouter);
+
+  // Easycash Portal client profile, Phase D (2026-07-24): view/edit own contact info once linked
+  // to a real Borrower record (PortalAccount.borrowerId, set at "Create Client Profile" time).
+  // Delegates writes to the same UpdateBorrowerUseCase staff uses (own instance here, same
+  // stateless-Prisma-wrapper reuse pattern as elsewhere in this file) so both surfaces share one
+  // write path and one activity-log trail.
+  const portalProfileRouter = createPortalProfileRouter(
+    {
+      getPortalProfileUseCase: new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository }),
+      updatePortalProfileUseCase: new UpdatePortalProfileUseCase({
+        portalAccountRepository,
+        updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+      }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalProfileRouter);
 
   // Portal-facing PSGC address lookups (cascading region/province/city/barangay + ZIP auto-fill
   // on the loan application form) - see portalPsgcRouter.ts's doc comment for why this can't just

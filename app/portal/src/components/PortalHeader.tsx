@@ -29,6 +29,9 @@ export function PortalHeader() {
           <Link to="/products" className="hover:text-foreground">
             Loan Products
           </Link>
+          <Link to="/profile" className="hover:text-foreground">
+            My Profile
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <NotificationBell />

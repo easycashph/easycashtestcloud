@@ -256,3 +256,45 @@ export interface PortalNotificationListResponse {
   nextCursor: string | null;
   unreadCount: number;
 }
+
+/** Phase D (2026-07-24 user request) - mirrors backend's PortalProfilePresenter.ts. View is the
+ * whole client record as the LMS has it; edit (PATCH /portal/profile) is contact info only - see
+ * UpdatePortalProfileRequest below. */
+export interface PortalProfileAddress {
+  addressType: string | null;
+  houseUnitNumber: string | null;
+  street: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+  zipCode: string | null;
+}
+
+export interface PortalProfile {
+  id: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+  gender: string | null;
+  civilStatus: string | null;
+  mobilePhone1: string | null;
+  mobilePhone2: string | null;
+  email: string | null;
+  addresses: PortalProfileAddress[];
+}
+
+export interface UpdatePortalProfileRequest {
+  mobilePhone1?: string;
+  mobilePhone2?: string;
+  email?: string;
+  addresses?: {
+    addressType?: string;
+    houseUnitNumber?: string;
+    street?: string;
+    barangay?: string;
+    cityMunicipality?: string;
+    province?: string;
+    zipCode?: string;
+  }[];
+}

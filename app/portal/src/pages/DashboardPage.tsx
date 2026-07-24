@@ -91,6 +91,9 @@ export function DashboardPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {account?.borrowerId ? 'Linked to an existing client profile.' : 'Not yet linked to a client profile.'}
             </p>
+            <Button variant="outline" className="mt-4" onClick={() => navigate('/profile')}>
+              View Profile
+            </Button>
           </Card>
         </div>
 

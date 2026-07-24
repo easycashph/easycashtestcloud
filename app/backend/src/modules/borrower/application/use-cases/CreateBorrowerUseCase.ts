@@ -4,12 +4,21 @@ import { PersonName } from '../../domain/valueObjects/PersonName';
 import { Address } from '../../domain/valueObjects/Address';
 import { DuplicateClientProfileError } from '../../domain/errors/BorrowerDomainErrors';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
 import type { IBorrowerRepository } from '../ports/IBorrowerRepository';
 import type { CreateBorrowerInput } from '../dtos/BorrowerDtos';
 
 export interface CreateBorrowerUseCaseDeps {
   borrowerRepository: IBorrowerRepository;
   profileActivityLogService?: ProfileActivityLogService;
+  /** Both optional and only used together (2026-07-24, Phase D): when Create Client Profile runs
+   * from an application that carries a `portalAccountId` (i.e. was submitted through the Easycash
+   * Portal, not staff-encoded), links that PortalAccount to the newly-created Borrower so the
+   * portal user can see/edit their own client profile. Silently skipped if either dep is missing
+   * or the source application has no portalAccountId - staff-encoded applications never link. */
+  loanApplicationRepository?: ILoanApplicationRepository;
+  portalAccountRepository?: IPortalAccountRepository;
 }
 
 /**
@@ -55,6 +64,14 @@ export class CreateBorrowerUseCase {
     });
 
     await this.deps.borrowerRepository.save(borrower);
+
+    // Phase D (2026-07-24): link the originating PortalAccount to this Borrower, if any.
+    if (input.sourceApplicationId && this.deps.loanApplicationRepository && this.deps.portalAccountRepository) {
+      const sourceApplication = await this.deps.loanApplicationRepository.findById(input.sourceApplicationId);
+      if (sourceApplication?.portalAccountId) {
+        await this.deps.portalAccountRepository.update(sourceApplication.portalAccountId, { borrowerId: borrower.id });
+      }
+    }
 
     // ADR-050: Log activity for profile timeline
     if (this.deps.profileActivityLogService && createdByUserId) {
