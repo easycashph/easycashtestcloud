@@ -13,6 +13,8 @@ import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/Insta
 import { LoanAccount } from '../../domain/LoanAccount';
 import { LoanRestructure } from '../../domain/LoanRestructure';
 import { LoanAlreadyRestructuredError, LoanNotEligibleForRestructureError, UnsupportedInterestCalculationMethodError } from '../../domain/errors/LoanAccountDomainErrors';
+import { resolveSecMc3Coverage } from '../services/SecMc3CoverageResolver';
+import { AccruedInterestCalculator } from '../services/AccruedInterestCalculator';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
 import type { ILoanRestructureRepository } from '../ports/ILoanRestructureRepository';
 
@@ -60,10 +62,13 @@ function addMonths(date: Date, months: number): Date {
  *   current/good-standing loan is refused (`LoanNotEligibleForRestructureError`).
  * - Exactly once per loan account — enforced via `LoanRestructure.oldLoanAccountId`'s unique
  *   constraint, pre-checked here for a fast, friendly error (`LoanAlreadyRestructuredError`).
- * - The new loan's principal = the old loan's full Collections Balance (principal + interest +
- *   fees + penalty) — user-confirmed despite the interest-on-interest/SEC-MC3-non-compounding-
- *   penalty implications discussed with the user; mitigated by making this explicit on the new
- *   loan's Disclosure Statement (existing ADR-051 document generation, unchanged by this feature).
+ * - 2026-07-24 follow-up (user-confirmed, after Accrued Interest shipped): the new loan's
+ *   principal = unpaid Principal + unpaid Interest (across the WHOLE remaining schedule, every
+ *   installment whether due yet or not) + unpaid Penalty (frozen at maturity, naturally ₱0 for a
+ *   not-yet-due installment) + Accrued Interest (0 before maturity - `AccruedInterestCalculator`)
+ *   + unpaid Fees. Despite the interest-on-interest/SEC-MC3-non-compounding-penalty implications
+ *   discussed with the user; mitigated by making this explicit on the new loan's Disclosure
+ *   Statement (existing ADR-051 document generation, unchanged by this feature).
  * - Product/interest rate are copied from the old loan (its own LA-4 snapshot fields) — user
  *   chose NOT to let staff pick a different product. Term (`installmentCount`) and
  *   `firstRepaymentDate` ARE staff-entered, per ADR-045's "no recoverable generation rule" stance
@@ -113,7 +118,23 @@ export class RestructureLoanUseCase {
       throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
     }
 
-    const newPrincipalAmount = oldLoanAccount.collectionsBalance;
+    // 2026-07-24 (user-confirmed, follow-up after the Accrued Interest feature shipped): new
+    // principal = unpaid Principal + unpaid Interest across the WHOLE remaining schedule (every
+    // installment, due or not - "kahit hindi pa due ang installment") + unpaid Penalty (frozen at
+    // maturity, per-installment - naturally ₱0 for a not-yet-due installment, no separate
+    // filtering needed) + Accrued Interest (0 before maturity) + unpaid Fees. Replaces the
+    // original `collectionsBalance`-based figure, which didn't yet account for Accrued Interest.
+    // `AccruedInterestCalculator.restructureNewPrincipal` computes exactly this - shared with the
+    // Loan Detail page's own accrued-interest query so the Restructure dialog's preview and this
+    // use case's actual charge always agree.
+    const isSecMc3Covered = await resolveSecMc3Coverage(oldLoanAccount, this.deps.loanProductRepository);
+    const accruedInterestFigures = AccruedInterestCalculator.calculate(
+      installments,
+      { isProspectiveLoan: true, principalAmount: oldLoanAccount.principalAmount, isSecMc3Covered },
+      oldLoanAccount.contractualInterestRate,
+      now,
+    );
+    const newPrincipalAmount = accruedInterestFigures.restructureNewPrincipal;
     const loanCode = await this.generateLoanCode(oldLoanAccount.loanProductVersionId);
 
     const newLoanAccount = LoanAccount.create({

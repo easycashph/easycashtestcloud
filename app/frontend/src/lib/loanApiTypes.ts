@@ -66,6 +66,10 @@ export interface AccruedInterestFigures {
   daysLate: number;
   contractualRate: string | null;
   accruedInterest: string;
+  /** 2026-07-24 (Loan Restructure follow-up) - what a Restructure would set the new loan's
+   * principal to right now: unpaid principal + unpaid interest across the WHOLE remaining
+   * schedule (every installment, due or not) + unpaid penalty + accruedInterest + unpaid fees. */
+  restructureNewPrincipal: string;
   breakdown: AccruedInterestBreakdownRow[];
 }
 

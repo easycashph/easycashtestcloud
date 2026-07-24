@@ -11,6 +11,7 @@ export function presentAccruedInterest(figures: AccruedInterestFigures) {
     daysLate: figures.daysLate,
     contractualRate: figures.contractualRate?.toString() ?? null,
     accruedInterest: figures.accruedInterest.toString(),
+    restructureNewPrincipal: figures.restructureNewPrincipal.toString(),
     breakdown: figures.breakdown.map((row) => ({
       installmentNumber: row.installmentNumber,
       dueDate: row.dueDate.toISOString(),

@@ -1452,13 +1452,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const schedulePreview = showSchedulePreview
     ? previewLoanSchedule(num(loan.principalAmount), num(loan.interestRate), loan.installmentCount, new Date(loan.firstRepaymentDate))
     : null;
-  // 2026-07-24 (Loan Restructure feature, user request): same client-side preview convention as
-  // Create Loan Account/the block above - principal is this loan's Collections Balance (frozen,
-  // never editable), rate is copied from this loan, only term/date come from the dialog's inputs.
+  // 2026-07-24 (Loan Restructure feature, user request, follow-up 2026-07-24): same client-side
+  // preview convention as Create Loan Account/the block above - rate is copied from this loan,
+  // only term/date come from the dialog's inputs. Principal is `restructureNewPrincipal` from the
+  // accrued-interest query (unpaid principal + interest across the WHOLE schedule + unpaid
+  // penalty + accrued interest + unpaid fees) - the exact figure the backend will actually charge,
+  // not the old collectionsBalance-only figure. Falls back to collectionsBalance only while that
+  // query is still loading, so the preview isn't briefly blank.
   const restructureInstallmentCountNum = Number.parseInt(restructureInstallmentCount, 10);
+  const restructureNewPrincipalNum = accruedInterestQuery.data
+    ? num(accruedInterestQuery.data.restructureNewPrincipal)
+    : num(loan.collectionsBalance);
   const restructurePreview =
     restructureOpen && restructureFirstRepaymentDate
-      ? previewLoanSchedule(num(loan.collectionsBalance), num(loan.interestRate), restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
+      ? previewLoanSchedule(restructureNewPrincipalNum, num(loan.interestRate), restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
       : null;
   // Every balance column (and the collectionsBalance/accountingBalance getters derived from them)
   // is genuinely 0 before Activation - not because there's no obligation, but because
@@ -2917,15 +2924,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <DialogHeader>
             <DialogTitle>Restructure loan</DialogTitle>
             <DialogDescription>
-              Creates a brand new loan account with this loan's full Collections Balance as its principal, using the same product and
-              interest rate. This loan closes as Restructured. Can only be done once per loan account.
+              Creates a brand new loan account with unpaid principal + unpaid interest (whole remaining schedule) + unpaid penalty +
+              accrued interest + unpaid fees as its principal, using the same product and interest rate. This loan closes as
+              Restructured. Can only be done once per loan account.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">New principal</p>
-              <p className="font-semibold">{formatPeso(num(loan.collectionsBalance))}</p>
+              <p className="font-semibold">{formatPeso(restructureNewPrincipalNum)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Interest rate</p>

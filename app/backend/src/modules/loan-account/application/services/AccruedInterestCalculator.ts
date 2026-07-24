@@ -26,6 +26,17 @@ export interface AccruedInterestFigures {
   /** = (totalPastDue x contractualRate) / 30 x daysLate - 0 if not yet past maturity, no unpaid balance, or no contractual rate set. */
   accruedInterest: Money;
   breakdown: AccruedInterestBreakdownRow[];
+  /**
+   * 2026-07-24 (user-confirmed, Loan Restructure follow-up): what a Restructure would set the new
+   * loan's principal to RIGHT NOW - unpaid Principal + unpaid Interest across the WHOLE remaining
+   * schedule (every installment, due or not) + unpaid Penalty (every installment, naturally ₱0
+   * for a not-yet-due one) + `accruedInterest` above + unpaid Fees. Exposed here (not just
+   * computed inside `RestructureLoanUseCase`) so the Loan Detail page's Restructure dialog can
+   * preview the exact figure the backend will actually charge, from the one query it already
+   * makes - see `RestructureLoanUseCase`'s own doc comment for why this differs in SCOPE (whole
+   * loan, not just past-due) from every other field on this interface.
+   */
+  restructureNewPrincipal: Money;
 }
 
 /** Whole calendar days from `from` to `to` (>= 0). */
@@ -92,6 +103,24 @@ export class AccruedInterestCalculator {
       accruedInterest = Money.of(dailyBase.times(daysLate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP));
     }
 
+    // Whole-loan (not just past-due) totals, for restructureNewPrincipal only - see that field's
+    // own doc comment for why this is a deliberately different scope from every field above it.
+    let wholeLoanUnpaidPrincipal = Money.ZERO;
+    let wholeLoanUnpaidInterest = Money.ZERO;
+    let wholeLoanUnpaidFees = Money.ZERO;
+    let wholeLoanUnpaidPenalty = Money.ZERO;
+    for (const installment of sorted) {
+      wholeLoanUnpaidPrincipal = wholeLoanUnpaidPrincipal.add(installment.due.principal.subtract(installment.paid.principal));
+      wholeLoanUnpaidInterest = wholeLoanUnpaidInterest.add(installment.due.interest.subtract(installment.paid.interest));
+      wholeLoanUnpaidFees = wholeLoanUnpaidFees.add(installment.due.fees.subtract(installment.paid.fees));
+      wholeLoanUnpaidPenalty = wholeLoanUnpaidPenalty.add(resolveComputedPenalty(installment, fullContext, asOfDate));
+    }
+    const restructureNewPrincipal = wholeLoanUnpaidPrincipal
+      .add(wholeLoanUnpaidInterest)
+      .add(wholeLoanUnpaidPenalty)
+      .add(accruedInterest)
+      .add(wholeLoanUnpaidFees);
+
     return {
       maturityDate,
       totalPastDuePrincipal,
@@ -102,6 +131,7 @@ export class AccruedInterestCalculator {
       contractualRate,
       accruedInterest,
       breakdown,
+      restructureNewPrincipal,
     };
   }
 }

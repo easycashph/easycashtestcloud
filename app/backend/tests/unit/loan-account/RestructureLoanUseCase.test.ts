@@ -114,7 +114,7 @@ describe('RestructureLoanUseCase', () => {
     vi.clearAllMocks();
   });
 
-  it('creates a new ACTIVE loan account whose principal equals the old loan\'s Collections Balance', async () => {
+  it('creates a new ACTIVE loan account whose principal is unpaid principal + unpaid interest (no penalty/accrued interest here)', async () => {
     const deps = buildDeps();
     const loan = buildActiveLoan();
     primeHappyPath(deps, loan);
@@ -128,9 +128,83 @@ describe('RestructureLoanUseCase', () => {
     });
 
     expect(newLoanAccount.status).toBe('ACTIVE');
-    expect(newLoanAccount.principalAmount.equals(loan.collectionsBalance)).toBe(true);
+    // 2026-07-24 follow-up: unpaid principal (4166.67) + unpaid interest (145.83) - penalty and
+    // accrued interest are both deterministically ₱0 here (no contractualInterestRate set on the
+    // fixture loan, and the single-installment fixture's own dueDate IS the maturity date, so
+    // there's no elapsed time for penalty to accrue past it either).
+    expect(newLoanAccount.principalAmount.equals(Money.of('4312.50'))).toBe(true);
     expect(newLoanAccount.installmentCount).toBe(6);
     expect(newLoanAccount.firstRepaymentDate).toEqual(NEW_FIRST_REPAYMENT_DATE);
+  });
+
+  it('includes unpaid principal/interest from NOT-yet-due installments too - "kahit hindi pa due ang installment"', async () => {
+    const deps = buildDeps();
+    const loan = buildActiveLoan();
+    deps.loanAccountRepository.findById.mockResolvedValue(loan);
+    // Installment #1 is overdue (satisfies eligibility); #2 is not yet due (far in the future) -
+    // both must still count toward the new principal.
+    const overdue = buildOverdueInstallment(loan.id, new Date('2026-02-15T00:00:00.000Z'));
+    const notYetDue = RepaymentInstallment.create({
+      loanAccountId: loan.id,
+      installmentNumber: 2,
+      dueDate: new Date('2099-01-01T00:00:00.000Z'),
+      due: InstallmentAmounts.of({ principal: Money.of('1000.00'), interest: Money.of('50.00') }),
+    });
+    deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([overdue, notYetDue]);
+    deps.loanProductRepository.findVersionById.mockResolvedValue(buildLoanProductVersion());
+    deps.loanProductRepository.findById.mockResolvedValue(buildLoanProduct());
+
+    const useCase = new RestructureLoanUseCase(deps);
+    const { newLoanAccount } = await useCase.execute({
+      oldLoanAccountId: loan.id,
+      installmentCount: 6,
+      firstRepaymentDate: NEW_FIRST_REPAYMENT_DATE,
+      restructuredByUserId: 'staff-1',
+    });
+
+    // 4166.67 + 145.83 (installment #1) + 1000.00 + 50.00 (installment #2, not yet due) = 5362.50
+    // is the floor - #1's penalty is no longer capped at its OWN due date now that #2 (far in the
+    // future) pushes the schedule's maturityDate out, so it may add a live ADR-050 amount on top
+    // (wall-clock-dependent, not asserted exactly here). The key behavior under test - that #2's
+    // principal/interest are NOT excluded just because it isn't due yet - only needs >=.
+    expect(Number(newLoanAccount.principalAmount.toString())).toBeGreaterThanOrEqual(5362.5);
+  });
+
+  it('adds Accrued Interest when the loan has genuinely matured with a contractual rate set', async () => {
+    const deps = buildDeps();
+    const loan = LoanAccount.create({
+      loanCode: 'SML-REG_00099',
+      borrowerId: 'borrower-1',
+      loanProductVersionId: 'version-1',
+      branchId: 'branch-1',
+      principalAmount: PRINCIPAL,
+      interestRate: RATE,
+      contractualInterestRate: Percentage.of('4.95'),
+      installmentCount: OLD_INSTALLMENT_COUNT,
+      firstRepaymentDate: FIRST_REPAYMENT_DATE,
+    });
+    loan.approve('officer-1');
+    loan.activate({ principalDue: PRINCIPAL, interestDue: Money.of('1750.00'), activatedAt: new Date('2026-01-01T00:00:00.000Z') });
+    deps.loanAccountRepository.findById.mockResolvedValue(loan);
+    // Due far enough in the past that maturity has definitely elapsed, regardless of wall-clock
+    // drift between when this test was written and when it runs.
+    const matured = buildOverdueInstallment(loan.id, new Date('2020-01-01T00:00:00.000Z'));
+    deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([matured]);
+    deps.loanProductRepository.findVersionById.mockResolvedValue(buildLoanProductVersion());
+    deps.loanProductRepository.findById.mockResolvedValue(buildLoanProduct());
+
+    const useCase = new RestructureLoanUseCase(deps);
+    const { newLoanAccount } = await useCase.execute({
+      oldLoanAccountId: loan.id,
+      installmentCount: 6,
+      firstRepaymentDate: NEW_FIRST_REPAYMENT_DATE,
+      restructuredByUserId: 'staff-1',
+    });
+
+    // Unpaid principal + interest (4312.50) alone would be the floor - Accrued Interest and/or
+    // frozen Penalty on top must push the actual figure strictly higher, since this installment
+    // has been overdue for years with a real contractual rate set.
+    expect(Number(newLoanAccount.principalAmount.toString())).toBeGreaterThan(4312.5);
   });
 
   it('copies the product/interest rate from the old loan rather than accepting them as input', async () => {
@@ -187,7 +261,7 @@ describe('RestructureLoanUseCase', () => {
     const restructure = deps.loanRestructureRepository.create.mock.calls[0]?.[0] as LoanRestructure;
     expect(restructure.oldLoanAccountId).toBe(loan.id);
     expect(restructure.newLoanAccountId).toBe(newLoanAccount.id);
-    expect(restructure.newPrincipalAmount.equals(loan.collectionsBalance)).toBe(true);
+    expect(restructure.newPrincipalAmount.equals(Money.of('4312.50'))).toBe(true);
     expect(restructure.reason).toBe('Client requested lower monthly');
   });
 
