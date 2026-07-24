@@ -297,6 +297,25 @@ function computeAge(birthDate: string): number | null {
   return value;
 }
 
+/** 2026-07-24 (user request) — best-effort device GPS capture at submission time via the
+ * browser's Geolocation API. Deliberately never blocks/delays submission on a denial, timeout, or
+ * unsupported browser - resolves null in every failure case instead of rejecting, so callers can
+ * just await it and move on. A short 5s timeout keeps a slow/stuck GPS fix from stalling the whole
+ * form; `maximumAge` allows a recently-cached fix instead of always forcing a fresh one. */
+function getBestEffortGeolocation(): Promise<{ latitude: number; longitude: number } | null> {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator)) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }),
+      () => resolve(null),
+      { timeout: 5000, maximumAge: 60000 },
+    );
+  });
+}
+
 /** Client-facing loan application form (Phase 2, 2026-07-23; expanded to the full field set
  * 2026-07-24) - the same fields the staff-facing form captures (app/frontend's
  * LoanApplicationCreatePage.tsx), following the same section numbering/grouping/order, minus what
@@ -387,10 +406,16 @@ export function LoanApplicationFormPage() {
 
     setIsSubmitting(true);
     try {
+      // Skipped entirely on an edit (PATCH) - the geotag is a one-time "where were they when they
+      // first applied" signal, not something re-captured on every save. Never blocks/delays a new
+      // submission for longer than the geolocation helper's own 5s timeout.
+      const geolocation = isEditMode ? null : await getBestEffortGeolocation();
       const body: SubmitLoanApplicationRequest = {
         branchId: form.branchId,
         applicantName,
         age: age ?? undefined,
+        submissionLatitude: geolocation?.latitude,
+        submissionLongitude: geolocation?.longitude,
         birthDate: form.birthDate || undefined,
         gender: form.gender || undefined,
         civilStatus: form.civilStatus || undefined,
@@ -851,6 +876,13 @@ export function LoanApplicationFormPage() {
             <SectionCard number="9" title="Note" description="Anything else worth mentioning that doesn't have its own field above.">
               <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Optional" />
             </SectionCard>
+
+            {!isEditMode && (
+              <p className="text-center text-xs text-muted-foreground">
+                Submitting may prompt for your device's location - this is optional and helps us verify your application faster. You can
+                still submit if you decline.
+              </p>
+            )}
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
               {isSubmitting ? (isEditMode ? 'Saving…' : 'Submitting…') : isEditMode ? 'Save Changes' : 'Submit Application'}

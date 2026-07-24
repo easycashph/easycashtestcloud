@@ -1957,6 +1957,15 @@ model LoanApplication {
   /// case; see LoanApplicationPreQualificationService).
   distanceFromBranchKm Decimal?              @db.Decimal(6, 2)
 
+  /// 2026-07-24 (user request) — the applicant's DEVICE GPS coordinates at the moment of
+  /// submission, captured only for a portal (self-service) submission via the browser's
+  /// Geolocation API. Deliberately optional/best-effort: if the applicant denies the permission
+  /// prompt or their browser doesn't support it, submission still proceeds with both null - this
+  /// is a supporting signal for staff review, never a gate. Distinct from distanceFromBranchKm
+  /// above, which is geocoded from the typed address text, not the device's actual location.
+  submissionLatitude  Decimal? @db.Decimal(9, 6)
+  submissionLongitude Decimal? @db.Decimal(9, 6)
+
   /// Staff picks the specific product sub-type during review — approval is
   /// blocked until this is set (mirrors the mock UI's rule).
   assignedLoanProductVersionId String?

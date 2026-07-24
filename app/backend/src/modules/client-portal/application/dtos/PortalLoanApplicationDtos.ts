@@ -58,6 +58,11 @@ export interface SubmitLoanApplicationInput {
   requestedCategory: string;
   requestedAmount: number;
   requestedTermMonths: number;
+  /** 2026-07-24 (user request) — applicant's device GPS coordinates at submission time, captured
+   * client-side via the browser's Geolocation API. Optional/best-effort - the portal form never
+   * blocks submission on a denied/unavailable permission. */
+  submissionLatitude?: number;
+  submissionLongitude?: number;
 }
 
 export interface PortalLoanApplicationSummary {

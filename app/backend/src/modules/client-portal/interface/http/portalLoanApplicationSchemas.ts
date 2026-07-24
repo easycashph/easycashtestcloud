@@ -53,6 +53,12 @@ export const submitLoanApplicationSchema = z.object({
   requestedCategory: z.string().min(1),
   requestedAmount: z.coerce.number().positive(),
   requestedTermMonths: z.coerce.number().int().positive(),
+  // 2026-07-24 — device GPS coordinates at submission time (optional/best-effort, never blocks
+  // submission). Standard lat/lng ranges; not required even when present as a pair (a client could
+  // theoretically send just one, which the backend just stores as-is - no cross-field validation
+  // needed for a purely informational signal).
+  submissionLatitude: z.coerce.number().min(-90).max(90).optional(),
+  submissionLongitude: z.coerce.number().min(-180).max(180).optional(),
 });
 export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicationSchema>;
 
@@ -60,8 +66,11 @@ export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicat
  * (enforced by LoanApplication.updateSelfServiceIntake's own guard, not this schema). Same field
  * set as submitLoanApplicationSchema, but every field is optional (including requestedCategory/
  * Amount/TermMonths) since this is a partial PATCH against an already-valid record, not a fresh
- * submission. */
-export const updateLoanApplicationSchema = submitLoanApplicationSchema.partial();
+ * submission. submissionLatitude/Longitude are deliberately EXCLUDED (not just left optional) -
+ * that's a one-time-at-submission signal, not something re-editable after the fact; omitting it
+ * here means updateSelfServiceIntake() (whose patch type also excludes it) never even sees it,
+ * regardless of what a caller sends in the request body. */
+export const updateLoanApplicationSchema = submitLoanApplicationSchema.omit({ submissionLatitude: true, submissionLongitude: true }).partial();
 export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;
 
 /** Same category enum as document module's AttachmentDocumentCategory, minus PROFILE_PICTURE

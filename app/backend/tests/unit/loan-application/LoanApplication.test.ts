@@ -120,4 +120,23 @@ describe('LoanApplication', () => {
     const application = buildApplication('PRE_APPROVAL');
     expect(() => application.updateSelfServiceIntake({ applicantName: 'Juana Dela Cruz' })).toThrow(InvalidLoanApplicationTransitionError);
   });
+
+  it('create() persists the submission geotag when provided, and leaves it undefined when not', () => {
+    const withGeotag = LoanApplication.create({
+      branchId: 'branch-1',
+      applicantName: 'Juan Dela Cruz',
+      requestedCategory: 'Salary Loan',
+      requestedAmount: 50000,
+      requestedTermMonths: 12,
+      status: 'PREAPPROVED',
+      submissionLatitude: 14.5995,
+      submissionLongitude: 120.9842,
+    });
+    expect(withGeotag.toProps().submissionLatitude).toBe(14.5995);
+    expect(withGeotag.toProps().submissionLongitude).toBe(120.9842);
+
+    const withoutGeotag = buildApplication('PREAPPROVED');
+    expect(withoutGeotag.toProps().submissionLatitude).toBeUndefined();
+    expect(withoutGeotag.toProps().submissionLongitude).toBeUndefined();
+  });
 });

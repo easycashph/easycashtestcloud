@@ -120,6 +120,10 @@ export interface SubmitLoanApplicationRequest {
   requestedCategory: string;
   requestedAmount: number;
   requestedTermMonths: number;
+  /** 2026-07-24 (user request) - device GPS coordinates captured client-side at submission time,
+   * best-effort only (see LoanApplicationFormPage's getBestEffortGeolocation()). */
+  submissionLatitude?: number;
+  submissionLongitude?: number;
 }
 
 export type LoanApplicationStatus = 'PREAPPROVED' | 'PREDECLINED' | 'UNDER_REVIEW' | 'PRE_APPROVAL' | 'APPROVED' | 'DECLINED';

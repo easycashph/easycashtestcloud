@@ -50,4 +50,8 @@ export interface CreateLoanApplicationInput {
   requestedTermMonths: number;
   submittedDocuments?: string[];
   encodedByUserId?: string;
+  /** 2026-07-24 — applicant's device GPS coordinates at submission time (portal only, optional/
+   * best-effort). See schema.prisma's doc comment on LoanApplication.submissionLatitude. */
+  submissionLatitude?: number;
+  submissionLongitude?: number;
 }

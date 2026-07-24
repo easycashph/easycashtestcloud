@@ -178,6 +178,10 @@ export interface LoanApplicationProps {
   /** Cached from LoanApplicationPreQualificationService's geocoding — null if unresolved (distance
    * rule fails open in that case). */
   distanceFromBranchKm?: number;
+  /** 2026-07-24 — the applicant's device GPS coordinates at submission time (portal only,
+   * optional/best-effort). See schema.prisma's doc comment. */
+  submissionLatitude?: number;
+  submissionLongitude?: number;
   assignedLoanProductVersionId?: string;
 
   reviewedByUserId?: string;
@@ -254,6 +258,8 @@ export interface CreateLoanApplicationProps {
    * lookup is I/O and does not belong in this domain layer. */
   status: 'PREAPPROVED' | 'PREDECLINED';
   distanceFromBranchKm?: number;
+  submissionLatitude?: number;
+  submissionLongitude?: number;
 }
 
 /**
@@ -328,6 +334,8 @@ export class LoanApplication {
       encodedByUserId: input.encodedByUserId,
       status: input.status,
       distanceFromBranchKm: input.distanceFromBranchKm,
+      submissionLatitude: input.submissionLatitude,
+      submissionLongitude: input.submissionLongitude,
       createdAt: now,
       updatedAt: now,
     });

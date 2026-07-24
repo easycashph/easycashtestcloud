@@ -209,6 +209,11 @@ export interface LoanApplication {
   encodedByUserId: string | null;
   status: LoanApplicationStatus;
   distanceFromBranchKm: number | null;
+  /** 2026-07-24 — the applicant's device GPS coordinates at submission time (Easycash Portal
+   * submissions only, optional/best-effort - null for staff-encoded walk-ins and for a portal
+   * client who denied/lacks the browser's location permission). */
+  submissionLatitude: number | null;
+  submissionLongitude: number | null;
   assignedLoanProductVersionId: string | null;
   reviewedByUserId: string | null;
   reviewedAt: string | null;
