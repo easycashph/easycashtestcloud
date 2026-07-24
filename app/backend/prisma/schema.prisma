@@ -461,14 +461,14 @@ model PortalNotification {
   /// 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED' - the only two triggers today (user's
   /// explicit choice, 2026-07-24: not every intermediate review stage, just the client-facing
   /// milestones).
-  type       String
-  title      String
-  body       String?
-  entityType String?
-  entityId   String?
-  read       Boolean   @default(false)
-  readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  type            String
+  title           String
+  body            String?
+  entityType      String?
+  entityId        String?
+  read            Boolean       @default(false)
+  readAt          DateTime?
+  createdAt       DateTime      @default(now())
 
   @@index([portalAccountId, read, createdAt])
   @@map("portal_notifications")
