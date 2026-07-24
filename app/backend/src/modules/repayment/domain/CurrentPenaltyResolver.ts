@@ -34,6 +34,15 @@ export interface PenaltyComputationContext {
   principalAmount: Money;
   /** `ADR-053` — when true, use the SEC MC 3 ceiling (5%/month, simple/non-compounding) instead of the ADR-050 rates. Resolved by the caller via `isSecMc3Covered()` against the loan's product/principal/tenor/origination date. */
   isSecMc3Covered: boolean;
+  /**
+   * 2026-07-24 (user-confirmed): the loan's full-term maturity date — the LATEST `dueDate` across
+   * every one of its installments (same definition already used elsewhere in this codebase for
+   * the "Matured" badge/dashboard overlay). Penalty accrual is capped here: once past this date,
+   * the formula is evaluated AS OF the maturity date itself, not the real "today" - so an unpaid
+   * installment's penalty stops growing once the loan's whole term has run out, rather than
+   * compounding indefinitely for years afterward.
+   */
+  maturityDate: Date;
 }
 
 /**
@@ -56,13 +65,19 @@ export function resolveComputedPenalty(
       .add(installment.due.interest)
       .subtract(installment.paid.principal.add(installment.paid.interest));
 
+    // 2026-07-24 (user-confirmed): penalty stops accruing once the loan's whole term has matured
+    // — evaluate the formula as of the EARLIER of "today" and the maturity date, so an unpaid
+    // installment's penalty freezes at whatever it reached on the maturity date instead of
+    // compounding indefinitely for years past it.
+    const effectiveAsOfDate = asOfDate.getTime() > penaltyContext.maturityDate.getTime() ? penaltyContext.maturityDate : asOfDate;
+
     if (penaltyContext.isSecMc3Covered) {
       // ADR-053: SEC MC 3's own 5%/month ceiling, simple/non-compounding — replaces the ADR-050
       // rates below entirely for a covered loan, not layered on top of them.
       return PenaltyCalculator.calculateSimple({
         overdueAmount,
         dueDate: installment.dueDate,
-        asOfDate,
+        asOfDate: effectiveAsOfDate,
         ratePercent: SEC_MC3_PENALTY_RATE,
         gracePeriodDays: GRACE_PERIOD_DAYS,
       });
@@ -71,7 +86,7 @@ export function resolveComputedPenalty(
     return PenaltyCalculator.calculate({
       overdueAmount,
       dueDate: installment.dueDate,
-      asOfDate,
+      asOfDate: effectiveAsOfDate,
       ratePercent: resolvePenaltyRatePercent(penaltyContext.principalAmount),
       gracePeriodDays: GRACE_PERIOD_DAYS,
     });

@@ -10,9 +10,17 @@ import type { GetRepaymentInstallmentUseCase } from '../../application/use-cases
 import type { ReducePenaltyUseCase } from '../../application/use-cases/ReducePenaltyUseCase';
 import type { AdjustFeesUseCase } from '../../application/use-cases/AdjustFeesUseCase';
 import type { ListInstallmentAdjustmentsForLoanUseCase } from '../../application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
+import type { RepaymentInstallment } from '../../domain/RepaymentInstallment';
 import { presentRepaymentInstallment } from './presenters/RepaymentInstallmentPresenter';
 import { presentInstallmentAdjustment } from './presenters/InstallmentAdjustmentPresenter';
 import type { AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
+
+/** 2026-07-24 (user-confirmed): the loan's maturity date - the latest `dueDate` across its whole
+ * schedule - same definition as the "Matured" badge/dashboard overlay elsewhere in this codebase.
+ * Feeds `PenaltyComputationContext.maturityDate`, which caps live penalty accrual at this date. */
+function resolveMaturityDate(installments: RepaymentInstallment[]): Date {
+  return installments.reduce((latest, i) => (i.dueDate > latest ? i.dueDate : latest), installments[0]?.dueDate ?? new Date(0));
+}
 
 export interface RepaymentControllerDeps {
   listRepaymentInstallmentsForLoanUseCase: ListRepaymentInstallmentsForLoanUseCase;
@@ -59,6 +67,7 @@ export class RepaymentController {
         isProspectiveLoan: !loanAccount.legacyId,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(installments),
       };
       // Genuinely unpaginated by design (ADR-042 §7/§11: a schedule is
       // bounded, low-hundreds-per-loan at most) — nextCursor is always
@@ -83,6 +92,7 @@ export class RepaymentController {
         isProspectiveLoan: !loanAccount.legacyId,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
       };
       res.status(200).json(presentRepaymentInstallment(installment, penaltyContext));
     } catch (error) {
@@ -107,6 +117,7 @@ export class RepaymentController {
         isProspectiveLoan: !loanAccount.legacyId,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
       };
       res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
     } catch (error) {
@@ -131,6 +142,7 @@ export class RepaymentController {
         isProspectiveLoan: !loanAccount.legacyId,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
       };
       res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
     } catch (error) {

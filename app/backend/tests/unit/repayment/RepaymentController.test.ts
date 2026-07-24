@@ -13,7 +13,10 @@ function buildResponse() {
 
 function buildDeps() {
   return {
-    listRepaymentInstallmentsForLoanUseCase: { execute: vi.fn() },
+    // 2026-07-24: defaults to [] (not unmocked) - get()/reducePenalty()/adjustFees() now also call
+    // this to resolve PenaltyComputationContext.maturityDate, which would otherwise throw on an
+    // unmocked (undefined) return value in tests that don't care about this and never set it.
+    listRepaymentInstallmentsForLoanUseCase: { execute: vi.fn().mockResolvedValue([]) },
     getRepaymentInstallmentUseCase: { execute: vi.fn() },
     getLoanAccountUseCase: { execute: vi.fn() },
     // ADR-053: resolveSecMc3Coverage() looks this up to build PenaltyComputationContext.isSecMc3Covered.

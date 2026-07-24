@@ -54,10 +54,16 @@ export class ReducePenaltyUseCase {
       throw new NotFoundError('LoanAccount', installment.loanAccountId);
     }
 
+    const scheduleInstallments = await this.deps.repaymentInstallmentRepository.findByLoanAccountId(loanAccount.id);
+    const maturityDate = scheduleInstallments.reduce(
+      (latest, i) => (i.dueDate > latest ? i.dueDate : latest),
+      scheduleInstallments[0]?.dueDate ?? installment.dueDate,
+    );
     const currentPenalty = resolveComputedPenalty(installment, {
       isProspectiveLoan: !loanAccount.legacyId,
       principalAmount: loanAccount.principalAmount,
       isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+      maturityDate,
     });
 
     const previousBalanceTrackedPenalty = resolveEffectivePenaltyDue(installment);
