@@ -7,7 +7,7 @@ import type { ILoanApplicationRepository } from '../ports/ILoanApplicationReposi
 import type { CreateLoanApplicationInput } from '../dtos/LoanApplicationDtos';
 import type { LoanApplicationPreQualificationService } from '../services/LoanApplicationPreQualificationService';
 
-const CLOSED_LOAN_ACCOUNT_STATUSES = new Set(['CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_REJECTED']);
+const CLOSED_LOAN_ACCOUNT_STATUSES = new Set(['CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_REJECTED', 'CLOSED_RESTRUCTURED']);
 
 /** Reviewer roles for a freshly-submitted application - mirrors the frontend's `canReviewLoanApplication`. */
 const APPLICATION_SUBMITTED_NOTIFY_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];

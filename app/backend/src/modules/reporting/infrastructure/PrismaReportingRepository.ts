@@ -350,7 +350,7 @@ export class PrismaReportingRepository implements IReportingRepository {
   async getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
-        status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF'] },
+        status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED'] },
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
       include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } },

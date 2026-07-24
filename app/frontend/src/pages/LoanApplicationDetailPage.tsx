@@ -1416,7 +1416,12 @@ export function LoanApplicationDetailPage() {
     enabled: canAccessLoanApplications && Boolean(application?.createdBorrowerId),
   });
   const hasActiveLoan = (clientLoansQuery.data ?? []).some(
-    (l) => l.borrowerId === application?.createdBorrowerId && l.status !== 'CLOSED' && l.status !== 'CLOSED_WRITTEN_OFF' && l.status !== 'CLOSED_REJECTED',
+    (l) =>
+      l.borrowerId === application?.createdBorrowerId &&
+      l.status !== 'CLOSED' &&
+      l.status !== 'CLOSED_WRITTEN_OFF' &&
+      l.status !== 'CLOSED_REJECTED' &&
+      l.status !== 'CLOSED_RESTRUCTURED',
   );
   // Once the loan account created from this application has been Activated (disbursed - status
   // past PENDING_APPROVAL/APPROVED), the decision that produced it can no longer be reverted -
