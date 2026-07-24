@@ -2,5 +2,6 @@
 # breaks bash on macOS/Linux. Windows-only scripts stay CRLF (their native
 # line ending, and the .bat/.ps1 tooling that runs them expects it).
 *.sh text eol=lf
+*.command text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
