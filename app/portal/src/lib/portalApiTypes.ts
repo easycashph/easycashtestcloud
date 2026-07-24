@@ -234,3 +234,25 @@ export interface ResolvedAddressCodes {
   cityMunicipalityCode: string | null;
   barangayCode: string | null;
 }
+
+/** 2026-07-24 (user request, Phase C) - mirrors backend's PortalNotificationPresenter.ts. Only the
+ * 2 client-facing loan decision milestones today (Approved/Declined), not every review stage. */
+export type PortalNotificationType = 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED';
+
+export interface PortalNotification {
+  id: string;
+  type: PortalNotificationType;
+  title: string;
+  body: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  read: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface PortalNotificationListResponse {
+  items: PortalNotification[];
+  nextCursor: string | null;
+  unreadCount: number;
+}

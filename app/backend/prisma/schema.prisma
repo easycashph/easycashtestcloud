@@ -430,8 +430,34 @@ model PortalAccount {
 
   challenges       PortalAccountChallenge[]
   loanApplications LoanApplication[]
+  notifications    PortalNotification[]
 
   @@map("portal_accounts")
+}
+
+/// Notification Center for the Easycash Portal (2026-07-24 user request) - same append-only-
+/// except-`read` shape as the staff Notification model, scoped to a PortalAccount instead of a
+/// User. Created as a side effect of a real domain event (today: only the loan application
+/// Approve/Decline decisions - see ApproveLoanApplicationUseCase/DeclineLoanApplicationUseCase's
+/// optional `portalNotificationService` dep), never fabricated.
+model PortalNotification {
+  id              String        @id @default(uuid())
+  portalAccountId String
+  portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  /// 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED' - the only two triggers today (user's
+  /// explicit choice, 2026-07-24: not every intermediate review stage, just the client-facing
+  /// milestones).
+  type       String
+  title      String
+  body       String?
+  entityType String?
+  entityId   String?
+  read       Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([portalAccountId, read, createdAt])
+  @@map("portal_notifications")
 }
 
 /// Same opaque-OTP-challenge shape as `TwoFactorChallenge` (see that model's own doc comment for

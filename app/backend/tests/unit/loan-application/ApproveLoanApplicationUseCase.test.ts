@@ -56,4 +56,42 @@ describe('ApproveLoanApplicationUseCase', () => {
       expect.objectContaining({ action: 'APPROVE_LOAN_APPLICATION', entityType: 'LoanApplication', userId: 'user-1' }),
     );
   });
+
+  it('notifies the portal account when the application was portal-submitted', async () => {
+    const application = LoanApplication.create({
+      branchId: 'branch-1',
+      applicantName: 'Juan Dela Cruz',
+      requestedCategory: 'Salary Loan',
+      requestedAmount: 50000,
+      requestedTermMonths: 12,
+      status: 'PREAPPROVED',
+      portalAccountId: 'portal-account-1',
+    });
+    application.startReview('reviewer-1');
+    application.tagPreApproval('reviewer-1');
+    application.assignProduct('version-1');
+    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
+    const auditLogger = { log: vi.fn() };
+    const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+    const useCase = new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger, portalNotificationService });
+
+    await useCase.execute(application.id, 'user-1', 'approved on merit');
+
+    expect(portalNotificationService.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ portalAccountId: 'portal-account-1', type: 'APPLICATION_APPROVED', entityType: 'LoanApplication', entityId: application.id }),
+    );
+  });
+
+  it('does not notify the portal when the application was staff-encoded (no portalAccountId)', async () => {
+    const application = buildApplication();
+    application.assignProduct('version-1');
+    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
+    const auditLogger = { log: vi.fn() };
+    const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+    const useCase = new ApproveLoanApplicationUseCase({ loanApplicationRepository, auditLogger, portalNotificationService });
+
+    await useCase.execute(application.id, 'user-1', undefined);
+
+    expect(portalNotificationService.notify).not.toHaveBeenCalled();
+  });
 });

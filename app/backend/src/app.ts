@@ -43,10 +43,16 @@ import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/appli
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
+import { createPortalNotificationRouter } from '@modules/client-portal/interface/http/portalNotificationRouter';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
+import { PrismaPortalNotificationRepository } from '@modules/client-portal/infrastructure/PrismaPortalNotificationRepository';
+import { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
+import { ListPortalNotificationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalNotificationsUseCase';
+import { MarkPortalNotificationReadUseCase } from '@modules/client-portal/application/use-cases/MarkPortalNotificationReadUseCase';
+import { MarkAllPortalNotificationsReadUseCase } from '@modules/client-portal/application/use-cases/MarkAllPortalNotificationsReadUseCase';
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
@@ -840,6 +846,30 @@ export function createApp(): Express {
   const branchRepository = new PrismaBranchRepository();
   const geocodingService = new NominatimGeocodingService();
   const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
+
+  // Easycash Portal Notification Center (2026-07-24, Phase C): reuses portalAccountRepository from
+  // the Phase 1 wiring above; own smsGateway/emailGateway instances (same pattern as portalOtpSender)
+  // so portal notification delivery never shares a gateway instance with staff-facing notifications.
+  const portalNotificationRepository = new PrismaPortalNotificationRepository();
+  const portalNotificationService = new PortalNotificationService({
+    portalNotificationRepository,
+    portalAccountRepository,
+    reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+    smsGateway: new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+  });
+
   const loanApplicationRouter = createLoanApplicationRouter(
     {
       createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
@@ -857,12 +887,14 @@ export function createApp(): Express {
         auditLogger,
         profileActivityLogService,
         notificationService,
+        portalNotificationService,
       }),
       declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
         loanApplicationRepository,
         auditLogger,
         profileActivityLogService,
         notificationService,
+        portalNotificationService,
       }),
       revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
         loanApplicationRepository,
@@ -1015,6 +1047,18 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalLoanApplicationRouter);
+
+  // Easycash Portal Notification Center, Phase C (2026-07-24): bell notifications for Approved/
+  // Declined decisions, mounted at the same /api/v1/portal prefix.
+  const portalNotificationRouter = createPortalNotificationRouter(
+    {
+      listPortalNotificationsUseCase: new ListPortalNotificationsUseCase({ portalNotificationRepository }),
+      markPortalNotificationReadUseCase: new MarkPortalNotificationReadUseCase({ portalNotificationRepository }),
+      markAllPortalNotificationsReadUseCase: new MarkAllPortalNotificationsReadUseCase({ portalNotificationRepository }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalNotificationRouter);
 
   // Portal-facing PSGC address lookups (cascading region/province/city/barangay + ZIP auto-fill
   // on the loan application form) - see portalPsgcRouter.ts's doc comment for why this can't just

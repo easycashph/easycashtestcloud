@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useAuth } from '@/lib/authContext';
 
 /** Shared header for every logged-in page (Dashboard, Loan Products, ...) - extracted so nav
@@ -29,9 +30,12 @@ export function PortalHeader() {
             Loan Products
           </Link>
         </nav>
-        <Button variant="outline" size="sm" onClick={handleLogout}>
-          <LogOut className="h-4 w-4" /> Log Out
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            <LogOut className="h-4 w-4" /> Log Out
+          </Button>
+        </div>
       </div>
     </header>
   );

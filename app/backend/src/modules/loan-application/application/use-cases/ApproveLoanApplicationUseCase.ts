@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
+import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import type { LoanApplication } from '../../domain/LoanApplication';
 import type { ILoanApplicationRepository } from '../ports/ILoanApplicationRepository';
 
@@ -10,6 +11,7 @@ export interface ApproveLoanApplicationUseCaseDeps {
   auditLogger: IAuditLogger;
   profileActivityLogService?: ProfileActivityLogService;
   notificationService?: NotificationService;
+  portalNotificationService?: PortalNotificationService;
 }
 
 export class ApproveLoanApplicationUseCase {
@@ -50,6 +52,19 @@ export class ApproveLoanApplicationUseCase {
         branchId: application.branchId,
         type: 'APPLICATION_DECIDED',
         title: `Approved: ${application.applicantName}`,
+        entityType: 'LoanApplication',
+        entityId: application.id,
+      });
+    }
+
+    // Easycash Portal Notification Center (2026-07-24): tell the portal applicant themself
+    // (Approved/Declined only, per user's confirmed scope) via bell + email/SMS.
+    if (this.deps.portalNotificationService && application.portalAccountId) {
+      await this.deps.portalNotificationService.notify({
+        portalAccountId: application.portalAccountId,
+        type: 'APPLICATION_APPROVED',
+        title: `Approved: ${application.applicantName}`,
+        body: decisionNote,
         entityType: 'LoanApplication',
         entityId: application.id,
       });
