@@ -122,6 +122,7 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     controller.restructure,
   );
   router.get('/loan-accounts/:id/restructure', requireAuth, controller.getRestructure);
+  router.get('/loan-accounts/:id/accrued-interest', requireAuth, controller.accruedInterest);
 
   return router;
 }

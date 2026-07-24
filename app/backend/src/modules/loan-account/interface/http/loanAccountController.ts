@@ -21,6 +21,8 @@ import type { ReversePaymentUseCase } from '../../application/use-cases/ReverseP
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
 import type { RestructureLoanUseCase } from '../../application/use-cases/RestructureLoanUseCase';
 import type { GetLoanRestructureUseCase } from '../../application/use-cases/GetLoanRestructureUseCase';
+import type { GetAccruedInterestUseCase } from '../../application/use-cases/GetAccruedInterestUseCase';
+import { presentAccruedInterest } from './presenters/AccruedInterestPresenter';
 import type {
   CreateLoanAccountRequestBody,
   ProcessPaymentRequestBody,
@@ -48,6 +50,7 @@ export interface LoanAccountControllerDeps {
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   restructureLoanUseCase: RestructureLoanUseCase;
   getLoanRestructureUseCase: GetLoanRestructureUseCase;
+  getAccruedInterestUseCase: GetAccruedInterestUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
 
@@ -357,6 +360,19 @@ export class LoanAccountController {
       assertBranchAccess(scope, existing.branchId);
       const view = await this.deps.getLoanRestructureUseCase.execute(req.params.id as string);
       res.status(200).json(view ? presentLoanRestructure(view) : null);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-24 (user-confirmed) — null for a legacy (migrated) loan, same scope as the live penalty projection it's built on. */
+  accruedInterest = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const figures = await this.deps.getAccruedInterestUseCase.execute(req.params.id as string);
+      res.status(200).json(figures ? presentAccruedInterest(figures) : null);
     } catch (error) {
       next(error);
     }

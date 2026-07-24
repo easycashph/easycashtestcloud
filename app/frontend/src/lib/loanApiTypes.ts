@@ -47,6 +47,28 @@ export interface LoanRestructureView {
   createdAt: string;
 }
 
+/** 2026-07-24 (user-confirmed) - mirrors `AccruedInterestPresenter`'s output. Fetched via
+ * `GET /loan-accounts/:id/accrued-interest`, null for a legacy (migrated) loan. */
+export interface AccruedInterestBreakdownRow {
+  installmentNumber: number;
+  dueDate: string;
+  unpaidPrincipal: string;
+  unpaidInterest: string;
+  frozenPenalty: string;
+}
+
+export interface AccruedInterestFigures {
+  maturityDate: string;
+  totalPastDuePrincipal: string;
+  totalPastDueInterest: string;
+  totalPastDuePenalty: string;
+  totalPastDue: string;
+  daysLate: number;
+  contractualRate: string | null;
+  accruedInterest: string;
+  breakdown: AccruedInterestBreakdownRow[];
+}
+
 export interface LoanAccount {
   id: string;
   /** 2026-07-22 (optimistic concurrency) - echo this back as `expectedVersion` on

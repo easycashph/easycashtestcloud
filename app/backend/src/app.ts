@@ -83,6 +83,7 @@ import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cas
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
 import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
+import { GetAccruedInterestUseCase } from '@modules/loan-account/application/use-cases/GetAccruedInterestUseCase';
 import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { PrismaLoanRestructureRepository } from '@modules/loan-account/infrastructure/PrismaLoanRestructureRepository';
@@ -605,6 +606,7 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
+      getAccruedInterestUseCase: new GetAccruedInterestUseCase({ loanAccountRepository, repaymentInstallmentRepository, loanProductRepository }),
       idempotencyKeyStore,
     },
     tokenService,

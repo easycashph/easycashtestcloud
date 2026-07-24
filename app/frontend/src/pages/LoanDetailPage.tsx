@@ -25,6 +25,7 @@ import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClien
 import { ConcurrencyConflictDialog, type ConcurrencyConflictField } from '@/components/ConcurrencyConflictDialog';
 import type { LoanSigningSessionStatus } from '@/lib/loanSigningApiTypes';
 import type {
+  AccruedInterestFigures,
   Borrower as RealBorrower,
   GeneratedStatementOfAccountListItem,
   InstallmentAdjustment,
@@ -1197,6 +1198,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<LoanRestructureView | null>(`/loan-accounts/${loanId}/restructure`),
   });
 
+  // 2026-07-24 (user-confirmed): once a loan matures (last installment's due date passed) with an
+  // unpaid balance, interest keeps accruing on the total past-due balance - penalty itself freezes
+  // at maturity (see CurrentPenaltyResolver's maturityDate cap). null for a legacy loan.
+  const accruedInterestQuery = useQuery({
+    queryKey: ['accrued-interest', loanId],
+    queryFn: () => apiClient.get<AccruedInterestFigures | null>(`/loan-accounts/${loanId}/accrued-interest`),
+  });
+
   const transactionsQuery = useQuery({
     queryKey: ['loan-transactions', loanId],
     queryFn: () => fetchAllPages<LoanTransaction>(`/loan-accounts/${loanId}/transactions`),
@@ -1587,6 +1596,67 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </span>
           )}
         </div>
+      )}
+
+      {/* 2026-07-24 (user-confirmed): once matured with an unpaid balance, interest keeps
+          accruing on the total past-due balance - a separate figure from Penalty Due, which
+          freezes at maturity (CurrentPenaltyResolver's maturityDate cap). Hidden entirely for a
+          current loan (daysLate === 0) or a legacy loan (accruedInterestQuery.data === null). */}
+      {accruedInterestQuery.data && accruedInterestQuery.data.daysLate > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle>Accrued interest</CardTitle>
+              <Badge variant="warning">Past maturity</Badge>
+            </div>
+            <CardDescription>
+              This loan matured on {formatDate(accruedInterestQuery.data.maturityDate)} (installment #{accruedInterestQuery.data.breakdown.at(-1)?.installmentNumber ?? '?'}
+              's due date). Penalty froze on that date - what continues to accrue since then is interest on the total past-due balance, not
+              penalty.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-semibold">{formatPeso(num(accruedInterestQuery.data.accruedInterest))}</span>
+              <span className="text-xs text-muted-foreground">as of today</span>
+            </div>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                    <TableCell className="font-medium text-muted-foreground">Due date</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Unpaid principal</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Unpaid interest</TableCell>
+                    <TableCell className="text-right font-medium text-muted-foreground">Frozen penalty</TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accruedInterestQuery.data.breakdown.map((row) => (
+                    <TableRow key={row.installmentNumber}>
+                      <TableCell>{row.installmentNumber}</TableCell>
+                      <TableCell>{formatDate(row.dueDate)}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(row.unpaidPrincipal))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(row.unpaidInterest))}</TableCell>
+                      <TableCell className="text-right">{formatPeso(num(row.frozenPenalty))}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="font-semibold">
+                    <TableCell colSpan={2}>Total</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDuePrincipal))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDueInterest))}</TableCell>
+                    <TableCell className="text-right">{formatPeso(num(accruedInterestQuery.data.totalPastDuePenalty))}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total past due ({formatPeso(num(accruedInterestQuery.data.totalPastDue))}) × contractual rate (
+              {formatPercentage(accruedInterestQuery.data.contractualRate)}) ÷ 30 × days late ({accruedInterestQuery.data.daysLate}) ={' '}
+              {formatPeso(num(accruedInterestQuery.data.accruedInterest))}
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       <RiskAssessmentCard loanId={loan.id} />
