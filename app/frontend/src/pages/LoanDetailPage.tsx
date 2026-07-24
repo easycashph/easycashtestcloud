@@ -213,7 +213,7 @@ function MiniStat({ label, value, emphasize }: { label: string; value: string; e
   return (
     <div>
       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn('tabular-nums', emphasize ? 'font-semibold' : 'text-sm')}>{value}</p>
+      <p className={cn('tabular-nums', emphasize ? 'text-xl font-semibold' : 'text-sm text-muted-foreground')}>{value}</p>
     </div>
   );
 }
@@ -1580,6 +1580,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
+          {/* 2026-07-24 (UI polish, user-confirmed): at most one solid/primary button per view -
+              whichever action is THE next expected step for this status (Record Payment while
+              ACTIVE, Disburse Loan while APPROVED, Approve Loan while PENDING_APPROVAL). Every
+              other action (Undo Approve/Undo Disburse/Restructure/Loan Adjustment/Edit) is a
+              secondary, less-frequent action and lives in the "More actions" menu below instead
+              of competing for the same visual weight. */}
           {canRecordPayment && (
             <Button size="sm" onClick={() => setRecordPaymentOpen(true)}>
               Record Payment
@@ -1590,45 +1596,45 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Disburse Loan
             </Button>
           )}
-          {/* 2026-07-16 (Undo Approve / Undo Activate, user request): MIS-only, matching the
-              backend's requireRole('MIS') gate — a narrower tier than canCreateLoanAccount
-              (ORIGINATION_ROLES), same reasoning as Reverse Payment below. */}
-          {currentAccount.roles.includes('MIS') && loan.status === 'APPROVED' && (
-            <Button size="sm" variant="outline" onClick={() => openConfirm('UNDO_APPROVE')}>
-              Undo Approve
-            </Button>
-          )}
-          {currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE' && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={hasRepayment}
-              onClick={() => openConfirm('UNDO_ACTIVATE')}
-              title={hasRepayment ? 'Cannot undo - a payment has already been recorded against this loan.' : undefined}
-            >
-              Undo Disburse
-            </Button>
-          )}
-          {canRestructure && (
-            <Button size="sm" variant="outline" onClick={openRestructureConfirm}>
-              Restructure
-            </Button>
-          )}
-          {canAdjust && (
-            <Button size="sm" variant="outline" onClick={openAdjustConfirm}>
-              Loan Adjustment
-            </Button>
-          )}
-          {canCreateLoanAccount && loan.status === 'PENDING_APPROVAL' && (
-            <Button size="sm" variant="outline" onClick={openEdit}>
-              Edit
-            </Button>
-          )}
           {canApproveLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" onClick={() => openConfirm('APPROVE')}>
               Approve Loan
             </Button>
           )}
+          {(() => {
+            // 2026-07-16/24 (Undo Approve / Undo Activate, user request): MIS-only, matching the
+            // backend's requireRole('MIS') gate — a narrower tier than canCreateLoanAccount
+            // (ORIGINATION_ROLES), same reasoning as Reverse Payment below.
+            const canUndoApprove = currentAccount.roles.includes('MIS') && loan.status === 'APPROVED';
+            const canUndoActivate = currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE';
+            const canEdit = canCreateLoanAccount && loan.status === 'PENDING_APPROVAL';
+            const hasAnySecondaryAction = canUndoApprove || canUndoActivate || canRestructure || canAdjust || canEdit;
+            if (!hasAnySecondaryAction) return null;
+            return (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    More actions <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canEdit && <DropdownMenuItem onSelect={openEdit}>Edit</DropdownMenuItem>}
+                  {canUndoApprove && <DropdownMenuItem onSelect={() => openConfirm('UNDO_APPROVE')}>Undo Approve</DropdownMenuItem>}
+                  {canUndoActivate && (
+                    <DropdownMenuItem
+                      disabled={hasRepayment}
+                      onSelect={() => openConfirm('UNDO_ACTIVATE')}
+                      title={hasRepayment ? 'Cannot undo - a payment has already been recorded against this loan.' : undefined}
+                    >
+                      Undo Disburse
+                    </DropdownMenuItem>
+                  )}
+                  {canRestructure && <DropdownMenuItem onSelect={openRestructureConfirm}>Restructure</DropdownMenuItem>}
+                  {canAdjust && <DropdownMenuItem onSelect={openAdjustConfirm}>Loan Adjustment</DropdownMenuItem>}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
         </div>
       </div>
 
