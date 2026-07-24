@@ -27,6 +27,7 @@ function buildDeps(account: PortalAccountRecord | null) {
   };
   const loanApplicationRepository: Partial<ILoanApplicationRepository> = {
     findByBorrowerId: vi.fn().mockResolvedValue([]),
+    findByPortalAccountId: vi.fn().mockResolvedValue([]),
     save: vi.fn().mockResolvedValue(undefined),
   };
   const preQualificationService: Partial<LoanApplicationPreQualificationService> = {

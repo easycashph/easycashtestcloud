@@ -47,6 +47,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/apply/:id"
+        element={
+          <ProtectedRoute>
+            <LoanApplicationFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/products"
         element={
           <ProtectedRoute>

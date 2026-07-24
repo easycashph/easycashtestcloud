@@ -38,6 +38,8 @@ import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/
 import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
 import { SubmitLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/SubmitLoanApplicationUseCase';
 import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationsUseCase';
+import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationUseCase';
+import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
@@ -120,6 +122,7 @@ import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-applicat
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
+import { UpdateLoanApplicationSelfServiceUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationSelfServiceUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
 import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
 import { LoanApplicationPreQualificationService } from '@modules/loan-application/application/services/LoanApplicationPreQualificationService';
@@ -998,6 +1001,11 @@ export function createApp(): Express {
         createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, notificationService }),
       }),
       listPortalLoanApplicationsUseCase: new ListPortalLoanApplicationsUseCase({ loanApplicationRepository }),
+      getPortalLoanApplicationUseCase: new GetPortalLoanApplicationUseCase({ loanApplicationRepository }),
+      updatePortalLoanApplicationUseCase: new UpdatePortalLoanApplicationUseCase({
+        loanApplicationRepository,
+        updateLoanApplicationSelfServiceUseCase: new UpdateLoanApplicationSelfServiceUseCase({ loanApplicationRepository, preQualificationService }),
+      }),
       listPortalBranchesUseCase: new ListPortalBranchesUseCase({ branchRepository }),
       uploadPortalLoanApplicationDocumentUseCase: new UploadPortalLoanApplicationDocumentUseCase({
         loanApplicationRepository,

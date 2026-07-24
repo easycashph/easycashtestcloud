@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -11,7 +11,13 @@ import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
-import type { PortalBranch, PortalDocumentCategory, PortalLoanApplicationSummary, SubmitLoanApplicationRequest } from '@/lib/portalApiTypes';
+import type {
+  PortalBranch,
+  PortalDocumentCategory,
+  PortalLoanApplicationDetail,
+  PortalLoanApplicationSummary,
+  SubmitLoanApplicationRequest,
+} from '@/lib/portalApiTypes';
 
 const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
 const GENDER_OPTIONS = ['Female', 'Male'];
@@ -199,6 +205,88 @@ function addressToText(address: AddressDraft): string {
     .join(', ');
 }
 
+/** Splits a stored combined applicant name back into the form's separate first/middle/last
+ * inputs when prefilling an edit - a plain heuristic (first token / last token / everything
+ * between), matching the internal LMS's own splitFullName() convention. */
+function splitFullName(fullName: string): { firstName: string; middleName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] ?? '', middleName: '', lastName: '' };
+  if (parts.length === 2) return { firstName: parts[0]!, middleName: '', lastName: parts[1]! };
+  return { firstName: parts[0]!, middleName: parts.slice(1, -1).join(' '), lastName: parts[parts.length - 1]! };
+}
+
+/** Reverses the "Name (relationship)" convention handleSubmit's coBorrowerName combines - used to
+ * prefill the edit form's separate name/relationship inputs. */
+function parseCoBorrowerName(coBorrowerName: string): { name: string; relationship: string } {
+  const match = coBorrowerName.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (match) return { name: match[1]!.trim(), relationship: match[2]!.trim() };
+  return { name: coBorrowerName.trim(), relationship: '' };
+}
+
+function detailToFormState(detail: PortalLoanApplicationDetail): FormState {
+  const name = splitFullName(detail.applicantName);
+  const coBorrower = detail.coBorrowerName ? parseCoBorrowerName(detail.coBorrowerName) : { name: '', relationship: '' };
+  const [referralSource, ...referralDetailParts] = (detail.referralSource ?? 'Website').split(' - ');
+  return {
+    ...INITIAL_FORM,
+    referralSource: referralSource || 'Website',
+    referralDetail: referralDetailParts.join(' - '),
+    accountType: detail.accountType ?? 'NEW',
+    branchId: detail.branchId,
+    requestedCategory: detail.requestedCategory,
+    requestedAmount: String(detail.requestedAmount),
+    requestedTermMonths: String(detail.requestedTermMonths),
+    loanPurpose: detail.loanPurpose ?? '',
+    firstName: name.firstName,
+    middleName: name.middleName,
+    lastName: name.lastName,
+    gender: detail.gender ?? '',
+    civilStatus: detail.civilStatus ?? '',
+    nationality: detail.nationality ?? 'Filipino',
+    birthDate: detail.birthDate ? detail.birthDate.slice(0, 10) : '',
+    placeOfBirth: detail.placeOfBirth ?? '',
+    presentAddress: {
+      houseUnitNumber: detail.houseUnitNumber ?? '',
+      street: detail.street ?? '',
+      barangay: detail.barangay ?? '',
+      cityMunicipality: detail.cityMunicipality ?? '',
+      province: detail.province ?? '',
+      zipCode: detail.zipCode ?? '',
+    },
+    sameAsPresentAddress: detail.previousAddressSameAsPresent,
+    previousAddress: {
+      houseUnitNumber: detail.previousHouseUnitNumber ?? '',
+      street: detail.previousStreet ?? '',
+      barangay: detail.previousBarangay ?? '',
+      cityMunicipality: detail.previousCityMunicipality ?? '',
+      province: detail.previousProvince ?? '',
+      zipCode: detail.previousZipCode ?? '',
+    },
+    homeOwnership: detail.homeOwnership ?? '',
+    mobilePhone: detail.mobilePhone ?? '',
+    email: detail.email ?? '',
+    employer: detail.employer ?? '',
+    occupation: detail.occupation ?? '',
+    officeAddress: detail.officeAddress ?? '',
+    monthlyIncome: detail.monthlyIncome ? String(detail.monthlyIncome) : '',
+    tinNumber: detail.tinNumber ?? '',
+    sssNumber: detail.sssNumber ?? '',
+    dependants: (detail.dependants ?? []).map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' })),
+    hasCoBorrower: Boolean(detail.coBorrowerName),
+    coBorrowerName: coBorrower.name,
+    coBorrowerRelationship: coBorrower.relationship,
+    coBorrowerEmployer: detail.coBorrowerEmployer ?? '',
+    coBorrowerContactNumber: detail.coBorrowerContactNumber ?? '',
+    coBorrowerEmail: detail.coBorrowerEmail ?? '',
+    coBorrowerAddress: detail.coBorrowerAddress ?? '',
+    reference1Name: detail.reference1Name ?? '',
+    reference1Mobile: detail.reference1Mobile ?? '',
+    reference2Name: detail.reference2Name ?? '',
+    reference2Mobile: detail.reference2Mobile ?? '',
+    note: detail.note ?? '',
+  };
+}
+
 function computeAge(birthDate: string): number | null {
   if (!birthDate) return null;
   const dob = new Date(birthDate);
@@ -215,9 +303,13 @@ function computeAge(birthDate: string): number | null {
  * genuinely can't apply to public self-service (see SectionCard's own doc comment). Two steps in
  * one page: submit the application, then (optionally) attach supporting documents to the
  * freshly-created record. */
+const EDITABLE_STATUSES = new Set(['PREAPPROVED', 'PREDECLINED']);
+
 export function LoanApplicationFormPage() {
   const navigate = useNavigate();
+  const { id: editId } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
+  const isEditMode = Boolean(editId);
   const [branches, setBranches] = React.useState<PortalBranch[]>([]);
   // Pre-selects the product when arriving from LoanProductsPage's "Apply Now" (?category=...) -
   // only honored if it's a real, currently-offered category, never trusted blindly from the URL.
@@ -231,6 +323,11 @@ export function LoanApplicationFormPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submitted, setSubmitted] = React.useState<PortalLoanApplicationSummary | null>(null);
   const [uploadState, setUploadState] = React.useState<Partial<Record<PortalDocumentCategory, 'idle' | 'uploading' | 'done' | 'error'>>>({});
+  // Edit mode only: null while loading, 'not-editable' once loaded but status has moved past
+  // PREAPPROVED/PREDECLINED (mirrors the backend's own updateSelfServiceIntake() guard), 'ready'
+  // once the fetched record has been mapped into `form`.
+  const [editState, setEditState] = React.useState<'loading' | 'not-editable' | 'ready' | 'error'>(isEditMode ? 'loading' : 'ready');
+  const [editSaved, setEditSaved] = React.useState(false);
 
   React.useEffect(() => {
     apiClient
@@ -238,6 +335,21 @@ export function LoanApplicationFormPage() {
       .then(setBranches)
       .catch(() => setBranches([]));
   }, []);
+
+  React.useEffect(() => {
+    if (!editId) return;
+    apiClient
+      .get<PortalLoanApplicationDetail>(`/portal/loan-applications/${editId}`)
+      .then((detail) => {
+        if (!EDITABLE_STATUSES.has(detail.status)) {
+          setEditState('not-editable');
+          return;
+        }
+        setForm(detailToFormState(detail));
+        setEditState('ready');
+      })
+      .catch(() => setEditState('error'));
+  }, [editId]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -330,10 +442,15 @@ export function LoanApplicationFormPage() {
         requestedAmount,
         requestedTermMonths,
       };
-      const result = await apiClient.post<PortalLoanApplicationSummary>('/portal/loan-applications', body, true);
-      setSubmitted(result);
+      if (isEditMode) {
+        await apiClient.patch<PortalLoanApplicationDetail>(`/portal/loan-applications/${editId}`, body, true);
+        setEditSaved(true);
+      } else {
+        const result = await apiClient.post<PortalLoanApplicationSummary>('/portal/loan-applications', body, true);
+        setSubmitted(result);
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not submit your application. Please try again.');
+      setError(err instanceof ApiError ? err.message : `Could not ${isEditMode ? 'save your changes' : 'submit your application'}. Please try again.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -349,6 +466,61 @@ export function LoanApplicationFormPage() {
       setUploadState((prev) => ({ ...prev, [category]: 'error' }));
     }
   };
+
+  if (isEditMode && editState === 'loading') {
+    return (
+      <div className="min-h-screen bg-secondary/30 py-10">
+        <div className="container max-w-2xl">
+          <Card className="p-8 text-center text-sm text-muted-foreground">Loading your application…</Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && editState === 'not-editable') {
+    return (
+      <div className="min-h-screen bg-secondary/30 py-10">
+        <div className="container max-w-2xl">
+          <Card className="p-8">
+            <Alert>This application can no longer be edited - it's already under review or has been decided.</Alert>
+            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
+              Go to Dashboard
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && editState === 'error') {
+    return (
+      <div className="min-h-screen bg-secondary/30 py-10">
+        <div className="container max-w-2xl">
+          <Card className="p-8">
+            <Alert>Could not load this application. It may not exist, or may belong to a different account.</Alert>
+            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
+              Go to Dashboard
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEditMode && editSaved) {
+    return (
+      <div className="min-h-screen bg-secondary/30 py-10">
+        <div className="container max-w-2xl">
+          <Card className="p-8">
+            <Alert tone="success">Your changes were saved.</Alert>
+            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
+              Go to Dashboard
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -400,7 +572,7 @@ export function LoanApplicationFormPage() {
           <span className="text-base font-bold tracking-tight">Easycash Portal</span>
         </Link>
         <Card className="p-8">
-          <h1 className="text-xl font-bold tracking-tight">Loan Application</h1>
+          <h1 className="text-xl font-bold tracking-tight">{isEditMode ? 'Edit Loan Application' : 'Loan Application'}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Fields marked * are required. Everything else can be filled in during review.</p>
 
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
@@ -681,7 +853,7 @@ export function LoanApplicationFormPage() {
             </SectionCard>
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting…' : 'Submit Application'}
+              {isSubmitting ? (isEditMode ? 'Saving…' : 'Submitting…') : isEditMode ? 'Save Changes' : 'Submit Application'}
             </Button>
           </form>
         </Card>

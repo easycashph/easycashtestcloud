@@ -56,6 +56,14 @@ export const submitLoanApplicationSchema = z.object({
 });
 export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicationSchema>;
 
+/** 2026-07-24 (user request) - "edit my application" while it's still PREAPPROVED/PREDECLINED
+ * (enforced by LoanApplication.updateSelfServiceIntake's own guard, not this schema). Same field
+ * set as submitLoanApplicationSchema, but every field is optional (including requestedCategory/
+ * Amount/TermMonths) since this is a partial PATCH against an already-valid record, not a fresh
+ * submission. */
+export const updateLoanApplicationSchema = submitLoanApplicationSchema.partial();
+export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;
+
 /** Same category enum as document module's AttachmentDocumentCategory, minus PROFILE_PICTURE
  * (no clear self-service use for it - the paper-form-derived slot is meant for a staff photo
  * capture during a walk-in visit, not a client uploading their own). */

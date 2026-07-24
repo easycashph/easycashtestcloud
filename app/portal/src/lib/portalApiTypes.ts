@@ -134,6 +134,65 @@ export interface PortalLoanApplicationSummary {
   createdAt: string;
 }
 
+/** 2026-07-24 (user request) - the full record shape returned by GET/PATCH
+ * /portal/loan-applications/:id, used to prefill and save the portal's "edit my application"
+ * form. Mirrors backend's portalLoanApplicationController.ts's presentFullApplication(). */
+export interface PortalLoanApplicationDetail {
+  id: string;
+  branchId: string;
+  status: LoanApplicationStatus;
+  applicantName: string;
+  age: number | null;
+  gender: string | null;
+  civilStatus: string | null;
+  birthDate: string | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
+  homeOwnership: string | null;
+  address: string | null;
+  houseUnitNumber: string | null;
+  street: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+  zipCode: string | null;
+  previousAddressSameAsPresent: boolean;
+  previousAddress: string | null;
+  previousHouseUnitNumber: string | null;
+  previousStreet: string | null;
+  previousBarangay: string | null;
+  previousCityMunicipality: string | null;
+  previousProvince: string | null;
+  previousZipCode: string | null;
+  monthlyIncome: number | null;
+  employer: string | null;
+  occupation: string | null;
+  officeAddress: string | null;
+  tinNumber: string | null;
+  sssNumber: string | null;
+  coBorrowerName: string | null;
+  coBorrowerEmployer: string | null;
+  coBorrowerContactNumber: string | null;
+  coBorrowerEmail: string | null;
+  coBorrowerAddress: string | null;
+  mobilePhone: string | null;
+  email: string | null;
+  dependants: DependantEntry[] | null;
+  reference1Name: string | null;
+  reference1Mobile: string | null;
+  reference2Name: string | null;
+  reference2Mobile: string | null;
+  note: string | null;
+  referralSource: string | null;
+  accountType: 'NEW' | 'RENEWAL' | null;
+  loanPurpose: string | null;
+  requestedCategory: string;
+  requestedAmount: number;
+  requestedTermMonths: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PortalDocumentCategory =
   | 'VALID_ID_BORROWER'
   | 'VALID_ID_CO_BORROWER'

@@ -106,4 +106,18 @@ describe('LoanApplication', () => {
     const application = buildApplication('PREAPPROVED');
     expect(() => application.revert('PREDECLINED')).toThrow(InvalidLoanApplicationTransitionError);
   });
+
+  it('updateSelfServiceIntake() touches only the provided fields while still PREAPPROVED/PREDECLINED', () => {
+    const application = buildApplication('PREAPPROVED');
+    application.updateSelfServiceIntake({ applicantName: 'Juana Dela Cruz', employer: 'Acme Corp' });
+    const props = application.toProps();
+    expect(props.applicantName).toBe('Juana Dela Cruz');
+    expect(props.employer).toBe('Acme Corp');
+    expect(props.requestedAmount).toBe(50000); // untouched
+  });
+
+  it('updateSelfServiceIntake() throws InvalidLoanApplicationTransitionError once a human decision exists', () => {
+    const application = buildApplication('PRE_APPROVAL');
+    expect(() => application.updateSelfServiceIntake({ applicantName: 'Juana Dela Cruz' })).toThrow(InvalidLoanApplicationTransitionError);
+  });
 });

@@ -26,6 +26,11 @@ const STATUS_TONE: Record<PortalLoanApplicationSummary['status'], string> = {
   DECLINED: 'bg-destructive/10 text-destructive',
 };
 
+/** Mirrors the backend's one-application-per-portal-account rule (CreateLoanApplicationUseCase,
+ * 2026-07-24) - only editable while no human/system decision has moved it past the initial
+ * system-computed verdict. */
+const EDITABLE_STATUSES = new Set<PortalLoanApplicationSummary['status']>(['PREAPPROVED', 'PREDECLINED']);
+
 /** Phase 2 (2026-07-23): "Create Loan Application" now routes to the real form, and this page
  * shows the client's own submitted applications and their current status. */
 export function DashboardPage() {
@@ -39,6 +44,8 @@ export function DashboardPage() {
       .then(setApplications)
       .catch(() => setApplications([]));
   }, []);
+
+  const hasPendingApplication = (applications ?? []).some((application) => application.status !== 'DECLINED');
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -65,8 +72,12 @@ export function DashboardPage() {
               <FileText className="h-5 w-5" />
             </div>
             <h2 className="mt-4 text-base font-semibold">Loan Application</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">Apply for a new loan, or check the status of one you already submitted.</p>
-            <Button className="mt-4" onClick={() => navigate('/apply')}>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {hasPendingApplication
+                ? 'You already have an application in progress - see it below. You can apply again once it\'s declined.'
+                : 'Apply for a new loan, or check the status of one you already submitted.'}
+            </p>
+            <Button className="mt-4" onClick={() => navigate('/apply')} disabled={hasPendingApplication} title={hasPendingApplication ? 'You already have an application in progress' : undefined}>
               Create Loan Application
             </Button>
           </Card>
@@ -101,9 +112,16 @@ export function DashboardPage() {
                       Submitted {new Date(application.createdAt).toLocaleDateString()} - {application.requestedTermMonths} months
                     </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_TONE[application.status]}`}>
-                    {STATUS_LABELS[application.status]}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {EDITABLE_STATUSES.has(application.status) && (
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/apply/${application.id}`)}>
+                        Edit
+                      </Button>
+                    )}
+                    <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_TONE[application.status]}`}>
+                      {STATUS_LABELS[application.status]}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
