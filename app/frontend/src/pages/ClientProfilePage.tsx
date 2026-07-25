@@ -1,7 +1,10 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Briefcase, FilePlus2, Home, Landmark, Mail, Pencil, Phone, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Briefcase, FilePlus2, Home, Landmark, Mail, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableSection } from '@/components/SortableSection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,16 +22,16 @@ import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, fetchAllPages, uploadFile } from '@/lib/apiClient';
+import { apiClient, ApiError, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import { ATTACHMENT_ACCEPTED_MIME, ATTACHMENT_ACCEPTED_TYPES, ATTACHMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documentApiTypes';
-import type { Borrower as RealBorrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
+import type { Borrower as RealBorrower, CoBorrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 interface RealEditDraft {
@@ -426,16 +429,272 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
   );
 }
 
+interface CoBorrowerDraft {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  phoneNumber: string;
+  emailAddress: string;
+  relationship: string;
+  employer: string;
+}
+
+const EMPTY_CO_BORROWER_DRAFT: CoBorrowerDraft = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  phoneNumber: '',
+  emailAddress: '',
+  relationship: '',
+  employer: '',
+};
+
+function draftFromCoBorrower(cb: CoBorrower): CoBorrowerDraft {
+  return {
+    firstName: cb.firstName,
+    middleName: cb.middleName ?? '',
+    lastName: cb.lastName,
+    phoneNumber: cb.phoneNumber ?? '',
+    emailAddress: cb.emailAddress ?? '',
+    relationship: cb.relationship ?? '',
+    employer: cb.employer ?? '',
+  };
+}
+
+function addressDraftFromCoBorrower(cb: CoBorrower): AddressDraft {
+  const addr = cb.addresses[0];
+  return addr
+    ? {
+        houseUnitNumber: addr.houseUnitNumber ?? '',
+        street: addr.street ?? '',
+        barangay: addr.barangay ?? '',
+        cityMunicipality: addr.cityMunicipality ?? '',
+        province: addr.province ?? '',
+        zipCode: addr.zipCode ?? '',
+      }
+    : emptyAddressDraft();
+}
+
+function formatCoBorrowerAddress(cb: CoBorrower): string {
+  const addr = cb.addresses[0];
+  if (!addr) return '-';
+  return (
+    [addr.houseUnitNumber, addr.street, addr.barangay, addr.cityMunicipality, addr.province, addr.zipCode].filter(Boolean).join(', ') || '-'
+  );
+}
+
+/** 2026-07-25 - shows this client's co-borrower (ADR-015: per-Borrower, applies to every one of
+ * their loans) sourced from whichever loan application named one. Deliberately edit-only once a
+ * co-borrower exists - CRM decision (2026-07-25): a client's co-borrower must always be traceable
+ * back to what was verified on an application, so staff correct/replace the existing record
+ * in place (e.g. when the person named at intake doesn't pass verification) rather than adding
+ * an unrelated second one. "Add" only appears while none exists yet - for older applications
+ * that never captured a co-borrower, or clients created without one. */
+function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState<CoBorrowerDraft>({ ...EMPTY_CO_BORROWER_DRAFT });
+  const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  const query = useQuery({
+    queryKey: ['co-borrowers', borrowerId],
+    queryFn: () => apiClient.get<{ items: CoBorrower[] }>(`/borrowers/${borrowerId}/co-borrowers`),
+  });
+  const coBorrowers = query.data?.items ?? [];
+  const existing = coBorrowers[0] ?? null;
+
+  const openDialog = () => {
+    setDraft(existing ? draftFromCoBorrower(existing) : { ...EMPTY_CO_BORROWER_DRAFT });
+    setAddressDraft(existing ? addressDraftFromCoBorrower(existing) : emptyAddressDraft());
+    setSubmitError(null);
+    setEditOpen(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      const payload = {
+        firstName: draft.firstName.trim(),
+        middleName: draft.middleName.trim() || undefined,
+        lastName: draft.lastName.trim(),
+        phoneNumber: draft.phoneNumber.trim() || undefined,
+        emailAddress: draft.emailAddress.trim() || undefined,
+        relationship: draft.relationship.trim() || undefined,
+        employer: draft.employer.trim() || undefined,
+        addresses: Object.values(addressDraft).some((v) => v.trim()) ? [addressDraft] : undefined,
+      };
+      return existing
+        ? apiClient.patch<CoBorrower>(`/co-borrowers/${existing.id}`, payload)
+        : apiClient.post<CoBorrower>('/co-borrowers', { ...payload, borrowerId });
+    },
+    onSuccess: () => {
+      setEditOpen(false);
+      setSubmitError(null);
+      void queryClient.invalidateQueries({ queryKey: ['co-borrowers', borrowerId] });
+    },
+    onError: (error: unknown) => {
+      setSubmitError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  return (
+    <Card className="h-full">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Co-Borrower</CardTitle>
+        </div>
+        <Button size="sm" onClick={openDialog}>
+          {existing ? (
+            <>
+              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+            </>
+          ) : (
+            <>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
+            </>
+          )}
+        </Button>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {query.isLoading ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
+        ) : !existing ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">No co-borrower on record for this client.</p>
+        ) : (
+          <div className="rounded-md border p-3 text-sm">
+            <p className="font-medium">{existing.fullName}</p>
+            <p className="mb-2.5 text-xs text-muted-foreground">{existing.relationship || 'Relationship not set'}</p>
+            <dl className="grid grid-cols-2 gap-y-1.5 text-xs">
+              <dt className="text-muted-foreground">Phone</dt>
+              <dd className="text-right font-medium">{existing.phoneNumber ? formatMobileNumber(existing.phoneNumber) : '-'}</dd>
+              <dt className="text-muted-foreground">Email</dt>
+              <dd className="text-right font-medium">{existing.emailAddress ?? '-'}</dd>
+              <dt className="text-muted-foreground">Employer</dt>
+              <dd className="text-right font-medium">{existing.employer ?? '-'}</dd>
+              <dt className="text-muted-foreground">Address</dt>
+              <dd className="text-right font-medium">{formatCoBorrowerAddress(existing)}</dd>
+            </dl>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{existing ? 'Edit Co-Borrower' : 'Add Co-Borrower'}</DialogTitle>
+            <DialogDescription>Attaches to this client directly - applies to every one of their loans, not just one.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>
+                First Name<span className="text-destructive"> *</span>
+              </Label>
+              <Input value={draft.firstName} onChange={(e) => setDraft((prev) => ({ ...prev, firstName: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Last Name<span className="text-destructive"> *</span>
+              </Label>
+              <Input value={draft.lastName} onChange={(e) => setDraft((prev) => ({ ...prev, lastName: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Middle Name</Label>
+              <Input value={draft.middleName} onChange={(e) => setDraft((prev) => ({ ...prev, middleName: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone Number</Label>
+              <PhoneInput
+                value={draft.phoneNumber}
+                onChange={(e) => setDraft((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                placeholder="09XX XXX XXXX"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input type="email" value={draft.emailAddress} onChange={(e) => setDraft((prev) => ({ ...prev, emailAddress: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Relationship</Label>
+              <Input value={draft.relationship} onChange={(e) => setDraft((prev) => ({ ...prev, relationship: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Employer</Label>
+              <Input value={draft.employer} onChange={(e) => setDraft((prev) => ({ ...prev, employer: e.target.value }))} />
+            </div>
+          </div>
+          <div className="border-t pt-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
+            <PsgcAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
+          </div>
+          {submitError && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {submitError}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => saveMutation.mutate()}
+              disabled={!draft.firstName.trim() || !draft.lastName.trim() || saveMutation.isPending}
+            >
+              {saveMutation.isPending ? 'Saving…' : existing ? 'Save Changes' : 'Add Co-Borrower'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 /** A loan account is "active" for the "one active loan at a time" rule if it hasn't reached any closed state yet. */
 const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'ACTIVE_IN_ARREARS']);
+
+// 2026-07-25 (user request, same pattern as LoanDetailPage's cardOrder): everything below the
+// client info header is drag-to-reorder - each staff member's own arrangement, saved per-user in
+// localStorage (same key style as the sidebar-collapse preference in AppLayout.tsx), so one
+// officer's preferred layout doesn't affect anyone else logged into the same shared machine.
+const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'riskSummary', 'loanHistory', 'attachments', 'activityTimeline', 'recentActivity'];
+const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder';
+function cardOrderKey(userId: string): string {
+  return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
+}
 
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canAccessLoanApplications } = useRole();
+  const { canAccessLoanApplications, currentAccount } = useRole();
   const [editOpen, setEditOpen] = React.useState(false);
   const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
   const [createLoanAccountOpen, setCreateLoanAccountOpen] = React.useState(false);
+  const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
+    try {
+      const saved = window.localStorage.getItem(cardOrderKey(currentAccount.id));
+      if (!saved) return DEFAULT_CARD_ORDER;
+      const parsed = JSON.parse(saved) as string[];
+      const isValid = Array.isArray(parsed) && DEFAULT_CARD_ORDER.every((id) => parsed.includes(id)) && parsed.length === DEFAULT_CARD_ORDER.length;
+      return isValid ? parsed : DEFAULT_CARD_ORDER;
+    } catch {
+      return DEFAULT_CARD_ORDER;
+    }
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(cardOrderKey(currentAccount.id), JSON.stringify(cardOrder));
+  }, [cardOrder, currentAccount.id]);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setCardOrder((order) => {
+      const oldIndex = order.indexOf(String(active.id));
+      const newIndex = order.indexOf(String(over.id));
+      return oldIndex === -1 || newIndex === -1 ? order : arrayMove(order, oldIndex, newIndex);
+    });
+  };
 
   const borrowerQuery = useQuery({
     queryKey: ['borrower', borrowerId],
@@ -582,6 +841,13 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         </CardContent>
       </Card>
 
+      {(() => {
+        // 2026-07-25: everything from here to Recent Activity is drag-to-reorder (see cardOrder
+        // state above) - each section's JSX lives as one entry in this map so it can be rendered
+        // in whatever order the current user saved, instead of a fixed sequence.
+        const cardsById: Record<string, React.ReactNode> = {};
+
+        cardsById.loanApplications = (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
           <CardTitle className="text-sm">Loan Applications</CardTitle>
@@ -656,9 +922,13 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </div>
         </CardContent>
       </Card>
+        );
 
-      <RiskPaymentSummaryCard borrowerId={borrowerId} />
+        cardsById.coBorrower = <CoBorrowersCard borrowerId={borrowerId} />;
 
+        cardsById.riskSummary = <RiskPaymentSummaryCard borrowerId={borrowerId} />;
+
+        cardsById.loanHistory = (
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
           <div>
@@ -738,7 +1008,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </div>
         </CardContent>
       </Card>
+        );
 
+        cardsById.attachments = (
       <AttachmentsPanel
         ownerType="BORROWER"
         ownerId={borrower.id}
@@ -748,9 +1020,11 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         // the latest (myApplications[0], already sorted newest-first) rather than every
         // application this client has ever had.
         secondaryOwner={myApplications[0] ? { ownerType: 'LOAN_APPLICATION', ownerId: myApplications[0].id } : undefined}
+        className="h-full"
       />
+        );
 
-      {/* Activity Timeline - ADR-050 */}
+        cardsById.activityTimeline = (
       <Card>
         <CardHeader className="p-4">
           <CardTitle className="text-sm">Activity Timeline</CardTitle>
@@ -760,8 +1034,22 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           <ProfileActivityTimeline profileType="BORROWER" profileId={borrowerId} showDetailsToggle={false} />
         </CardContent>
       </Card>
+        );
 
-      <RecentActivityPanel label="Client Profile" entityId={borrowerId} />
+        cardsById.recentActivity = <RecentActivityPanel label="Client Profile" entityId={borrowerId} />;
+
+        return (
+          <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
+            <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
+              {cardOrder.map((id) => (
+                <SortableSection key={id} id={id} fullWidth={id === 'activityTimeline' || id === 'recentActivity'}>
+                  {cardsById[id]}
+                </SortableSection>
+              ))}
+            </SortableContext>
+          </DndContext>
+        );
+      })()}
       </div>
 
       <RealEditClientDialog open={editOpen} onOpenChange={setEditOpen} borrower={borrower} />

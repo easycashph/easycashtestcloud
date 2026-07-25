@@ -11,6 +11,13 @@ export interface StampSignatureInput {
    * stamper apply small per-template placement nudges (see `TEMPLATE_OFFSETS` in
    * `PdfLibDocumentSignatureStamper`) on top of the generic anchor-based positioning. */
   templateCode?: string;
+  /** 2026-07-25 (two-party signing) - which anchor marker to stamp at: `[[SIGNATURE_ANCHOR]]`
+   * (BORROWER, the default - matches every call site before this field existed) or
+   * `[[SIGNATURE_ANCHOR_CO_BORROWER]]` (CO_BORROWER). Only a handful of templates carry the
+   * second marker (see `DocumentTemplate.requiresCoBorrowerSignature`); templates without it
+   * simply have no match, so `findSignatureAnchor` falls back to the default placement same as
+   * any other anchor-less template. */
+  anchorTarget?: 'BORROWER' | 'CO_BORROWER';
 }
 
 export interface IDocumentSignatureStamper {

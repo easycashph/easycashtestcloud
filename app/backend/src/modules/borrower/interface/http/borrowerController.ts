@@ -8,8 +8,15 @@ import type { ListBorrowersUseCase } from '../../application/use-cases/ListBorro
 import type { UpdateBorrowerUseCase } from '../../application/use-cases/UpdateBorrowerUseCase';
 import type { CreateCoBorrowerUseCase } from '../../application/use-cases/CreateCoBorrowerUseCase';
 import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorrowerUseCase';
+import type { ListCoBorrowersUseCase } from '../../application/use-cases/ListCoBorrowersUseCase';
+import type { UpdateCoBorrowerUseCase } from '../../application/use-cases/UpdateCoBorrowerUseCase';
 import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
-import type { CreateBorrowerRequestBody, CreateCoBorrowerRequestBody, UpdateBorrowerRequestBody } from './borrowerSchemas';
+import type {
+  CreateBorrowerRequestBody,
+  CreateCoBorrowerRequestBody,
+  UpdateBorrowerRequestBody,
+  UpdateCoBorrowerRequestBody,
+} from './borrowerSchemas';
 import { presentBorrower, presentCoBorrower } from './presenters/BorrowerPresenter';
 
 export interface BorrowerControllerDeps {
@@ -19,6 +26,8 @@ export interface BorrowerControllerDeps {
   updateBorrowerUseCase: UpdateBorrowerUseCase;
   createCoBorrowerUseCase: CreateCoBorrowerUseCase;
   getCoBorrowerUseCase: GetCoBorrowerUseCase;
+  listCoBorrowersUseCase: ListCoBorrowersUseCase;
+  updateCoBorrowerUseCase: UpdateCoBorrowerUseCase;
   getBorrowerRiskSummaryUseCase: GetBorrowerRiskSummaryUseCase;
 }
 
@@ -102,6 +111,25 @@ export class BorrowerController {
   getCoBorrower = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const coBorrower = await this.deps.getCoBorrowerUseCase.execute(req.params.id as string);
+      res.status(200).json(presentCoBorrower(coBorrower));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCoBorrowers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const items = await this.deps.listCoBorrowersUseCase.execute(req.params.id as string);
+      res.status(200).json({ items: items.map(presentCoBorrower) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateCoBorrower = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as UpdateCoBorrowerRequestBody;
+      const coBorrower = await this.deps.updateCoBorrowerUseCase.execute(req.params.id as string, body, req.authUser?.sub);
       res.status(200).json(presentCoBorrower(coBorrower));
     } catch (error) {
       next(error);

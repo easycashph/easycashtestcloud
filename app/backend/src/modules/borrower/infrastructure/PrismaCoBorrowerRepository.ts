@@ -14,7 +14,7 @@ async function toDomain(client: PrismaReadClient, row: CoBorrowerRow): Promise<C
   const props: CoBorrowerProps = {
     id: row.id,
     borrowerId: row.borrowerId ?? undefined,
-    name: PersonName.of(row.firstName, row.lastName),
+    name: PersonName.of(row.firstName, row.lastName, row.middleName ?? undefined),
     gender: row.gender ?? undefined,
     civilStatus: row.civilStatus ?? undefined,
     birthDate: row.birthDate ?? undefined,
@@ -65,6 +65,7 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
           id: coBorrower.id,
           borrowerId: coBorrower.borrowerId,
           firstName: coBorrower.name.firstName,
+          middleName: coBorrower.name.middleName,
           lastName: coBorrower.name.lastName,
           gender: coBorrower.gender,
           civilStatus: coBorrower.civilStatus,
@@ -78,6 +79,7 @@ export class PrismaCoBorrowerRepository implements ICoBorrowerRepository {
         update: {
           borrowerId: coBorrower.borrowerId,
           firstName: coBorrower.name.firstName,
+          middleName: coBorrower.name.middleName,
           lastName: coBorrower.name.lastName,
           gender: coBorrower.gender,
           civilStatus: coBorrower.civilStatus,

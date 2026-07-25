@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { IGeneratedLoanDocumentRepository } from '@modules/loan-document/application/ports/IGeneratedLoanDocumentRepository';
 import type { IDocumentTemplateRepository } from '@modules/loan-document/application/ports/IDocumentTemplateRepository';
 import {
@@ -26,6 +27,7 @@ export interface SignLoanSigningDocumentUseCaseDeps {
   loanSigningSessionRepository: ILoanSigningSessionRepository;
   loanAccountRepository: ILoanAccountRepository;
   borrowerRepository: IBorrowerRepository;
+  coBorrowerRepository: ICoBorrowerRepository;
   generatedLoanDocumentRepository: IGeneratedLoanDocumentRepository;
   documentTemplateRepository: IDocumentTemplateRepository;
   fileStorage: IFileStorage;
@@ -55,19 +57,40 @@ export class SignLoanSigningDocumentUseCase {
 
     const loanAccount = await this.deps.loanAccountRepository.findById(session.loanAccountId);
     if (!loanAccount) throw new NotFoundError('LoanAccount', session.loanAccountId);
-    const borrower = await this.deps.borrowerRepository.findById(loanAccount.borrowerId);
 
     const template = await this.deps.documentTemplateRepository.findById(generatedDoc.documentTemplateId);
 
-    const originalPdf = await this.deps.fileStorage.read(generatedDoc.storageKey);
+    let signerName = 'Client';
+    if (session.partyType === 'CO_BORROWER') {
+      const coBorrower = session.coBorrowerId ? await this.deps.coBorrowerRepository.findById(session.coBorrowerId) : null;
+      signerName = coBorrower?.name.fullName() ?? signerName;
+    } else {
+      const borrower = await this.deps.borrowerRepository.findById(loanAccount.borrowerId);
+      signerName = borrower?.name.fullName() ?? signerName;
+    }
+
+    // 2026-07-25 (two-party signing): for a document that requires BOTH signatures, stamp onto
+    // whichever party already signed it (any OTHER session on this same loan account, for this
+    // same generatedLoanDocumentId) rather than the pristine original - so the borrower's and
+    // co-borrower's ink end up on the SAME final PDF instead of two independent single-signature
+    // copies. Falls back to the pristine original if this is the first (or only) signature.
+    const otherSessions = await this.deps.loanSigningSessionRepository.findManyByLoanAccountId(session.loanAccountId);
+    const priorSignedEntry = otherSessions
+      .filter((s) => s.id !== session.id)
+      .flatMap((s) => s.documents)
+      .filter((d) => d.generatedLoanDocumentId === entry.generatedLoanDocumentId && d.signedAt && d.signedStorageKey)
+      .sort((a, b) => (b.signedAt?.getTime() ?? 0) - (a.signedAt?.getTime() ?? 0))[0];
+
+    const basePdf = await this.deps.fileStorage.read(priorSignedEntry?.signedStorageKey ?? generatedDoc.storageKey);
     const signedAt = new Date();
     const stampedPdf = await this.deps.signatureStamper.stamp({
-      pdfBuffer: originalPdf,
+      pdfBuffer: basePdf,
       signatureImagePng: input.signatureImagePng,
-      signerName: borrower?.name.fullName() ?? 'Client',
+      signerName,
       signedAtIso: signedAt.toISOString(),
       ipAddress: input.ipAddress,
       templateCode: template?.code,
+      anchorTarget: session.partyType,
     });
 
     const signedStorageKey = `loan-signing/${session.id}/${entry.id}-signed.pdf`;

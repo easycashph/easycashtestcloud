@@ -26,6 +26,7 @@ export class LoanSigningController {
         body.phoneNumber,
         currentUser.sub,
         req.ip,
+        body.partyType,
       );
       res.status(201).json(presentLoanSigningSessionStatus(session));
     } catch (error) {

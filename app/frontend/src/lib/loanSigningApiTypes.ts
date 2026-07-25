@@ -11,6 +11,7 @@ export interface LoanSigningSessionDocumentStatus {
 export interface LoanSigningSessionStatus {
   id: string;
   loanAccountId: string;
+  partyType: 'BORROWER' | 'CO_BORROWER';
   phoneNumber: string;
   expiresAt: string;
   revokedAt: string | null;
@@ -24,6 +25,7 @@ export interface LoanSigningSessionStatus {
 
 export interface CreateLoanSigningSessionRequest {
   phoneNumber: string;
+  partyType?: 'BORROWER' | 'CO_BORROWER';
 }
 
 /** Public (unauthenticated) client-facing view - see `GetLoanSigningSessionUseCase`. */

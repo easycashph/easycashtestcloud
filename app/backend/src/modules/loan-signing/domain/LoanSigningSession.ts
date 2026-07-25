@@ -18,9 +18,13 @@ export interface SigningDocumentEntry {
   signedUserAgent?: string;
 }
 
+export type SigningPartyType = 'BORROWER' | 'CO_BORROWER';
+
 export interface LoanSigningSessionProps {
   id: string;
   loanAccountId: string;
+  partyType: SigningPartyType;
+  coBorrowerId?: string;
   phoneNumber: string;
   tokenHash: string;
   expiresAt: Date;
@@ -36,6 +40,8 @@ export interface LoanSigningSessionProps {
 
 export interface CreateLoanSigningSessionProps {
   loanAccountId: string;
+  partyType: SigningPartyType;
+  coBorrowerId?: string;
   phoneNumber: string;
   tokenHash: string;
   expiresAt: Date;
@@ -57,6 +63,8 @@ export class LoanSigningSession {
     return new LoanSigningSession({
       id: randomUUID(),
       loanAccountId: input.loanAccountId,
+      partyType: input.partyType,
+      coBorrowerId: input.coBorrowerId,
       phoneNumber: input.phoneNumber,
       tokenHash: input.tokenHash,
       expiresAt: input.expiresAt,
@@ -81,6 +89,14 @@ export class LoanSigningSession {
 
   get loanAccountId(): string {
     return this.props.loanAccountId;
+  }
+
+  get partyType(): SigningPartyType {
+    return this.props.partyType;
+  }
+
+  get coBorrowerId(): string | undefined {
+    return this.props.coBorrowerId;
   }
 
   get phoneNumber(): string {

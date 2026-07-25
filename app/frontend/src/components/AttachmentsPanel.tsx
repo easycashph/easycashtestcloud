@@ -50,11 +50,15 @@ export function AttachmentsPanel({
   ownerId,
   canUpload,
   secondaryOwner,
+  className,
 }: {
   ownerType: AttachmentOwnerType;
   ownerId: string;
   canUpload: boolean;
   secondaryOwner?: { ownerType: AttachmentOwnerType; ownerId: string };
+  /** For a grid layout where this card sits beside a taller sibling (e.g. ClientProfilePage's
+   * cardOrder grid) - pass "h-full" so it stretches to match instead of leaving empty space. */
+  className?: string;
 }) {
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -128,7 +132,7 @@ export function AttachmentsPanel({
   const error = localError ?? (uploadMutation.error instanceof Error ? uploadMutation.error.message : null);
 
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Paperclip className="h-4 w-4 text-muted-foreground" /> Attachments

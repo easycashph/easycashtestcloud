@@ -12,6 +12,7 @@ function decodeBase64Png(signatureImagePng: string): Buffer {
 const PDF2JSON_UNITS_PER_POINT = 16;
 
 const SIGNATURE_ANCHOR_TEXT = '[[SIGNATURE_ANCHOR]]';
+const SIGNATURE_ANCHOR_CO_BORROWER_TEXT = '[[SIGNATURE_ANCHOR_CO_BORROWER]]';
 
 /** 2026-07-22 - small hand-tuned per-template nudges on top of the generic anchor position, from
  * direct visual review of signed output (user feedback, several rounds). `dx` positive = right,
@@ -21,12 +22,23 @@ const SIGNATURE_ANCHOR_TEXT = '[[SIGNATURE_ANCHOR]]';
 const TEMPLATE_OFFSETS: Record<string, { dx?: number; dy?: number }> = {
   PROMISSORY_NOTE: { dx: 30 },
   DISCLOSURE_STATEMENT: { dy: -8 },
-  // ACKNOWLEDGEMENT_RECEIPT: no offset - 2026-07-22 the anchor itself moved (see the template) from
-  // the "Received by" line to sit directly above "Signature Over Printed Name" (the "Issued by"
-  // row), which is the line this document is actually meant to be signed on.
   DATA_PRIVACY_CONSENT: { dy: -10 },
   LOAN_AGREEMENT_SALARY: { dx: 30 },
+  // 2026-07-25 (user visual review round, e-signature phase 2 templates) - first-pass nudges
+  // toward centering the signature over the printed borrower name on each of these 5 templates;
+  // may need a further round after the user reviews this regeneration, same as the pass above.
+  ACKNOWLEDGEMENT_RECEIPT: { dx: 20, dy: -20 },
+  LOAN_AGREEMENT_SEAFARER: { dx: 30, dy: -10 },
+  DEED_OF_ASSIGNMENT_BORROWER: { dx: 30 },
+  SPECIAL_POWER_OF_ATTORNEY: { dx: 30 },
+  MANULIFE: { dx: 30 },
 };
+
+/** Same idea as TEMPLATE_OFFSETS, but for the `[[SIGNATURE_ANCHOR_CO_BORROWER]]` marker (2026-07-25,
+ * two-party signing) - the co-borrower's own anchor sits at a different spot in each template's
+ * layout than the borrower's, so it needs its own (initially empty, i.e. trust the raw anchor
+ * position) set of nudges, tuned the same way after visual review. */
+const CO_BORROWER_TEMPLATE_OFFSETS: Record<string, { dx?: number; dy?: number }> = {};
 
 interface AnchorLocation {
   pageIndex: number;
@@ -41,7 +53,7 @@ interface AnchorLocation {
  * already-rendered PDF, converting pdf2json's top-left/16-units-per-inch coordinates into pdf-lib's
  * bottom-left/point coordinate system. Returns `null` if a template has no anchor yet (older
  * templates not yet updated) - the caller falls back to the old fixed bottom-of-page placement. */
-async function findSignatureAnchor(pdfBuffer: Buffer): Promise<AnchorLocation | null> {
+async function findSignatureAnchor(pdfBuffer: Buffer, anchorText: string): Promise<AnchorLocation | null> {
   return new Promise((resolve, reject) => {
     const parser = new PDFParser();
     parser.on('pdfParser_dataError', (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))));
@@ -49,7 +61,7 @@ async function findSignatureAnchor(pdfBuffer: Buffer): Promise<AnchorLocation | 
       for (let pageIndex = 0; pageIndex < pdfData.Pages.length; pageIndex++) {
         const page = pdfData.Pages[pageIndex];
         if (!page) continue;
-        const match = page.Texts.find((t) => t.R.some((run) => run.T === SIGNATURE_ANCHOR_TEXT));
+        const match = page.Texts.find((t) => t.R.some((run) => run.T === anchorText));
         if (match) {
           const pageHeightPt = page.Height * PDF2JSON_UNITS_PER_POINT;
           resolve({
@@ -87,7 +99,9 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
     const pages = pdfDoc.getPages();
     if (pages.length === 0) throw new Error('PDF has no pages to stamp.');
 
-    const anchor = await findSignatureAnchor(input.pdfBuffer);
+    const isCoBorrower = input.anchorTarget === 'CO_BORROWER';
+    const anchorText = isCoBorrower ? SIGNATURE_ANCHOR_CO_BORROWER_TEXT : SIGNATURE_ANCHOR_TEXT;
+    const anchor = await findSignatureAnchor(input.pdfBuffer, anchorText);
     const targetPage = anchor ? pages[anchor.pageIndex] : pages[pages.length - 1];
     if (!targetPage) throw new Error('PDF has no pages to stamp.');
 
@@ -114,7 +128,8 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
       // (Borrower/Co-Borrower side by side), bleeding into the margin or the neighboring column.
       // A small lift (not a large computed gap) keeps it sitting on/around the anchor's own line -
       // the blank ink space the template already reserves - rather than floating well above it.
-      const offset = input.templateCode ? TEMPLATE_OFFSETS[input.templateCode] : undefined;
+      const offsetTable = isCoBorrower ? CO_BORROWER_TEMPLATE_OFFSETS : TEMPLATE_OFFSETS;
+      const offset = input.templateCode ? offsetTable[input.templateCode] : undefined;
       imageX = anchor.x + (offset?.dx ?? 0);
       imageY = anchor.y + 2 + (offset?.dy ?? 0);
     } else {
@@ -129,12 +144,16 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
     // anchor) compute a negative text width.
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const auditLines = [
-      `Signed by: ${input.signerName}`,
+      `Signed by (${isCoBorrower ? 'Co-Borrower' : 'Borrower'}): ${input.signerName}`,
       `Date: ${input.signedAtIso}`,
       input.ipAddress ? `IP address: ${input.ipAddress}` : undefined,
     ].filter((line): line is string => Boolean(line));
+    // 2026-07-25 (two-party signing): a document that requires both signatures gets stamped twice
+    // onto the SAME evolving PDF (see SignLoanSigningDocumentUseCase) - if both audit blocks sat at
+    // the same bottom-margin position, the second stamp would draw directly on top of the first,
+    // making both unreadable. The co-borrower's block sits higher up, clear of the borrower's.
     const auditX = 40;
-    let auditY = 20 + (auditLines.length - 1) * 9;
+    let auditY = (isCoBorrower ? 55 : 20) + (auditLines.length - 1) * 9;
     for (const line of auditLines) {
       targetPage.drawText(line, {
         x: auditX,

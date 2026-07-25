@@ -13,6 +13,8 @@ function toDomain(row: SessionRow): LoanSigningSession {
   const props: LoanSigningSessionProps = {
     id: row.id,
     loanAccountId: row.loanAccountId,
+    partyType: row.partyType,
+    coBorrowerId: row.coBorrowerId ?? undefined,
     phoneNumber: row.phoneNumber,
     tokenHash: row.tokenHash,
     expiresAt: row.expiresAt,
@@ -44,6 +46,8 @@ export class PrismaLoanSigningSessionRepository implements ILoanSigningSessionRe
       data: {
         id: p.id,
         loanAccountId: p.loanAccountId,
+        partyType: p.partyType,
+        coBorrowerId: p.coBorrowerId,
         phoneNumber: p.phoneNumber,
         tokenHash: p.tokenHash,
         expiresAt: p.expiresAt,

@@ -66,7 +66,9 @@ import { createPsgcRouter } from '@modules/psgc/interface/http/psgcRouter';
 import { ListPsgcOptionsUseCase } from '@modules/psgc/application/use-cases/ListPsgcOptionsUseCase';
 import { PrismaPsgcRepository } from '@modules/psgc/infrastructure/PrismaPsgcRepository';
 import { CreateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateCoBorrowerUseCase';
+import { UpdateCoBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateCoBorrowerUseCase';
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
+import { ListCoBorrowersUseCase } from '@modules/borrower/application/use-cases/ListCoBorrowersUseCase';
 import { GetBorrowerRiskSummaryUseCase } from '@modules/borrower/application/use-cases/GetBorrowerRiskSummaryUseCase';
 import { BorrowerRiskSummaryService } from '@modules/borrower/application/services/BorrowerRiskSummaryService';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
@@ -505,6 +507,8 @@ export function createApp(): Express {
       updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
       createCoBorrowerUseCase: new CreateCoBorrowerUseCase({ coBorrowerRepository, auditLogger }),
       getCoBorrowerUseCase: new GetCoBorrowerUseCase({ coBorrowerRepository }),
+      listCoBorrowersUseCase: new ListCoBorrowersUseCase({ coBorrowerRepository }),
+      updateCoBorrowerUseCase: new UpdateCoBorrowerUseCase({ coBorrowerRepository, auditLogger }),
       getBorrowerRiskSummaryUseCase: new GetBorrowerRiskSummaryUseCase({
         borrowerRepository,
         loanAccountRepository: loanAccountRepositoryForBorrowerRisk,
@@ -750,6 +754,7 @@ export function createApp(): Express {
           fileStorage: loanDocumentFileStorage,
         }),
         loanSigningSessionRepository,
+        coBorrowerRepository,
         smsGateway: signingSmsGateway,
       }),
       listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({
@@ -785,6 +790,7 @@ export function createApp(): Express {
       loanSigningSessionRepository,
       loanAccountRepository,
       borrowerRepository,
+      coBorrowerRepository,
       generatedLoanDocumentRepository,
       documentTemplateRepository,
       fileStorage: loanDocumentFileStorage,
@@ -963,7 +969,6 @@ export function createApp(): Express {
       generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,
-        loanProductRepository,
         auditLogger,
         profileActivityLogService,
         notificationService,

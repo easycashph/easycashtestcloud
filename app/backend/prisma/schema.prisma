@@ -904,6 +904,7 @@ model CoBorrower {
   borrowerId   String?
   borrower     Borrower? @relation(fields: [borrowerId], references: [id])
   firstName    String
+  middleName   String?
   lastName     String
   gender       String?
   civilStatus  String?
@@ -916,6 +917,7 @@ model CoBorrower {
   legacyId String? @unique
 
   loanAccounts LoanAccountCoBorrower[]
+  signingSessions LoanSigningSession[]
 
   @@index([borrowerId])
   @@map("co_borrowers")
@@ -1554,6 +1556,17 @@ model DocumentTemplate {
   isRequired Boolean @default(false)
   sortIndex  Int     @default(0)
 
+  /// 2026-07-25 (e-signature, phase 2): which party(ies) must sign this template, independent of
+  /// isRequired/DocumentTemplateMapping (those control whether the doc is generated at all for a
+  /// loan; these control which signing batch(es) it's included in once generated). Most templates
+  /// are borrower=true/coBorrower=false (the pre-existing default). A template with BOTH true (e.g.
+  /// Loan Agreement - Seafarer, Special Power of Attorney) carries two separate anchors in its
+  /// .docx ([[SIGNATURE_ANCHOR]] and [[SIGNATURE_ANCHOR_CO_BORROWER]]) and is stamped twice, once
+  /// per party, onto the same evolving PDF. Deed of Assignment - Co-Borrower is the one template
+  /// with borrower=false/coBorrower=true (co-borrower-only; never belongs in the borrower's batch).
+  requiresBorrowerSignature   Boolean @default(true)
+  requiresCoBorrowerSignature Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1602,6 +1615,13 @@ model GeneratedLoanDocument {
   @@map("generated_loan_documents")
 }
 
+/// 2026-07-25 (e-signature, phase 2 - two-party signing): which party a LoanSigningSession's
+/// batch and SMS link are for.
+enum SigningPartyType {
+  BORROWER
+  CO_BORROWER
+}
+
 /// 2026-07-22 (e-signature, phase 1 - required documents only, see ADR-051 §1 for the
 /// required/conditional split): batches a loan's required `GeneratedLoanDocument` rows into ONE
 /// signing session sent to the client via a single SMS link. The raw link token and OTP code are
@@ -1613,6 +1633,16 @@ model LoanSigningSession {
   id            String      @id @default(uuid())
   loanAccountId String
   loanAccount   LoanAccount @relation(fields: [loanAccountId], references: [id])
+
+  /// 2026-07-25: which party this batch is for - determines which templates get included
+  /// (DocumentTemplate.requiresBorrowerSignature/requiresCoBorrowerSignature) and which signature
+  /// anchor gets stamped ([[SIGNATURE_ANCHOR]] vs [[SIGNATURE_ANCHOR_CO_BORROWER]]) on documents
+  /// that need both. Defaults to BORROWER to match every session created before this field existed.
+  partyType SigningPartyType @default(BORROWER)
+  /// Set only when partyType=CO_BORROWER - which CoBorrower this session/phone number belongs to.
+  /// Null for BORROWER sessions (the loan account's own borrower is implied by loanAccountId).
+  coBorrowerId String?
+  coBorrower   CoBorrower? @relation(fields: [coBorrowerId], references: [id])
 
   /// Where the SMS link and OTP are sent - captured at send time, not re-read from the borrower
   /// record later, so a later profile edit can't silently redirect an in-flight signing session.
@@ -2024,7 +2054,14 @@ model LoanApplication {
   sssNumber                    String?
   propertiesOwned              String[]  @default([])
   creditScore                  Int?
-  coBorrowerName               String?
+  /// 2026-07-25: superseded by the structured coBorrowerFirstName/MiddleName/LastName fields below
+  /// for new intake - kept read-only for older applications that only ever had this single
+  /// combined "Name (relationship)" string, since re-parsing it apart is lossy/ambiguous (see
+  /// splitApplicantName's own doc comment on the frontend). Never written to by new intake.
+  coBorrowerName                String?
+  coBorrowerFirstName           String?
+  coBorrowerMiddleName          String?
+  coBorrowerLastName            String?
   coBorrowerEmployer           String?
   coBorrowerContactNumber      String?
   coBorrowerEmail              String?

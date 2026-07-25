@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { LoanApplication } from '@modules/loan-application/domain/LoanApplication';
 import { NotFoundError } from '@shared/errors/DomainError';
-import {
-  InvalidLoanApplicationTransitionError,
-  MissingAgencyVerificationError,
-} from '@modules/loan-application/domain/errors/LoanApplicationDomainErrors';
+import { InvalidLoanApplicationTransitionError } from '@modules/loan-application/domain/errors/LoanApplicationDomainErrors';
 
 function buildApplication(status: 'PREAPPROVED' | 'PREDECLINED' = 'PREAPPROVED') {
   return LoanApplication.create({
@@ -22,8 +19,7 @@ describe('TagLoanApplicationPreApprovalUseCase', () => {
   it('throws NotFoundError when the application does not exist', async () => {
     const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(null), findMany: vi.fn(), save: vi.fn() };
     const auditLogger = { log: vi.fn() };
-    const loanProductRepository = { findVersionById: vi.fn(), findById: vi.fn() };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
+    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, auditLogger });
 
     await expect(useCase.execute('missing', 'user-1')).rejects.toThrow(NotFoundError);
   });
@@ -32,8 +28,7 @@ describe('TagLoanApplicationPreApprovalUseCase', () => {
     const application = buildApplication('PREAPPROVED');
     const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
     const auditLogger = { log: vi.fn() };
-    const loanProductRepository = { findVersionById: vi.fn(), findById: vi.fn() };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
+    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, auditLogger });
 
     await expect(useCase.execute(application.id, 'user-1')).rejects.toThrow(InvalidLoanApplicationTransitionError);
     expect(loanApplicationRepository.save).not.toHaveBeenCalled();
@@ -45,8 +40,7 @@ describe('TagLoanApplicationPreApprovalUseCase', () => {
     application.startReview('reviewer-1');
     const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
     const auditLogger = { log: vi.fn() };
-    const loanProductRepository = { findVersionById: vi.fn(), findById: vi.fn() };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
+    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, auditLogger });
 
     const result = await useCase.execute(application.id, 'reviewer-1');
 
@@ -57,53 +51,17 @@ describe('TagLoanApplicationPreApprovalUseCase', () => {
     );
   });
 
-  it('throws MissingAgencyVerificationError for a Seafarer Loan with no Agency Verification filled in', async () => {
+  // 2026-07-25 (user decision): Agency Verification (agency name/position/vessel) is no longer a
+  // required gate for Seafarer Loan applications - tags pre approval regardless of whether that
+  // section is filled in. Previously this suite covered a MissingAgencyVerificationError thrown
+  // here; that gate and its dedicated test cases were removed along with the use case's check.
+  it('tags pre approval for a Seafarer Loan even with no Agency Verification filled in', async () => {
     const application = buildApplication('PREAPPROVED');
     application.startReview('reviewer-1');
     application.assignProduct('version-1');
     const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
     const auditLogger = { log: vi.fn() };
-    const loanProductRepository = {
-      findVersionById: vi.fn().mockResolvedValue({ loanProductId: 'product-1' }),
-      findById: vi.fn().mockResolvedValue({ name: 'SML-Regular' }),
-    };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
-
-    await expect(useCase.execute(application.id, 'reviewer-1')).rejects.toThrow(MissingAgencyVerificationError);
-    expect(loanApplicationRepository.save).not.toHaveBeenCalled();
-  });
-
-  it('tags pre approval for a Seafarer Loan once Agency Verification is filled in', async () => {
-    const application = buildApplication('PREAPPROVED');
-    application.startReview('reviewer-1');
-    application.assignProduct('version-1');
-    application.updateReviewReport({
-      agencyVerification: { agencyName: 'Manning Agency Co.', position: 'Able Seaman', vessel: 'MV Example' },
-    });
-    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
-    const auditLogger = { log: vi.fn() };
-    const loanProductRepository = {
-      findVersionById: vi.fn().mockResolvedValue({ loanProductId: 'product-1' }),
-      findById: vi.fn().mockResolvedValue({ name: 'SML-Regular' }),
-    };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
-
-    const result = await useCase.execute(application.id, 'reviewer-1');
-
-    expect(result.status).toBe('PRE_APPROVAL');
-  });
-
-  it('does not require Agency Verification for a non-Seafarer product', async () => {
-    const application = buildApplication('PREAPPROVED');
-    application.startReview('reviewer-1');
-    application.assignProduct('version-1');
-    const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
-    const auditLogger = { log: vi.fn() };
-    const loanProductRepository = {
-      findVersionById: vi.fn().mockResolvedValue({ loanProductId: 'product-1' }),
-      findById: vi.fn().mockResolvedValue({ name: 'SL-Regular' }),
-    };
-    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, loanProductRepository, auditLogger });
+    const useCase = new TagLoanApplicationPreApprovalUseCase({ loanApplicationRepository, auditLogger });
 
     const result = await useCase.execute(application.id, 'reviewer-1');
 

@@ -81,4 +81,22 @@ export interface CreateCoBorrowerInput {
   relationship?: string;
   employer?: string;
   legacyId?: string;
+  addresses?: CreateBorrowerAddressInput[];
+}
+
+/** All fields optional — PATCH semantics, send only what changed. `addresses`, when present,
+ * replaces the co-borrower's whole address list wholesale (same "always replaced as a whole"
+ * contract as UpdateBorrowerInput — see Address VO doc comment). */
+export interface UpdateCoBorrowerInput {
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  gender?: string;
+  civilStatus?: string;
+  birthDate?: Date;
+  phoneNumber?: string;
+  emailAddress?: string;
+  relationship?: string;
+  employer?: string;
+  addresses?: CreateBorrowerAddressInput[];
 }

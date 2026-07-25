@@ -143,7 +143,7 @@ function ReportCard({ report }: { report: ReportEntry }) {
   );
 
   const cardClass = cn(
-    'block rounded-xl border p-3.5 transition-colors',
+    'block rounded-xl border bg-card p-3.5 transition-colors shadow-[0_1px_2px_rgba(20,22,26,0.04),0_4px_10px_rgba(20,22,26,0.06)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
     report.status === 'live' ? 'hover:border-primary/60 hover:bg-secondary/40' : 'cursor-default opacity-60',
   );
 
