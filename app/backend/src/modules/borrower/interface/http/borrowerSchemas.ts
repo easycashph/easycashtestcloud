@@ -115,6 +115,24 @@ export const createCoBorrowerSchema = z.object({
   relationship: z.string().min(1).optional(),
   employer: z.string().min(1).optional(),
   legacyId: z.string().min(1).optional(),
+  addresses: z.array(addressSchema).optional(),
 });
 
 export type CreateCoBorrowerRequestBody = z.infer<typeof createCoBorrowerSchema>;
+
+/** All fields optional — PATCH semantics, send only what changed. */
+export const updateCoBorrowerSchema = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  middleName: z.string().min(1).optional(),
+  gender: z.string().min(1).optional(),
+  civilStatus: z.string().min(1).optional(),
+  birthDate: z.coerce.date().optional(),
+  phoneNumber: z.string().min(1).optional(),
+  emailAddress: z.string().email().optional(),
+  relationship: z.string().min(1).optional(),
+  employer: z.string().min(1).optional(),
+  addresses: z.array(addressSchema).optional(),
+});
+
+export type UpdateCoBorrowerRequestBody = z.infer<typeof updateCoBorrowerSchema>;

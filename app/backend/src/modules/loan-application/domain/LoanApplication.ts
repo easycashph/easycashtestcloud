@@ -151,6 +151,9 @@ export interface LoanApplicationProps {
   propertiesOwned: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerFirstName?: string;
+  coBorrowerMiddleName?: string;
+  coBorrowerLastName?: string;
   coBorrowerEmployer?: string;
   coBorrowerContactNumber?: string;
   coBorrowerEmail?: string;
@@ -234,6 +237,9 @@ export interface CreateLoanApplicationProps {
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerFirstName?: string;
+  coBorrowerMiddleName?: string;
+  coBorrowerLastName?: string;
   coBorrowerEmployer?: string;
   coBorrowerContactNumber?: string;
   coBorrowerEmail?: string;
@@ -312,6 +318,9 @@ export class LoanApplication {
       propertiesOwned: input.propertiesOwned ?? [],
       creditScore: input.creditScore,
       coBorrowerName: input.coBorrowerName,
+      coBorrowerFirstName: input.coBorrowerFirstName,
+      coBorrowerMiddleName: input.coBorrowerMiddleName,
+      coBorrowerLastName: input.coBorrowerLastName,
       coBorrowerEmployer: input.coBorrowerEmployer,
       coBorrowerContactNumber: input.coBorrowerContactNumber,
       coBorrowerEmail: input.coBorrowerEmail,
@@ -459,6 +468,9 @@ export class LoanApplication {
         | 'tinNumber'
         | 'sssNumber'
         | 'coBorrowerName'
+        | 'coBorrowerFirstName'
+        | 'coBorrowerMiddleName'
+        | 'coBorrowerLastName'
         | 'coBorrowerEmployer'
         | 'coBorrowerContactNumber'
         | 'coBorrowerEmail'

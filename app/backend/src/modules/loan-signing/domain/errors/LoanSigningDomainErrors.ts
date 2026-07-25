@@ -51,3 +51,24 @@ export class NoRequiredDocumentTemplatesError extends DomainError {
     this.name = 'NoRequiredDocumentTemplatesError';
   }
 }
+
+/** 2026-07-25 (two-party signing) - thrown when "Send for Co-Borrower Signing" is attempted but no
+ * CoBorrower profile is linked to this loan's borrower yet (create one via "Create Client Profile"
+ * or the client's own profile page first - the phone number itself is staff-entered per-send, not
+ * read from this profile, but the profile itself must exist for the signer's name/identity). */
+export class NoCoBorrowerLinkedError extends DomainError {
+  constructor() {
+    super('NO_CO_BORROWER_LINKED', 'No co-borrower is linked to this loan account yet.', undefined, 400);
+    this.name = 'NoCoBorrowerLinkedError';
+  }
+}
+
+/** No document template requires this party's signature (e.g. a loan product with no
+ * co-borrower-signed conditional templates mapped to it) - "Send for Co-Borrower Signing" would
+ * have nothing to send. */
+export class NoDocumentsForPartyError extends DomainError {
+  constructor(partyType: string) {
+    super('NO_DOCUMENTS_FOR_PARTY', `No documents require a ${partyType} signature for this loan.`, undefined, 400);
+    this.name = 'NoDocumentsForPartyError';
+  }
+}

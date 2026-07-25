@@ -33,6 +33,13 @@ services:
       LIBREOFFICE_BINARY_PATH: /usr/bin/soffice
     ports:
       - '4000:4000'
+    # 2026-07-25: Docker Desktop's internal DNS resolver (127.0.0.11) intermittently fails to
+    # resolve external hostnames (e.g. api.m360.com.ph for the SMS gateway) - confirmed flaky via
+    # repeated lookups (1 failure in 5 tries), most noticeable right after a host network change
+    # (LAN IP switch). Explicit public resolvers bypass the internal proxy's flakiness.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     depends_on:
       postgres:
         condition: service_healthy

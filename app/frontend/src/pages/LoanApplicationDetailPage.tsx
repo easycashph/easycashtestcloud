@@ -1,18 +1,32 @@
 import * as React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableSection } from '@/components/SortableSection';
 import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  Briefcase,
+  Cake,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  CreditCard,
+  Flag,
+  Heart,
+  Home,
+  IdCard,
   Landmark,
   Lock,
+  Mail,
+  MapPin,
+  Phone,
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  User as UserIcon,
   UserPlus,
   XCircle,
 } from 'lucide-react';
@@ -40,7 +54,7 @@ import { RoleAbbr } from '@/components/RoleAbbr';
 import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ProfileNotesPanel } from '@/components/ProfileNotesPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
-import { type AddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
+import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { TermTip } from '@/components/TermTip';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
@@ -64,6 +78,17 @@ import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
+
+/** 2026-07-26 (user request) - icon-labeled `<dt>` for the summary cards' dl/dt/dd fields,
+ * matching the icon+label pattern already used on ClientProfilePage's client info card. */
+function IconDt({ icon: Icon, children }: { icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
+  return (
+    <dt className="flex items-center gap-1.5 text-muted-foreground">
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      {children}
+    </dt>
+  );
+}
 
 /** Best-effort split of a free-text full name into first/middle/last for the create-client
  * form's initial prefill - staff can still edit every field before submitting, so an imperfect
@@ -140,15 +165,30 @@ function CreateClientProfileDialog({
     () => (application.coBorrowerName ? parseCoBorrowerName(application.coBorrowerName) : null),
     [application.coBorrowerName],
   );
+  // Prefer the structured first/middle/last fields (2026-07-25+ intakes); fall back to splitting
+  // the legacy combined "name (relationship)" string for older applications.
   const coBorrowerSplit = React.useMemo(
-    () => (coBorrowerParsed ? splitApplicantName(coBorrowerParsed.name) : null),
-    [coBorrowerParsed],
+    () =>
+      application.coBorrowerFirstName || application.coBorrowerLastName
+        ? {
+            firstName: application.coBorrowerFirstName ?? '',
+            middleName: application.coBorrowerMiddleName ?? '',
+            lastName: application.coBorrowerLastName ?? '',
+          }
+        : coBorrowerParsed
+          ? splitApplicantName(coBorrowerParsed.name)
+          : null,
+    [application, coBorrowerParsed],
   );
   const [includeCoBorrower, setIncludeCoBorrower] = React.useState(Boolean(application.coBorrowerName));
   const [coBorrowerFirstName, setCoBorrowerFirstName] = React.useState(coBorrowerSplit?.firstName ?? '');
+  const [coBorrowerMiddleName, setCoBorrowerMiddleName] = React.useState(coBorrowerSplit?.middleName ?? '');
   const [coBorrowerLastName, setCoBorrowerLastName] = React.useState(coBorrowerSplit?.lastName ?? '');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(coBorrowerParsed?.relationship ?? '');
   const [coBorrowerEmployer, setCoBorrowerEmployer] = React.useState(application.coBorrowerEmployer ?? '');
+  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(application.coBorrowerContactNumber ?? '');
+  const [coBorrowerEmail, setCoBorrowerEmail] = React.useState(application.coBorrowerEmail ?? '');
+  const [coBorrowerAddressDraft, setCoBorrowerAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
 
   React.useEffect(() => {
     if (!open) return;
@@ -186,12 +226,25 @@ function CreateClientProfileDialog({
     setNote(application.note ?? '');
 
     const parsed = application.coBorrowerName ? parseCoBorrowerName(application.coBorrowerName) : null;
-    const coSplit = parsed ? splitApplicantName(parsed.name) : null;
+    const coSplit =
+      application.coBorrowerFirstName || application.coBorrowerLastName
+        ? {
+            firstName: application.coBorrowerFirstName ?? '',
+            middleName: application.coBorrowerMiddleName ?? '',
+            lastName: application.coBorrowerLastName ?? '',
+          }
+        : parsed
+          ? splitApplicantName(parsed.name)
+          : null;
     setIncludeCoBorrower(Boolean(application.coBorrowerName));
     setCoBorrowerFirstName(coSplit?.firstName ?? '');
+    setCoBorrowerMiddleName(coSplit?.middleName ?? '');
     setCoBorrowerLastName(coSplit?.lastName ?? '');
     setCoBorrowerRelationship(parsed?.relationship ?? '');
     setCoBorrowerEmployer(application.coBorrowerEmployer ?? '');
+    setCoBorrowerPhoneNumber(application.coBorrowerContactNumber ?? '');
+    setCoBorrowerEmail(application.coBorrowerEmail ?? '');
+    setCoBorrowerAddressDraft(emptyAddressDraft());
   }, [open, application]);
 
   const createMutation = useMutation({
@@ -237,10 +290,15 @@ function CreateClientProfileDialog({
       if (includeCoBorrower && coBorrowerFirstName.trim() && coBorrowerLastName.trim()) {
         try {
           await apiClient.post('/co-borrowers', {
+            borrowerId: borrower.id,
             firstName: coBorrowerFirstName.trim(),
+            middleName: coBorrowerMiddleName.trim() || undefined,
             lastName: coBorrowerLastName.trim(),
             relationship: coBorrowerRelationship.trim() || undefined,
             employer: coBorrowerEmployer.trim() || undefined,
+            phoneNumber: coBorrowerPhoneNumber.trim() || undefined,
+            emailAddress: coBorrowerEmail.trim() || undefined,
+            addresses: Object.values(coBorrowerAddressDraft).some((v) => v.trim()) ? [coBorrowerAddressDraft] : undefined,
           });
         } catch {
           // Swallowed - see comment above.
@@ -269,11 +327,15 @@ function CreateClientProfileDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>First Name</Label>
+            <Label>
+              First Name<span className="text-destructive"> *</span>
+            </Label>
             <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>Last Name</Label>
+            <Label>
+              Last Name<span className="text-destructive"> *</span>
+            </Label>
             <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
@@ -437,14 +499,30 @@ function CreateClientProfileDialog({
             {includeCoBorrower && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Co-Borrower First Name</Label>
+                  <Label>
+                    Co-Borrower First Name<span className="text-destructive"> *</span>
+                  </Label>
                   <Input value={coBorrowerFirstName} onChange={(e) => setCoBorrowerFirstName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Co-Borrower Last Name</Label>
+                  <Label>
+                    Co-Borrower Last Name<span className="text-destructive"> *</span>
+                  </Label>
                   <Input value={coBorrowerLastName} onChange={(e) => setCoBorrowerLastName(e.target.value)} />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5">
+                  <Label>Co-Borrower Middle Name</Label>
+                  <Input value={coBorrowerMiddleName} onChange={(e) => setCoBorrowerMiddleName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Co-Borrower Phone Number</Label>
+                  <PhoneInput value={coBorrowerPhoneNumber} onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Co-Borrower Email</Label>
+                  <Input type="email" value={coBorrowerEmail} onChange={(e) => setCoBorrowerEmail(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
                   <Label>Relationship to Applicant</Label>
                   <Input value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
                 </div>
@@ -452,7 +530,20 @@ function CreateClientProfileDialog({
                   <Label>Co-Borrower Employer</Label>
                   <Input value={coBorrowerEmployer} onChange={(e) => setCoBorrowerEmployer(e.target.value)} />
                 </div>
+                <div className="sm:col-span-2">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Co-Borrower Address</p>
+                  <PsgcAddressPicker
+                    value={coBorrowerAddressDraft}
+                    onChange={(patch) => setCoBorrowerAddressDraft((prev) => ({ ...prev, ...patch }))}
+                  />
+                </div>
               </div>
+            )}
+            {includeCoBorrower && (!coBorrowerFirstName.trim() || !coBorrowerLastName.trim()) && (
+              <p className="text-sm text-destructive">
+                Co-Borrower First Name and Last Name are required to save the co-borrower - leave both blank (or uncheck the box) to skip
+                creating one, otherwise fill them in.
+              </p>
             )}
           </div>
         )}
@@ -498,6 +589,31 @@ function CreateClientProfileDialog({
 
 const LOAN_TYPE_OPTIONS = ['Business Loan', 'Salary Loan', 'Seafarer Loan'] as const;
 type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
+
+// 2026-07-25 (user request, same pattern as LoanDetailPage/ClientProfilePage's cardOrder): every
+// section on this page is drag-to-reorder - each staff member's own arrangement, saved per-user in
+// localStorage. Applicant/Co-Borrower/Requested Loan render inside the same 2-column grid as the
+// rest (see the grid wrapper around the SortableContext below), so they can be dragged just like
+// any other section despite sharing that layout. AI document review/underwriting/notes are only
+// shown once a manual review has actually started - they're still in this ideal ordering, but
+// `cardsById` only gets an entry for them when applicable, and the render below filters cardOrder
+// down to whatever's actually present, so a hidden section leaves no dangling empty slot.
+const DEFAULT_CARD_ORDER = [
+  'applicantDetails',
+  'coBorrowerDetails',
+  'requestedLoan',
+  'personalHousehold',
+  'attachments',
+  'recentActivity',
+  'aiReview',
+  'underwriting',
+  'notes',
+  'activityTimeline',
+];
+const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder';
+function cardOrderKey(userId: string): string {
+  return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
+}
 
 /** Mirrors LoanApplicationsPage's STATUS_BADGE_VARIANT - kept local since this file doesn't
  * otherwise import from that page. */
@@ -633,13 +749,14 @@ const MITIGATION_FIELDS: { key: keyof MitigationDetails; label: string }[] = [
   { key: 'allotmentAmount', label: 'Assigned allotment amount' },
 ];
 
-/** `required: true` on agencyName/position/vessel mirrors the backend's
- * `MissingAgencyVerificationError` gate in TagLoanApplicationPreApprovalUseCase - keep both in
- * sync if that gate's required subset ever changes. */
+/** 2026-07-25 (user decision): agencyName/position/vessel are no longer required to Tag as Pre
+ * Approval - the backend's matching gate (`MissingAgencyVerificationError` in
+ * `TagLoanApplicationPreApprovalUseCase`) was removed at the same time. Fields remain on the form
+ * for staff who choose to fill them in, just no longer block progression when left blank. */
 const AGENCY_CORE_FIELDS: { key: keyof AgencyVerificationDetails; label: string; required?: boolean }[] = [
-  { key: 'agencyName', label: 'Agency name', required: true },
-  { key: 'position', label: 'Position', required: true },
-  { key: 'vessel', label: 'Vessel', required: true },
+  { key: 'agencyName', label: 'Agency name' },
+  { key: 'position', label: 'Position' },
+  { key: 'vessel', label: 'Vessel' },
   { key: 'agencyContactNumbers', label: 'Agency contact number/s' },
   { key: 'agencyAddress', label: 'Agency address' },
 ];
@@ -1152,14 +1269,14 @@ const UnderwritingCard = React.forwardRef<
           <div className="flex items-center gap-2">
             <Label className="text-xs">Agency / contract / allotment verification</Label>
             {isSeafarerLoan && (
-              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[10px] text-warning">
-                Required - Seafarer loan
+              <Badge variant="outline" className="border-primary/40 bg-primary/10 text-[10px] text-primary">
+                Seafarer loan
               </Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
             {isSeafarerLoan
-              ? 'Assigned product is a Seaman/OFW loan - must be completed before Tag as Pre Approval.'
+              ? 'Assigned product is a Seaman/OFW loan - fill in if available, optional.'
               : 'Shown for Seaman/OFW loans only - not applicable to this product.'}
           </p>
           {(canEditReview || hasAgencyData) && (
@@ -1390,6 +1507,31 @@ export function LoanApplicationDetailPage() {
   const [decisionNote, setDecisionNote] = React.useState('');
   const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
+  const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
+    try {
+      const saved = window.localStorage.getItem(cardOrderKey(currentAccount.id));
+      if (!saved) return DEFAULT_CARD_ORDER;
+      const parsed = JSON.parse(saved) as string[];
+      const isValid = Array.isArray(parsed) && DEFAULT_CARD_ORDER.every((id) => parsed.includes(id)) && parsed.length === DEFAULT_CARD_ORDER.length;
+      return isValid ? parsed : DEFAULT_CARD_ORDER;
+    } catch {
+      return DEFAULT_CARD_ORDER;
+    }
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(cardOrderKey(currentAccount.id), JSON.stringify(cardOrder));
+  }, [cardOrder, currentAccount.id]);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setCardOrder((order) => {
+      const oldIndex = order.indexOf(String(active.id));
+      const newIndex = order.indexOf(String(over.id));
+      return oldIndex === -1 || newIndex === -1 ? order : arrayMove(order, oldIndex, newIndex);
+    });
+  };
   const [createLoanOpen, setCreateLoanOpen] = React.useState(false);
   const underwritingCardRef = React.useRef<UnderwritingCardHandle>(null);
 
@@ -1732,8 +1874,16 @@ export function LoanApplicationDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+      {(() => {
+        // 2026-07-25: everything from here to Activity Timeline is drag-to-reorder (see cardOrder
+        // state above) - each section's JSX lives as one entry in this map so it can be rendered
+        // in whatever order the current user saved, instead of a fixed sequence. Applicant
+        // Details/Co-Borrower Details/Requested Loan share one 2-column grid and move together as
+        // a single unit, since splitting them would break that shared layout.
+        const cardsById: Record<string, React.ReactNode> = {};
+
+        cardsById.applicantDetails = (
+        <Card className="h-full">
           <CardHeader>
             <CardTitle>Applicant Details</CardTitle>
             <CardDescription>
@@ -1744,26 +1894,53 @@ export function LoanApplicationDetailPage() {
           </CardHeader>
           <CardContent>
             <dl className="grid grid-cols-2 gap-y-3 text-sm">
-              <dt className="text-muted-foreground">Age</dt>
+              <IconDt icon={UserIcon}>Age</IconDt>
               <dd className="text-right font-medium">{application.age ?? '-'}</dd>
-              <dt className="text-muted-foreground">Address</dt>
+              <IconDt icon={MapPin}>Address</IconDt>
               <dd className="text-right font-medium">{toProperCase(application.address) || '-'}</dd>
-              <dt className="text-muted-foreground">Previous address</dt>
+              <IconDt icon={MapPin}>Previous address</IconDt>
               <dd className="text-right font-medium">
                 {application.previousAddressSameAsPresent ? 'Same as present address' : toProperCase(application.previousAddress) || '-'}
               </dd>
-              <dt className="text-muted-foreground">Contact Number</dt>
+              <IconDt icon={Phone}>Contact Number</IconDt>
               <dd className="text-right font-medium">{formatMobileNumber(application.mobilePhone)}</dd>
-              <dt className="text-muted-foreground">Email</dt>
+              <IconDt icon={Mail}>Email</IconDt>
               <dd className="text-right font-medium">{application.email ?? '-'}</dd>
-              <dt className="text-muted-foreground">Employer</dt>
+              <IconDt icon={Briefcase}>Employer</IconDt>
               <dd className="text-right font-medium">{application.employer ?? '-'}</dd>
-              <dt className="text-muted-foreground">Co-borrower</dt>
-              <dd className="text-right font-medium">{application.coBorrowerName ?? 'None (optional)'}</dd>
             </dl>
           </CardContent>
         </Card>
+        );
 
+        cardsById.coBorrowerDetails = (
+        <Card>
+          <CardHeader>
+            <CardTitle>Co-Borrower Details</CardTitle>
+            <CardDescription>{application.coBorrowerName ? 'Named on this loan application at intake.' : 'None named on this loan application.'}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {application.coBorrowerName ? (
+              <dl className="grid grid-cols-2 gap-y-3 text-sm">
+                <IconDt icon={UserIcon}>Name</IconDt>
+                <dd className="text-right font-medium">{application.coBorrowerName}</dd>
+                <IconDt icon={Phone}>Contact Number</IconDt>
+                <dd className="text-right font-medium">{formatMobileNumber(application.coBorrowerContactNumber)}</dd>
+                <IconDt icon={Mail}>Email</IconDt>
+                <dd className="text-right font-medium">{application.coBorrowerEmail ?? '-'}</dd>
+                <IconDt icon={Briefcase}>Employer</IconDt>
+                <dd className="text-right font-medium">{application.coBorrowerEmployer ?? '-'}</dd>
+                <IconDt icon={MapPin}>Address</IconDt>
+                <dd className="text-right font-medium">{toProperCase(application.coBorrowerAddress) || '-'}</dd>
+              </dl>
+            ) : (
+              <p className="py-2 text-center text-sm text-muted-foreground">No co-borrower on record for this application.</p>
+            )}
+          </CardContent>
+        </Card>
+        );
+
+        cardsById.requestedLoan = (
         <Card>
           <CardHeader>
             <CardTitle>Requested Loan</CardTitle>
@@ -2020,8 +2197,9 @@ export function LoanApplicationDetailPage() {
             )}
           </CardContent>
         </Card>
-      </div>
+        );
 
+        cardsById.personalHousehold = (
       <Card>
         <CardHeader>
           <CardTitle>Personal &amp; Household Information</CardTitle>
@@ -2029,25 +2207,25 @@ export function LoanApplicationDetailPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <dl className="grid grid-cols-2 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Gender</dt>
+            <IconDt icon={UserIcon}>Gender</IconDt>
             <dd className="text-right font-medium">{application.gender ?? '-'}</dd>
-            <dt className="text-muted-foreground">Civil Status</dt>
+            <IconDt icon={Heart}>Civil Status</IconDt>
             <dd className="text-right font-medium">{application.civilStatus ?? '-'}</dd>
-            <dt className="text-muted-foreground">Birth Date</dt>
+            <IconDt icon={Cake}>Birth Date</IconDt>
             <dd className="text-right font-medium">{application.birthDate ? formatDate(application.birthDate) : '-'}</dd>
-            <dt className="text-muted-foreground">Place of Birth</dt>
+            <IconDt icon={MapPin}>Place of Birth</IconDt>
             <dd className="text-right font-medium">{application.placeOfBirth ?? '-'}</dd>
-            <dt className="text-muted-foreground">Nationality</dt>
+            <IconDt icon={Flag}>Nationality</IconDt>
             <dd className="text-right font-medium">{application.nationality ?? '-'}</dd>
-            <dt className="text-muted-foreground">Home Ownership</dt>
+            <IconDt icon={Home}>Home Ownership</IconDt>
             <dd className="text-right font-medium">{application.homeOwnership ?? '-'}</dd>
-            <dt className="text-muted-foreground">Occupation</dt>
+            <IconDt icon={Briefcase}>Occupation</IconDt>
             <dd className="text-right font-medium">{application.occupation ?? '-'}</dd>
-            <dt className="text-muted-foreground">Office Address</dt>
+            <IconDt icon={MapPin}>Office Address</IconDt>
             <dd className="text-right font-medium">{application.officeAddress ?? '-'}</dd>
-            <dt className="text-muted-foreground">TIN</dt>
+            <IconDt icon={IdCard}>TIN</IconDt>
             <dd className="text-right font-medium">{application.tinNumber ?? '-'}</dd>
-            <dt className="text-muted-foreground">SSS</dt>
+            <IconDt icon={CreditCard}>SSS</IconDt>
             <dd className="text-right font-medium">{application.sssNumber ?? '-'}</dd>
           </dl>
 
@@ -2101,42 +2279,62 @@ export function LoanApplicationDetailPage() {
           </div>
         </CardContent>
       </Card>
+        );
 
-      {/* 2026-07-21 (user request) - underwriter features (Decision Scoring/DTI, risk-input
-          fields, review report) shouldn't be visible at all until a manual review has actually
-          started - PREAPPROVED/PREDECLINED is only the system's advisory pre-qualification verdict,
-          not a real underwriting pass yet. `reviewStartedAt` is set exactly once by "Start Review"
-          (see LoanApplication.startReview in the backend domain model) and never unset again, so
-          it's a reliable "has review ever started" flag across every later stage. */}
-      {Boolean(application.reviewStartedAt) && (
-        <>
-          {isUnderReview && canReviewLoanApplication && (
+        // 2026-07-21 (user request) - underwriter features (Decision Scoring/DTI, risk-input
+        // fields, review report) shouldn't be visible at all until a manual review has actually
+        // started - PREAPPROVED/PREDECLINED is only the system's advisory pre-qualification
+        // verdict, not a real underwriting pass yet. Only added to cardsById when applicable, so
+        // they join the draggable set while shown but leave no dangling slot when hidden (see the
+        // cardOrder.filter in the render below).
+        if (isUnderReview && canReviewLoanApplication) {
+          cardsById.aiReview = (
             <AiDocumentReviewCard
               application={application}
               onInsert={(text) => underwritingCardRef.current?.insertCrmRecommendation(text)}
             />
-          )}
-          <UnderwritingCard
-            ref={underwritingCardRef}
-            application={application}
-            canEditRisk={canAccessLoanApplications}
-            canEditReview={isUnderReview && canReviewLoanApplication}
-            showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
-            assignedProductName={assignedProductName}
-            documentsVerifiedByName={documentsVerifiedByName}
+          );
+        }
+        if (application.reviewStartedAt) {
+          cardsById.underwriting = (
+            <UnderwritingCard
+              ref={underwritingCardRef}
+              application={application}
+              canEditRisk={canAccessLoanApplications}
+              canEditReview={isUnderReview && canReviewLoanApplication}
+              showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
+              assignedProductName={assignedProductName}
+              documentsVerifiedByName={documentsVerifiedByName}
+            />
+          );
+          // same "not until a review has actually started" gate as the Underwriting card above
+          cardsById.notes = <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />;
+        }
+
+        cardsById.attachments = <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />;
+
+        cardsById.recentActivity = <RecentActivityPanel label="Loan Application" entityId={application.id} />;
+
+        cardsById.activityTimeline = (
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity Timeline</CardTitle>
+          <CardDescription>
+            Log of all actions taken on this application by loan officers
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileActivityTimeline
+            profileType="LOAN_APPLICATION"
+            profileId={application.id}
+            showDetailsToggle={false}
           />
-        </>
-      )}
+        </CardContent>
+      </Card>
+        );
 
-      {/* 2026-07-21 (user request) - same "not until a review has actually started" gate as the
-          Underwriting card above; the running Notes log is a reviewer/staff tool, not something
-          relevant while the application is still just PREAPPROVED/PREDECLINED. */}
-      {Boolean(application.reviewStartedAt) && <ProfileNotesPanel ownerType="LOAN_APPLICATION" ownerId={application.id} />}
-
-      <AttachmentsPanel ownerType="LOAN_APPLICATION" ownerId={application.id} canUpload={canAccessLoanApplications} />
-
-      <RecentActivityPanel label="Loan Application" entityId={application.id} />
-
+        const dialogs = (
+          <>
       <Dialog open={confirmAction !== null} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -2176,23 +2374,6 @@ export function LoanApplicationDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Activity Timeline - ADR-050 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Activity Timeline</CardTitle>
-          <CardDescription>
-            Log of all actions taken on this application by loan officers
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ProfileActivityTimeline
-            profileType="LOAN_APPLICATION"
-            profileId={application.id}
-            showDetailsToggle={false}
-          />
-        </CardContent>
-      </Card>
-
       <CreateClientProfileDialog open={createClientOpen} onOpenChange={setCreateClientOpen} application={application} />
       {clientBorrowerQuery.data && (
         <CreateLoanAccountDialog
@@ -2203,6 +2384,40 @@ export function LoanApplicationDetailPage() {
           applicationId={application.id}
         />
       )}
+          </>
+        );
+
+        const visibleCardOrder = cardOrder.filter((id) => cardsById[id] !== undefined);
+
+        return (
+          <>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
+                <SortableContext items={visibleCardOrder} strategy={verticalListSortingStrategy}>
+                  {visibleCardOrder.map((id) => (
+                    <SortableSection
+                      key={id}
+                      id={id}
+                      fullWidth={
+                        id === 'coBorrowerDetails' ||
+                        id === 'underwriting' ||
+                        id === 'notes' ||
+                        id === 'personalHousehold' ||
+                        id === 'attachments' ||
+                        id === 'recentActivity' ||
+                        id === 'activityTimeline'
+                      }
+                    >
+                      {cardsById[id]}
+                    </SortableSection>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+            {dialogs}
+          </>
+        );
+      })()}
     </div>
   );
 }

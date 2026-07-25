@@ -11,6 +11,7 @@ export interface StaffSigningSessionDocumentView {
 export interface StaffSigningSessionView {
   id: string;
   loanAccountId: string;
+  partyType: 'BORROWER' | 'CO_BORROWER';
   phoneNumber: string;
   expiresAt: string;
   revokedAt: string | null;
@@ -50,6 +51,7 @@ export class ListLoanSigningSessionsUseCase {
       views.push({
         id: p.id,
         loanAccountId: p.loanAccountId,
+        partyType: p.partyType,
         phoneNumber: p.phoneNumber,
         expiresAt: p.expiresAt.toISOString(),
         revokedAt: p.revokedAt?.toISOString() ?? null,

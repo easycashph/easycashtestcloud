@@ -286,6 +286,22 @@ export function LoanApplicationForm({
     () => (prefillFrom?.coBorrowerName ? parseCoBorrowerName(prefillFrom.coBorrowerName) : null),
     [prefillFrom],
   );
+  // Prefer the structured first/middle/last fields (2026-07-25+ intakes); fall back to splitting
+  // the legacy combined "name (relationship)" string for older applications that never captured
+  // co-borrower names separately.
+  const prefillCoBorrowerName = React.useMemo(
+    () =>
+      prefillFrom?.coBorrowerFirstName || prefillFrom?.coBorrowerLastName
+        ? {
+            firstName: prefillFrom.coBorrowerFirstName ?? '',
+            middleName: prefillFrom.coBorrowerMiddleName ?? '',
+            lastName: prefillFrom.coBorrowerLastName ?? '',
+          }
+        : prefillCoBorrower
+          ? splitFullName(prefillCoBorrower.name)
+          : null,
+    [prefillFrom, prefillCoBorrower],
+  );
 
   // §1 - referral
   const [referralSource, setReferralSource] = React.useState('Walk-in');
@@ -341,7 +357,9 @@ export function LoanApplicationForm({
   const [spouseEmployer, setSpouseEmployer] = React.useState('');
   // §7/§8 - co-borrower
   const [hasCoBorrower, setHasCoBorrower] = React.useState(Boolean(prefillFrom?.coBorrowerName));
-  const [coBorrowerName, setCoBorrowerName] = React.useState(prefillCoBorrower?.name ?? '');
+  const [coBorrowerFirstName, setCoBorrowerFirstName] = React.useState(prefillCoBorrowerName?.firstName ?? '');
+  const [coBorrowerMiddleName, setCoBorrowerMiddleName] = React.useState(prefillCoBorrowerName?.middleName ?? '');
+  const [coBorrowerLastName, setCoBorrowerLastName] = React.useState(prefillCoBorrowerName?.lastName ?? '');
   const [coBorrowerRelationship, setCoBorrowerRelationship] = React.useState(prefillCoBorrower?.relationship ?? '');
   const [coBorrowerContactNumber, setCoBorrowerContactNumber] = React.useState(prefillFrom?.coBorrowerContactNumber ?? '');
   const [coBorrowerEmail, setCoBorrowerEmail] = React.useState(prefillFrom?.coBorrowerEmail ?? '');
@@ -379,7 +397,10 @@ export function LoanApplicationForm({
   const applyPreviousCoBorrower = (name: string) => {
     const match = previousCoBorrowers.find((c) => c.name === name);
     if (!match) return;
-    setCoBorrowerName(match.name);
+    const split = splitFullName(match.name);
+    setCoBorrowerFirstName(split.firstName);
+    setCoBorrowerMiddleName(split.middleName);
+    setCoBorrowerLastName(split.lastName);
     setCoBorrowerRelationship(match.relationship);
     setCoBorrowerContactNumber(match.contactNumber);
     setCoBorrowerEmail(match.email);
@@ -592,9 +613,12 @@ export function LoanApplicationForm({
           .filter((d) => d.name.trim())
           .map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined })),
         coBorrowerName:
-          hasCoBorrower && coBorrowerName.trim()
-            ? `${coBorrowerName.trim()}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
+          hasCoBorrower && (coBorrowerFirstName.trim() || coBorrowerLastName.trim())
+            ? `${[coBorrowerFirstName.trim(), coBorrowerMiddleName.trim(), coBorrowerLastName.trim()].filter(Boolean).join(' ')}${coBorrowerRelationship.trim() ? ` (${coBorrowerRelationship.trim().toLowerCase()})` : ''}`
             : undefined,
+        coBorrowerFirstName: hasCoBorrower && coBorrowerFirstName.trim() ? coBorrowerFirstName.trim() : undefined,
+        coBorrowerMiddleName: hasCoBorrower && coBorrowerMiddleName.trim() ? coBorrowerMiddleName.trim() : undefined,
+        coBorrowerLastName: hasCoBorrower && coBorrowerLastName.trim() ? coBorrowerLastName.trim() : undefined,
         coBorrowerContactNumber: hasCoBorrower && coBorrowerContactNumber.trim() ? coBorrowerContactNumber.trim() : undefined,
         coBorrowerEmail: hasCoBorrower && coBorrowerEmail.trim() ? coBorrowerEmail.trim() : undefined,
         coBorrowerAddress: hasCoBorrower && coBorrowerAddress.trim() ? coBorrowerAddress.trim() : undefined,
@@ -887,6 +911,12 @@ export function LoanApplicationForm({
           <Field label="Nationality" tooltip="Applicant's citizenship.">
             <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </Field>
+          <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
+            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
+          </Field>
+          <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
         </div>
         <div className="mt-3 space-y-3">
           <div className="space-y-1.5">
@@ -937,14 +967,6 @@ export function LoanApplicationForm({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
-            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
-          </Field>
-          <div className="sm:col-span-2">
-            <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </Field>
-          </div>
         </div>
       </SectionCard>
 
@@ -1072,8 +1094,14 @@ export function LoanApplicationForm({
               </Field>
             )}
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Co-borrower full name" tooltip="Full name of the person who will share responsibility for this loan.">
-                <Input value={coBorrowerName} onChange={(e) => setCoBorrowerName(e.target.value)} />
+              <Field label="Co-borrower first name" tooltip="Co-borrower's legal first name, as shown on a valid ID.">
+                <Input value={coBorrowerFirstName} onChange={(e) => setCoBorrowerFirstName(e.target.value.toUpperCase())} />
+              </Field>
+              <Field label="Co-borrower middle name" tooltip="Co-borrower's legal middle name, if any.">
+                <Input value={coBorrowerMiddleName} onChange={(e) => setCoBorrowerMiddleName(e.target.value.toUpperCase())} />
+              </Field>
+              <Field label="Co-borrower last name" tooltip="Co-borrower's legal surname, as shown on a valid ID.">
+                <Input value={coBorrowerLastName} onChange={(e) => setCoBorrowerLastName(e.target.value.toUpperCase())} />
               </Field>
               <Field label="Relationship to applicant" tooltip="How the co-borrower is related to the applicant (e.g. spouse, sibling).">
                 <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />

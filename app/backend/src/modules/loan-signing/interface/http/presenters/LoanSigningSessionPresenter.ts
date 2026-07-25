@@ -7,6 +7,7 @@ export function presentLoanSigningSessionStatus(session: LoanSigningSession) {
   return {
     id: p.id,
     loanAccountId: p.loanAccountId,
+    partyType: p.partyType,
     phoneNumber: p.phoneNumber,
     expiresAt: p.expiresAt.toISOString(),
     revokedAt: p.revokedAt?.toISOString() ?? null,

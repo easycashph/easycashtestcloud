@@ -187,6 +187,9 @@ export interface LoanApplication {
   propertiesOwned: string[];
   creditScore: number | null;
   coBorrowerName: string | null;
+  coBorrowerFirstName: string | null;
+  coBorrowerMiddleName: string | null;
+  coBorrowerLastName: string | null;
   coBorrowerEmployer: string | null;
   coBorrowerContactNumber: string | null;
   coBorrowerEmail: string | null;
@@ -271,6 +274,9 @@ export interface CreateLoanApplicationRequest {
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerFirstName?: string;
+  coBorrowerMiddleName?: string;
+  coBorrowerLastName?: string;
   coBorrowerEmployer?: string;
   coBorrowerContactNumber?: string;
   coBorrowerEmail?: string;

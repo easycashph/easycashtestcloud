@@ -8,21 +8,6 @@ export class ProductNotAssignedError extends DomainError {
   }
 }
 
-/** 2026-07-21 — Seafarer Loan applications must have the Agency/Contract/Allotment verification
- * section of the Review Report filled in (at minimum: agency name, position, vessel) before they
- * can be tagged Pre Approval - mirrors the legacy CER template's requirement for that product line. */
-export class MissingAgencyVerificationError extends DomainError {
-  constructor() {
-    super(
-      'MISSING_AGENCY_VERIFICATION',
-      'Complete the Agency/Contract/Allotment verification section of the Review Report before tagging a Seafarer Loan application as Pre Approval.',
-      undefined,
-      400,
-    );
-    this.name = 'MissingAgencyVerificationError';
-  }
-}
-
 /** Thrown when approve/decline/revert is attempted from a status that doesn't allow it. */
 export class InvalidLoanApplicationTransitionError extends DomainError {
   constructor(from: string, action: string) {

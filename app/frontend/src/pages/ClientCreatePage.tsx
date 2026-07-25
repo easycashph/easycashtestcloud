@@ -25,20 +25,24 @@ const EMPTY_REFERENCE: CharacterReferenceField = { firstName: '', lastName: '', 
 
 interface CoBorrowerField {
   firstName: string;
+  middleName: string;
   lastName: string;
   relationship: string;
   employer: string;
+  address: AddressDraft;
 }
 
-const EMPTY_CO_BORROWER: CoBorrowerField = { firstName: '', lastName: '', relationship: '', employer: '' };
+function emptyCoBorrower(): CoBorrowerField {
+  return { firstName: '', middleName: '', lastName: '', relationship: '', employer: '', address: emptyAddressDraft() };
+}
 
 /**
  * Standalone client creation (Clients -> Add Client), scoped 2026-07-16 per the legacy Excel LMS
  * (`Client_details`/`CoBorrower_details`/`Reference_details` sheets) as the field-completeness
- * reference. Co-borrower here is deliberately a LIGHT sub-form (name/relationship/employer only,
- * no address/SSS-TIN/employment expansion) - ADR-015 resolved this as a per-Borrower (client-level)
- * attachment, not per-loan, so it's created via `POST /co-borrowers` with `borrowerId` set once the
- * client itself is saved.
+ * reference. Co-borrower here is a lighter sub-form than the client's own fields (name/relationship
+ * /employer/address only, no SSS-TIN/employment expansion) - ADR-015 resolved this as a per-Borrower
+ * (client-level) attachment, not per-loan, so it's created via `POST /co-borrowers` with
+ * `borrowerId` set once the client itself is saved.
  */
 export function ClientCreatePage() {
   useLogPageView('Create Client Account');
@@ -102,12 +106,12 @@ export function ClientCreatePage() {
   const [references, setReferences] = React.useState<CharacterReferenceField[]>([{ ...EMPTY_REFERENCE }, { ...EMPTY_REFERENCE }]);
 
   const [includeCoBorrower, setIncludeCoBorrower] = React.useState(false);
-  const [coBorrowers, setCoBorrowers] = React.useState<CoBorrowerField[]>([{ ...EMPTY_CO_BORROWER }]);
+  const [coBorrowers, setCoBorrowers] = React.useState<CoBorrowerField[]>([emptyCoBorrower()]);
 
   const updateCoBorrower = (index: number, patch: Partial<CoBorrowerField>) => {
     setCoBorrowers((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
-  const addCoBorrower = () => setCoBorrowers((prev) => [...prev, { ...EMPTY_CO_BORROWER }]);
+  const addCoBorrower = () => setCoBorrowers((prev) => [...prev, emptyCoBorrower()]);
   const removeCoBorrower = (index: number) => setCoBorrowers((prev) => prev.filter((_, i) => i !== index));
 
   const [submitError, setSubmitError] = React.useState<string | null>(null);
@@ -195,8 +199,10 @@ export function ClientCreatePage() {
           const coBody: CreateCoBorrowerRequest = {
             borrowerId: borrower.id,
             firstName: co.firstName,
+            middleName: co.middleName || undefined,
             lastName: co.lastName,
             relationship: co.relationship || undefined,
+            addresses: Object.values(co.address).some((v) => v.trim()) ? [co.address] : undefined,
             employer: co.employer || undefined,
           };
           await apiClient.post('/co-borrowers', coBody);
@@ -461,30 +467,42 @@ export function ClientCreatePage() {
           {includeCoBorrower && (
             <div className="space-y-4">
               {coBorrowers.map((co, i) => (
-                <div key={i} className="grid grid-cols-1 gap-4 rounded-md border border-border p-3 sm:grid-cols-2 lg:grid-cols-5">
-                  <Field label="First Name" required>
-                    <Input value={co.firstName} onChange={(e) => updateCoBorrower(i, { firstName: e.target.value })} />
-                  </Field>
-                  <Field label="Last Name" required>
-                    <Input value={co.lastName} onChange={(e) => updateCoBorrower(i, { lastName: e.target.value })} />
-                  </Field>
-                  <Field label="Relationship">
-                    <Input value={co.relationship} onChange={(e) => updateCoBorrower(i, { relationship: e.target.value })} />
-                  </Field>
-                  <Field label="Employer">
-                    <Input value={co.employer} onChange={(e) => updateCoBorrower(i, { employer: e.target.value })} />
-                  </Field>
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeCoBorrower(i)}
-                      disabled={coBorrowers.length === 1}
-                      title={coBorrowers.length === 1 ? 'At least one co-borrower slot is required while this is checked' : 'Remove this co-borrower'}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                <div key={i} className="space-y-4 rounded-md border border-border p-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <Field label="First Name" required>
+                      <Input value={co.firstName} onChange={(e) => updateCoBorrower(i, { firstName: e.target.value })} />
+                    </Field>
+                    <Field label="Middle Name">
+                      <Input value={co.middleName} onChange={(e) => updateCoBorrower(i, { middleName: e.target.value })} />
+                    </Field>
+                    <Field label="Last Name" required>
+                      <Input value={co.lastName} onChange={(e) => updateCoBorrower(i, { lastName: e.target.value })} />
+                    </Field>
+                    <Field label="Relationship">
+                      <Input value={co.relationship} onChange={(e) => updateCoBorrower(i, { relationship: e.target.value })} />
+                    </Field>
+                    <Field label="Employer">
+                      <Input value={co.employer} onChange={(e) => updateCoBorrower(i, { employer: e.target.value })} />
+                    </Field>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeCoBorrower(i)}
+                        disabled={coBorrowers.length === 1}
+                        title={coBorrowers.length === 1 ? 'At least one co-borrower slot is required while this is checked' : 'Remove this co-borrower'}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="border-t pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Address</p>
+                    <PsgcAddressPicker
+                      value={co.address}
+                      onChange={(patch) => updateCoBorrower(i, { address: { ...co.address, ...patch } })}
+                    />
                   </div>
                 </div>
               ))}

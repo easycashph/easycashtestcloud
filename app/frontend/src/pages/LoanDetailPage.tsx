@@ -423,6 +423,7 @@ function LoanSigningPanel({
 }) {
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
+  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState('');
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [signedDocPreview, setSignedDocPreview] = React.useState<LoanDocumentPreviewTarget | null>(null);
 
@@ -443,7 +444,30 @@ function LoanSigningPanel({
   const sessions = sessionsQuery.data?.items ?? [];
 
   const sendMutation = useMutation({
-    mutationFn: () => apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, { phoneNumber }),
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        phoneNumber,
+        partyType: 'BORROWER',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  // 2026-07-25 (two-party signing, revised) - staff-entered phone number, same as the borrower's
+  // own box below - a CoBorrower profile must still exist (linked to this loan's borrower) for the
+  // signer's name/identity, but the number itself is never silently read from that profile, so
+  // staff can send to an updated/different number without editing the CoBorrower record first.
+  const sendCoBorrowerMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        phoneNumber: coBorrowerPhoneNumber,
+        partyType: 'CO_BORROWER',
+      }),
     onSuccess: () => {
       setSendError(null);
       void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
@@ -483,6 +507,27 @@ function LoanSigningPanel({
           </Button>
         </div>
 
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="co-borrower-signing-phone" className="text-xs">
+              Co-borrower mobile number
+            </Label>
+            <Input
+              id="co-borrower-signing-phone"
+              placeholder="09XX XXX XXXX"
+              value={coBorrowerPhoneNumber}
+              onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => sendCoBorrowerMutation.mutate()}
+            disabled={!coBorrowerPhoneNumber.trim() || sendCoBorrowerMutation.isPending}
+          >
+            {sendCoBorrowerMutation.isPending ? 'Sending…' : 'Send for Co-Borrower Signing'}
+          </Button>
+        </div>
+
         {sessionsQuery.isLoading ? (
           <p className="py-2 text-center text-xs text-muted-foreground">Loading…</p>
         ) : sessions.length === 0 ? (
@@ -494,6 +539,7 @@ function LoanSigningPanel({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{s.partyType === 'CO_BORROWER' ? 'Co-Borrower' : 'Borrower'}</span> ·
                       Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
                     </p>
                     <p className="text-xs text-muted-foreground">

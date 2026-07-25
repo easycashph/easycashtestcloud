@@ -13,6 +13,8 @@ function toDomain(row: DocumentTemplateRow): DocumentTemplate {
     name: row.name,
     isRequired: row.isRequired,
     sortIndex: row.sortIndex,
+    requiresBorrowerSignature: row.requiresBorrowerSignature,
+    requiresCoBorrowerSignature: row.requiresCoBorrowerSignature,
   };
   return DocumentTemplate.reconstitute(props);
 }

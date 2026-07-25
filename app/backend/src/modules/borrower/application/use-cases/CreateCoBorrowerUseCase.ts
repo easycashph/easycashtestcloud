@@ -1,5 +1,6 @@
 import { CoBorrower } from '../../domain/CoBorrower';
 import { PersonName } from '../../domain/valueObjects/PersonName';
+import { Address } from '../../domain/valueObjects/Address';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
 import type { ICoBorrowerRepository } from '../ports/ICoBorrowerRepository';
 import type { CreateCoBorrowerInput } from '../dtos/BorrowerDtos';
@@ -30,6 +31,7 @@ export class CreateCoBorrowerUseCase {
       relationship: input.relationship,
       employer: input.employer,
       legacyId: input.legacyId,
+      addresses: input.addresses?.map((addr) => Address.of(addr)),
     });
 
     await this.deps.coBorrowerRepository.save(coBorrower);

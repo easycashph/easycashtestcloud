@@ -115,4 +115,32 @@ export class CoBorrower {
   get addresses(): readonly Address[] {
     return this.props.addresses;
   }
+
+  /** PATCH semantics - only fields present (not `undefined`) are applied. Lets CRM staff correct a
+   * co-borrower's details when the person named on the loan application intake didn't pass
+   * verification (e.g. wrong contact info, or staff needs to swap in the actual co-borrower). */
+  updateDetails(patch: {
+    name?: PersonName;
+    gender?: string;
+    civilStatus?: string;
+    birthDate?: Date;
+    phoneNumber?: string;
+    emailAddress?: string;
+    relationship?: string;
+    employer?: string;
+  }): void {
+    if (patch.name !== undefined) this.props.name = patch.name;
+    if (patch.gender !== undefined) this.props.gender = patch.gender;
+    if (patch.civilStatus !== undefined) this.props.civilStatus = patch.civilStatus;
+    if (patch.birthDate !== undefined) this.props.birthDate = patch.birthDate;
+    if (patch.phoneNumber !== undefined) this.props.phoneNumber = patch.phoneNumber;
+    if (patch.emailAddress !== undefined) this.props.emailAddress = patch.emailAddress;
+    if (patch.relationship !== undefined) this.props.relationship = patch.relationship;
+    if (patch.employer !== undefined) this.props.employer = patch.employer;
+  }
+
+  /** Always replaces the whole list — an Address has no independent identity to merge against (see Address VO doc comment). */
+  replaceAddresses(addresses: Address[]): void {
+    this.props.addresses = addresses;
+  }
 }

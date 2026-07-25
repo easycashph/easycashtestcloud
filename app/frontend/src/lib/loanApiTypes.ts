@@ -284,6 +284,24 @@ export interface CreateBorrowerRequest {
   }[];
 }
 
+/** Response shape for `GET /co-borrowers/:id` / `GET /borrowers/:id/co-borrowers` - see BorrowerPresenter.presentCoBorrower. */
+export interface CoBorrower {
+  id: string;
+  borrowerId: string | null;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  fullName: string;
+  gender: string | null;
+  civilStatus: string | null;
+  birthDate: string | null;
+  phoneNumber: string | null;
+  emailAddress: string | null;
+  relationship: string | null;
+  employer: string | null;
+  addresses: BorrowerAddress[];
+}
+
 /** Body for `POST /co-borrowers`. */
 export interface CreateCoBorrowerRequest {
   /** 2026-07-16 (ADR-015 resolved: per-Borrower) - attaches the co-borrower directly to a client. */
@@ -293,6 +311,41 @@ export interface CreateCoBorrowerRequest {
   middleName?: string;
   relationship?: string;
   employer?: string;
+  phoneNumber?: string;
+  emailAddress?: string;
+  addresses?: {
+    addressType?: string;
+    houseUnitNumber?: string;
+    street?: string;
+    barangay?: string;
+    cityMunicipality?: string;
+    province?: string;
+    zipCode?: string;
+    lengthOfStayMonths?: number;
+    ownershipStatus?: string;
+  }[];
+}
+
+/** Body for `PATCH /co-borrowers/:id`. All fields optional — PATCH semantics, send only what changed. */
+export interface UpdateCoBorrowerRequest {
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  relationship?: string;
+  employer?: string;
+  phoneNumber?: string;
+  emailAddress?: string;
+  addresses?: {
+    addressType?: string;
+    houseUnitNumber?: string;
+    street?: string;
+    barangay?: string;
+    cityMunicipality?: string;
+    province?: string;
+    zipCode?: string;
+    lengthOfStayMonths?: number;
+    ownershipStatus?: string;
+  }[];
 }
 
 export type PenaltyCalculationMethod = 'NONE' | 'OVERDUE_BALANCE_AND_INTEREST' | 'ON_REPAYMENT';

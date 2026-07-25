@@ -4,6 +4,8 @@ export interface DocumentTemplateProps {
   name: string;
   isRequired: boolean;
   sortIndex: number;
+  requiresBorrowerSignature: boolean;
+  requiresCoBorrowerSignature: boolean;
 }
 
 /**
@@ -36,5 +38,13 @@ export class DocumentTemplate {
 
   get sortIndex(): number {
     return this.props.sortIndex;
+  }
+
+  get requiresBorrowerSignature(): boolean {
+    return this.props.requiresBorrowerSignature;
+  }
+
+  get requiresCoBorrowerSignature(): boolean {
+    return this.props.requiresCoBorrowerSignature;
   }
 }

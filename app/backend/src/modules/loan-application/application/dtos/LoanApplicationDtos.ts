@@ -30,6 +30,9 @@ export interface CreateLoanApplicationInput {
   propertiesOwned?: string[];
   creditScore?: number;
   coBorrowerName?: string;
+  coBorrowerFirstName?: string;
+  coBorrowerMiddleName?: string;
+  coBorrowerLastName?: string;
   coBorrowerEmployer?: string;
   coBorrowerContactNumber?: string;
   coBorrowerEmail?: string;
