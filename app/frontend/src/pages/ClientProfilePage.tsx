@@ -18,7 +18,6 @@ import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { LoanStatusBadge } from '@/components/StatusBadge';
-import { AttachmentsPanel } from '@/components/AttachmentsPanel';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
@@ -657,7 +656,7 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 // client info header is drag-to-reorder - each staff member's own arrangement, saved per-user in
 // localStorage (same key style as the sidebar-collapse preference in AppLayout.tsx), so one
 // officer's preferred layout doesn't affect anyone else logged into the same shared machine.
-const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'riskSummary', 'loanHistory', 'attachments', 'activityTimeline', 'recentActivity'];
+const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'riskSummary', 'loanHistory', 'activityTimeline', 'recentActivity'];
 const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
@@ -780,7 +779,7 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Button>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-        Real client, migrated from legacy data (CP12) - details, loan history, Create Loan Account, and Attachments below are live.
+        Real client, migrated from legacy data (CP12) - details, loan history, and Create Loan Account below are live.
       </div>
 
       {/* Tile grid - two compact columns on large screens */}
@@ -1010,19 +1009,12 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
       </Card>
         );
 
-        cardsById.attachments = (
-      <AttachmentsPanel
-        ownerType="BORROWER"
-        ownerId={borrower.id}
-        canUpload
-        // 2026-07-23 (user request): also surface documents uploaded during this client's most
-        // recent Loan Application intake - see AttachmentsPanel's own doc comment for why only
-        // the latest (myApplications[0], already sorted newest-first) rather than every
-        // application this client has ever had.
-        secondaryOwner={myApplications[0] ? { ownerType: 'LOAN_APPLICATION', ownerId: myApplications[0].id } : undefined}
-        className="h-full"
-      />
-        );
+        // 2026-07-26 (user request): the client-level Attachments card was removed entirely - its
+        // documents (plus the merged-in Loan Application ones) already surface on the Loan
+        // Account's own Attachments card (LoanDetailPage.tsx), so this was pure duplication with
+        // no distinct capability worth keeping. Profile picture upload (above) is unaffected -
+        // ApplicantAvatar has its own independent `/attachments?ownerType=BORROWER` query, not tied
+        // to this card's rendering.
 
         cardsById.activityTimeline = (
       <Card>
@@ -1038,11 +1030,23 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
         cardsById.recentActivity = <RecentActivityPanel label="Client Profile" entityId={borrowerId} />;
 
+        // 2026-07-26: a staff member's already-saved localStorage cardOrder may still list a
+        // since-removed card id (e.g. 'attachments') - filter down to whatever's actually present
+        // so it doesn't render an empty draggable slot (same pattern as LoanApplicationDetailPage).
+        const visibleCardOrder = cardOrder.filter((id) => cardsById[id] !== undefined);
+
         return (
           <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleCardDragEnd}>
-            <SortableContext items={cardOrder} strategy={verticalListSortingStrategy}>
-              {cardOrder.map((id) => (
-                <SortableSection key={id} id={id} fullWidth={id === 'activityTimeline' || id === 'recentActivity'}>
+            <SortableContext items={visibleCardOrder} strategy={verticalListSortingStrategy}>
+              {visibleCardOrder.map((id) => (
+                <SortableSection
+                  key={id}
+                  id={id}
+                  // 2026-07-26 (user request): Loan History's 8-column balance table was cramped
+                  // into a half-width column, forcing horizontal scroll - full-width gives it room
+                  // to breathe, same reasoning as Activity Timeline/Recent Activity below.
+                  fullWidth={id === 'loanHistory' || id === 'activityTimeline' || id === 'recentActivity'}
+                >
                   {cardsById[id]}
                 </SortableSection>
               ))}
