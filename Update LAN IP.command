@@ -85,14 +85,28 @@ sed -i '' -E "s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://${NEW_IP}:4000/ap
 echo "      Tapos na i-update ang config files."
 echo
 
-echo "[4/5] Ire-rebuild ang Docker backend at frontend..."
-echo "      (Puwedeng tumagal ito ng 1-2 minuto)"
-if ! (cd "$DOCKER_DIR" && docker compose up -d --build backend frontend); then
+echo "[4/5] Ina-update ang Docker containers..."
+echo "      Ire-rebuild lang ang frontend (kailangan - naka-bake ang IP sa"
+echo "      loob ng bundle nito). Ire-restart lang ang backend, walang"
+echo "      rebuild - basta CORS_ORIGIN lang naman ang nagbabago, at"
+echo "      binabasa iyon habang tumatakbo, hindi habang nagbi-build."
+echo "      (Mas mabilis ngayon - nalaktawan na ang backend's mabigat na"
+echo "      LibreOffice/npm rebuild, na hindi naman kailangan dito.)"
+if ! (cd "$DOCKER_DIR" && docker compose up -d --build frontend); then
   echo
-  echo "      May error sa Docker rebuild - malamang may ibang"
+  echo "      May error sa Docker rebuild ng frontend - malamang may ibang"
   echo "      proseso (hal. \"npm run dev\") na humahawak pa rin sa"
-  echo "      port 4000 o 5173. Isara muna iyon nang mano-mano,"
+  echo "      port 5173. Isara muna iyon nang mano-mano,"
   echo "      tapos ulitin ang script."
+  echo
+  read -n 1 -s -r -p "Pindutin ang kahit anong key para lumabas..."
+  exit 1
+fi
+if ! (cd "$DOCKER_DIR" && docker compose up -d --force-recreate backend); then
+  echo
+  echo "      May error sa pag-restart ng backend - malamang may ibang"
+  echo "      proseso na humahawak pa rin sa port 4000. Isara muna iyon"
+  echo "      nang mano-mano, tapos ulitin ang script."
   echo
   read -n 1 -s -r -p "Pindutin ang kahit anong key para lumabas..."
   exit 1

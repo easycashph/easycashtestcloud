@@ -81,17 +81,33 @@ powershell -NoProfile -Command ^
 echo       Tapos na i-update ang config files.
 echo.
 
-echo [4/5] Ire-rebuild ang Docker backend at frontend...
-echo       (Puwedeng tumagal ito ng 1-2 minuto)
+echo [4/5] Ina-update ang Docker containers...
+echo       Ire-rebuild lang ang frontend ^(kailangan - naka-bake ang IP sa
+echo       loob ng bundle nito^). Ire-restart lang ang backend, walang
+echo       rebuild - basta CORS_ORIGIN lang naman ang nagbabago, at
+echo       binabasa iyon habang tumatakbo, hindi habang nagbi-build.
+echo       ^(Mas mabilis ngayon - nalaktawan na ang backend's mabigat na
+echo       LibreOffice/npm rebuild, na hindi naman kailangan dito.^)
 pushd "%DOCKER_DIR%"
-docker compose up -d --build backend frontend
+docker compose up -d --build frontend
 if errorlevel 1 (
   popd
   echo.
-  echo       May error sa Docker rebuild - malamang may ibang
+  echo       May error sa Docker rebuild ng frontend - malamang may ibang
   echo       proseso ^(hal. "npm run dev"^) na humahawak pa rin sa
-  echo       port 4000 o 5173. Isara muna iyon nang mano-mano
+  echo       port 5173. Isara muna iyon nang mano-mano
   echo       ^(o i-close ang window nito^), tapos ulitin ang script.
+  echo.
+  pause
+  exit /b 1
+)
+docker compose up -d --force-recreate backend
+if errorlevel 1 (
+  popd
+  echo.
+  echo       May error sa pag-restart ng backend - malamang may ibang
+  echo       proseso na humahawak pa rin sa port 4000. Isara muna iyon
+  echo       nang mano-mano, tapos ulitin ang script.
   echo.
   pause
   exit /b 1
