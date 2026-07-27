@@ -160,6 +160,26 @@ and searching for interest-compounding logic rather than assuming:
   one-time event at the moment of Restructure, not continuous/automatic compounding within normal
   repayment.
 
+## 5. "Would daily-prorated Live match SOA?" — no, not on its own
+
+User asked directly: if Live's penalty computation were changed to daily-prorated (per §3's
+proposal), would it then match the SOA calculator's output? Answered no — even after fixing the
+compounding-vs-linear difference, **two more structural mismatches remain**:
+
+1. **Day-count mechanic**: SOA applies one staff-entered shared From/To range uniformly across
+   every qualifying installment (e.g. 150 days for all of them); the daily-prorated Live proposal
+   counts each installment's own days from its own due date to a shared To-date (117/87/56/26 days
+   in the `SML-REG_00378` example) — structurally different even once both are "flat/daily."
+2. **Rate threshold basis** — the same open question from §3: SOA compares each installment's own
+   unpaid balance against ₱10,000 (yielding a different rate per installment); ADR-050/Live compares
+   the whole loan's principal; the user's proposed "total unpaid balance of the loan" basis is still
+   undecided.
+
+Concluded that true parity would require deciding and aligning all three axes together
+(compounding→linear, day-count mechanic, rate threshold basis) — not just one. Offered to build a
+full side-by-side comparison table with all three aligned, but the user has not yet asked for that;
+**no code changed**.
+
 ## Current state / open items for next session
 
 - **Client Profile Attachments removal + Loan History full-width**: done, verified, committed,
