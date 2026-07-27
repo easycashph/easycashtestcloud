@@ -198,6 +198,7 @@ export interface PortalLoanApplicationDetail {
 }
 
 export type PortalDocumentCategory =
+  | 'PROFILE_PICTURE'
   | 'VALID_ID_BORROWER'
   | 'VALID_ID_CO_BORROWER'
   | 'PROOF_OF_BILLING'
@@ -257,9 +258,10 @@ export interface PortalNotificationListResponse {
   unreadCount: number;
 }
 
-/** Phase D (2026-07-24 user request) - mirrors backend's PortalProfilePresenter.ts. View is the
- * whole client record as the LMS has it; edit (PATCH /portal/profile) is contact info only - see
- * UpdatePortalProfileRequest below. */
+/** Phase D (2026-07-24 user request), widened 2026-07-27 (user request, LMS parity) - mirrors
+ * backend's PortalProfilePresenter.ts. View is the whole client record as the LMS has it; edit
+ * (PATCH /portal/profile) covers Personal, Address, and Employment - see UpdatePortalProfileRequest
+ * below. */
 export interface PortalProfileAddress {
   addressType: string | null;
   houseUnitNumber: string | null;
@@ -277,17 +279,33 @@ export interface PortalProfile {
   lastName: string;
   suffix: string | null;
   gender: string | null;
+  birthDate: string | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
   civilStatus: string | null;
+  homeOwnership: string | null;
   mobilePhone1: string | null;
   mobilePhone2: string | null;
   email: string | null;
+  occupation: string | null;
+  employer: string | null;
+  monthlyIncome: number | null;
   addresses: PortalProfileAddress[];
 }
 
 export interface UpdatePortalProfileRequest {
+  gender?: string;
+  birthDate?: string;
+  placeOfBirth?: string;
+  nationality?: string;
+  civilStatus?: string;
+  homeOwnership?: string;
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
+  occupation?: string;
+  employer?: string;
+  monthlyIncome?: number;
   addresses?: {
     addressType?: string;
     houseUnitNumber?: string;

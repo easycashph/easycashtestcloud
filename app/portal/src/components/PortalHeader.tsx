@@ -32,6 +32,9 @@ export function PortalHeader() {
           <Link to="/profile" className="hover:text-foreground">
             My Profile
           </Link>
+          <Link to="/security" className="hover:text-foreground">
+            Security
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <NotificationBell />

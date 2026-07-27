@@ -293,7 +293,12 @@ export class Borrower {
   updateContactDetails(patch: {
     name?: PersonName;
     suffix?: string;
+    gender?: string;
+    birthDate?: Date;
+    placeOfBirth?: string;
+    nationality?: string;
     civilStatus?: string;
+    homeOwnership?: string;
     mobilePhone1?: string;
     mobilePhone2?: string;
     email?: string;
@@ -301,11 +306,22 @@ export class Borrower {
   }): void {
     if (patch.name !== undefined) this.props.name = patch.name;
     if (patch.suffix !== undefined) this.props.suffix = patch.suffix;
+    if (patch.gender !== undefined) this.props.gender = patch.gender;
+    if (patch.birthDate !== undefined) this.props.birthDate = patch.birthDate;
+    if (patch.placeOfBirth !== undefined) this.props.placeOfBirth = patch.placeOfBirth;
+    if (patch.nationality !== undefined) this.props.nationality = patch.nationality;
     if (patch.civilStatus !== undefined) this.props.civilStatus = patch.civilStatus;
+    if (patch.homeOwnership !== undefined) this.props.homeOwnership = patch.homeOwnership;
     if (patch.mobilePhone1 !== undefined) this.props.mobilePhone1 = patch.mobilePhone1;
     if (patch.mobilePhone2 !== undefined) this.props.mobilePhone2 = patch.mobilePhone2;
     if (patch.email !== undefined) this.props.email = patch.email;
     if (patch.facebookLink !== undefined) this.props.facebookLink = patch.facebookLink;
+    this.props.updatedAt = new Date();
+  }
+
+  /** Merges into the existing 1:1 income detail (creates one if none exists yet) — PATCH-style like updateContactDetails. */
+  updateIncomeDetail(patch: Partial<BorrowerIncomeDetail>): void {
+    this.props.incomeDetail = { ...this.props.incomeDetail, ...patch };
     this.props.updatedAt = new Date();
   }
 

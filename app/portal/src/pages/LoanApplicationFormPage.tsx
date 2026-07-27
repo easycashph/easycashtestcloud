@@ -8,9 +8,12 @@ import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Alert } from '@/components/ui/Alert';
+import { Dialog } from '@/components/ui/Dialog';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
+import { TermsContent } from '@/pages/TermsPage';
+import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
 import type {
   PortalBranch,
   PortalDocumentCategory,
@@ -25,7 +28,7 @@ const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Renting', 'Living with family'];
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
 
-const DOCUMENT_LABELS: Record<PortalDocumentCategory, string> = {
+const DOCUMENT_LABELS: Record<Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>, string> = {
   VALID_ID_BORROWER: 'Valid ID',
   VALID_ID_CO_BORROWER: 'Valid ID (Co-Borrower)',
   PROOF_OF_BILLING: 'Proof of Billing',
@@ -38,7 +41,9 @@ const DOCUMENT_LABELS: Record<PortalDocumentCategory, string> = {
 
 /** Mirrors the staff form's DOCUMENT_SLOTS showWhen logic exactly (LoanApplicationCreatePage.tsx)
  * - only PROFILE_PICTURE is dropped (see backend's portalLoanApplicationSchemas.ts doc comment). */
-const DOCUMENT_SLOTS: { category: PortalDocumentCategory; showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean }[] = [
+type UploadableDocumentCategory = Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>;
+
+const DOCUMENT_SLOTS: { category: UploadableDocumentCategory; showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean }[] = [
   { category: 'VALID_ID_BORROWER' },
   { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower },
   { category: 'PROOF_OF_BILLING' },
@@ -343,6 +348,8 @@ export function LoanApplicationFormPage() {
   });
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [showTerms, setShowTerms] = React.useState(false);
+  const [showPrivacy, setShowPrivacy] = React.useState(false);
   const [submitted, setSubmitted] = React.useState<PortalLoanApplicationSummary | null>(null);
   const [uploadState, setUploadState] = React.useState<Partial<Record<PortalDocumentCategory, 'idle' | 'uploading' | 'done' | 'error'>>>({});
   // Edit mode only: null while loading, 'not-editable' once loaded but status has moved past
@@ -896,13 +903,21 @@ export function LoanApplicationFormPage() {
                   />
                   <span>
                     I have been given the opportunity to review the{' '}
-                    <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => setShowTerms(true)}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
                       Terms and Conditions
-                    </Link>{' '}
+                    </button>{' '}
                     and{' '}
-                    <Link to="/privacy-policy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => setShowPrivacy(true)}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
                       Data Privacy Statement and Consent Form
-                    </Link>
+                    </button>
                     , and I agree to them. *
                   </span>
                 </label>
@@ -922,6 +937,13 @@ export function LoanApplicationFormPage() {
           </form>
         </Card>
       </div>
+
+      <Dialog open={showTerms} onClose={() => setShowTerms(false)} title="Terms and Conditions">
+        <TermsContent />
+      </Dialog>
+      <Dialog open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Data Privacy Statement and Consent Form">
+        <PrivacyContent />
+      </Dialog>
     </div>
   );
 }

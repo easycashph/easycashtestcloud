@@ -94,6 +94,19 @@ async function postFile<T>(path: string, file: File, fields: Record<string, stri
   return data as T;
 }
 
+/** Binary download (e.g. a profile picture attachment) - the endpoint requires a Bearer auth
+ * header, so a plain `<img src>` can't hit it directly; fetched as a blob and rendered via an
+ * object URL (same pattern as the internal LMS frontend's own fetchFileBlob). */
+export async function fetchFileBlob(path: string): Promise<Blob> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, 'DOWNLOAD_FAILED', 'Could not download the file.');
+  return res.blob();
+}
+
 export const apiClient = {
   get: <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, auth = false): Promise<T> => request<T>(path, { method: 'POST', body, auth }),

@@ -23,6 +23,7 @@ export interface UpdatePortalAccountInput {
   emailVerifiedAt?: Date;
   passwordHash?: string;
   borrowerId?: string | null;
+  email?: string;
 }
 
 export interface IPortalAccountRepository {

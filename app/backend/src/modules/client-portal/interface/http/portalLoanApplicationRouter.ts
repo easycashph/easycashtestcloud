@@ -21,6 +21,8 @@ export function createPortalLoanApplicationRouter(deps: PortalLoanApplicationCon
   router.get('/loan-applications/:id', requirePortalAuth, controller.get);
   router.patch('/loan-applications/:id', requirePortalAuth, validateBody(updateLoanApplicationSchema), controller.update);
   router.post('/loan-applications/:id/documents', requirePortalAuth, upload.single('file'), controller.uploadDocument);
+  router.get('/loan-applications/:id/documents', requirePortalAuth, controller.listDocuments);
+  router.get('/loan-applications/:id/documents/:documentId/download', requirePortalAuth, controller.downloadDocument);
 
   return router;
 }

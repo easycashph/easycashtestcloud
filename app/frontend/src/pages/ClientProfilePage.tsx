@@ -37,9 +37,17 @@ interface RealEditDraft {
   firstName: string;
   lastName: string;
   middleName: string;
+  gender: string;
+  birthDate: string;
+  placeOfBirth: string;
+  nationality: string;
+  homeOwnership: string;
   mobilePhone1: string;
   email: string;
   civilStatus: string;
+  occupation: string;
+  employer: string;
+  monthlyIncome: string;
   address: AddressDraft;
 }
 
@@ -49,9 +57,17 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     firstName: borrower.firstName,
     lastName: borrower.lastName,
     middleName: borrower.middleName ?? '',
+    gender: borrower.gender ?? '',
+    birthDate: borrower.birthDate ?? '',
+    placeOfBirth: borrower.placeOfBirth ?? '',
+    nationality: borrower.nationality ?? '',
+    homeOwnership: borrower.homeOwnership ?? '',
     mobilePhone1: borrower.mobilePhone1 ?? '',
     email: borrower.email ?? '',
     civilStatus: borrower.civilStatus ?? '',
+    occupation: borrower.incomeDetail?.position ?? '',
+    employer: borrower.incomeDetail?.employerName ?? '',
+    monthlyIncome: borrower.incomeDetail?.monthlyIncome != null ? String(borrower.incomeDetail.monthlyIncome) : '',
     address: existing
       ? {
           houseUnitNumber: existing.houseUnitNumber ?? '',
@@ -89,9 +105,17 @@ function RealEditClientDialog({
     firstName: false,
     lastName: false,
     middleName: false,
+    gender: false,
+    birthDate: false,
+    placeOfBirth: false,
+    nationality: false,
+    homeOwnership: false,
     mobilePhone1: false,
     email: false,
     civilStatus: false,
+    occupation: false,
+    employer: false,
+    monthlyIncome: false,
     address: false,
   });
   const toggleUnlock = (field: keyof typeof unlocked) => setUnlocked((u) => ({ ...u, [field]: !u[field] }));
@@ -134,9 +158,17 @@ function RealEditClientDialog({
         firstName: false,
         lastName: false,
         middleName: false,
+        gender: false,
+        birthDate: false,
+        placeOfBirth: false,
+        nationality: false,
+        homeOwnership: false,
         mobilePhone1: false,
         email: false,
         civilStatus: false,
+        occupation: false,
+        employer: false,
+        monthlyIncome: false,
         address: false,
       });
     }
@@ -157,9 +189,17 @@ function RealEditClientDialog({
         firstName: draft.firstName,
         lastName: draft.lastName,
         middleName: draft.middleName || undefined,
+        gender: draft.gender || undefined,
+        birthDate: draft.birthDate || undefined,
+        placeOfBirth: draft.placeOfBirth || undefined,
+        nationality: draft.nationality || undefined,
+        homeOwnership: draft.homeOwnership || undefined,
         mobilePhone1: draft.mobilePhone1 || undefined,
         email: draft.email || undefined,
         civilStatus: draft.civilStatus || undefined,
+        occupation: draft.occupation || undefined,
+        employer: draft.employer || undefined,
+        monthlyIncome: draft.monthlyIncome.trim() ? Number(draft.monthlyIncome) : undefined,
         ...(addressTouched
           ? {
               addresses: [
@@ -311,6 +351,125 @@ function RealEditClientDialog({
                 <SelectItem value="Separated">Separated</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Gender <FieldTooltip text="Client's gender." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.gender} onToggle={() => toggleUnlock('gender')} />
+            </div>
+            <Select value={draft.gender} onValueChange={(v) => setDraft({ ...draft, gender: v })} disabled={!unlocked.gender}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Female">Female</SelectItem>
+                <SelectItem value="Male">Male</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Birth Date <FieldTooltip text="Client's date of birth." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.birthDate} onToggle={() => toggleUnlock('birthDate')} />
+            </div>
+            <Input
+              type="date"
+              value={draft.birthDate}
+              onChange={(e) => setDraft({ ...draft, birthDate: e.target.value })}
+              disabled={!unlocked.birthDate}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Place of Birth <FieldTooltip text="Client's place of birth." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.placeOfBirth} onToggle={() => toggleUnlock('placeOfBirth')} />
+            </div>
+            <Input
+              value={draft.placeOfBirth}
+              onChange={(e) => setDraft({ ...draft, placeOfBirth: e.target.value })}
+              disabled={!unlocked.placeOfBirth}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Nationality <FieldTooltip text="Client's nationality." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.nationality} onToggle={() => toggleUnlock('nationality')} />
+            </div>
+            <Input
+              value={draft.nationality}
+              onChange={(e) => setDraft({ ...draft, nationality: e.target.value })}
+              disabled={!unlocked.nationality}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Home Ownership <FieldTooltip text="Client's home ownership status." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.homeOwnership} onToggle={() => toggleUnlock('homeOwnership')} />
+            </div>
+            <Select
+              value={draft.homeOwnership}
+              onValueChange={(v) => setDraft({ ...draft, homeOwnership: v })}
+              disabled={!unlocked.homeOwnership}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Owned">Owned</SelectItem>
+                <SelectItem value="Renting">Renting</SelectItem>
+                <SelectItem value="Living with family">Living with family</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Occupation <FieldTooltip text="Client's job title/occupation." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.occupation} onToggle={() => toggleUnlock('occupation')} />
+            </div>
+            <Input
+              value={draft.occupation}
+              onChange={(e) => setDraft({ ...draft, occupation: e.target.value })}
+              disabled={!unlocked.occupation}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Employer <FieldTooltip text="Client's current employer." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.employer} onToggle={() => toggleUnlock('employer')} />
+            </div>
+            <Input
+              value={draft.employer}
+              onChange={(e) => setDraft({ ...draft, employer: e.target.value })}
+              disabled={!unlocked.employer}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Monthly Income <FieldTooltip text="Client's gross monthly income." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.monthlyIncome} onToggle={() => toggleUnlock('monthlyIncome')} />
+            </div>
+            <Input
+              type="number"
+              value={draft.monthlyIncome}
+              onChange={(e) => setDraft({ ...draft, monthlyIncome: e.target.value })}
+              disabled={!unlocked.monthlyIncome}
+            />
           </div>
         </div>
 

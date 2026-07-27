@@ -1,17 +1,9 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
-export function PrivacyPolicyPage() {
+export function PrivacyContent() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-3xl py-10">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to home
-        </Link>
-
-        <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">Data Privacy Statement and Consent Form</h1>
-
-        <div className="prose prose-sm mt-8 max-w-none space-y-4 text-sm leading-relaxed text-muted-foreground dark:prose-invert">
+    <div className="prose prose-sm max-w-none space-y-4 text-sm leading-relaxed text-muted-foreground dark:prose-invert">
           <p>
             I/We know and understand that Easycash Lending Company, Inc. (&ldquo;Easycash&rdquo;) is a Filipino corporation
             organized and existing under the laws of the Philippines and registered with the Securities and Exchange
@@ -234,6 +226,22 @@ export function PrivacyPolicyPage() {
             or to Easycash Lending Company, Inc., Unit 9 G/F The Midland Plaza M Adriatico Barangay 669 Ermita Manila, or
             through Telephone No. (02) 5 310-3708.
           </p>
+    </div>
+  );
+}
+
+export function PrivacyPolicyPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container max-w-3xl py-10">
+        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back to home
+        </Link>
+
+        <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">Data Privacy Statement and Consent Form</h1>
+
+        <div className="mt-8">
+          <PrivacyContent />
         </div>
       </div>
     </div>

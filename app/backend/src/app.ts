@@ -43,10 +43,15 @@ import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/appli
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import { createPortalLoanApplicationRouter } from '@modules/client-portal/interface/http/portalLoanApplicationRouter';
+import { ListPortalLoanApplicationDocumentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationDocumentsUseCase';
+import { DownloadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/DownloadPortalLoanApplicationDocumentUseCase';
 import { createPortalNotificationRouter } from '@modules/client-portal/interface/http/portalNotificationRouter';
 import { createPortalProfileRouter } from '@modules/client-portal/interface/http/portalProfileRouter';
 import { GetPortalProfileUseCase } from '@modules/client-portal/application/use-cases/GetPortalProfileUseCase';
 import { UpdatePortalProfileUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalProfileUseCase';
+import { createPortalSecurityRouter } from '@modules/client-portal/interface/http/portalSecurityRouter';
+import { ChangePortalPasswordUseCase } from '@modules/client-portal/application/use-cases/ChangePortalPasswordUseCase';
+import { ChangePortalEmailUseCase } from '@modules/client-portal/application/use-cases/ChangePortalEmailUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
@@ -1100,6 +1105,12 @@ export function createApp(): Express {
         loanApplicationRepository,
         uploadAttachmentUseCase: portalUploadAttachmentUseCase,
       }),
+      listPortalLoanApplicationDocumentsUseCase: new ListPortalLoanApplicationDocumentsUseCase({ loanApplicationRepository, attachmentRepository }),
+      downloadPortalLoanApplicationDocumentUseCase: new DownloadPortalLoanApplicationDocumentUseCase({
+        loanApplicationRepository,
+        attachmentRepository,
+        fileStorage,
+      }),
     },
     portalTokenService,
   );
@@ -1133,6 +1144,18 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalProfileRouter);
+
+  // Easycash Portal Security tab (2026-07-27 user request): self-service login-email and password
+  // change, gated by the current password. Reuses the same passwordHasher/portalAccountRepository
+  // instances as sign-up/login above.
+  const portalSecurityRouter = createPortalSecurityRouter(
+    {
+      changePortalPasswordUseCase: new ChangePortalPasswordUseCase({ portalAccountRepository, passwordHasher }),
+      changePortalEmailUseCase: new ChangePortalEmailUseCase({ portalAccountRepository, passwordHasher }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalSecurityRouter);
 
   // Portal-facing PSGC address lookups (cascading region/province/city/barangay + ZIP auto-fill
   // on the loan application form) - see portalPsgcRouter.ts's doc comment for why this can't just

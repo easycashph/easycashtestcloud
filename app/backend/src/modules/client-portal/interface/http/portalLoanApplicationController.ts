@@ -7,6 +7,8 @@ import type { GetPortalLoanApplicationUseCase } from '../../application/use-case
 import type { UpdatePortalLoanApplicationUseCase } from '../../application/use-cases/UpdatePortalLoanApplicationUseCase';
 import type { ListPortalBranchesUseCase } from '../../application/use-cases/ListPortalBranchesUseCase';
 import type { UploadPortalLoanApplicationDocumentUseCase } from '../../application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
+import type { ListPortalLoanApplicationDocumentsUseCase } from '../../application/use-cases/ListPortalLoanApplicationDocumentsUseCase';
+import type { DownloadPortalLoanApplicationDocumentUseCase } from '../../application/use-cases/DownloadPortalLoanApplicationDocumentUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   SubmitLoanApplicationRequestBody,
@@ -22,6 +24,8 @@ export interface PortalLoanApplicationControllerDeps {
   updatePortalLoanApplicationUseCase: UpdatePortalLoanApplicationUseCase;
   listPortalBranchesUseCase: ListPortalBranchesUseCase;
   uploadPortalLoanApplicationDocumentUseCase: UploadPortalLoanApplicationDocumentUseCase;
+  listPortalLoanApplicationDocumentsUseCase: ListPortalLoanApplicationDocumentsUseCase;
+  downloadPortalLoanApplicationDocumentUseCase: DownloadPortalLoanApplicationDocumentUseCase;
 }
 
 /** The full self-service-editable shape - same field set updateSelfServiceIntake() accepts, plus
@@ -166,6 +170,32 @@ export class PortalLoanApplicationController {
         documentCategory: body.documentCategory ?? null,
       });
       res.status(201).json({ id: attachment.id, fileName: attachment.fileName, documentCategory: attachment.documentCategory });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listDocuments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const attachments = await this.deps.listPortalLoanApplicationDocumentsUseCase.execute(account.sub, req.params.id as string);
+      res.status(200).json(attachments.map((a) => ({ id: a.id, fileName: a.fileName, documentCategory: a.documentCategory })));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  downloadDocument = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const { record, data } = await this.deps.downloadPortalLoanApplicationDocumentUseCase.execute(
+        account.sub,
+        req.params.id as string,
+        req.params.documentId as string,
+      );
+      res.setHeader('Content-Type', record.fileType);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.fileName)}"`);
+      res.status(200).send(data);
     } catch (error) {
       next(error);
     }

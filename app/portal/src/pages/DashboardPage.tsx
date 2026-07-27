@@ -1,12 +1,14 @@
 import * as React from 'react';
-import { FileText, ShoppingBag, User } from 'lucide-react';
+import { FileText, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Dialog } from '@/components/ui/Dialog';
 import { PortalHeader } from '@/components/PortalHeader';
+import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { useAuth } from '@/lib/authContext';
 import { apiClient } from '@/lib/apiClient';
-import type { PortalLoanApplicationSummary } from '@/lib/portalApiTypes';
+import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary } from '@/lib/portalApiTypes';
 
 const STATUS_LABELS: Record<PortalLoanApplicationSummary['status'], string> = {
   PREAPPROVED: 'Pre-approved',
@@ -37,6 +39,10 @@ export function DashboardPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
+  const [viewingApplicationId, setViewingApplicationId] = React.useState<string | null>(null);
+  const [viewingDetail, setViewingDetail] = React.useState<PortalLoanApplicationDetail | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     apiClient
@@ -47,6 +53,18 @@ export function DashboardPage() {
 
   const hasPendingApplication = (applications ?? []).some((application) => application.status !== 'DECLINED');
 
+  const openApplicationDetail = (applicationId: string) => {
+    setViewingApplicationId(applicationId);
+    setViewingDetail(null);
+    setDetailError(null);
+    setIsLoadingDetail(true);
+    apiClient
+      .get<PortalLoanApplicationDetail>(`/portal/loan-applications/${applicationId}`)
+      .then(setViewingDetail)
+      .catch(() => setDetailError('Unable to load this application right now.'))
+      .finally(() => setIsLoadingDetail(false));
+  };
+
   return (
     <div className="min-h-screen bg-secondary/30">
       <PortalHeader />
@@ -55,18 +73,7 @@ export function DashboardPage() {
         <h1 className="text-2xl font-bold tracking-tight">Welcome back{account ? `, ${account.email}` : ''}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
 
-        <div className="mt-8 grid gap-5 sm:grid-cols-3">
-          <Card className="p-6">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-            <h2 className="mt-4 text-base font-semibold">Loan Products</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">Browse our loan products and find the one that fits your needs.</p>
-            <Button variant="outline" className="mt-4" onClick={() => navigate('/products')}>
-              Browse Products
-            </Button>
-          </Card>
-
+        <div className="mt-8 grid gap-5 sm:grid-cols-2">
           <Card className="p-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <FileText className="h-5 w-5" />
@@ -106,7 +113,19 @@ export function DashboardPage() {
           ) : (
             <div className="mt-4 divide-y divide-border">
               {applications.map((application) => (
-                <div key={application.id} className="flex items-center justify-between gap-4 py-3">
+                <div
+                  key={application.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openApplicationDetail(application.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openApplicationDetail(application.id);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-center justify-between gap-4 py-3 text-left hover:bg-secondary/40"
+                >
                   <div>
                     <p className="text-sm font-medium">
                       {application.requestedCategory} - ₱{application.requestedAmount.toLocaleString()}
@@ -117,7 +136,14 @@ export function DashboardPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {EDITABLE_STATUSES.has(application.status) && (
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/apply/${application.id}`)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/apply/${application.id}`);
+                        }}
+                      >
                         Edit
                       </Button>
                     )}
@@ -131,6 +157,12 @@ export function DashboardPage() {
           )}
         </Card>
       </main>
+
+      <Dialog open={viewingApplicationId !== null} onClose={() => setViewingApplicationId(null)} title="Loan Application">
+        {isLoadingDetail && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {detailError && <p className="text-sm text-destructive">{detailError}</p>}
+        {viewingDetail && <LoanApplicationDetailView detail={viewingDetail} />}
+      </Dialog>
     </div>
   );
 }

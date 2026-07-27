@@ -8,6 +8,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (accessToken: string, account: PortalAccountView) => void;
   logout: () => void;
+  refreshAccount: () => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -39,9 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccount(null);
   }, []);
 
+  const refreshAccount = React.useCallback(async () => {
+    if (!getStoredToken()) return;
+    const me = await apiClient.get<MeResponse>('/portal/me');
+    setAccount(me);
+  }, []);
+
   const value = React.useMemo<AuthContextValue>(
-    () => ({ account, isLoading, isAuthenticated: account !== null, login, logout }),
-    [account, isLoading, login, logout],
+    () => ({ account, isLoading, isAuthenticated: account !== null, login, logout, refreshAccount }),
+    [account, isLoading, login, logout, refreshAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

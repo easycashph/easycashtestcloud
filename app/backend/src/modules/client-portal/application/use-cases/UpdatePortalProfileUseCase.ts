@@ -27,9 +27,18 @@ export class UpdatePortalProfileUseCase {
     }
 
     return this.deps.updateBorrowerUseCase.execute(account.borrowerId, {
+      gender: input.gender,
+      birthDate: input.birthDate,
+      placeOfBirth: input.placeOfBirth,
+      nationality: input.nationality,
+      civilStatus: input.civilStatus,
+      homeOwnership: input.homeOwnership,
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
+      occupation: input.occupation,
+      employer: input.employer,
+      monthlyIncome: input.monthlyIncome,
       addresses: input.addresses,
     });
   }

@@ -73,10 +73,10 @@ export type SubmitLoanApplicationRequestBody = z.infer<typeof submitLoanApplicat
 export const updateLoanApplicationSchema = submitLoanApplicationSchema.omit({ submissionLatitude: true, submissionLongitude: true }).partial();
 export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;
 
-/** Same category enum as document module's AttachmentDocumentCategory, minus PROFILE_PICTURE
- * (no clear self-service use for it - the paper-form-derived slot is meant for a staff photo
- * capture during a walk-in visit, not a client uploading their own). */
+/** Same category enum as document module's AttachmentDocumentCategory. PROFILE_PICTURE added
+ * 2026-07-27 (user request) - a loan applicant can now upload their own avatar for My Profile. */
 export const portalDocumentCategorySchema = z.enum([
+  'PROFILE_PICTURE',
   'VALID_ID_BORROWER',
   'VALID_ID_CO_BORROWER',
   'PROOF_OF_BILLING',

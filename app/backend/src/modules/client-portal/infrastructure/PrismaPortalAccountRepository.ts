@@ -60,6 +60,7 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         emailVerifiedAt: patch.emailVerifiedAt,
         passwordHash: patch.passwordHash,
         borrowerId: patch.borrowerId,
+        email: patch.email?.toLowerCase().trim(),
       },
     });
     return toRecord(updated);

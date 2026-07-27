@@ -49,6 +49,20 @@ const CLAUSES = [
   },
 ];
 
+export function TermsContent() {
+  return (
+    <div className="space-y-6">
+      {CLAUSES.map((clause) => (
+        <div key={clause.title} className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="text-sm font-semibold">{clause.title}</h2>
+          <p className="mt-1 text-sm font-medium text-muted-foreground">{clause.lead}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{clause.body}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TermsPage() {
   return (
     <div className="min-h-screen bg-background">
@@ -62,14 +76,8 @@ export function TermsPage() {
           Please make sure you review, understand, and agree with the following terms and conditions.
         </p>
 
-        <div className="mt-8 space-y-6">
-          {CLAUSES.map((clause) => (
-            <div key={clause.title} className="rounded-2xl border border-border bg-card p-5">
-              <h2 className="text-sm font-semibold">{clause.title}</h2>
-              <p className="mt-1 text-sm font-medium text-muted-foreground">{clause.lead}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{clause.body}</p>
-            </div>
-          ))}
+        <div className="mt-8">
+          <TermsContent />
         </div>
       </div>
     </div>

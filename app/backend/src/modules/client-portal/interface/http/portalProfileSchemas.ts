@@ -1,12 +1,22 @@
 import { z } from 'zod';
 
-/** Phase D (2026-07-24, confirmed scope) - contact info only: mobile number(s), email, and
- * present address. See UpdatePortalProfileInput's own doc comment for why the rest of the
- * Borrower record isn't self-service-editable yet. */
+/** Phase D (2026-07-24), widened 2026-07-27 (user request, LMS parity) to also cover Personal and
+ * Employment - see UpdatePortalProfileInput's own doc comment for exactly which Borrower fields
+ * remain staff-editable-only (name, government IDs, dependants, references, etc. - identity/legal
+ * fields that shouldn't be self-service). */
 export const updatePortalProfileSchema = z.object({
+  gender: z.string().min(1).optional(),
+  birthDate: z.coerce.date().optional(),
+  placeOfBirth: z.string().min(1).optional(),
+  nationality: z.string().min(1).optional(),
+  civilStatus: z.string().min(1).optional(),
+  homeOwnership: z.string().min(1).optional(),
   mobilePhone1: z.string().min(1).optional(),
   mobilePhone2: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  occupation: z.string().min(1).optional(),
+  employer: z.string().min(1).optional(),
+  monthlyIncome: z.coerce.number().nonnegative().optional(),
   addresses: z
     .array(
       z.object({

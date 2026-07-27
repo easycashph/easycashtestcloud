@@ -10,11 +10,19 @@ export interface UpdateBorrowerInput {
   lastName?: string;
   middleName?: string;
   suffix?: string;
+  gender?: string;
+  birthDate?: Date;
+  placeOfBirth?: string;
+  nationality?: string;
   civilStatus?: string;
+  homeOwnership?: string;
   mobilePhone1?: string;
   mobilePhone2?: string;
   email?: string;
   facebookLink?: string;
+  occupation?: string;
+  employer?: string;
+  monthlyIncome?: number;
   addresses?: AddressProps[];
 }
 
@@ -35,12 +43,25 @@ export class UpdateBorrowerUseCase {
         ? PersonName.of(input.firstName ?? borrower.name.firstName, input.lastName ?? borrower.name.lastName, input.middleName ?? borrower.name.middleName)
         : undefined,
       suffix: input.suffix,
+      gender: input.gender,
+      birthDate: input.birthDate,
+      placeOfBirth: input.placeOfBirth,
+      nationality: input.nationality,
       civilStatus: input.civilStatus,
+      homeOwnership: input.homeOwnership,
       mobilePhone1: input.mobilePhone1,
       mobilePhone2: input.mobilePhone2,
       email: input.email,
       facebookLink: input.facebookLink,
     });
+
+    if (input.occupation !== undefined || input.employer !== undefined || input.monthlyIncome !== undefined) {
+      borrower.updateIncomeDetail({
+        position: input.occupation,
+        employerName: input.employer,
+        monthlyIncome: input.monthlyIncome,
+      });
+    }
 
     if (input.addresses !== undefined) {
       borrower.replaceAddresses(input.addresses.map((a) => Address.of(a)));

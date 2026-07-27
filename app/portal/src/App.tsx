@@ -10,6 +10,7 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { LoanApplicationFormPage } from '@/pages/LoanApplicationFormPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { SecurityPage } from '@/pages/SecurityPage';
 import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage';
 import { TermsPage } from '@/pages/TermsPage';
 
@@ -72,6 +73,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/security"
+        element={
+          <ProtectedRoute>
+            <SecurityPage />
           </ProtectedRoute>
         }
       />
