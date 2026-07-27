@@ -138,6 +138,28 @@ against their own reference tools. Two loans were used:
   direct business/MIS testimony on 2026-07-11 — must not be implemented without an explicit,
   unambiguous confirmation, treated with the same weight as the original ADR-050 sign-off.**
 
+## 4. Payment allocation order and compounding — Q&A, no code changed
+
+User asked two follow-up conceptual questions, answered by reading `PaymentAllocationCalculator.ts`
+and searching for interest-compounding logic rather than assuming:
+
+- **"Kung magbayad ng ₱500 papuntang interest, mababawasan din ba ang penalty?"** — explained the
+  real allocation order (`docs/Architecture/CALCULATION_ENGINE_SPEC.md` §5 / `ADR-009`, sourced from
+  the Promissory Note's own clause 4): **Fees → Penalty → Interest → Principal**, each tier filled
+  completely before the next. So a single payment CAN reduce both Penalty and Interest, but only
+  because Penalty is paid first out of it and whatever remains afterward flows into Interest — not
+  because the payment is split between them independently. Worked two examples (penalty smaller
+  than payment → both reduce; penalty larger than payment → only penalty reduces, Interest
+  untouched).
+- **"Pwede ba itong maging compounded?"** — clarified that **Interest itself does not compound**
+  anywhere in the normal repayment cycle; only **Penalty** compounds (ADR-050), computed against the
+  combined overdue Principal+Interest base, not against Interest on its own. Found one narrow
+  exception via a codebase search: `RestructureLoanUseCase.ts`'s own doc comment acknowledges an
+  "interest-on-interest" implication — restructuring folds unpaid Interest into the *new* loan's
+  Principal, so on the new loan that former Interest starts earning fresh Interest — but this is a
+  one-time event at the moment of Restructure, not continuous/automatic compounding within normal
+  repayment.
+
 ## Current state / open items for next session
 
 - **Client Profile Attachments removal + Loan History full-width**: done, verified, committed,
