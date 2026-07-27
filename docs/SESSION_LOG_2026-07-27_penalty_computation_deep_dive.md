@@ -180,6 +180,37 @@ Concluded that true parity would require deciding and aligning all three axes to
 full side-by-side comparison table with all three aligned, but the user has not yet asked for that;
 **no code changed**.
 
+## 6. Proposed direction: SOA should just reuse Live's computed penalty (not maintain a parallel formula)
+
+After §3-5 kept surfacing new mismatches between SOA's independent `StatementOfAccountCalculator`
+formula and the Live/ADR-050 one, the user proposed a structurally different fix: instead of trying
+to align SOA's own formula with Live's, **have the SOA's Penalty line call the exact same function
+Live already uses** (`resolveComputedPenalty` in `CurrentPenaltyResolver.ts`), with a manual
+date-range fallback offered only for migrated loans or loans with no live-computable penalty.
+
+Investigated the actual wiring before responding (`StatementOfAccountMergeDataResolver.resolve()` →
+`StatementOfAccountCalculator.calculate()`, `GenerateStatementOfAccountUseCase.ts`'s
+`penaltyFromDate`/`penaltyToDate` inputs) and confirmed this is not just workable but elegant:
+`resolveComputedPenalty` already has the exact gate the user described built in —
+`if (isProspectiveLoan && status !== 'PAID')` uses the live ADR-050 formula, otherwise it returns
+the frozen `due.penalty` snapshot (which is `₱0` for accounts with nothing recorded) — i.e. the
+"migrated or no computed penalty on record" carve-out the user asked for is already the existing
+behavior of that function, not something new to build. Reusing it for SOA's Penalty line would make
+SOA and Live **identical by construction** for prospective loans (same function call, not two
+formulas kept in sync), resolving every open question from §3-5 (rate threshold, day-count
+mechanic, compounding vs linear) at once by simply not having two formulas.
+
+Assessed this positively and asked four clarifying questions before implementing (none answered
+yet — **paused, no code changed**):
+1. Whether the SOA's `PenaltyFromDate` field should be dropped from the document for prospective
+   loans, since `resolveComputedPenalty` doesn't take a "from" input (it derives each installment's
+   own due date automatically) — or kept as display-only.
+2. Whether `PenaltyToDate` should keep its current staff-free-entry flexibility (any past/future
+   date for a "what-if" preview) or be defaulted/locked to today.
+3. Confirmed migrated loans keep the existing manual date-range + flat-formula path unchanged.
+4. Whether the separate Accrued Interest section (its own independent staff-entered date/formula)
+   should be left alone or folded into this same alignment effort.
+
 ## Current state / open items for next session
 
 - **Client Profile Attachments removal + Loan History full-width**: done, verified, committed,
@@ -189,9 +220,13 @@ full side-by-side comparison table with all three aligned, but the user has not 
   local changes on this machine beyond the same pre-existing, untouched stray files noted in prior
   logs (deleted `legacy/Sync Database And Apply Migrations.bat`, `app/backend/templates-backup-preanchor/`,
   `legacy/Setup note only/`, `legacy/reports/Loan_Penalty_Computation_Reference.pdf`).
-- **SOA penalty rate threshold basis** (per-installment vs whole-loan vs total-unpaid-balance):
-  reopened, unresolved. Needs an explicit decision before any change to
-  `StatementOfAccountCalculator.ts`.
+- **§6's proposal — SOA reuses `resolveComputedPenalty` directly instead of its own formula**:
+  this is the most likely next concrete implementation step; supersedes the standalone "SOA rate
+  threshold basis" question (§3) since reusing Live's function makes that question moot for
+  prospective loans. Blocked on the 4 clarifying questions in §6 — answer those first, then
+  implement in `StatementOfAccountMergeDataResolver.ts` (swap the Penalty-line source, keep
+  `StatementOfAccountCalculator`'s flat formula only as the migrated-loan fallback, which
+  `resolveComputedPenalty` already gates on `isProspectiveLoan`).
 - **Whether to change ADR-050 itself** (whole-month-gated compounding → immediate
   daily-prorated): raised, comparison shown, **NOT decided, NOT implemented**. This is a
   business-critical, already-once-confirmed rule — do not touch without a clear, explicit
