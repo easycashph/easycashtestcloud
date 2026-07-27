@@ -211,6 +211,26 @@ yet — **paused, no code changed**):
 4. Whether the separate Accrued Interest section (its own independent staff-entered date/formula)
    should be left alone or folded into this same alignment effort.
 
+## 7. Mockup of the redesigned "Create Statement of Account" modal
+
+User shared a screenshot of the actual current SOA modal (Account information / Balances / Penalty
+(From+To date range) / Accrued interest / Collection+Other Fee / Total amount due cards) and asked
+for a mockup applying §6's direction in that exact layout, not a redesigned one. Produced two
+mockup iterations:
+- First pass matched the real card grouping/styling, replacing the Penalty card's From+To range
+  with a single "As of date" input and a "Live computed" badge, and showed the Accrued Interest
+  date input disabled/locked with "Not applicable until maturity" for a not-yet-matured example
+  loan (`SML-REG_00378`) — flagged this lock behavior as a question needing confirmation, not yet
+  decided.
+- Second pass added two explanatory lines back in at the user's request: inside the Penalty card,
+  "Same figure shown on this loan's Repayment Schedule - computed as of the date below"; and a
+  small info box below it, "Migrated loans have no live penalty on file - a manual From/To date
+  range appears instead for those accounts."
+
+Still just a visual mockup — **no code changed**. Still waiting on the §6 clarifying questions
+(especially whether Accrued Interest should lock before maturity, and the `PenaltyToDate`
+flexibility question) before implementation starts.
+
 ## Current state / open items for next session
 
 - **Client Profile Attachments removal + Loan History full-width**: done, verified, committed,
