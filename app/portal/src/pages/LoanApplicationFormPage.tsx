@@ -139,6 +139,8 @@ interface FormState {
   reference2Mobile: string;
   // §9 Note
   note: string;
+  // §10 Terms & Consent
+  agreedToTerms: boolean;
 }
 
 const INITIAL_FORM: FormState = {
@@ -185,6 +187,7 @@ const INITIAL_FORM: FormState = {
   reference2Name: '',
   reference2Mobile: '',
   note: '',
+  agreedToTerms: false,
 };
 
 function addressToRequestFields(address: AddressDraft) {
@@ -401,6 +404,10 @@ export function LoanApplicationFormPage() {
     }
     if (!requestedTermMonths || requestedTermMonths <= 0) {
       setError('Enter a valid loan term in months.');
+      return;
+    }
+    if (!isEditMode && !form.agreedToTerms) {
+      setError('Please acknowledge the Terms and Conditions and Data Privacy Statement before submitting.');
       return;
     }
 
@@ -876,6 +883,31 @@ export function LoanApplicationFormPage() {
             <SectionCard number="9" title="Note" description="Anything else worth mentioning that doesn't have its own field above.">
               <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Optional" />
             </SectionCard>
+
+            {!isEditMode && (
+              <SectionCard number="10" title="Terms &amp; Consent">
+                <label className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm">
+                  <input
+                    type="checkbox"
+                    required
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+                    checked={form.agreedToTerms}
+                    onChange={(e) => update('agreedToTerms', e.target.checked)}
+                  />
+                  <span>
+                    I have been given the opportunity to review the{' '}
+                    <Link to="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                      Terms and Conditions
+                    </Link>{' '}
+                    and{' '}
+                    <Link to="/privacy-policy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                      Data Privacy Statement and Consent Form
+                    </Link>
+                    , and I agree to them. *
+                  </span>
+                </label>
+              </SectionCard>
+            )}
 
             {!isEditMode && (
               <p className="text-center text-xs text-muted-foreground">

@@ -15,17 +15,20 @@ export const LOAN_PRODUCTS = [
     category: 'Business Loan',
     blurb: 'Flexible financing and a simpler process for growing your business.',
     details: 'Working capital, equipment, or expansion financing for business owners.',
+    image: './images/product-business.jpg',
   },
   {
     icon: Landmark,
     category: 'Salary Loan',
     blurb: 'A quick cash advance against your salary, approved fast.',
     details: 'A short-term cash advance for employees, repaid against your regular paycheck.',
+    image: './images/product-salary.jpg',
   },
   {
     icon: Anchor,
     category: 'Seafarer Loan',
     blurb: 'Lower rates and faster approvals, tailored around irregular allotment income.',
     details: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
+    image: './images/product-seafarer.jpg',
   },
 ] as const;
