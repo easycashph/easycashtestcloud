@@ -4,9 +4,11 @@ import { Percentage } from '@shared/domain/Percentage';
 import { PenaltyCalculator } from '@shared/domain/calculation/PenaltyCalculator';
 
 // ADR-050 / CALCULATION_ENGINE_SPEC.md §12 — STATUS: CONFIRMED via direct business/MIS testimony
-// (2026-07-11). Test vectors are cited from ADR-050 §1's worked example, not synthetic guesses.
-describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12)', () => {
-  it('matches ADR-050 §1\'s worked example exactly: ₱10,000 @ 10%, 3 whole months late (due 2026-07-01, paid 2026-10-01)', () => {
+// (2026-07-11), formula reversed to daily-prorated on 2026-07-28 (ADR-050 §8), then aligned to the
+// user's own Excel reference tool on 2026-07-28 (ADR-050 §9): no grace period, divisor is the
+// installment's own due-month day count (not a flat 30).
+describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated + Excel-aligned as of 2026-07-28)', () => {
+  it('prorates linearly at 10% using July\'s own 31-day divisor (92 days late, due 2026-07-01, as-of 2026-10-01)', () => {
     const result = PenaltyCalculator.calculate({
       overdueAmount: Money.of('10000.00'),
       dueDate: new Date('2026-07-01T00:00:00Z'),
@@ -14,10 +16,11 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12)', () => {
       ratePercent: Percentage.of('10'),
       gracePeriodDays: 3,
     });
-    expect(result.toString()).toBe('3310.00');
+    // 10000 x 10% / 31 x 92 days = 2967.741935... -> 2967.74
+    expect(result.toString()).toBe('2967.74');
   });
 
-  it('compounds at 5% for the small-unsecured-loan tier (two whole months late)', () => {
+  it('prorates linearly at 5% for the small-unsecured-loan tier (62 days late, July\'s 31-day divisor)', () => {
     const result = PenaltyCalculator.calculate({
       overdueAmount: Money.of('10000.00'),
       dueDate: new Date('2026-07-01T00:00:00Z'),
@@ -25,50 +28,55 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12)', () => {
       ratePercent: Percentage.of('5'),
       gracePeriodDays: 3,
     });
-    // Month 1: 10000 * 5% = 500 -> 10500. Month 2: 10500 * 5% = 525 -> 11025. Penalty = 1025.00.
-    expect(result.toString()).toBe('1025.00');
+    // 10000 x 5% / 31 x 62 days = 1000.00 (62 = exactly 2 x 31)
+    expect(result.toString()).toBe('1000.00');
   });
 
-  it('charges zero penalty when paid within the grace period', () => {
+  it('charges a penalty starting the very first day after the due date - no grace period', () => {
     const result = PenaltyCalculator.calculate({
       overdueAmount: Money.of('10000.00'),
       dueDate: new Date('2026-07-01T00:00:00Z'),
-      asOfDate: new Date('2026-07-04T00:00:00Z'), // exactly at grace end (due + 3 days)
+      asOfDate: new Date('2026-07-02T00:00:00Z'), // 1 day late - would have been zero under the old 3-day grace period
+      ratePercent: Percentage.of('10'),
+      gracePeriodDays: 3,
+    });
+    // 10000 x 10% / 31 x 1 day = 32.26
+    expect(result.toString()).toBe('32.26');
+  });
+
+  it('uses the divisor of the installment\'s own due month, not a flat 30 (February 2026 has 28 days)', () => {
+    const result = PenaltyCalculator.calculate({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-02-01T00:00:00Z'),
+      asOfDate: new Date('2026-03-01T00:00:00Z'), // exactly 28 days late - all of February
+      ratePercent: Percentage.of('10'),
+      gracePeriodDays: 3,
+    });
+    // 10000 x 10% / 28 x 28 days = 1000.00 exactly (one full due-month's worth)
+    expect(result.toString()).toBe('1000.00');
+  });
+
+  it('accrues proportionally more the longer an installment stays overdue (no whole-month gating)', () => {
+    const result = PenaltyCalculator.calculate({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-07-25T00:00:00Z'), // 24 days late, well under what used to require a full month
+      ratePercent: Percentage.of('10'),
+      gracePeriodDays: 3,
+    });
+    // 10000 x 10% / 31 x 24 days = 774.19
+    expect(result.toString()).toBe('774.19');
+  });
+
+  it('returns zero when asOfDate equals the due date (not yet late at all)', () => {
+    const result = PenaltyCalculator.calculate({
+      overdueAmount: Money.of('10000.00'),
+      dueDate: new Date('2026-07-01T00:00:00Z'),
+      asOfDate: new Date('2026-07-01T00:00:00Z'),
       ratePercent: Percentage.of('10'),
       gracePeriodDays: 3,
     });
     expect(result.isZero()).toBe(true);
-  });
-
-  it('charges zero penalty the instant the grace period ends but before a whole month has passed (no proration)', () => {
-    const result = PenaltyCalculator.calculate({
-      overdueAmount: Money.of('10000.00'),
-      dueDate: new Date('2026-07-01T00:00:00Z'),
-      asOfDate: new Date('2026-07-25T00:00:00Z'), // past grace (July 4), but well under 1 whole month from the due date
-      ratePercent: Percentage.of('10'),
-      gracePeriodDays: 3,
-    });
-    expect(result.isZero()).toBe(true);
-  });
-
-  it('charges exactly one month\'s penalty once a full month has elapsed past the due date, not before', () => {
-    const justUnderOneMonth = PenaltyCalculator.calculate({
-      overdueAmount: Money.of('10000.00'),
-      dueDate: new Date('2026-07-01T00:00:00Z'),
-      asOfDate: new Date('2026-07-31T00:00:00Z'), // one day short of a full month from July 1
-      ratePercent: Percentage.of('10'),
-      gracePeriodDays: 3,
-    });
-    expect(justUnderOneMonth.isZero()).toBe(true);
-
-    const exactlyOneMonth = PenaltyCalculator.calculate({
-      overdueAmount: Money.of('10000.00'),
-      dueDate: new Date('2026-07-01T00:00:00Z'),
-      asOfDate: new Date('2026-08-01T00:00:00Z'),
-      ratePercent: Percentage.of('10'),
-      gracePeriodDays: 3,
-    });
-    expect(exactlyOneMonth.toString()).toBe('1000.00');
   });
 
   it('returns zero for a zero overdue amount regardless of how late it is', () => {
