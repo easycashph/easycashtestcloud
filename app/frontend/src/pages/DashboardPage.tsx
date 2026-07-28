@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useTheme } from '@/components/theme-provider';
 import {
   Bar,
   BarChart,
@@ -426,22 +427,25 @@ function LoanApplicationPipelineFunnel({ pipeline: pipelineProp }: { pipeline: D
  * having to add a height prop to `SummaryCard` itself.
  */
 function DraggableStatCard({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { dragReorderEnabled } = useTheme();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !dragReorderEnabled });
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn('relative h-full [&>*]:h-full', isDragging && 'z-10 opacity-70')}
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label="Drag to reorder this card"
-        className="absolute left-1 top-1.5 z-10 flex h-5 w-5 cursor-grab items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:text-foreground active:cursor-grabbing"
-      >
-        <GripVertical className="h-3 w-3" />
-      </button>
+      {dragReorderEnabled && (
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag to reorder this card"
+          className="absolute left-1 top-1.5 z-10 flex h-5 w-5 cursor-grab items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:text-foreground active:cursor-grabbing"
+        >
+          <GripVertical className="h-3 w-3" />
+        </button>
+      )}
       {children}
     </div>
   );
