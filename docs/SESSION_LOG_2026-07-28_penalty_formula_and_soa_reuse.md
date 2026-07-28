@@ -23,8 +23,13 @@
   must be rebuilt, and even `docker compose build` (no `--no-cache`) can silently reuse a stale
   `COPY . .` layer. Use `docker compose build --no-cache frontend && docker compose up -d
   --force-recreate frontend` when a UI change isn't showing up after a normal rebuild.
-- **Nothing else pending** — both formula changes and the SOA reuse are committed, full backend
-  suite green (890 tests), frontend/backend `tsc --noEmit` clean.
+- **Nothing else pending from the formula/SOA work** — both formula changes and the SOA reuse are
+  committed, full backend suite green (890 tests), frontend/backend `tsc --noEmit` clean.
+- **This log was extended same-day with 3 more shipped items** (all committed): a per-account
+  drag-and-drop reordering toggle (`95b4d21`, §6), a real co-borrower-signing bug fix affecting
+  every migrated loan (`452af06`, §7), and a new email delivery channel for the e-signature signing
+  link (`452af06`, §8) — added after confirming some Smart-network numbers silently filter
+  link-containing SMS. See those sections for full detail.
 
 ## Context
 
@@ -230,3 +235,113 @@ UI matched. **Worth remembering for next time a UI change "isn't showing up" on 
   without `--no-cache` can silently skip rebuilding even when source files changed.
 - Still open from earlier sessions, untouched today: whether to widen Accrued Interest to
   legacy/migrated loans, Dashboard color redesign mockups, sidebar brand header redesign mockups.
+
+## 6. Drag-and-drop card reordering toggle (Settings > Appearance)
+
+User asked for an on/off switch for the drag-and-drop card-reordering feature (`SortableSection`,
+Dashboard's `DraggableStatCard`), placed in Settings > Appearance, mockup shown and approved first.
+Extended `theme-provider.tsx`'s existing per-account preference pattern (same
+userId-suffixed-localStorage-key convention as theme/accent/fontSize) with a new
+`dragReorderEnabled` boolean (default `true`), exposed via `useTheme()`. `SortableSection.tsx` and
+`DashboardPage.tsx`'s `DraggableStatCard` both read it and pass `disabled: !dragReorderEnabled` to
+dnd-kit's `useSortable()`, and don't render the grip handle at all when off — this single shared
+component change covers every page that uses it (Dashboard, Client Profile, Loan Application, Loan
+Account), no per-page wiring needed. Turning it off does not reset any page's already-saved card
+order, just hides the handles and disables dragging. Added a new "Card Reordering" card to
+`SettingsPage.tsx`'s `AppearanceTab`, styled to match the existing Dark Mode toggle exactly.
+Committed as `95b4d21`.
+
+## 7. Real bug: co-borrower e-signature lookup failed for every migrated loan
+
+User reported "No co-borrower is linked to this loan account yet" when clicking "Send for
+Co-Borrower signing" on a loan account that clearly had a co-borrower attached and visible
+elsewhere in the UI. Investigated the actual DB state directly (disposable scripts, deleted after
+use) rather than guessing, and found **two entirely separate, non-overlapping co-borrower linkage
+mechanisms** coexisting in the live data:
+
+1. **`LoanAccountCoBorrower`** — a per-LOAN join table. Every one of the **443** CP12-migrated
+   co-borrowers in the database uses ONLY this; their `CoBorrower.borrowerId` column is `null` for
+   all 443, with zero exceptions. Nothing in the current codebase's use cases ever calls
+   `LoanAccount.addCoBorrower()` (confirmed via a full-codebase grep) — this join is purely a
+   migration-time artifact, no live UI path creates it anymore.
+2. **`CoBorrower.borrowerId`** — a direct per-BORROWER FK (ADR-015, "resolved" 2026-07-16 as the
+   forward-looking design: attach a co-borrower once to a client, visible on every one of their
+   loans). This is the ONLY mechanism `CreateCoBorrowerUseCase` (the real, currently-active "Add
+   Co-Borrower" button on Client Profile) ever writes — it never touches the join table at all.
+
+`CreateLoanSigningSessionUseCase`'s co-borrower lookup checked only mechanism #2
+(`coBorrowerRepository.findByBorrowerId`), which is why it failed for every migrated loan (whose
+co-borrower only exists via mechanism #1) — but would have equally failed the reverse way had it
+only checked #1. Fixed to check the loan-level join first (specific to the exact loan), falling
+back to the per-Borrower FK — verified against one real example of each case directly against the
+live database (both resolved correctly afterward). Also fixed the frontend's co-borrower
+default-phone-number prefill (`LoanDetailPage.tsx`) the same dual-lookup way, since it had the same
+single-mechanism gap. **Business-rule note surfaced but NOT decided**: which mechanism *should* be
+the standard going forward is effectively already answered by what's actually active in
+production — per-Borrower (mechanism #2) is the only one with a live UI entry point today; the
+loan-level join is legacy-only. No schema/architecture change was made based on this, just the bug
+fix. Committed together with §8 as `452af06`.
+
+## 8. New email delivery channel for the e-signature signing link
+
+While testing §7's fix with a real Smart-network number, the user reported the co-borrower never
+received the signing-link SMS despite the M360 API reporting success (`code: 201`) both times.
+Read the M360 API documentation PDF directly (`legacy/reports/M360 SMS API and Passthru Version
+3.3.4.pdf`) and found the key fact: **status 201 only means M360 accepted the request — it does
+NOT confirm handset delivery**, and the DLR delivery-confirmation statuses are documented as
+"Applicable to Globe Transactions only" (Smart/DITO delivery status isn't even reported back).
+Tested the hypothesis directly: sent a plain-text SMS (no link) to the same Smart number via a
+disposable script — **it arrived successfully**, while the earlier link-containing signing SMS to
+the identical number did not. This strongly confirms Smart's network (or M360's Smart route)
+silently filters/drops SMS containing URLs from an unregistered/unverified sender — a known PH
+telco anti-smishing pattern, not a code bug, and not something fixable in this codebase (needs
+telco/M360-side sender or link-domain registration).
+
+User asked for a second delivery channel instead: send the signing link via **email** as an
+alternative to SMS. Design confirmed via 2 quick questions: (1) a separate "Send via Email" button
+next to each existing SMS button (not a toggle/dropdown), and (2) the email address is always
+auto-read from the Borrower/CoBorrower profile, never staff-typed (unlike the SMS phone number
+box, which is deliberately staff-editable per `CreateLoanSigningSessionUseCase`'s own 2026-07-25
+doc comment). OTP verification was deliberately left as SMS-only regardless of channel — it's a
+plain 6-digit code with no link, so it isn't affected by the filtering issue that motivated this
+whole feature; only the initial link-send needed an alternative.
+
+**Implementation:**
+- `CreateLoanSigningSessionUseCase.execute()` gained a `channel: 'SMS' | 'EMAIL' = 'SMS'` parameter.
+  For `'EMAIL'`, both the email address AND the phone number (still needed for the OTP SMS) are
+  auto-resolved from the party's profile (`Borrower.email`/`mobilePhone1` or
+  `CoBorrower.emailAddress`/`phoneNumber`) — new `NoEmailOnFileError`/`NoPhoneNumberOnFileError`
+  domain errors if either is missing. Reused the existing `IEmailGateway`/`NodemailerEmailGateway`
+  infrastructure (already used by payment-reminder emails) rather than building anything new.
+- New `DryRunAwareEmailGateway` mirrors `DryRunAwareSmsGateway` exactly — checks a DB-backed
+  `ReminderSettings.signingEmailEnabled` flag fresh on every send (new Prisma migration
+  `20260728074152_add_signing_email_enabled`), independently toggleable from `signingSmsEnabled`.
+  Threaded through the reminder-settings stack (repository/use case/presenter/controller) the same
+  way `signingSmsEnabled` was in an earlier session.
+- New "E-signature Email" toggle added to `SystemPage.tsx`, next to the existing "E-signature SMS"
+  one.
+- `createLoanSigningSessionSchema`: `phoneNumber` is now optional (only required for the `SMS`
+  channel — validated inside the use case, not the schema, since the requirement is conditional);
+  new `channel` enum field, default `SMS`.
+- Frontend (`LoanDetailPage.tsx`): new "Send via Email" outline-variant button next to each
+  existing SMS button (Borrower and Co-Borrower), disabled when no email is on file for that party
+  (tooltip explains why), calling the same endpoint with `channel: 'EMAIL'` and no `phoneNumber`.
+- **From-address fix (user-requested mid-implementation)**: the email initially went out from
+  `collections@easycash.ph` (the existing payment-reminders "Send As" alias) — user pointed out
+  this reads as a collections mailbox, not appropriate for OTP/signing emails. Added a new
+  `SIGNING_SMTP_FROM_ADDRESS` env var (default `esignature@easycash.ph`), kept fully separate from
+  `SMTP_FROM_ADDRESS` (payment reminders unaffected). Required setting up `esignature@easycash.ph`
+  as a verified Gmail "Send As" alias on the same authenticated mailbox (`sales@easycash.ph`) first
+  — walked the user through Gmail Settings > Accounts and Import > Send mail as > Add another email
+  address, then through completing the verification step (the address initially showed
+  "unverified", causing Gmail to silently fall back to the default `sales@easycash.ph` sender until
+  verification completed). Confirmed working via a real end-to-end test send after verification.
+
+Verified end-to-end: real test email sent to a live Gmail address, confirmed arriving from
+`esignature@easycash.ph` (not `sales@` or `collections@`). 890 backend tests still passing,
+`tsc --noEmit` clean on both frontend and backend. Committed together with §7 as `452af06`.
+
+**Open item for next session**: user explicitly agreed to accept one real SMS charge for the OTP
+step during testing (§8's OTP-stays-SMS design) — the actual OTP-open/verify step on the real
+signing page had not yet been walked through as of this log; confirm the full email-link →
+OTP-SMS → sign flow completes end-to-end next time it comes up.
