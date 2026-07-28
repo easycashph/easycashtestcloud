@@ -1,5 +1,32 @@
 # Session Log — 2026-07-27: Client Profile cleanup, multi-machine git sync, penalty computation deep dive
 
+## TL;DR for a fresh Claude session picking this up cold
+
+- Two real UI/code changes landed and are committed (see §1): Client Profile's duplicate
+  Attachments card removed, Loan History card widened. Nothing else in this log changed code.
+- The rest of the session (§3-8) is a long, still-unresolved analysis of penalty computation
+  discrepancies across three places in the codebase: the live Repayment Schedule (`ADR-050`,
+  compounding, whole-calendar-month gated), the Statement of Account calculator (flat/linear,
+  staff-entered date range, different ₱10,000 rate threshold basis), and the user's own Excel
+  reference tool (flat/linear too, but yet another day-count convention). None of the three agree,
+  and why is now fully understood and documented — but nothing has been changed.
+- **The live thread to continue**: §6/§7 propose making the SOA's Penalty line just call
+  `resolveComputedPenalty()` (the exact same function the live Repayment Schedule already uses)
+  instead of maintaining `StatementOfAccountCalculator`'s own parallel formula — this would make SOA
+  and Live identical *by construction* for prospective (non-migrated) loans, and correctly falls
+  back to the frozen `due.penalty` snapshot for migrated loans automatically (no new logic needed
+  for that case — `resolveComputedPenalty` already gates on `isProspectiveLoan`). A mockup of the
+  redesigned "Create Statement of Account" modal was shown and approved in shape (single "As of
+  date" input replacing the From/To range, "Live computed" badge, explanatory copy) — **but
+  implementation has not started.**
+- **Before writing any code for that**, get explicit answers to the 4 open questions in §6 (repeated
+  in "Current state" below) — especially whether the Accrued Interest date should lock/disable
+  before the loan's maturity date (raised in §7, not yet confirmed).
+- **Do not touch ADR-050 itself** (the whole-month-gated compounding formula) without a very
+  explicit, unambiguous go-ahead — §5/§6 raised the idea of making it daily-prorated instead, purely
+  as a comparison exercise; that would be a business-critical reversal of an already-confirmed rule
+  and must not be inferred as approved from this discussion.
+
 ## Context
 
 Continuation from `SESSION_LOG_2026-07-24_loan_adjustment_and_ui_polish.md`. This session covered
@@ -230,6 +257,17 @@ mockup iterations:
 Still just a visual mockup — **no code changed**. Still waiting on the §6 clarifying questions
 (especially whether Accrued Interest should lock before maturity, and the `PenaltyToDate`
 flexibility question) before implementation starts.
+
+## 8. "What's the start date, if only 'As of date' shows?" — clarified, no code changed
+
+User asked, given the mockup now shows only one date field, what the effective "start" of each
+installment's penalty period would be under §6's proposal — specifically whether it's a single
+shared date like April 1, 2026. Clarified: there is no single shared start date. Each installment
+supplies its own start automatically from its own `dueDate` (`resolveComputedPenalty` reads
+`installment.dueDate` directly, same as Live already does) — for `SML-REG_00378` that's Apr 1 for
+installment #1, May 1 for #2, Jun 1 for #3, Jul 1 for #4, each independent. The single "As of date"
+field in the mockup is only the shared **end**/`asOfDate` point; staff never enter a "from" at all
+under this design.
 
 ## Current state / open items for next session
 
