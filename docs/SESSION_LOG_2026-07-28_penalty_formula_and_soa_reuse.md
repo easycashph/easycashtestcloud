@@ -30,6 +30,13 @@
   every migrated loan (`452af06`, §7), and a new email delivery channel for the e-signature signing
   link (`452af06`, §8) — added after confirming some Smart-network numbers silently filter
   link-containing SMS. See those sections for full detail.
+- **Extended again same-day with 2 more shipped items** (`60df0a0`): OTP verification now follows
+  whichever channel (SMS/Email) sent the link, instead of always SMS (§9); and the Dashboard's
+  Loan Portfolio Health + Recommendation cards were rearranged into a 2-column row (§10). Also
+  fixed a UI gap where the "OTP will also be sent via..." hint text was missing from the
+  e-signature panel despite the OTP-follows-channel logic already being implemented (§9). Pushed to
+  `origin/main` (`735d00c`) after rebasing cleanly onto 2 unrelated portal commits pushed by another
+  teammate in the interim.
 
 ## Context
 
@@ -341,7 +348,111 @@ Verified end-to-end: real test email sent to a live Gmail address, confirmed arr
 `esignature@easycash.ph` (not `sales@` or `collections@`). 890 backend tests still passing,
 `tsc --noEmit` clean on both frontend and backend. Committed together with §7 as `452af06`.
 
-**Open item for next session**: user explicitly agreed to accept one real SMS charge for the OTP
-step during testing (§8's OTP-stays-SMS design) — the actual OTP-open/verify step on the real
-signing page had not yet been walked through as of this log; confirm the full email-link →
-OTP-SMS → sign flow completes end-to-end next time it comes up.
+**Resolved later same day (see §9)**: the OTP-stays-SMS design from this section was superseded —
+user asked for OTP to follow the link channel instead, implemented and shipped.
+
+Also shipped after this, in the same conversation (not yet logged until now): an HTML version of
+the signing email with a styled "Review and Sign Documents" button instead of a raw pasted URL
+(`buildSigningEmailHtml()` in `CreateLoanSigningSessionUseCase.ts`, inline-styled per
+email-client-safe conventions — no `<style>` blocks, no flexbox/grid), `IEmailGateway.send()`
+gaining an optional 4th `html` param plumbed through `NodemailerEmailGateway` and
+`DryRunAwareEmailGateway`; a unified `messageBody` wording (user picked "Option 3" from 4 offered
+options) shared verbatim between the SMS send and the email's plain-text fallback; and a full
+"high-end, advanced, sophisticated" redesign of the e-signature panel itself
+(`LoanDetailPage.tsx`) — replaced the old flat phone-input-plus-two-buttons layout with a
+per-party card (avatar/initials, name, a 3-button SMS/Email/Portal channel picker with Portal
+disabled and badged "Soon", and one dynamic "Send via {channel}" button), then rearranged the two
+party cards into a `grid sm:grid-cols-2` (side-by-side) layout per a follow-up request. All shown
+as mockups and approved before implementation, per the usual workflow.
+
+## 9. OTP verification now follows the link's delivery channel
+
+User asked whether OTP could also get an SMS/Email toggle, "same channel as the link" — confirmed
+as the better design over an independent toggle (a number that can't receive the link via SMS,
+Smart's link-filtering, likely can't receive an OTP SMS either for the same reason), shown as a
+mockup and approved.
+
+**Implementation:**
+- `LoanSigningSession` (domain) gained `channel: SigningLinkChannel` (`'SMS' | 'EMAIL'`, moved here
+  from `CreateLoanSigningSessionUseCase.ts` where it previously lived) and an optional `email`
+  field, both captured at send time (same "captured once, never re-read from the profile later"
+  principle as the existing `phoneNumber` field). New Prisma migration
+  `20260728155213_add_signing_session_channel_email` adds `channel` (default `"SMS"`, backward
+  compatible with every pre-existing session row) and nullable `email` to
+  `loan_signing_sessions`.
+- `CreateLoanSigningSessionUseCase.execute()` now passes `channel`/`recipientEmail` into
+  `LoanSigningSession.create()` so they're persisted on the session itself.
+- `RequestSigningOtpUseCase` (called when the client opens the signing link, or taps "Resend
+  code") now branches on `session.channel`: sends the OTP via `emailGateway` when `EMAIL` (and an
+  email is on file), otherwise via `smsGateway` as before. Needed a new `emailGateway` dependency,
+  wired in `app.ts` to the same `signingEmailGateway` (`DryRunAwareEmailGateway`) instance already
+  used for the link-send — meaning the existing "E-signature Email" toggle in Settings already
+  functions as the master on/off switch for OTP-by-email too; no new DB flag was needed.
+- Frontend (`LoanDetailPage.tsx`): added the "OTP verification will also be sent via {SMS/email} —
+  same channel as the link" hint text inside each party card (Borrower and Co-Borrower),
+  dynamically reflecting the currently-selected channel — this was initially missed (only the
+  backend logic was implemented in the same turn), caught when the user compared the real UI
+  against the earlier-approved mockup, then added.
+
+`tsc --noEmit` clean (frontend and backend), 890 backend tests passing. Verified via Docker
+rebuild + live UI check. Committed together with §10 as `60df0a0`.
+
+## 10. Dashboard: Loan Portfolio Health + Recommendation rearranged into a 2-column row
+
+User showed a reference screenshot (dark-themed 3-column dashboard layout from elsewhere) and,
+after iterating through several mockups, settled on: Loan Portfolio Health and Recommendation
+side-by-side in one row (not the original reference's 3-column dark theme — kept our own
+light/dark design system), with Recent System Activity staying full-width below, unchanged.
+
+Iterated the mockup several rounds based on feedback: added the Good (53) and Matured (1189)
+account counts inside their respective venn-diagram circles (already present in the real
+`LoanPortfolioVennDiagram` component — the mockup had just omitted them, nothing to fix in code);
+included the existing Good/In-Arrears/Matured explanation text and the Maintain/Protect the
+margin/Resolve recommendation body text (both already existed verbatim in
+`LoanPortfolioVennDiagram.tsx` and `PORTFOLIO_HEALTH_PLANS` respectively — again a mockup-fidelity
+gap, not a code change); tried and then explicitly rejected a "..." menu button and a
+scroll-with-chevron-to-expand treatment for the Recommendation card, settling on the full card
+always fully expanded, no truncation.
+
+**Implementation** (`DashboardPage.tsx`): wrapped the Loan Portfolio Health `Card` and the
+Recommendation `Card` in a new `grid gap-4 lg:grid-cols-2` container. Since the Recommendation
+card is now half-width instead of full-width, changed its inner `PORTFOLIO_HEALTH_PLANS` list from
+`grid gap-3 lg:grid-cols-3` (3 cards side-by-side) to `flex flex-col gap-3` (stacked vertically) —
+the only functional code change this section needed, since every other visual element the mockups
+showed already existed in the real components. Recent System Activity panel (`RecentSystemActivityPanel`,
+already a separate full-width component) was left untouched.
+
+`tsc --noEmit` clean. Verified via Docker rebuild + live UI check (`Ctrl+Shift+R`). Committed
+together with §9 as `60df0a0`.
+
+## Git: push conflict with a concurrent teammate push
+
+After committing §9/§10 (`60df0a0`), `git push` was rejected — another session had pushed 2
+unrelated commits (`7ca9750`, `f11af9d` — portal applicant-profile and Privacy Policy/Terms pages)
+to `origin/main` in the interim. Stashed this session's own pre-existing unrelated pending changes
+(a deleted legacy `.bat` file and some untracked legacy folders/PDF — present since before this
+session started, not part of this session's work) with `git stash push -u` before rebasing, per
+the "never run a history-rewriting command with uncommitted changes present" safety rule. `git
+pull --rebase origin main` replayed all 13 local commits cleanly on top of the 2 remote commits
+with zero conflicts (different code areas entirely). Restored the stash afterward (`git stash
+pop`) — unrelated changes are still sitting as pending, uncommitted local-only changes, exactly as
+they were before this session, untouched. Pushed successfully as `735d00c`.
+
+## Current state / open items for the next session
+
+- **OTP-follows-channel**: fully implemented, migrated, tested, committed, pushed. The "E-signature
+  Email" toggle in Settings is the master switch for both the email link-send AND the email OTP
+  send (they share the same `DryRunAwareEmailGateway` instance) — no separate OTP toggle exists,
+  by design.
+- **Dashboard 2-column layout**: shipped as described in §10. The unrelated pending legacy-file
+  changes (deleted `.bat`, untracked `templates-backup-preanchor/`, `legacy/Setup note only/`,
+  `Loan_Penalty_Computation_Reference.pdf`) are still sitting uncommitted in the working tree as of
+  this log — not part of this session's work, deliberately left alone; flag to the user next
+  session if they're still there and unexplained.
+- **Still open from earlier sessions, untouched today**: whether to widen Accrued Interest to
+  legacy/migrated loans; sidebar brand header redesign mockups; the SOA docx template's literal
+  `{PenaltyFromDate} / {PenaltyToDate}` copy (noted in the original §5 as unconditional across loan
+  types).
+- The full end-to-end email-link → OTP-by-email → sign flow (now that OTP follows channel) has not
+  yet been walked through live by the user as of this log — worth confirming next time e-signature
+  comes up.
