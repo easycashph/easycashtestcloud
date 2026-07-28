@@ -28,6 +28,7 @@ import type { LoanSigningSessionStatus } from '@/lib/loanSigningApiTypes';
 import type {
   AccruedInterestFigures,
   Borrower as RealBorrower,
+  CoBorrower,
   GeneratedStatementOfAccountListItem,
   InstallmentAdjustment,
   InterestRateChartEntry,
@@ -415,16 +416,35 @@ function LoanSigningPanel({
   loanId,
   loanCode,
   defaultPhoneNumber,
+  defaultCoBorrowerPhoneNumber,
+  borrowerEmail,
+  coBorrowerEmail,
   canSend,
 }: {
   loanId: string;
   loanCode: string;
   defaultPhoneNumber?: string;
+  defaultCoBorrowerPhoneNumber?: string;
+  /** 2026-07-28 (email delivery channel) - display-only, auto-read from the profile, never staff-entered (unlike the phone number boxes below). */
+  borrowerEmail?: string;
+  coBorrowerEmail?: string;
   canSend: boolean;
 }) {
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
-  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState('');
+  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(defaultCoBorrowerPhoneNumber ?? '');
+
+  // The co-borrower profile (and its phone number) is fetched by a separate query on the parent
+  // page and may resolve after this component's first render (borrower/co-borrower requests run in
+  // parallel, not guaranteed to finish in order) - sync the default in once it arrives, same as any
+  // other "fill from a slower-loading query" field. Does not overwrite whatever staff already typed.
+  const hasAppliedCoBorrowerDefault = React.useRef(false);
+  React.useEffect(() => {
+    if (hasAppliedCoBorrowerDefault.current) return;
+    if (!defaultCoBorrowerPhoneNumber) return;
+    hasAppliedCoBorrowerDefault.current = true;
+    setCoBorrowerPhoneNumber(defaultCoBorrowerPhoneNumber);
+  }, [defaultCoBorrowerPhoneNumber]);
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [signedDocPreview, setSignedDocPreview] = React.useState<LoanDocumentPreviewTarget | null>(null);
 
@@ -478,6 +498,40 @@ function LoanSigningPanel({
     },
   });
 
+  // 2026-07-28 (email delivery channel) - alternative to the SMS buttons above, added after
+  // confirming some Smart-network numbers silently filter link-containing SMS. The email address
+  // is auto-read from the profile server-side (see CreateLoanSigningSessionUseCase) - no
+  // phoneNumber is sent here, since staff never types the email in.
+  const sendViaEmailMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        partyType: 'BORROWER',
+        channel: 'EMAIL',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  const sendCoBorrowerViaEmailMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        partyType: 'CO_BORROWER',
+        channel: 'EMAIL',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
   if (!canSend) return null;
 
   return (
@@ -504,7 +558,15 @@ function LoanSigningPanel({
             <Input id="signing-phone" placeholder="09XX XXX XXXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
           </div>
           <Button onClick={() => sendMutation.mutate()} disabled={!phoneNumber.trim() || sendMutation.isPending}>
-            {sendMutation.isPending ? 'Sending…' : 'Send for signature'}
+            {sendMutation.isPending ? 'Sending…' : 'Send for Borrower signing'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => sendViaEmailMutation.mutate()}
+            disabled={!borrowerEmail || sendViaEmailMutation.isPending}
+            title={borrowerEmail ? `Send to ${borrowerEmail}` : 'No email on file for the borrower'}
+          >
+            {sendViaEmailMutation.isPending ? 'Sending…' : 'Send via Email'}
           </Button>
         </div>
 
@@ -521,11 +583,18 @@ function LoanSigningPanel({
             />
           </div>
           <Button
-            variant="outline"
             onClick={() => sendCoBorrowerMutation.mutate()}
             disabled={!coBorrowerPhoneNumber.trim() || sendCoBorrowerMutation.isPending}
           >
-            {sendCoBorrowerMutation.isPending ? 'Sending…' : 'Send for Co-Borrower Signing'}
+            {sendCoBorrowerMutation.isPending ? 'Sending…' : 'Send for Co-Borrower signing'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => sendCoBorrowerViaEmailMutation.mutate()}
+            disabled={!coBorrowerEmail || sendCoBorrowerViaEmailMutation.isPending}
+            title={coBorrowerEmail ? `Send to ${coBorrowerEmail}` : 'No email on file for the co-borrower'}
+          >
+            {sendCoBorrowerViaEmailMutation.isPending ? 'Sending…' : 'Send via Email'}
           </Button>
         </div>
 
@@ -1272,6 +1341,27 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<RealBorrower>(`/borrowers/${loan!.borrowerId}`),
     enabled: Boolean(loan?.borrowerId),
   });
+
+  // 2026-07-28 (e-signature default number) - lets LoanSigningPanel default-fill the co-borrower's
+  // signing box the same way it already does for the borrower's own box. Two DIFFERENT, non-
+  // overlapping linkage mechanisms exist in the live data (see the matching fix/comment in
+  // CreateLoanSigningSessionUseCase.ts): a per-LOAN join (`loan.coBorrowerIds`, what every
+  // CP12-migrated co-borrower uses) and a per-BORROWER direct attachment (`GET
+  // /borrowers/:id/co-borrowers`, what `CoBorrowersCard`'s "Add Co-Borrower" on Client Profile
+  // actually creates - ADR-015). Try the loan-level join first (specific to this exact loan), fall
+  // back to the client's directly-attached co-borrower if this loan has no join row.
+  const coBorrowerId = loan?.coBorrowerIds[0];
+  const coBorrowerByLoanQuery = useQuery({
+    queryKey: ['co-borrower', coBorrowerId],
+    queryFn: () => apiClient.get<CoBorrower>(`/co-borrowers/${coBorrowerId}`),
+    enabled: Boolean(coBorrowerId),
+  });
+  const coBorrowerByBorrowerQuery = useQuery({
+    queryKey: ['co-borrowers', loan?.borrowerId],
+    queryFn: () => apiClient.get<{ items: CoBorrower[] }>(`/borrowers/${loan!.borrowerId}/co-borrowers`),
+    enabled: Boolean(loan?.borrowerId) && !coBorrowerId,
+  });
+  const coBorrower = coBorrowerByLoanQuery.data ?? coBorrowerByBorrowerQuery.data?.items[0];
 
   const installmentsQuery = useQuery({
     queryKey: ['repayment-schedule', loanId],
@@ -2373,6 +2463,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               loanId={loan.id}
               loanCode={loan.loanCode}
               defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined}
+              defaultCoBorrowerPhoneNumber={coBorrower?.phoneNumber ?? undefined}
+              borrowerEmail={borrower?.email ?? undefined}
+              coBorrowerEmail={coBorrower?.emailAddress ?? undefined}
               canSend={canGenerateDocuments}
             />
           ),

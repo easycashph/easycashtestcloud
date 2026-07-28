@@ -6,8 +6,12 @@ export const createLoanSigningSessionSchema = z.object({
   // audit trail), but the phone number itself is always whatever staff types into the box, not
   // silently read from that profile - lets staff use a different/updated number per send without
   // first going to edit the CoBorrower record. See CreateLoanSigningSessionUseCase.
-  phoneNumber: z.string().min(1),
+  // 2026-07-28: optional now - only required for an SMS-channel send; an EMAIL-channel send
+  // auto-resolves both the email and the phone number (still needed for OTP) from the profile, so
+  // this is ignored if supplied. The use case itself validates presence for the SMS channel.
+  phoneNumber: z.string().min(1).optional(),
   partyType: z.enum(['BORROWER', 'CO_BORROWER']).default('BORROWER'),
+  channel: z.enum(['SMS', 'EMAIL']).default('SMS'),
 });
 export type CreateLoanSigningSessionRequestBody = z.infer<typeof createLoanSigningSessionSchema>;
 

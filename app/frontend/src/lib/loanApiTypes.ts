@@ -148,6 +148,8 @@ export interface LoanAccount {
   /** Non-null only for a CP12-migrated legacy loan. Drives "prospective vs migrated" branching
    * (e.g. live-computed vs manual-date-range Penalty on the Statement of Account, ADR-052 addendum). */
   legacyId: string | null;
+  /** Zero or one entry today (co-borrower is per-Borrower, ADR-015) - empty for a loan with no co-borrower. */
+  coBorrowerIds: string[];
 }
 
 export interface BorrowerIncomeDetail {

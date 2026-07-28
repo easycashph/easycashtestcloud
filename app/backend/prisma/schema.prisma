@@ -2199,6 +2199,12 @@ model ReminderSettings {
   /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
   /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
   signingSmsEnabled  Boolean  @default(false)
+  /// 2026-07-28 - e-signature signing-link EMAIL, as an alternative delivery channel to
+  /// signingSmsEnabled above - added after confirming some Smart-network numbers silently
+  /// filter/drop the signing-link SMS (link-containing messages specifically; a plain-text SMS to
+  /// the same number went through fine). Checked fresh on every send (DryRunAwareEmailGateway), no
+  /// server restart needed.
+  signingEmailEnabled Boolean @default(false)
   /// 2026-07-23 - Easycash Portal signup/password-reset OTP email. SEPARATE from emailEnabled
   /// above (payment reminders) and from staff 2FA (identity module's LoginUseCase/
   /// RequestTwoFactorSetupUseCase, which are NOT gated by this row at all - they keep using the

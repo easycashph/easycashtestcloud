@@ -248,6 +248,7 @@ import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/applicatio
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
 import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
 import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
+import { DryRunAwareEmailGateway } from '@modules/loan-signing/infrastructure/DryRunAwareEmailGateway';
 import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
 import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
 import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
@@ -741,6 +742,18 @@ export function createApp(): Express {
     }),
     new PrismaReminderSettingsRepository(),
   );
+  // 2026-07-28 (email delivery channel) - same dry-run-safety precedent as signingSmsGateway
+  // above, added after confirming some Smart-network numbers silently filter link-containing SMS.
+  const signingEmailGateway = new DryRunAwareEmailGateway(
+    new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SIGNING_SMTP_FROM_ADDRESS,
+    }),
+    new PrismaReminderSettingsRepository(),
+  );
   const loanSigningRouter = createLoanSigningRouter(
     {
       createLoanSigningSessionUseCase: new CreateLoanSigningSessionUseCase({
@@ -759,8 +772,10 @@ export function createApp(): Express {
           fileStorage: loanDocumentFileStorage,
         }),
         loanSigningSessionRepository,
+        borrowerRepository,
         coBorrowerRepository,
         smsGateway: signingSmsGateway,
+        emailGateway: signingEmailGateway,
       }),
       listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({
         loanSigningSessionRepository,

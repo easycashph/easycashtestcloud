@@ -4,6 +4,7 @@ export interface ReminderSettingsResponse {
   smsEnabled: boolean;
   emailEnabled: boolean;
   signingSmsEnabled: boolean;
+  signingEmailEnabled: boolean;
   portalEmailEnabled: boolean;
   portalSmsEnabled: boolean;
   updatedAt: string;
@@ -15,6 +16,7 @@ export function presentReminderSettings(settings: ReminderSettings): ReminderSet
     smsEnabled: settings.smsEnabled,
     emailEnabled: settings.emailEnabled,
     signingSmsEnabled: settings.signingSmsEnabled,
+    signingEmailEnabled: settings.signingEmailEnabled,
     portalEmailEnabled: settings.portalEmailEnabled,
     portalSmsEnabled: settings.portalSmsEnabled,
     updatedAt: settings.updatedAt.toISOString(),

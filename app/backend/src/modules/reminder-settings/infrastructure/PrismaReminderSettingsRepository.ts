@@ -7,6 +7,7 @@ function toDomain(row: {
   smsEnabled: boolean;
   emailEnabled: boolean;
   signingSmsEnabled: boolean;
+  signingEmailEnabled: boolean;
   portalEmailEnabled: boolean;
   portalSmsEnabled: boolean;
   updatedAt: Date;
@@ -16,6 +17,7 @@ function toDomain(row: {
     smsEnabled: row.smsEnabled,
     emailEnabled: row.emailEnabled,
     signingSmsEnabled: row.signingSmsEnabled,
+    signingEmailEnabled: row.signingEmailEnabled,
     portalEmailEnabled: row.portalEmailEnabled,
     portalSmsEnabled: row.portalSmsEnabled,
     updatedAt: row.updatedAt,
@@ -41,6 +43,7 @@ export class PrismaReminderSettingsRepository implements IReminderSettingsReposi
         smsEnabled: input.smsEnabled ?? false,
         emailEnabled: input.emailEnabled ?? false,
         signingSmsEnabled: input.signingSmsEnabled ?? false,
+        signingEmailEnabled: input.signingEmailEnabled ?? false,
         portalEmailEnabled: input.portalEmailEnabled ?? false,
         portalSmsEnabled: input.portalSmsEnabled ?? false,
         updatedByUserId: input.updatedByUserId,
@@ -49,6 +52,7 @@ export class PrismaReminderSettingsRepository implements IReminderSettingsReposi
         ...(input.smsEnabled !== undefined ? { smsEnabled: input.smsEnabled } : {}),
         ...(input.emailEnabled !== undefined ? { emailEnabled: input.emailEnabled } : {}),
         ...(input.signingSmsEnabled !== undefined ? { signingSmsEnabled: input.signingSmsEnabled } : {}),
+        ...(input.signingEmailEnabled !== undefined ? { signingEmailEnabled: input.signingEmailEnabled } : {}),
         ...(input.portalEmailEnabled !== undefined ? { portalEmailEnabled: input.portalEmailEnabled } : {}),
         ...(input.portalSmsEnabled !== undefined ? { portalSmsEnabled: input.portalSmsEnabled } : {}),
         updatedByUserId: input.updatedByUserId,

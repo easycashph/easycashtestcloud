@@ -91,6 +91,13 @@ const envSchema = z.object({
   SMTP_USERNAME: z.string().optional(), // the real mailbox's own login, NOT the Send As alias
   SMTP_PASSWORD: z.string().optional(), // Gmail App Password
   SMTP_FROM_ADDRESS: z.string().default('collections@easycash.ph'),
+
+  // E-signature emails (2026-07-28) - a SEPARATE "From" address from the payment-reminders one
+  // above, since collections@easycash.ph reads as a collections/payment-reminder mailbox, not
+  // signing links/OTP codes. Same Google Workspace SMTP credentials (SMTP_USERNAME/PASSWORD) -
+  // this must already be a verified "Send As" alias on that mailbox, or Gmail/Workspace will
+  // reject or silently rewrite the From header (see NodemailerEmailGateway's own doc comment).
+  SIGNING_SMTP_FROM_ADDRESS: z.string().default('esignature@easycash.ph'),
 });
 
 export type Env = z.infer<typeof envSchema> & {

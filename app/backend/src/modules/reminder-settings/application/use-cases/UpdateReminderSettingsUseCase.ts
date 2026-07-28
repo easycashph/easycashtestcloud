@@ -4,6 +4,7 @@ export interface UpdateReminderSettingsCommand {
   smsEnabled?: boolean;
   emailEnabled?: boolean;
   signingSmsEnabled?: boolean;
+  signingEmailEnabled?: boolean;
   portalEmailEnabled?: boolean;
   portalSmsEnabled?: boolean;
   updatedByUserId: string;

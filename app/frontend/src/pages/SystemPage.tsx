@@ -43,6 +43,7 @@ function ReminderSettingsCard() {
       smsEnabled?: boolean;
       emailEnabled?: boolean;
       signingSmsEnabled?: boolean;
+      signingEmailEnabled?: boolean;
       portalEmailEnabled?: boolean;
       portalSmsEnabled?: boolean;
     }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
@@ -130,6 +131,23 @@ function ReminderSettingsCard() {
               disabled={settingsQuery.isLoading || updateMutation.isPending}
               onCheckedChange={(checked) => updateMutation.mutate({ signingSmsEnabled: checked })}
               aria-label="Toggle e-signature SMS"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">E-signature Email</p>
+            <p className="text-xs text-muted-foreground">
+              Alternative to E-signature SMS above - some Smart-network numbers silently filter link-containing SMS.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.signingEmailEnabled ? 'success' : 'warning'}>{settings?.signingEmailEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.signingEmailEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ signingEmailEnabled: checked })}
+              aria-label="Toggle e-signature email"
             />
           </div>
         </div>
