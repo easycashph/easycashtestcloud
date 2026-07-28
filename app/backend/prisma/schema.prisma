@@ -1647,6 +1647,12 @@ model LoanSigningSession {
   /// Where the SMS link and OTP are sent - captured at send time, not re-read from the borrower
   /// record later, so a later profile edit can't silently redirect an in-flight signing session.
   phoneNumber String
+  /// 2026-07-28: which channel delivered the link - the OTP (via RequestSigningOtpUseCase) follows
+  /// this SAME channel, so a link sent by email also gets its OTP by email. Defaults to SMS to
+  /// match every session created before this field existed.
+  channel String  @default("SMS")
+  /// Set only when channel=EMAIL - captured at send time for the same reason as phoneNumber above.
+  email   String?
   tokenHash   String    @unique
   expiresAt   DateTime
   revokedAt   DateTime?

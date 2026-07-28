@@ -20,12 +20,20 @@ export interface SigningDocumentEntry {
 
 export type SigningPartyType = 'BORROWER' | 'CO_BORROWER';
 
+/** 2026-07-28 - which channel delivers the link. The OTP (see `RequestSigningOtpUseCase`) always
+ * follows this SAME channel - a link sent by email gets its OTP by email too - rather than being
+ * an independent toggle, since a number that can't receive the link (telco link-filtering) likely
+ * can't receive an OTP SMS either for the same reason. */
+export type SigningLinkChannel = 'SMS' | 'EMAIL';
+
 export interface LoanSigningSessionProps {
   id: string;
   loanAccountId: string;
   partyType: SigningPartyType;
   coBorrowerId?: string;
   phoneNumber: string;
+  channel: SigningLinkChannel;
+  email?: string;
   tokenHash: string;
   expiresAt: Date;
   revokedAt?: Date;
@@ -43,6 +51,8 @@ export interface CreateLoanSigningSessionProps {
   partyType: SigningPartyType;
   coBorrowerId?: string;
   phoneNumber: string;
+  channel: SigningLinkChannel;
+  email?: string;
   tokenHash: string;
   expiresAt: Date;
   createdByUserId: string;
@@ -66,6 +76,8 @@ export class LoanSigningSession {
       partyType: input.partyType,
       coBorrowerId: input.coBorrowerId,
       phoneNumber: input.phoneNumber,
+      channel: input.channel,
+      email: input.email,
       tokenHash: input.tokenHash,
       expiresAt: input.expiresAt,
       createdByUserId: input.createdByUserId,
@@ -101,6 +113,14 @@ export class LoanSigningSession {
 
   get phoneNumber(): string {
     return this.props.phoneNumber;
+  }
+
+  get channel(): SigningLinkChannel {
+    return this.props.channel;
+  }
+
+  get email(): string | undefined {
+    return this.props.email;
   }
 
   get tokenHash(): string {

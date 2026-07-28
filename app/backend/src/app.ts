@@ -792,7 +792,7 @@ export function createApp(): Express {
   app.use('/api/v1', loanSigningRouter);
 
   const publicLoanSigningRouter = createPublicLoanSigningRouter({
-    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway }),
+    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway, emailGateway: signingEmailGateway }),
     verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository }),
     getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({
       loanSigningSessionRepository,

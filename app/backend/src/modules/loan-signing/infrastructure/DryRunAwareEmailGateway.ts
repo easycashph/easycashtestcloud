@@ -15,12 +15,12 @@ export class DryRunAwareEmailGateway implements IEmailGateway {
     private readonly reminderSettingsRepository: IReminderSettingsRepository,
   ) {}
 
-  async send(to: string, subject: string, body: string): Promise<void> {
+  async send(to: string, subject: string, body: string, html?: string): Promise<void> {
     const settings = await this.reminderSettingsRepository.get();
     if (!settings.signingEmailEnabled) {
       logger.info({ to, subject, body }, '[DRY RUN] signingEmailEnabled=false - would have sent this email, no real message was sent.');
       return;
     }
-    await this.real.send(to, subject, body);
+    await this.real.send(to, subject, body, html);
   }
 }

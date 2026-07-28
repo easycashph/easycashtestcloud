@@ -9,7 +9,7 @@ import type { ISmsGateway } from '@modules/sms-reminder/application/ports/ISmsGa
 import type { IEmailGateway } from '@modules/email-reminder/application/ports/IEmailGateway';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
-import { LoanSigningSession, type SigningPartyType } from '../../domain/LoanSigningSession';
+import { LoanSigningSession, type SigningPartyType, type SigningLinkChannel } from '../../domain/LoanSigningSession';
 import {
   NoCoBorrowerLinkedError,
   NoDocumentsForPartyError,
@@ -22,10 +22,25 @@ import { generateSigningToken, hashSigningSecret } from '../../infrastructure/si
 
 const SESSION_TTL_DAYS = 7;
 
-/** 2026-07-28 - which channel delivers the signing link. OTP verification always stays on SMS
- * regardless (it's a plain numeric code, unaffected by the link-filtering that motivated this
- * channel choice in the first place) - only the initial link-send needs an alternative. */
-export type SigningLinkChannel = 'SMS' | 'EMAIL';
+/**
+ * 2026-07-28 (user-requested) - HTML version of the signing-link email, with a styled button
+ * instead of a raw pasted URL. Inline styles only (email clients strip `<style>` blocks and don't
+ * support flexbox/grid) - table-free since the content is simple enough not to need it. The
+ * plain-text `body` passed alongside this to `IEmailGateway.send()` remains the fallback for
+ * clients that don't render HTML.
+ */
+function buildSigningEmailHtml(params: { partyLabel: string; documentCount: number; signingUrl: string; ttlDays: number }): string {
+  return `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 480px; margin: 0 auto; color: #1f2937;">
+  <p style="font-size: 16px; line-height: 1.6;">Hi! Please review and sign ${params.documentCount} loan document(s)${params.partyLabel} for your Easycash loan.</p>
+  <p style="text-align: center; margin: 32px 0;">
+    <a href="${params.signingUrl}" style="display: inline-block; padding: 14px 28px; background-color: #0f766e; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px;">Review and Sign Documents</a>
+  </p>
+  <p style="font-size: 13px; color: #6b7280; line-height: 1.6;">This link expires in ${params.ttlDays} days. If the button above doesn't work, copy and paste this address into your browser:<br />${params.signingUrl}</p>
+  <p style="font-size: 13px; color: #6b7280; margin-top: 24px;">Easycash Lending Company Inc.</p>
+</div>`;
+}
+
+export type { SigningLinkChannel };
 
 export interface CreateLoanSigningSessionUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
@@ -62,9 +77,11 @@ export interface CreateLoanSigningSessionUseCaseDeps {
  * 2026-07-28 (email delivery channel): `channel` picks which channel delivers the INITIAL LINK -
  * added after confirming some Smart-network numbers silently filter/drop link-containing SMS (a
  * plain-text SMS to the same number went through fine). For `channel: 'EMAIL'`, both the email
- * address AND the phone number (still needed for OTP - see `SigningLinkChannel`'s own doc comment)
- * are auto-read from the party's profile, NOT staff-entered - `phoneNumber` is ignored when
- * supplied for an EMAIL-channel send.
+ * address AND the phone number are auto-read from the party's profile, NOT staff-entered -
+ * `phoneNumber` is ignored when supplied for an EMAIL-channel send. The OTP (`RequestSigningOtpUseCase`)
+ * follows this SAME channel (see `SigningLinkChannel`'s own doc comment in the domain module) -
+ * the phone number is still captured here even for EMAIL so the session record keeps it for audit
+ * purposes, but it is no longer used to deliver the OTP for an EMAIL-channel session.
  */
 export class CreateLoanSigningSessionUseCase {
   constructor(private readonly deps: CreateLoanSigningSessionUseCaseDeps) {}
@@ -157,6 +174,8 @@ export class CreateLoanSigningSessionUseCase {
       partyType,
       coBorrowerId,
       phoneNumber: recipientPhoneNumber,
+      channel,
+      email: recipientEmail,
       tokenHash,
       expiresAt,
       createdByUserId,
@@ -167,17 +186,18 @@ export class CreateLoanSigningSessionUseCase {
 
     const signingUrl = `${env.CORS_ORIGIN}/sign/${rawToken}`;
     const partyLabel = partyType === 'CO_BORROWER' ? ' (co-borrower)' : '';
+    // 2026-07-28 (user-picked wording, option 3): "Hi! Please review and sign..." - used for both
+    // the SMS message and the plain-text email fallback, kept identical across channels.
+    const messageBody = `Hi! Please review and sign ${documents.length} loan document(s)${partyLabel} for your Easycash loan: ${signingUrl} - valid for ${SESSION_TTL_DAYS} days.`;
     if (channel === 'EMAIL') {
       await this.deps.emailGateway.send(
         recipientEmail!,
         'Easycash: Please review and sign your loan document(s)',
-        `Please review and sign your loan document(s)${partyLabel} (${documents.length} in total) here: ${signingUrl} - link expires in ${SESSION_TTL_DAYS} days.`,
+        messageBody,
+        buildSigningEmailHtml({ partyLabel, documentCount: documents.length, signingUrl, ttlDays: SESSION_TTL_DAYS }),
       );
     } else {
-      await this.deps.smsGateway.send(
-        recipientPhoneNumber,
-        `Easycash: Please review and sign your loan document(s)${partyLabel} (${documents.length} in total) here: ${signingUrl} - link expires in ${SESSION_TTL_DAYS} days.`,
-      );
+      await this.deps.smsGateway.send(recipientPhoneNumber, messageBody);
     }
 
     return { session, rawToken };

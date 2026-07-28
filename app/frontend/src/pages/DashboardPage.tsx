@@ -1298,6 +1298,7 @@ export function DashboardPage() {
         </CardContent>
       </Card>
 
+      <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>{t('dashboard.portfolioHealth.title')}</CardTitle>
@@ -1327,7 +1328,7 @@ export function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="flex flex-col gap-3">
             {PORTFOLIO_HEALTH_PLANS.map((plan) => {
               const segmentCount = filteredPortfolioHealth[plan.key as 'good' | 'activeInArrears' | 'matured'].count;
               return (
@@ -1352,6 +1353,7 @@ export function DashboardPage() {
           </p>
         </CardContent>
       </Card>
+      </div>
 
       <LoanDrillDownDialog drillDown={drillDown} onClose={() => setDrillDown(null)} />
 

@@ -14,12 +14,14 @@ import {
   Download,
   Eye,
   FileCheck2,
+  Globe2,
   Info,
   Mail,
   MessageSquareText,
   Lock,
   MoreHorizontal,
   Receipt,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
@@ -412,11 +414,22 @@ function emailReminderStatusText(log: EmailReminderLog): string {
  * (generating any not already on file) as one batch, one SMS link, one OTP verification covering
  * the whole client visit. See `docs/Claude_API_Cost_Reference.docx`-adjacent design discussion -
  * this is unrelated to that AI feature, just noting the same session's design-first pattern. */
+/** First-letter-of-first-two-words initials for the party avatar (e.g. "Juan Dela Cruz" -> "JD"); falls back to a generic 2-letter tag when no name is on file yet. */
+function partyInitials(name: string | undefined, fallback: string): string {
+  if (!name) return fallback;
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || fallback;
+}
+
+type SigningChannel = 'SMS' | 'EMAIL';
+
 function LoanSigningPanel({
   loanId,
   loanCode,
   defaultPhoneNumber,
   defaultCoBorrowerPhoneNumber,
+  borrowerName,
+  coBorrowerName,
   borrowerEmail,
   coBorrowerEmail,
   canSend,
@@ -425,6 +438,8 @@ function LoanSigningPanel({
   loanCode: string;
   defaultPhoneNumber?: string;
   defaultCoBorrowerPhoneNumber?: string;
+  borrowerName?: string;
+  coBorrowerName?: string;
   /** 2026-07-28 (email delivery channel) - display-only, auto-read from the profile, never staff-entered (unlike the phone number boxes below). */
   borrowerEmail?: string;
   coBorrowerEmail?: string;
@@ -433,6 +448,8 @@ function LoanSigningPanel({
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
   const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(defaultCoBorrowerPhoneNumber ?? '');
+  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('SMS');
+  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('SMS');
 
   // The co-borrower profile (and its phone number) is fetched by a separate query on the parent
   // page and may resolve after this component's first render (borrower/co-borrower requests run in
@@ -534,13 +551,18 @@ function LoanSigningPanel({
 
   if (!canSend) return null;
 
+  const borrowerSendMutation = borrowerChannel === 'EMAIL' ? sendViaEmailMutation : sendMutation;
+  const coBorrowerSendMutation = coBorrowerChannel === 'EMAIL' ? sendCoBorrowerViaEmailMutation : sendCoBorrowerMutation;
+  const borrowerCanSend = borrowerChannel === 'EMAIL' ? Boolean(borrowerEmail) : Boolean(phoneNumber.trim());
+  const coBorrowerCanSend = coBorrowerChannel === 'EMAIL' ? Boolean(coBorrowerEmail) : Boolean(coBorrowerPhoneNumber.trim());
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>E-signature</CardTitle>
         <CardDescription>
-          Send this loan's applicable documents (required plus any conditional on its product) to the client for signature via SMS - one
-          link, one code, every document signed in the same visit.
+          Send this loan's applicable documents to each party for signature - one link, one code, every document signed in the same
+          visit.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -550,52 +572,144 @@ function LoanSigningPanel({
             <span>{sendError}</span>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="signing-phone" className="text-xs">
-              Client mobile number
-            </Label>
-            <Input id="signing-phone" placeholder="09XX XXX XXXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border p-3">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+              {partyInitials(borrowerName, 'B')}
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-tight">Borrower</p>
+              {borrowerName && <p className="text-xs text-muted-foreground">{borrowerName}</p>}
+            </div>
           </div>
-          <Button onClick={() => sendMutation.mutate()} disabled={!phoneNumber.trim() || sendMutation.isPending}>
-            {sendMutation.isPending ? 'Sending…' : 'Send for Borrower signing'}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => sendViaEmailMutation.mutate()}
-            disabled={!borrowerEmail || sendViaEmailMutation.isPending}
-            title={borrowerEmail ? `Send to ${borrowerEmail}` : 'No email on file for the borrower'}
-          >
-            {sendViaEmailMutation.isPending ? 'Sending…' : 'Send via Email'}
+          {borrowerChannel === 'SMS' ? (
+            <Input
+              placeholder="09XX XXX XXXX"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className="mb-2.5"
+              aria-label="Borrower mobile number"
+            />
+          ) : (
+            <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              {borrowerEmail ?? 'No email on file for the borrower'}
+            </p>
+          )}
+          <div className="mb-2.5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setBorrowerChannel('SMS')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                borrowerChannel === 'SMS' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <MessageSquareText className={cn('h-4 w-4', borrowerChannel === 'SMS' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', borrowerChannel === 'SMS' && 'text-primary')}>SMS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBorrowerChannel('EMAIL')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                borrowerChannel === 'EMAIL' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <Mail className={cn('h-4 w-4', borrowerChannel === 'EMAIL' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', borrowerChannel === 'EMAIL' && 'text-primary')}>Email</span>
+            </button>
+            <button type="button" disabled className="relative flex cursor-not-allowed flex-col items-center gap-1 rounded-md border p-2 opacity-50">
+              <Badge variant="warning" className="absolute -right-1.5 -top-2 px-1.5 py-0 text-[9px]">
+                Soon
+              </Badge>
+              <Globe2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Portal</span>
+            </button>
+          </div>
+          <div className="mb-2.5 flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              OTP verification will also be sent via <span className="font-medium text-foreground">{borrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> —
+              same channel as the link
+            </p>
+          </div>
+          <Button className="w-full" onClick={() => borrowerSendMutation.mutate()} disabled={!borrowerCanSend || borrowerSendMutation.isPending}>
+            {borrowerSendMutation.isPending ? 'Sending…' : `Send via ${borrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
           </Button>
         </div>
 
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="co-borrower-signing-phone" className="text-xs">
-              Co-borrower mobile number
-            </Label>
+        <div className="rounded-md border p-3">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium">
+              {partyInitials(coBorrowerName, 'CB')}
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-tight">Co-borrower</p>
+              {coBorrowerName && <p className="text-xs text-muted-foreground">{coBorrowerName}</p>}
+            </div>
+          </div>
+          {coBorrowerChannel === 'SMS' ? (
             <Input
-              id="co-borrower-signing-phone"
               placeholder="09XX XXX XXXX"
               value={coBorrowerPhoneNumber}
               onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
+              className="mb-2.5"
+              aria-label="Co-borrower mobile number"
             />
+          ) : (
+            <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              {coBorrowerEmail ?? 'No email on file for the co-borrower'}
+            </p>
+          )}
+          <div className="mb-2.5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setCoBorrowerChannel('SMS')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                coBorrowerChannel === 'SMS' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <MessageSquareText className={cn('h-4 w-4', coBorrowerChannel === 'SMS' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', coBorrowerChannel === 'SMS' && 'text-primary')}>SMS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoBorrowerChannel('EMAIL')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                coBorrowerChannel === 'EMAIL' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <Mail className={cn('h-4 w-4', coBorrowerChannel === 'EMAIL' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', coBorrowerChannel === 'EMAIL' && 'text-primary')}>Email</span>
+            </button>
+            <button type="button" disabled className="relative flex cursor-not-allowed flex-col items-center gap-1 rounded-md border p-2 opacity-50">
+              <Badge variant="warning" className="absolute -right-1.5 -top-2 px-1.5 py-0 text-[9px]">
+                Soon
+              </Badge>
+              <Globe2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Portal</span>
+            </button>
+          </div>
+          <div className="mb-2.5 flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              OTP verification will also be sent via{' '}
+              <span className="font-medium text-foreground">{coBorrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> — same channel as
+              the link
+            </p>
           </div>
           <Button
-            onClick={() => sendCoBorrowerMutation.mutate()}
-            disabled={!coBorrowerPhoneNumber.trim() || sendCoBorrowerMutation.isPending}
+            className="w-full"
+            onClick={() => coBorrowerSendMutation.mutate()}
+            disabled={!coBorrowerCanSend || coBorrowerSendMutation.isPending}
           >
-            {sendCoBorrowerMutation.isPending ? 'Sending…' : 'Send for Co-Borrower signing'}
+            {coBorrowerSendMutation.isPending ? 'Sending…' : `Send via ${coBorrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => sendCoBorrowerViaEmailMutation.mutate()}
-            disabled={!coBorrowerEmail || sendCoBorrowerViaEmailMutation.isPending}
-            title={coBorrowerEmail ? `Send to ${coBorrowerEmail}` : 'No email on file for the co-borrower'}
-          >
-            {sendCoBorrowerViaEmailMutation.isPending ? 'Sending…' : 'Send via Email'}
-          </Button>
+        </div>
         </div>
 
         {sessionsQuery.isLoading ? (
@@ -2464,6 +2578,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               loanCode={loan.loanCode}
               defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined}
               defaultCoBorrowerPhoneNumber={coBorrower?.phoneNumber ?? undefined}
+              borrowerName={borrower?.fullName}
+              coBorrowerName={coBorrower?.fullName}
               borrowerEmail={borrower?.email ?? undefined}
               coBorrowerEmail={coBorrower?.emailAddress ?? undefined}
               canSend={canGenerateDocuments}
