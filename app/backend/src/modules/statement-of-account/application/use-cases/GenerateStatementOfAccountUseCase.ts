@@ -30,8 +30,14 @@ export interface GenerateStatementOfAccountUseCaseDeps {
 
 export interface GenerateStatementOfAccountInput {
   loanAccountId: string;
-  /** Manually-entered date range applied uniformly across every Past Due installment for the Penalty computation (2026-07-19, user request — see `StatementOfAccountCalculator`'s own doc comment). */
-  penaltyFromDate: Date;
+  /**
+   * Manually-entered date range applied uniformly across every Past Due installment for the
+   * Penalty computation (2026-07-19, user request — see `StatementOfAccountCalculator`'s own doc
+   * comment). 2026-07-28: only required for a migrated loan now — a prospective loan's Penalty
+   * line is live-computed (`ADR-050` via `resolveComputedPenalty`) and ignores this entirely; the
+   * resolver validates presence for a migrated loan and throws if omitted.
+   */
+  penaltyFromDate?: Date;
   penaltyToDate: Date;
   /** Manually-entered "as of" date for the Accrued Interest figure — independent of the Penalty range. */
   accruedInterestAsOfDate: Date;
@@ -59,7 +65,7 @@ export class GenerateStatementOfAccountUseCase {
     const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber(input.loanAccountId)) + 1;
     const statementDate = new Date();
     const soaNumber = formatSoaNumber(soaSequenceNumber, statementDate);
-    const { mergeData, figures } = await this.deps.mergeDataResolver.resolve(
+    const { mergeData, figures, effectivePenaltyFromDate } = await this.deps.mergeDataResolver.resolve(
       input.loanAccountId,
       soaNumber,
       statementDate,
@@ -84,7 +90,7 @@ export class GenerateStatementOfAccountUseCase {
     const statement = GeneratedStatementOfAccount.create({
       loanAccountId: input.loanAccountId,
       soaSequenceNumber,
-      penaltyFromDate: input.penaltyFromDate,
+      penaltyFromDate: effectivePenaltyFromDate,
       penaltyToDate: input.penaltyToDate,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
       currentAmortizationDue: figures.currentAmortizationDue,

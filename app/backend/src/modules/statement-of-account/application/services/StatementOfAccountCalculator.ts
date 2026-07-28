@@ -2,6 +2,7 @@ import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
+import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 
 /** Same ₱10,000 threshold as ADR-050, but applied per-installment here (2026-07-19, user request) rather than against the whole loan's principal. */
 const SMALL_BALANCE_THRESHOLD = Money.of('10000.00');
@@ -79,14 +80,24 @@ function daysBetween(from: Date, to: Date): number {
  * Collection Fee and Other Fee are NOT computed here — confirmed (per the same legacy tool's
  * `txtCollectionFee`/`txtotherfee` manual text boxes) to be staff-entered per generation, so the
  * caller supplies them directly when persisting/merging (see `GenerateStatementOfAccountUseCase`).
+ *
+ * **2026-07-28 (user-confirmed, ADR-052 addendum):** for a PROSPECTIVE (non-migrated) loan, the
+ * Penalty figure no longer uses the flat/shared-date-range formula described above at all — it
+ * calls `resolveComputedPenalty()` per qualifying installment instead, the exact same function the
+ * live Repayment Schedule uses (`ADR-050`), so Live and SOA are identical by construction rather
+ * than two independently-maintained formulas. Pass `livePenaltyContext` to opt into this path;
+ * `penaltyFromDate` is then ignored entirely (each installment supplies its own due date
+ * automatically). Migrated loans (no `livePenaltyContext`) keep the flat/shared-range formula
+ * exactly as before — `resolveComputedPenalty` has no live figure for them anyway.
  */
 export class StatementOfAccountCalculator {
   static calculate(
     installments: RepaymentInstallment[],
     contractualRate: Percentage | undefined,
-    penaltyFromDate: Date,
+    penaltyFromDate: Date | undefined,
     penaltyToDate: Date,
     accruedInterestAsOfDate: Date,
+    livePenaltyContext?: PenaltyComputationContext,
   ): StatementOfAccountFigures {
     const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sorted[sorted.length - 1];
@@ -95,7 +106,7 @@ export class StatementOfAccountCalculator {
     const outstandingInterest = (i: RepaymentInstallment) => i.due.interest.subtract(i.paid.interest);
     const outstandingBase = (i: RepaymentInstallment) => outstandingPrincipal(i).add(outstandingInterest(i));
 
-    const penaltyDays = daysBetween(penaltyFromDate, penaltyToDate);
+    const penaltyDays = livePenaltyContext || !penaltyFromDate ? 0 : daysBetween(penaltyFromDate, penaltyToDate);
 
     let pastDuePrincipal = Money.ZERO;
     let pastDueInterest = Money.ZERO;
@@ -111,7 +122,9 @@ export class StatementOfAccountCalculator {
       if (unpaidPrincipal.isPositive()) pastDuePrincipal = pastDuePrincipal.add(unpaidPrincipal);
       if (unpaidInterest.isPositive()) pastDueInterest = pastDueInterest.add(unpaidInterest);
 
-      if (penaltyDays > 0) {
+      if (livePenaltyContext) {
+        pastDuePenalty = pastDuePenalty.add(resolveComputedPenalty(installment, livePenaltyContext, penaltyToDate));
+      } else if (penaltyDays > 0) {
         const rate = unpaidBase.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
         const rowPenalty = Money.of(
           unpaidBase.toDecimal().times(penaltyDays).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),

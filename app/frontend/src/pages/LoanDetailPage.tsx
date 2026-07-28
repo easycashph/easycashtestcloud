@@ -14,6 +14,7 @@ import {
   Download,
   Eye,
   FileCheck2,
+  Info,
   Mail,
   MessageSquareText,
   Lock,
@@ -1391,6 +1392,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // the Penalty/Accrued Interest figures live as they adjust dates, before generating. The backend
   // is still the source of truth for the actual PDF/persisted record; this preview reuses the
   // already-loaded `installments` (same data as the Repayment Schedule table above).
+  //
+  // 2026-07-28 (ADR-052 addendum, user-confirmed): for a PROSPECTIVE (non-migrated) loan, Penalty
+  // is no longer the flat/shared-date-range formula below - it mirrors `resolveComputedPenalty`
+  // (ADR-050, daily-prorated, no grace period, due-month-day-count divisor, capped at the loan's
+  // maturity date), the exact same figure shown on the live Repayment Schedule. A migrated loan
+  // keeps the original flat formula unchanged (it has no live penalty on file to reuse).
+  const isProspectiveLoan = !loan?.legacyId;
   const soaPreview = React.useMemo(() => {
     const parseNum = (v: string | null | undefined) => Number.parseFloat(v ?? '') || 0;
     const toDate = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -1399,10 +1407,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     const accruedTo = toDate(soaAccruedInterestAsOfDate);
     const daysBetween = (from: Date, to: Date) =>
       Math.max(0, Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86_400_000));
-    const penaltyDays = daysBetween(penaltyFrom, penaltyTo);
+    const daysInMonth = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    const penaltyDays = isProspectiveLoan ? 0 : daysBetween(penaltyFrom, penaltyTo);
 
     const previewInstallments = installmentsQuery.data?.items ?? [];
     const sorted = [...previewInstallments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+
+    const lastInstallment = sorted[sorted.length - 1];
+    const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
+    const loanPrincipal = parseNum(loanQuery.data?.principalAmount);
+    const loanRate = loanPrincipal > 10000 ? 0.1 : 0.05; // ADR-050 tiering: whole loan's principal, not per-installment.
+
     let pastDuePrincipal = 0;
     let pastDueInterest = 0;
     let pastDuePenalty = 0;
@@ -1414,7 +1429,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       if (unpaidBase <= 0) continue;
       if (unpaidPrincipal > 0) pastDuePrincipal += unpaidPrincipal;
       if (unpaidInterest > 0) pastDueInterest += unpaidInterest;
-      if (penaltyDays > 0) {
+
+      if (isProspectiveLoan) {
+        const effectiveAsOf = maturityDate && penaltyTo.getTime() > maturityDate.getTime() ? maturityDate : penaltyTo;
+        const daysLate = daysBetween(new Date(inst.dueDate), effectiveAsOf);
+        if (daysLate > 0) {
+          pastDuePenalty += Math.round(((unpaidBase * loanRate) / daysInMonth(new Date(inst.dueDate))) * daysLate * 100) / 100;
+        }
+      } else if (penaltyDays > 0) {
         const rate = unpaidBase > 10000 ? 0.1 : 0.05;
         pastDuePenalty += Math.round(((unpaidBase * penaltyDays * rate) / 30) * 100) / 100;
       }
@@ -1436,8 +1458,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // PN Amount = Principal + Interest summed across the whole original schedule (not just unpaid).
     const pnValue = sorted.reduce((sum, inst) => sum + parseNum(inst.due.principal) + parseNum(inst.due.interest), 0);
 
-    const lastInstallment = sorted[sorted.length - 1];
-    const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
     // Account must actually be matured (real "today" past the Maturity Date), not just the picked
     // date — Accrued Interest is only applicable once the loan itself has matured.
     const isMatured = maturityDate ? maturityDate.getTime() <= Date.now() : false;
@@ -1467,14 +1487,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       accruedInterest,
       totalAmountDue,
     };
-  }, [installmentsQuery.data, loanQuery.data, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
+  }, [installmentsQuery.data, loanQuery.data, isProspectiveLoan, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
 
   const generateStatementMutation = useMutation({
     mutationFn: () =>
       apiClient.post(
         `/loan-accounts/${loanId}/statements-of-account`,
         {
-          penaltyFromDate: soaPenaltyFromDate,
+          // Only a migrated loan needs a manual From date - a prospective loan's Penalty is
+          // live-computed and ignores it entirely (ADR-052 addendum, 2026-07-28).
+          ...(isProspectiveLoan ? {} : { penaltyFromDate: soaPenaltyFromDate }),
           penaltyToDate: soaPenaltyToDate,
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
           collectionFee: soaCollectionFee,
@@ -2489,38 +2511,64 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               </div>
             </div>
             <div className="rounded-md bg-secondary/40 p-3">
-              <p className="mb-2 text-sm font-medium">Penalty (daily computation)</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="soa-penalty-from-date">From date</Label>
-                  <Input
-                    id="soa-penalty-from-date"
-                    type="date"
-                    value={soaPenaltyFromDate}
-                    onChange={(e) => setSoaPenaltyFromDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="soa-penalty-to-date">To date</Label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-sm font-medium">Penalty</p>
+                {isProspectiveLoan && <Badge variant="success">Live computed</Badge>}
+              </div>
+              {isProspectiveLoan ? (
+                <>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Same figure shown on this loan's Repayment Schedule - computed as of the date below.
+                  </p>
+                  <Label htmlFor="soa-penalty-to-date">As of date</Label>
                   <Input
                     id="soa-penalty-to-date"
                     type="date"
                     value={soaPenaltyToDate}
                     onChange={(e) => setSoaPenaltyToDate(e.target.value)}
                   />
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Days</p>
-                  <p className="font-medium">{soaPreview.penaltyDays}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Penalty amount</p>
-                  <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.</p>
+                  <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
+                    <p className="text-muted-foreground">Past due penalty</p>
+                    <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="soa-penalty-from-date">From date</Label>
+                      <Input
+                        id="soa-penalty-from-date"
+                        type="date"
+                        value={soaPenaltyFromDate}
+                        onChange={(e) => setSoaPenaltyFromDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="soa-penalty-to-date">To date</Label>
+                      <Input
+                        id="soa-penalty-to-date"
+                        type="date"
+                        value={soaPenaltyToDate}
+                        onChange={(e) => setSoaPenaltyToDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Days</p>
+                      <p className="font-medium">{soaPreview.penaltyDays}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Penalty amount</p>
+                      <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Migrated loan - rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.
+                  </p>
+                </>
+              )}
             </div>
             <div className={cn('rounded-md bg-secondary/40 p-3', !soaPreview.isMatured && 'opacity-60')}>
               <p className="mb-2 text-sm font-medium">Accrued interest</p>
@@ -2570,6 +2618,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 />
               </div>
             </div>
+            {isProspectiveLoan && (
+              <div className="flex items-start gap-2 rounded-md border bg-secondary/40 p-2.5 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>Migrated loans have no live penalty on file - a manual From/To date range appears instead for those accounts.</span>
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-md bg-primary/10 p-3">
               <p className="text-sm font-medium text-primary">Total amount due</p>
               <p className="text-lg font-medium text-primary">{formatPeso(soaPreview.totalAmountDue)}</p>

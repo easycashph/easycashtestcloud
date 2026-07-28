@@ -816,6 +816,7 @@ export function createApp(): Express {
     borrowerRepository,
     coBorrowerRepository,
     repaymentInstallmentRepository,
+    loanProductRepository,
   });
   const statementOfAccountRouter = createStatementOfAccountRouter(
     {
