@@ -74,11 +74,15 @@ const TEMPLATE_OFFSETS: Record<string, { dx?: number; dy?: number; auditDy?: num
   // text block up to sit just below the printed name - measured via pdf2json against a freshly
   // regenerated document: this template's anchor sits INLINE with the printed name (not on its own
   // line above it, unlike other templates), so the audit block previously landed far below (near
-  // "Conforme / Certified by:") instead of right under the name. `auditDy: 22` lands it ~12pt below
-  // the anchor - a modest single-line gap. See CO_BORROWER_TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER
-  // below for the matching co-borrower raise (same target y, since both anchors sit at the same
+  // "Conforme / Certified by:") instead of right under the name.
+  // 2026-07-29 (user-reported, second correction on a real signed PDF): `auditDy: 22` (~12pt below
+  // the anchor) turned out too tight - the printed name here renders at 10pt, so its own glyphs/
+  // descenders left almost no visual gap before the audit text started, reading as "stuck together".
+  // Backed off to `auditDy: 14` (~20pt below the anchor) for comfortable breathing room while staying
+  // well above the old far-below position. See CO_BORROWER_TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER
+  // below for the matching co-borrower value (same target y, since both anchors sit at the same
   // height here) and the co-borrower signature-image lower that levels the two signatures.
-  LOAN_AGREEMENT_SEAFARER: { dx: 41, dy: -10, auditDy: 22 },
+  LOAN_AGREEMENT_SEAFARER: { dx: 41, dy: -10, auditDy: 14 },
   // 2026-07-29 (user-reported, real signed PDF review): the audit text block overlapped
   // "With Marital consent" below it - measured via pdf2json against a freshly-regenerated document
   // (audit block's last line landed at y=388.99, but "With Marital consent" sits at y=393.46, a
@@ -116,11 +120,14 @@ const CO_BORROWER_TEMPLATE_OFFSETS: Record<string, { dx?: number; dy?: number; a
   // centering nudge for the co-borrower's (longer) printed name and its own anchor position.
   // First-pass estimate - may need a further nudge.
   // 2026-07-29 (second round): raised the Co-Borrower's audit text to the same target y as the
-  // Borrower's (both anchors sit at the same height on this template, so the same `auditDy: 22`
+  // Borrower's (both anchors sit at the same height on this template, so the same `auditDy` value
   // lands them level). Also lowered the Co-Borrower's SIGNATURE IMAGE by matching the Borrower's own
   // `dy: -10` - previously unset (0), so the co-borrower's signature sat 10pt higher than the
   // borrower's.
-  LOAN_AGREEMENT_SEAFARER: { dx: 87, dy: -10, auditDy: 22 },
+  // 2026-07-29 (third round): backed `auditDy` off from 22 to 14 along with the Borrower's own entry
+  // above - see that entry's comment for why (the audit text was rendering too close to the printed
+  // name at the tighter value).
+  LOAN_AGREEMENT_SEAFARER: { dx: 87, dy: -10, auditDy: 14 },
   // 2026-07-29 (user-reported, measured via pdf2json against a freshly regenerated document): the
   // co-borrower's printed name starts at x=57.90 and spans a measured 167.85pt - `dx: 59` centers
   // the (up to 90pt-wide) signature image's left edge on the name's midpoint, same convention as
@@ -148,6 +155,12 @@ interface AnchorLocation {
   /** PDF points, bottom-left origin (pdf-lib's coordinate system). */
   x: number;
   y: number;
+  /** 2026-07-29 (user request): x position of the printed name text found just at-or-below the
+   * anchor - used to left-align the audit trail text under the actual name instead of under the
+   * signature image (whose x is a per-template `dx` tuned for centering the image, not for text
+   * alignment, so it doesn't always land under the name's own start). `undefined` if no plausible
+   * name text was found nearby, in which case the caller falls back to the old image-x behavior. */
+  nameX?: number;
 }
 
 /** Locates the invisible `[[SIGNATURE_ANCHOR]]` marker (see `templates/*.docx` - a tiny, white-on-
@@ -167,11 +180,37 @@ async function findSignatureAnchor(pdfBuffer: Buffer, anchorText: string): Promi
         const match = page.Texts.find((t) => t.R.some((run) => run.T === anchorText));
         if (match) {
           const pageHeightPt = page.Height * PDF2JSON_UNITS_PER_POINT;
-          resolve({
-            pageIndex,
-            x: match.x * PDF2JSON_UNITS_PER_POINT,
-            y: pageHeightPt - match.y * PDF2JSON_UNITS_PER_POINT,
-          });
+          const anchorX = match.x * PDF2JSON_UNITS_PER_POINT;
+          const anchorY = pageHeightPt - match.y * PDF2JSON_UNITS_PER_POINT;
+          // The printed name sits either INLINE with the anchor (same line - e.g. Special Power of
+          // Attorney/Loan Agreement - Seafarer, name a bit to the RIGHT of the anchor) or on the line
+          // just BELOW it (e.g. Disclosure Statement, where the anchor is its own paragraph above the
+          // name - and there, measured, the name actually starts to the LEFT of the anchor, ~50pt
+          // closer to the margin, likely because the anchor sits after the blank ink-signature space
+          // rather than before the name). Since the direction varies by template but the DISTANCE from
+          // the anchor to its own name is always modest, filter by absolute x-distance (not a
+          // one-sided range) - this is also what correctly excludes the OTHER signer's name in
+          // side-by-side templates, which sits ~200pt+ away regardless of direction. Ties on vertical
+          // distance are broken by whichever candidate is horizontally closest, so a same-y candidate
+          // from the other signer's column never wins over the further-but-still-nearby real name.
+          let nameX: number | undefined;
+          let bestScore = Infinity;
+          const MAX_NAME_DISTANCE = 90;
+          for (const t of page.Texts) {
+            if (t === match) continue;
+            if (t.R.some((run) => run.T === anchorText)) continue;
+            const tX = t.x * PDF2JSON_UNITS_PER_POINT;
+            const tY = pageHeightPt - t.y * PDF2JSON_UNITS_PER_POINT;
+            const deltaY = anchorY - tY;
+            const absDeltaX = Math.abs(tX - anchorX);
+            if (deltaY < -1 || deltaY > 16 || absDeltaX > MAX_NAME_DISTANCE) continue;
+            const score = deltaY * 1000 + absDeltaX;
+            if (score < bestScore) {
+              bestScore = score;
+              nameX = tX;
+            }
+          }
+          resolve({ pageIndex, x: anchorX, y: anchorY, nameX });
           return;
         }
       }
@@ -305,7 +344,11 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
       // blank space there for a "Date:" line. AUDIT_BELOW_ANCHOR_OFFSET is a first-pass distance
       // below the anchor (image height + the template's own "Signature/printed name" line) - may
       // need per-template tuning after visual review, same as TEMPLATE_OFFSETS above.
-      const auditX = imageX;
+      // 2026-07-29 (user request): left-align the audit text under the printed NAME's own start x,
+      // not the signature image's x - the image's x is a per-template `dx` tuned for centering the
+      // image over the name, which doesn't always coincide with where the name itself starts. Falls
+      // back to the old image-x behavior if no plausible name text was found near the anchor.
+      const auditX = anchor.nameX ?? imageX;
       const AUDIT_BELOW_ANCHOR_OFFSET = 34;
       let auditY = anchor.y - AUDIT_BELOW_ANCHOR_OFFSET + (offset?.auditDy ?? offset?.dy ?? 0);
       const maxWidth = Math.max(80, width - auditX - 20);

@@ -74,9 +74,16 @@ export class SignLoanSigningDocumentUseCase {
     // same generatedLoanDocumentId) rather than the pristine original - so the borrower's and
     // co-borrower's ink end up on the SAME final PDF instead of two independent single-signature
     // copies. Falls back to the pristine original if this is the first (or only) signature.
+    //
+    // 2026-07-29 (real bug found): the "other session" lookup only excluded THIS session
+    // (`s.id !== session.id`), not sessions belonging to the SAME party - so re-signing the same
+    // document as the same party through a second session (e.g. a fresh test/retry) picked up that
+    // party's own already-stamped PDF as the base and stamped a second signature/audit block on top
+    // of the first, both landing at the identical anchor position (visible as doubled, overlapping
+    // text and signature ink). Only the OPPOSITE party's signed copy should ever be used as the base.
     const otherSessions = await this.deps.loanSigningSessionRepository.findManyByLoanAccountId(session.loanAccountId);
     const priorSignedEntry = otherSessions
-      .filter((s) => s.id !== session.id)
+      .filter((s) => s.id !== session.id && s.partyType !== session.partyType)
       .flatMap((s) => s.documents)
       .filter((d) => d.generatedLoanDocumentId === entry.generatedLoanDocumentId && d.signedAt && d.signedStorageKey)
       .sort((a, b) => (b.signedAt?.getTime() ?? 0) - (a.signedAt?.getTime() ?? 0))[0];

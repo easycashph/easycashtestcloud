@@ -678,6 +678,124 @@ Co-Borrower name would otherwise wrap.
 
 **Not yet visually confirmed against a real signed PDF.**
 
+## 17. Loan Agreement - Seafarer: audit text was too close to the printed name (§15's round-2 fix
+overcorrected)
+
+User shared another real signed Loan Agreement - Seafarer and flagged the audit trail text as now
+sitting "naka-dikit" (stuck/glued) to the printed name - §15's round 2 had raised both audit blocks
+via `auditDy: 22` (landing ~12pt below the anchor) specifically to address the opposite problem (audit
+text floating too far down near "Conforme / Certified by:"), but 12pt turned out too tight once
+measured against the printed name's actual rendered size.
+
+**Measured (not guessed) via pdf2json against a fresh regeneration**: this template's printed name
+renders at **10pt** font size. At only 12pt total gap between the name's baseline and the audit text's
+baseline, there's very little visual clearance once the name's own glyph height is accounted for -
+close enough to read as "touching" even without literal pixel overlap.
+
+**Fix**: backed `auditDy` off from `22` to `14` on both `TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER` and
+`CO_BORROWER_TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER` (kept in sync so both signers stay level with
+each other, per §15's requirement) - lands the audit text ~20pt below the anchor instead of ~12pt,
+giving comfortable breathing room while staying well above the pre-§15 position that was too far away
+in the first place.
+
+**Verification**: `tsc --noEmit` clean, 897 tests passing. Backend rebuilt (`--no-cache`, run
+synchronously) and recreated, confirmed healthy. Verified via a fresh regeneration stamped with the
+real `stamp()`: printed name at y=196.99, audit text now starts at y=188.99 (20pt gap, up from the
+previous 12pt), Borrower and Co-Borrower both still land at the same y as each other (188.99) -
+level, as required.
+
+**Not yet visually confirmed against a real signed PDF.**
+
+## 18. Architecture change: audit text now left-aligns to the printed name's own x, not the signature
+image's x
+
+User asked a design question - showed a mockup request first (per this repo's own workflow
+convention: mockup before implementing) - about whether the audit trail text could always align to
+wherever the Borrower's/Co-Borrower's printed name itself starts, rather than reusing the signature
+image's x (which is a per-template `dx` hand-tuned for CENTERING the image over the name, and often
+doesn't coincide with the name's own left edge). Explicitly scoped down to text-only: the signature
+image's position/sizing was left completely untouched.
+
+**Design shown as a mockup** (two-card before/after comparison) before writing any code, confirmed by
+the user, then implemented.
+
+**Implementation**: extended `findSignatureAnchor()`'s return value (`AnchorLocation`) with an
+optional `nameX` field - after locating the anchor's own text run inside the already-parsed pdf2json
+page data, it also searches the SAME page for the actual printed-name text run and returns its x.
+`auditX` (previously always `= imageX`) now reads `anchor.nameX ?? imageX`, falling back to the old
+behavior if no plausible name text is found.
+
+**Real bug found during first-pass verification**: the initial name-detection heuristic only looked
+to the RIGHT of the anchor, assuming the name always sits at or after the anchor's own x (true for
+several templates - Loan Agreement - Seafarer, Special Power of Attorney, where the anchor is placed
+immediately before the name on the same line). Verified against Disclosure Statement, though, and
+found the printed name there actually starts ~54pt to the LEFT of its own anchor (the anchor is
+placed after the blank ink-signature space, not before the name) - the right-only search missed the
+real name entirely and instead matched the OTHER signer's name column, which happened to fall within
+the (too generous) x window on the same line.
+
+**Fix**: switched the candidate window to filter by absolute horizontal distance from the anchor
+(`Math.abs(nameCandidate.x - anchor.x) <= 90`) instead of a one-sided range, correctly covering both
+"name after anchor" (Seafarer, SPOA) and "name before anchor" (Disclosure Statement) cases while still
+excluding the other signer's name column, which sits 200pt+ away regardless of direction. Tie-breaks
+(when a candidate matches on vertical distance) now prefer the smallest horizontal distance, so a
+same-y candidate from the other signer's side never wins over the further-but-still-nearby real name.
+
+**Verification**: `tsc --noEmit` clean, 897 tests passing throughout both rounds. Backend rebuilt
+(`--no-cache`, synchronous) and recreated, confirmed healthy each time. Verified against fresh
+regenerations of 4 templates spanning every anchor/name layout this codebase has (side-by-side
+same-y, side-by-side anchor-above-name, inline-same-line, and Promissory Note's mixed case) -
+Disclosure Statement, Special Power of Attorney, Loan Agreement - Seafarer, Promissory Note - and
+confirmed each signer's audit text now lands close to their own name's actual start x (small ~4-8pt
+run-to-run variance observed, consistent with the same dynamic-content-drift behavior already
+documented for Loan Agreement - Seafarer's anchor position in §17 - not a bug), and no longer locks
+onto the other signer's name in any of the 4 templates tested.
+
+**Signature image position/sizing is completely unchanged** - this only affects where the audit text
+block starts horizontally.
+
+**Not yet visually confirmed against a real signed PDF** - and unlike the per-template offset fixes
+above, this is a change to the shared detection logic itself, so it's worth a broader spot-check
+across a few different templates (not just one) when real signed PDFs are available next.
+
+## 19. Real bug found and fixed: re-signing the same document as the same party stamped on top of
+that party's OWN prior signature instead of the pristine original
+
+User shared a screenshot showing badly overlapping, doubled audit text and signature ink on a
+Disclosure Statement - two "Signed by (Borrower)"/"Sent OTP to"/"Date"/"IP address" blocks and two
+signature strokes stacked directly on top of each other for BOTH Borrower and Co-Borrower.
+
+**Root cause**: `SignLoanSigningDocumentUseCase.execute()` picks a "base PDF" to stamp onto - either
+the pristine original, or (2026-07-25, two-party signing) the OTHER party's already-signed copy, so
+Borrower's and Co-Borrower's ink end up on ONE final PDF instead of two separate single-signature
+copies. The lookup filtered out only the CURRENT session (`s.id !== session.id`) but never checked
+whether a candidate "prior signed" entry belonged to the SAME party. `SML-Self_00058` has been
+signed and re-signed many times this session for testing (a fresh signing session each time a
+position fix needed checking) - so when a NEW Borrower session signed the document, the lookup found
+an EARLIER Borrower session's already-signed copy (not the Co-Borrower's, which is what it should
+look for) and stamped a second Borrower signature directly on top of the first, at the identical
+anchor position - producing exactly the doubled/overlapping look in the screenshot.
+
+**Fix**: `app/backend/src/modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase.ts`
+- added `s.partyType !== session.partyType` to the "prior signed entry" filter, so only the OPPOSITE
+party's signed copy is ever used as the base; a same-party re-sign now always starts fresh from the
+pristine original.
+
+**New regression test**: `tests/unit/loan-signing/SignLoanSigningDocumentUseCase.test.ts` (new file,
+3 tests) - confirms (1) stamping onto the opposite party's signed copy still works as designed, (2) the
+exact bug scenario (a same-party prior signed session must NOT be used as the base - regression test
+for this fix), (3) falls back to the pristine original when nothing has been signed yet.
+
+**Verification**: `tsc --noEmit` clean, 900 backend tests passing (897 + 3 new). Backend rebuilt
+(`--no-cache`, synchronous) and recreated, confirmed healthy.
+
+**Live-data cleanup (user-confirmed)**: with explicit confirmation, deleted all 24 `LoanSigningSession`
+rows for `SML-Self_00058` (cascades to their `LoanSigningDocument` and `SigningNotificationLog` rows)
+and removed their corresponding `storage/loan-signing/{sessionId}/` signed-PDF directories from disk.
+Confirmed 0 remaining sessions and notification logs for this loan afterward. This loan's signing
+history and e-signature logs are now completely clean - the next real sign-through will be the first
+data point since today's fixes, with no leftover doubled-up PDFs to confuse future testing.
+
 ## Current state / open items for the next session
 
 - **E-signature document generation**: co-borrower name/address now populate correctly on every
