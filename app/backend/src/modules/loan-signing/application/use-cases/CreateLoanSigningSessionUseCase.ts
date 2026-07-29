@@ -19,6 +19,7 @@ import {
   NoRequiredDocumentTemplatesError,
 } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
+import type { ISigningNotificationLogRepository } from '../ports/ISigningNotificationLogRepository';
 import { generateSigningToken, hashSigningSecret } from '../../infrastructure/signingTokenHash';
 
 const SESSION_TTL_DAYS = 7;
@@ -50,6 +51,7 @@ export interface CreateLoanSigningSessionUseCaseDeps {
   generatedLoanDocumentRepository: IGeneratedLoanDocumentRepository;
   generateLoanDocumentUseCase: GenerateLoanDocumentUseCase;
   loanSigningSessionRepository: ILoanSigningSessionRepository;
+  signingNotificationLogRepository: ISigningNotificationLogRepository;
   borrowerRepository: IBorrowerRepository;
   coBorrowerRepository: ICoBorrowerRepository;
   loanApplicationRepository: ILoanApplicationRepository;
@@ -216,6 +218,21 @@ export class CreateLoanSigningSessionUseCase {
     } else {
       await this.deps.smsGateway.send(recipientPhoneNumber, messageBody);
     }
+
+    // 2026-07-29 (user request): "may OTP sms and email log ba tayo?" - log every LINK send so
+    // there's a permanent, queryable record of when/how each link was delivered (see
+    // SigningNotificationLog's own doc comment). Best-effort - a logging failure must never block
+    // the actual send the client is waiting on.
+    await this.deps.signingNotificationLogRepository
+      .create({
+        loanSigningSessionId: session.id,
+        loanAccountId,
+        type: 'LINK',
+        partyType,
+        channel,
+        recipient: channel === 'EMAIL' ? recipientEmail! : recipientPhoneNumber,
+      })
+      .catch(() => undefined);
 
     return { session, rawToken };
   }

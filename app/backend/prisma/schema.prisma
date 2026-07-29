@@ -916,7 +916,7 @@ model CoBorrower {
 
   legacyId String? @unique
 
-  loanAccounts LoanAccountCoBorrower[]
+  loanAccounts    LoanAccountCoBorrower[]
   signingSessions LoanSigningSession[]
 
   @@index([borrowerId])
@@ -1095,6 +1095,7 @@ model LoanAccount {
   emailReminderLogs            EmailReminderLog[]
   generatedStatementsOfAccount GeneratedStatementOfAccount[]
   loanSigningSessions          LoanSigningSession[]
+  signingNotificationLogs      SigningNotificationLog[]
   /// 2026-07-24 (Loan Restructure) — set on the OLD account when it was closed via restructure.
   restructuredFromRecord       LoanRestructure?              @relation("OldLoanRestructure")
   /// 2026-07-24 (Loan Restructure) — set on the NEW account created by a restructure.
@@ -1638,11 +1639,11 @@ model LoanSigningSession {
   /// (DocumentTemplate.requiresBorrowerSignature/requiresCoBorrowerSignature) and which signature
   /// anchor gets stamped ([[SIGNATURE_ANCHOR]] vs [[SIGNATURE_ANCHOR_CO_BORROWER]]) on documents
   /// that need both. Defaults to BORROWER to match every session created before this field existed.
-  partyType SigningPartyType @default(BORROWER)
+  partyType    SigningPartyType @default(BORROWER)
   /// Set only when partyType=CO_BORROWER - which CoBorrower this session/phone number belongs to.
   /// Null for BORROWER sessions (the loan account's own borrower is implied by loanAccountId).
   coBorrowerId String?
-  coBorrower   CoBorrower? @relation(fields: [coBorrowerId], references: [id])
+  coBorrower   CoBorrower?      @relation(fields: [coBorrowerId], references: [id])
 
   /// Where the SMS link and OTP are sent - captured at send time, not re-read from the borrower
   /// record later, so a later profile edit can't silently redirect an in-flight signing session.
@@ -1650,9 +1651,9 @@ model LoanSigningSession {
   /// 2026-07-28: which channel delivered the link - the OTP (via RequestSigningOtpUseCase) follows
   /// this SAME channel, so a link sent by email also gets its OTP by email. Defaults to SMS to
   /// match every session created before this field existed.
-  channel String  @default("SMS")
+  channel     String    @default("SMS")
   /// Set only when channel=EMAIL - captured at send time for the same reason as phoneNumber above.
-  email   String?
+  email       String?
   tokenHash   String    @unique
   expiresAt   DateTime
   revokedAt   DateTime?
@@ -1666,10 +1667,43 @@ model LoanSigningSession {
   createdByIp     String?
   createdAt       DateTime @default(now())
 
-  documents LoanSigningDocument[]
+  documents        LoanSigningDocument[]
+  notificationLogs SigningNotificationLog[]
 
   @@index([loanAccountId])
   @@map("loan_signing_sessions")
+}
+
+/// 2026-07-29 (user request): "may OTP sms and email log ba tayo?" - previously neither the
+/// signing-link send nor the OTP send left any persistent record (only ephemeral server logs, and
+/// LoanSigningSession's own otpCodeHash/otpExpiresAt get overwritten on every resend, so there was
+/// no history). One row per LINK send (CreateLoanSigningSessionUseCase) or OTP send
+/// (RequestSigningOtpUseCase) - immutable, append-only, mirroring SmsReminderLog/EmailReminderLog's
+/// own "log every send, never overwrite" posture. `verifiedAt` is set only on the specific OTP row
+/// that was actually verified (LoanSigningSession.verifyOtp always checks against the latest-issued
+/// code, so this is always the most recent OTP row for that session at the time of verification) -
+/// left null forever on LINK rows and on superseded/never-verified OTP rows.
+enum SigningNotificationType {
+  LINK
+  OTP
+}
+
+model SigningNotificationLog {
+  id                   String                  @id @default(uuid())
+  loanSigningSessionId String
+  loanSigningSession   LoanSigningSession      @relation(fields: [loanSigningSessionId], references: [id], onDelete: Cascade)
+  loanAccountId        String
+  loanAccount          LoanAccount             @relation(fields: [loanAccountId], references: [id])
+  type                 SigningNotificationType
+  partyType            SigningPartyType
+  channel              String
+  recipient            String
+  sentAt               DateTime                @default(now())
+  verifiedAt           DateTime?
+
+  @@index([loanAccountId])
+  @@index([loanSigningSessionId])
+  @@map("signing_notification_logs")
 }
 
 /// One row per document in the batch, in signing order (`sortIndex`). `signedStorageKey` is a NEW
@@ -2064,10 +2098,10 @@ model LoanApplication {
   /// for new intake - kept read-only for older applications that only ever had this single
   /// combined "Name (relationship)" string, since re-parsing it apart is lossy/ambiguous (see
   /// splitApplicantName's own doc comment on the frontend). Never written to by new intake.
-  coBorrowerName                String?
-  coBorrowerFirstName           String?
-  coBorrowerMiddleName          String?
-  coBorrowerLastName            String?
+  coBorrowerName               String?
+  coBorrowerFirstName          String?
+  coBorrowerMiddleName         String?
+  coBorrowerLastName           String?
   coBorrowerEmployer           String?
   coBorrowerContactNumber      String?
   coBorrowerEmail              String?
@@ -2197,32 +2231,32 @@ model IdempotencyKey {
 /// it always wins. MIS-only to change (enforced by the HTTP layer's `requireRole('MIS')`, not
 /// here), matching every other system-wide toggle in this codebase.
 model ReminderSettings {
-  id                 String   @id @default("singleton")
-  smsEnabled         Boolean  @default(false)
-  emailEnabled       Boolean  @default(false)
+  id                  String   @id @default("singleton")
+  smsEnabled          Boolean  @default(false)
+  emailEnabled        Boolean  @default(false)
   /// 2026-07-22 - e-signature signing-link/OTP SMS. A SEPARATE switch from smsEnabled above
   /// (which also gates the payment-reminder cron, reaching many real clients at once) - lets MIS
   /// toggle e-signature SMS on/off for a one-off staff-triggered send without touching the
   /// reminder blast. Checked fresh on every send (DryRunAwareSmsGateway), no server restart needed.
-  signingSmsEnabled  Boolean  @default(false)
+  signingSmsEnabled   Boolean  @default(false)
   /// 2026-07-28 - e-signature signing-link EMAIL, as an alternative delivery channel to
   /// signingSmsEnabled above - added after confirming some Smart-network numbers silently
   /// filter/drop the signing-link SMS (link-containing messages specifically; a plain-text SMS to
   /// the same number went through fine). Checked fresh on every send (DryRunAwareEmailGateway), no
   /// server restart needed.
-  signingEmailEnabled Boolean @default(false)
+  signingEmailEnabled Boolean  @default(false)
   /// 2026-07-23 - Easycash Portal signup/password-reset OTP email. SEPARATE from emailEnabled
   /// above (payment reminders) and from staff 2FA (identity module's LoginUseCase/
   /// RequestTwoFactorSetupUseCase, which are NOT gated by this row at all - they keep using the
   /// static SMS_ENABLED/EMAIL_ENABLED env vars via the original shared OtpSender instance). Checked
   /// fresh on every send (PortalOtpSender), no server restart needed.
-  portalEmailEnabled Boolean  @default(false)
+  portalEmailEnabled  Boolean  @default(false)
   /// 2026-07-23 - Easycash Portal signup/password-reset OTP SMS. Same "separate from staff 2FA"
   /// reasoning as portalEmailEnabled above.
-  portalSmsEnabled   Boolean  @default(false)
-  updatedAt          DateTime @updatedAt
-  updatedByUserId    String?
-  updatedBy          User?    @relation(fields: [updatedByUserId], references: [id])
+  portalSmsEnabled    Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+  updatedByUserId     String?
+  updatedBy           User?    @relation(fields: [updatedByUserId], references: [id])
 
   @@map("reminder_settings")
 }

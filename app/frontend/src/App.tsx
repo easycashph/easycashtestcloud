@@ -11,6 +11,7 @@ import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
 import { LoanApplicationCreatePage } from '@/pages/LoanApplicationCreatePage';
 import { PaymentRemindersPage } from '@/pages/PaymentRemindersPage';
 import { ReminderLogsPage } from '@/pages/ReminderLogsPage';
+import { EsignatureLogsPage } from '@/pages/EsignatureLogsPage';
 import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
 import { ClientListPage } from '@/pages/ClientListPage';
 import { ClientCreatePage } from '@/pages/ClientCreatePage';
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
         <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
         <Route path="reports/reminder-logs" element={<ReminderLogsPage />} />
+        <Route path="reports/esignature-logs" element={<EsignatureLogsPage />} />
         <Route path="configuration/settings" element={<SettingsPage />} />
         <Route path="admin/members" element={<Navigate to="/admin/system?tab=members" replace />} />
         <Route path="admin/activity-logs" element={<Navigate to="/admin/system?tab=activity-logs" replace />} />

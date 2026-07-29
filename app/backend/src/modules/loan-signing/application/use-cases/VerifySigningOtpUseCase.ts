@@ -1,9 +1,11 @@
 import { SigningSessionExpiredError } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
+import type { ISigningNotificationLogRepository } from '../ports/ISigningNotificationLogRepository';
 import { hashSigningSecret } from '../../infrastructure/signingTokenHash';
 
 export interface VerifySigningOtpUseCaseDeps {
   loanSigningSessionRepository: ILoanSigningSessionRepository;
+  signingNotificationLogRepository: ISigningNotificationLogRepository;
 }
 
 /** Returns `true`/`false` for a correct/incorrect code rather than throwing on a mismatch - a
@@ -20,6 +22,12 @@ export class VerifySigningOtpUseCase {
 
     const matched = session.verifyOtp(hashSigningSecret(code));
     await this.deps.loanSigningSessionRepository.save(session);
+    if (matched) {
+      // 2026-07-29 (user request): mark the OTP log row that was actually verified, so the log
+      // shows which send succeeded vs. which earlier resends were superseded. Best-effort - never
+      // block the real verification result on a logging failure.
+      await this.deps.signingNotificationLogRepository.markLatestOtpVerified(session.id, new Date()).catch(() => undefined);
+    }
     return matched;
   }
 }

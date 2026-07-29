@@ -7,6 +7,21 @@ function decodeBase64Png(signatureImagePng: string): Buffer {
   return Buffer.from(base64, 'base64');
 }
 
+/** 2026-07-29 (user-confirmed): the "Sent OTP to:" audit line masks the recipient rather than
+ * printing it in full, since a signed PDF may be downloaded/printed/shared. Mobile: first 4 +
+ * `****` + last 3 (`0917****567`). Email: first character + `***` + the full `@domain`
+ * (`j***@email.com`) - the domain is left visible since it identifies the provider, not the
+ * person. Falls back to the raw string unmasked if it's too short to mask meaningfully. */
+function maskOtpRecipient(recipient: string, channel: 'SMS' | 'EMAIL'): string {
+  if (channel === 'EMAIL') {
+    const atIndex = recipient.indexOf('@');
+    if (atIndex <= 0) return recipient;
+    return `${recipient[0]}***${recipient.slice(atIndex)}`;
+  }
+  if (recipient.length < 7) return recipient;
+  return `${recipient.slice(0, 4)}****${recipient.slice(-3)}`;
+}
+
 /** 1 pdf2json "unit" is always 1/16 inch, whatever the page's actual point size - confirmed
  * empirically (a Letter-width page reports Width=38.25 units, and 612pt / 38.25 = 16 exactly). */
 const PDF2JSON_UNITS_PER_POINT = 16;
@@ -142,6 +157,9 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const auditLines = [
       `Signed by (${isCoBorrower ? 'Co-Borrower' : 'Borrower'}): ${input.signerName}`,
+      input.otpChannel && input.otpRecipient
+        ? `Sent OTP to: ${maskOtpRecipient(input.otpRecipient, input.otpChannel)}`
+        : undefined,
       `Date: ${input.signedAtIso}`,
       input.ipAddress ? `IP address: ${input.ipAddress}` : undefined,
     ].filter((line): line is string => Boolean(line));

@@ -18,6 +18,12 @@ export interface StampSignatureInput {
    * simply have no match, so `findSignatureAnchor` falls back to the default placement same as
    * any other anchor-less template. */
   anchorTarget?: 'BORROWER' | 'CO_BORROWER';
+  /** 2026-07-29 (user request) - which channel delivered the OTP for this signature, and the
+   * recipient it went to (masked before display - see `maskOtpRecipient` in
+   * `PdfLibDocumentSignatureStamper`). Omitted entirely (no audit line drawn) for a session that
+   * predates this field or somehow has neither a phone number nor an email captured. */
+  otpChannel?: 'SMS' | 'EMAIL';
+  otpRecipient?: string;
 }
 
 export interface IDocumentSignatureStamper {
