@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { PortalHeader } from '@/components/PortalHeader';
@@ -82,7 +83,7 @@ export function SecurityPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Current password</Label>
-              <Input type="password" value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} required />
+              <PasswordInput value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} required />
             </div>
             {emailState === 'error' && <Alert tone="error">{emailError}</Alert>}
             {emailState === 'saved' && <Alert tone="success">Login email updated.</Alert>}
@@ -97,15 +98,15 @@ export function SecurityPage() {
           <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
             <div className="space-y-1.5">
               <Label>Current password</Label>
-              <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+              <PasswordInput value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label>New password</Label>
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+              <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label>Confirm new password</Label>
-              <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
             </div>
             {passwordState === 'error' && <Alert tone="error">{passwordError}</Alert>}
             {passwordState === 'saved' && <Alert tone="success">Password updated.</Alert>}

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout } from '@/components/AuthLayout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
@@ -62,14 +63,13 @@ export function SignUpPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput id="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
           <p className="text-xs text-muted-foreground">At least 12 characters.</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="confirm-password">Confirm password</Label>
-          <Input
+          <PasswordInput
             id="confirm-password"
-            type="password"
             required
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}

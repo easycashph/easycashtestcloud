@@ -34,3 +34,31 @@ export const verifyLoginOtpSchema = z.object({
 });
 
 export type VerifyLoginOtpRequestBody = z.infer<typeof verifyLoginOtpSchema>;
+
+/** Forgot Password (2026-07-28). Same lenient email validation as loginSchema (Email domain value
+ * object) - normalization/format-checking, not existence-checking (existence is deliberately never
+ * revealed by this endpoint - see RequestPasswordResetUseCase). */
+export const requestPasswordResetSchema = z.object({
+  email: z.string().transform((value, ctx) => {
+    const email = Email.create(value);
+    if (!email) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid email address' });
+      return z.NEVER;
+    }
+    return email.value;
+  }),
+});
+
+export type RequestPasswordResetRequestBody = z.infer<typeof requestPasswordResetSchema>;
+
+export const confirmPasswordResetSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().min(1),
+  // Not PasswordPolicy.MIN_LENGTH here - ConfirmPasswordResetUseCase re-validates against the
+  // actual policy and throws WeakPasswordError with the real violation list; this is just a
+  // non-empty-string sanity check at the HTTP boundary, same division of responsibility as
+  // loginSchema's password field.
+  newPassword: z.string().min(1),
+});
+
+export type ConfirmPasswordResetRequestBody = z.infer<typeof confirmPasswordResetSchema>;

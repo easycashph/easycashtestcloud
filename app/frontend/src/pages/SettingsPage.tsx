@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -310,15 +311,15 @@ function SecurityTab() {
           <form className="grid max-w-md gap-4" onSubmit={handleChangePassword}>
             <div className="space-y-1.5">
               <Label htmlFor="current-password">Current Password</Label>
-              <Input id="current-password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
+              <PasswordInput id="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-password">New Password</Label>
-              <Input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+              <PasswordInput id="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm-password">Confirm New Password</Label>
-              <Input id="confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              <PasswordInput id="confirm-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
             </div>
             {message && (
               <p className={cn('text-xs', message.tone === 'error' ? 'text-destructive' : 'text-success')}>{message.text}</p>
@@ -425,9 +426,8 @@ function TwoFactorAuthCard() {
               <div className="space-y-3 rounded-md border p-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="disable-2fa-password">Current Password</Label>
-                  <Input
+                  <PasswordInput
                     id="disable-2fa-password"
-                    type="password"
                     value={disablePassword}
                     onChange={(e) => setDisablePassword(e.target.value)}
                   />

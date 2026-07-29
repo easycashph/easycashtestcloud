@@ -1,4 +1,9 @@
-export type TwoFactorPurpose = 'LOGIN' | 'ENABLE';
+/** 'PASSWORD_RESET' (2026-07-28, Forgot Password) reuses this same challenge table/repository
+ * rather than a new one - `purpose` is a plain string column (see TwoFactorChallenge's Prisma
+ * model), so adding a value here needs no migration, and RequestPasswordResetUseCase/
+ * ConfirmPasswordResetUseCase get the same proven expiry/attempt-limit/single-use semantics as
+ * LOGIN and ENABLE for free. */
+export type TwoFactorPurpose = 'LOGIN' | 'ENABLE' | 'PASSWORD_RESET';
 export type TwoFactorChannel = 'EMAIL' | 'SMS';
 
 export interface TwoFactorChallengeRecord {

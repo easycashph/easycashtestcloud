@@ -17,6 +17,8 @@ import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/G
 import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
+import { RequestPasswordResetUseCase as StaffRequestPasswordResetUseCase } from '@modules/identity/application/use-cases/RequestPasswordResetUseCase';
+import { ConfirmPasswordResetUseCase as StaffConfirmPasswordResetUseCase } from '@modules/identity/application/use-cases/ConfirmPasswordResetUseCase';
 import { RequestTwoFactorSetupUseCase } from '@modules/identity/application/use-cases/RequestTwoFactorSetupUseCase';
 import { ConfirmTwoFactorSetupUseCase } from '@modules/identity/application/use-cases/ConfirmTwoFactorSetupUseCase';
 import { DisableTwoFactorUseCase } from '@modules/identity/application/use-cases/DisableTwoFactorUseCase';
@@ -398,6 +400,17 @@ export function createApp(): Express {
         auditLogger,
         twoFactorChallengeRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
+      }),
+      requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({
+        userRepository,
+        twoFactorChallengeRepository,
+        otpSender,
+      }),
+      confirmPasswordResetUseCase: new StaffConfirmPasswordResetUseCase({
+        userRepository,
+        twoFactorChallengeRepository,
+        passwordHasher,
+        auditLogger,
       }),
     },
     tokenService,

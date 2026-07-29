@@ -119,3 +119,24 @@ export interface RevokeSessionInput {
   userId: string;
   sessionId: string;
 }
+
+/** Forgot Password (2026-07-28). Mirrors the client-portal module's RequestPasswordReset/
+ * ConfirmPasswordReset DTOs exactly - same enumeration-avoidance shape (see
+ * RequestPasswordResetOutput below). */
+export interface RequestPasswordResetInput {
+  email: string;
+}
+
+export interface RequestPasswordResetOutput {
+  /** Always returned, even when the email doesn't match any active user - a caller must never be
+   * able to tell "no such account" apart from "code sent" by inspecting this response (same
+   * enumeration-avoidance posture as InvalidCredentialsError elsewhere in this module). Only a
+   * real, active user's code is ever actually sent/usable. */
+  challengeId: string;
+}
+
+export interface ConfirmPasswordResetInput {
+  challengeId: string;
+  code: string;
+  newPassword: string;
+}

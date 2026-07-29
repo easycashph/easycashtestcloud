@@ -5,7 +5,7 @@ import type { ITokenService } from '@modules/identity/application/ports/ITokenSe
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { AuthController, type AuthControllerDeps } from './authController';
-import { loginSchema, verifyLoginOtpSchema } from './authSchemas';
+import { loginSchema, verifyLoginOtpSchema, requestPasswordResetSchema, confirmPasswordResetSchema } from './authSchemas';
 
 /**
  * Milestone 6 plan §4/§8: stricter than the global rate limiter already
@@ -57,6 +57,28 @@ const verifyOtpRateLimiter = rateLimit({
   message: { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' } },
 });
 
+/** Forgot Password (2026-07-28). Tighter than login's 8/15min: this endpoint sends an email on
+ * every match, so an uncapped attacker could otherwise use it to spam a target's inbox (not just
+ * guess credentials) - same class of concern the client-portal module's own forgot-password
+ * endpoint is presumably rate-limited for at the gateway/infra level. */
+const requestPasswordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: env.NODE_ENV === 'development' ? 1000 : 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.' } },
+});
+
+/** Forgot Password (2026-07-28) - same reasoning as verifyOtpRateLimiter: guessing a 6-digit reset
+ * code is the brute-force threat this exists for. */
+const confirmPasswordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: env.NODE_ENV === 'development' ? 1000 : 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' } },
+});
+
 export function createAuthRouter(deps: AuthControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new AuthController(deps);
@@ -64,6 +86,18 @@ export function createAuthRouter(deps: AuthControllerDeps, tokenService: ITokenS
 
   router.post('/login', loginRateLimiter, validateBody(loginSchema), controller.login);
   router.post('/verify-login-otp', verifyOtpRateLimiter, validateBody(verifyLoginOtpSchema), controller.verifyLoginOtp);
+  router.post(
+    '/forgot-password',
+    requestPasswordResetRateLimiter,
+    validateBody(requestPasswordResetSchema),
+    controller.requestPasswordReset,
+  );
+  router.post(
+    '/reset-password',
+    confirmPasswordResetRateLimiter,
+    validateBody(confirmPasswordResetSchema),
+    controller.confirmPasswordReset,
+  );
   router.post('/refresh', refreshRateLimiter, controller.refresh);
   router.post('/logout', controller.logout);
   router.post('/logout-all', requireAuth, controller.logoutAll);

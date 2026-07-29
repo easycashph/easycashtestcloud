@@ -8,7 +8,14 @@ import type { GetCurrentUserUseCase } from '@modules/identity/application/use-ca
 import type { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import type { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import type { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
-import type { LoginRequestBody, VerifyLoginOtpRequestBody } from './authSchemas';
+import type { RequestPasswordResetUseCase } from '@modules/identity/application/use-cases/RequestPasswordResetUseCase';
+import type { ConfirmPasswordResetUseCase } from '@modules/identity/application/use-cases/ConfirmPasswordResetUseCase';
+import type {
+  LoginRequestBody,
+  VerifyLoginOtpRequestBody,
+  RequestPasswordResetRequestBody,
+  ConfirmPasswordResetRequestBody,
+} from './authSchemas';
 import { clearRefreshTokenCookie, readRefreshTokenCookie, setRefreshTokenCookie } from './cookies';
 import { TokenNotFoundError, TokenExpiredError } from '@modules/identity/application/errors/AuthErrors';
 
@@ -21,6 +28,8 @@ export interface AuthControllerDeps {
   listSessionsUseCase: ListSessionsUseCase;
   revokeSessionUseCase: RevokeSessionUseCase;
   verifyLoginOtpUseCase: VerifyLoginOtpUseCase;
+  requestPasswordResetUseCase: RequestPasswordResetUseCase;
+  confirmPasswordResetUseCase: ConfirmPasswordResetUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture). */
@@ -73,6 +82,30 @@ export class AuthController {
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
         user: result.user,
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Forgot Password (2026-07-28). Always 200 with a challengeId, whether or not the email matched
+   * an active user - see RequestPasswordResetUseCase's doc comment. */
+  requestPasswordReset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email } = req.body as RequestPasswordResetRequestBody;
+      const result = await this.deps.requestPasswordResetUseCase.execute({ email });
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Forgot Password (2026-07-28). Deliberately does not log the user in - see
+   * ConfirmPasswordResetUseCase's doc comment. */
+  confirmPasswordReset = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { challengeId, code, newPassword } = req.body as ConfirmPasswordResetRequestBody;
+      await this.deps.confirmPasswordResetUseCase.execute({ challengeId, code, newPassword });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }
