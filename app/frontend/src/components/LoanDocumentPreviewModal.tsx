@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Loader2, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
@@ -27,6 +27,7 @@ export function LoanDocumentPreviewModal({
   const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
     if (!target) return;
@@ -83,8 +84,15 @@ export function LoanDocumentPreviewModal({
 
         {!loading && !error && objectUrl && target && (
           <>
-            <iframe src={objectUrl} className="h-[85vh] w-full rounded-md border" title={target.title} />
-            <div className="flex justify-end">
+            <iframe ref={iframeRef} src={objectUrl} className="h-[85vh] w-full rounded-md border" title={target.title} />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => iframeRef.current?.contentWindow?.print()}
+              >
+                <Printer className="mr-2 h-3.5 w-3.5" /> Print
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

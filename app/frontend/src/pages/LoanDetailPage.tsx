@@ -451,6 +451,18 @@ function LoanSigningPanel({
   const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('SMS');
   const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('SMS');
 
+  // The borrower profile (and its phone number) is fetched by a query on the parent page and may
+  // resolve after this component's first render, same "slower-loading query" gap as the
+  // co-borrower default below - without this, a borrower whose profile simply hadn't finished
+  // loading yet at mount time would show as "no mobile number on file" even though one exists.
+  const hasAppliedBorrowerDefault = React.useRef(false);
+  React.useEffect(() => {
+    if (hasAppliedBorrowerDefault.current) return;
+    if (!defaultPhoneNumber) return;
+    hasAppliedBorrowerDefault.current = true;
+    setPhoneNumber(defaultPhoneNumber);
+  }, [defaultPhoneNumber]);
+
   // The co-borrower profile (and its phone number) is fetched by a separate query on the parent
   // page and may resolve after this component's first render (borrower/co-borrower requests run in
   // parallel, not guaranteed to finish in order) - sync the default in once it arrives, same as any
