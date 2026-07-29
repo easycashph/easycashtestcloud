@@ -89,7 +89,7 @@ staff identity (`ADR-044-separate-customer-identity-for-public-portal.md`).
 | Blocker | Evidence | Impact |
 |---|---|---|
 | Backend is not publicly reachable | `App.tsx:92-103` — a `PreviewBanner` shows whenever `VITE_API_BASE_URL` still points at localhost | **Site cannot go live.** Sign-up/login are dead in the deployed build |
-| GitHub Pages deploy not finished | `.github/workflows/deploy.yml` exists; memory notes deploy still open | No public URL |
+| GitHub Pages cannot run at all yet | **2026-07-29, root-caused:** the deploy workflow lived at `app/portal/.github/workflows/deploy.yml` — invisible to GitHub Actions in a monorepo, which only scans `.github/workflows/` at the repo root (confirmed zero Actions runs in the repo's history). Fixed: relocated to `.github/workflows/deploy-portal.yml`. **Still blocked**: `gh api repos/.../pages` → 422 "Your current plan does not support GitHub Pages for this repository" — this repo is private, and private-repo Pages needs a paid GitHub plan | No public URL. Needs an org billing decision: upgrade the plan, make the repo public, or switch to a host that doesn't require either (Netlify/Cloudflare Pages) |
 | No real domain | — | `easycash.ph` (or equivalent) status **UNKNOWN** — must confirm ownership |
 | No landing images | `public/images/README.md` lists 4 expected files, none present | Hero/product cards render placeholder gradients |
 | No news/blog capability | No route, no data model | Cannot satisfy the stated "makikita ang Easycash news" requirement |
