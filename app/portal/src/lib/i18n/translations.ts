@@ -74,6 +74,9 @@ export const en = {
     statYearsLabel: 'Years in Business',
     statDreamsLabel: 'Dreams Reached',
     statPartnersLabel: 'Corporate Partners',
+    trustSecRegistered: 'SEC Registered Lending Company',
+    trustNoAdvanceFee: 'Never asks for a fee before releasing your loan',
+    trustDataProtected: 'Your data is protected',
     missionTitle: 'Dream Big, Fear Less',
     missionBody:
       "We understand the fears - debt traps, loan rejections, and financial uncertainties. Your dreams are worth pursuing, and we're here to minimize your fears. Our commitment is to provide not just fast loans but pathways to a brighter future. Your dreams, your financial security - it's what we live for.",
@@ -121,6 +124,28 @@ export const en = {
     ],
     ctaTitle: 'Ready to get started?',
     ctaBody: 'Create your free Easycash account and apply for a loan in minutes.',
+  },
+  eligibilityCheck: {
+    title: 'Not sure if you qualify?',
+    subtitle: 'Answer 4 quick questions - takes 30 seconds, no account needed.',
+    /** Mirrors ELIGIBILITY_CRITERIA in loanRequirements.ts index-for-index (question phrasing of
+     * the same 4 facts) - never add a 5th question here without adding the matching criterion
+     * there first, and vice versa. */
+    questions: [
+      'Are you at least 18 years old?',
+      'Are you a Filipino citizen or resident of the Philippines?',
+      'Do you have a valid government-issued ID?',
+      'Do you have a stable source of income?',
+    ],
+    yes: 'Yes',
+    no: 'No',
+    checkButton: 'Check Eligibility',
+    disclaimer: 'This is a quick self-check, not a loan approval - every application still goes through Easycash\'s full review process.',
+    resultPassTitle: 'You meet Easycash\'s basic eligibility requirements!',
+    resultPassBody: 'You can go ahead and apply. Have your requirements ready to make it even faster.',
+    resultFailTitle: 'You may not meet the minimum requirements yet',
+    resultFailBody: 'Based on your answers, Easycash may not be able to approve an application right now. If you think this doesn\'t reflect your situation, feel free to contact us.',
+    startOver: 'Start over',
   },
   requirements: {
     title: 'Loan Requirements',
@@ -292,6 +317,9 @@ export const fil: Translations = {
     statYearsLabel: 'Taon sa Negosyo',
     statDreamsLabel: 'Natulungang mga Pangarap',
     statPartnersLabel: 'Corporate Partners',
+    trustSecRegistered: 'Rehistradong Lending Company sa SEC',
+    trustNoAdvanceFee: 'Hindi kailanman humihingi ng bayad bago ilabas ang loan',
+    trustDataProtected: 'Protektado ang iyong datos',
     missionTitle: 'Mangarap nang Malaki, Bawasan ang Takot',
     missionBody:
       'Naiintindihan namin ang mga takot - ang bitag ng utang, pagtanggi sa loan, at kawalan ng katiyakan sa pananalapi. Karapat-dapat na tugisin ang iyong mga pangarap, at narito kami para bawasan ang iyong mga takot. Ang aming pangako ay magbigay hindi lamang ng mabilis na loan kundi ng daan tungo sa mas maliwanag na kinabukasan. Ang iyong mga pangarap, ang iyong seguridad sa pananalapi - ito ang dahilan kung bakit kami nandito.',
@@ -339,6 +367,25 @@ export const fil: Translations = {
     ],
     ctaTitle: 'Handa ka na bang magsimula?',
     ctaBody: 'Gumawa ng libreng Easycash account at mag-apply ng loan sa loob ng ilang minuto.',
+  },
+  eligibilityCheck: {
+    title: 'Hindi sigurado kung kwalipikado ka?',
+    subtitle: 'Sagutin ang 4 na mabilisang tanong - 30 segundo lang, walang kailangang account.',
+    questions: [
+      'Ikaw ba ay 18 taong gulang pataas?',
+      'Ikaw ba ay mamamayan o residente ng Pilipinas?',
+      'May wasto ka bang government-issued ID?',
+      'May matatag ka bang pinagkukunan ng kita?',
+    ],
+    yes: 'Oo',
+    no: 'Hindi',
+    checkButton: 'Suriin ang Kwalipikasyon',
+    disclaimer: 'Mabilisang self-check lamang ito, hindi ito pag-apruba ng loan - dumadaan pa rin ang bawat aplikasyon sa buong proseso ng pagsusuri ng Easycash.',
+    resultPassTitle: 'Nakakatugon ka sa mga pangunahing kinakailangan ng Easycash!',
+    resultPassBody: 'Puwede ka nang mag-apply. Ihanda ang iyong mga kailangan para mas mabilis pa.',
+    resultFailTitle: 'Maaaring hindi mo pa natutugunan ang minimum na kinakailangan',
+    resultFailBody: 'Batay sa iyong mga sagot, maaaring hindi ma-apruba ng Easycash ang aplikasyon sa ngayon. Kung sa tingin mo ay hindi ito tumutugma sa iyong sitwasyon, huwag mag-atubiling makipag-ugnayan sa amin.',
+    startOver: 'Simulan ulit',
   },
   requirements: {
     title: 'Mga Kailangan sa Pag-apply',

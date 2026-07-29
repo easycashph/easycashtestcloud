@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Lock,
   Menu,
   Quote,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/Button';
+import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
@@ -224,6 +226,28 @@ export function LandingPage() {
                 </Button>
               </Link>
             </motion.div>
+
+            {/* Trust strip (2026-07-29) - regulatory disclosure lives in the footer, but a first-time
+                visitor decides whether to trust the site before ever scrolling that far. Placed right
+                under the CTA, the exact moment reassurance matters most. Values come from
+                companyInfo.ts, same single source of truth as the footer - never hardcode these. */}
+            <motion.div
+              variants={fadeUp}
+              className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-primary" />
+                {t.landing.trustSecRegistered}
+              </span>
+              <Link to="/security-tips" className="inline-flex items-center gap-1.5 hover:text-foreground">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+                {t.landing.trustNoAdvanceFee}
+              </Link>
+              <span className="inline-flex items-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-primary" />
+                {t.landing.trustDataProtected}
+              </span>
+            </motion.div>
           </motion.div>
 
           <motion.div
@@ -320,6 +344,18 @@ export function LandingPage() {
               </motion.div>
             ))}
           </motion.div>
+        </div>
+      </section>
+
+      {/* Eligibility self-check (2026-07-29) - placed right after Products, once a visitor has
+          picked a loan type they're interested in but before committing to the full application
+          form. See EligibilityCheckWidget's own doc comment for why this stops short of a full
+          "pre-qualification with an amount estimate" tool. */}
+      <section className="border-t border-border py-20 sm:py-24">
+        <div className="container">
+          <Reveal>
+            <EligibilityCheckWidget />
+          </Reveal>
         </div>
       </section>
 
