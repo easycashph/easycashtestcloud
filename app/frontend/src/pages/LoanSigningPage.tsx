@@ -124,11 +124,13 @@ export function LoanSigningPage() {
           )}
           {!otpSent ? (
             <Button className="w-full" onClick={() => requestOtpMutation.mutate()} disabled={requestOtpMutation.isPending}>
-              {requestOtpMutation.isPending ? 'Sending…' : 'Send code to my phone'}
+              {requestOtpMutation.isPending ? 'Sending…' : session.channel === 'EMAIL' ? 'Send code to my email' : 'Send code to my phone'}
             </Button>
           ) : (
             <>
-              <p className="text-xs text-muted-foreground">Enter the 6-digit code we texted you.</p>
+              <p className="text-xs text-muted-foreground">
+                Enter the 6-digit code we {session.channel === 'EMAIL' ? 'emailed' : 'texted'} you.
+              </p>
               <Input
                 inputMode="numeric"
                 maxLength={6}

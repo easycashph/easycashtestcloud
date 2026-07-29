@@ -752,7 +752,7 @@ function LoanSigningPanel({
                   <div>
                     <p className="text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{s.partyType === 'CO_BORROWER' ? 'Co-Borrower' : 'Borrower'}</span> ·
-                      Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
+                      Sent to {s.channel === 'EMAIL' ? s.email ?? s.phoneNumber : s.phoneNumber} · {formatDate(s.createdAt)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {s.signedDocuments} of {s.totalDocuments} signed

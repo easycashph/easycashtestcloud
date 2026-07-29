@@ -71,9 +71,19 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
 
     // Loan Agreement templates (Salary/Seafarer) reference a Co-Borrower — most loans don't have
     // one, so this is optional (blank placeholders), not a NotFoundError like Borrower above.
-    const coBorrower = loanAccount.coBorrowerIds[0]
-      ? await this.deps.coBorrowerRepository.findById(loanAccount.coBorrowerIds[0])
-      : null;
+    //
+    // 2026-07-29 bug fix: same dual-linkage gap fixed in CreateLoanSigningSessionUseCase - two
+    // non-overlapping mechanisms exist in the live data. (1) `LoanAccountCoBorrower`, the per-loan
+    // join (`loanAccount.coBorrowerIds`) - every CP12-migrated co-borrower uses ONLY this. (2)
+    // `CoBorrower.borrowerId`, the direct per-Borrower FK - `CreateCoBorrowerUseCase` (the real,
+    // currently-active "Add Co-Borrower" button) sets ONLY this, never the join table. Checking
+    // just the join meant {CoBorrowerName}/{CoBorrowerAddress} silently rendered blank for every
+    // co-borrower added via the newer per-Borrower flow. Check the loan-level join first, then fall
+    // back to the per-Borrower FK.
+    const firstCoBorrowerId = loanAccount.coBorrowerIds[0];
+    const coBorrower = firstCoBorrowerId
+      ? await this.deps.coBorrowerRepository.findById(firstCoBorrowerId)
+      : (await this.deps.coBorrowerRepository.findByBorrowerId(loanAccount.borrowerId))[0] ?? null;
 
     const loanProduct = await this.deps.loanProductRepository.findById(loanProductVersion.loanProductId);
     if (!loanProduct) throw new NotFoundError('LoanProduct', loanProductVersion.loanProductId);

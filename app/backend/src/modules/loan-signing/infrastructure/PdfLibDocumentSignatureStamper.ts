@@ -139,31 +139,53 @@ export class PdfLibDocumentSignatureStamper implements IDocumentSignatureStamper
 
     targetPage.drawImage(signatureImage, { x: imageX, y: imageY, width: imageWidth, height: imageHeight });
 
-    // Audit trail (Signed by / Date / IP) - always in the page's bottom margin, independent of the
-    // anchor's position, so it can never overlap unrelated content or (on a right-hand-column
-    // anchor) compute a negative text width.
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const auditLines = [
       `Signed by (${isCoBorrower ? 'Co-Borrower' : 'Borrower'}): ${input.signerName}`,
       `Date: ${input.signedAtIso}`,
       input.ipAddress ? `IP address: ${input.ipAddress}` : undefined,
     ].filter((line): line is string => Boolean(line));
-    // 2026-07-25 (two-party signing): a document that requires both signatures gets stamped twice
-    // onto the SAME evolving PDF (see SignLoanSigningDocumentUseCase) - if both audit blocks sat at
-    // the same bottom-margin position, the second stamp would draw directly on top of the first,
-    // making both unreadable. The co-borrower's block sits higher up, clear of the borrower's.
-    const auditX = 40;
-    let auditY = (isCoBorrower ? 55 : 20) + (auditLines.length - 1) * 9;
-    for (const line of auditLines) {
-      targetPage.drawText(line, {
-        x: auditX,
-        y: auditY,
-        size: 7,
-        font,
-        color: rgb(0.45, 0.45, 0.45),
-        maxWidth: width - auditX * 2,
-      });
-      auditY -= 9;
+
+    if (anchor) {
+      // 2026-07-29 (user request) - draw the audit trail directly under this signer's own printed
+      // name/anchor instead of a shared bottom-margin block, since these templates already reserve
+      // blank space there for a "Date:" line. AUDIT_BELOW_ANCHOR_OFFSET is a first-pass distance
+      // below the anchor (image height + the template's own "Signature/printed name" line) - may
+      // need per-template tuning after visual review, same as TEMPLATE_OFFSETS above.
+      const auditX = imageX;
+      const AUDIT_BELOW_ANCHOR_OFFSET = 34;
+      let auditY = anchor.y - AUDIT_BELOW_ANCHOR_OFFSET;
+      for (const line of auditLines) {
+        targetPage.drawText(line, {
+          x: auditX,
+          y: auditY,
+          size: 6,
+          font,
+          color: rgb(0.45, 0.45, 0.45),
+          maxWidth: Math.max(80, width - auditX - 20),
+        });
+        auditY -= 8;
+      }
+    } else {
+      // Templates without an anchor yet - fall back to the original fixed bottom-margin block.
+      // 2026-07-25 (two-party signing): a document that requires both signatures gets stamped
+      // twice onto the SAME evolving PDF (see SignLoanSigningDocumentUseCase) - if both audit
+      // blocks sat at the same bottom-margin position, the second stamp would draw directly on top
+      // of the first, making both unreadable. The co-borrower's block sits higher up, clear of the
+      // borrower's.
+      const auditX = 40;
+      let auditY = (isCoBorrower ? 55 : 20) + (auditLines.length - 1) * 9;
+      for (const line of auditLines) {
+        targetPage.drawText(line, {
+          x: auditX,
+          y: auditY,
+          size: 7,
+          font,
+          color: rgb(0.45, 0.45, 0.45),
+          maxWidth: width - auditX * 2,
+        });
+        auditY -= 9;
+      }
     }
 
     const stampedBytes = await pdfDoc.save();
