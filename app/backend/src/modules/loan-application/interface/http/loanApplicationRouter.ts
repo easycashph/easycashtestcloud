@@ -9,6 +9,7 @@ import {
   createLoanApplicationSchema,
   decideLoanApplicationSchema,
   reviewReportSchema,
+  setMitigationAccountOwnerSchema,
   updateLoanApplicationSchema,
 } from './loanApplicationSchemas';
 
@@ -55,6 +56,15 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     controller.submitReviewReport,
   );
   router.post('/loan-applications/:id/tag-pre-approval', requireAuth, requireApplicationAccess, controller.tagPreApproval);
+  // 2026-07-29: deliberately NOT status-gated (unlike /review-report above) - see
+  // SetMitigationAccountOwnerUseCase's doc comment.
+  router.patch(
+    '/loan-applications/:id/mitigation-account-owner',
+    requireAuth,
+    requireApplicationAccess,
+    validateBody(setMitigationAccountOwnerSchema),
+    controller.setMitigationAccountOwner,
+  );
   // 2026-07-22: mocked "Assist" panel above the Credit Evaluation Report - see
   // AiDocumentReviewResult's doc comment. Same access gate as the review report it feeds.
   router.post('/loan-applications/:id/ai-document-review', requireAuth, requireApplicationAccess, controller.aiDocumentReview);

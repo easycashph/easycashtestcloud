@@ -584,6 +584,19 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-07-29 - deliberately NOT gated by the UNDER_REVIEW check `updateReviewReport()` enforces
+   * above. `mitigation.accountOwner` is read by `CreateLoanSigningSessionUseCase` (via
+   * `LoanAccount.sourceApplicationId`) for loans that are already ACTIVE - long past UNDER_REVIEW -
+   * so it must stay settable for the lifetime of the loan, unlike every other Review Report field
+   * (which the surrounding lock exists specifically to freeze once a later stage has moved on).
+   * Merges into whatever `mitigation` already exists rather than replacing it, so this narrow
+   * update can never clobber the other mitigation fields (bank/branch/account number/etc). */
+  setMitigationAccountOwner(accountOwner: 'BORROWER' | 'CO_BORROWER'): void {
+    const current = this.props.reviewReport ?? { checkedDocuments: [] };
+    this.props.reviewReport = { ...current, mitigation: { ...current.mitigation, accountOwner } };
+    this.props.updatedAt = new Date();
+  }
+
   /** CRM/MIS/Loan Operation Manager "Tags as Pre Approval" once the Review Report is complete:
    * UNDER_REVIEW -> PRE_APPROVAL. The report itself becomes implicitly locked from here on, since
    * updateReviewReport() only accepts UNDER_REVIEW. */

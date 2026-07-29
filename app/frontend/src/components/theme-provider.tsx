@@ -94,7 +94,7 @@ const FONT_SIZE_VALUES = FONT_SIZE_OPTIONS.map((o) => o.value);
  * `DraggableStatCard`) across every page that has it. Off hides every drag handle and disables
  * dragging outright (via dnd-kit's own `disabled` option) - it does NOT reset the officer's already
  * saved card order, just stops further rearranging until switched back on. */
-export const DEFAULT_DRAG_REORDER_ENABLED = true;
+export const DEFAULT_DRAG_REORDER_ENABLED = false;
 
 interface ThemeContextValue {
   theme: Theme;

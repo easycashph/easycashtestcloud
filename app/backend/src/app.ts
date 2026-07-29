@@ -142,6 +142,7 @@ import { DeclineLoanApplicationUseCase } from '@modules/loan-application/applica
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
@@ -988,6 +989,7 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
+      setMitigationAccountOwnerUseCase: new SetMitigationAccountOwnerUseCase({ loanApplicationRepository, auditLogger }),
       generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,

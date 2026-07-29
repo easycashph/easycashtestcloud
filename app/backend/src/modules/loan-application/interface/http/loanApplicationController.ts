@@ -12,6 +12,7 @@ import type { DeclineLoanApplicationUseCase } from '../../application/use-cases/
 import type { RevertLoanApplicationDecisionUseCase } from '../../application/use-cases/RevertLoanApplicationDecisionUseCase';
 import type { StartLoanApplicationReviewUseCase } from '../../application/use-cases/StartLoanApplicationReviewUseCase';
 import type { SubmitLoanApplicationReviewReportUseCase } from '../../application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import type { SetMitigationAccountOwnerUseCase } from '../../application/use-cases/SetMitigationAccountOwnerUseCase';
 import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
@@ -23,6 +24,7 @@ import type {
   CreateLoanApplicationRequestBody,
   DecideLoanApplicationRequestBody,
   ReviewReportRequestBody,
+  SetMitigationAccountOwnerRequestBody,
   UpdateLoanApplicationRequestBody,
 } from './loanApplicationSchemas';
 import { presentLoanApplication, type LoanApplicationLinkage } from './presenters/LoanApplicationPresenter';
@@ -37,6 +39,7 @@ export interface LoanApplicationControllerDeps {
   revertLoanApplicationDecisionUseCase: RevertLoanApplicationDecisionUseCase;
   startLoanApplicationReviewUseCase: StartLoanApplicationReviewUseCase;
   submitLoanApplicationReviewReportUseCase: SubmitLoanApplicationReviewReportUseCase;
+  setMitigationAccountOwnerUseCase: SetMitigationAccountOwnerUseCase;
   generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
@@ -230,6 +233,19 @@ export class LoanApplicationController {
       const body = req.body as ReviewReportRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.submitLoanApplicationReviewReportUseCase.execute(req.params.id as string, currentUser.sub, body);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-07-29 - see `SetMitigationAccountOwnerUseCase`'s doc comment: unlike `submitReviewReport`
+   * above, callable regardless of the application's status. */
+  setMitigationAccountOwner = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { accountOwner } = req.body as SetMitigationAccountOwnerRequestBody;
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.setMitigationAccountOwnerUseCase.execute(req.params.id as string, currentUser.sub, accountOwner);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);
