@@ -10,6 +10,7 @@ import {
   CalendarCheck,
   CheckSquare,
   MessageSquare,
+  FileSignature,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLogPageView } from '@/lib/activityLog';
@@ -119,6 +120,13 @@ const CATEGORIES: ReportCategory[] = [
         label: 'Reminder logs',
         description: 'Who got reminded, by SMS or email, when, status',
         icon: MessageSquare,
+        status: 'live',
+      },
+      {
+        to: '/reports/esignature-logs',
+        label: 'E-signature logs',
+        description: 'Every signing link and OTP code sent, by SMS or email',
+        icon: FileSignature,
         status: 'live',
       },
     ],

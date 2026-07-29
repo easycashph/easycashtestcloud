@@ -2,12 +2,14 @@ import type { ISmsGateway } from '@modules/sms-reminder/application/ports/ISmsGa
 import type { IEmailGateway } from '@modules/email-reminder/application/ports/IEmailGateway';
 import { SigningSessionExpiredError } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
+import type { ISigningNotificationLogRepository } from '../ports/ISigningNotificationLogRepository';
 import { generateOtpCode, hashSigningSecret } from '../../infrastructure/signingTokenHash';
 
 const OTP_TTL_MINUTES = 5;
 
 export interface RequestSigningOtpUseCaseDeps {
   loanSigningSessionRepository: ILoanSigningSessionRepository;
+  signingNotificationLogRepository: ISigningNotificationLogRepository;
   smsGateway: ISmsGateway;
   emailGateway: IEmailGateway;
 }
@@ -30,10 +32,26 @@ export class RequestSigningOtpUseCase {
     await this.deps.loanSigningSessionRepository.save(session);
 
     const messageBody = `Easycash: Your loan document signing code is ${otpCode}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`;
+    let recipient: string;
     if (session.channel === 'EMAIL' && session.email) {
+      recipient = session.email;
       await this.deps.emailGateway.send(session.email, 'Easycash: Your loan document signing code', messageBody);
     } else {
+      recipient = session.phoneNumber;
       await this.deps.smsGateway.send(session.phoneNumber, messageBody);
     }
+
+    // 2026-07-29 (user request): log every OTP send, same "best-effort, never block the real send"
+    // posture as the LINK log in CreateLoanSigningSessionUseCase.
+    await this.deps.signingNotificationLogRepository
+      .create({
+        loanSigningSessionId: session.id,
+        loanAccountId: session.loanAccountId,
+        type: 'OTP',
+        partyType: session.partyType,
+        channel: session.channel === 'EMAIL' && session.email ? 'EMAIL' : 'SMS',
+        recipient,
+      })
+      .catch(() => undefined);
   }
 }

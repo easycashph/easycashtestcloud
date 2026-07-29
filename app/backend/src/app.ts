@@ -247,6 +247,8 @@ import { GetLoanSigningDocumentFileUseCase } from '@modules/loan-signing/applica
 import { GetSignedLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetSignedLoanSigningDocumentFileUseCase';
 import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase';
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
+import { PrismaSigningNotificationLogRepository } from '@modules/loan-signing/infrastructure/PrismaSigningNotificationLogRepository';
+import { ListSigningNotificationLogsUseCase } from '@modules/loan-signing/application/use-cases/ListSigningNotificationLogsUseCase';
 import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
 import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
 import { DryRunAwareEmailGateway } from '@modules/loan-signing/infrastructure/DryRunAwareEmailGateway';
@@ -729,6 +731,7 @@ export function createApp(): Express {
   // loanAccountRepository/borrowerRepository from the loan-document wiring above and this file's
   // top-level borrower wiring - same underlying documents, just batched for signature.
   const loanSigningSessionRepository = new PrismaLoanSigningSessionRepository();
+  const signingNotificationLogRepository = new PrismaSigningNotificationLogRepository();
   const signatureStamper = new PdfLibDocumentSignatureStamper();
   // Constructed directly here (not shared with server.ts's cron-scheduler instance) - app.ts is
   // the HTTP composition root, server.ts is the cron composition root; tests import createApp()
@@ -773,6 +776,7 @@ export function createApp(): Express {
           fileStorage: loanDocumentFileStorage,
         }),
         loanSigningSessionRepository,
+        signingNotificationLogRepository,
         borrowerRepository,
         coBorrowerRepository,
         loanApplicationRepository: new PrismaLoanApplicationRepository(),
@@ -788,14 +792,20 @@ export function createApp(): Express {
         loanSigningSessionRepository,
         fileStorage: loanDocumentFileStorage,
       }),
+      listSigningNotificationLogsUseCase: new ListSigningNotificationLogsUseCase({ signingNotificationLogRepository }),
     },
     tokenService,
   );
   app.use('/api/v1', loanSigningRouter);
 
   const publicLoanSigningRouter = createPublicLoanSigningRouter({
-    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway, emailGateway: signingEmailGateway }),
-    verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository }),
+    requestSigningOtpUseCase: new RequestSigningOtpUseCase({
+      loanSigningSessionRepository,
+      signingNotificationLogRepository,
+      smsGateway: signingSmsGateway,
+      emailGateway: signingEmailGateway,
+    }),
+    verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository, signingNotificationLogRepository }),
     getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({
       loanSigningSessionRepository,
       loanAccountRepository,
