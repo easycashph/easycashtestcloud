@@ -22,11 +22,11 @@ logs/
 *.tsbuildinfo
 
 # Word/Office lock files (created while a .docx template is open for editing, e.g.
-# app/backend/templates/~$SOME_TEMPLATE.docx) — never real content, just an open-file marker.
+# app/easycashbackend/templates/~$SOME_TEMPLATE.docx) — never real content, just an open-file marker.
 ~$*.doc*
 
-# Local document storage (app/backend — DOC-3 local storage adapter)
-app/backend/storage/
+# Local document storage (app/easycashbackend — DOC-3 local storage adapter)
+app/easycashbackend/storage/
 
 # IDE
 .vscode/
@@ -55,7 +55,7 @@ legacy/mongodb-tools/
 legacy/MongoDB dump/
 
 # Real client case files (scanned IDs, credit bureau reports, selfies) — highly sensitive PII,
-# must never enter git history. Only the small curated subset copied into app/frontend/public/
+# must never enter git history. Only the small curated subset copied into app/lmsfrontend/public/
 # for the UI preview is tracked.
 legacy/sdevtech/
 
@@ -78,7 +78,7 @@ legacy/reports/*.xlsm
 # them. 2026-07-11: found untracked but NOT gitignored (same class of gap as legacy/MongoDB dump/
 # and legacy/reports/*.xlsm above — fixed immediately, before any commit). If/when the Templates
 # subfolder is needed as the canonical source for a document-generation feature, copy it
-# deliberately into the app's own source tree (e.g. app/backend/templates/) rather than reading
+# deliberately into the app's own source tree (e.g. app/easycashbackend/templates/) rather than reading
 # live from this ignored legacy folder or un-ignoring any part of it.
 legacy/Excel LMS Files/
 

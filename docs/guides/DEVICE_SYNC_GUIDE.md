@@ -76,7 +76,7 @@ npm install
 cd ..
 
 # 3. Regenerate the Prisma client (safe to always run)
-cd app/backend
+cd app/easycashbackend
 npx prisma generate
 
 # 4. Apply any new database migrations to YOUR local database
@@ -100,10 +100,10 @@ cd ../..
 
 Some CP12 legacy-migration fixes are **standalone scripts**, not Prisma migrations — running
 `prisma migrate deploy` does **not** run them. If a commit's message or docs mention a new script
-under `app/backend/scripts/`, check whether you need to run it too:
+under `app/easycashbackend/scripts/`, check whether you need to run it too:
 
 ```bash
-cd app/backend
+cd app/easycashbackend
 npx tsx scripts/<script-name>.ts --dry-run   # preview first, always
 npx tsx scripts/<script-name>.ts             # then run for real
 ```
@@ -116,7 +116,7 @@ don't guess or substitute an older one, since the data may differ.
 **If in doubt whether you need to re-run a script:** don't guess — run the automated check:
 
 ```bash
-cd app/backend
+cd app/easycashbackend
 npx tsx scripts/check-migration-status.ts
 ```
 
@@ -140,7 +140,7 @@ Check which loans are still safe to rely on a re-import for, and which have alre
 native" (must only be updated through the LMS from now on):
 
 ```bash
-cd app/backend
+cd app/easycashbackend
 npx tsx scripts/check-legacy-sync-safety.ts
 ```
 
@@ -155,9 +155,9 @@ scripts) — not a guess.
 - [ ] `git fetch origin` + `git status` — check for remote updates
 - [ ] `git pull origin main` — if behind or diverged
 - [ ] `npm install` (from `app/`) — if `package-lock.json` changed
-- [ ] `npx prisma generate` (from `app/backend/`)
-- [ ] `npx prisma migrate deploy` (from `app/backend/`)
-- [ ] `npx tsx scripts/check-migration-status.ts` (from `app/backend/`) — run any script it flags ACTION NEEDED
+- [ ] `npx prisma generate` (from `app/easycashbackend/`)
+- [ ] `npx prisma migrate deploy` (from `app/easycashbackend/`)
+- [ ] `npx tsx scripts/check-migration-status.ts` (from `app/easycashbackend/`) — run any script it flags ACTION NEEDED
 - [ ] `docker compose up -d --build` (from `app/docker/`)
 - [ ] Commit your own work
 - [ ] `git push origin main`

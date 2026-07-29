@@ -1,6 +1,6 @@
 /**
  * Thin `fetch` wrapper for the Easycash Portal's `/api/v1/portal/*` backend routes (see
- * app/backend/src/modules/client-portal/). Deliberately separate from app/frontend's apiClient.ts
+ * app/easycashbackend/src/modules/client-portal/). Deliberately separate from app/frontend's apiClient.ts
  * - this app is a fully separate deployable (GitHub Pages), talking to a different auth realm
  * (PortalAccount, not the internal staff User).
  *

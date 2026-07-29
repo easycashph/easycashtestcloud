@@ -20,7 +20,7 @@ export interface LoanAccountBalances {
   penaltyDue: string;
 }
 
-/** Matches `LoanAccountStatus` in `app/backend/prisma/schema.prisma` exactly - note plain `CLOSED`, not `CLOSED_PAID`. */
+/** Matches `LoanAccountStatus` in `app/easycashbackend/prisma/schema.prisma` exactly - note plain `CLOSED`, not `CLOSED_PAID`. */
 export type LoanAccountStatus =
   | 'PENDING_APPROVAL'
   | 'APPROVED'

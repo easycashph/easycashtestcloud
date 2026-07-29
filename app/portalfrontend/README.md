@@ -4,7 +4,7 @@ Client-facing web app for Easycash Lending Company Inc. — sign up, apply for a
 application status online. Hosted on GitHub Pages as a static SPA; talks to the Easycash LMS
 backend's `/api/v1/portal/*` routes over a separate auth realm from internal staff accounts.
 
-This app is developed from the main LMS monorepo at `app/portal/` and mirrored here for GitHub
+This app is developed from the main LMS monorepo at `app/portalfrontend/` and mirrored here for GitHub
 Pages hosting. See the main repo's `CLAUDE.md` for the platform's overall architecture and
 conventions.
 

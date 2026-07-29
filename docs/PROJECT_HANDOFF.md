@@ -2,15 +2,15 @@
 
 **Purpose:** a complete, self-contained briefing for a brand-new Claude Code conversation that
 has never seen this project before. It reflects the repository state through **Milestone 9.1
-checkpoint 11** (`collectionsBalance`/`accountingBalance` summary getters) on the `app/backend`
-track, **plus** the separate, mock-data-only `app/frontend` CEO-facing UI preview committed on
+checkpoint 11** (`collectionsBalance`/`accountingBalance` summary getters) on the `app/easycashbackend`
+track, **plus** the separate, mock-data-only `app/lmsfrontend` CEO-facing UI preview committed on
 2026-07-06, verified directly against the repository rather than reconstructed from memory.
 **Read this document in full before touching any code.** If anything here conflicts with what
 you observe in the repository, trust the repository and update this document.
 
 **2026-07-08 update — this document's "frontend/backend are separate, disconnected tracks"
 framing is now partially stale.** The first wiring pilot landed the same day: real login and real
-Payment Recording now call `app/backend` directly. See `docs/Architecture/
+Payment Recording now call `app/easycashbackend` directly. See `docs/Architecture/
 FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md` for full detail and `LMS_PROJECT_SUMMARY.md` for a current
 top-level summary — both are more current than the rest of this document's frontend sections below,
 which still describe the pre-pilot, fully-mock state and have not been fully rewritten yet.
@@ -21,7 +21,7 @@ which still describe the pre-pilot, fully-mock state and have not been fully rew
 
 - **Current branch:** `main`, up to date with `origin/main`. **Working tree is clean.**
 - **Latest committed commit:** `ba774ed` — "feat: implement ADR-038 role rename (Administrator/
-  Manager/... -> MIS/Loan Operation Manager/...)". This is a real `app/backend` code change (not a
+  Manager/... -> MIS/Loan Operation Manager/...)". This is a real `app/easycashbackend` code change (not a
   docs-only commit) — see §6 for the current, implemented authorization model.
   **Note on commit hashes:** every commit hash in this repository was rewritten on 2026-07-06 by a
   `git filter-branch` pass that stripped `legacy/reports/*.xlsx` (real client data) from history —
@@ -72,8 +72,8 @@ which still describe the pre-pilot, fully-mock state and have not been fully rew
     either use case runs; a repeated key replays the stored response instead of re-executing.
     Both new controller methods use `ActivateLoanUseCase`/`ProcessPaymentUseCase`'s own returned
     aggregate directly (no second `getLoanAccountUseCase` re-fetch) — does not repeat `approve`/
-    `reject`'s known M-1 "mutate then re-fetch" pattern in this new code. The `app/frontend` UI
-    preview still has **zero API calls into `app/backend`** — CP13 shipping does not itself wire
+    `reject`'s known M-1 "mutate then re-fetch" pattern in this new code. The `app/lmsfrontend` UI
+    preview still has **zero API calls into `app/easycashbackend`** — CP13 shipping does not itself wire
     the frontend to anything; that remains separate, not-yet-scoped work.
   - **Two new ADRs resolved/added since the CP10 handoff, both from a single business
     conversation (2026-07-05):**
@@ -121,9 +121,9 @@ which still describe the pre-pilot, fully-mock state and have not been fully rew
 ### 1.1 Frontend UI Preview track (new, 2026-07-06, `a85b815`)
 
 A **separate, parallel track from every Milestone 9.1 backend checkpoint above.** Builds out a
-CEO-facing UI preview against hand-authored mock data in `app/frontend/src/lib/mockData.ts` — no
-`app/backend` files, schema, or API surface touched. Full itemized history is in
-`app/frontend/CHANGELOG.md`; do not duplicate that detail here, just the facts relevant to
+CEO-facing UI preview against hand-authored mock data in `app/lmsfrontend/src/lib/mockData.ts` — no
+`app/easycashbackend` files, schema, or API surface touched. Full itemized history is in
+`app/lmsfrontend/CHANGELOG.md`; do not duplicate that detail here, just the facts relevant to
 resuming work correctly:
 - **Purpose:** demonstrate layout, navigation, and interaction flow to the CEO before the real
   backend HTTP API (CP13) is wired up. A "Preview Mode" banner renders in the app itself, and
@@ -137,17 +137,17 @@ resuming work correctly:
   code convention), and broadened MIS-only Activity Logs.
 - **Does not change, gate, or unblock any backend checkpoint.** CP12 is still gated on `ADR-007`
   §4. **CP13 (HTTP exposure) was completed 2026-07-06, independently of this frontend preview** —
-  the two tracks remain unconnected: this UI preview has zero API calls into `app/backend`, even
-  though `app/backend` now has real `/loan-accounts/:id/activate` and `/loan-accounts/:id/payments`
+  the two tracks remain unconnected: this UI preview has zero API calls into `app/easycashbackend`, even
+  though `app/easycashbackend` now has real `/loan-accounts/:id/activate` and `/loan-accounts/:id/payments`
   routes. Do not treat any UI-preview screen as evidence that its underlying use case is exposed
-  over HTTP — check the `app/backend` module table in §2 for that, not this section.
+  over HTTP — check the `app/easycashbackend` module table in §2 for that, not this section.
 - **Legacy data note:** `legacy/sdevtech/` (real client case files) was used as a photo/document
   source for this preview but is **excluded from the commit and added to `.gitignore`** — only a
-  small curated photo subset (12 files) was copied into `app/frontend/public/applicants/`, with
+  small curated photo subset (12 files) was copied into `app/lmsfrontend/public/applicants/`, with
   explicit user confirmation. Never commit the rest of `legacy/sdevtech/`'s contents.
 - **New root-level files this commit added:** `Run LMS Preview.bat` / `Run LMS  Preview.md` — a
   standalone (non-Claude-Code) local preview launcher for non-technical stakeholders.
-- **Before doing any real CP13 frontend wiring later:** read `app/frontend/CHANGELOG.md` in full
+- **Before doing any real CP13 frontend wiring later:** read `app/lmsfrontend/CHANGELOG.md` in full
   first — several UI decisions here (role/access matrix, account-code convention, document
   categorization) are described as "confirmed by the business" and should carry forward into the
   real implementation rather than being re-derived or guessed at.
@@ -175,12 +175,12 @@ resuming work correctly:
   combinations).
 - **Verification status (all re-run and confirmed clean immediately before writing this section,
   2026-07-06, against the working tree including CP13 and M-5):**
-  - `npx eslint "src/**/*.ts"` (from `app/backend/`) — clean, zero errors/warnings.
+  - `npx eslint "src/**/*.ts"` (from `app/easycashbackend/`) — clean, zero errors/warnings.
   - `npx tsc -p tsconfig.json --noEmit` — clean, zero errors.
   - `npm run build` — clean.
   - `npx vitest run` — **75 test files passed, 1 skipped (76 total); 493 tests passed, 6 skipped
     (499 total); 0 failed.**
-  - `npm audit --omit=dev` (from `app/backend/`) — **0 vulnerabilities**.
+  - `npm audit --omit=dev` (from `app/easycashbackend/`) — **0 vulnerabilities**.
 
 ---
 
@@ -199,7 +199,7 @@ interface/http   →   application   →   domain
   `identity`, `borrower`, `loan-product`, `loan-account`, `ledger`, `repayment`** — `document`
   and `audit` remain empty `.gitkeep` scaffolds.
 
-### Module structure (`app/backend/src/modules/`)
+### Module structure (`app/easycashbackend/src/modules/`)
 | Module | Status |
 |---|---|
 | `identity` | Fully built (Milestone 6): login, refresh rotation, logout, get-current-user. |
@@ -211,7 +211,7 @@ interface/http   →   application   →   domain
 | `document` | Scaffolded only (`.gitkeep`), not started. |
 | `audit` | Scaffolded only (`.gitkeep`), not started. |
 
-### Shared infrastructure (`app/backend/src/shared/`)
+### Shared infrastructure (`app/easycashbackend/src/shared/`)
 | Path | Purpose |
 |---|---|
 | `domain/Money.ts`, `domain/Percentage.ts` | Value objects wrapping `decimal.js`'s `Decimal` directly (imported from `decimal.js`, not `@prisma/client` — a database-portability refactor, uncommitted) — never native `number`. Deterministic, pure methods; construction throws `InvalidMoneyError`/`InvalidPercentageError`. **Final decision: no `Result<T,E>` for these.** |
@@ -246,7 +246,7 @@ interface/http   →   application   →   domain
 - Cross-module dependencies at the **interface** layer are now also an established pattern as of
   Milestone 8.1 (`RepaymentController` depends on `loan-account`'s `GetLoanAccountUseCase` for
   H-1's branch check, since `RepaymentInstallment` has no `branchId` of its own).
-- Composition root is `app/backend/src/app.ts` — the only place infrastructure is instantiated
+- Composition root is `app/easycashbackend/src/app.ts` — the only place infrastructure is instantiated
   and wired into use cases. All module routers are mounted there under `/api/v1`.
 
 ### Important ADRs currently in effect
@@ -396,15 +396,15 @@ content:
   or chat history reference the old filenames, update them to the new numbered names above.
 - **Removed 8 empty, untracked, top-level scaffold folders** left over from initial project setup
   (`backend/`, `database/`, `deployments/`, `frontend/`, `scripts/`, `tests/`, `docs/Reports/`,
-  `docs/SRS/`) — all duplicated the already-in-use `app/backend`/`app/frontend` structure, were
+  `docs/SRS/`) — all duplicated the already-in-use `app/easycashbackend`/`app/lmsfrontend` structure, were
   never populated, and were not tracked by git. `legacy/sdevtech/` (referenced as evidence in
-  `ADR-045`) and `app/frontend/src/{components,features,hooks,lib,routes}` (intentional, not-yet-
+  `ADR-045`) and `app/lmsfrontend/src/{components,features,hooks,lib,routes}` (intentional, not-yet-
   populated frontend scaffolding) were deliberately left untouched.
 
 **Wording inconsistency surfaced and resolved:** while updating references, §8's Financial audit
 infrastructure entry was found to say "fail-closed implementation, logs-but-never-throws on write
 failure" — self-contradictory, since fail-closed requires throwing, not catching-and-logging.
-Checked directly against `app/backend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts`:
+Checked directly against `app/easycashbackend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts`:
 the actual code is correct — it deliberately has no `try/catch`, so a failed `auditLog.create()`
 call propagates and rolls back the enclosing `IUnitOfWork` transaction, exactly as
 `ADR-047-financial-audit-isolation.md` §1/§3 requires. **Only the doc's wording was wrong; the
@@ -418,9 +418,9 @@ no test assertions or logic touched.
 
 **Additional consistency fixes found on a second, broader sweep** (grep restricted to `.ts`/`.md`
 initially missed non-`.ts` source files):
-- `app/backend/prisma/schema.prisma` — 2 stale `ADR-optimistic-concurrency` comment references
+- `app/easycashbackend/prisma/schema.prisma` — 2 stale `ADR-optimistic-concurrency` comment references
   (on `LoanAccount.version` and `RepaymentInstallment.version`) updated to `ADR-048-...`.
-- `app/backend/prisma/migrations/20260703000000_add_optimistic_concurrency_version/migration.sql`
+- `app/easycashbackend/prisma/migrations/20260703000000_add_optimistic_concurrency_version/migration.sql`
   — 3 stale comment references updated to `ADR-048-...`. **Comments only, no DDL changed** — safe
   because this migration has never been applied against a live database in this project (no live
   Postgres has ever been available here, per this file's own header comment and the repeated note
@@ -433,7 +433,7 @@ initially missed non-`.ts` source files):
   content was in fact folded into the already-existing `ADR-042-aggregate-boundaries.md` §7
   ("Why `RepaymentInstallment` is an independent Aggregate Root") when it was written, but the
   invariants doc was never updated to point to it. Fixed to reference the real file/section.
-- `app/backend/dist/**/*.js` (compiled build output) also matched the old filenames in a repo-wide
+- `app/easycashbackend/dist/**/*.js` (compiled build output) also matched the old filenames in a repo-wide
   grep — **left untouched, correctly**: `dist/` is git-ignored, regenerated by `npm run build`, and
   will pick up the corrected source comments on the next build. Never hand-edit generated output.
 - Verified as **not** issues, so left alone: `ADR-008`, `ADR-015`, `ADR-038`, `ADR-041` are
@@ -507,7 +507,7 @@ initially missed non-`.ts` source files):
   tests: `RejectLoanUseCase.test.ts` (new file), `ApproveLoanUseCase.test.ts` (extended) — both
   assert the audit entry's shape and that an audit-write failure rolls back the save.
 - **M-7 (2026-07-06 verification pass) — RESOLVED, 2026-07-06.** Was: `npm audit` — 4
-  vulnerabilities in `app/backend` (1 moderate, 3 high), all transitive via `bcrypt@5.x →
+  vulnerabilities in `app/easycashbackend` (1 moderate, 3 high), all transitive via `bcrypt@5.x →
   @mapbox/node-pre-gyp → tar` (path-traversal/symlink CVEs) and `uuid <11.1.1` (buffer bounds
   check). Fixed: `bcrypt` upgraded to `^6.0.0` (verified via the existing `BcryptPasswordHasher`
   test suite, including the regression test that a static, pre-computed `$2b$12$...` hash string
@@ -558,7 +558,7 @@ initially missed non-`.ts` source files):
   confirms it trips independently of the login limiter.
 
 ### Frontend findings (new, 2026-07-08 full-codebase bug hunt) — all RESOLVED, 2026-07-08
-Found by an independent full read of `app/frontend/src`, cross-checked against `CHANGELOG.md`.
+Found by an independent full read of `app/lmsfrontend/src`, cross-checked against `CHANGELOG.md`.
 - **F-1 — RESOLVED.** Was: Dashboard "Collections This Month" froze after any loan was
   created/activated this session — `DASHBOARD_SUMMARY.totalPortfolioValue` was computed once at
   import time from a one-time `MOCK_LOANS.filter()`, the same stale-snapshot shape as the
@@ -871,14 +871,14 @@ origination) as the schedule's anchor per `ADR-045`. **Do not start CP8 without 
 this handoff does not constitute that approval.**
 
 ### 10.0.1 New/modified source files added by CP1–CP7 (for orientation, not exhaustive)
-- `app/backend/src/shared/errors/DomainError.ts` — `ConcurrencyConflictError` (CP1).
-- `app/backend/src/shared/application/ports/IFinancialAuditLogger.ts` — port (CP2).
-- `app/backend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts` — implementation (CP2).
-- `app/backend/src/shared/domain/calculation/DecliningBalanceInterestCalculator.ts` (CP3).
-- `app/backend/src/shared/domain/calculation/AmortizationScheduleGenerator.ts` (CP3).
-- `app/backend/src/shared/domain/calculation/PaymentAllocationCalculator.ts` (CP4).
-- `app/backend/src/shared/domain/calculation/PaymentAllocationService.ts` (CP4).
-- `app/backend/src/shared/domain/calculation/errors/CalculationDomainErrors.ts` (CP3/CP4).
+- `app/easycashbackend/src/shared/errors/DomainError.ts` — `ConcurrencyConflictError` (CP1).
+- `app/easycashbackend/src/shared/application/ports/IFinancialAuditLogger.ts` — port (CP2).
+- `app/easycashbackend/src/shared/infrastructure/PrismaFinancialAuditLogger.ts` — implementation (CP2).
+- `app/easycashbackend/src/shared/domain/calculation/DecliningBalanceInterestCalculator.ts` (CP3).
+- `app/easycashbackend/src/shared/domain/calculation/AmortizationScheduleGenerator.ts` (CP3).
+- `app/easycashbackend/src/shared/domain/calculation/PaymentAllocationCalculator.ts` (CP4).
+- `app/easycashbackend/src/shared/domain/calculation/PaymentAllocationService.ts` (CP4).
+- `app/easycashbackend/src/shared/domain/calculation/errors/CalculationDomainErrors.ts` (CP3/CP4).
 - `LoanAccount.version` / `RepaymentInstallment.version` getters (CP5), in
   `src/modules/loan-account/domain/LoanAccount.ts` and
   `src/modules/repayment/domain/RepaymentInstallment.ts`.
@@ -1108,7 +1108,7 @@ Do not start implementing anything until the user has explicitly scoped and appr
 6. **Run the verification suite before starting new work**, to confirm the baseline described in
    §1 still holds:
    ```
-   cd app/backend
+   cd app/easycashbackend
    npx eslint "src/**/*.ts"
    npx tsc -p tsconfig.json --noEmit
    npm run build

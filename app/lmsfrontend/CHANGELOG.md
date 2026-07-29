@@ -4,7 +4,7 @@ Scope note: most of this changelog is a **CEO-facing UI preview** built against 
 data in `src/lib/mockData.ts`, existing to demonstrate layout, navigation, and interaction flow
 before the real backend HTTP API is wired up. **Correction, 2026-07-08:** this stopped being
 universally true the same day — see the "Frontend↔Backend Wiring Pilot" entry below. Authentication
-and Payment Recording now call `app/backend` for real; every other page is still mock-only. The
+and Payment Recording now call `app/easycashbackend` for real; every other page is still mock-only. The
 "Preview Mode" banner and `mockData.ts`'s top-of-file comment describe the *pages still on mock
 data*, not the whole app anymore.
 
@@ -243,7 +243,7 @@ borrowers into the backend:
 ## 2026-07-08
 
 ### Frontend↔Backend Wiring Pilot — real login and real Payment Recording (see `docs/Architecture/FRONTEND_BACKEND_WIRING_PILOT_DESIGN.md`)
-The first two pieces of the frontend actually talking to `app/backend`, per the approved design
+The first two pieces of the frontend actually talking to `app/easycashbackend`, per the approved design
 doc's Stages 0 and 1:
 - **Real authentication.** New `src/lib/apiClient.ts` (in-memory access token, `credentials:
   'include'`, transparent refresh-and-retry on a `401`). `roleContext.tsx` rewritten:
@@ -799,7 +799,7 @@ the same day:
 - The Allocation Preview panel switches accordingly: per-installment table for Automatic, a
   simple component-totals summary for Manual (explicitly noted as not yet mapped to specific
   installments — that decision is deferred to whenever CP13 wiring reaches this screen).
-- Mock/preview only, same as the rest of this screen — no `app/backend` change, no real posting.
+- Mock/preview only, same as the rest of this screen — no `app/easycashbackend` change, no real posting.
 
 ### Loan Applications — attachments, AI summary, repeat-client detection
 - Restricted Loan Application attachment file names to documents an applicant would actually
@@ -903,5 +903,5 @@ the same day:
 The bulk of the UI preview (Dashboard, Loan Accounts list/detail, Client Data, Payment Recording,
 Loan Products catalog, Reports, LMS Administration/Member Details/Activity Logs, Preview Mode
 banner, light/dark theme, real company branding) was already built and verified working before
-the entries above; see `docs/PROJECT_HANDOFF.md` for the separate `app/backend` implementation
+the entries above; see `docs/PROJECT_HANDOFF.md` for the separate `app/easycashbackend` implementation
 history (unrelated track — the backend is not yet wired to this frontend).

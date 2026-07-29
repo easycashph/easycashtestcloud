@@ -18,7 +18,7 @@ clones the repo and finds an empty `local/` directory.
 
 - Anything referenced by a fixed path from a script, `docker-compose.yml`, or app config (e.g.
   `.env` files stay next to the app that reads them; `legacy/` source material stays where the
-  migration docs and scripts expect it; `app/backend/storage/` stays where the backend's bind mount
+  migration docs and scripts expect it; `app/easycashbackend/storage/` stays where the backend's bind mount
   expects it). Moving those breaks things — see `docs/guides/DOCKER_CLEANUP_GUIDE.md` and the
   `Architecture/` ADRs before relocating anything with an existing reference.
 - Anything that should actually be committed. If in doubt, ask before adding a new blanket

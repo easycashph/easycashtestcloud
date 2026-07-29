@@ -50,13 +50,13 @@ cd easycash-lms
 `.env` files are gitignored (they can hold secrets) — copy the templates and fill them in:
 
 ```bash
-cp app/backend/.env.example app/backend/.env
-cp app/frontend/.env.example app/frontend/.env
+cp app/easycashbackend/.env.example app/easycashbackend/.env
+cp app/lmsfrontend/.env.example app/lmsfrontend/.env
 ```
 
 For **local dev**, the example values mostly work as-is (dev-only placeholders, e.g.
 `JWT_ACCESS_SECRET=change-me-in-production-min-32-chars`) — no real secrets are needed to run
-the app locally. `app/backend/.env`'s `DATABASE_URL` should point at the Postgres container you'll
+the app locally. `app/easycashbackend/.env`'s `DATABASE_URL` should point at the Postgres container you'll
 start in the next step:
 
 ```
@@ -104,7 +104,7 @@ whoever has the current export, or pull a fresh one yourself:
 - If you instead pull a **fresh** dump yourself (see `backup-mongodb.bat` for the Windows
   reference — you'd need a macOS `mongodump` binary and an equivalent `.sh` script; ask before
   connecting to the real remote SDevTech server), the output folder will have a different
-  timestamp. In that case, update `DUMP_DIR` in `app/backend/scripts/migrate-legacy-data.ts` to
+  timestamp. In that case, update `DUMP_DIR` in `app/easycashbackend/scripts/migrate-legacy-data.ts` to
   match, or rename the folder to match the hardcoded path — don't silently assume it's optional.
 
 ### 5b. Run the migration scripts, in order
@@ -127,7 +127,7 @@ only preview. Confirmed from each script's own file (2026-07-11):
 Preview every script first, in order, before applying any of them:
 
 ```bash
-cd app/backend
+cd app/easycashbackend
 
 npx tsx scripts/migrate-legacy-data.ts                                    # preview (default)
 npx tsx scripts/import-psgc-reference-data.ts                             # preview (default)
@@ -187,10 +187,10 @@ Two ways, same as on Windows:
 **Option A — plain `npm run dev` (recommended for day-to-day dev):**
 ```bash
 # terminal 1
-cd app/backend && npm run dev
+cd app/easycashbackend && npm run dev
 
 # terminal 2
-cd app/frontend && npm run dev
+cd app/lmsfrontend && npm run dev
 ```
 
 **Option B — full Docker Compose (backend + frontend + Postgres, closer to production):**
@@ -210,7 +210,7 @@ it — e.g.:
 
 ```bash
 #!/bin/bash
-cd "$(dirname "$0")/../app/frontend"
+cd "$(dirname "$0")/../app/lmsfrontend"
 PORT="${PORT:-5173}"
 npm run dev -- --port "$PORT" --strictPort
 ```

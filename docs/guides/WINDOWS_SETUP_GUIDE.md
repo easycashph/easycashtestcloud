@@ -64,13 +64,13 @@ Ang `.env` files ay hindi kasama sa git (baka may laman na sensitive) — kailan
 mula sa `.env.example`:
 
 ```powershell
-Copy-Item app\backend\.env.example app\backend\.env
-Copy-Item app\frontend\.env.example app\frontend\.env
+Copy-Item app\easycashbackend\.env.example app\easycashbackend\.env
+Copy-Item app\lmsfrontend\.env.example app\lmsfrontend\.env
 ```
 
 Para sa **local dev**, gumagana na ang mga default values sa `.env.example` nang walang
 karagdagang palitan — hindi kailangan ng totoong secrets para tumakbo lokal. I-double-check lang
-na tumutugma ang `DATABASE_URL` sa `app/backend/.env` sa Docker Postgres container na sisimulan sa
+na tumutugma ang `DATABASE_URL` sa `app/easycashbackend/.env` sa Docker Postgres container na sisimulan sa
 Step 4:
 
 ```
@@ -115,7 +115,7 @@ Walang HTTP endpoint para gumawa ng admin account (sinadya, para hindi ito ma-ab
 lang:
 
 ```powershell
-cd app\backend
+cd app\easycashbackend
 $env:BOOTSTRAP_ADMIN_EMAIL = "admin@easycash.ph"
 $env:BOOTSTRAP_ADMIN_PASSWORD = "PalitanMoIto123!"
 npx tsx scripts/bootstrap-admin.ts
@@ -143,11 +143,11 @@ ipapasa via email/cloud share, laging via secure/encrypted channel.
 
 ```powershell
 # Terminal 1 — backend
-cd app\backend
+cd app\easycashbackend
 npm run dev
 
 # Terminal 2 — frontend
-cd app\frontend
+cd app\lmsfrontend
 npm run dev
 ```
 
@@ -172,7 +172,7 @@ Karaniwang git flow:
 
 ```powershell
 git pull origin main          # kumuha ng bagong commits
-cd app\backend
+cd app\easycashbackend
 npx prisma migrate deploy     # i-apply ang anumang bagong migration
 npx prisma generate
 cd ..\..
@@ -200,8 +200,8 @@ ang commits ng ibang tao).
 3. Copy .env.example -> .env (backend + frontend)
 4. docker compose up -d postgres
 5. npm install (sa app/)
-6. npx prisma generate / migrate deploy / db seed (sa app/backend/)
+6. npx prisma generate / migrate deploy / db seed (sa app/easycashbackend/)
 7. npx tsx scripts/bootstrap-admin.ts (gumawa ng unang MIS account)
-8. npm run dev (sa app/backend at app/frontend, dalawang hiwalay na terminal)
+8. npm run dev (sa app/easycashbackend at app/lmsfrontend, dalawang hiwalay na terminal)
 9. Buksan http://localhost:5173, mag-login
 ```

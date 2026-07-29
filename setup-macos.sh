@@ -35,18 +35,18 @@ echo "  gh:     $(gh --version | head -1)"
 
 info "2. Setting up environment files"
 
-if [ -f "app/backend/.env" ]; then
-  echo "  app/backend/.env already exists - leaving it as-is."
+if [ -f "app/easycashbackend/.env" ]; then
+  echo "  app/easycashbackend/.env already exists - leaving it as-is."
 else
-  cp app/backend/.env.example app/backend/.env
-  echo "  Created app/backend/.env from .env.example."
+  cp app/easycashbackend/.env.example app/easycashbackend/.env
+  echo "  Created app/easycashbackend/.env from .env.example."
 fi
 
-if [ -f "app/frontend/.env" ]; then
-  echo "  app/frontend/.env already exists - leaving it as-is."
+if [ -f "app/lmsfrontend/.env" ]; then
+  echo "  app/lmsfrontend/.env already exists - leaving it as-is."
 else
-  cp app/frontend/.env.example app/frontend/.env
-  echo "  Created app/frontend/.env from .env.example."
+  cp app/lmsfrontend/.env.example app/lmsfrontend/.env
+  echo "  Created app/lmsfrontend/.env from .env.example."
 fi
 
 info "3. Starting PostgreSQL (Docker)"
@@ -71,7 +71,7 @@ info "4. Installing dependencies and setting up the database schema"
 (cd app && npm install)
 
 (
-  cd app/backend
+  cd app/easycashbackend
   npx prisma generate
   npx prisma migrate deploy
   npx prisma db seed
@@ -83,7 +83,7 @@ cat <<'EOF'
 Next steps (manual - see docs/MACOS_SETUP_GUIDE.md §5 onward):
   1. Get the legacy MongoDB dump onto this Mac (never via git/email - see §5a).
   2. Preview, then run, the migration scripts in order (§5b).
-  3. Verify with: cd app/backend && npx tsx scripts/check-migration-status.ts
+  3. Verify with: cd app/easycashbackend && npx tsx scripts/check-migration-status.ts
   4. Create your login user (§5c) with scripts/bootstrap-admin.ts.
-  5. Run the app (§6): npm run dev in app/backend and app/frontend, or docker compose up -d --build.
+  5. Run the app (§6): npm run dev in app/easycashbackend and app/lmsfrontend, or docker compose up -d --build.
 EOF

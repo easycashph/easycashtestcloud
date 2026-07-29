@@ -16,13 +16,13 @@ As of `app/docker/docker-compose.yml`, currently:
 |---|---|---|
 | Container | `easycash-backend-1` | The API (`easycash-backend` image) |
 | Container | `easycash-postgres-1` | The database (`postgres:16-alpine` image) |
-| Image | `easycash-backend:latest` | Built from `app/backend` via `app/docker/backend.Dockerfile` |
+| Image | `easycash-backend:latest` | Built from `app/easycashbackend` via `app/docker/backend.Dockerfile` |
 | Image | `postgres:16-alpine` | Pulled from Docker Hub, unmodified |
 | Volume | `easycash_postgres_data` | Postgres's actual data directory — **never delete this** |
 | Network | `easycash_default` | Compose's auto-created network for the two services above |
 
 Backend file storage (`/app/storage` in the container) is a **bind mount** to
-`app/backend/storage` on the host, not a named Docker volume — deliberately, since 2026-07-22, so
+`app/easycashbackend/storage` on the host, not a named Docker volume — deliberately, since 2026-07-22, so
 a `docker compose`-run backend and a host-run `npm run dev` backend always read/write the exact
 same folder (see the comment on that line in `docker-compose.yml`). This means uploaded
 borrower/loan-application files live on the host filesystem, not inside Docker at all — cleaning
@@ -108,7 +108,7 @@ error, it just quietly doesn't work). Use the explicit Windows-style path instea
 -v "$(pwd)/storage:/dest"
 
 # RIGHT:
--v "D:/ECLC CLAUDE CODE/app/backend/storage:/dest"
+-v "D:/ECLC CLAUDE CODE/app/easycashbackend/storage:/dest"
 ```
 Always verify the mount actually landed by writing a test file from inside the container and then
 checking for it on the host, before trusting a larger copy operation.
