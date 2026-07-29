@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Lock,
   Menu,
+  Phone,
   Quote,
   ShieldCheck,
   Smartphone,
@@ -18,10 +19,12 @@ import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
+import { MobileApplyBar } from '@/components/MobileApplyBar';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
+import { COMPANY } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 
@@ -113,6 +116,16 @@ function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-4 md:flex">
+          {/* Contact number visible in the header, not just the footer - reputable PH lending
+              sites keep a call-us option one glance away for visitors hesitant to apply online.
+              lg: only, since md-width already gets tight with the nav links + Login/Apply. */}
+          <a
+            href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`}
+            className="hidden items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground lg:flex"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            {COMPANY.contact.landline}
+          </a>
           <Link
             to="/requirements"
             className="text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -154,6 +167,13 @@ function Navbar() {
       {open && (
         <div className="border-t border-border bg-background px-4 py-4 md:hidden">
           <div className="flex flex-col gap-3">
+            <a
+              href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`}
+              className="flex items-center gap-1.5 text-sm font-medium"
+            >
+              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+              {COMPANY.contact.landline}
+            </a>
             <Link to="/requirements" onClick={() => setOpen(false)} className="text-sm font-medium">
               {t.nav.requirementsFull}
             </Link>
@@ -194,10 +214,13 @@ function Navbar() {
 
 export function LandingPage() {
   const { t, locale } = useLanguage();
+  // Marks where the hero ends, so MobileApplyBar knows when to slide in - see its own doc comment.
+  const heroEndRef = React.useRef<HTMLDivElement>(null);
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <MobileApplyBar sentinelRef={heroEndRef} />
 
       {/* Hero */}
       <section className="relative overflow-hidden">
@@ -278,6 +301,9 @@ export function LandingPage() {
             </div>
           </motion.div>
         </div>
+        {/* Zero-height sentinel, not a visual element - MobileApplyBar watches this to know when
+            the hero (and its own Apply button) has scrolled out of view. */}
+        <div ref={heroEndRef} aria-hidden="true" />
       </section>
 
       {/* Mission */}

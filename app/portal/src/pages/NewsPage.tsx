@@ -9,6 +9,7 @@ import {
   getUsedCategories,
   type NewsCategory,
 } from '@/content/news';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /**
  * News listing page.
@@ -16,8 +17,13 @@ import {
  * Serves two audiences at once: existing borrowers looking for service advisories (which reduces
  * call volume), and search traffic arriving on financial-literacy guides. See
  * `docs/PORTAL_WEBSITE_STRATEGY.md` §3.5.
+ *
+ * 2026-07-29: wired to the i18n system for the page chrome (title, empty state, filter label) -
+ * post content itself is never translated (see content/news.ts's own scope note - there are no
+ * posts yet, and a future post's language is up to whoever writes it).
  */
 export function NewsPage() {
+  const { t } = useLanguage();
   const posts = getPublishedPosts();
   const usedCategories = getUsedCategories();
   const [activeCategory, setActiveCategory] = React.useState<NewsCategory | 'all'>('all');
@@ -26,10 +32,7 @@ export function NewsPage() {
     activeCategory === 'all' ? posts : posts.filter((post) => post.category === activeCategory);
 
   return (
-    <PublicPageLayout
-      title="News & Announcements"
-      intro="Service advisories, financial guides, and company updates from Easycash."
-    >
+    <PublicPageLayout title={t.news.title} intro={t.news.intro}>
       {posts.length === 0 ? (
         <EmptyState />
       ) : (
@@ -38,7 +41,7 @@ export function NewsPage() {
           {usedCategories.length > 1 && (
             <div className="flex flex-wrap gap-2">
               <CategoryChip
-                label="All"
+                label={t.news.filterAll}
                 active={activeCategory === 'all'}
                 onClick={() => setActiveCategory('all')}
               />
@@ -104,16 +107,14 @@ function CategoryChip({
 }
 
 function EmptyState() {
+  const { t } = useLanguage();
   return (
     <div className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-center">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
         <Newspaper className="h-6 w-6" />
       </div>
-      <h2 className="mt-4 text-base font-semibold">No posts yet</h2>
-      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-        Easycash announcements, service advisories, and financial guides will appear here. Check
-        back soon.
-      </p>
+      <h2 className="mt-4 text-base font-semibold">{t.news.emptyTitle}</h2>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">{t.news.emptyBody}</p>
     </div>
   );
 }

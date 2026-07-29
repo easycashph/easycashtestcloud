@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { NEWS_CATEGORIES, formatPostDate, getPostBySlug, type NewsBlock } from '@/content/news';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /**
  * A single news post.
@@ -8,19 +9,20 @@ import { NEWS_CATEGORIES, formatPostDate, getPostBySlug, type NewsBlock } from '
  * An unknown slug renders a "not found" state rather than redirecting: a borrower who followed an
  * old link should be told the post is gone, not silently dumped on the listing page wondering
  * whether they mistyped.
+ *
+ * 2026-07-29: page chrome wired to i18n (post content itself stays in whatever language it was
+ * written in - see NewsPage.tsx's own note).
  */
 export function NewsArticlePage() {
+  const { t } = useLanguage();
   const { slug } = useParams<{ slug: string }>();
   const post = slug ? getPostBySlug(slug) : undefined;
 
   if (!post) {
     return (
-      <PublicPageLayout
-        title="Post not found"
-        intro="This post may have been moved or removed."
-      >
+      <PublicPageLayout title={t.news.notFoundTitle} intro={t.news.notFoundIntro}>
         <Link to="/news" className="text-sm font-semibold text-primary hover:underline">
-          Back to all news
+          {t.news.backToAllNews}
         </Link>
       </PublicPageLayout>
     );
@@ -47,7 +49,7 @@ export function NewsArticlePage() {
 
       <div className="mt-10 border-t border-border pt-6">
         <Link to="/news" className="text-sm font-semibold text-primary hover:underline">
-          Back to all news
+          {t.news.backToAllNews}
         </Link>
       </div>
     </PublicPageLayout>

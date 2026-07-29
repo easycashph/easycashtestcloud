@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Building2, Mail, MapPin, Phone, ShieldAlert } from 'lucide-react';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { COMPANY, FORMATTED_ADDRESS, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /**
  * Contact page.
@@ -10,18 +11,21 @@ import { COMPANY, FORMATTED_ADDRESS, REGULATORY_DISCLOSURE } from '@/lib/company
  * a contact form, branch addresses, and social media links — none are confirmed, and inventing a
  * phone-answering schedule or an unmonitored inbox is worse than omitting it. See
  * `docs/PORTAL_WEBSITE_STRATEGY.md` §7 questions 6, 8, and 10.
+ *
+ * 2026-07-29: wired to the i18n system - translations.ts already had a full `contact` namespace,
+ * but this page was never actually updated to read from it (same gap found and fixed on
+ * SecurityTipsPage.tsx and ComplaintsPage.tsx).
  */
 export function ContactPage() {
+  const { t } = useLanguage();
+
   return (
-    <PublicPageLayout
-      title="Contact Us"
-      intro={`Reach ${COMPANY.shortName} through any of the channels below. These are our only official contact details.`}
-    >
+    <PublicPageLayout title={t.contact.title} intro={t.contact.intro}>
       <div className="space-y-8">
         <section className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-5">
             <Phone className="h-5 w-5 text-primary" />
-            <h2 className="mt-3 text-sm font-semibold">Phone</h2>
+            <h2 className="mt-3 text-sm font-semibold">{t.contact.phoneHeading}</h2>
             <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
               <li>
                 <a href={`tel:${COMPANY.contact.landline.replace(/[^\d+]/g, '')}`} className="hover:text-foreground">
@@ -45,20 +49,18 @@ export function ContactPage() {
 
           <div className="rounded-2xl border border-border bg-card p-5">
             <Mail className="h-5 w-5 text-primary" />
-            <h2 className="mt-3 text-sm font-semibold">Email</h2>
+            <h2 className="mt-3 text-sm font-semibold">{t.contact.emailHeading}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="hover:text-foreground">
                 {COMPANY.contact.dpoEmail}
               </a>
             </p>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              For data privacy matters and formal written concerns.
-            </p>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t.contact.emailNote}</p>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
             <MapPin className="h-5 w-5 text-primary" />
-            <h2 className="mt-3 text-sm font-semibold">Registered office</h2>
+            <h2 className="mt-3 text-sm font-semibold">{t.contact.officeHeading}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{FORMATTED_ADDRESS}</p>
           </div>
         </section>
@@ -77,29 +79,26 @@ export function ContactPage() {
           <div className="flex items-start gap-3">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-500" />
             <div>
-              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-200">
-                Beware of impostors
-              </h2>
+              <h2 className="text-sm font-bold text-amber-900 dark:text-amber-200">{t.contact.impostorsHeading}</h2>
               <p className="mt-1.5 text-sm leading-relaxed text-amber-900/80 dark:text-amber-200/80">
-                If someone contacts you from a number or account not listed on this page claiming to
-                be {COMPANY.shortName}, treat it as a scam. Read our{' '}
+                {t.contact.impostorsBody.split('{securityLink}')[0]}
                 <Link to="/security-tips" className="font-semibold underline">
-                  Security &amp; Anti-Scam guide
+                  {t.contact.impostorsLinkText}
                 </Link>
-                .
+                {t.contact.impostorsBody.split('{securityLink}')[1]}
               </p>
             </div>
           </div>
         </section>
 
         <section>
-          <h2 className="text-lg font-bold tracking-tight">Have a complaint?</h2>
+          <h2 className="text-lg font-bold tracking-tight">{t.contact.complaintHeading}</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            We would rather hear about it directly.{' '}
+            {t.contact.complaintBody.split('{complaintsLink}')[0]}
             <Link to="/complaints" className="font-semibold text-primary hover:underline">
-              File a complaint
-            </Link>{' '}
-            and we will look into it.
+              {t.contact.complaintLinkText}
+            </Link>
+            {t.contact.complaintBody.split('{complaintsLink}')[1]}
           </p>
         </section>
       </div>
