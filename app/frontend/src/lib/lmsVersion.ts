@@ -62,6 +62,54 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.20',
+    date: 'July 26, 2026',
+    highlights: [
+      'Fixed co-borrower last names sometimes showing blank when converting an approved loan application into a client profile - co-borrower names are now captured as separate First/Middle/Last fields from the start instead of one combined text field that occasionally failed to split correctly.',
+      'Fixed co-borrower addresses not being captured at all in three different places they can be added (loan application intake, Create Client, and a client\'s own Co-Borrower card) - the address picker was missing from all three forms.',
+      'Co-Borrower card on Client Profile redesigned: now edit-in-place (a client has one co-borrower, correctable if verification turns up an issue) instead of implying multiple co-borrowers could be added over time; shows full contact/employer/address details by default instead of just a name.',
+      'Loan Application Detail\'s mixed "Applicant Details" card split into separate Applicant Details and Co-Borrower Details cards, and every detail field across the page gained a small icon next to its label for easier scanning.',
+      'Drag-to-reorder sections (already available on Loan Detail) added to Client Profile and Loan Application Detail as well - also fixed the drag handle being effectively unclickable on both new pages due to a layout issue where it landed outside the card or overlapped a neighboring card in the two-column layout.',
+      'Removed a duplicate Attachments card and widened Loan History on Client Profile for a cleaner layout.',
+    ],
+  },
+  {
+    version: '0.9.19',
+    date: 'July 25, 2026',
+    highlights: [
+      'Loan signing now supports two signers on one document - both the borrower and, when there is one, the co-borrower can each sign in their own place on the same generated loan document, instead of only the borrower having a signing step.',
+      'Added an "Add Co-Borrower" option on Client Profile, so a co-borrower can be recorded for a client even if their original loan application never named one. (Redesigned into an edit-in-place card the very next day - see the entry below.)',
+      'Removed the Agency Verification required-fields gate for Seafarer Loan pre-approval that had been added the day before, after it turned out to be blocking pre-approval more than intended.',
+      'Reports Hub cards gained the same soft shadow treatment applied platform-wide the day before.',
+    ],
+  },
+  {
+    version: '0.9.18',
+    date: 'July 24, 2026',
+    highlights: [
+      'New Loan Restructure - for an overdue or matured loan, close it and open a new loan account carrying its full outstanding balance forward, with staff choosing the new term and first due date. Limited to once per loan account, and only for MIS and Accounting.',
+      'New Loan Adjustment - for a brand-new loan with zero payments made yet, before its first due date, move the first due date without changing anything else about the loan. Also once per loan account, MIS and Accounting only.',
+      'Loan Detail page redesigned: one primary action button per loan status (e.g. Record Payment) with every other action (Undo Disburse, Restructure, Loan Adjustment, Edit) grouped into a single "More actions" menu instead of a growing row of buttons, and key balance figures given clearer visual hierarchy.',
+      'Platform-wide card shadow added so cards read more distinctly against the page background, in both light and dark mode.',
+      'System page\'s "Reminders" tab renamed "Messaging & Alerts" to better reflect everything it actually covers (payment reminders, e-signature SMS, Portal verification).',
+      'Dashboard\'s Recommendation card is now fully live - shows the real, current count of Good/In Arrears/Matured accounts behind each recommended action instead of a static label. This was the last remaining non-live element on the Dashboard.',
+    ],
+  },
+  {
+    version: '0.9.17',
+    date: 'July 23, 2026',
+    highlights: [
+      'Fixed a real bug where a client\'s loan applications, and the attachments filed under them, could silently disappear from view platform-wide - traced to a database update from an earlier merge that had updated the code but not yet been applied to the database itself.',
+      'Dashboard\'s Portfolio Growth and Collections vs. Target cards now compute from real data (month-over-month disbursement, and a rolling 3-month collections average) instead of placeholder sample numbers.',
+      'Dashboard given a more focused color treatment - one hero metric (Portfolio Growth) highlighted, and every chart\'s accent color unified to the platform\'s single primary color instead of a different arbitrary color per chart.',
+      '"Mode of Payment" renamed to "Channel" and expanded to the company\'s full real list of payment channels, with a follow-up review correcting a couple that shouldn\'t have been offered.',
+      '"Reduce Penalty" renamed to "Adjust Penalty," and can now raise a penalty as well as lower it.',
+      'Client and Loan Account pages now also show the documents originally uploaded during the loan application (previously visible only on the application itself), plus a full disbursement fee breakdown.',
+      'Dashboard stat cards can now be dragged to reorder, and Settings\' layout controls were simplified.',
+      'Loan Application\'s Agency Verification fields (for Seafarer Loans) grouped into collapsible sections instead of one long list.',
+    ],
+  },
+  {
     version: '0.9.16',
     date: 'July 22, 2026',
     highlights: [
