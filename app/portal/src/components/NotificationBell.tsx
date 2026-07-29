@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { apiClient } from '@/lib/apiClient';
 import type { PortalNotification, PortalNotificationListResponse } from '@/lib/portalApiTypes';
 
@@ -98,7 +99,14 @@ export function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {items === null ? (
-              <p className="px-4 py-6 text-center text-sm text-muted-foreground">Loading…</p>
+              <div className="space-y-3 px-4 py-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="space-y-1.5">
+                    <Skeleton className="h-3.5 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                ))}
+              </div>
             ) : items.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-muted-foreground">No notifications yet.</p>
             ) : (

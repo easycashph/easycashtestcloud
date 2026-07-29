@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { PortalHeader } from '@/components/PortalHeader';
@@ -47,14 +47,21 @@ export function LoanProductsPage() {
               <h2 className="mt-4 text-base font-semibold">{product.category}</h2>
               <p className="mt-1.5 text-sm text-muted-foreground">{product.blurb}</p>
               <p className="mt-2 text-xs text-muted-foreground">{product.details}</p>
-              <Button
-                className="mt-5"
-                disabled={hasPendingApplication}
-                title={hasPendingApplication ? 'You already have an application in progress' : undefined}
-                onClick={() => navigate(`/apply?category=${encodeURIComponent(product.category)}`)}
-              >
-                Apply Now
-              </Button>
+              <div className="mt-5 flex items-center gap-3">
+                <Button
+                  disabled={hasPendingApplication}
+                  title={hasPendingApplication ? 'You already have an application in progress' : undefined}
+                  onClick={() => navigate(`/apply?category=${encodeURIComponent(product.category)}`)}
+                >
+                  Apply Now
+                </Button>
+                <Link
+                  to="/requirements"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  See requirements
+                </Link>
+              </div>
             </Card>
           ))}
         </div>

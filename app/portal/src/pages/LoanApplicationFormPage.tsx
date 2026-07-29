@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Dialog } from '@/components/ui/Dialog';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
+import { DOCUMENT_LABELS, DOCUMENT_SLOTS } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { TermsContent } from '@/pages/TermsPage';
 import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
@@ -28,31 +29,8 @@ const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Renting', 'Living with family'];
 const REFERRAL_OPTIONS = ['Walk-in', 'Website', 'Facebook', 'Internet', 'Flyers/Signages/Streamers', 'Agent/Referral', 'Others'];
 
-const DOCUMENT_LABELS: Record<Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>, string> = {
-  VALID_ID_BORROWER: 'Valid ID',
-  VALID_ID_CO_BORROWER: 'Valid ID (Co-Borrower)',
-  PROOF_OF_BILLING: 'Proof of Billing',
-  EMPLOYEE_ID: 'Employee ID',
-  BUSINESS_CLEARANCE: 'Business Clearance',
-  CORPORATE_PAYSLIP: 'Payslip',
-  SEAMANS_BOOK: "Seaman's Book",
-  OVERSEAS_EMPLOYMENT_CERTIFICATE: 'Overseas Employment Certificate',
-};
-
-/** Mirrors the staff form's DOCUMENT_SLOTS showWhen logic exactly (LoanApplicationCreatePage.tsx)
- * - only PROFILE_PICTURE is dropped (see backend's portalLoanApplicationSchemas.ts doc comment). */
-type UploadableDocumentCategory = Exclude<PortalDocumentCategory, 'PROFILE_PICTURE'>;
-
-const DOCUMENT_SLOTS: { category: UploadableDocumentCategory; showWhen?: (ctx: { loanCategory: string; hasCoBorrower: boolean }) => boolean }[] = [
-  { category: 'VALID_ID_BORROWER' },
-  { category: 'VALID_ID_CO_BORROWER', showWhen: (ctx) => ctx.hasCoBorrower },
-  { category: 'PROOF_OF_BILLING' },
-  { category: 'EMPLOYEE_ID', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
-  { category: 'CORPORATE_PAYSLIP', showWhen: (ctx) => ctx.loanCategory === 'Salary Loan' },
-  { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
-  { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
-  { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
-];
+/* DOCUMENT_LABELS and DOCUMENT_SLOTS moved to @/lib/loanRequirements on 2026-07-28 so the public
+ * Requirements page reads the same definitions this form does, and the two can never drift. */
 
 /** Numbered section, matching the internal LMS staff-facing form's convention (mirrors the
  * printed loan application form, Form No. ECLC-LOFN01). 2026-07-24 (user request): expanded to

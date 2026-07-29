@@ -2,10 +2,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { NotificationBell } from '@/components/NotificationBell';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
 
-/** Shared header for every logged-in page (Dashboard, Loan Products, ...) - extracted so nav
- * links stay in one place as more authenticated pages get added. */
+/** Shared header for every logged-in page (Dashboard, My Profile, ...) - extracted so nav links
+ * stay in one place as more authenticated pages get added. "Loan Products" tab removed 2026-07-27
+ * (user request) - the /products page itself still exists, just no longer linked from the nav. */
 export function PortalHeader() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -16,7 +18,7 @@ export function PortalHeader() {
   };
 
   return (
-    <header className="border-b border-border bg-background">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/dashboard" className="flex items-center gap-2.5">
           <img src="./logo-easycash.png" alt="Easycash" className="h-8 w-8 rounded-lg object-contain" />
@@ -26,9 +28,6 @@ export function PortalHeader() {
           <Link to="/dashboard" className="hover:text-foreground">
             Dashboard
           </Link>
-          <Link to="/products" className="hover:text-foreground">
-            Loan Products
-          </Link>
           <Link to="/profile" className="hover:text-foreground">
             My Profile
           </Link>
@@ -37,6 +36,7 @@ export function PortalHeader() {
           </Link>
         </nav>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <NotificationBell />
           <Button variant="outline" size="sm" onClick={handleLogout}>
             <LogOut className="h-4 w-4" /> Log Out

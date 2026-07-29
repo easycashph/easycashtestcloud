@@ -1,18 +1,37 @@
+import * as React from 'react';
+import { MotionConfig } from 'framer-motion';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/authContext';
+import { LanguageProvider } from '@/lib/i18n/LanguageContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { LandingPage } from '@/pages/LandingPage';
-import { SignUpPage } from '@/pages/SignUpPage';
-import { VerifyEmailPage } from '@/pages/VerifyEmailPage';
-import { LoginPage } from '@/pages/LoginPage';
-import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
-import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { LoanApplicationFormPage } from '@/pages/LoanApplicationFormPage';
-import { LoanProductsPage } from '@/pages/LoanProductsPage';
-import { ProfilePage } from '@/pages/ProfilePage';
-import { SecurityPage } from '@/pages/SecurityPage';
-import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage';
-import { TermsPage } from '@/pages/TermsPage';
+
+/** The landing page is imported eagerly (above) because it is the entry point for almost every
+ * visitor - lazy-loading it would only add a network round-trip before first paint.
+ *
+ * Everything else is code-split: a first-time visitor reading the landing page should not have to
+ * download the loan application form, the dashboard, and the profile editor before seeing it.
+ * This matters disproportionately here - much of the audience is on mobile data. */
+const SignUpPage = React.lazy(() => import('@/pages/SignUpPage').then((m) => ({ default: m.SignUpPage })));
+const VerifyEmailPage = React.lazy(() => import('@/pages/VerifyEmailPage').then((m) => ({ default: m.VerifyEmailPage })));
+const LoginPage = React.lazy(() => import('@/pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const ForgotPasswordPage = React.lazy(() => import('@/pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = React.lazy(() => import('@/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
+const DashboardPage = React.lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const LoanApplicationFormPage = React.lazy(() => import('@/pages/LoanApplicationFormPage').then((m) => ({ default: m.LoanApplicationFormPage })));
+const LoanProductsPage = React.lazy(() => import('@/pages/LoanProductsPage').then((m) => ({ default: m.LoanProductsPage })));
+const ProfilePage = React.lazy(() => import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SecurityPage = React.lazy(() => import('@/pages/SecurityPage').then((m) => ({ default: m.SecurityPage })));
+const PrivacyPolicyPage = React.lazy(() => import('@/pages/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
+const TermsPage = React.lazy(() => import('@/pages/TermsPage').then((m) => ({ default: m.TermsPage })));
+const SecurityTipsPage = React.lazy(() => import('@/pages/SecurityTipsPage').then((m) => ({ default: m.SecurityTipsPage })));
+const ComplaintsPage = React.lazy(() => import('@/pages/ComplaintsPage').then((m) => ({ default: m.ComplaintsPage })));
+const NewsPage = React.lazy(() => import('@/pages/NewsPage').then((m) => ({ default: m.NewsPage })));
+const NewsArticlePage = React.lazy(() => import('@/pages/NewsArticlePage').then((m) => ({ default: m.NewsArticlePage })));
+const RequirementsPage = React.lazy(() => import('@/pages/RequirementsPage').then((m) => ({ default: m.RequirementsPage })));
+const ContactPage = React.lazy(() => import('@/pages/ContactPage').then((m) => ({ default: m.ContactPage })));
+const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 /** HashRouter, not BrowserRouter: GitHub Pages serves static files only (no server-side rewrite
  * to index.html for a deep link/refresh on a client-side route), and hash-based routes
@@ -36,6 +55,12 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/terms" element={<TermsPage />} />
+      <Route path="/security-tips" element={<SecurityTipsPage />} />
+      <Route path="/complaints" element={<ComplaintsPage />} />
+      <Route path="/news" element={<NewsPage />} />
+      <Route path="/news/:slug" element={<NewsArticlePage />} />
+      <Route path="/requirements" element={<RequirementsPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route
         path="/dashboard"
         element={
@@ -84,7 +109,8 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* A real 404, not a silent redirect home - see NotFoundPage's doc comment. */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
@@ -102,13 +128,49 @@ function PreviewBanner() {
   );
 }
 
+/** Shown while a code-split route chunk is downloading. Deliberately minimal - a spinner that
+ * appears for 100ms reads as a flicker, so this is a calm, centred placeholder rather than an
+ * animation. `role="status"` announces the wait to screen readers. */
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite">
+      <span className="text-sm text-muted-foreground">Loading…</span>
+    </div>
+  );
+}
+
 export default function App() {
   return (
-    <HashRouter>
-      <AuthProvider>
-        <PreviewBanner />
-        <AppRoutes />
-      </AuthProvider>
-    </HashRouter>
+    /* framer-motion animates via inline transforms in JS, so the CSS prefers-reduced-motion rule
+       in index.css cannot reach it. `reducedMotion="user"` makes every motion component honour the
+       OS setting: transform/opacity animations are skipped, content still appears. */
+    <ErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <HashRouter>
+          <LanguageProvider>
+            <AuthProvider>
+              {/* Lets keyboard and screen-reader users jump past the nav straight to the page
+                  content (WCAG 2.4.1 "Bypass Blocks"). Visually hidden until focused. */}
+              <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
+              >
+                Skip to main content
+              </a>
+              <OfflineBanner />
+              <PreviewBanner />
+              {/* A plain div, not <main>: each page owns its own landmarks (the landing page
+                  renders its own <header> nav, which must not sit inside <main>). tabIndex=-1
+                  makes the skip link reliably move focus here in all browsers. */}
+              <div id="main-content" tabIndex={-1} className="outline-none">
+                <React.Suspense fallback={<RouteFallback />}>
+                  <AppRoutes />
+                </React.Suspense>
+              </div>
+            </AuthProvider>
+          </LanguageProvider>
+        </HashRouter>
+      </MotionConfig>
+    </ErrorBoundary>
   );
 }

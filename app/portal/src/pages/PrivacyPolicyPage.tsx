@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { PublicPageLayout } from '@/components/PublicPageLayout';
 
 export function PrivacyContent() {
   return (
@@ -232,18 +231,8 @@ export function PrivacyContent() {
 
 export function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-3xl py-10">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to home
-        </Link>
-
-        <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">Data Privacy Statement and Consent Form</h1>
-
-        <div className="mt-8">
-          <PrivacyContent />
-        </div>
-      </div>
-    </div>
+    <PublicPageLayout title="Data Privacy Statement and Consent Form">
+      <PrivacyContent />
+    </PublicPageLayout>
   );
 }

@@ -36,6 +36,36 @@
 
     --radius: 0.75rem;
   }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 42% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --primary: 158 55% 42%;
+    --primary-foreground: 222 47% 8%;
+
+    --secondary: 222 30% 16%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 222 30% 16%;
+    --muted-foreground: 215 20% 65%;
+
+    --destructive: 0 63% 48%;
+    --destructive-foreground: 210 40% 96%;
+
+    --success: 142 55% 45%;
+    --success-foreground: 222 47% 8%;
+
+    --warning: 32 90% 55%;
+    --warning-foreground: 222 47% 8%;
+
+    --border: 222 25% 20%;
+    --input: 222 25% 20%;
+    --ring: 158 55% 42%;
+  }
 }
 
 @layer base {
@@ -43,6 +73,27 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
+  }
+
+  /* Always show a visible focus ring for keyboard users (WCAG 2.4.7 "Focus Visible").
+     :focus-visible, not :focus, so a mouse click does not leave a ring behind. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* Respect the OS "reduce motion" setting (WCAG 2.3.3). The landing page uses framer-motion
+   reveal/scale animations throughout; for users who get motion sickness or vestibular symptoms
+   these are actively harmful, and the site reads perfectly well without them. Content still
+   appears - only the movement is removed. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

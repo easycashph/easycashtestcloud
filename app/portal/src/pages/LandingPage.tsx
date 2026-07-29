@@ -5,9 +5,9 @@ import {
   ChevronDown,
   ChevronRight,
   Menu,
+  Quote,
   ShieldCheck,
   Smartphone,
-  Star,
   UserPlus,
   FileEdit,
   BadgeCheck,
@@ -16,62 +16,44 @@ import {
 import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { SiteFooter } from '@/components/SiteFooter';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 
-const STEPS = [
-  { icon: UserPlus, title: 'Create an account', body: 'Sign up with your email in under a minute.' },
-  { icon: FileEdit, title: 'Apply online', body: 'Fill out one simple form and submit your requirements.' },
-  { icon: BadgeCheck, title: 'Track your status', body: 'See exactly where your application stands, anytime.' },
-];
+const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
+const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
 
-const FEATURES = [
-  { icon: Smartphone, title: 'Easy & convenient', body: 'Apply anytime, anywhere, from your phone or desktop.' },
-  { icon: CheckCircle2, title: 'Flexible terms', body: 'Payment schedules that work with how you actually get paid.' },
-  { icon: ShieldCheck, title: 'Safe & secure', body: 'Your information is protected - we take confidentiality seriously.' },
-];
-
+/** Client stories inherited from the legacy Easycash website. The numeric star ratings that
+ * previously accompanied these were removed on 2026-07-28: they implied a verified review system
+ * that does not exist, which is not defensible on a regulated financial site. The quotes are
+ * retained but attributed only by role, as received.
+ *
+ * Kept English-only (not in translations.ts) even when the page is set to Filipino: these are
+ * direct quotes as originally given, not Easycash's own copy - translating someone else's quoted
+ * words changes what they're reported to have said. `testimonialsNote` in the dictionary says so
+ * explicitly when Filipino is selected.
+ *
+ * PENDING BUSINESS DECISION: these are unattributed and their consent status is undocumented.
+ * Either obtain documented consent and attribute them properly (first name, role, year), or
+ * replace them with verified stories. See docs/PORTAL_WEBSITE_STRATEGY.md §3.4 and §7 question 7. */
 const TESTIMONIALS = [
   {
-    rating: 5,
     role: 'Seafarer',
     quote:
       "Being a seafarer means irregular paychecks and a constant fear of financial instability. Easycash changed the game for me. They understand the unique challenges we face, and their seafarer loans were a lifesaver. The lower rates and faster approvals were a breath of fresh air. I'm now well on my way to achieving my dream of owning a home when I retire. Smooth sailing all the way!",
   },
   {
-    rating: 4,
     role: 'Seafarer',
     quote:
       "As someone who's been working at sea for over a decade, finding a reliable loan provider that caters to our needs was a constant struggle. But Easycash not only understood our financial frustrations but offered tailored solutions that worked with our income patterns. Their seafarer loans are a game-changer, and the dream of sending my children to college is becoming a reality. Thank you, Easycash!",
   },
   {
-    rating: 5,
     role: 'Business Owner',
     quote:
       "As a small business owner, I'd always felt constrained by the rigid requirements and inflexible terms of traditional lenders. Easycash provided a refreshing alternative. Their business loans offer flexibility, competitive rates, and a swift approval process. With their support, I expanded my business, opened new locations, and achieved financial success beyond my wildest dreams. This is the financing partner every entrepreneur needs!",
-  },
-];
-
-const FAQS = [
-  {
-    question: 'What is Easycash?',
-    answer: 'Easycash is a financial service that provides fast and convenient cash solutions to qualified applicants in the Philippines.',
-  },
-  {
-    question: 'Is Easycash a registered company?',
-    answer: 'Yes. Easycash operates in compliance with applicable Philippine laws and regulations.',
-  },
-  {
-    question: 'Who can apply for Easycash services?',
-    answer: 'Eligible applicants are Filipino citizens who meet the minimum age, income, and identification requirements.',
-  },
-  {
-    question: 'Who is eligible to apply for a loan?',
-    answer: 'Applicants must be at least 18 years old, be a Filipino citizen or resident, have a valid government-issued ID, and have a stable source of income.',
-  },
-  {
-    question: 'Do I need collateral to apply?',
-    answer: 'No. Easycash loans are unsecured and do not require collateral.',
   },
 ];
 
@@ -117,6 +99,7 @@ function Reveal({ children, className }: { children: React.ReactNode; className?
 
 function Navbar() {
   const { isAuthenticated } = useAuth();
+  const { t } = useLanguage();
   const [open, setOpen] = React.useState(false);
 
   return (
@@ -127,27 +110,35 @@ function Navbar() {
           <span className="text-base font-bold tracking-tight">Easycash</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
-          <a href="#products" className="hover:text-foreground">
-            Loan Products
-          </a>
-          <a href="#how-it-works" className="hover:text-foreground">
-            How It Works
-          </a>
-        </nav>
-
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
+          <Link
+            to="/requirements"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {t.nav.requirements}
+          </Link>
+          <Link to="/news" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            {t.nav.news}
+          </Link>
+          <Link
+            to="/security-tips"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {t.nav.security}
+          </Link>
+          <LanguageToggle />
+          <ThemeToggle />
           {isAuthenticated ? (
             <Link to="/dashboard">
-              <Button size="sm">Go to Dashboard</Button>
+              <Button size="sm">{t.nav.goToDashboard}</Button>
             </Link>
           ) : (
             <>
               <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-                Log In
+                {t.common.logIn}
               </Link>
               <Link to="/signup">
-                <Button size="sm">Apply Now</Button>
+                <Button size="sm">{t.common.applyNow}</Button>
               </Link>
             </>
           )}
@@ -161,23 +152,34 @@ function Navbar() {
       {open && (
         <div className="border-t border-border bg-background px-4 py-4 md:hidden">
           <div className="flex flex-col gap-3">
-            <a href="#products" onClick={() => setOpen(false)} className="text-sm font-medium">
-              Loan Products
-            </a>
-            <a href="#how-it-works" onClick={() => setOpen(false)} className="text-sm font-medium">
-              How It Works
-            </a>
+            <Link to="/requirements" onClick={() => setOpen(false)} className="text-sm font-medium">
+              {t.nav.requirementsFull}
+            </Link>
+            <Link to="/news" onClick={() => setOpen(false)} className="text-sm font-medium">
+              {t.nav.newsFull}
+            </Link>
+            <Link to="/security-tips" onClick={() => setOpen(false)} className="text-sm font-medium">
+              {t.nav.securityFull}
+            </Link>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">{t.nav.language}</span>
+              <LanguageToggle />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-muted-foreground">{t.nav.theme}</span>
+              <ThemeToggle />
+            </div>
             {isAuthenticated ? (
               <Link to="/dashboard" onClick={() => setOpen(false)}>
-                <Button className="w-full">Go to Dashboard</Button>
+                <Button className="w-full">{t.nav.goToDashboard}</Button>
               </Link>
             ) : (
               <>
                 <Link to="/login" onClick={() => setOpen(false)} className="text-sm font-medium">
-                  Log In
+                  {t.common.logIn}
                 </Link>
                 <Link to="/signup" onClick={() => setOpen(false)}>
-                  <Button className="w-full">Apply Now</Button>
+                  <Button className="w-full">{t.common.applyNow}</Button>
                 </Link>
               </>
             )}
@@ -189,6 +191,8 @@ function Navbar() {
 }
 
 export function LandingPage() {
+  const { t, locale } = useLanguage();
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -202,22 +206,21 @@ export function LandingPage() {
               variants={fadeUp}
               className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
             >
-              Easycash Lending Company Inc.
+              {t.landing.badge}
             </motion.span>
             <motion.h1 variants={fadeUp} className="mt-4 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
-              We&apos;re here to empower your financial voyage
+              {t.landing.heroTitle}
             </motion.h1>
             <motion.p variants={fadeUp} className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Apply for a loan online in minutes, track your application status in real time, and manage your account -
-              all from one place.
+              {t.landing.heroSubtitle}
             </motion.p>
             <motion.div variants={fadeUp} className="mt-8 flex flex-wrap items-center gap-3">
               <Link to="/signup">
-                <Button size="lg">Apply for a Loan Today</Button>
+                <Button size="lg">{t.landing.applyToday}</Button>
               </Link>
               <Link to="/login">
                 <Button size="lg" variant="outline">
-                  Log In
+                  {t.common.logIn}
                 </Button>
               </Link>
             </motion.div>
@@ -238,9 +241,9 @@ export function LandingPage() {
             <div className="absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-card p-5 shadow-xl sm:p-6">
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Years in Business', value: '14' },
-                  { label: 'Dreams Reached', value: '7,000+' },
-                  { label: 'Corporate Partners', value: '20' },
+                  { label: t.landing.statYearsLabel, value: '14' },
+                  { label: t.landing.statDreamsLabel, value: '7,000+' },
+                  { label: t.landing.statPartnersLabel, value: '20' },
                 ].map((stat) => (
                   <div key={stat.label} className="text-center">
                     <p className="text-xl font-bold text-primary sm:text-2xl">{stat.value}</p>
@@ -257,12 +260,8 @@ export function LandingPage() {
       <section className="py-16 sm:py-20">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Dream Big, Fear Less</h2>
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              We understand the fears - debt traps, loan rejections, and financial uncertainties. Your dreams are worth
-              pursuing, and we&apos;re here to minimize your fears. Our commitment is to provide not just fast loans but
-              pathways to a brighter future. Your dreams, your financial security - it&apos;s what we live for.
-            </p>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.missionTitle}</h2>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">{t.landing.missionBody}</p>
           </Reveal>
         </div>
       </section>
@@ -271,8 +270,8 @@ export function LandingPage() {
       <section id="products" className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">A loan for every dream</h2>
-            <p className="mt-3 text-muted-foreground">Whatever you're working toward, there's an Easycash product built for it.</p>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.productsTitle}</h2>
+            <p className="mt-3 text-muted-foreground">{t.landing.productsSubtitle}</p>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -303,12 +302,20 @@ export function LandingPage() {
                 <div className="p-6">
                   <h3 className="text-base font-semibold">{product.category}</h3>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
-                  <Link
-                    to="/signup"
-                    className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary transition-transform group-hover:translate-x-0.5"
-                  >
-                    Apply for this loan <ChevronRight className="h-4 w-4" />
-                  </Link>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <Link
+                      to="/signup"
+                      className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-transform group-hover:translate-x-0.5"
+                    >
+                      {t.landing.applyForThisLoan} <ChevronRight className="h-4 w-4" />
+                    </Link>
+                    <Link
+                      to="/requirements"
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                    >
+                      {t.landing.seeRequirements}
+                    </Link>
+                  </div>
                 </div>
               </motion.div>
             ))}
@@ -320,7 +327,7 @@ export function LandingPage() {
       <section id="how-it-works" className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">No nonsense. Just a better borrowing experience.</h2>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -330,16 +337,19 @@ export function LandingPage() {
             className="relative mt-14 grid gap-10 sm:grid-cols-3"
           >
             <div className="pointer-events-none absolute left-0 right-0 top-5 hidden h-px bg-border sm:block" />
-            {STEPS.map((step, index) => (
-              <motion.div key={step.title} variants={fadeUp} className="relative text-center">
-                <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                  {index + 1}
-                </div>
-                <step.icon className="mx-auto mt-4 h-6 w-6 text-primary" />
-                <h3 className="mt-3 text-base font-semibold">{step.title}</h3>
-                <p className="mt-1.5 text-sm text-muted-foreground">{step.body}</p>
-              </motion.div>
-            ))}
+            {t.landing.steps.map((step, index) => {
+              const Icon = STEP_ICONS[index];
+              return (
+                <motion.div key={step.title} variants={fadeUp} className="relative text-center">
+                  <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                    {index + 1}
+                  </div>
+                  <Icon className="mx-auto mt-4 h-6 w-6 text-primary" />
+                  <h3 className="mt-3 text-base font-semibold">{step.title}</h3>
+                  <p className="mt-1.5 text-sm text-muted-foreground">{step.body}</p>
+                </motion.div>
+              );
+            })}
           </motion.div>
         </div>
       </section>
@@ -353,17 +363,20 @@ export function LandingPage() {
           variants={stagger}
           className="container grid gap-8 sm:grid-cols-3"
         >
-          {FEATURES.map((feature) => (
-            <motion.div key={feature.title} variants={fadeUp} className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <feature.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold">{feature.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{feature.body}</p>
-              </div>
-            </motion.div>
-          ))}
+          {t.landing.features.map((feature, index) => {
+            const Icon = FEATURE_ICONS[index];
+            return (
+              <motion.div key={feature.title} variants={fadeUp} className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold">{feature.title}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{feature.body}</p>
+                </div>
+              </motion.div>
+            );
+          })}
         </motion.div>
       </section>
 
@@ -371,11 +384,12 @@ export function LandingPage() {
       <section className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">People say the nicest things</h2>
-            <p className="mt-3 text-muted-foreground">
-              Here&apos;s the compelling reason why thousands of businesses and individuals have opted for our expertise to
-              drive their financial growth.
-            </p>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.testimonialsTitle}</h2>
+            <p className="mt-3 text-muted-foreground">{t.landing.testimonialsSubtitle}</p>
+            {/* Testimonials themselves are never translated - see TESTIMONIALS' doc comment. */}
+            {locale === 'fil' && (
+              <p className="mt-2 text-xs italic text-muted-foreground">{t.landing.testimonialsNote}</p>
+            )}
           </Reveal>
           <motion.div
             initial="hidden"
@@ -384,15 +398,11 @@ export function LandingPage() {
             variants={stagger}
             className="mt-10 grid gap-6 sm:grid-cols-3"
           >
-            {TESTIMONIALS.map((t, index) => (
+            {TESTIMONIALS.map((testimonial, index) => (
               <motion.div key={index} variants={fadeUp} className="flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex gap-0.5 text-amber-500">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} className="h-4 w-4" fill={i < t.rating ? 'currentColor' : 'none'} />
-                  ))}
-                </div>
-                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">&ldquo;{t.quote}&rdquo;</p>
-                <p className="mt-4 text-sm font-semibold">{t.role}</p>
+                <Quote className="h-6 w-6 shrink-0 text-primary/40" aria-hidden="true" />
+                <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">&ldquo;{testimonial.quote}&rdquo;</p>
+                <p className="mt-4 text-sm font-semibold">{testimonial.role}</p>
               </motion.div>
             ))}
           </motion.div>
@@ -403,7 +413,7 @@ export function LandingPage() {
       <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <div className="container max-w-2xl">
           <Reveal className="text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Frequently asked questions</h2>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.faqTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
@@ -412,7 +422,7 @@ export function LandingPage() {
             variants={stagger}
             className="mt-8 space-y-3"
           >
-            {FAQS.map((faq) => (
+            {t.landing.faqs.map((faq) => (
               <motion.div key={faq.question} variants={fadeUp}>
                 <FaqItem question={faq.question} answer={faq.answer} />
               </motion.div>
@@ -426,17 +436,15 @@ export function LandingPage() {
         <div className="container">
           <Reveal>
             <div className="rounded-3xl bg-primary px-8 py-12 text-center text-primary-foreground sm:px-16">
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Ready to get started?</h2>
-              <p className="mx-auto mt-3 max-w-lg text-primary-foreground/80">
-                Create your free Easycash account and apply for a loan in minutes.
-              </p>
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.ctaTitle}</h2>
+              <p className="mx-auto mt-3 max-w-lg text-primary-foreground/80">{t.landing.ctaBody}</p>
               <Link to="/signup" className="mt-6 inline-block">
                 <Button
                   size="lg"
                   variant="outline"
                   className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
                 >
-                  Create Your Account
+                  {t.common.createAccount}
                 </Button>
               </Link>
             </div>
@@ -444,60 +452,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t border-border py-12">
-        <div className="container grid gap-8 sm:grid-cols-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <img src="./logo-easycash.png" alt="Easycash" className="h-8 w-8 rounded-lg object-contain" />
-              <span className="text-sm font-bold tracking-tight">Easycash Lending Company, Inc.</span>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-              Unit 9 G/F The Midland Plaza, M Adriatico, Barangay 669, Ermita, Manila.
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">SEC Reg No. CS201001882 &middot; COA No. 640</p>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Contact</p>
-            <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-              <li>(02) 5 310-3708</li>
-              <li>SMART: 0947 595 6151</li>
-              <li>GLOBE: 0927 784 7091</li>
-              <li>
-                <a href="mailto:dataprivacyofficer@easycash.ph" className="hover:text-foreground">
-                  dataprivacyofficer@easycash.ph
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground">Quick Links</p>
-            <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-              <li>
-                <Link to="/privacy-policy" className="hover:text-foreground">
-                  Data Privacy Statement &amp; Consent
-                </Link>
-              </li>
-              <li>
-                <Link to="/terms" className="hover:text-foreground">
-                  Terms and Conditions
-                </Link>
-              </li>
-              <li>
-                <a href="#products" className="hover:text-foreground">
-                  Loan Products
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="container mt-10 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
-          <p>© {new Date().getFullYear()} Easycash Lending Company, Inc. All rights reserved.</p>
-          <p>Internal preview build - not yet live.</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

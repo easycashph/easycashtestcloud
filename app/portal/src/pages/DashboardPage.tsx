@@ -1,9 +1,11 @@
 import * as React from 'react';
+import { motion, type Variants } from 'framer-motion';
 import { FileText, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { useAuth } from '@/lib/authContext';
@@ -28,10 +30,59 @@ const STATUS_TONE: Record<PortalLoanApplicationSummary['status'], string> = {
   DECLINED: 'bg-destructive/10 text-destructive',
 };
 
+/** "What happens next" copy (2026-07-27 user request) - so a client isn't left guessing what a
+ * status badge means. Not a source of truth for actual review SLAs - just sets expectations. */
+const STATUS_NEXT_STEPS: Record<PortalLoanApplicationSummary['status'], string> = {
+  PREAPPROVED: "Our system pre-approved this application. A loan officer will review it next, usually within 1-2 business days.",
+  PREDECLINED: 'Our system flagged this application. You can edit and resubmit it, or a loan officer may reach out for more information.',
+  UNDER_REVIEW: "A loan officer is reviewing this application now. We'll notify you as soon as there's a decision.",
+  PRE_APPROVAL: 'This application passed initial review and is pending final approval.',
+  APPROVED: "This loan is approved. Our team will reach out to complete the release of proceeds.",
+  DECLINED: "This application wasn't approved this time. You're welcome to apply again.",
+};
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
+const stagger: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+
 /** Mirrors the backend's one-application-per-portal-account rule (CreateLoanApplicationUseCase,
  * 2026-07-24) - only editable while no human/system decision has moved it past the initial
  * system-computed verdict. */
 const EDITABLE_STATUSES = new Set<PortalLoanApplicationSummary['status']>(['PREAPPROVED', 'PREDECLINED']);
+
+/** Mirrors the shape of one rendered application row (title bar, subtitle bar, status pill) so the
+ * loading state reads as "your applications are coming" rather than an unexplained blank pause. */
+function ApplicationsListSkeleton() {
+  return (
+    <div className="mt-4 divide-y divide-border">
+      {[0, 1].map((i) => (
+        <div key={i} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApplicationDetailSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-24 w-full" />
+    </div>
+  );
+}
 
 /** Phase 2 (2026-07-23): "Create Loan Application" now routes to the real form, and this page
  * shows the client's own submitted applications and their current status. */
@@ -70,10 +121,13 @@ export function DashboardPage() {
       <PortalHeader />
 
       <main className="container py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Welcome back{account ? `, ${account.email}` : ''}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
+        <motion.div initial="hidden" animate="show" variants={fadeUp}>
+          <h1 className="text-2xl font-bold tracking-tight">Welcome back{account ? `, ${account.email}` : ''}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
+        </motion.div>
 
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        <motion.div initial="hidden" animate="show" variants={stagger} className="mt-8 grid gap-5 sm:grid-cols-2">
+          <motion.div variants={fadeUp}>
           <Card className="p-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <FileText className="h-5 w-5" />
@@ -88,7 +142,9 @@ export function DashboardPage() {
               Create Loan Application
             </Button>
           </Card>
+          </motion.div>
 
+          <motion.div variants={fadeUp}>
           <Card className="p-6">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <User className="h-5 w-5" />
@@ -102,19 +158,22 @@ export function DashboardPage() {
               View Profile
             </Button>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
 
+        <motion.div initial="hidden" animate="show" variants={fadeUp}>
         <Card className="mt-5 p-6">
           <h2 className="text-base font-semibold">My Applications</h2>
           {applications === null ? (
-            <p className="mt-2 text-sm text-muted-foreground">Loading…</p>
+            <ApplicationsListSkeleton />
           ) : applications.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">You haven't submitted a loan application yet.</p>
           ) : (
-            <div className="mt-4 divide-y divide-border">
+            <motion.div initial="hidden" animate="show" variants={stagger} className="mt-4 divide-y divide-border">
               {applications.map((application) => (
-                <div
+                <motion.div
                   key={application.id}
+                  variants={fadeUp}
                   role="button"
                   tabIndex={0}
                   onClick={() => openApplicationDetail(application.id)}
@@ -124,7 +183,7 @@ export function DashboardPage() {
                       openApplicationDetail(application.id);
                     }
                   }}
-                  className="flex w-full cursor-pointer items-center justify-between gap-4 py-3 text-left hover:bg-secondary/40"
+                  className="flex w-full cursor-pointer flex-col gap-3 py-3 text-left transition-colors hover:bg-secondary/40 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="text-sm font-medium">
@@ -133,6 +192,7 @@ export function DashboardPage() {
                     <p className="text-xs text-muted-foreground">
                       Submitted {new Date(application.createdAt).toLocaleDateString()} - {application.requestedTermMonths} months
                     </p>
+                    <p className="mt-1.5 max-w-md text-xs text-muted-foreground">{STATUS_NEXT_STEPS[application.status]}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {EDITABLE_STATUSES.has(application.status) && (
@@ -151,15 +211,16 @@ export function DashboardPage() {
                       {STATUS_LABELS[application.status]}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </Card>
+        </motion.div>
       </main>
 
       <Dialog open={viewingApplicationId !== null} onClose={() => setViewingApplicationId(null)} title="Loan Application">
-        {isLoadingDetail && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {isLoadingDetail && <ApplicationDetailSkeleton />}
         {detailError && <p className="text-sm text-destructive">{detailError}</p>}
         {viewingDetail && <LoanApplicationDetailView detail={viewingDetail} />}
       </Dialog>

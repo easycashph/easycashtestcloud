@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { Alert } from '@/components/ui/Alert';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { PortalAvatar } from '@/components/PortalAvatar';
@@ -82,6 +83,31 @@ function addressToDraft(address: PortalProfile['addresses'][number] | undefined)
     province: address.province ?? '',
     zipCode: address.zipCode ?? '',
   };
+}
+
+/** Mirrors the shape of the real profile form below - two cards, each with a heading bar and a
+ * grid of label/field pairs - so the loading state reads as "your profile is coming" rather than
+ * an unexplained blank pause. Deliberately approximate rather than pixel-matching every real card:
+ * the point is to signal "a form is loading here", not to be indistinguishable from the final
+ * content. */
+function ProfileFormSkeleton() {
+  return (
+    <div className="mt-8 space-y-5">
+      {[0, 1].map((card) => (
+        <Card key={card} className="p-6">
+          <Skeleton className="h-4 w-40" />
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {[0, 1, 2, 3].map((field) => (
+              <div key={field} className="space-y-1.5">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -254,7 +280,7 @@ export function ProfilePage() {
           This is the same client record Easycash staff sees - you can update your contact info here.
         </p>
 
-        {state === 'loading' && <p className="mt-8 text-sm text-muted-foreground">Loading…</p>}
+        {state === 'loading' && <ProfileFormSkeleton />}
 
         {state === 'error' && (
           <Alert tone="error" className="mt-8">
@@ -272,7 +298,12 @@ export function ProfilePage() {
               </p>
             </Card>
 
-            {applicationState === 'loading' && <p className="text-sm text-muted-foreground">Loading…</p>}
+            {applicationState === 'loading' && (
+              <Card className="p-6">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="mt-2 h-4 w-1/2" />
+              </Card>
+            )}
             {applicationState === 'error' && (
               <Alert tone="error">Couldn't load your application details. Please try again later.</Alert>
             )}

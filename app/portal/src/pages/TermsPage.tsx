@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { PublicPageLayout } from '@/components/PublicPageLayout';
 
 const CLAUSES = [
   {
@@ -65,21 +64,11 @@ export function TermsContent() {
 
 export function TermsPage() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container max-w-3xl py-10">
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to home
-        </Link>
-
-        <h1 className="mt-6 text-2xl font-bold tracking-tight sm:text-3xl">Terms and Conditions</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Please make sure you review, understand, and agree with the following terms and conditions.
-        </p>
-
-        <div className="mt-8">
-          <TermsContent />
-        </div>
-      </div>
-    </div>
+    <PublicPageLayout
+      title="Terms and Conditions"
+      intro="Please make sure you review, understand, and agree with the following terms and conditions."
+    >
+      <TermsContent />
+    </PublicPageLayout>
   );
 }
