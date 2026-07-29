@@ -77,7 +77,7 @@ import type {
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
-import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
+import { cn, formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 /** 2026-07-26 (user request) - icon-labeled `<dt>` for the summary cards' dl/dt/dd fields,
  * matching the icon+label pattern already used on ClientProfilePage's client info card. */
@@ -1023,6 +1023,11 @@ const UnderwritingCard = React.forwardRef<
   );
   const isSeafarerLoan = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
   const hasMitigationData = MITIGATION_FIELDS.some((f) => mitigation[f.key]?.trim());
+  // 2026-07-29: only meaningful (and only required) when there's actually a co-borrower to
+  // disambiguate against - CreateLoanSigningSessionUseCase reads this to decide whether "Deed of
+  // Assignment - Co-Borrower" belongs in the co-borrower's e-signature batch.
+  const mitigationOwnerRequired = hasMitigationData && Boolean(application.coBorrowerName);
+  const mitigationOwnerMissing = mitigationOwnerRequired && !mitigation.accountOwner;
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
   const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
@@ -1263,6 +1268,48 @@ const UnderwritingCard = React.forwardRef<
               ))}
             </div>
           )}
+          {mitigationOpen && application.coBorrowerName && (
+            <div className="border-t pt-3">
+              <Label className="text-xs text-muted-foreground">
+                Whose name is this account under?
+                <span className="ml-0.5 text-destructive">*</span>
+              </Label>
+              {canEditReview ? (
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMitigation((prev) => ({ ...prev, accountOwner: 'BORROWER' }))}
+                    className={cn(
+                      'rounded-md border py-2 text-sm transition-colors',
+                      mitigation.accountOwner === 'BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                    )}
+                  >
+                    Borrower
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMitigation((prev) => ({ ...prev, accountOwner: 'CO_BORROWER' }))}
+                    className={cn(
+                      'rounded-md border py-2 text-sm transition-colors',
+                      mitigation.accountOwner === 'CO_BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                    )}
+                  >
+                    Co-borrower
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm">
+                  {mitigation.accountOwner === 'CO_BORROWER' ? 'Co-borrower' : mitigation.accountOwner === 'BORROWER' ? 'Borrower' : '-'}
+                </p>
+              )}
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Determines whether "Deed of Assignment - Co-Borrower" is included when sending e-signature documents to the co-borrower.
+              </p>
+              {canEditReview && mitigationOwnerMissing && (
+                <p className="mt-1.5 text-xs text-destructive">Required - please select who this account belongs to.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2 rounded-md border p-3">
@@ -1467,7 +1514,11 @@ const UnderwritingCard = React.forwardRef<
         </div>
 
         {canEditReview && (
-          <Button size="sm" disabled={saveReviewMutation.isPending} onClick={() => saveReviewMutation.mutate()}>
+          <Button
+            size="sm"
+            disabled={saveReviewMutation.isPending || mitigationOwnerMissing}
+            onClick={() => saveReviewMutation.mutate()}
+          >
             {saveReviewMutation.isPending ? 'Saving…' : 'Save Underwriting Details'}
           </Button>
         )}

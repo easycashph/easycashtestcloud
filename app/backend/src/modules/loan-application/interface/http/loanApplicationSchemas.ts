@@ -91,6 +91,7 @@ const mitigationDetailsSchema = z.object({
   accountNumber: z.string().optional(),
   atmCardNumber: z.string().optional(),
   allotmentAmount: z.string().optional(),
+  accountOwner: z.enum(['BORROWER', 'CO_BORROWER']).optional(),
 });
 
 const agencyVerificationDetailsSchema = z.object({

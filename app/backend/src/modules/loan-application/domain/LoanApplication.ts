@@ -34,7 +34,14 @@ export interface DocumentVerificationEntry {
 }
 
 /** 2026-07-21 — "Mode of Payment and Mitigation" from the legacy CER: an optional ATM/allotment
- * surrender arrangement, not applicable to every loan. */
+ * surrender arrangement, not applicable to every loan.
+ *
+ * 2026-07-29: `accountOwner` added - whose name this bank/ATM account is under. Required whenever
+ * any of the other mitigation fields are filled AND the application has a co-borrower - it's the
+ * source of truth `CreateLoanSigningSessionUseCase` reads (via `LoanAccount.sourceApplicationId`)
+ * to decide whether "Deed of Assignment - Co-Borrower" belongs in the co-borrower's signing batch:
+ * that form only applies when the surrendered account is actually the co-borrower's, not simply
+ * because a co-borrower exists on the loan. */
 export interface MitigationDetails {
   bank?: string;
   branch?: string;
@@ -42,6 +49,7 @@ export interface MitigationDetails {
   accountNumber?: string;
   atmCardNumber?: string;
   allotmentAmount?: string;
+  accountOwner?: 'BORROWER' | 'CO_BORROWER';
 }
 
 /** 2026-07-21 — Agency/contract/allotment verification from the legacy CER, required only for

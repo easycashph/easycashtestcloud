@@ -9,6 +9,7 @@ import type { ISmsGateway } from '@modules/sms-reminder/application/ports/ISmsGa
 import type { IEmailGateway } from '@modules/email-reminder/application/ports/IEmailGateway';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import { LoanSigningSession, type SigningPartyType, type SigningLinkChannel } from '../../domain/LoanSigningSession';
 import {
   NoCoBorrowerLinkedError,
@@ -51,6 +52,7 @@ export interface CreateLoanSigningSessionUseCaseDeps {
   loanSigningSessionRepository: ILoanSigningSessionRepository;
   borrowerRepository: IBorrowerRepository;
   coBorrowerRepository: ICoBorrowerRepository;
+  loanApplicationRepository: ILoanApplicationRepository;
   smsGateway: ISmsGateway;
   emailGateway: IEmailGateway;
 }
@@ -148,8 +150,23 @@ export class CreateLoanSigningSessionUseCase {
       ? await this.deps.documentTemplateRepository.findConditionalForLoanProduct(loanProductVersion.loanProductId)
       : [];
 
+    // 2026-07-29 (user request): the two "Deed of Assignment" templates are mutually exclusive per
+    // loan - whichever party the surrendered ATM/allotment account actually belongs to (captured on
+    // the originating LoanApplication's Underwriting review, `MitigationDetails.accountOwner`, and
+    // required there whenever any other mitigation field is filled and a co-borrower is present)
+    // determines which one applies, not simply which batch is being sent. When `accountOwner` is
+    // unset (no co-borrower, or mitigation section never used), default to Borrower's Deed of
+    // Assignment applying - the pre-existing behavior for every loan without this new field.
+    let mitigationAccountOwner: 'BORROWER' | 'CO_BORROWER' | undefined;
+    if (loanAccount.sourceApplicationId) {
+      const sourceApplication = await this.deps.loanApplicationRepository.findById(loanAccount.sourceApplicationId);
+      mitigationAccountOwner = sourceApplication?.reviewReport?.mitigation?.accountOwner;
+    }
+
     const applicableTemplates = [...requiredTemplates, ...conditionalTemplates]
       .filter((t) => (partyType === 'CO_BORROWER' ? t.requiresCoBorrowerSignature : t.requiresBorrowerSignature))
+      .filter((t) => t.code !== 'DEED_OF_ASSIGNMENT_CO_BORROWER' || mitigationAccountOwner === 'CO_BORROWER')
+      .filter((t) => t.code !== 'DEED_OF_ASSIGNMENT_BORROWER' || mitigationAccountOwner !== 'CO_BORROWER')
       .sort((a, b) => a.sortIndex - b.sortIndex);
     if (applicableTemplates.length === 0) throw new NoDocumentsForPartyError(partyType);
 
