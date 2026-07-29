@@ -1,0 +1,62 @@
+name: Deploy Portal to GitHub Pages
+
+# 2026-07-29: relocated from app/portal/.github/workflows/deploy.yml to the repo root.
+# GitHub Actions only ever scans .github/workflows/ relative to the REPOSITORY root - in a
+# monorepo (this repo's git root is the project root, not app/portal), a workflow file nested
+# under app/portal/.github/workflows/ is invisible to GitHub and never runs. Confirmed via
+# `gh run list` (zero runs in the repo's entire history) and `gh api repos/.../pages` (404 - Pages
+# was never even enabled). Renamed deploy.yml -> deploy-portal.yml so a future LMS-specific
+# workflow at this same root location has an unambiguous name to sit alongside.
+
+on:
+  push:
+    branches: [main]
+    # Only run when the Portal itself (or this workflow) actually changes - a monorepo push that
+    # only touches app/backend or app/frontend shouldn't trigger a Portal rebuild/deploy.
+    paths:
+      - 'app/portal/**'
+      - '.github/workflows/deploy-portal.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/portal/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          # Path is relative to $GITHUB_WORKSPACE (repo root), NOT to this job's
+          # working-directory - the previous version of this file got this right only by
+          # accident, since it lived inside app/portal/ itself.
+          path: app/portal/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
