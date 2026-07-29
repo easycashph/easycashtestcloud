@@ -1,3 +1,9 @@
+# Personal/machine-local/scratch files (credential notes, ad-hoc local DB backups, etc.) — see
+# local/README.md for what belongs here and why this folder exists (2026-07-29). The README itself
+# is the one deliberate exception, so the folder's purpose stays documented even on a fresh clone.
+/local/*
+!/local/README.md
+
 # Node
 node_modules/
 npm-debug.log
@@ -76,9 +82,6 @@ legacy/reports/*.xlsm
 # live from this ignored legacy folder or un-ignoring any part of it.
 legacy/Excel LMS Files/
 
-# Local database backups (backup-database.bat output) — never committed.
-backups/
-
 # pg_dump exports of the live Postgres DB (real borrower/loan PII) — used to hand off a full
 # snapshot between team members' separate local Postgres instances (e.g. MIS Nomer's laptop).
 # Same sensitivity class as legacy/MongoDB dump/ above — never committed.
@@ -100,9 +103,6 @@ app/docker/tailscale-certs/
 # credentials as the zip above, structurally required for mongodump to connect. Never committed.
 backup-mongodb.bat
 backup-mongodb.command
-
-# Personal login credentials in plain text — never committed.
-MIS Jomer Login.md
 
 # Build
 dist/

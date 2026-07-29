@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "frontend-preview",
+      "name": "lms-preview",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "app/frontend"],
       "port": 5173,

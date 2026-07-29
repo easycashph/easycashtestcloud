@@ -203,7 +203,7 @@ Frontend: http://localhost:5173 · Backend: http://localhost:4000
 
 ### Note on `.claude/launch.json` (Claude Code's browser-preview tool)
 
-`.claude/launch.json`'s `frontend-preview` config currently points at a Windows batch file
+`.claude/launch.json`'s `lms-preview` config currently points at a Windows batch file
 (`.claude/run-frontend.bat`), which won't run on macOS. If you want Claude Code's preview tool to
 work on your Mac, add a `.sh` equivalent and point a second config entry (or a per-OS override) at
 it — e.g.:

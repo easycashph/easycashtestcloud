@@ -141,15 +141,6 @@ ipapasa via email/cloud share, laging via secure/encrypted channel.
 
 ## 7. Patakbuhin ang app
 
-**Pinakamadaling paraan** — double-click ang `Run LMS Preview.bat` sa root ng project (o patakbuhin
-via PowerShell), na awtomatikong:
-1. Nililinis ang stale processes sa port 5173/4000.
-2. Sinisimulan ang backend (`npm run dev`, port 4000) kung wala pang tumatakbo doon.
-3. Sinisimulan ang frontend hot-reload dev server (`npm run dev`, port 5173).
-4. Binubuksan ang browser sa `http://localhost:5173`.
-
-O manu-mano:
-
 ```powershell
 # Terminal 1 — backend
 cd app\backend
@@ -211,6 +202,6 @@ ang commits ng ibang tao).
 5. npm install (sa app/)
 6. npx prisma generate / migrate deploy / db seed (sa app/backend/)
 7. npx tsx scripts/bootstrap-admin.ts (gumawa ng unang MIS account)
-8. Run LMS Preview.bat (o npm run dev sa backend at frontend)
+8. npm run dev (sa app/backend at app/frontend, dalawang hiwalay na terminal)
 9. Buksan http://localhost:5173, mag-login
 ```
