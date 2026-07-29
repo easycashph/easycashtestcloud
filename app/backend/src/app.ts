@@ -144,6 +144,7 @@ import { DeclineLoanApplicationUseCase } from '@modules/loan-application/applica
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
+import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
@@ -250,6 +251,7 @@ import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/applicatio
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
 import { PdfLibDocumentSignatureStamper } from '@modules/loan-signing/infrastructure/PdfLibDocumentSignatureStamper';
 import { DryRunAwareSmsGateway } from '@modules/loan-signing/infrastructure/DryRunAwareSmsGateway';
+import { DryRunAwareEmailGateway } from '@modules/loan-signing/infrastructure/DryRunAwareEmailGateway';
 import { createStatementOfAccountRouter } from '@modules/statement-of-account/interface/http/statementOfAccountRouter';
 import { GenerateStatementOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/GenerateStatementOfAccountUseCase';
 import { ListStatementsOfAccountUseCase } from '@modules/statement-of-account/application/use-cases/ListStatementsOfAccountUseCase';
@@ -754,6 +756,18 @@ export function createApp(): Express {
     }),
     new PrismaReminderSettingsRepository(),
   );
+  // 2026-07-28 (email delivery channel) - same dry-run-safety precedent as signingSmsGateway
+  // above, added after confirming some Smart-network numbers silently filter link-containing SMS.
+  const signingEmailGateway = new DryRunAwareEmailGateway(
+    new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SIGNING_SMTP_FROM_ADDRESS,
+    }),
+    new PrismaReminderSettingsRepository(),
+  );
   const loanSigningRouter = createLoanSigningRouter(
     {
       createLoanSigningSessionUseCase: new CreateLoanSigningSessionUseCase({
@@ -772,8 +786,11 @@ export function createApp(): Express {
           fileStorage: loanDocumentFileStorage,
         }),
         loanSigningSessionRepository,
+        borrowerRepository,
         coBorrowerRepository,
+        loanApplicationRepository: new PrismaLoanApplicationRepository(),
         smsGateway: signingSmsGateway,
+        emailGateway: signingEmailGateway,
       }),
       listLoanSigningSessionsUseCase: new ListLoanSigningSessionsUseCase({
         loanSigningSessionRepository,
@@ -790,7 +807,7 @@ export function createApp(): Express {
   app.use('/api/v1', loanSigningRouter);
 
   const publicLoanSigningRouter = createPublicLoanSigningRouter({
-    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway }),
+    requestSigningOtpUseCase: new RequestSigningOtpUseCase({ loanSigningSessionRepository, smsGateway: signingSmsGateway, emailGateway: signingEmailGateway }),
     verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository }),
     getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({
       loanSigningSessionRepository,
@@ -829,6 +846,7 @@ export function createApp(): Express {
     borrowerRepository,
     coBorrowerRepository,
     repaymentInstallmentRepository,
+    loanProductRepository,
   });
   const statementOfAccountRouter = createStatementOfAccountRouter(
     {
@@ -984,6 +1002,7 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
+      setMitigationAccountOwnerUseCase: new SetMitigationAccountOwnerUseCase({ loanApplicationRepository, auditLogger }),
       generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,
@@ -1042,7 +1061,10 @@ export function createApp(): Express {
   const reminderSettingsRouter = createReminderSettingsRouter(
     {
       getReminderSettingsUseCase: new GetReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
-      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({
+        reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+        auditLogger,
+      }),
     },
     tokenService,
   );

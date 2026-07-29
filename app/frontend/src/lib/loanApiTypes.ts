@@ -145,6 +145,11 @@ export interface LoanAccount {
   /** Set at "Create Loan Account" time to the LoanApplication this account was actually produced
    * from - null for legacy-migrated accounts and any account created before this field existed. */
   sourceApplicationId: string | null;
+  /** Non-null only for a CP12-migrated legacy loan. Drives "prospective vs migrated" branching
+   * (e.g. live-computed vs manual-date-range Penalty on the Statement of Account, ADR-052 addendum). */
+  legacyId: string | null;
+  /** Zero or one entry today (co-borrower is per-Borrower, ADR-015) - empty for a loan with no co-borrower. */
+  coBorrowerIds: string[];
 }
 
 export interface BorrowerIncomeDetail {

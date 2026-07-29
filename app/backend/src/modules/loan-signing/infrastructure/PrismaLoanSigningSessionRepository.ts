@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import { LoanSigningSession, type LoanSigningSessionProps } from '../domain/LoanSigningSession';
+import { LoanSigningSession, type LoanSigningSessionProps, type SigningLinkChannel } from '../domain/LoanSigningSession';
 import type { ILoanSigningSessionRepository } from '../application/ports/ILoanSigningSessionRepository';
 
 type PrismaWriteClient = PrismaClient | Prisma.TransactionClient;
@@ -16,6 +16,8 @@ function toDomain(row: SessionRow): LoanSigningSession {
     partyType: row.partyType,
     coBorrowerId: row.coBorrowerId ?? undefined,
     phoneNumber: row.phoneNumber,
+    channel: row.channel as SigningLinkChannel,
+    email: row.email ?? undefined,
     tokenHash: row.tokenHash,
     expiresAt: row.expiresAt,
     revokedAt: row.revokedAt ?? undefined,
@@ -49,6 +51,8 @@ export class PrismaLoanSigningSessionRepository implements ILoanSigningSessionRe
         partyType: p.partyType,
         coBorrowerId: p.coBorrowerId,
         phoneNumber: p.phoneNumber,
+        channel: p.channel,
+        email: p.email,
         tokenHash: p.tokenHash,
         expiresAt: p.expiresAt,
         createdByUserId: p.createdByUserId,

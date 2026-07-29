@@ -91,6 +91,7 @@ const mitigationDetailsSchema = z.object({
   accountNumber: z.string().optional(),
   atmCardNumber: z.string().optional(),
   allotmentAmount: z.string().optional(),
+  accountOwner: z.enum(['BORROWER', 'CO_BORROWER']).optional(),
 });
 
 const agencyVerificationDetailsSchema = z.object({
@@ -145,6 +146,14 @@ export const reviewReportSchema = z.object({
 });
 
 export type ReviewReportRequestBody = z.infer<typeof reviewReportSchema>;
+
+/** 2026-07-29 - see `SetMitigationAccountOwnerUseCase`'s doc comment for why this is a separate,
+ * status-unrestricted endpoint rather than going through `reviewReportSchema`/`review-report`. */
+export const setMitigationAccountOwnerSchema = z.object({
+  accountOwner: z.enum(['BORROWER', 'CO_BORROWER']),
+});
+
+export type SetMitigationAccountOwnerRequestBody = z.infer<typeof setMitigationAccountOwnerSchema>;
 
 /** Risk-input fields, editable post-creation on the Detail page's AI Risk Management Summary —
  * moved off the Create form's intake fields (see loanApplicationSchemas' create schema above) now

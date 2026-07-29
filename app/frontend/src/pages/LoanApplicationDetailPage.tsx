@@ -77,7 +77,7 @@ import type {
 import type { Borrower, LoanProduct } from '@/lib/loanApiTypes';
 import type { User } from '@/lib/userApiTypes';
 import { STATUS_DISPLAY_LABEL } from '@/lib/loanApplicationStatusLabels';
-import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
+import { cn, formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 /** 2026-07-26 (user request) - icon-labeled `<dt>` for the summary cards' dl/dt/dd fields,
  * matching the icon+label pattern already used on ClientProfilePage's client info card. */
@@ -958,6 +958,11 @@ const UnderwritingCard = React.forwardRef<
     application: LoanApplication;
     canEditRisk: boolean;
     canEditReview: boolean;
+    /** 2026-07-29 - unlike canEditReview, NOT gated on isUnderReview: whoever can review
+     * applications can still set the mitigation account owner on an already-Active loan's
+     * application. See `SetMitigationAccountOwnerUseCase`'s doc comment for why this one field
+     * stays editable past the Review Report's normal lock. */
+    canEditAccountOwner: boolean;
     /** Review Report + Underwriter Assessment only make sense once a manual review has actually
      * started - matches the old ReviewReportCard's own visibility rule (Under Review, Pre Approval,
      * or already decided with a report on file). Decision scoring/DTI and the risk-input fields
@@ -970,7 +975,7 @@ const UnderwritingCard = React.forwardRef<
     documentsVerifiedByName: string | null;
   }
 >(function UnderwritingCard(
-  { application, canEditRisk, canEditReview, showReview, assignedProductName, documentsVerifiedByName },
+  { application, canEditRisk, canEditReview, canEditAccountOwner, showReview, assignedProductName, documentsVerifiedByName },
   ref,
 ) {
   const queryClient = useQueryClient();
@@ -1023,6 +1028,11 @@ const UnderwritingCard = React.forwardRef<
   );
   const isSeafarerLoan = assignedProductName ? classifyProductType(assignedProductName) === 'Seafarer Loan' : false;
   const hasMitigationData = MITIGATION_FIELDS.some((f) => mitigation[f.key]?.trim());
+  // 2026-07-29: only meaningful (and only required) when there's actually a co-borrower to
+  // disambiguate against - CreateLoanSigningSessionUseCase reads this to decide whether "Deed of
+  // Assignment - Co-Borrower" belongs in the co-borrower's e-signature batch.
+  const mitigationOwnerRequired = hasMitigationData && Boolean(application.coBorrowerName);
+  const mitigationOwnerMissing = mitigationOwnerRequired && !mitigation.accountOwner;
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
   const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
@@ -1056,6 +1066,17 @@ const UnderwritingCard = React.forwardRef<
         crmRecommendation: crmRecommendation.trim() || undefined,
         documentVerifications,
       } satisfies SubmitReviewReportRequest),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+  });
+
+  // 2026-07-29: separate, status-unrestricted endpoint - see SetMitigationAccountOwnerUseCase's
+  // doc comment. Saves immediately on click (no separate "Save" button) since it's a single toggle,
+  // not a multi-field draft like the rest of the Review Report.
+  const setAccountOwnerMutation = useMutation({
+    mutationFn: (accountOwner: 'BORROWER' | 'CO_BORROWER') => {
+      setMitigation((prev) => ({ ...prev, accountOwner }));
+      return apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/mitigation-account-owner`, { accountOwner });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
   });
 
@@ -1261,6 +1282,50 @@ const UnderwritingCard = React.forwardRef<
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {mitigationOpen && application.coBorrowerName && (
+            <div className="border-t pt-3">
+              <Label className="text-xs text-muted-foreground">
+                Whose name is this account under?
+                <span className="ml-0.5 text-destructive">*</span>
+              </Label>
+              {canEditAccountOwner ? (
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={setAccountOwnerMutation.isPending}
+                    onClick={() => setAccountOwnerMutation.mutate('BORROWER')}
+                    className={cn(
+                      'rounded-md border py-2 text-sm transition-colors',
+                      mitigation.accountOwner === 'BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                    )}
+                  >
+                    Borrower
+                  </button>
+                  <button
+                    type="button"
+                    disabled={setAccountOwnerMutation.isPending}
+                    onClick={() => setAccountOwnerMutation.mutate('CO_BORROWER')}
+                    className={cn(
+                      'rounded-md border py-2 text-sm transition-colors',
+                      mitigation.accountOwner === 'CO_BORROWER' ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/40',
+                    )}
+                  >
+                    Co-borrower
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm">
+                  {mitigation.accountOwner === 'CO_BORROWER' ? 'Co-borrower' : mitigation.accountOwner === 'BORROWER' ? 'Borrower' : '-'}
+                </p>
+              )}
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Determines whether "Deed of Assignment - Co-Borrower" is included when sending e-signature documents to the co-borrower.
+              </p>
+              {canEditAccountOwner && mitigationOwnerMissing && (
+                <p className="mt-1.5 text-xs text-destructive">Required - please select who this account belongs to.</p>
+              )}
             </div>
           )}
         </div>
@@ -2302,6 +2367,7 @@ export function LoanApplicationDetailPage() {
               application={application}
               canEditRisk={canAccessLoanApplications}
               canEditReview={isUnderReview && canReviewLoanApplication}
+              canEditAccountOwner={canReviewLoanApplication}
               showReview={isUnderReview || isPreApproval || (isDecided && Boolean(application.reviewReport))}
               assignedProductName={assignedProductName}
               documentsVerifiedByName={documentsVerifiedByName}

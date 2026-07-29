@@ -89,6 +89,13 @@ export const FONT_SIZE_OPTIONS: { value: FontSize; label: string }[] = [
 
 const FONT_SIZE_VALUES = FONT_SIZE_OPTIONS.map((o) => o.value);
 
+/** Settings > Appearance > Card Reordering (2026-07-28 user request) - a personal, per-user on/off
+ * switch for the drag-and-drop card reordering feature (`SortableSection`, Dashboard's
+ * `DraggableStatCard`) across every page that has it. Off hides every drag handle and disables
+ * dragging outright (via dnd-kit's own `disabled` option) - it does NOT reset the officer's already
+ * saved card order, just stops further rearranging until switched back on. */
+export const DEFAULT_DRAG_REORDER_ENABLED = false;
+
 interface ThemeContextValue {
   theme: Theme;
   toggleTheme: () => void;
@@ -99,6 +106,8 @@ interface ThemeContextValue {
   setCustomColor: (hex: string) => void;
   fontSize: FontSize;
   setFontSize: (fontSize: FontSize) => void;
+  dragReorderEnabled: boolean;
+  setDragReorderEnabled: (enabled: boolean) => void;
   /**
    * Switches whose saved preference is active. Called by `roleContext.tsx` on bootstrap, login,
    * and logout - `userId: null` means "no signed-in user," which loads the system-preference/
@@ -114,6 +123,7 @@ const THEME_KEY_PREFIX = 'easycash-preview-theme';
 const ACCENT_KEY_PREFIX = 'easycash-preview-accent';
 const CUSTOM_COLOR_KEY_PREFIX = 'easycash-preview-custom-color';
 const FONT_SIZE_KEY_PREFIX = 'easycash-preview-font-size';
+const DRAG_REORDER_KEY_PREFIX = 'easycash-preview-drag-reorder-enabled';
 const ANON_SCOPE = 'anon';
 
 function themeStorageKey(userId: string | null): string {
@@ -127,6 +137,9 @@ function customColorStorageKey(userId: string | null): string {
 }
 function fontSizeStorageKey(userId: string | null): string {
   return `${FONT_SIZE_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
+}
+function dragReorderStorageKey(userId: string | null): string {
+  return `${DRAG_REORDER_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
 }
 
 function readTheme(userId: string | null): Theme {
@@ -150,6 +163,13 @@ function readFontSize(userId: string | null): FontSize {
   return FONT_SIZE_VALUES.includes(stored as FontSize) ? (stored as FontSize) : DEFAULT_FONT_SIZE;
 }
 
+function readDragReorderEnabled(userId: string | null): boolean {
+  const stored = window.localStorage.getItem(dragReorderStorageKey(userId));
+  if (stored === 'true') return true;
+  if (stored === 'false') return false;
+  return DEFAULT_DRAG_REORDER_ENABLED;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Ref, not state: mutated synchronously by loadPreferenceFor() and read by the persistence
   // effects below at their next run, without itself needing to trigger a re-render.
@@ -158,6 +178,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accent, setAccent] = React.useState<Accent>(() => readAccent(null));
   const [customColor, setCustomColor] = React.useState<string>(() => readCustomColor(null));
   const [fontSize, setFontSize] = React.useState<FontSize>(() => readFontSize(null));
+  const [dragReorderEnabled, setDragReorderEnabled] = React.useState<boolean>(() => readDragReorderEnabled(null));
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -185,6 +206,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(fontSizeStorageKey(currentUserIdRef.current), fontSize);
   }, [fontSize]);
 
+  React.useEffect(() => {
+    window.localStorage.setItem(dragReorderStorageKey(currentUserIdRef.current), String(dragReorderEnabled));
+  }, [dragReorderEnabled]);
+
   const toggleTheme = React.useCallback(() => {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }, []);
@@ -195,11 +220,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setAccent(readAccent(userId));
     setCustomColor(readCustomColor(userId));
     setFontSize(readFontSize(userId));
+    setDragReorderEnabled(readDragReorderEnabled(userId));
   }, []);
 
   return (
     <ThemeContext.Provider
-      value={{ theme, toggleTheme, accent, setAccent, customColor, setCustomColor, fontSize, setFontSize, loadPreferenceFor }}
+      value={{
+        theme,
+        toggleTheme,
+        accent,
+        setAccent,
+        customColor,
+        setCustomColor,
+        fontSize,
+        setFontSize,
+        dragReorderEnabled,
+        setDragReorderEnabled,
+        loadPreferenceFor,
+      }}
     >
       {children}
     </ThemeContext.Provider>

@@ -1,4 +1,5 @@
 import type { ISmsGateway } from '@modules/sms-reminder/application/ports/ISmsGateway';
+import type { IEmailGateway } from '@modules/email-reminder/application/ports/IEmailGateway';
 import { SigningSessionExpiredError } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
 import { generateOtpCode, hashSigningSecret } from '../../infrastructure/signingTokenHash';
@@ -8,10 +9,14 @@ const OTP_TTL_MINUTES = 5;
 export interface RequestSigningOtpUseCaseDeps {
   loanSigningSessionRepository: ILoanSigningSessionRepository;
   smsGateway: ISmsGateway;
+  emailGateway: IEmailGateway;
 }
 
 /** Called when the client opens the signing link (or taps "Resend code"). Generates a fresh
- * 6-digit OTP every time - a previously issued, unverified code is simply superseded. */
+ * 6-digit OTP every time - a previously issued, unverified code is simply superseded.
+ *
+ * 2026-07-28: the OTP is delivered via the SAME channel the link itself used (`session.channel`) -
+ * not hardcoded to SMS - so an EMAIL-channel session also gets its OTP by email. */
 export class RequestSigningOtpUseCase {
   constructor(private readonly deps: RequestSigningOtpUseCaseDeps) {}
 
@@ -24,9 +29,11 @@ export class RequestSigningOtpUseCase {
     session.setOtp(hashSigningSecret(otpCode), new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000));
     await this.deps.loanSigningSessionRepository.save(session);
 
-    await this.deps.smsGateway.send(
-      session.phoneNumber,
-      `Easycash: Your loan document signing code is ${otpCode}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
-    );
+    const messageBody = `Easycash: Your loan document signing code is ${otpCode}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`;
+    if (session.channel === 'EMAIL' && session.email) {
+      await this.deps.emailGateway.send(session.email, 'Easycash: Your loan document signing code', messageBody);
+    } else {
+      await this.deps.smsGateway.send(session.phoneNumber, messageBody);
+    }
   }
 }

@@ -2,6 +2,8 @@ import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -27,6 +29,106 @@ const REMINDER_TOGGLES_LOCKED = true;
 type SystemTab = 'reminders' | 'members' | 'products' | 'activity-logs';
 const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'activity-logs'];
 
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+function initials(name: string | null): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+/** Settings > System > Messaging & Alerts (2026-07-29 user request) - "who toggled which switch,
+ * and when" for the reminder-settings row above, backed by the same MIS-only `GET /audit-logs` the
+ * full Activity Logs tab uses, filtered to this use case's own `TOGGLE_REMINDER_SETTING` entries
+ * (written by `UpdateReminderSettingsUseCase`, one entry per toggle that actually changed). Shows
+ * previousValue/newValue since this whole card is already MIS-only, unlike the all-roles
+ * `RecentSystemActivityPanel` which deliberately omits that detail. */
+function ReminderSettingsActivityLog() {
+  const { canManageReminderSettings } = useRole();
+
+  const logsQuery = useQuery({
+    queryKey: ['audit-logs', 'ReminderSettings', 5],
+    queryFn: () =>
+      apiClient.get<{ items: AuditLog[] }>('/audit-logs?entityType=ReminderSettings&limit=5'),
+    enabled: canManageReminderSettings,
+  });
+
+  if (!canManageReminderSettings) return null;
+
+  const logs = logsQuery.data?.items ?? [];
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle className="text-base">Activity log</CardTitle>
+          <CardDescription>Who changed which toggle above, and when.</CardDescription>
+        </div>
+        <Link
+          to="/admin/system?tab=activity-logs"
+          className="shrink-0 text-xs font-medium text-primary underline-offset-2 hover:underline"
+        >
+          View all
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {logsQuery.isLoading ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
+        ) : logs.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">No toggle changes recorded yet.</p>
+        ) : (
+          <ul>
+            {logs.map((log, index) => {
+              const prev = log.previousValue as { label?: string; value?: boolean } | null;
+              const next = log.newValue as { label?: string; value?: boolean } | null;
+              const label = next?.label ?? prev?.label ?? log.entityId;
+              const turnedOn = Boolean(next?.value);
+              return (
+                <li key={log.id} className={`flex items-start gap-3 py-2.5 ${index > 0 ? 'border-t' : ''}`}>
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-medium text-primary">
+                    {initials(log.userName)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      <span className="font-medium">{log.userName ?? 'Unknown user'}</span> turned{' '}
+                      <span className="font-medium">{label}</span> {turnedOn ? 'on' : 'off'}
+                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <Badge variant={prev?.value ? 'success' : 'warning'} className="px-1.5 py-0 text-[10px]">
+                        {prev?.value ? 'On' : 'Off'}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground">&rarr;</span>
+                      <Badge variant={next?.value ? 'success' : 'warning'} className="px-1.5 py-0 text-[10px]">
+                        {next?.value ? 'On' : 'Off'}
+                      </Badge>
+                      <span className="ml-1 text-[10.5px] text-muted-foreground">{formatRelativeTime(log.createdAt)}</span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ReminderSettingsCard() {
   const { canManageReminderSettings, currentAccount } = useRole();
   const queryClient = useQueryClient();
@@ -43,6 +145,7 @@ function ReminderSettingsCard() {
       smsEnabled?: boolean;
       emailEnabled?: boolean;
       signingSmsEnabled?: boolean;
+      signingEmailEnabled?: boolean;
       portalEmailEnabled?: boolean;
       portalSmsEnabled?: boolean;
     }) => apiClient.patch<ReminderSettings>('/reminder-settings', body),
@@ -135,6 +238,23 @@ function ReminderSettingsCard() {
         </div>
         <div className="flex items-center justify-between gap-3 p-3">
           <div>
+            <p className="text-sm font-medium">E-signature Email</p>
+            <p className="text-xs text-muted-foreground">
+              Alternative to E-signature SMS above - some Smart-network numbers silently filter link-containing SMS.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.signingEmailEnabled ? 'success' : 'warning'}>{settings?.signingEmailEnabled ? 'On' : 'Off'}</Badge>
+            <Switch
+              checked={settings?.signingEmailEnabled ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ signingEmailEnabled: checked })}
+              aria-label="Toggle e-signature email"
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
             <p className="text-sm font-medium">Portal email verification</p>
             <p className="text-xs text-muted-foreground">
               Easycash Portal signup/password-reset OTP email - separate from staff 2FA, which always uses its own delivery flags.
@@ -214,7 +334,12 @@ export function SystemPage() {
         </TabsList>
       </Tabs>
 
-      {tab === 'reminders' && <ReminderSettingsCard />}
+      {tab === 'reminders' && (
+        <div className="space-y-6">
+          <ReminderSettingsCard />
+          <ReminderSettingsActivityLog />
+        </div>
+      )}
       {tab === 'members' && <MemberListPage />}
       {tab === 'products' && <LoanProductsPage />}
       {tab === 'activity-logs' && <ActivityLogPage />}

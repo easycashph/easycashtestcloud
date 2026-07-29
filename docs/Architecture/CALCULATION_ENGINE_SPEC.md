@@ -804,7 +804,8 @@ through this system (see Scope below — this explicitly does NOT apply to alrea
 - `ratePercent: Percentage` — resolved from the loan's own `principalAmount` (5 or 10, see Formula
   and Configuration Required — NOT read from a per-`LoanProductVersion` `PenaltyRule` row; see
   `ADR-050` §4 for why).
-- `gracePeriodDays: number` — 3, fixed, same for every loan (see Configuration Required).
+- `gracePeriodDays: number` — accepted for interface parity with `calculateSimple()` (ADR-053); no
+  longer read by `calculate()` itself as of 2026-07-28 (see Formula / `ADR-050` §9).
 
 ### Outputs
 - `penaltyOwed: Money`
@@ -812,65 +813,74 @@ through this system (see Scope below — this explicitly does NOT apply to alrea
 ### Configuration Required
 **A global rule, applied identically to every loan/product** (`ADR-050` §4, 2026-07-11 revision —
 originally proposed as per-`LoanProductVersion` `PenaltyRule` configuration, rejected because a
-single product version's loan-amount range can straddle the ₱10,000 threshold): `gracePeriodDays =
-3`; `ratePercent = 5%` when that specific loan's `principalAmount` ≤ ₱10,000, `10%` otherwise (all
-Easycash loans are unsecured — see `ADR-050` §1). Compounding and whole-months-only counting are
-likewise fixed behavior of the formula itself, not configurable at all. `PenaltyRule`'s schema
-fields remain unused by this feature — available for a future genuinely-per-product policy if one
-is ever confirmed, not built now (YAGNI).
+single product version's loan-amount range can straddle the ₱10,000 threshold): `ratePercent = 5%`
+when that specific loan's `principalAmount` ≤ ₱10,000, `10%` otherwise (all Easycash loans are
+unsecured — see `ADR-050` §1). Daily proration and the due-month divisor are likewise fixed behavior
+of the formula itself, not configurable at all. `PenaltyRule`'s schema fields remain unused by this
+feature — available for a future genuinely-per-product policy if one is ever confirmed, not built
+now (YAGNI).
 
 ### Formula
+**2026-07-28 (user-confirmed, `ADR-050` §8/§9):** daily-prorated simple interest, aligned to the
+user's own Excel reference tool — no grace period, divisor is the installment's own due-month day
+count (not a flat 30).
 ```
-graceEndDate = dueDate + gracePeriodDays
-if asOfDate <= graceEndDate:
+daysLate = daysBetween(dueDate, asOfDate)
+if daysLate <= 0:
     penaltyOwed = 0
 else:
-    // Whole months are counted from the ORIGINAL due date, not from graceEndDate — the grace
-    // period is purely a yes/no gate on whether any penalty applies at all, not a shift in the
-    // month-counting anchor. Verified against ADR-050 §1's worked example: due 2026-07-01, paid
-    // 2026-10-01 → wholeCalendarMonthsBetween(2026-07-01, 2026-10-01) = exactly 3, matching the
-    // 3-month compounding table there. (Anchoring at graceEndDate instead would have given only 2
-    // whole months for that same example — graceEndDate is 2026-07-04, and Oct 1 is 3 days short
-    // of completing a 3rd month from that later start point.)
-    monthsLate = floor(wholeCalendarMonthsBetween(dueDate, asOfDate))  — partial months don't count
-    penaltyOwed = overdueAmount × ((1 + ratePercent/100)^monthsLate − 1)
+    daysInDueMonth = calendar days in dueDate's own month (28/29/30/31)
+    penaltyOwed = overdueAmount × (ratePercent/100) / daysInDueMonth × daysLate
 ```
+No grace-period gate: penalty accrues starting the day immediately after the due date. If a client
+pays before what would have been a grace period's end, staff manually adjusts the penalty via the
+existing Reduce Penalty feature — a deliberate staff-driven exception path, not an automatic formula
+behavior (`ADR-050` §9).
 
-**Evidence:** `ADR-050` — confirmed directly by the user (MIS), 2026-07-11, as a new, going-forward
-policy (explicitly not a claim about historical legacy behavior — see that ADR's §3 for the real,
-contradictory legacy `PENALTY_APPLIED` evidence this formula deliberately does not try to match).
-The 5%/10% tiering by ≤₱10,000 principal exists because of BSP Circular No. 1133 (2021)/SEC
-Memorandum Circular No. 3 (2022)'s penalty ceiling for small unsecured loans — see `ADR-050` §2 for
-why the tier ignores that circular's own 4-month-tenor condition.
+**Evidence:** `ADR-050` §1 — original rate/tiering confirmed directly by the user (MIS), 2026-07-11.
+`ADR-050` §8 — the switch from compounding to daily proration confirmed directly by the user,
+2026-07-28. `ADR-050` §9 — grace period removed and divisor changed to the due-month day count,
+confirmed directly by the user the same day after a side-by-side comparison against their own Excel
+reference tool for a real loan (`SML-Self_00058`) — verified 5 of 6 installments matched to the
+centavo, with the 6th traced to a real partial payment recorded after the Excel snapshot, not a
+formula difference (see `ADR-050` §9 for the full verification). The 5%/10% tiering by ≤₱10,000
+principal exists because of BSP Circular No. 1133 (2021)/SEC Memorandum Circular No. 3 (2022)'s
+penalty ceiling for small unsecured loans — see `ADR-050` §2 for why the tier ignores that
+circular's own 4-month-tenor condition. Maturity-date capping (`ADR-050` addendum, 2026-07-24 —
+penalty stops accruing once the loan's whole term has matured) is unaffected by either change: it
+lives in `CurrentPenaltyResolver.resolveComputedPenalty`, which clamps `asOfDate` to the loan's
+maturity date before calling this formula either way.
 
-**STATUS: CONFIRMED** (formula, rate, grace period, compounding, tiering) — via direct business/MIS
-testimony, same evidentiary standing as other testimony-confirmed rules in this system (e.g.
-`ADR-046`'s Add-On-Rate basis). `capPercent` enforcement (the 100%-of-principal total cost cap)
-remains **UNRESOLVED**, still gated by `ADR-008` (not produced this milestone).
+**STATUS: CONFIRMED** (formula, rate, no grace period, due-month divisor, tiering) — via direct
+business/MIS testimony, same evidentiary standing as other testimony-confirmed rules in this system
+(e.g. `ADR-046`'s Add-On-Rate basis). `capPercent` enforcement (the 100%-of-principal total cost
+cap) remains **UNRESOLVED**, still gated by `ADR-008` (not produced this milestone).
 
 ### Rounding
-Not yet specified to the same decimal-place rigor as §1–§9 — `ADR-050` gives the formula in terms
-of exact compounding; whether intermediate monthly steps round to `Decimal(14,2)` before the next
-compounding step (as the worked example in `ADR-050` §1 does) or the whole-period formula is
-applied once without intermediate rounding is not yet distinguished (they can differ by a few
-centavos over several months). Use the step-by-step monthly rounding shown in `ADR-050`'s worked
-example — that is what was actually confirmed with the user.
+Single rounding step at the end: `overdueAmount × rate/100 ÷ daysInDueMonth × daysLate`, rounded
+once to `Decimal(14,2)` half-up-to-centavo. No intermediate compounding steps to round.
 
 ### Precision
-`Decimal(14,2)`, rounded at each monthly compounding step (see Rounding above).
+`Decimal(14,2)`, rounded once at the final multiplication (see Rounding above).
 
 ### Examples
-See `ADR-050` §1's worked example: ₱10,000.00 overdue, 10% rate, 3 whole months late →
-₱1,000.00 + ₱1,100.00 + ₱1,210.00 = ₱3,310.00 total penalty.
+₱10,000.00 overdue, 10% rate, due 2026-02-01, evaluated 2026-03-01 (28 days late, all of February,
+which has 28 days in 2026): `10000 × 0.10 ÷ 28 × 28` = ₱1,000.00 total penalty (a full due-month's
+worth, by construction). (Superseded 2026-07-11 worked example, ₱3,310.00 via monthly compounding
+for a different set of inputs — kept in `ADR-050` §1/§8/§9 for historical reference.)
 
 ### Edge Cases
-- Paid within the grace period (`asOfDate <= dueDate + gracePeriodDays`): zero penalty.
-- Fewer than one whole month past the grace period: zero penalty (no proration) — the first
-  compounding step only fires once a full month has elapsed past `graceEndDate`.
+- `asOfDate` on or before `dueDate` (not yet late at all): zero penalty.
+- No grace period: penalty accrues starting the very first day after the due date — an early payer
+  needing forgiveness for those first few days is handled manually by staff (Reduce Penalty), not
+  automatically by this formula.
+- The divisor is always the due date's OWN calendar month length, even when the accrual period
+  spans into later months (e.g. a February-due installment still divides by 28 even when evaluated
+  in July).
 
 ### Validation Rules
-`overdueAmount` must be non-negative; `gracePeriodDays`/`ratePercent` come from an already-valid
-`PenaltyRule` snapshot, not re-validated here.
+`overdueAmount` must be non-negative; `ratePercent` comes from an already-valid `PenaltyRule`
+snapshot, not re-validated here. `gracePeriodDays` is accepted but unused by `calculate()`.
 
 ### Test Vectors
 See Examples above — directly reusable as a test fixture.

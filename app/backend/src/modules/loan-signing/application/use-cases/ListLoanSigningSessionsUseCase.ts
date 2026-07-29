@@ -13,6 +13,10 @@ export interface StaffSigningSessionView {
   loanAccountId: string;
   partyType: 'BORROWER' | 'CO_BORROWER';
   phoneNumber: string;
+  /** 2026-07-29 - which channel actually delivered the link, so the panel can show "Sent to
+   * {email}" instead of the (unused-for-delivery) phoneNumber when channel is EMAIL. */
+  channel: 'SMS' | 'EMAIL';
+  email: string | null;
   expiresAt: string;
   revokedAt: string | null;
   otpVerifiedAt: string | null;
@@ -53,6 +57,8 @@ export class ListLoanSigningSessionsUseCase {
         loanAccountId: p.loanAccountId,
         partyType: p.partyType,
         phoneNumber: p.phoneNumber,
+        channel: p.channel,
+        email: p.email ?? null,
         expiresAt: p.expiresAt.toISOString(),
         revokedAt: p.revokedAt?.toISOString() ?? null,
         otpVerifiedAt: p.otpVerifiedAt?.toISOString() ?? null,

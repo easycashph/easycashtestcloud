@@ -174,3 +174,103 @@ loans created and activated after this feature ships). Explicitly, per the user'
    configuration task once the calculation engine exists, not a schema or formula question this ADR
    needs to resolve further.
 4. `capPercent`/`ADR-008` (the 100%-of-principal total cost cap) remains a separate, still-open item.
+
+---
+
+## 8. 2026-07-28 reversal — compounding → daily-prorated (user-confirmed)
+
+**Status: CONFIRMED**, direct user instruction, treated with the same evidentiary weight as §1's
+original 2026-07-11 sign-off (this ADR's own §1 preamble explicitly required an equally explicit
+re-confirmation before this exact change could be made — obtained here).
+
+**What changed:** `PenaltyCalculator.calculate()` no longer waits for a whole calendar month to
+elapse before charging anything, and no longer compounds monthly. Once the 3-day grace period ends,
+penalty accrues **immediately and linearly per day**:
+
+```
+penaltyOwed = overdueAmount × (ratePercent / 100) ÷ 30 × daysLate
+```
+
+where `daysLate` is the whole calendar-day count from the installment's original due date (not from
+grace-period end — same anchoring convention the prior formula used) to `asOfDate`.
+
+**What did NOT change** (explicitly confirmed unchanged in the same conversation):
+- The ₱10,000 principal threshold and the 5%/10% rate tiering (§1/§2) — same basis, same rates.
+- The 3-day grace period (§1) — same yes/no gate on whether any penalty applies at all.
+- The overdue Principal + Interest basis (§1) — not principal alone.
+- The maturity-date cap (2026-07-24 addendum, see `CurrentPenaltyResolver.resolveComputedPenalty`)
+  — penalty still freezes at whatever it reached on the loan's maturity date and does not continue
+  accruing past it. This logic lives outside `PenaltyCalculator` entirely (it clamps `asOfDate`
+  before calling the formula), so it is unaffected by which formula runs underneath it.
+- `ADR-053` (SEC MC 3 coverage) — `PenaltyCalculator.calculateSimple()`, the separate ceiling used
+  for SEC-MC3-covered loans, is untouched. It was already daily-proration-free, simple/linear by
+  month; this reversal does not change it further.
+- Scope (§5) — still prospective-only; migrated loans' stored penalty snapshots are still never
+  recomputed by either formula.
+
+**Worked example, same inputs as §1** (₱10,000 overdue, 10% rate, due 2026-07-01, evaluated
+2026-10-01, 92 days late):
+
+`10000 × 0.10 ÷ 30 × 92` = **₱3,066.67** total penalty — versus §1's ₱3,310.00 under the
+now-superseded compounding formula for the identical inputs. §1's worked example and table are kept
+above for historical record, not as the current behavior.
+
+**Why the reversal** — not separately re-litigated here beyond noting: this was raised, discussed,
+and confirmed in a dedicated session (`docs/SESSION_LOG_2026-07-27_penalty_computation_deep_dive.md`
+§3/§5, then explicitly confirmed the following session) as a deliberate simplification, moving the
+live formula toward the same flat/linear shape already used by `StatementOfAccountCalculator` and
+the user's own legacy Excel reference tool, rather than three independently-diverging formulas.
+**Note:** this reversal does **not**, on its own, make Live and the SOA calculator's figures match —
+see `CALC-SPEC` §12 and the session log above for the two further mismatches (day-count mechanic,
+rate-threshold basis) that remain open, separate questions.
+
+**Implementation:** `PenaltyCalculator.calculate()` and its test vectors
+(`tests/unit/shared/calculation/PenaltyCalculator.test.ts`) updated; `CALCULATION_ENGINE_SPEC.md`
+§12 updated in place (superseded worked example retained inline for reference, not deleted).
+
+---
+
+## 9. 2026-07-28 — aligned to the user's own Excel reference tool (grace period removed, days-in-month divisor)
+
+**Status: CONFIRMED**, direct user instruction, same session as §8. The user compared §8's
+daily-prorated formula directly against their own Excel reference tool
+(`legacy/reports/PENALTY COMPUTATION ( LMS ).xlsx`) for the same real loan (`SML-Self_00058`) and
+found two remaining mechanical differences, both now resolved:
+
+1. **Grace period removed from `calculate()` entirely.** The Excel tool has no grace period —
+   penalty accrues starting the day immediately after the due date. **User's explicit instruction:**
+   if a client actually pays before what would have been the grace period's end, staff handles that
+   manually via the existing Reduce Penalty feature (`ReducePenaltyUseCase`) rather than the formula
+   automatically zeroing out the first few days. This is a deliberate policy choice, not an
+   oversight — `gracePeriodDays` remains a documented input on `PenaltyCalculatorInput` (for
+   `calculateSimple()`'s sake, see below) but `calculate()` no longer reads it.
+2. **Divisor changed from a flat 30 to the installment's own due-month day count** (28/29/30/31),
+   matching the Excel's "End of the month" column exactly — a February-due installment divides by
+   28, a July-due one by 31, etc.
+
+**What did NOT change** (still true, same as §8):
+- The ₱10,000 principal threshold and 5%/10% tiering, the overdue Principal + Interest basis, the
+  maturity-date cap (still lives in `CurrentPenaltyResolver`, unaffected), and `ADR-053`'s
+  `calculateSimple()` (SEC MC3 ceiling) — that method keeps its own grace period and whole-month
+  counting untouched; only `calculate()` (the non-SEC-MC3 ADR-050 path) changed here.
+
+**Verification against the Excel tool:** compared the actual production `resolveComputedPenalty()`
+output against the Excel's own computed cell values for `SML-Self_00058`'s 6 installments (`TO`
+date read as the loan's maturity date, 2026-07-01, per §8's already-confirmed maturity cap — the
+Excel's live `TODAY()` formula must be entered as the loan's own maturity date once matured, to stay
+aligned with Live's cap). **5 of 6 installments matched exactly to the centavo.** The 6th
+(installment #1) initially appeared to differ (₱2,839.86 live vs. ₱3,161.29 in the static Excel
+file) — traced to a real ₱600.00 partial interest payment recorded against that installment in the
+live system after the Excel snapshot was taken (reducing its overdue Principal+Interest base from
+₱5,901.08 to ₱5,301.08). Recomputing the Excel's own formula with that same reduced base produced
+₱2,839.86 exactly, confirming the formulas are identical — the apparent mismatch was a stale input,
+not a formula difference.
+
+**Worked example** (installment due 2026-02-01, ₱10,000 overdue, 10% rate, capped at a 2026-03-01
+maturity — exactly 28 days late, all of February):
+`10000 × 0.10 ÷ 28 × 28` = **₱1,000.00** exactly (one full due-month's worth by construction — the
+`28 ÷ 28` cancels cleanly when the accrual period fills the whole due-month).
+
+**Implementation:** `PenaltyCalculator.calculate()` (grace-period check removed; divisor changed to
+`daysInMonth(dueDate)`), `tests/unit/shared/calculation/PenaltyCalculator.test.ts` updated with new
+test vectors reflecting no-grace-period and due-month-divisor behavior.

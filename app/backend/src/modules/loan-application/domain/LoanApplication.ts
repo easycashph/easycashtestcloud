@@ -34,7 +34,14 @@ export interface DocumentVerificationEntry {
 }
 
 /** 2026-07-21 — "Mode of Payment and Mitigation" from the legacy CER: an optional ATM/allotment
- * surrender arrangement, not applicable to every loan. */
+ * surrender arrangement, not applicable to every loan.
+ *
+ * 2026-07-29: `accountOwner` added - whose name this bank/ATM account is under. Required whenever
+ * any of the other mitigation fields are filled AND the application has a co-borrower - it's the
+ * source of truth `CreateLoanSigningSessionUseCase` reads (via `LoanAccount.sourceApplicationId`)
+ * to decide whether "Deed of Assignment - Co-Borrower" belongs in the co-borrower's signing batch:
+ * that form only applies when the surrendered account is actually the co-borrower's, not simply
+ * because a co-borrower exists on the loan. */
 export interface MitigationDetails {
   bank?: string;
   branch?: string;
@@ -42,6 +49,7 @@ export interface MitigationDetails {
   accountNumber?: string;
   atmCardNumber?: string;
   allotmentAmount?: string;
+  accountOwner?: 'BORROWER' | 'CO_BORROWER';
 }
 
 /** 2026-07-21 — Agency/contract/allotment verification from the legacy CER, required only for
@@ -573,6 +581,19 @@ export class LoanApplication {
     }
     const current = this.props.reviewReport ?? { checkedDocuments: [] };
     this.props.reviewReport = { ...current, ...patch };
+    this.props.updatedAt = new Date();
+  }
+
+  /** 2026-07-29 - deliberately NOT gated by the UNDER_REVIEW check `updateReviewReport()` enforces
+   * above. `mitigation.accountOwner` is read by `CreateLoanSigningSessionUseCase` (via
+   * `LoanAccount.sourceApplicationId`) for loans that are already ACTIVE - long past UNDER_REVIEW -
+   * so it must stay settable for the lifetime of the loan, unlike every other Review Report field
+   * (which the surrounding lock exists specifically to freeze once a later stage has moved on).
+   * Merges into whatever `mitigation` already exists rather than replacing it, so this narrow
+   * update can never clobber the other mitigation fields (bank/branch/account number/etc). */
+  setMitigationAccountOwner(accountOwner: 'BORROWER' | 'CO_BORROWER'): void {
+    const current = this.props.reviewReport ?? { checkedDocuments: [] };
+    this.props.reviewReport = { ...current, mitigation: { ...current.mitigation, accountOwner } };
     this.props.updatedAt = new Date();
   }
 

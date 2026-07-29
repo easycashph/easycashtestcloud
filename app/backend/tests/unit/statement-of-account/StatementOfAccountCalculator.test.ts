@@ -143,3 +143,59 @@ describe('StatementOfAccountCalculator (ADR-052)', () => {
     expect(figures.remainingSchedule[0]?.totalDue.toString()).toBe('880.00');
   });
 });
+
+// 2026-07-28 (ADR-052 addendum, user-confirmed): a prospective loan's Penalty line reuses
+// resolveComputedPenalty (ADR-050) instead of the flat/shared-range formula above.
+describe('StatementOfAccountCalculator - livePenaltyContext (ADR-052 addendum)', () => {
+  it('uses resolveComputedPenalty per installment, matching PenaltyCalculator.calculate() exactly, when livePenaltyContext is supplied', () => {
+    const dueDate = new Date('2026-02-01T00:00:00Z');
+    const asOfDate = new Date('2026-03-01T00:00:00Z'); // exactly 28 days late (all of February 2026)
+    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' }); // 10000 overdue, > threshold -> 10%
+    const maturityDate = new Date('2026-08-01T00:00:00Z');
+
+    const figures = StatementOfAccountCalculator.calculate(
+      [inst1],
+      undefined,
+      undefined,
+      asOfDate,
+      asOfDate,
+      { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate },
+    );
+
+    // 10000 x 10% / 28 (February's own day count) x 28 days = 1000.00 exactly.
+    expect(figures.pastDuePenalty.toString()).toBe('1000.00');
+  });
+
+  it('ignores penaltyFromDate entirely when livePenaltyContext is supplied', () => {
+    const dueDate = new Date('2026-02-01T00:00:00Z');
+    const asOfDate = new Date('2026-03-01T00:00:00Z');
+    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' });
+    const maturityDate = new Date('2026-08-01T00:00:00Z');
+    const context = { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate };
+
+    const withFromDate = StatementOfAccountCalculator.calculate([inst1], undefined, daysAgo(9999), asOfDate, asOfDate, context);
+    const withoutFromDate = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, asOfDate, asOfDate, context);
+
+    expect(withFromDate.pastDuePenalty.toString()).toBe(withoutFromDate.pastDuePenalty.toString());
+  });
+
+  it('caps the live penalty at the maturity date, same as the live Repayment Schedule', () => {
+    const dueDate = new Date('2026-02-01T00:00:00Z');
+    const maturityDate = new Date('2026-03-01T00:00:00Z'); // matures right after this installment's due date
+    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' });
+    const context = { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate };
+
+    // Ask for a figure far past maturity - should freeze at the maturity-date figure, not keep growing.
+    const cappedFigures = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, daysFromNow(9999), daysFromNow(9999), context);
+    const atMaturityFigures = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, maturityDate, maturityDate, context);
+
+    expect(cappedFigures.pastDuePenalty.toString()).toBe(atMaturityFigures.pastDuePenalty.toString());
+  });
+
+  it('falls back to the flat/shared-range formula when livePenaltyContext is omitted (migrated loan path unchanged)', () => {
+    const inst1 = installment(1, daysAgo(40), { principal: '11000.00', interest: '0.00' });
+    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(30), new Date(), new Date());
+
+    expect(figures.pastDuePenalty.toString()).toBe('1100.00');
+  });
+});

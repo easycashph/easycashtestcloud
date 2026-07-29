@@ -29,9 +29,9 @@ export class NodemailerEmailGateway implements IEmailGateway {
     });
   }
 
-  async send(to: string, subject: string, body: string): Promise<void> {
+  async send(to: string, subject: string, body: string, html?: string): Promise<void> {
     try {
-      await this.transporter.sendMail({ from: this.config.fromAddress, to, subject, text: body });
+      await this.transporter.sendMail({ from: this.config.fromAddress, to, subject, text: body, ...(html ? { html } : {}) });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown SMTP error';
       throw new EmailGatewayError(`SMTP send failed: ${message}`);

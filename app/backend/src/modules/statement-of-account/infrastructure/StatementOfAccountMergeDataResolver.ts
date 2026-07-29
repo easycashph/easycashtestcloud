@@ -1,8 +1,11 @@
-import { NotFoundError } from '@shared/errors/DomainError';
+import { NotFoundError, ValidationError } from '@shared/errors/DomainError';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
+import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
+import { resolveSecMc3Coverage } from '@modules/loan-account/application/services/SecMc3CoverageResolver';
+import type { PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import { Money } from '@shared/domain/Money';
 import { StatementOfAccountCalculator } from '../application/services/StatementOfAccountCalculator';
 import type {
@@ -41,6 +44,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       borrowerRepository: IBorrowerRepository;
       coBorrowerRepository: ICoBorrowerRepository;
       repaymentInstallmentRepository: IRepaymentInstallmentRepository;
+      loanProductRepository: ILoanProductRepository;
     },
   ) {}
 
@@ -48,7 +52,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     loanAccountId: string,
     soaNumber: string,
     statementDate: Date,
-    penaltyFromDate: Date,
+    penaltyFromDate: Date | undefined,
     penaltyToDate: Date,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
@@ -70,13 +74,41 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const sortedInstallments = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sortedInstallments[sortedInstallments.length - 1];
 
+    // 2026-07-28 (ADR-052 addendum, user-confirmed): a prospective loan's Penalty line reuses
+    // `resolveComputedPenalty` (the exact same ADR-050 function the live Repayment Schedule uses)
+    // instead of the flat/shared-range formula below — see `StatementOfAccountCalculator`'s own doc
+    // comment. A migrated loan has no live figure to reuse, so it keeps the original manual
+    // date-range path and REQUIRES `penaltyFromDate` to be supplied by the caller.
+    const isProspectiveLoan = !loanAccount.legacyId;
+    let livePenaltyContext: PenaltyComputationContext | undefined;
+    if (isProspectiveLoan) {
+      livePenaltyContext = {
+        isProspectiveLoan: true,
+        principalAmount: loanAccount.principalAmount,
+        isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: lastInstallment?.dueDate ?? statementDate,
+      };
+    } else if (!penaltyFromDate) {
+      throw new ValidationError('penaltyFromDate is required for a migrated loan (no live penalty on file).');
+    }
+
     const figures = StatementOfAccountCalculator.calculate(
       sortedInstallments,
       loanAccount.contractualInterestRate,
       penaltyFromDate,
       penaltyToDate,
       accruedInterestAsOfDate,
+      livePenaltyContext,
     );
+
+    // Display-only for a prospective loan (not fed back into the computation) - the earliest
+    // qualifying Past Due installment's own due date, so the printed "{PenaltyFromDate} /
+    // {PenaltyToDate}" range still reads sensibly even though staff no longer enters a "from" date.
+    const effectivePenaltyFromDate =
+      penaltyFromDate ??
+      sortedInstallments.find((i) => i.dueDate.getTime() <= penaltyToDate.getTime())?.dueDate ??
+      sortedInstallments[0]?.dueDate ??
+      statementDate;
 
     // PN Amount (`btnCreateSOA_Click`'s `totalObligation`) = Principal + Interest summed across the
     // ENTIRE original schedule (not just unpaid amounts, and excluding fees) — the loan's total
@@ -114,7 +146,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       PastDuePrincipal: figures.pastDuePrincipal.toString(),
       PastDueInterest: figures.pastDueInterest.toString(),
       PastDuePenalty: figures.pastDuePenalty.toString(),
-      PenaltyFromDate: formatDate(penaltyFromDate),
+      PenaltyFromDate: formatDate(effectivePenaltyFromDate),
       PenaltyToDate: formatDate(penaltyToDate),
       TotalPastDue: figures.totalPastDue.toString(),
       AccruedInterest: figures.accruedInterest.toString(),
@@ -131,6 +163,6 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       })),
     };
 
-    return { mergeData, figures };
+    return { mergeData, figures, effectivePenaltyFromDate };
   }
 }

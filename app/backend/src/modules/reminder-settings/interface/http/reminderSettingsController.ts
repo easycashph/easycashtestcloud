@@ -25,10 +25,11 @@ export class ReminderSettingsController {
 
   update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { smsEnabled, emailEnabled, signingSmsEnabled, portalEmailEnabled, portalSmsEnabled } = req.body as {
+      const { smsEnabled, emailEnabled, signingSmsEnabled, signingEmailEnabled, portalEmailEnabled, portalSmsEnabled } = req.body as {
         smsEnabled?: unknown;
         emailEnabled?: unknown;
         signingSmsEnabled?: unknown;
+        signingEmailEnabled?: unknown;
         portalEmailEnabled?: unknown;
         portalSmsEnabled?: unknown;
       };
@@ -42,6 +43,10 @@ export class ReminderSettingsController {
       }
       if (signingSmsEnabled !== undefined && typeof signingSmsEnabled !== 'boolean') {
         res.status(400).json({ error: 'signingSmsEnabled must be a boolean.' });
+        return;
+      }
+      if (signingEmailEnabled !== undefined && typeof signingEmailEnabled !== 'boolean') {
+        res.status(400).json({ error: 'signingEmailEnabled must be a boolean.' });
         return;
       }
       if (portalEmailEnabled !== undefined && typeof portalEmailEnabled !== 'boolean') {
@@ -58,9 +63,12 @@ export class ReminderSettingsController {
         smsEnabled,
         emailEnabled,
         signingSmsEnabled,
+        signingEmailEnabled,
         portalEmailEnabled,
         portalSmsEnabled,
         updatedByUserId: currentUser.sub,
+        ipAddress: req.ip,
+        userAgent: req.header('user-agent'),
       });
       res.status(200).json(presentReminderSettings(settings));
     } catch (error) {

@@ -20,11 +20,27 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+/** Whole calendar-day difference from `from` to `to` (never negative). */
+function daysBetween(from: Date, to: Date): number {
+  const fromUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
+  const toUtc = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+  return Math.max(0, Math.round((toUtc - fromUtc) / (1000 * 60 * 60 * 24)));
+}
+
+/**
+ * Number of calendar days in the month `date` falls in (28/29/30/31) — `ADR-050` §9: the
+ * divisor for daily proration is the installment's OWN due-month length, not a flat 30, matching
+ * the user's own Excel reference tool exactly (its "End of the month" column).
+ */
+function daysInMonth(date: Date): number {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
 /**
  * Whole calendar months elapsed from `start` to `end` (`end` assumed >= `start`) — the same
  * "hasn't had its birthday yet this year" arithmetic used for age-in-years, applied to months.
- * `CALCULATION_ENGINE_SPEC.md` §12's Formula explains why this counts from the original due date,
- * not from the grace-period end date.
+ * Only `calculateSimple()` (ADR-053, SEC MC3) uses this now — `calculate()` switched to daily
+ * proration on 2026-07-28 (see below) and no longer needs whole-month counting.
  */
 function wholeCalendarMonthsBetween(start: Date, end: Date): number {
   let months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
@@ -39,29 +55,30 @@ function wholeCalendarMonthsBetween(start: Date, end: Date): number {
  * business/MIS testimony (2026-07-11), for loans originated going forward only (see `ADR-050` §5 —
  * this calculator is never applied to already-migrated loans' stored penalty figures).
  *
- * Formula: zero penalty within the grace period; past it, `overdueAmount × ((1 + rate)^monthsLate
- * − 1)`, compounded monthly, whole months only (no proration), each monthly step rounded via
- * `Money`'s own half-up-to-centavo arithmetic — see `ADR-050` §1's worked example, which this is
- * verified against exactly (₱10,000 @ 10%, 3 whole months late → ₱3,310.00 total penalty).
+ * **2026-07-28 (user-confirmed, `ADR-050` §8/§9):** daily-prorated simple interest, matching the
+ * user's own Excel reference tool exactly:
+ * `overdueAmount × rate ÷ daysInDueMonth × daysLate`, where `daysLate` is the whole calendar-day
+ * count from the original due date to `asOfDate` (no grace period — see §9: grace-period
+ * forgiveness for an early payer is now a manual staff adjustment via Reduce Penalty, not an
+ * automatic zero built into the formula), and `daysInDueMonth` is the actual number of days in the
+ * calendar month the installment's own due date falls in (28/29/30/31), not a flat 30.
+ * `gracePeriodDays` is accepted for interface parity with `calculateSimple()` but intentionally
+ * unused here. Rounded once via `Money`'s half-up-to-centavo arithmetic.
  */
 export class PenaltyCalculator {
   static calculate(input: PenaltyCalculatorInput): Money {
-    const graceEndDate = addDays(input.dueDate, input.gracePeriodDays);
-    if (input.asOfDate.getTime() <= graceEndDate.getTime()) {
+    const daysLate = daysBetween(input.dueDate, input.asOfDate);
+    if (daysLate <= 0) {
       return Money.ZERO;
     }
 
-    const monthsLate = wholeCalendarMonthsBetween(input.dueDate, input.asOfDate);
-    if (monthsLate <= 0) {
-      return Money.ZERO;
-    }
-
-    let balance = input.overdueAmount;
-    for (let i = 0; i < monthsLate; i++) {
-      balance = balance.add(balance.multiply(input.ratePercent));
-    }
-
-    return balance.subtract(input.overdueAmount);
+    const amount = input.overdueAmount
+      .toDecimal()
+      .times(input.ratePercent.asFraction())
+      .dividedBy(daysInMonth(input.dueDate))
+      .times(daysLate)
+      .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    return Money.of(amount);
   }
 
   /**

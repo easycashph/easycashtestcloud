@@ -6,6 +6,7 @@ import type { IDocumentTemplateRepository } from '@modules/loan-document/applica
 import { SigningSessionExpiredError } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
 import { hashSigningSecret } from '../../infrastructure/signingTokenHash';
+import type { SigningLinkChannel } from '../../domain/LoanSigningSession';
 
 export interface SigningSessionDocumentView {
   id: string;
@@ -20,6 +21,9 @@ export interface SigningSessionView {
   otpVerified: boolean;
   fullySigned: boolean;
   documents: SigningSessionDocumentView[];
+  /** 2026-07-29 - lets the client-facing OTP screen say "Send code to my email"/"we emailed you"
+   * instead of always assuming SMS, since the OTP now follows the link's own delivery channel. */
+  channel: SigningLinkChannel;
 }
 
 export interface GetLoanSigningSessionUseCaseDeps {
@@ -63,6 +67,7 @@ export class GetLoanSigningSessionUseCase {
       otpVerified: session.isOtpVerifiedFresh(),
       fullySigned: session.isFullySigned(),
       documents,
+      channel: session.channel,
     };
   }
 }

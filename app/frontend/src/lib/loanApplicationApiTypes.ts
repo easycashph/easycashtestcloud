@@ -27,6 +27,10 @@ export interface MitigationDetails {
   accountNumber?: string;
   atmCardNumber?: string;
   allotmentAmount?: string;
+  /** 2026-07-29 - whose name this account is under; required whenever any other mitigation field
+   * is filled and the application has a co-borrower. Drives whether "Deed of Assignment -
+   * Co-Borrower" is included in the co-borrower's e-signature batch. */
+  accountOwner?: 'BORROWER' | 'CO_BORROWER';
 }
 
 export interface AgencyVerificationDetails {

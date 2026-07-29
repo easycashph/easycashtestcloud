@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, AlertTriangle, Bell, Check, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Bell, Check, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Move, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -682,7 +682,8 @@ function LoginActivityCard() {
 }
 
 function AppearanceTab() {
-  const { theme, toggleTheme, accent, setAccent, customColor, setCustomColor, fontSize, setFontSize } = useTheme();
+  const { theme, toggleTheme, accent, setAccent, customColor, setCustomColor, fontSize, setFontSize, dragReorderEnabled, setDragReorderEnabled } =
+    useTheme();
   const { currentAccount } = useRole();
   const [landingPage, setLandingPageState] = React.useState(() => readLandingPage(currentAccount.id));
 
@@ -846,6 +847,34 @@ function AppearanceTab() {
               </button>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <Move className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Card Reordering</CardTitle>
+            <CardDescription>
+              Drag cards by their handle to rearrange sections on the Dashboard, Client Profile, Loan Application, and Loan Account
+              pages. Turn off if you prefer a fixed layout. Applies only to your account.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between rounded-md border p-4">
+            <div>
+              <p className="text-sm font-medium">Drag and Drop</p>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                Currently: <Badge variant="outline">{dragReorderEnabled ? 'On' : 'Off'}</Badge>
+              </div>
+            </div>
+            <Switch checked={dragReorderEnabled} onCheckedChange={setDragReorderEnabled} aria-label="Toggle drag and drop card reordering" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Turning this off keeps each page's current card order and hides the drag handles - it doesn't reset your saved order. Turn
+            it back on anytime to resume rearranging.
+          </p>
         </CardContent>
       </Card>
 

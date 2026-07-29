@@ -103,12 +103,12 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
     expect(Number(largeLoanResult.currentPenaltyOwed)).toBeGreaterThan(Number(smallLoanResult.currentPenaltyOwed));
   });
 
-  it('is zero (not null) within the grace period even for a prospective loan', () => {
+  it('is already positive (not zero) the day immediately after the due date - no grace period (ADR-050 §9)', () => {
     const dueDate = new Date();
-    dueDate.setUTCDate(dueDate.getUTCDate() - 1); // due yesterday -> still within the 3-day grace period
+    dueDate.setUTCDate(dueDate.getUTCDate() - 1); // due yesterday -> would have been within the old 3-day grace period
     const installment = buildOverdueInstallment(dueDate);
     const result = presentRepaymentInstallment(installment, { isProspectiveLoan: true, principalAmount: Money.of('50000.00'), maturityDate: FAR_FUTURE_MATURITY });
-    expect(result.currentPenaltyOwed).toBe('0.00');
+    expect(Number(result.currentPenaltyOwed)).toBeGreaterThan(0);
   });
 
   // 2026-07-24 (user-confirmed): penalty stops growing once the loan's whole term has matured -
@@ -181,9 +181,16 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
         version: 0,
       });
 
-      // Not currently exercised by presentRepaymentInstallment's asOfDate (always "now"), so this
-      // just confirms the covered path produces the SIMPLE-formula figure, not the ADR-050 one, by
-      // comparing directly against the two PenaltyCalculator methods for a fixed 2-month-late date.
+      // Cross-checked directly against both PenaltyCalculator methods (same pattern as the
+      // maturityDate-cap tests above) rather than a magnitude comparison - since ADR-050 §9 removed
+      // calculate()'s grace period and switched its divisor to the due-month day count, it's no
+      // longer guaranteed to always charge >= calculateSimple()'s whole-month figure (a "31-day"
+      // due month makes calculate()'s per-day rate slightly smaller than a 30-day approximation
+      // would, which can undercut a floored whole-month simple total over a long enough span) - an
+      // exact-value check is the correct, non-fragile way to confirm each path uses the right formula.
+      const now = new Date();
+      const overdueAmount = Money.of('8000.00').add(Money.of('2000.00'));
+
       const covered = presentRepaymentInstallment(installment, {
         isProspectiveLoan: true,
         principalAmount: Money.of('8000.00'),
@@ -197,11 +204,23 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
         maturityDate: FAR_FUTURE_MATURITY,
       });
 
-      expect(covered.currentPenaltyOwed).not.toBeNull();
-      expect(notCovered.currentPenaltyOwed).not.toBeNull();
-      // ADR-050's compounding formula always charges >= the simple formula for the same rate/months
-      // once at least 2 whole months have elapsed (compounding interest on interest).
-      expect(Number(notCovered.currentPenaltyOwed)).toBeGreaterThanOrEqual(Number(covered.currentPenaltyOwed));
+      const expectedCovered = PenaltyCalculator.calculateSimple({
+        overdueAmount,
+        dueDate,
+        asOfDate: now,
+        ratePercent: Percentage.of('5'),
+        gracePeriodDays: 3,
+      });
+      const expectedNotCovered = PenaltyCalculator.calculate({
+        overdueAmount,
+        dueDate,
+        asOfDate: now,
+        ratePercent: Percentage.of('5'),
+        gracePeriodDays: 3,
+      });
+
+      expect(covered.currentPenaltyOwed).toBe(expectedCovered.toString());
+      expect(notCovered.currentPenaltyOwed).toBe(expectedNotCovered.toString());
     });
   });
 

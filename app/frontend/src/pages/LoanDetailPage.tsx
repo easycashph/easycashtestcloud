@@ -14,11 +14,14 @@ import {
   Download,
   Eye,
   FileCheck2,
+  Globe2,
+  Info,
   Mail,
   MessageSquareText,
   Lock,
   MoreHorizontal,
   Receipt,
+  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError, downloadFile, fetchAllPages } from '@/lib/apiClient';
@@ -27,6 +30,7 @@ import type { LoanSigningSessionStatus } from '@/lib/loanSigningApiTypes';
 import type {
   AccruedInterestFigures,
   Borrower as RealBorrower,
+  CoBorrower,
   GeneratedStatementOfAccountListItem,
   InstallmentAdjustment,
   InterestRateChartEntry,
@@ -410,20 +414,66 @@ function emailReminderStatusText(log: EmailReminderLog): string {
  * (generating any not already on file) as one batch, one SMS link, one OTP verification covering
  * the whole client visit. See `docs/Claude_API_Cost_Reference.docx`-adjacent design discussion -
  * this is unrelated to that AI feature, just noting the same session's design-first pattern. */
+/** First-letter-of-first-two-words initials for the party avatar (e.g. "Juan Dela Cruz" -> "JD"); falls back to a generic 2-letter tag when no name is on file yet. */
+function partyInitials(name: string | undefined, fallback: string): string {
+  if (!name) return fallback;
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || fallback;
+}
+
+type SigningChannel = 'SMS' | 'EMAIL';
+
 function LoanSigningPanel({
   loanId,
   loanCode,
   defaultPhoneNumber,
+  defaultCoBorrowerPhoneNumber,
+  borrowerName,
+  coBorrowerName,
+  borrowerEmail,
+  coBorrowerEmail,
   canSend,
 }: {
   loanId: string;
   loanCode: string;
   defaultPhoneNumber?: string;
+  defaultCoBorrowerPhoneNumber?: string;
+  borrowerName?: string;
+  coBorrowerName?: string;
+  /** 2026-07-28 (email delivery channel) - display-only, auto-read from the profile, never staff-entered (unlike the phone number boxes below). */
+  borrowerEmail?: string;
+  coBorrowerEmail?: string;
   canSend: boolean;
 }) {
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
-  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState('');
+  const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(defaultCoBorrowerPhoneNumber ?? '');
+  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('SMS');
+  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('SMS');
+
+  // The borrower profile (and its phone number) is fetched by a query on the parent page and may
+  // resolve after this component's first render, same "slower-loading query" gap as the
+  // co-borrower default below - without this, a borrower whose profile simply hadn't finished
+  // loading yet at mount time would show as "no mobile number on file" even though one exists.
+  const hasAppliedBorrowerDefault = React.useRef(false);
+  React.useEffect(() => {
+    if (hasAppliedBorrowerDefault.current) return;
+    if (!defaultPhoneNumber) return;
+    hasAppliedBorrowerDefault.current = true;
+    setPhoneNumber(defaultPhoneNumber);
+  }, [defaultPhoneNumber]);
+
+  // The co-borrower profile (and its phone number) is fetched by a separate query on the parent
+  // page and may resolve after this component's first render (borrower/co-borrower requests run in
+  // parallel, not guaranteed to finish in order) - sync the default in once it arrives, same as any
+  // other "fill from a slower-loading query" field. Does not overwrite whatever staff already typed.
+  const hasAppliedCoBorrowerDefault = React.useRef(false);
+  React.useEffect(() => {
+    if (hasAppliedCoBorrowerDefault.current) return;
+    if (!defaultCoBorrowerPhoneNumber) return;
+    hasAppliedCoBorrowerDefault.current = true;
+    setCoBorrowerPhoneNumber(defaultCoBorrowerPhoneNumber);
+  }, [defaultCoBorrowerPhoneNumber]);
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [signedDocPreview, setSignedDocPreview] = React.useState<LoanDocumentPreviewTarget | null>(null);
 
@@ -477,15 +527,54 @@ function LoanSigningPanel({
     },
   });
 
+  // 2026-07-28 (email delivery channel) - alternative to the SMS buttons above, added after
+  // confirming some Smart-network numbers silently filter link-containing SMS. The email address
+  // is auto-read from the profile server-side (see CreateLoanSigningSessionUseCase) - no
+  // phoneNumber is sent here, since staff never types the email in.
+  const sendViaEmailMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        partyType: 'BORROWER',
+        channel: 'EMAIL',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
+  const sendCoBorrowerViaEmailMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        partyType: 'CO_BORROWER',
+        channel: 'EMAIL',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
   if (!canSend) return null;
+
+  const borrowerSendMutation = borrowerChannel === 'EMAIL' ? sendViaEmailMutation : sendMutation;
+  const coBorrowerSendMutation = coBorrowerChannel === 'EMAIL' ? sendCoBorrowerViaEmailMutation : sendCoBorrowerMutation;
+  const borrowerCanSend = borrowerChannel === 'EMAIL' ? Boolean(borrowerEmail) : Boolean(phoneNumber.trim());
+  const coBorrowerCanSend = coBorrowerChannel === 'EMAIL' ? Boolean(coBorrowerEmail) : Boolean(coBorrowerPhoneNumber.trim());
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>E-signature</CardTitle>
         <CardDescription>
-          Send this loan's applicable documents (required plus any conditional on its product) to the client for signature via SMS - one
-          link, one code, every document signed in the same visit.
+          Send this loan's applicable documents to each party for signature - one link, one code, every document signed in the same
+          visit.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -495,37 +584,160 @@ function LoanSigningPanel({
             <span>{sendError}</span>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="signing-phone" className="text-xs">
-              Client mobile number
-            </Label>
-            <Input id="signing-phone" placeholder="09XX XXX XXXX" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border p-3">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+              {partyInitials(borrowerName, 'B')}
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-tight">Borrower</p>
+              {borrowerName && <p className="text-xs text-muted-foreground">{borrowerName}</p>}
+            </div>
           </div>
-          <Button onClick={() => sendMutation.mutate()} disabled={!phoneNumber.trim() || sendMutation.isPending}>
-            {sendMutation.isPending ? 'Sending…' : 'Send for signature'}
+          {borrowerChannel === 'SMS' ? (
+            <>
+              <Input
+                placeholder="09XX XXX XXXX"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className={cn('mb-1.5', !phoneNumber.trim() && 'border-warning')}
+                aria-label="Borrower mobile number"
+              />
+              {!phoneNumber.trim() && (
+                <div className="mb-2.5 flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                  <p className="text-xs text-warning">No mobile number on file for the borrower. Enter one above to send via SMS.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              {borrowerEmail ?? 'No email on file for the borrower'}
+            </p>
+          )}
+          <div className="mb-2.5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setBorrowerChannel('SMS')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                borrowerChannel === 'SMS' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <MessageSquareText className={cn('h-4 w-4', borrowerChannel === 'SMS' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', borrowerChannel === 'SMS' && 'text-primary')}>SMS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBorrowerChannel('EMAIL')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                borrowerChannel === 'EMAIL' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <Mail className={cn('h-4 w-4', borrowerChannel === 'EMAIL' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', borrowerChannel === 'EMAIL' && 'text-primary')}>Email</span>
+            </button>
+            <button type="button" disabled className="relative flex cursor-not-allowed flex-col items-center gap-1 rounded-md border p-2 opacity-50">
+              <Badge variant="warning" className="absolute -right-1.5 -top-2 px-1.5 py-0 text-[9px]">
+                Soon
+              </Badge>
+              <Globe2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Portal</span>
+            </button>
+          </div>
+          <div className="mb-2.5 flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              OTP verification will also be sent via <span className="font-medium text-foreground">{borrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> —
+              same channel as the link
+            </p>
+          </div>
+          <Button className="w-full" onClick={() => borrowerSendMutation.mutate()} disabled={!borrowerCanSend || borrowerSendMutation.isPending}>
+            {borrowerSendMutation.isPending ? 'Sending…' : `Send via ${borrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
           </Button>
         </div>
 
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="co-borrower-signing-phone" className="text-xs">
-              Co-borrower mobile number
-            </Label>
-            <Input
-              id="co-borrower-signing-phone"
-              placeholder="09XX XXX XXXX"
-              value={coBorrowerPhoneNumber}
-              onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
-            />
+        <div className="rounded-md border p-3">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium">
+              {partyInitials(coBorrowerName, 'CB')}
+            </div>
+            <div>
+              <p className="text-sm font-medium leading-tight">Co-borrower</p>
+              {coBorrowerName && <p className="text-xs text-muted-foreground">{coBorrowerName}</p>}
+            </div>
+          </div>
+          {coBorrowerChannel === 'SMS' ? (
+            <>
+              <Input
+                placeholder="09XX XXX XXXX"
+                value={coBorrowerPhoneNumber}
+                onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
+                className={cn('mb-1.5', !coBorrowerPhoneNumber.trim() && 'border-warning')}
+                aria-label="Co-borrower mobile number"
+              />
+              {!coBorrowerPhoneNumber.trim() && (
+                <div className="mb-2.5 flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                  <p className="text-xs text-warning">No mobile number on file for the co-borrower. Enter one above to send via SMS.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              {coBorrowerEmail ?? 'No email on file for the co-borrower'}
+            </p>
+          )}
+          <div className="mb-2.5 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => setCoBorrowerChannel('SMS')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                coBorrowerChannel === 'SMS' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <MessageSquareText className={cn('h-4 w-4', coBorrowerChannel === 'SMS' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', coBorrowerChannel === 'SMS' && 'text-primary')}>SMS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoBorrowerChannel('EMAIL')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                coBorrowerChannel === 'EMAIL' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <Mail className={cn('h-4 w-4', coBorrowerChannel === 'EMAIL' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', coBorrowerChannel === 'EMAIL' && 'text-primary')}>Email</span>
+            </button>
+            <button type="button" disabled className="relative flex cursor-not-allowed flex-col items-center gap-1 rounded-md border p-2 opacity-50">
+              <Badge variant="warning" className="absolute -right-1.5 -top-2 px-1.5 py-0 text-[9px]">
+                Soon
+              </Badge>
+              <Globe2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Portal</span>
+            </button>
+          </div>
+          <div className="mb-2.5 flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              OTP verification will also be sent via{' '}
+              <span className="font-medium text-foreground">{coBorrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> — same channel as
+              the link
+            </p>
           </div>
           <Button
-            variant="outline"
-            onClick={() => sendCoBorrowerMutation.mutate()}
-            disabled={!coBorrowerPhoneNumber.trim() || sendCoBorrowerMutation.isPending}
+            className="w-full"
+            onClick={() => coBorrowerSendMutation.mutate()}
+            disabled={!coBorrowerCanSend || coBorrowerSendMutation.isPending}
           >
-            {sendCoBorrowerMutation.isPending ? 'Sending…' : 'Send for Co-Borrower Signing'}
+            {coBorrowerSendMutation.isPending ? 'Sending…' : `Send via ${coBorrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
           </Button>
+        </div>
         </div>
 
         {sessionsQuery.isLoading ? (
@@ -540,7 +752,7 @@ function LoanSigningPanel({
                   <div>
                     <p className="text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{s.partyType === 'CO_BORROWER' ? 'Co-Borrower' : 'Borrower'}</span> ·
-                      Sent to {s.phoneNumber} · {formatDate(s.createdAt)}
+                      Sent to {s.channel === 'EMAIL' ? s.email ?? s.phoneNumber : s.phoneNumber} · {formatDate(s.createdAt)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {s.signedDocuments} of {s.totalDocuments} signed
@@ -1272,6 +1484,27 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     enabled: Boolean(loan?.borrowerId),
   });
 
+  // 2026-07-28 (e-signature default number) - lets LoanSigningPanel default-fill the co-borrower's
+  // signing box the same way it already does for the borrower's own box. Two DIFFERENT, non-
+  // overlapping linkage mechanisms exist in the live data (see the matching fix/comment in
+  // CreateLoanSigningSessionUseCase.ts): a per-LOAN join (`loan.coBorrowerIds`, what every
+  // CP12-migrated co-borrower uses) and a per-BORROWER direct attachment (`GET
+  // /borrowers/:id/co-borrowers`, what `CoBorrowersCard`'s "Add Co-Borrower" on Client Profile
+  // actually creates - ADR-015). Try the loan-level join first (specific to this exact loan), fall
+  // back to the client's directly-attached co-borrower if this loan has no join row.
+  const coBorrowerId = loan?.coBorrowerIds[0];
+  const coBorrowerByLoanQuery = useQuery({
+    queryKey: ['co-borrower', coBorrowerId],
+    queryFn: () => apiClient.get<CoBorrower>(`/co-borrowers/${coBorrowerId}`),
+    enabled: Boolean(coBorrowerId),
+  });
+  const coBorrowerByBorrowerQuery = useQuery({
+    queryKey: ['co-borrowers', loan?.borrowerId],
+    queryFn: () => apiClient.get<{ items: CoBorrower[] }>(`/borrowers/${loan!.borrowerId}/co-borrowers`),
+    enabled: Boolean(loan?.borrowerId) && !coBorrowerId,
+  });
+  const coBorrower = coBorrowerByLoanQuery.data ?? coBorrowerByBorrowerQuery.data?.items[0];
+
   const installmentsQuery = useQuery({
     queryKey: ['repayment-schedule', loanId],
     queryFn: () => apiClient.get<PaginatedResponse<RepaymentInstallment>>(`/loan-accounts/${loanId}/repayment-schedule`),
@@ -1391,6 +1624,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // the Penalty/Accrued Interest figures live as they adjust dates, before generating. The backend
   // is still the source of truth for the actual PDF/persisted record; this preview reuses the
   // already-loaded `installments` (same data as the Repayment Schedule table above).
+  //
+  // 2026-07-28 (ADR-052 addendum, user-confirmed): for a PROSPECTIVE (non-migrated) loan, Penalty
+  // is no longer the flat/shared-date-range formula below - it mirrors `resolveComputedPenalty`
+  // (ADR-050, daily-prorated, no grace period, due-month-day-count divisor, capped at the loan's
+  // maturity date), the exact same figure shown on the live Repayment Schedule. A migrated loan
+  // keeps the original flat formula unchanged (it has no live penalty on file to reuse).
+  const isProspectiveLoan = !loan?.legacyId;
   const soaPreview = React.useMemo(() => {
     const parseNum = (v: string | null | undefined) => Number.parseFloat(v ?? '') || 0;
     const toDate = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -1399,10 +1639,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     const accruedTo = toDate(soaAccruedInterestAsOfDate);
     const daysBetween = (from: Date, to: Date) =>
       Math.max(0, Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86_400_000));
-    const penaltyDays = daysBetween(penaltyFrom, penaltyTo);
+    const daysInMonth = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    const penaltyDays = isProspectiveLoan ? 0 : daysBetween(penaltyFrom, penaltyTo);
 
     const previewInstallments = installmentsQuery.data?.items ?? [];
     const sorted = [...previewInstallments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+
+    const lastInstallment = sorted[sorted.length - 1];
+    const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
+    const loanPrincipal = parseNum(loanQuery.data?.principalAmount);
+    const loanRate = loanPrincipal > 10000 ? 0.1 : 0.05; // ADR-050 tiering: whole loan's principal, not per-installment.
+
     let pastDuePrincipal = 0;
     let pastDueInterest = 0;
     let pastDuePenalty = 0;
@@ -1414,7 +1661,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       if (unpaidBase <= 0) continue;
       if (unpaidPrincipal > 0) pastDuePrincipal += unpaidPrincipal;
       if (unpaidInterest > 0) pastDueInterest += unpaidInterest;
-      if (penaltyDays > 0) {
+
+      if (isProspectiveLoan) {
+        const effectiveAsOf = maturityDate && penaltyTo.getTime() > maturityDate.getTime() ? maturityDate : penaltyTo;
+        const daysLate = daysBetween(new Date(inst.dueDate), effectiveAsOf);
+        if (daysLate > 0) {
+          pastDuePenalty += Math.round(((unpaidBase * loanRate) / daysInMonth(new Date(inst.dueDate))) * daysLate * 100) / 100;
+        }
+      } else if (penaltyDays > 0) {
         const rate = unpaidBase > 10000 ? 0.1 : 0.05;
         pastDuePenalty += Math.round(((unpaidBase * penaltyDays * rate) / 30) * 100) / 100;
       }
@@ -1436,8 +1690,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // PN Amount = Principal + Interest summed across the whole original schedule (not just unpaid).
     const pnValue = sorted.reduce((sum, inst) => sum + parseNum(inst.due.principal) + parseNum(inst.due.interest), 0);
 
-    const lastInstallment = sorted[sorted.length - 1];
-    const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
     // Account must actually be matured (real "today" past the Maturity Date), not just the picked
     // date — Accrued Interest is only applicable once the loan itself has matured.
     const isMatured = maturityDate ? maturityDate.getTime() <= Date.now() : false;
@@ -1467,14 +1719,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       accruedInterest,
       totalAmountDue,
     };
-  }, [installmentsQuery.data, loanQuery.data, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
+  }, [installmentsQuery.data, loanQuery.data, isProspectiveLoan, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
 
   const generateStatementMutation = useMutation({
     mutationFn: () =>
       apiClient.post(
         `/loan-accounts/${loanId}/statements-of-account`,
         {
-          penaltyFromDate: soaPenaltyFromDate,
+          // Only a migrated loan needs a manual From date - a prospective loan's Penalty is
+          // live-computed and ignores it entirely (ADR-052 addendum, 2026-07-28).
+          ...(isProspectiveLoan ? {} : { penaltyFromDate: soaPenaltyFromDate }),
           penaltyToDate: soaPenaltyToDate,
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
           collectionFee: soaCollectionFee,
@@ -2351,6 +2605,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               loanId={loan.id}
               loanCode={loan.loanCode}
               defaultPhoneNumber={borrower?.mobilePhone1 ?? undefined}
+              defaultCoBorrowerPhoneNumber={coBorrower?.phoneNumber ?? undefined}
+              borrowerName={borrower?.fullName}
+              coBorrowerName={coBorrower?.fullName}
+              borrowerEmail={borrower?.email ?? undefined}
+              coBorrowerEmail={coBorrower?.emailAddress ?? undefined}
               canSend={canGenerateDocuments}
             />
           ),
@@ -2489,38 +2748,64 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               </div>
             </div>
             <div className="rounded-md bg-secondary/40 p-3">
-              <p className="mb-2 text-sm font-medium">Penalty (daily computation)</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="soa-penalty-from-date">From date</Label>
-                  <Input
-                    id="soa-penalty-from-date"
-                    type="date"
-                    value={soaPenaltyFromDate}
-                    onChange={(e) => setSoaPenaltyFromDate(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="soa-penalty-to-date">To date</Label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-sm font-medium">Penalty</p>
+                {isProspectiveLoan && <Badge variant="success">Live computed</Badge>}
+              </div>
+              {isProspectiveLoan ? (
+                <>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Same figure shown on this loan's Repayment Schedule - computed as of the date below.
+                  </p>
+                  <Label htmlFor="soa-penalty-to-date">As of date</Label>
                   <Input
                     id="soa-penalty-to-date"
                     type="date"
                     value={soaPenaltyToDate}
                     onChange={(e) => setSoaPenaltyToDate(e.target.value)}
                   />
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
-                <div>
-                  <p className="text-muted-foreground">Days</p>
-                  <p className="font-medium">{soaPreview.penaltyDays}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Penalty amount</p>
-                  <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.</p>
+                  <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
+                    <p className="text-muted-foreground">Past due penalty</p>
+                    <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="soa-penalty-from-date">From date</Label>
+                      <Input
+                        id="soa-penalty-from-date"
+                        type="date"
+                        value={soaPenaltyFromDate}
+                        onChange={(e) => setSoaPenaltyFromDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="soa-penalty-to-date">To date</Label>
+                      <Input
+                        id="soa-penalty-to-date"
+                        type="date"
+                        value={soaPenaltyToDate}
+                        onChange={(e) => setSoaPenaltyToDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Days</p>
+                      <p className="font-medium">{soaPreview.penaltyDays}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Penalty amount</p>
+                      <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Migrated loan - rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.
+                  </p>
+                </>
+              )}
             </div>
             <div className={cn('rounded-md bg-secondary/40 p-3', !soaPreview.isMatured && 'opacity-60')}>
               <p className="mb-2 text-sm font-medium">Accrued interest</p>
@@ -2570,6 +2855,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 />
               </div>
             </div>
+            {isProspectiveLoan && (
+              <div className="flex items-start gap-2 rounded-md border bg-secondary/40 p-2.5 text-xs text-muted-foreground">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>Migrated loans have no live penalty on file - a manual From/To date range appears instead for those accounts.</span>
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-md bg-primary/10 p-3">
               <p className="text-sm font-medium text-primary">Total amount due</p>
               <p className="text-lg font-medium text-primary">{formatPeso(soaPreview.totalAmountDue)}</p>

@@ -72,3 +72,31 @@ export class NoDocumentsForPartyError extends DomainError {
     this.name = 'NoDocumentsForPartyError';
   }
 }
+
+/** 2026-07-28 (email delivery channel) - thrown when "Send via Email" is attempted but the party
+ * (Borrower or CoBorrower) has no email address on file. Unlike the SMS channel's phone number
+ * (always staff-entered per-send), the email address is deliberately auto-read from the profile,
+ * not typed by staff - so there is no staff-entered fallback here; the profile must be updated
+ * with an email address first. */
+export class NoEmailOnFileError extends DomainError {
+  constructor(partyType: string) {
+    super('NO_EMAIL_ON_FILE', `No email address is on file for the ${partyType.toLowerCase()}.`, undefined, 400);
+    this.name = 'NoEmailOnFileError';
+  }
+}
+
+/** 2026-07-28 (email delivery channel) - OTP verification always goes out via SMS regardless of
+ * which channel delivered the initial link (a plain numeric code isn't affected by the
+ * link-filtering issue that motivated the email channel), so a phone number is still required even
+ * for an EMAIL-channel send - auto-read from the profile in that case, same as the email address. */
+export class NoPhoneNumberOnFileError extends DomainError {
+  constructor(partyType: string) {
+    super(
+      'NO_PHONE_NUMBER_ON_FILE',
+      `No phone number is on file for the ${partyType.toLowerCase()} - one is still required to deliver the OTP code.`,
+      undefined,
+      400,
+    );
+    this.name = 'NoPhoneNumberOnFileError';
+  }
+}
