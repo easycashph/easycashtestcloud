@@ -67,6 +67,8 @@ export class ReminderSettingsController {
         portalEmailEnabled,
         portalSmsEnabled,
         updatedByUserId: currentUser.sub,
+        ipAddress: req.ip,
+        userAgent: req.header('user-agent'),
       });
       res.status(200).json(presentReminderSettings(settings));
     } catch (error) {

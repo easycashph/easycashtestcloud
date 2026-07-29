@@ -1045,7 +1045,10 @@ export function createApp(): Express {
   const reminderSettingsRouter = createReminderSettingsRouter(
     {
       getReminderSettingsUseCase: new GetReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
-      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({ reminderSettingsRepository: new PrismaReminderSettingsRepository() }),
+      updateReminderSettingsUseCase: new UpdateReminderSettingsUseCase({
+        reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+        auditLogger,
+      }),
     },
     tokenService,
   );
