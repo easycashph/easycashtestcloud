@@ -34,7 +34,7 @@ export function SortableSection({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn('group relative', fullWidth && 'lg:col-span-2', isDragging && 'z-10 opacity-70')}
+      className={cn('group relative h-full', fullWidth && 'lg:col-span-2', isDragging && 'z-10 opacity-70')}
     >
       {dragReorderEnabled && (
         <button

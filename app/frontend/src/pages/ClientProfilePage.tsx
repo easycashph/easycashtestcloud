@@ -546,7 +546,7 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
   const summary = query.data;
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-muted-foreground" />
@@ -554,7 +554,7 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
         </div>
         {summary && <Badge variant={RISK_BADGE_VARIANT[summary.riskLevel]}>{RISK_LEVEL_LABEL[summary.riskLevel]}</Badge>}
       </CardHeader>
-      <CardContent className="space-y-2 p-4 pt-0">
+      <CardContent className="flex-1 space-y-2 p-4 pt-0">
         {query.isLoading ? (
           <p className="text-sm text-muted-foreground">Loading risk summary…</p>
         ) : !summary ? (
@@ -748,17 +748,17 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
               <Label>
                 First Name<span className="text-destructive"> *</span>
               </Label>
-              <Input value={draft.firstName} onChange={(e) => setDraft((prev) => ({ ...prev, firstName: e.target.value }))} />
+              <Input value={draft.firstName} onChange={(e) => setDraft((prev) => ({ ...prev, firstName: e.target.value.toUpperCase() }))} />
             </div>
             <div className="space-y-1.5">
               <Label>
                 Last Name<span className="text-destructive"> *</span>
               </Label>
-              <Input value={draft.lastName} onChange={(e) => setDraft((prev) => ({ ...prev, lastName: e.target.value }))} />
+              <Input value={draft.lastName} onChange={(e) => setDraft((prev) => ({ ...prev, lastName: e.target.value.toUpperCase() }))} />
             </div>
             <div className="space-y-1.5">
               <Label>Middle Name</Label>
-              <Input value={draft.middleName} onChange={(e) => setDraft((prev) => ({ ...prev, middleName: e.target.value }))} />
+              <Input value={draft.middleName} onChange={(e) => setDraft((prev) => ({ ...prev, middleName: e.target.value.toUpperCase() }))} />
             </div>
             <div className="space-y-1.5">
               <Label>Phone Number</Label>
@@ -774,11 +774,11 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
             </div>
             <div className="space-y-1.5">
               <Label>Relationship</Label>
-              <Input value={draft.relationship} onChange={(e) => setDraft((prev) => ({ ...prev, relationship: e.target.value }))} />
+              <Input value={draft.relationship} onChange={(e) => setDraft((prev) => ({ ...prev, relationship: e.target.value.toUpperCase() }))} />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Employer</Label>
-              <Input value={draft.employer} onChange={(e) => setDraft((prev) => ({ ...prev, employer: e.target.value }))} />
+              <Input value={draft.employer} onChange={(e) => setDraft((prev) => ({ ...prev, employer: e.target.value.toUpperCase() }))} />
             </div>
           </div>
           <div className="border-t pt-3">

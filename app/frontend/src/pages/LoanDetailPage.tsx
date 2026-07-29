@@ -585,13 +585,21 @@ function LoanSigningPanel({
             </div>
           </div>
           {borrowerChannel === 'SMS' ? (
-            <Input
-              placeholder="09XX XXX XXXX"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              className="mb-2.5"
-              aria-label="Borrower mobile number"
-            />
+            <>
+              <Input
+                placeholder="09XX XXX XXXX"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className={cn('mb-1.5', !phoneNumber.trim() && 'border-warning')}
+                aria-label="Borrower mobile number"
+              />
+              {!phoneNumber.trim() && (
+                <div className="mb-2.5 flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                  <p className="text-xs text-warning">No mobile number on file for the borrower. Enter one above to send via SMS.</p>
+                </div>
+              )}
+            </>
           ) : (
             <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               {borrowerEmail ?? 'No email on file for the borrower'}
@@ -651,13 +659,21 @@ function LoanSigningPanel({
             </div>
           </div>
           {coBorrowerChannel === 'SMS' ? (
-            <Input
-              placeholder="09XX XXX XXXX"
-              value={coBorrowerPhoneNumber}
-              onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
-              className="mb-2.5"
-              aria-label="Co-borrower mobile number"
-            />
+            <>
+              <Input
+                placeholder="09XX XXX XXXX"
+                value={coBorrowerPhoneNumber}
+                onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)}
+                className={cn('mb-1.5', !coBorrowerPhoneNumber.trim() && 'border-warning')}
+                aria-label="Co-borrower mobile number"
+              />
+              {!coBorrowerPhoneNumber.trim() && (
+                <div className="mb-2.5 flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
+                  <p className="text-xs text-warning">No mobile number on file for the co-borrower. Enter one above to send via SMS.</p>
+                </div>
+              )}
+            </>
           ) : (
             <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               {coBorrowerEmail ?? 'No email on file for the co-borrower'}
