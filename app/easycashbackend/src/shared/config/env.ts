@@ -30,6 +30,16 @@ const envSchema = z.object({
 
   CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
 
+  // 2026-07-30 (real bug found): e-signature links (CreateLoanSigningSessionUseCase) used to be
+  // built directly from CORS_ORIGIN - worked by coincidence while that was a single origin, but
+  // CORS_ORIGIN is semantically an ALLOW-LIST (comma-separated once multiple origins are trusted,
+  // see app.ts's split(',') below) and the signing link needs exactly ONE canonical, externally
+  // reachable URL. Kept as its own var rather than "just take the first CORS_ORIGIN entry" so the
+  // externally-facing signing link (must be reachable by the borrower's phone/email, e.g. the
+  // Cloudflare Pages URL) can differ from the primary CORS origin used for staff-facing browser
+  // requests (e.g. a LAN IP) without one silently breaking the other.
+  SIGNING_LINK_BASE_URL: z.string().min(1).default('http://localhost:5173'),
+
   // Audit finding C-02: must match actual deployment topology. Default
   // "false" is the safe choice for local dev / direct exposure with no
   // reverse proxy in front. See shared/config/trustProxy.ts and
