@@ -3,6 +3,7 @@ import type { SignUpUseCase } from '../../application/use-cases/SignUpUseCase';
 import type { VerifySignUpUseCase } from '../../application/use-cases/VerifySignUpUseCase';
 import type { PortalLoginUseCase } from '../../application/use-cases/PortalLoginUseCase';
 import type { VerifyPortalLoginOtpUseCase } from '../../application/use-cases/VerifyPortalLoginOtpUseCase';
+import type { ResendPortalLoginOtpUseCase } from '../../application/use-cases/ResendPortalLoginOtpUseCase';
 import type { RequestPasswordResetUseCase } from '../../application/use-cases/RequestPasswordResetUseCase';
 import type { ConfirmPasswordResetUseCase } from '../../application/use-cases/ConfirmPasswordResetUseCase';
 import type { GetPortalAccountUseCase } from '../../application/use-cases/GetPortalAccountUseCase';
@@ -11,6 +12,7 @@ import type {
   PortalConfirmPasswordResetRequestBody,
   PortalLoginRequestBody,
   PortalRequestPasswordResetRequestBody,
+  PortalResendLoginOtpRequestBody,
   PortalSignUpRequestBody,
   PortalVerifyLoginOtpRequestBody,
   PortalVerifySignUpRequestBody,
@@ -21,6 +23,7 @@ export interface PortalAuthControllerDeps {
   verifySignUpUseCase: VerifySignUpUseCase;
   portalLoginUseCase: PortalLoginUseCase;
   verifyPortalLoginOtpUseCase: VerifyPortalLoginOtpUseCase;
+  resendPortalLoginOtpUseCase: ResendPortalLoginOtpUseCase;
   requestPasswordResetUseCase: RequestPasswordResetUseCase;
   confirmPasswordResetUseCase: ConfirmPasswordResetUseCase;
   getPortalAccountUseCase: GetPortalAccountUseCase;
@@ -77,6 +80,16 @@ export class PortalAuthController {
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
         account: result.account,
       });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resendLoginOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as PortalResendLoginOtpRequestBody;
+      const result = await this.deps.resendPortalLoginOtpUseCase.execute(body);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

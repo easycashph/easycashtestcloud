@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
-import type { LoginRequest, LoginResult, LoginResponse } from '@/lib/portalApiTypes';
+import type { LoginRequest, LoginResult, LoginResponse, LoginTwoFactorRequired } from '@/lib/portalApiTypes';
+
+const RESEND_COOLDOWN_SECONDS = 30;
 
 function friendlyApiError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -20,6 +22,12 @@ function friendlyApiError(err: unknown): string {
  * `twoFactorRequired`, the form swaps to a plain 6-digit code entry instead of completing the
  * login immediately - mirrors the internal LMS LoginPage's own OTP-step pattern exactly. Nothing
  * changes for an account that has 2FA turned off (Security tab).
+ *
+ * 2026-07-30 (user request): added a "Resend code" action on that OTP step, backed by
+ * `POST /portal/resend-login-otp` - issues a fresh challenge (new code, new 5-minute expiry) for
+ * the same in-progress login without making the client re-enter their password. Gated by a
+ * client-side cooldown (matches the backend's own tighter rate limit on that route) so it can't be
+ * spammed into re-triggering real message sends.
  */
 export function LoginPage() {
   const navigate = useNavigate();
@@ -34,6 +42,15 @@ export function LoginPage() {
 
   const [otpStep, setOtpStep] = React.useState<{ challengeId: string; channel: 'EMAIL' | 'SMS' } | null>(null);
   const [otpCode, setOtpCode] = React.useState('');
+  const [isResending, setIsResending] = React.useState(false);
+  const [resendMessage, setResendMessage] = React.useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = React.useState(0);
+
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
 
   const completeLogin = (result: LoginResponse) => {
     login(result.accessToken, result.account);
@@ -49,6 +66,7 @@ export function LoginPage() {
       const result = await apiClient.post<LoginResult>('/portal/login', body);
       if ('twoFactorRequired' in result) {
         setOtpStep({ challengeId: result.challengeId, channel: result.channel });
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
       } else {
         completeLogin(result);
       }
@@ -74,6 +92,24 @@ export function LoginPage() {
     }
   };
 
+  const handleResendOtp = async () => {
+    if (!otpStep || resendCooldown > 0) return;
+    setError(null);
+    setResendMessage(null);
+    setIsResending(true);
+    try {
+      const result = await apiClient.post<LoginTwoFactorRequired>('/portal/resend-login-otp', { challengeId: otpStep.challengeId });
+      setOtpStep({ challengeId: result.challengeId, channel: result.channel });
+      setOtpCode('');
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      setResendMessage(`A new code was sent to your ${result.channel === 'EMAIL' ? 'email address' : 'mobile number'}.`);
+    } catch (err) {
+      setError(friendlyApiError(err));
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   if (otpStep) {
     return (
       <AuthLayout
@@ -82,6 +118,7 @@ export function LoginPage() {
       >
         <form className="space-y-4" onSubmit={handleVerifyOtp}>
           {error && <Alert>{error}</Alert>}
+          {resendMessage && <Alert tone="success">{resendMessage}</Alert>}
           <div className="space-y-1.5">
             <Label htmlFor="otp-code">Verification code</Label>
             <Input
@@ -102,11 +139,21 @@ export function LoginPage() {
           </Button>
           <button
             type="button"
+            className="w-full text-center text-sm text-muted-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline"
+            onClick={handleResendOtp}
+            disabled={isResending || resendCooldown > 0}
+          >
+            {isResending ? 'Sending…' : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Didn't get a code? Resend"}
+          </button>
+          <button
+            type="button"
             className="w-full text-center text-sm text-muted-foreground hover:underline"
             onClick={() => {
               setOtpStep(null);
               setOtpCode('');
               setError(null);
+              setResendMessage(null);
+              setResendCooldown(0);
             }}
           >
             Back to login

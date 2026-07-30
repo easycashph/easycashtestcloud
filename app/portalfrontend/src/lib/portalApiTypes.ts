@@ -54,6 +54,11 @@ export interface VerifyLoginOtpRequest {
   code: string;
 }
 
+/** Login 2FA resend (2026-07-30 user request). */
+export interface ResendLoginOtpRequest {
+  challengeId: string;
+}
+
 export interface RequestEnableTwoFactorRequest {
   channel: 'EMAIL' | 'SMS';
 }

@@ -55,6 +55,13 @@ export interface VerifyPortalLoginOtpInput {
   code: string;
 }
 
+/** Login 2FA resend (2026-07-30 user request) - a client stuck on the OTP step (didn't receive
+ * the code, let it expire) can request a fresh one for the same in-progress login, rather than
+ * having to go back and re-enter their password. */
+export interface ResendPortalLoginOtpInput {
+  challengeId: string;
+}
+
 export interface RequestEnablePortalTwoFactorInput {
   portalAccountId: string;
   channel: PortalChallengeChannel;

@@ -31,4 +31,9 @@ export interface IPortalAccountChallengeRepository {
   findById(id: string): Promise<PortalAccountChallengeRecord | null>;
   verifyAndConsume(id: string, code: string): Promise<boolean>;
   incrementAttempts(id: string): Promise<number>;
+  /** Marks a challenge consumed WITHOUT verifying a code - used to invalidate a superseded
+   * challenge (2026-07-30: ResendPortalLoginOtpUseCase, so the old code stops working the moment a
+   * new one is issued, not just whenever its own 5-minute window happens to lapse). A no-op if
+   * already consumed. */
+  invalidate(id: string): Promise<void>;
 }
