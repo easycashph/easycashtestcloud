@@ -203,7 +203,7 @@ export class CreateLoanSigningSessionUseCase {
     });
     await this.deps.loanSigningSessionRepository.create(session);
 
-    const signingUrl = `${env.CORS_ORIGIN}/sign/${rawToken}`;
+    const signingUrl = `${env.SIGNING_LINK_BASE_URL}/sign/${rawToken}`;
     const partyLabel = partyType === 'CO_BORROWER' ? ' (co-borrower)' : '';
     // 2026-07-28 (user-picked wording, option 3): "Hi! Please review and sign..." - used for both
     // the SMS message and the plain-text email fallback, kept identical across channels.
