@@ -395,6 +395,13 @@ export function LoanApplicationFormPage() {
       setError('Please acknowledge the Terms and Conditions and Data Privacy Statement before submitting.');
       return;
     }
+    // 2026-07-30 (user request): hard eligibility gate - applicants under 18 or over 59 cannot
+    // submit at all. Only blocks when age is actually known; the backend enforces this too
+    // (CreateLoanApplicationUseCase) since client-side validation alone is never a real safeguard.
+    if (age !== null && (age < 18 || age > 59)) {
+      setError(`Applicants must be between 18 and 59 years old to qualify (computed age: ${age}).`);
+      return;
+    }
 
     setIsSubmitting(true);
     try {

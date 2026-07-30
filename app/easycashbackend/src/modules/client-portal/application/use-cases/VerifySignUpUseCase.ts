@@ -37,6 +37,14 @@ export class VerifySignUpUseCase {
     const account = await portalAccountRepository.findById(challenge.portalAccountId);
     if (!account) throw new PortalAccountNotFoundError();
 
-    await portalAccountRepository.update(account.id, { status: 'ACTIVE', emailVerifiedAt: new Date() });
+    // Login 2FA (2026-07-30, default ON): populate twoFactorChannel with the channel this account
+    // just proved it can receive - twoFactorEnabled already defaults to true at the DB level, so
+    // this is the only piece needed for 2FA to actually kick in on first login. A client can
+    // change/disable it later from Security.
+    await portalAccountRepository.update(account.id, {
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      twoFactorChannel: challenge.channel,
+    });
   }
 }

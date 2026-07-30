@@ -35,6 +35,10 @@ import { createPortalAuthRouter } from '@modules/client-portal/interface/http/po
 import { SignUpUseCase } from '@modules/client-portal/application/use-cases/SignUpUseCase';
 import { VerifySignUpUseCase } from '@modules/client-portal/application/use-cases/VerifySignUpUseCase';
 import { PortalLoginUseCase } from '@modules/client-portal/application/use-cases/PortalLoginUseCase';
+import { VerifyPortalLoginOtpUseCase } from '@modules/client-portal/application/use-cases/VerifyPortalLoginOtpUseCase';
+import { RequestEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/RequestEnablePortalTwoFactorUseCase';
+import { ConfirmEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/ConfirmEnablePortalTwoFactorUseCase';
+import { DisablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/DisablePortalTwoFactorUseCase';
 import { RequestPasswordResetUseCase } from '@modules/client-portal/application/use-cases/RequestPasswordResetUseCase';
 import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/use-cases/ConfirmPasswordResetUseCase';
 import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
@@ -469,7 +473,14 @@ export function createApp(): Express {
     {
       signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender: portalOtpSender }),
       verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
-      portalLoginUseCase: new PortalLoginUseCase({ portalAccountRepository, passwordHasher, portalTokenService }),
+      portalLoginUseCase: new PortalLoginUseCase({
+        portalAccountRepository,
+        passwordHasher,
+        portalTokenService,
+        portalAccountChallengeRepository,
+        otpSender: portalOtpSender,
+      }),
+      verifyPortalLoginOtpUseCase: new VerifyPortalLoginOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, portalTokenService }),
       requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       confirmPasswordResetUseCase: new ConfirmPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher }),
       getPortalAccountUseCase: new GetPortalAccountUseCase({ portalAccountRepository }),
@@ -1197,6 +1208,13 @@ export function createApp(): Express {
     {
       changePortalPasswordUseCase: new ChangePortalPasswordUseCase({ portalAccountRepository, passwordHasher }),
       changePortalEmailUseCase: new ChangePortalEmailUseCase({ portalAccountRepository, passwordHasher }),
+      requestEnablePortalTwoFactorUseCase: new RequestEnablePortalTwoFactorUseCase({
+        portalAccountRepository,
+        portalAccountChallengeRepository,
+        otpSender: portalOtpSender,
+      }),
+      confirmEnablePortalTwoFactorUseCase: new ConfirmEnablePortalTwoFactorUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
+      disablePortalTwoFactorUseCase: new DisablePortalTwoFactorUseCase({ portalAccountRepository, passwordHasher }),
     },
     portalTokenService,
   );

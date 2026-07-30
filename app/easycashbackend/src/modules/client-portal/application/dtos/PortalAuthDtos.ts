@@ -29,12 +29,50 @@ export interface PortalAuthenticatedAccountView {
   email: string;
   contactNumber: string | null;
   borrowerId: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorChannel: PortalChallengeChannel | null;
 }
 
 export interface PortalLoginOutput {
   accessToken: string;
   accessTokenExpiresAt: Date;
   account: PortalAuthenticatedAccountView;
+}
+
+/** Login 2FA (2026-07-30) - PortalLoginUseCase returns this instead of tokens when the account has
+ * 2FA enabled; the caller must complete VerifyPortalLoginOtpUseCase next. Mirrors identity's own
+ * LoginResult union shape. */
+export interface PortalLoginTwoFactorRequired {
+  twoFactorRequired: true;
+  challengeId: string;
+  channel: PortalChallengeChannel;
+}
+
+export type PortalLoginResult = PortalLoginOutput | PortalLoginTwoFactorRequired;
+
+export interface VerifyPortalLoginOtpInput {
+  challengeId: string;
+  code: string;
+}
+
+export interface RequestEnablePortalTwoFactorInput {
+  portalAccountId: string;
+  channel: PortalChallengeChannel;
+}
+
+export interface RequestEnablePortalTwoFactorOutput {
+  challengeId: string;
+}
+
+export interface ConfirmEnablePortalTwoFactorInput {
+  portalAccountId: string;
+  challengeId: string;
+  code: string;
+}
+
+export interface DisablePortalTwoFactorInput {
+  portalAccountId: string;
+  currentPassword: string;
 }
 
 export interface RequestPasswordResetInput {

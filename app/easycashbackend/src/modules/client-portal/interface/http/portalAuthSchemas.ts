@@ -37,6 +37,12 @@ export const portalLoginSchema = z.object({
 });
 export type PortalLoginRequestBody = z.infer<typeof portalLoginSchema>;
 
+export const portalVerifyLoginOtpSchema = z.object({
+  challengeId: z.string().min(1),
+  code: z.string().min(1),
+});
+export type PortalVerifyLoginOtpRequestBody = z.infer<typeof portalVerifyLoginOtpSchema>;
+
 export const portalRequestPasswordResetSchema = z.object({
   email: z.string().email(),
 });

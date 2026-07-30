@@ -29,12 +29,46 @@ export interface PortalAccountView {
   email: string;
   contactNumber: string | null;
   borrowerId: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorChannel: 'EMAIL' | 'SMS' | null;
 }
 
 export interface LoginResponse {
   accessToken: string;
   accessTokenExpiresAt: string;
   account: PortalAccountView;
+}
+
+/** Login 2FA (2026-07-30) - PortalLoginUseCase returns this instead of tokens when the account has
+ * 2FA enabled. */
+export interface LoginTwoFactorRequired {
+  twoFactorRequired: true;
+  challengeId: string;
+  channel: 'EMAIL' | 'SMS';
+}
+
+export type LoginResult = LoginResponse | LoginTwoFactorRequired;
+
+export interface VerifyLoginOtpRequest {
+  challengeId: string;
+  code: string;
+}
+
+export interface RequestEnableTwoFactorRequest {
+  channel: 'EMAIL' | 'SMS';
+}
+
+export interface RequestEnableTwoFactorResponse {
+  challengeId: string;
+}
+
+export interface ConfirmEnableTwoFactorRequest {
+  challengeId: string;
+  code: string;
+}
+
+export interface DisableTwoFactorRequest {
+  currentPassword: string;
 }
 
 export interface ForgotPasswordRequest {

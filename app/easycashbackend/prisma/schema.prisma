@@ -434,6 +434,15 @@ model PortalAccount {
   status          PortalAccountStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?
 
+  /// Portal login 2FA (2026-07-30 user request) - unlike the internal LMS's opt-in-default-off
+  /// 2FA, this defaults ON: `twoFactorChannel` is populated automatically from whichever channel
+  /// the client already verified at sign-up (see VerifySignUpUseCase), so it's never null while
+  /// enabled - no separate "first enable" step needed for the common case. A client can still turn
+  /// it off (DisablePortalTwoFactorUseCase) or re-enable/switch channel later (RequestEnable/
+  /// ConfirmEnablePortalTwoFactorUseCase), mirroring identity's TwoFactorChallenge flow shape.
+  twoFactorEnabled Boolean @default(true)
+  twoFactorChannel String?
+
   /// Set once this account is linked to a real Borrower (their first application gets approved
   /// and "Create Client Profile" is run, or an existing client is matched) - null until then.
   borrowerId String?   @unique
@@ -482,7 +491,8 @@ model PortalAccountChallenge {
   id              String        @id @default(uuid())
   portalAccountId String
   portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
-  /// 'SIGNUP' (verify email/contact before first login) | 'PASSWORD_RESET'.
+  /// 'SIGNUP' (verify email/contact before first login) | 'PASSWORD_RESET' | 'LOGIN' (2FA-gated
+  /// login, 2026-07-30) | 'ENABLE_2FA' (re-enable/switch channel, 2026-07-30).
   purpose         String
   /// 'EMAIL' | 'SMS' - which channel the code was sent to.
   channel         String

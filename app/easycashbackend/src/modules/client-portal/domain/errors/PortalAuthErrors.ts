@@ -46,6 +46,14 @@ export class PortalAccountNotFoundError extends DomainError {
   }
 }
 
+/** Login 2FA (2026-07-30) - chosen channel is SMS but the account has no contactNumber on file. */
+export class PortalTwoFactorChannelUnavailableError extends DomainError {
+  constructor(channel: string) {
+    super('PORTAL_2FA_CHANNEL_UNAVAILABLE', `Cannot send a code via ${channel} - no destination on file.`, undefined, 422);
+    this.name = 'PortalTwoFactorChannelUnavailableError';
+  }
+}
+
 export class PortalWeakPasswordError extends DomainError {
   constructor(violations: string[]) {
     super('PORTAL_WEAK_PASSWORD', `Password does not meet policy requirements: ${violations.join(', ')}`, undefined, 422);

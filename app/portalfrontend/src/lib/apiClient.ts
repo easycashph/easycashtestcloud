@@ -27,11 +27,23 @@ export class ApiError extends Error {
   }
 }
 
+/** 2026-07-30 (bug found in production testing): a corrupted/stale localStorage value - the
+ * literal string "undefined" (from a prior `setStoredToken(undefined)` call, e.g. before a fix
+ * elsewhere, or from an interrupted login) - was being sent as `Authorization: Bearer undefined`
+ * on every request, silently failing every authenticated call while the app still believed it was
+ * logged in. Treat these literal strings as "no token" (and clear them) rather than trusting
+ * whatever's in localStorage at face value. */
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+  const value = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (!value || value === 'undefined' || value === 'null') {
+    if (value) localStorage.removeItem(TOKEN_STORAGE_KEY);
+    return null;
+  }
+  return value;
 }
 
 export function setStoredToken(token: string): void {
+  if (!token) return;
   localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
@@ -63,6 +75,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
+    // 2026-07-30: a 401 on an authenticated call means the stored token is missing/invalid/expired
+    // - clear it rather than leaving the app stuck believing it's logged in while every
+    // authenticated call keeps silently failing (the bug this was found from).
+    if (res.status === 401 && options.auth !== false) {
+      clearStoredToken();
+      window.dispatchEvent(new Event('easycash-portal-session-expired'));
+    }
     const code = data?.error?.code ?? 'UNKNOWN_ERROR';
     const message = data?.error?.message ?? 'Something went wrong. Please try again.';
     throw new ApiError(res.status, code, message);
