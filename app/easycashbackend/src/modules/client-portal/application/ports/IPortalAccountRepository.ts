@@ -1,6 +1,33 @@
 export type PortalAccountStatus = 'PENDING_VERIFICATION' | 'ACTIVE';
 
-export interface PortalAccountRecord {
+/** Pre-application profile fields (2026-07-30) - see schema.prisma's PortalAccount doc comment.
+ * Shared between the record shape and the update-patch shape since every field here is optional
+ * and independently settable. */
+export interface PortalAccountProfileFields {
+  firstName: string | null;
+  middleName: string | null;
+  lastName: string | null;
+  suffix: string | null;
+  gender: string | null;
+  birthDate: Date | null;
+  placeOfBirth: string | null;
+  nationality: string | null;
+  civilStatus: string | null;
+  homeOwnership: string | null;
+  mobilePhone1: string | null;
+  mobilePhone2: string | null;
+  occupation: string | null;
+  employer: string | null;
+  monthlyIncome: number | null;
+  houseUnitNumber: string | null;
+  street: string | null;
+  barangay: string | null;
+  cityMunicipality: string | null;
+  province: string | null;
+  zipCode: string | null;
+}
+
+export interface PortalAccountRecord extends PortalAccountProfileFields {
   id: string;
   email: string;
   passwordHash: string;
@@ -20,7 +47,7 @@ export interface CreatePortalAccountInput {
   contactNumber?: string;
 }
 
-export interface UpdatePortalAccountInput {
+export interface UpdatePortalAccountInput extends Partial<PortalAccountProfileFields> {
   status?: PortalAccountStatus;
   emailVerifiedAt?: Date;
   passwordHash?: string;

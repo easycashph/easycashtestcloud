@@ -448,6 +448,36 @@ model PortalAccount {
   borrowerId String?   @unique
   borrower   Borrower? @relation(fields: [borrowerId], references: [id])
 
+  /// Pre-application profile fields (2026-07-30 user request) - lets a client personalize "My
+  /// Profile" before ever submitting a loan application (previously the only editable copy of this
+  /// data was on a draft LoanApplication, which doesn't exist until they apply). Same field
+  /// shape/types as the real Borrower record so GetPortalProfileUseCase/UpdatePortalProfileUseCase
+  /// can present both through one PortalProfileDto shape. Once `borrowerId` is set, these columns
+  /// become dormant - the Borrower record is authoritative from then on and these are never synced
+  /// back into it (a fresh signup vs. an existing client's history are different sources of truth;
+  /// reconciling them isn't this feature's job).
+  firstName     String?
+  middleName    String?
+  lastName      String?
+  suffix        String?
+  gender        String?
+  birthDate     DateTime?
+  placeOfBirth  String?
+  nationality   String?
+  civilStatus   String?
+  homeOwnership String?
+  mobilePhone1  String?
+  mobilePhone2  String?
+  occupation    String?
+  employer      String?
+  monthlyIncome Decimal? @db.Decimal(14, 2)
+  houseUnitNumber   String?
+  street            String?
+  barangay          String?
+  cityMunicipality  String?
+  province          String?
+  zipCode           String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -1189,12 +1189,14 @@ export function createApp(): Express {
   // Delegates writes to the same UpdateBorrowerUseCase staff uses (own instance here, same
   // stateless-Prisma-wrapper reuse pattern as elsewhere in this file) so both surfaces share one
   // write path and one activity-log trail.
+  const getPortalProfileUseCase = new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository });
   const portalProfileRouter = createPortalProfileRouter(
     {
-      getPortalProfileUseCase: new GetPortalProfileUseCase({ portalAccountRepository, borrowerRepository }),
+      getPortalProfileUseCase,
       updatePortalProfileUseCase: new UpdatePortalProfileUseCase({
         portalAccountRepository,
         updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
+        getPortalProfileUseCase,
       }),
     },
     portalTokenService,
