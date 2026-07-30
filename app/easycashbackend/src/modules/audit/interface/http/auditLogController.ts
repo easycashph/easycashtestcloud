@@ -81,7 +81,7 @@ export class AuditLogController {
   logView = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = getCurrentUser(req);
-      const { section, entityId } = req.body as { section?: string; entityId?: string };
+      const { section, entityId, action } = req.body as { section?: string; entityId?: string; action?: string };
       if (!section) {
         res.status(400).json({ error: 'Missing section' });
         return;
@@ -91,6 +91,7 @@ export class AuditLogController {
         userId: user.sub,
         section,
         entityId,
+        action,
         ipAddress: req.ip,
         userAgent: req.header('user-agent'),
       });

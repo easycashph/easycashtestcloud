@@ -6,6 +6,12 @@ export interface LogSectionViewInput {
   entityId?: string;
   ipAddress?: string;
   userAgent?: string;
+  /** 2026-07-30 (user request): specific in-section interactions (filtering, opening a specific
+   * record) read as generic "viewed this section" noise when every entry uses the same action -
+   * lets a caller log a more precise action name (e.g. "FILTER_SECTION", "OPEN_SIGNING_LOG") while
+   * staying under the same section/entityType scoping. Defaults to the original "VIEW_SECTION" so
+   * every existing `useLogPageView` call site (page-mount logging, unchanged) keeps working as-is. */
+  action?: string;
 }
 
 /**
@@ -20,7 +26,7 @@ export class LogSectionViewUseCase {
   async execute(input: LogSectionViewInput): Promise<void> {
     await this.deps.auditLogger.log({
       userId: input.userId,
-      action: 'VIEW_SECTION',
+      action: input.action ?? 'VIEW_SECTION',
       entityType: input.section,
       entityId: input.entityId ?? input.section,
       ipAddress: input.ipAddress,

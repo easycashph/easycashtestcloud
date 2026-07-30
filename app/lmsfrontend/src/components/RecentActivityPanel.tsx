@@ -1,12 +1,28 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { History } from 'lucide-react';
+import { Eye, History, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { formatDateTime } from '@/lib/utils';
+
+/** action -> a sentence-builder given the panel's own `label` and the log's `entityId`. Actions not
+ * listed here fall back to the original generic Badge + entityId rendering below, so every other
+ * page using this component (each with its own actions) is unaffected. 2026-07-30 (user request):
+ * "VIEW SECTION" on every row read as repetitive noise with no way to tell what was actually done. */
+const ACTIVITY_SENTENCE: Record<string, (label: string, entityId: string | null) => string> = {
+  VIEW_SECTION: (label) => `viewed ${label}`,
+  FILTER_SECTION: (label, entityId) => (entityId ? `filtered ${label} by ${entityId}` : `filtered ${label}`),
+  OPEN_SIGNING_LOG: (_label, entityId) => (entityId ? `opened signing log for loan ${entityId}` : 'opened a signing log'),
+};
+
+const ACTIVITY_ICON: Record<string, typeof Eye> = {
+  VIEW_SECTION: Eye,
+  FILTER_SECTION: Search,
+  OPEN_SIGNING_LOG: Eye,
+};
 
 interface RecentActivityPanelProps {
   /** Section name - builds the title ("Recent {label} Activity") and, unless `entityTypes` is given, is the sole entityType filter. */
@@ -76,21 +92,34 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
           <p className="py-4 text-center text-sm text-muted-foreground">No activity recorded yet for this section.</p>
         ) : (
           <ul className="space-y-2">
-            {recent.map((log) => (
-              <li key={log.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {log.action.replaceAll('_', ' ')}
-                  </Badge>
-                  <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
-                  {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityId}</span>}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
-                  {log.ipAddress && <span className="font-mono text-[10px] text-muted-foreground/70">{log.ipAddress}</span>}
-                </div>
-              </li>
-            ))}
+            {recent.map((log) => {
+              const sentence = ACTIVITY_SENTENCE[log.action]?.(label, log.entityId);
+              const Icon = ACTIVITY_ICON[log.action];
+              return (
+                <li key={log.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                  {sentence ? (
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+                      <p className="min-w-0 text-sm">
+                        <span className="font-medium">{log.userName ?? 'Unknown user'}</span> {sentence}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                        {log.action.replaceAll('_', ' ')}
+                      </Badge>
+                      <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
+                      {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityId}</span>}
+                    </div>
+                  )}
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
+                    {log.ipAddress && <span className="font-mono text-[10px] text-muted-foreground/70">{log.ipAddress}</span>}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardContent>
