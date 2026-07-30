@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    // A composite/referenced project may not disable emit (TS6310), so redirect the emitted
+    // vite.config.js/.d.ts into node_modules instead of littering the project root.
+    "outDir": "./node_modules/.tmp/tsconfig.node",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node/.tsbuildinfo",
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts"]
+}

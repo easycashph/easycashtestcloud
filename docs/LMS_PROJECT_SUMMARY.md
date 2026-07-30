@@ -1,7 +1,7 @@
 # Easycash LMS — Project Summary
 
 **Prepared:** 2026-07-07, refreshed 2026-07-08 (full-project re-verification + bug hunt + CP12)
-**Scope:** Full-project analysis — `app/backend`, `app/frontend`, and `docs/` — verified directly
+**Scope:** Full-project analysis — `app/easycashbackend`, `app/lmsfrontend`, and `docs/` — verified directly
 against the repository (`git log`, live test run, file listings), not reconstructed from memory.
 
 **2026-07-08, end of day — CP12 done, Milestone 9.1 is now fully complete (CP1–CP13, nothing
@@ -16,9 +16,9 @@ known gap for this pass (nothing is lost — the full source ledger remains inta
 dump). This pass targets local dev Postgres only; a production cutover against Easycash's real
 backup database is an explicit longer-term goal, not yet scheduled.
 
-**2026-07-08 re-verification:** `npx vitest run` in `app/backend` → **493 passed, 6 skipped
+**2026-07-08 re-verification:** `npx vitest run` in `app/easycashbackend` → **493 passed, 6 skipped
 (integration, requires `RUN_INTEGRATION_TESTS=1`), 0 failed** (75/76 files) — unchanged from
-2026-07-07. `eslint`/`tsc --noEmit` clean. `app/frontend`: `tsc -b`, `eslint`, and `npm run build`
+2026-07-07. `eslint`/`tsc --noEmit` clean. `app/lmsfrontend`: `tsc -b`, `eslint`, and `npm run build`
 all clean (one pre-existing informational warning: main JS chunk is 1.02 MB, above Vite's 500 kB
 default threshold — not a defect, just an unaddressed code-splitting opportunity). A dedicated
 codebase-wide bug hunt (two independent full-read reviews, one per track) found **3 new backend
@@ -29,7 +29,7 @@ per-finding detail. Backend re-verified **against the live Postgres instance** (
 Prisma) with `RUN_INTEGRATION_TESTS=1`: **510/510 tests passing, 77/77 files, 0 skipped** — up from
 499/499 with 6 always-skipped, because the idempotency-store rewrite (H-4) needed a real schema
 migration, and it seemed worth actually proving it against Postgres rather than only mocks.
-`eslint`/`tsc --noEmit` still clean. `app/frontend`: `tsc -b`, `eslint`, `npm run build` still all
+`eslint`/`tsc --noEmit` still clean. `app/lmsfrontend`: `tsc -b`, `eslint`, `npm run build` still all
 clean. A brief summary of what changed, grouped by finding:
 - **H-4 (idempotency race):** claim-before-execute pattern — a DB row is inserted *before* the use
   case runs, so a genuinely concurrent duplicate request collides with the unique constraint
@@ -59,8 +59,8 @@ Two tracks were built **in parallel, deliberately not connected to each other** 
 
 | Track | What it is | Status |
 |---|---|---|
-| **`app/backend`** | The real system — Clean Architecture, TypeScript, Express, Prisma/PostgreSQL schema, real financial calculation engine, real tests | Milestone 9.1, in progress, most-of-the-way built |
-| **`app/frontend`** | A CEO-facing **UI preview**, mostly against hand-authored mock data | Feature-rich, evolving daily. **Real authentication and real Payment Recording** now call `app/backend`; every other page is still mock-only |
+| **`app/easycashbackend`** | The real system — Clean Architecture, TypeScript, Express, Prisma/PostgreSQL schema, real financial calculation engine, real tests | Milestone 9.1, in progress, most-of-the-way built |
+| **`app/lmsfrontend`** | A CEO-facing **UI preview**, mostly against hand-authored mock data | Feature-rich, evolving daily. **Real authentication and real Payment Recording** now call `app/easycashbackend`; every other page is still mock-only |
 
 This split is intentional: the frontend exists to validate layout, workflow, and business rules
 with the CEO *before* the corresponding backend capability is built or wired up. As of this
@@ -73,7 +73,7 @@ only.
 
 ## 2. Current State
 
-### 2.1 Backend (`app/backend`) — Milestone 9.1
+### 2.1 Backend (`app/easycashbackend`) — Milestone 9.1
 
 **Verified fresh, 2026-07-07:** `npx vitest run` → **493 tests passed, 6 skipped, 0 failed** (75/76
 test files), `eslint` and `tsc --noEmit` both clean.
@@ -134,7 +134,7 @@ import infrastructure, interface, or `@prisma/client`). 8 modules: `identity`, `
   maturity-capitalization timing, reversal/adjustment modeling) — deliberately not implemented
   from generic lending convention, because no legacy evidence supports guessing at them.
 
-### 2.2 Frontend (`app/frontend`) — UI Preview
+### 2.2 Frontend (`app/lmsfrontend`) — UI Preview
 
 **Verified fresh, 2026-07-07:** `tsc --noEmit`, `eslint`, and `npm run build` all clean.
 

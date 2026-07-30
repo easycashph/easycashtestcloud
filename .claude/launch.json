@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "frontend-preview",
+      "name": "lms-preview",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "app/frontend"],
+      "runtimeArgs": ["run", "dev", "--prefix", "app/lmsfrontend"],
       "port": 5173,
       "autoPort": true
     },
@@ -15,7 +15,7 @@
     {
       "name": "portal-preview",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "app/portal"],
+      "runtimeArgs": ["run", "dev", "--prefix", "app/portalfrontend"],
       "port": 5199
     }
   ]

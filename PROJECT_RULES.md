@@ -441,7 +441,7 @@ Maintain a complete history of business decisions.
 * **Date:** 2026-07-06
 * **Reason:** The original §User Roles list (Administrator/Manager/Loan Officer/Cashier/
   Collection Officer/Viewer) was an unverified placeholder, never sourced from confirmed company
-  policy. A separate LMS UI preview build (`app/frontend`, mock-data-only) had already introduced
+  policy. A separate LMS UI preview build (`app/lmsfrontend`, mock-data-only) had already introduced
   a real, business-confirmed staff roster and access policy (MIS/Loan Operation
   Manager/CRM/Finance/Accounting/Collection Officer) for demo purposes. A verification pass found
   the two lists never matched, and the business confirmed the frontend roster is the correct one
@@ -449,11 +449,11 @@ Maintain a complete history of business decisions.
 * **Approved by:** Nomer Perez (nomer.perez@easycash.ph)
 * **Affected modules:** `PROJECT_RULES.md` §User Roles (this document); informs the still-open
   `ADR-038` (full permission matrix) and the interim `requireRole`/`GLOBAL_ROLES` allow-lists in
-  `app/backend/src/shared/middleware/requireRole.ts` / `shared/http/branchScope.ts` (not yet
+  `app/easycashbackend/src/shared/middleware/requireRole.ts` / `shared/http/branchScope.ts` (not yet
   updated to match — those remain the old placeholder role strings until `ADR-038` is drafted and
   approved).
 * **Migration impact:** None yet — no seed data, migration, or backend code changed by this
-  decision alone. `app/backend/prisma/schema.prisma`'s seeded `Role` records (per
+  decision alone. `app/easycashbackend/prisma/schema.prisma`'s seeded `Role` records (per
   `docs/PROJECT_HANDOFF.md` Milestone 5) still reflect the old placeholder names and will need a
   follow-up migration once `ADR-038` is implemented.
 

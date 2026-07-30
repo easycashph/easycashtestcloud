@@ -1,0 +1,21 @@
+# Easycash Portal
+#
+# Public marketing and information pages are open to crawlers. The authenticated area is not
+# linked from anywhere public and requires a login, but it is listed here so a crawler never
+# wastes budget on routes that will only ever return the login redirect.
+#
+# NOTE: these paths are hash fragments (/#/dashboard) under the current HashRouter setup, which
+# crawlers do not send to the server and cannot be excluded by path. The Disallow rules below
+# become meaningful once the site moves to real (non-hash) URLs.
+# See docs/PORTAL_WEBSITE_STRATEGY.md §5 Phase 0.
+
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /apply
+Disallow: /profile
+Disallow: /security
+Disallow: /reset-password
+Disallow: /verify
+
+# Sitemap: to be added once the production domain is confirmed.
