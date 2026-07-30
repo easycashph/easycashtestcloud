@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bell,
+  Check,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -1857,7 +1858,113 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
   const documents = documentsQuery.data?.items ?? [];
   const requiredDocuments = documents.filter((d) => d.isRequired);
+  const conditionalDocuments = documents.filter((d) => !d.isRequired);
   const ungeneratedRequiredCodes = requiredDocuments.filter((d) => !d.latestGeneration).map((d) => d.documentTemplateCode);
+  const generatedDocumentCount = documents.filter((d) => d.latestGeneration).length;
+  const documentProgressCircumference = 2 * Math.PI * 16;
+  const documentProgressOffset =
+    documents.length === 0 ? documentProgressCircumference : documentProgressCircumference * (1 - generatedDocumentCount / documents.length);
+
+  const renderDocumentGroup = (label: string, docs: typeof documents) => {
+    if (docs.length === 0) return null;
+    return (
+      <div key={label}>
+        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <ul className="divide-y rounded-md border">
+          {docs.map((doc) => {
+            const isBusy = generatingCode === doc.documentTemplateCode;
+            return (
+              <li key={doc.documentTemplateId} className="flex items-center gap-2.5 p-2.5">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 shrink-0 rounded border-input"
+                  checked={selectedDocumentCodes.has(doc.documentTemplateCode)}
+                  onChange={() => toggleDocumentSelected(doc.documentTemplateCode)}
+                  aria-label={`Select ${doc.documentTemplateName}`}
+                />
+                <FileCheck2 className={cn('h-4 w-4 shrink-0', doc.latestGeneration ? 'text-emerald-600' : 'text-muted-foreground')} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{doc.documentTemplateName}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {doc.latestGeneration
+                      ? `${doc.latestGeneration.generatedByName} · ${formatDate(doc.latestGeneration.generatedAt)}`
+                      : 'Not generated yet'}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    'flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs',
+                    doc.latestGeneration ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
+                  )}
+                >
+                  {doc.latestGeneration ? (
+                    <>
+                      <Check className="h-3 w-3" /> Generated
+                    </>
+                  ) : (
+                    'Pending'
+                  )}
+                </span>
+                {doc.latestGeneration ? (
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label={`Preview ${doc.documentTemplateName}`}
+                      onClick={() =>
+                        setPreviewTarget({
+                          downloadPath: `/loan-accounts/${loanId}/documents/${doc.latestGeneration!.id}/download`,
+                          title: doc.documentTemplateName,
+                          fileName: buildDocumentFileName(loan.loanCode, doc.documentTemplateName),
+                        })
+                      }
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      aria-label={`Download ${doc.documentTemplateName}`}
+                      onClick={() => downloadDocument(doc.latestGeneration!.id, buildDocumentFileName(loan.loanCode, doc.documentTemplateName))}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`More actions for ${doc.documentTemplateName}`}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => generateDocuments([doc.documentTemplateCode])}
+                          disabled={isBusy || generatingCode !== null}
+                        >
+                          {isBusy ? 'Regenerating…' : 'Regenerate'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => generateDocuments([doc.documentTemplateCode])}
+                    disabled={isBusy || generatingCode !== null}
+                  >
+                    {isBusy ? '…' : 'Generate'}
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -2474,9 +2581,36 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           // APPROVED.
           documents: (
       <Card>
-        <CardHeader>
-          <CardTitle>Documents</CardTitle>
-          <CardDescription>Disclosure Statement, Promissory Note, and other legal documents applicable to this loan (ADR-051).</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Documents</CardTitle>
+            <CardDescription>Disclosure Statement, Promissory Note, and other legal documents applicable to this loan.</CardDescription>
+          </div>
+          {canGenerateDocuments && documents.length > 0 && (
+            <div className="flex shrink-0 items-center gap-2.5">
+              <svg width="36" height="36" viewBox="0 0 40 40" className="shrink-0">
+                <circle cx="20" cy="20" r="16" fill="none" stroke="hsl(var(--border))" strokeWidth="4" />
+                <circle
+                  cx="20"
+                  cy="20"
+                  r="16"
+                  fill="none"
+                  stroke="rgb(5 150 105)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={documentProgressCircumference}
+                  strokeDashoffset={documentProgressOffset}
+                  transform="rotate(-90 20 20)"
+                />
+              </svg>
+              <div className="text-right">
+                <p className="text-sm font-medium leading-none">
+                  {generatedDocumentCount} of {documents.length}
+                </p>
+                <p className="text-[11px] text-muted-foreground">generated</p>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {!canGenerateDocuments ? (
@@ -2491,10 +2625,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   <span>{docsError}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {requiredDocuments.length - ungeneratedRequiredCodes.length} of {requiredDocuments.length} required documents generated
-                </p>
+              <div className="flex justify-end">
                 <Button
                   size="sm"
                   onClick={() => generateDocuments(ungeneratedRequiredCodes)}
@@ -2503,75 +2634,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   {generatingCode ? 'Generating…' : 'Generate all required'}
                 </Button>
               </div>
-              <ul className="space-y-2">
-                {documents.map((doc) => {
-                  const isBusy = generatingCode === doc.documentTemplateCode;
-                  return (
-                    <li
-                      key={doc.documentTemplateId}
-                      className={cn('flex items-center justify-between gap-2 rounded-md border p-3', !doc.latestGeneration && 'border-dashed')}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-input"
-                          checked={selectedDocumentCodes.has(doc.documentTemplateCode)}
-                          onChange={() => toggleDocumentSelected(doc.documentTemplateCode)}
-                          aria-label={`Select ${doc.documentTemplateName}`}
-                        />
-                        <FileCheck2 className={cn('h-4 w-4', doc.latestGeneration ? 'text-emerald-600' : 'text-muted-foreground')} />
-                        <div>
-                          <p className={cn('text-sm font-medium', !doc.latestGeneration && 'text-muted-foreground')}>{doc.documentTemplateName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {doc.latestGeneration
-                              ? `Generated by ${doc.latestGeneration.generatedByName} · ${formatDate(doc.latestGeneration.generatedAt)}`
-                              : doc.isRequired
-                                ? 'Required · not generated yet'
-                                : 'Optional · not generated yet'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {doc.latestGeneration && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                setPreviewTarget({
-                                  downloadPath: `/loan-accounts/${loanId}/documents/${doc.latestGeneration!.id}/download`,
-                                  title: doc.documentTemplateName,
-                                  fileName: buildDocumentFileName(loan.loanCode, doc.documentTemplateName),
-                                })
-                              }
-                            >
-                              Preview
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                downloadDocument(doc.latestGeneration!.id, buildDocumentFileName(loan.loanCode, doc.documentTemplateName))
-                              }
-                            >
-                              Download
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateDocuments([doc.documentTemplateCode])}
-                          disabled={isBusy || generatingCode !== null}
-                        >
-                          {isBusy ? '…' : doc.latestGeneration ? 'Regenerate' : 'Generate'}
-                        </Button>
-                      </div>
-                    </li>
-                  );
-                })}
-                {documents.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No documents configured for this loan's product.</p>}
-              </ul>
+              <div className="space-y-4">
+                {renderDocumentGroup('Required', requiredDocuments)}
+                {renderDocumentGroup('Conditional', conditionalDocuments)}
+              </div>
+              {documents.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No documents configured for this loan's product.</p>}
               {documents.length > 0 && (
                 <div className="flex items-center justify-between border-t pt-3">
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
