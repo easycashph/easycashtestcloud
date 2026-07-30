@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { SignUpUseCase } from '../../application/use-cases/SignUpUseCase';
 import type { VerifySignUpUseCase } from '../../application/use-cases/VerifySignUpUseCase';
 import type { PortalLoginUseCase } from '../../application/use-cases/PortalLoginUseCase';
+import type { VerifyPortalLoginOtpUseCase } from '../../application/use-cases/VerifyPortalLoginOtpUseCase';
 import type { RequestPasswordResetUseCase } from '../../application/use-cases/RequestPasswordResetUseCase';
 import type { ConfirmPasswordResetUseCase } from '../../application/use-cases/ConfirmPasswordResetUseCase';
 import type { GetPortalAccountUseCase } from '../../application/use-cases/GetPortalAccountUseCase';
@@ -11,6 +12,7 @@ import type {
   PortalLoginRequestBody,
   PortalRequestPasswordResetRequestBody,
   PortalSignUpRequestBody,
+  PortalVerifyLoginOtpRequestBody,
   PortalVerifySignUpRequestBody,
 } from './portalAuthSchemas';
 
@@ -18,6 +20,7 @@ export interface PortalAuthControllerDeps {
   signUpUseCase: SignUpUseCase;
   verifySignUpUseCase: VerifySignUpUseCase;
   portalLoginUseCase: PortalLoginUseCase;
+  verifyPortalLoginOtpUseCase: VerifyPortalLoginOtpUseCase;
   requestPasswordResetUseCase: RequestPasswordResetUseCase;
   confirmPasswordResetUseCase: ConfirmPasswordResetUseCase;
   getPortalAccountUseCase: GetPortalAccountUseCase;
@@ -51,6 +54,24 @@ export class PortalAuthController {
     try {
       const body = req.body as PortalLoginRequestBody;
       const result = await this.deps.portalLoginUseCase.execute(body);
+      if ('twoFactorRequired' in result) {
+        res.status(200).json(result);
+        return;
+      }
+      res.status(200).json({
+        accessToken: result.accessToken,
+        accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
+        account: result.account,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  verifyLoginOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as PortalVerifyLoginOtpRequestBody;
+      const result = await this.deps.verifyPortalLoginOtpUseCase.execute(body);
       res.status(200).json({
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),

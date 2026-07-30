@@ -531,6 +531,10 @@ export function LoanApplicationForm({
   const missing: string[] = [];
   if (!firstName.trim() || !lastName.trim()) missing.push('Applicant first and last name (§3)');
   if (!dateOfBirth || age === null) missing.push('Date of birth (§3)');
+  // 2026-07-30 (user request): hard eligibility gate, mirrors the Portal's own client-facing form
+  // and the backend's CreateLoanApplicationUseCase - applicants under 18 or over 59 cannot be
+  // submitted at all, from either channel.
+  if (age !== null && (age < 18 || age > 59)) missing.push(`Applicant age must be 18-59 to qualify (computed age: ${age}) (§3)`);
   if (!presentAddress.trim()) missing.push('Present address (§3)');
   if (!loanCategory) missing.push('Type of loan (§2)');
   if (!(amount > 0)) missing.push('Desired loan amount (§2)');

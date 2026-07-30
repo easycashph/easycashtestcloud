@@ -14,6 +14,8 @@ function toRecord(row: {
   status: string;
   emailVerifiedAt: Date | null;
   borrowerId: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorChannel: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): PortalAccountRecord {
@@ -25,6 +27,8 @@ function toRecord(row: {
     status: row.status as PortalAccountRecord['status'],
     emailVerifiedAt: row.emailVerifiedAt,
     borrowerId: row.borrowerId,
+    twoFactorEnabled: row.twoFactorEnabled,
+    twoFactorChannel: row.twoFactorChannel,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -61,6 +65,8 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         passwordHash: patch.passwordHash,
         borrowerId: patch.borrowerId,
         email: patch.email?.toLowerCase().trim(),
+        twoFactorEnabled: patch.twoFactorEnabled,
+        twoFactorChannel: patch.twoFactorChannel,
       },
     });
     return toRecord(updated);

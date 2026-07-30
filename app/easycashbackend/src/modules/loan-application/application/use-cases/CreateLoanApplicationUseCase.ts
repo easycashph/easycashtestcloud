@@ -1,5 +1,8 @@
 import { LoanApplication } from '../../domain/LoanApplication';
-import { BorrowerHasInFlightLoanError } from '../../domain/errors/LoanApplicationDomainErrors';
+import { BorrowerHasInFlightLoanError, LoanApplicantAgeIneligibleError } from '../../domain/errors/LoanApplicationDomainErrors';
+
+const MIN_ELIGIBLE_AGE = 18;
+const MAX_ELIGIBLE_AGE = 59;
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
@@ -26,6 +29,13 @@ export class CreateLoanApplicationUseCase {
   constructor(private readonly deps: CreateLoanApplicationUseCaseDeps) {}
 
   async execute(input: CreateLoanApplicationInput): Promise<LoanApplication> {
+    // 2026-07-30 (user request): hard eligibility gate - see LoanApplicantAgeIneligibleError's own
+    // doc comment for how this differs from the softer, advisory-only pre-qualification age check
+    // below. Checked first, before any of the in-flight/pre-qualification logic runs.
+    if (input.age !== undefined && (input.age < MIN_ELIGIBLE_AGE || input.age > MAX_ELIGIBLE_AGE)) {
+      throw new LoanApplicantAgeIneligibleError(input.age);
+    }
+
     // 2026-07-14: a client cannot have two loan applications going at once, nor start a new one
     // ("Create Loan Application" renewal flow) while an earlier one is anything other than
     // DECLINED and hasn't yet produced a loan account. Only checked when `borrowerId` is set - the

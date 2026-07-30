@@ -1,4 +1,4 @@
-export type PortalChallengePurpose = 'SIGNUP' | 'PASSWORD_RESET';
+export type PortalChallengePurpose = 'SIGNUP' | 'PASSWORD_RESET' | 'LOGIN' | 'ENABLE_2FA';
 export type PortalChallengeChannel = 'EMAIL' | 'SMS';
 
 export interface PortalAccountChallengeRecord {

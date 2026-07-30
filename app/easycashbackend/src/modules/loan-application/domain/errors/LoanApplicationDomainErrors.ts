@@ -16,6 +16,20 @@ export class InvalidLoanApplicationTransitionError extends DomainError {
   }
 }
 
+/** 2026-07-30 (user request): a hard eligibility gate, separate from the advisory-only
+ * LoanApplicationPreQualificationService's softer 18-55 PREAPPROVED/PREDECLINED age check (which
+ * still lets an application through for staff review). This one blocks submission entirely -
+ * neither the Portal form nor the staff-facing form can create an application for an applicant
+ * under 18 or over 59, computed from the same `age` field the pre-qualification check already
+ * uses. Only enforced when age is actually known (undefined age is not treated as ineligible -
+ * missing data isn't proof of ineligibility). */
+export class LoanApplicantAgeIneligibleError extends DomainError {
+  constructor(age: number) {
+    super('LOAN_APPLICANT_AGE_INELIGIBLE', `Applicants must be between 18 and 59 years old to qualify (computed age: ${age}).`, undefined, 422);
+    this.name = 'LoanApplicantAgeIneligibleError';
+  }
+}
+
 /** 2026-07-14: a client cannot have two loan applications "in flight" at once, nor start a new
  * one while a prior loan (from an earlier application) is still open - see
  * `CreateLoanApplicationUseCase`'s own doc comment for the exact rule. */

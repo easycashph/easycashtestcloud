@@ -8,6 +8,8 @@ export interface PortalAccountRecord {
   status: PortalAccountStatus;
   emailVerifiedAt: Date | null;
   borrowerId: string | null;
+  twoFactorEnabled: boolean;
+  twoFactorChannel: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,8 @@ export interface UpdatePortalAccountInput {
   passwordHash?: string;
   borrowerId?: string | null;
   email?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorChannel?: string | null;
 }
 
 export interface IPortalAccountRepository {
