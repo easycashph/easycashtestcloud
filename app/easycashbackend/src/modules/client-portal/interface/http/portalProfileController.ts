@@ -3,22 +3,24 @@ import type { GetPortalProfileUseCase } from '../../application/use-cases/GetPor
 import type { UpdatePortalProfileUseCase } from '../../application/use-cases/UpdatePortalProfileUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type { UpdatePortalProfileRequestBody } from './portalProfileSchemas';
-import { presentPortalProfile } from './presenters/PortalProfilePresenter';
 
 export interface PortalProfileControllerDeps {
   getPortalProfileUseCase: GetPortalProfileUseCase;
   updatePortalProfileUseCase: UpdatePortalProfileUseCase;
 }
 
-/** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other portal controller's shape. */
+/** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other
+ * portal controller's shape. Both use cases now return a ready-to-serialize PortalProfileDto
+ * directly (2026-07-30) - see GetPortalProfileUseCase's own doc comment for why the presentation
+ * mapping moved into the application layer. */
 export class PortalProfileController {
   constructor(private readonly deps: PortalProfileControllerDeps) {}
 
   get = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const account = getCurrentPortalAccount(req);
-      const borrower = await this.deps.getPortalProfileUseCase.execute(account.sub);
-      res.status(200).json(presentPortalProfile(borrower));
+      const profile = await this.deps.getPortalProfileUseCase.execute(account.sub);
+      res.status(200).json(profile);
     } catch (error) {
       next(error);
     }
@@ -28,8 +30,8 @@ export class PortalProfileController {
     try {
       const account = getCurrentPortalAccount(req);
       const body = req.body as UpdatePortalProfileRequestBody;
-      const borrower = await this.deps.updatePortalProfileUseCase.execute(account.sub, body);
-      res.status(200).json(presentPortalProfile(borrower));
+      const profile = await this.deps.updatePortalProfileUseCase.execute(account.sub, body);
+      res.status(200).json(profile);
     } catch (error) {
       next(error);
     }

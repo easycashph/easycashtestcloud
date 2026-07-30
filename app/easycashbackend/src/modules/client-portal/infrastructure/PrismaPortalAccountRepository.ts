@@ -1,3 +1,4 @@
+import type { PortalAccount as PrismaPortalAccountRow } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import type {
   CreatePortalAccountInput,
@@ -6,19 +7,7 @@ import type {
   UpdatePortalAccountInput,
 } from '../application/ports/IPortalAccountRepository';
 
-function toRecord(row: {
-  id: string;
-  email: string;
-  passwordHash: string;
-  contactNumber: string | null;
-  status: string;
-  emailVerifiedAt: Date | null;
-  borrowerId: string | null;
-  twoFactorEnabled: boolean;
-  twoFactorChannel: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}): PortalAccountRecord {
+function toRecord(row: PrismaPortalAccountRow): PortalAccountRecord {
   return {
     id: row.id,
     email: row.email,
@@ -29,6 +18,27 @@ function toRecord(row: {
     borrowerId: row.borrowerId,
     twoFactorEnabled: row.twoFactorEnabled,
     twoFactorChannel: row.twoFactorChannel,
+    firstName: row.firstName,
+    middleName: row.middleName,
+    lastName: row.lastName,
+    suffix: row.suffix,
+    gender: row.gender,
+    birthDate: row.birthDate,
+    placeOfBirth: row.placeOfBirth,
+    nationality: row.nationality,
+    civilStatus: row.civilStatus,
+    homeOwnership: row.homeOwnership,
+    mobilePhone1: row.mobilePhone1,
+    mobilePhone2: row.mobilePhone2,
+    occupation: row.occupation,
+    employer: row.employer,
+    monthlyIncome: row.monthlyIncome ? Number(row.monthlyIncome) : null,
+    houseUnitNumber: row.houseUnitNumber,
+    street: row.street,
+    barangay: row.barangay,
+    cityMunicipality: row.cityMunicipality,
+    province: row.province,
+    zipCode: row.zipCode,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -67,6 +77,27 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         email: patch.email?.toLowerCase().trim(),
         twoFactorEnabled: patch.twoFactorEnabled,
         twoFactorChannel: patch.twoFactorChannel,
+        firstName: patch.firstName,
+        middleName: patch.middleName,
+        lastName: patch.lastName,
+        suffix: patch.suffix,
+        gender: patch.gender,
+        birthDate: patch.birthDate,
+        placeOfBirth: patch.placeOfBirth,
+        nationality: patch.nationality,
+        civilStatus: patch.civilStatus,
+        homeOwnership: patch.homeOwnership,
+        mobilePhone1: patch.mobilePhone1,
+        mobilePhone2: patch.mobilePhone2,
+        occupation: patch.occupation,
+        employer: patch.employer,
+        monthlyIncome: patch.monthlyIncome,
+        houseUnitNumber: patch.houseUnitNumber,
+        street: patch.street,
+        barangay: patch.barangay,
+        cityMunicipality: patch.cityMunicipality,
+        province: patch.province,
+        zipCode: patch.zipCode,
       },
     });
     return toRecord(updated);

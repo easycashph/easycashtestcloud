@@ -9,6 +9,7 @@ import {
   portalConfirmPasswordResetSchema,
   portalLoginSchema,
   portalRequestPasswordResetSchema,
+  portalResendLoginOtpSchema,
   portalSignUpSchema,
   portalVerifyLoginOtpSchema,
   portalVerifySignUpSchema,
@@ -18,10 +19,10 @@ import {
  * guessing a password or a 6-digit OTP is exactly the threat this class of limiter exists for.
  * Relaxed in development for the same reason identity's own limiters are (repeated manual/
  * automated preview testing). */
-function makeLimiter(message: string) {
+function makeLimiter(message: string, limit = 8) {
   return rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: env.NODE_ENV === 'development' ? 1000 : 8,
+    limit: env.NODE_ENV === 'development' ? 1000 : limit,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: { code: 'RATE_LIMITED', message } },
@@ -46,6 +47,14 @@ export function createPortalAuthRouter(deps: PortalAuthControllerDeps, portalTok
     makeLimiter('Too many attempts. Try again later.'),
     validateBody(portalVerifyLoginOtpSchema),
     controller.verifyLoginOtp,
+  );
+  router.post(
+    '/resend-login-otp',
+    // Tighter limit than the other OTP routes (3, not 8) - this one exists purely to trigger extra
+    // real message sends, so it's the one most worth capping harder against abuse/cost.
+    makeLimiter('Too many resend attempts. Please wait a few minutes.', 3),
+    validateBody(portalResendLoginOtpSchema),
+    controller.resendLoginOtp,
   );
   router.post(
     '/forgot-password',

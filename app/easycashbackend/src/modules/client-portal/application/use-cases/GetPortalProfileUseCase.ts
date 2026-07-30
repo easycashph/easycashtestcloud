@@ -1,32 +1,108 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { Borrower } from '@modules/borrower/domain/Borrower';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
-import type { IPortalAccountRepository } from '../ports/IPortalAccountRepository';
-import { PortalAccountNotLinkedError } from '../../domain/errors/PortalAuthErrors';
+import type { IPortalAccountRepository, PortalAccountRecord } from '../ports/IPortalAccountRepository';
+import type { PortalProfileDto } from '../dtos/PortalProfileDtos';
+
+function fromBorrower(borrower: Borrower): PortalProfileDto {
+  return {
+    id: borrower.id,
+    firstName: borrower.name.firstName,
+    middleName: borrower.name.middleName ?? null,
+    lastName: borrower.name.lastName,
+    suffix: borrower.suffix ?? null,
+    gender: borrower.gender ?? null,
+    birthDate: borrower.birthDate ? borrower.birthDate.toISOString().slice(0, 10) : null,
+    placeOfBirth: borrower.placeOfBirth ?? null,
+    nationality: borrower.nationality ?? null,
+    civilStatus: borrower.civilStatus ?? null,
+    homeOwnership: borrower.homeOwnership ?? null,
+    mobilePhone1: borrower.mobilePhone1 ?? null,
+    mobilePhone2: borrower.mobilePhone2 ?? null,
+    email: borrower.email ?? null,
+    occupation: borrower.incomeDetail?.position ?? null,
+    employer: borrower.incomeDetail?.employerName ?? null,
+    monthlyIncome: borrower.incomeDetail?.monthlyIncome ?? null,
+    addresses: borrower.addresses.map((address) => ({
+      addressType: address.addressType ?? null,
+      houseUnitNumber: address.houseUnitNumber ?? null,
+      street: address.street ?? null,
+      barangay: address.barangay ?? null,
+      cityMunicipality: address.cityMunicipality ?? null,
+      province: address.province ?? null,
+      zipCode: address.zipCode ?? null,
+    })),
+  };
+}
+
+/** 2026-07-30 (user request): a client who hasn't been linked to a real Borrower yet (no MIS staff
+ * has run "Create Client Profile") still gets a real, editable profile - backed by the new
+ * pre-application profile columns on PortalAccount itself rather than a Borrower record that
+ * doesn't exist yet. `id` is the PortalAccount's own id here (there's no Borrower id to use). */
+function fromPortalAccount(account: PortalAccountRecord): PortalProfileDto {
+  return {
+    id: account.id,
+    firstName: account.firstName ?? '',
+    middleName: account.middleName,
+    lastName: account.lastName ?? '',
+    suffix: account.suffix,
+    gender: account.gender,
+    birthDate: account.birthDate ? account.birthDate.toISOString().slice(0, 10) : null,
+    placeOfBirth: account.placeOfBirth,
+    nationality: account.nationality,
+    civilStatus: account.civilStatus,
+    homeOwnership: account.homeOwnership,
+    mobilePhone1: account.mobilePhone1 ?? account.contactNumber,
+    mobilePhone2: account.mobilePhone2,
+    email: account.email,
+    occupation: account.occupation,
+    employer: account.employer,
+    monthlyIncome: account.monthlyIncome,
+    addresses:
+      account.houseUnitNumber || account.street || account.barangay || account.cityMunicipality || account.province || account.zipCode
+        ? [
+            {
+              addressType: null,
+              houseUnitNumber: account.houseUnitNumber,
+              street: account.street,
+              barangay: account.barangay,
+              cityMunicipality: account.cityMunicipality,
+              province: account.province,
+              zipCode: account.zipCode,
+            },
+          ]
+        : [],
+  };
+}
 
 /**
- * Phase D (2026-07-24 user request): reads the client's own profile straight off the real
+ * Phase D (2026-07-24 user request): a linked portal client's profile reads straight off the real
  * `Borrower` record the LMS itself uses (linked via `PortalAccount.borrowerId`, set at "Create
- * Client Profile" time - see CreateBorrowerUseCase). Not a separate copy, so LMS and portal are
- * always in sync by construction, no reconciliation needed.
+ * Client Profile" time) - not a separate copy, so LMS and portal are always in sync by
+ * construction.
+ *
+ * 2026-07-30 (user request): previously this threw `PortalAccountNotLinkedError` for an unlinked
+ * account, and the portal frontend fell back to letting the client edit a draft LoanApplication
+ * instead (only possible once one existed). Now it always succeeds - an unlinked account gets its
+ * own pre-application profile view/edit surface instead (`fromPortalAccount` above).
  */
 export class GetPortalProfileUseCase {
   constructor(private readonly deps: { portalAccountRepository: IPortalAccountRepository; borrowerRepository: IBorrowerRepository }) {}
 
-  async execute(portalAccountId: string): Promise<Borrower> {
+  async execute(portalAccountId: string): Promise<PortalProfileDto> {
     const account = await this.deps.portalAccountRepository.findById(portalAccountId);
     if (!account) {
       throw new NotFoundError('PortalAccount', portalAccountId);
     }
+
     if (!account.borrowerId) {
-      throw new PortalAccountNotLinkedError();
+      return fromPortalAccount(account);
     }
 
     const borrower = await this.deps.borrowerRepository.findById(account.borrowerId);
     if (!borrower) {
       throw new NotFoundError('Borrower', account.borrowerId);
     }
-
-    return borrower;
+    return fromBorrower(borrower);
   }
 }

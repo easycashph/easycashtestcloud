@@ -54,6 +54,11 @@ export interface VerifyLoginOtpRequest {
   code: string;
 }
 
+/** Login 2FA resend (2026-07-30 user request). */
+export interface ResendLoginOtpRequest {
+  challengeId: string;
+}
+
 export interface RequestEnableTwoFactorRequest {
   channel: 'EMAIL' | 'SMS';
 }
@@ -328,6 +333,12 @@ export interface PortalProfile {
 }
 
 export interface UpdatePortalProfileRequest {
+  /** Only actually applied server-side while the account isn't linked to a Borrower yet
+   * (2026-07-30) - see backend's UpdatePortalProfileUseCase. */
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  suffix?: string;
   gender?: string;
   birthDate?: string;
   placeOfBirth?: string;

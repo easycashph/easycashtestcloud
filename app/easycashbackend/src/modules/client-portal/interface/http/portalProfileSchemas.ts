@@ -5,6 +5,13 @@ import { z } from 'zod';
  * remain staff-editable-only (name, government IDs, dependants, references, etc. - identity/legal
  * fields that shouldn't be self-service). */
 export const updatePortalProfileSchema = z.object({
+  // 2026-07-30 (user request): editable ONLY before the account is linked to a real Borrower -
+  // see UpdatePortalProfileUseCase's branch. Once linked, these are silently ignored (name stays
+  // staff-editable-only, same posture as before).
+  firstName: z.string().min(1).optional(),
+  middleName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  suffix: z.string().min(1).optional(),
   gender: z.string().min(1).optional(),
   birthDate: z.coerce.date().optional(),
   placeOfBirth: z.string().min(1).optional(),

@@ -13,6 +13,8 @@ import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { DOCUMENT_LABELS, DOCUMENT_SLOTS } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
+import { NumberInput } from '@/components/NumberInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { TermsContent } from '@/pages/TermsPage';
 import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
 import type {
@@ -652,7 +654,7 @@ export function LoanApplicationFormPage() {
                   </Select>
                 </Field>
                 <Field label="Desired loan amount (₱) *">
-                  <Input id="requestedAmount" type="number" min={1} required value={form.requestedAmount} onChange={(e) => update('requestedAmount', e.target.value)} />
+                  <NumberInput id="requestedAmount" min="0" required value={form.requestedAmount} onChange={(e) => update('requestedAmount', e.target.value)} />
                 </Field>
                 <Field label="Preferred loan term (months) *">
                   <Input id="requestedTermMonths" type="number" min={1} required value={form.requestedTermMonths} onChange={(e) => update('requestedTermMonths', e.target.value)} />
@@ -760,13 +762,13 @@ export function LoanApplicationFormPage() {
                   <Input id="officeAddress" value={form.officeAddress} onChange={(e) => update('officeAddress', e.target.value)} />
                 </Field>
                 <Field label="Monthly income (₱)">
-                  <Input id="monthlyIncome" type="number" min={0} value={form.monthlyIncome} onChange={(e) => update('monthlyIncome', e.target.value)} />
+                  <NumberInput id="monthlyIncome" min="0" value={form.monthlyIncome} onChange={(e) => update('monthlyIncome', e.target.value)} placeholder="0.00" />
                 </Field>
                 <Field label="TIN">
-                  <Input value={form.tinNumber} onChange={(e) => update('tinNumber', e.target.value)} />
+                  <GroupedDigitsInput value={form.tinNumber} onChange={(e) => update('tinNumber', e.target.value)} />
                 </Field>
                 <Field label="SSS no.">
-                  <Input value={form.sssNumber} onChange={(e) => update('sssNumber', e.target.value)} />
+                  <GroupedDigitsInput value={form.sssNumber} onChange={(e) => update('sssNumber', e.target.value)} />
                 </Field>
               </div>
             </SectionCard>

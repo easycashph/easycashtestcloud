@@ -81,4 +81,11 @@ export class PrismaPortalAccountChallengeRepository implements IPortalAccountCha
     });
     return updated.attempts;
   }
+
+  async invalidate(id: string): Promise<void> {
+    await prisma.portalAccountChallenge.updateMany({
+      where: { id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+  }
 }
