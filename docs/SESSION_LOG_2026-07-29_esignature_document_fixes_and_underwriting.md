@@ -374,6 +374,481 @@ codebase's established pattern here). Backend rebuilt (`--no-cache`) and verifie
 work, now compounded with this addition; next session should confirm both together against one
 real signed document from the user.
 
+## 11. Real bug found and fixed: co-borrower signature/audit block misaligned on Promissory Note
+
+User shared a real signed PDF (`SML-Self_00058_Promissory_Note_signed.pdf`) - exactly the visual
+confirmation §6/§10 were both waiting on. Read it directly (native PDF support) and found the
+co-borrower's signature image and "Signed by (Co-Borrower).../Sent OTP to.../Date/IP address" block
+sat noticeably higher than the borrower's, overlapping the co-borrower's own printed name and the
+"Co-Borrower's Signature over printed name/Date" label - not level with the borrower's row as
+intended.
+
+**Root cause, measured (not guessed)**: copied the file into the backend container and ran
+`pdf2json` directly against it (this environment's earlier attempts to self-test the stamper hung
+outside Docker - running the *same* tool standalone, without going through the full
+`PdfLibDocumentSignatureStamper.stamp()` pipeline, worked fine). Found the co-borrower's raw
+`[[SIGNATURE_ANCHOR_CO_BORROWER]]` anchor sits exactly **38.2pt higher** on the page than the
+borrower's `[[SIGNATURE_ANCHOR]]`, in pdf-lib's bottom-origin coordinates - almost certainly because
+the co-borrower's long printed name wraps to a second line in this template's narrower right
+column, and the anchor (placed just above the name) ends up a full line higher relative to where it
+"should" sit to look level with the borrower's side.
+
+**A second, independent bug found while investigating**: the audit-trail text block's Y position
+(`auditY = anchor.y - AUDIT_BELOW_ANCHOR_OFFSET`) used the **raw, un-nudged** `anchor.y` - it never
+applied the per-template `TEMPLATE_OFFSETS`/`CO_BORROWER_TEMPLATE_OFFSETS` `dy` correction the
+signature *image* already respected. So even a template with a correctly-tuned image offset would
+still have had its audit text floating at the wrong height. Fixed by hoisting the `offset` lookup
+out of the image-positioning `if` block so both the image draw and the audit-text draw apply the
+same `dy`.
+
+**Fix**: added `PROMISSORY_NOTE: { dy: -38 }` to the previously-empty `CO_BORROWER_TEMPLATE_OFFSETS`
+table.
+
+**Verification**: rather than trust the arithmetic alone, generated a **fresh** Promissory Note for
+the same real loan (`SML-Self_00058`) using the user's own just-edited template (see §12) by
+requiring the compiled `LoanDocumentMergeDataResolver`/`DocxtemplaterDocumentFiller`/
+`LibreOfficeDocxToPdfConverter` classes directly inside the running backend container (a disposable
+script, deleted after use) - real merge data from the real database, real LibreOffice conversion,
+same pipeline production uses. Re-measured both anchors on the fresh output: **raw gap was still
+exactly 38.208pt** (confirming the template edits in §12 didn't change this template's structural
+layout), and with the `dy: -38` fix applied, borrower vs co-borrower `imageY` differ by only
+**0.21pt** - effectively perfectly level. `tsc --noEmit` clean, 897 backend tests still passing,
+backend rebuilt (`--no-cache`) and verified healthy.
+
+**Not yet re-confirmed against a real freshly-signed PDF** - the math and the actual anchor
+positions are now verified directly, but nobody has re-signed a real Promissory Note through the
+live app since this fix shipped. Should be quick to confirm next time e-signature testing comes up.
+
+### 11b. Second round: raise both blocks one more step (level-preserving) + a real wrap-overlap bug
+
+User shared an ACTUAL freshly-signed Promissory Note this time (not a mockup/regeneration) and
+asked to raise both audit blocks one more step while keeping them level with each other. Reading the
+PDF directly also surfaced a real, previously-unnoticed bug: the Co-Borrower's long name
+(`TEST2COBORR TEST2COBORR TEST2`) wraps to a second line at its new x-position (from §14's
+name-alignment fix - shifting the name right by `SIGNED_BY_NAME_X_OFFSET` left less room before the
+page's right margin than the name needs), but every subsequent audit line was still advanced by a
+fixed single `AUDIT_LINE_HEIGHT` regardless of the wrap - so `IP address: ::ffff:172.18.0.1` ended
+up rendered with the wrapped name fragment ("TEST2") drawn directly on top of it, reading as
+`::ffff:172.18.0.TEST2` in the shared PDF.
+
+**Raise + level fix**: `TEMPLATE_OFFSETS.PROMISSORY_NOTE` → `{ dx: 30, auditDy: 10 }` (Borrower's
+audit text raised 10pt, image `dx` untouched); `CO_BORROWER_TEMPLATE_OFFSETS.PROMISSORY_NOTE` →
+`{ dy: -38, auditDy: -28 }` (Co-Borrower's audit text raised the same 10pt from its existing -38
+base, image `dy` untouched) - both blocks move up by an equal amount and stay level (same pattern as
+§14's `auditDy` mechanism).
+
+**Wrap-overlap fix (real bug, not a cosmetic nudge)**: added a `countWrappedLines()` helper that
+word-wraps the signer's name against the same `maxWidth` pdf-lib will use, so the exact number of
+lines the name will take is known BEFORE drawing the lines below it. The audit block's Y cursor now
+advances by `AUDIT_LINE_HEIGHT * nameLines` after the name line instead of a hardcoded single line -
+fixes this for any signer name length going forward, not just this specific test name.
+
+**Verification**: `tsc --noEmit` clean, 897 backend tests passing, backend rebuilt (`--no-cache`)
+and recreated, confirmed healthy. Verified against a freshly-regenerated real Promissory Note for
+`SML-Self_00058`, stamped via the actual `stamp()` function, measured with `pdf2json`: Borrower's
+"Signed by (Borrower):" at y=348.99, Co-Borrower's at y=349.20 (0.21pt apart - level, as before, now
+both raised). Co-Borrower's audit lines below the wrapped name now step by 16pt instead of 8pt (
+`Sent OTP to:` at y=333.20, 16pt below the name start) with no overlap, vs. the previous fixed-8pt
+step that caused the collision in the user's shared PDF.
+
+**Not yet re-confirmed against a real freshly-signed PDF** - same caveat as the first round; next
+signed Promissory Note from the live app should be checked to confirm both fixes together.
+
+## 12. User's own template content edits (8 templates) - confirmed baked into the running backend
+
+User edited `DATA_PRIVACY_CONSENT`, `DEED_OF_ASSIGNMENT_BORROWER`, `DEED_OF_ASSIGNMENT_CO_BORROWER`,
+`DEED_OF_ASSIGNMENT_SALARY`, `LOAN_AGREEMENT_SALARY`, `LOAN_AGREEMENT_SEAFARER`, `PROMISSORY_NOTE`,
+and `SPECIAL_POWER_OF_ATTORNEY` directly (content, not code - the actual `.docx` files on disk) and
+asked whether a rebuild was needed. Confirmed yes (this machine bakes `templates/` into the backend
+image at build time, doesn't bind-mount it), and - since a `--no-cache` rebuild for §11's fix was
+already in flight when these edits landed - verified via `md5sum` (host vs. inside the running
+container, same technique already used earlier the same day for `DISCLOSURE_STATEMENT.docx`) that
+all 8 files matched exactly post-rebuild, confirming every edit is live. No content of these edits
+was reviewed/authored by me - purely a "is it deployed" check.
+
+## 13. Loan Agreement - Seafarer: centered both signatures over their printed names
+
+User shared a second real signed PDF (`SML-Self_00058_Loan_Agreement_-_Seafarer_signed.pdf`) and
+asked to center both parties' signatures over their printed names (unlike Promissory Note, this
+template's Borrower and Co-Borrower anchors sit at the exact same page height - `pdf2json`
+confirmed no `dy` issue here, purely a horizontal `dx` centering request).
+
+**First measurement pass**: copied the signed PDF into the backend container, ran `pdf2json`
+directly to get exact anchor/printed-name x-coordinates, and estimated each name's rendered width
+using `pdf-lib`'s `HelveticaBold.widthOfTextAtSize()` as an approximation (corrected down ~28%
+after noticing the raw estimate for the co-borrower's name would have overflowed the page's right
+margin - the template's actual font is narrower than Helvetica Bold). Computed candidate `dx`
+values to land the (up to 90pt-wide) signature image's horizontal center on each name's estimated
+midpoint: borrower `dx: 56`, co-borrower `dx: 102`.
+
+**Correction found before shipping**: regenerating a fresh, unsigned Seafarer document for the same
+loan (via the actual `LoanDocumentMergeDataResolver`/`DocxtemplaterDocumentFiller`/
+`LibreOfficeDocxToPdfConverter` pipeline, run directly inside the backend container) revealed the
+anchor's **absolute** x-position had shifted from the earlier signed-PDF measurement - because
+`LOAN_AGREEMENT_SEAFARER.docx` was one of the 8 templates the user had just edited (§12). Re-derived
+the correct `dx` values against the current template's actual layout instead of the stale
+already-signed one: borrower `dx: 30 → 41`, co-borrower (new entry) `dx: 87`. **Lesson for next
+time**: always re-measure against a freshly-regenerated document when the underlying template may
+have changed, never trust coordinates pulled from an older signed PDF at face value.
+
+**Verification**: recomputed the final stamped image bounds against each name's estimated midpoint
+using the corrected `dx` values and the freshly-measured anchor/name positions - borrower off by
+~0.3pt, co-borrower off by ~0.2pt from perfectly centered. Also ran the actual
+`PdfLibDocumentSignatureStamper.stamp()` function (not just the arithmetic) against the fresh
+document with a synthetic 90pt-wide test signature image (hand-rolled a minimal PNG encoder in the
+verification script since neither `canvas`, `jimp`, nor `sharp` are installed in this environment)
+to confirm the real code path completes without error end-to-end. `tsc --noEmit` clean, 897 backend
+tests still passing throughout both rounds, backend rebuilt (`--no-cache`) twice (once per `dx`
+correction) and verified healthy each time.
+
+**Not yet visually confirmed against a real signed PDF** - same open item as §11, now covering a
+second template; next session should confirm both together (Promissory Note + Loan Agreement -
+Seafarer) against fresh real signatures from the user.
+
+## 14. Disclosure Statement: audit-text/signature-image alignment + name x-alignment (2 rounds)
+
+User shared a third real signed PDF (`SML-Self_00058_Disclosure_Statement_signed.pdf`) with two
+itemized requests, then a follow-up request after reviewing that fix's output.
+
+**Round 1 (two independent requests in one message)**:
+1. Raise the Borrower's audit text block up once - it overlapped the "AMORTIZATION SCHEDULE"
+   heading below it.
+2. Lower the Co-Borrower's signature IMAGE (not audit text) once, to align with the Borrower's row
+   - the audit text was NOT flagged as wrong for the co-borrower.
+
+This was the first case where the image position and audit-text position needed to move
+**independently** - the existing code (from the Promissory Note fix, §11) coupled them together via
+a single shared `dy`. Added a new `auditDy?: number` field to `PdfLibDocumentSignatureStamper.ts`'s
+offset types, used by the audit-text `auditY` calculation in preference to `dy`
+(`offset?.auditDy ?? offset?.dy ?? 0`) when explicitly set, falling back to reusing `dy` otherwise -
+zero behavior change for every other template/entry that doesn't set it (Promissory Note's
+co-borrower fix in particular still needed the coupled behavior, since there BOTH the image and
+audit text were off by the same anchor-position bug).
+- `TEMPLATE_OFFSETS.DISCLOSURE_STATEMENT`: `{ dy: -8 }` → `{ dy: -8, auditDy: 2 }` (raises the
+  Borrower's audit text only).
+- `CO_BORROWER_TEMPLATE_OFFSETS.DISCLOSURE_STATEMENT` (new entry): `{ dy: -10, auditDy: 0 }` (lowers
+  the Co-Borrower's signature image only; `auditDy: 0` explicitly pins the co-borrower's own audit
+  text in place, since without it the fallback would have inherited the new `dy: -10` and moved text
+  that wasn't flagged as wrong).
+
+**Round 2** (after reviewing round 1's output): "i pantay din itong dalawa sa unang letra ng
+pangalan ng Borrower at Co-borrower" - align the first letter of the Borrower's and Co-Borrower's
+printed names in the audit text. Root cause: `"Signed by (Borrower): "` and
+`"Signed by (Co-Borrower): "` are different lengths (the label itself, not a coordinate offset) -
+each signer's full "label + name" line was drawn as ONE string, so the actual NAME started at a
+different x for each signer even when the audit blocks were otherwise level. (First checked whether
+this was a `dx`/anchor-position issue by measuring both anchors via `pdf2json` against a freshly
+regenerated document - found the anchors sit ~265pt apart on this template, which is expected since
+Borrower and Co-Borrower are in separate table columns; that ruled out a coordinate-offset fix and
+confirmed the real cause was the label-length difference.) Fixed by splitting the "Signed by
+(...): " label from the signer's name into two separate `drawText` calls, both signers' names now
+starting from the same fixed x offset (`SIGNED_BY_NAME_X_OFFSET`, the width of the wider
+`"Signed by (Co-Borrower): "` label) measured from their own label's start - so the name's first
+letter lines up consistently relative to its own audit block regardless of which label preceded it.
+This only changes the first audit line (`Signed by (...)`); the `Sent OTP to:` / `Date:` /
+`IP address:` lines use the same label on both signers already and were left untouched.
+
+**Verification**: `tsc --noEmit` clean and 897 backend tests passing after each round. Backend
+rebuilt (`--no-cache`) twice (once per round) and recreated; confirmed healthy each time. Verified
+by regenerating a fresh, unsigned Disclosure Statement for `SML-Self_00058` via the actual
+`LoanDocumentMergeDataResolver`/`DocxtemplaterDocumentFiller`/`LibreOfficeDocxToPdfConverter`
+pipeline, running the real `PdfLibDocumentSignatureStamper.stamp()` against it for both signers, then
+dumping the resulting text positions with `pdf2json`:
+- Borrower audit block at y=390.54, Co-Borrower's at y=388.54 (2pt higher for Borrower only, as
+  requested - Co-Borrower unchanged).
+- Borrower name starts at x=226.22 (its own label starts at x=157.10, gap 69.12pt); Co-Borrower name
+  starts at x=491.66 (its own label starts at x=422.54, gap 69.12pt) - identical gap for both,
+  confirming the name-alignment fix works as intended.
+
+**Not yet visually confirmed against a real signed PDF** - same open-item pattern as §11/§13, now a
+third template; next session should confirm all three together (Promissory Note, Loan Agreement -
+Seafarer, Disclosure Statement) against fresh real signatures from the user.
+
+## 15. Four more real signed PDFs reviewed: Data Privacy Consent, Loan Agreement - Seafarer (round 2),
+Special Power of Attorney, Deed of Assignment - Borrower
+
+User shared four more real signed PDFs for `SML-Self_00058` in quick succession, each with its own
+alignment complaint, using the exact same "share a signed PDF → measure via pdf2json → apply the
+minimal targeted offset → verify against a fresh regeneration" workflow established in §11/§13/§14.
+
+**Data Privacy and Consent Form**: same "Co-Borrower's audit text and signature sit higher than the
+Borrower's" pattern as §14's Disclosure Statement fix. Measured both raw anchors at the identical
+y=106.75 - so the Co-Borrower was only higher because it lacked the Borrower's inherited `dy: -10`.
+`TEMPLATE_OFFSETS.DATA_PRIVACY_CONSENT` → `{ dy: -10, auditDy: 0 }` (levels the Borrower's audit text
+with the Co-Borrower's by removing the inherited offset); new
+`CO_BORROWER_TEMPLATE_OFFSETS.DATA_PRIVACY_CONSENT` → `{ dy: -10, auditDy: 0 }` (lowers the
+Co-Borrower's signature image to match the Borrower's, `auditDy: 0` keeps its own audit text where it
+already was, since only the image was flagged as wrong).
+
+**Loan Agreement - Seafarer, second round**: user asked to raise BOTH audit blocks up to sit just
+below their printed names, and lower the Co-Borrower's signature image to align with the Borrower's.
+This template's anchor is unusual - it sits INLINE with the printed name (not on its own line above
+it), so the existing fixed `AUDIT_BELOW_ANCHOR_OFFSET` landed the audit block far below the name,
+near "Conforme / Certified by:". Added `auditDy: 22` to both `TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER`
+(image `dx`/`dy` unchanged) and `CO_BORROWER_TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER` (which also
+got `dy: -10` added to lower its signature image level with the Borrower's, matching the Borrower's
+own `dy`).
+
+**Special Power of Attorney**: single-column, stacked layout (Borrower's block above the
+Co-Borrower's "With conformity:" block - not side-by-side like the other templates), so no
+"level with each other" requirement here, just each party's own block needing its own fix.
+Borrower: `auditDy: 10` (raised one step, was floating too far down toward "With conformity:").
+Co-Borrower: new entry `{ dx: 59, auditDy: 10 }` - `dx: 59` centers the (up to 90pt-wide) signature
+image over the co-borrower's printed name (measured via pdf2json: name starts at x=57.90, spans a
+measured 167.85pt), `auditDy: 10` raises its own audit text the same one step as the Borrower's.
+
+**Deed of Assignment - Borrower**: a real, previously-unnoticed overlap bug, same shape as §14's
+Disclosure Statement finding - the audit block's last line (`IP address:`) landed at y=388.99 but
+"With Marital consent" sits at y=393.46, a ~4.5pt overlap. `TEMPLATE_OFFSETS.DEED_OF_ASSIGNMENT_BORROWER`
+→ `{ dx: 30, auditDy: 10 }` raises the block 10pt, clearing the overlap with ~5.5pt to spare.
+
+**Operational issue found and fixed**: this round's fixes were shipped across several consecutive
+`docker compose build --no-cache backend` calls, each launched in the background while working on the
+next template's fix. Two of these builds ended up overlapping in flight (the Special Power of
+Attorney build was still running when the Deed of Assignment build was kicked off) - both reported
+"completed, exit 0", but the OLDER build's image finished writing the `latest` tag AFTER the newer
+one, silently reverting the Deed of Assignment fix in the running container while keeping the other
+three. Caught this by inspecting the compiled `dist/*.js` inside the container directly (not just
+trusting "build succeeded") and finding `DEED_OF_ASSIGNMENT_BORROWER: { dx: 30 }` (missing
+`auditDy: 10`) despite the source file being correct. Fixed by running one final rebuild synchronously
+(not backgrounded) and re-confirming all four templates' offsets in the compiled output before
+re-verifying. **Lesson for next time**: don't launch a new background Docker rebuild while a prior one
+for the same image may still be in flight - either wait for the notification first, or verify the
+compiled output's actual content (not just "build succeeded") before trusting a rebuild landed.
+
+**Verification**: `tsc --noEmit` clean and 897 backend tests passing throughout. After the clean
+rebuild, regenerated fresh documents for all four templates via the real
+`LoanDocumentMergeDataResolver`/`DocxtemplaterDocumentFiller`/`LibreOfficeDocxToPdfConverter` pipeline,
+stamped with the real `PdfLibDocumentSignatureStamper.stamp()`, and confirmed via `pdf2json`:
+- Data Privacy Consent: Borrower and Co-Borrower "Signed by (...):" both at y=84.75 - level.
+- Loan Agreement - Seafarer: Borrower and Co-Borrower both at y=196.99 - level. (Note: this
+  template's raw anchor y is not a fixed constant - it shifts slightly run-to-run based on
+  dynamically-rendered content on that page, so the exact absolute y varies between verification runs;
+  what matters and was confirmed is that both signers always land at the SAME y as each other.)
+- Special Power of Attorney: each party's own block is present and populated correctly (Borrower
+  y=526.85, Co-Borrower y=435.34 - expected to differ, single-column layout).
+- Deed of Assignment - Borrower: audit block's last line at y=410.99, clear of "With Marital consent"
+  at y=393.46 (17.5pt gap).
+
+**Not yet visually confirmed against real freshly-signed PDFs** - same open-item pattern as every
+prior alignment fix this session; next session should confirm all six templates fixed today
+(Promissory Note, Disclosure Statement, Loan Agreement - Seafarer, Data Privacy Consent, Special Power
+of Attorney, Deed of Assignment - Borrower) against fresh real signatures from the user.
+
+## 16. Real bug found and properly fixed: Co-Borrower name wrap broke the "same spacing as Borrower"
+rhythm on Disclosure Statement (and any other template with a long Co-Borrower name)
+
+User shared ANOTHER real signed Disclosure Statement and flagged that the gap under "Signed by
+(Co-Borrower): ..." didn't match the Borrower's block - the Co-Borrower's name was wrapping to a
+second line (same underlying cause as §11b's Promissory Note wrap bug: shifting the name right by
+`SIGNED_BY_NAME_X_OFFSET` for §14's name-alignment fix left less room before the page's right margin),
+pushing "Sent OTP to:"/"Date:"/"IP address:" an extra 8pt lower than the Borrower's matching lines.
+§11b's fix only prevented the OVERLAP that wrapping caused - it didn't stop the wrap itself, so the
+visual rhythm mismatch the user is now describing was still there even after that fix.
+
+**First attempt (wrong)**: shrink the name's font size to fit within `nameMaxWidth`, sizing the shrink
+ratio off `font.widthOfTextAtSize(fullString, size)` (a single kerned measurement of the whole name).
+Verified via pdf2json against a fresh regeneration - the name STILL wrapped, just at the smaller size.
+
+**Root cause of the first attempt's failure**: pdf-lib's actual word-wrap engine (used internally by
+`drawText`'s `maxWidth` option, and mirrored by this codebase's own `countWrappedLines` helper from
+§11b) measures width per-word, summing each word's individual width - it does NOT use a single
+whole-string measurement. For `"TEST2COBORR TEST2COBORR TEST2"` at the relevant size, the per-word sum
+measured ~2pt wider than the single whole-string measurement. My shrink ratio was computed from the
+whole-string number, so the "shrunk" text still measured over the limit by the wrap engine's own
+(per-word) yardstick, and wrapped anyway.
+
+**Correct fix**: added `measureUnwrappedWidth()`, which sums per-word widths (`font.widthOfTextAtSize
+(word + ' ', size)` per word) - the exact same method `countWrappedLines` already used - and switched
+the shrink-ratio calculation to use it instead of the whole-string measurement, so the "does this need
+shrinking" and "will this actually wrap" decisions are now measured identically. Also added a small
+0.98 safety margin to the shrink ratio to absorb any residual floating-point rounding at the exact
+boundary.
+
+**Verification**: `tsc --noEmit` clean, 897 tests passing. Backend rebuilt (`--no-cache`, run
+synchronously this time per §15's lesson) and recreated, confirmed healthy. Verified against a fresh
+Disclosure Statement regeneration, stamped via the real `stamp()`: the Co-Borrower's full name
+`"TEST2COBORR TEST2COBORR TEST2"` now renders on ONE line (y=388.54), and "Sent OTP to:" for the
+Co-Borrower sits exactly 8pt below it (y=380.54) - matching the Borrower's own 8pt gap
+(y=390.54 → y=382.54) exactly, as requested.
+
+This fix is template-agnostic (lives in the shared stamping code, not a per-template offset), so it
+also resolves the same wrap-rhythm issue on the Promissory Note and any other template where a long
+Co-Borrower name would otherwise wrap.
+
+**Not yet visually confirmed against a real signed PDF.**
+
+## 17. Loan Agreement - Seafarer: audit text was too close to the printed name (§15's round-2 fix
+overcorrected)
+
+User shared another real signed Loan Agreement - Seafarer and flagged the audit trail text as now
+sitting "naka-dikit" (stuck/glued) to the printed name - §15's round 2 had raised both audit blocks
+via `auditDy: 22` (landing ~12pt below the anchor) specifically to address the opposite problem (audit
+text floating too far down near "Conforme / Certified by:"), but 12pt turned out too tight once
+measured against the printed name's actual rendered size.
+
+**Measured (not guessed) via pdf2json against a fresh regeneration**: this template's printed name
+renders at **10pt** font size. At only 12pt total gap between the name's baseline and the audit text's
+baseline, there's very little visual clearance once the name's own glyph height is accounted for -
+close enough to read as "touching" even without literal pixel overlap.
+
+**Fix**: backed `auditDy` off from `22` to `14` on both `TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER` and
+`CO_BORROWER_TEMPLATE_OFFSETS.LOAN_AGREEMENT_SEAFARER` (kept in sync so both signers stay level with
+each other, per §15's requirement) - lands the audit text ~20pt below the anchor instead of ~12pt,
+giving comfortable breathing room while staying well above the pre-§15 position that was too far away
+in the first place.
+
+**Verification**: `tsc --noEmit` clean, 897 tests passing. Backend rebuilt (`--no-cache`, run
+synchronously) and recreated, confirmed healthy. Verified via a fresh regeneration stamped with the
+real `stamp()`: printed name at y=196.99, audit text now starts at y=188.99 (20pt gap, up from the
+previous 12pt), Borrower and Co-Borrower both still land at the same y as each other (188.99) -
+level, as required.
+
+**Not yet visually confirmed against a real signed PDF.**
+
+## 18. Architecture change: audit text now left-aligns to the printed name's own x, not the signature
+image's x
+
+User asked a design question - showed a mockup request first (per this repo's own workflow
+convention: mockup before implementing) - about whether the audit trail text could always align to
+wherever the Borrower's/Co-Borrower's printed name itself starts, rather than reusing the signature
+image's x (which is a per-template `dx` hand-tuned for CENTERING the image over the name, and often
+doesn't coincide with the name's own left edge). Explicitly scoped down to text-only: the signature
+image's position/sizing was left completely untouched.
+
+**Design shown as a mockup** (two-card before/after comparison) before writing any code, confirmed by
+the user, then implemented.
+
+**Implementation**: extended `findSignatureAnchor()`'s return value (`AnchorLocation`) with an
+optional `nameX` field - after locating the anchor's own text run inside the already-parsed pdf2json
+page data, it also searches the SAME page for the actual printed-name text run and returns its x.
+`auditX` (previously always `= imageX`) now reads `anchor.nameX ?? imageX`, falling back to the old
+behavior if no plausible name text is found.
+
+**Real bug found during first-pass verification**: the initial name-detection heuristic only looked
+to the RIGHT of the anchor, assuming the name always sits at or after the anchor's own x (true for
+several templates - Loan Agreement - Seafarer, Special Power of Attorney, where the anchor is placed
+immediately before the name on the same line). Verified against Disclosure Statement, though, and
+found the printed name there actually starts ~54pt to the LEFT of its own anchor (the anchor is
+placed after the blank ink-signature space, not before the name) - the right-only search missed the
+real name entirely and instead matched the OTHER signer's name column, which happened to fall within
+the (too generous) x window on the same line.
+
+**Fix**: switched the candidate window to filter by absolute horizontal distance from the anchor
+(`Math.abs(nameCandidate.x - anchor.x) <= 90`) instead of a one-sided range, correctly covering both
+"name after anchor" (Seafarer, SPOA) and "name before anchor" (Disclosure Statement) cases while still
+excluding the other signer's name column, which sits 200pt+ away regardless of direction. Tie-breaks
+(when a candidate matches on vertical distance) now prefer the smallest horizontal distance, so a
+same-y candidate from the other signer's side never wins over the further-but-still-nearby real name.
+
+**Verification**: `tsc --noEmit` clean, 897 tests passing throughout both rounds. Backend rebuilt
+(`--no-cache`, synchronous) and recreated, confirmed healthy each time. Verified against fresh
+regenerations of 4 templates spanning every anchor/name layout this codebase has (side-by-side
+same-y, side-by-side anchor-above-name, inline-same-line, and Promissory Note's mixed case) -
+Disclosure Statement, Special Power of Attorney, Loan Agreement - Seafarer, Promissory Note - and
+confirmed each signer's audit text now lands close to their own name's actual start x (small ~4-8pt
+run-to-run variance observed, consistent with the same dynamic-content-drift behavior already
+documented for Loan Agreement - Seafarer's anchor position in §17 - not a bug), and no longer locks
+onto the other signer's name in any of the 4 templates tested.
+
+**Signature image position/sizing is completely unchanged** - this only affects where the audit text
+block starts horizontally.
+
+**Not yet visually confirmed against a real signed PDF** - and unlike the per-template offset fixes
+above, this is a change to the shared detection logic itself, so it's worth a broader spot-check
+across a few different templates (not just one) when real signed PDFs are available next.
+
+## 19. Real bug found and fixed: re-signing the same document as the same party stamped on top of
+that party's OWN prior signature instead of the pristine original
+
+User shared a screenshot showing badly overlapping, doubled audit text and signature ink on a
+Disclosure Statement - two "Signed by (Borrower)"/"Sent OTP to"/"Date"/"IP address" blocks and two
+signature strokes stacked directly on top of each other for BOTH Borrower and Co-Borrower.
+
+**Root cause**: `SignLoanSigningDocumentUseCase.execute()` picks a "base PDF" to stamp onto - either
+the pristine original, or (2026-07-25, two-party signing) the OTHER party's already-signed copy, so
+Borrower's and Co-Borrower's ink end up on ONE final PDF instead of two separate single-signature
+copies. The lookup filtered out only the CURRENT session (`s.id !== session.id`) but never checked
+whether a candidate "prior signed" entry belonged to the SAME party. `SML-Self_00058` has been
+signed and re-signed many times this session for testing (a fresh signing session each time a
+position fix needed checking) - so when a NEW Borrower session signed the document, the lookup found
+an EARLIER Borrower session's already-signed copy (not the Co-Borrower's, which is what it should
+look for) and stamped a second Borrower signature directly on top of the first, at the identical
+anchor position - producing exactly the doubled/overlapping look in the screenshot.
+
+**Fix**: `app/backend/src/modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase.ts`
+- added `s.partyType !== session.partyType` to the "prior signed entry" filter, so only the OPPOSITE
+party's signed copy is ever used as the base; a same-party re-sign now always starts fresh from the
+pristine original.
+
+**New regression test**: `tests/unit/loan-signing/SignLoanSigningDocumentUseCase.test.ts` (new file,
+3 tests) - confirms (1) stamping onto the opposite party's signed copy still works as designed, (2) the
+exact bug scenario (a same-party prior signed session must NOT be used as the base - regression test
+for this fix), (3) falls back to the pristine original when nothing has been signed yet.
+
+**Verification**: `tsc --noEmit` clean, 900 backend tests passing (897 + 3 new). Backend rebuilt
+(`--no-cache`, synchronous) and recreated, confirmed healthy.
+
+**Live-data cleanup (user-confirmed)**: with explicit confirmation, deleted all 24 `LoanSigningSession`
+rows for `SML-Self_00058` (cascades to their `LoanSigningDocument` and `SigningNotificationLog` rows)
+and removed their corresponding `storage/loan-signing/{sessionId}/` signed-PDF directories from disk.
+Confirmed 0 remaining sessions and notification logs for this loan afterward. This loan's signing
+history and e-signature logs are now completely clean - the next real sign-through will be the first
+data point since today's fixes, with no leftover doubled-up PDFs to confuse future testing.
+
+## 20. Real bug found and fixed: §18's name-alignment window was too narrow for the Promissory
+Note's Co-Borrower case
+
+User shared another real signed Promissory Note (the first one signed since §19's re-sign fix) and
+flagged the Co-Borrower's audit text as visibly misaligned from the printed name above it - a
+regression in §18's new name-alignment feature.
+
+**Root cause, measured (not guessed)**: §18's name search only looked up to 16pt below the anchor.
+The Promissory Note's Co-Borrower anchor sits its own **~39.5pt** above its printed name (§11's
+original finding - the co-borrower's long name wraps to a second line in this template's narrower
+column, pushing the anchor up) - well outside that 16pt window. So the real name was never found,
+`auditX` silently fell back to `imageX` (the signature image's x, not the name's), and the audit text
+landed at the old, name-misaligned position again.
+
+**Fix**: widened the vertical search window from 16pt to 45pt (`MAX_NAME_DELTA_Y`), comfortably
+covering this known ~39.5pt case while the existing ±90pt horizontal distance filter still excludes
+unrelated page content and the other signer's name.
+
+**Verification**: `tsc --noEmit` clean, 900 tests passing. Backend rebuilt (`--no-cache`) and
+recreated, confirmed healthy. Verified against a fresh Promissory Note regeneration, stamped with the
+real `stamp()`: Co-Borrower's "Signed by (Co-Borrower):" now starts at x=380.94, within 4pt of the
+printed name's own x=384.94 - correctly aligned, matching the Borrower's own alignment (x=115.95 vs
+name x=119.95, also ~4pt).
+
+**Not yet re-confirmed against a real signed PDF** - this is the second round of the same real bug
+class (§18 was too narrow for right-side-only detection; this was too narrow for far-below-the-anchor
+cases) - worth a broader re-check across all templates with a wide anchor-to-name gap next time real
+signed PDFs are available.
+
+## 21. Business rule change (user-confirmed): Acknowledgement Receipt removed from the e-signature
+batch - it's signed physically in the office
+
+User clarified that the Acknowledgement Receipt is actually signed in person when the client visits
+the office, not remotely - so it should never have been part of the e-signature link/batch at all.
+
+**Fix (data-only, no code change needed)**: `CreateLoanSigningSessionUseCase` already builds each
+party's e-signature batch purely from `DocumentTemplate.requiresBorrowerSignature`/
+`requiresCoBorrowerSignature` (see §5's original design) - no application code needed to change.
+New migration `20260730010350_acknowledgement_receipt_signed_in_office` sets both flags to `false`
+for `ACKNOWLEDGEMENT_RECEIPT`, removing it from both the Borrower's and Co-Borrower's e-signature
+batches. `isRequired` is left `true` - it's still a required GENERATED document for every loan, just
+no longer signed through this flow.
+
+**Applied**: ran `npx prisma migrate deploy` directly from the host (the running backend container's
+baked-in `prisma/migrations` folder doesn't include a migration created after its last build - this
+machine's containers don't auto-run migrations on startup, only via manual `migrate deploy`/`exec`,
+so applying from the host against the same Postgres the container uses is equivalent and didn't
+require a rebuild). Confirmed via a direct query: `requiresBorrowerSignature: false,
+requiresCoBorrowerSignature: false, isRequired: true` for `ACKNOWLEDGEMENT_RECEIPT`. `tsc --noEmit`
+and all 900 tests still pass (no application code touched by this change). No frontend hardcoding of
+this template code found (`grep` across `app/frontend/src` - the e-signature panel is entirely
+data-driven from these two flags).
+
 ## Current state / open items for the next session
 
 - **E-signature document generation**: co-borrower name/address now populate correctly on every
@@ -385,12 +860,20 @@ real signed document from the user.
   a real signed PDF** — the user was asked to generate fresh documents, sign both parties in the
   live app, and share the resulting PDF next session (or later this same session, if picked back
   up soon).
-- **Audit-trail repositioning + new "Sent OTP to:" line**: both implemented, deployed, same
-  unverified-against-a-real-PDF status as above (§10 added the OTP line on top of §6's
-  repositioning, same day). `AUDIT_BELOW_ANCHOR_OFFSET = 34` is a first-pass guess — expect a
-  follow-up visual-tuning round once the user shares a real signed PDF, likely per-template like the
-  existing offset tables. With 4 lines now instead of 3, tight-space templates (e.g. Acknowledgement
-  Receipt) are more likely to need that tuning sooner rather than later.
+- **Audit-trail repositioning + "Sent OTP to:" line + Promissory Note co-borrower alignment fix**:
+  the user's real signed PDF (§11) confirmed the Promissory Note's co-borrower block was
+  misaligned; root-caused and fixed (`CO_BORROWER_TEMPLATE_OFFSETS.PROMISSORY_NOTE = { dy: -38 }`
+  plus the audit-text-ignoring-the-offset bug), verified via a freshly-generated real document
+  (0.21pt final gap). `AUDIT_BELOW_ANCHOR_OFFSET = 34` is still a first-pass guess for every OTHER
+  template though — expect the same per-template `dy` tuning to be needed elsewhere once the user
+  signs and shares PDFs from other templates (Acknowledgement Receipt especially, being the
+  tightest-space one). Not yet re-confirmed with a fresh real signature after this exact fix
+  shipped.
+- **Loan Agreement - Seafarer signature centering** (§13): both `TEMPLATE_OFFSETS` and
+  `CO_BORROWER_TEMPLATE_OFFSETS` entries added/corrected (`dx: 41` borrower, `dx: 87`
+  co-borrower), verified mathematically against a freshly-regenerated real document to within
+  ~0.3pt of centered. Same "not yet confirmed against an actual freshly-signed PDF" caveat as the
+  Promissory Note fix above.
 - **New E-signature Logs report** (§9): centralized record of every signing-link and OTP send
   (SMS/Email) at `/reports/esignature-logs`, verified against the real database (route registration
   + a real join-query check) but not yet clicked through in the live UI (no login credentials
@@ -410,6 +893,20 @@ real signed document from the user.
 - **11 test signing sessions deleted** for `SML-Self_00058` — the loan's signing history is clean
   as of this log; expect fresh entries once the user signs the newly-regenerated documents to
   verify §6/§7 above.
+- **Disclosure Statement audit-text/signature alignment + name x-alignment** (§14): `auditDy` field
+  added to decouple image position from audit-text position; Borrower audit text raised, Co-Borrower
+  signature image lowered, both signer names now start from a consistent x offset regardless of
+  label length. Verified mathematically against a freshly-regenerated real document. Same "not yet
+  confirmed against an actual freshly-signed PDF" caveat as the Promissory Note and Loan Agreement -
+  Seafarer fixes above - next session should confirm all three together.
+- **Four more template alignment fixes** (§15): Data Privacy Consent, Loan Agreement - Seafarer
+  (round 2), Special Power of Attorney, Deed of Assignment - Borrower. All verified mathematically
+  against freshly-regenerated real documents after a clean (non-overlapping) Docker rebuild. Same
+  "not yet confirmed against an actual freshly-signed PDF" caveat as every other alignment fix this
+  session - six templates total now pending that real-signature confirmation.
+- **Docker rebuild lesson** (§15): don't launch overlapping background `--no-cache` rebuilds for the
+  same image - the older one can finish last and silently win the tag, reverting newer fixes. Verify
+  compiled `dist/*.js` content directly when in doubt, not just the "build succeeded" notification.
 - Still open from earlier sessions, untouched today: whether to widen Accrued Interest to
   legacy/migrated loans; sidebar brand header redesign mockups; the SOA docx template's literal
   `{PenaltyFromDate} / {PenaltyToDate}` copy for prospective loans.
