@@ -796,6 +796,59 @@ Confirmed 0 remaining sessions and notification logs for this loan afterward. Th
 history and e-signature logs are now completely clean - the next real sign-through will be the first
 data point since today's fixes, with no leftover doubled-up PDFs to confuse future testing.
 
+## 20. Real bug found and fixed: §18's name-alignment window was too narrow for the Promissory
+Note's Co-Borrower case
+
+User shared another real signed Promissory Note (the first one signed since §19's re-sign fix) and
+flagged the Co-Borrower's audit text as visibly misaligned from the printed name above it - a
+regression in §18's new name-alignment feature.
+
+**Root cause, measured (not guessed)**: §18's name search only looked up to 16pt below the anchor.
+The Promissory Note's Co-Borrower anchor sits its own **~39.5pt** above its printed name (§11's
+original finding - the co-borrower's long name wraps to a second line in this template's narrower
+column, pushing the anchor up) - well outside that 16pt window. So the real name was never found,
+`auditX` silently fell back to `imageX` (the signature image's x, not the name's), and the audit text
+landed at the old, name-misaligned position again.
+
+**Fix**: widened the vertical search window from 16pt to 45pt (`MAX_NAME_DELTA_Y`), comfortably
+covering this known ~39.5pt case while the existing ±90pt horizontal distance filter still excludes
+unrelated page content and the other signer's name.
+
+**Verification**: `tsc --noEmit` clean, 900 tests passing. Backend rebuilt (`--no-cache`) and
+recreated, confirmed healthy. Verified against a fresh Promissory Note regeneration, stamped with the
+real `stamp()`: Co-Borrower's "Signed by (Co-Borrower):" now starts at x=380.94, within 4pt of the
+printed name's own x=384.94 - correctly aligned, matching the Borrower's own alignment (x=115.95 vs
+name x=119.95, also ~4pt).
+
+**Not yet re-confirmed against a real signed PDF** - this is the second round of the same real bug
+class (§18 was too narrow for right-side-only detection; this was too narrow for far-below-the-anchor
+cases) - worth a broader re-check across all templates with a wide anchor-to-name gap next time real
+signed PDFs are available.
+
+## 21. Business rule change (user-confirmed): Acknowledgement Receipt removed from the e-signature
+batch - it's signed physically in the office
+
+User clarified that the Acknowledgement Receipt is actually signed in person when the client visits
+the office, not remotely - so it should never have been part of the e-signature link/batch at all.
+
+**Fix (data-only, no code change needed)**: `CreateLoanSigningSessionUseCase` already builds each
+party's e-signature batch purely from `DocumentTemplate.requiresBorrowerSignature`/
+`requiresCoBorrowerSignature` (see §5's original design) - no application code needed to change.
+New migration `20260730010350_acknowledgement_receipt_signed_in_office` sets both flags to `false`
+for `ACKNOWLEDGEMENT_RECEIPT`, removing it from both the Borrower's and Co-Borrower's e-signature
+batches. `isRequired` is left `true` - it's still a required GENERATED document for every loan, just
+no longer signed through this flow.
+
+**Applied**: ran `npx prisma migrate deploy` directly from the host (the running backend container's
+baked-in `prisma/migrations` folder doesn't include a migration created after its last build - this
+machine's containers don't auto-run migrations on startup, only via manual `migrate deploy`/`exec`,
+so applying from the host against the same Postgres the container uses is equivalent and didn't
+require a rebuild). Confirmed via a direct query: `requiresBorrowerSignature: false,
+requiresCoBorrowerSignature: false, isRequired: true` for `ACKNOWLEDGEMENT_RECEIPT`. `tsc --noEmit`
+and all 900 tests still pass (no application code touched by this change). No frontend hardcoding of
+this template code found (`grep` across `app/frontend/src` - the e-signature panel is entirely
+data-driven from these two flags).
+
 ## Current state / open items for the next session
 
 - **E-signature document generation**: co-borrower name/address now populate correctly on every

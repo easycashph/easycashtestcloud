@@ -193,9 +193,18 @@ async function findSignatureAnchor(pdfBuffer: Buffer, anchorText: string): Promi
           // side-by-side templates, which sits ~200pt+ away regardless of direction. Ties on vertical
           // distance are broken by whichever candidate is horizontally closest, so a same-y candidate
           // from the other signer's column never wins over the further-but-still-nearby real name.
+          //
+          // 2026-07-30 (real bug, found from a user-shared signed Promissory Note): the Co-Borrower
+          // anchor on THIS template sits its own ~39.5pt ABOVE the printed name (see §11's original
+          // finding - the co-borrower's long name wraps to a second line in this template's narrower
+          // column, pushing the anchor up relative to the name) - well outside the vertical window
+          // this search originally used (16pt), so the real name was never found and auditX silently
+          // fell back to imageX, misaligning the audit text from the name again. Widened to 45pt to
+          // comfortably cover this known case while still excluding unrelated far-away page content.
           let nameX: number | undefined;
           let bestScore = Infinity;
           const MAX_NAME_DISTANCE = 90;
+          const MAX_NAME_DELTA_Y = 45;
           for (const t of page.Texts) {
             if (t === match) continue;
             if (t.R.some((run) => run.T === anchorText)) continue;
@@ -203,7 +212,7 @@ async function findSignatureAnchor(pdfBuffer: Buffer, anchorText: string): Promi
             const tY = pageHeightPt - t.y * PDF2JSON_UNITS_PER_POINT;
             const deltaY = anchorY - tY;
             const absDeltaX = Math.abs(tX - anchorX);
-            if (deltaY < -1 || deltaY > 16 || absDeltaX > MAX_NAME_DISTANCE) continue;
+            if (deltaY < -1 || deltaY > MAX_NAME_DELTA_Y || absDeltaX > MAX_NAME_DISTANCE) continue;
             const score = deltaY * 1000 + absDeltaX;
             if (score < bestScore) {
               bestScore = score;
