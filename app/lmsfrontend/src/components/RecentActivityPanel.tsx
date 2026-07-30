@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Eye, History, Search } from 'lucide-react';
+import { Activity, Eye, History, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
+import { ACTION_VERB, ENTITY_ROUTE } from '@/lib/activityVerbs';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { formatDateTime } from '@/lib/utils';
 
@@ -94,7 +95,9 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
           <ul className="space-y-2">
             {recent.map((log) => {
               const sentence = ACTIVITY_SENTENCE[log.action]?.(label, log.entityId);
-              const Icon = ACTIVITY_ICON[log.action];
+              const staticVerb = ACTION_VERB[log.action];
+              const Icon = ACTIVITY_ICON[log.action] ?? (staticVerb ? Activity : undefined);
+              const routePrefix = ENTITY_ROUTE[log.entityType];
               return (
                 <li key={log.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
                   {sentence ? (
@@ -104,19 +107,31 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
                         <span className="font-medium">{log.userName ?? 'Unknown user'}</span> {sentence}
                       </p>
                     </div>
+                  ) : staticVerb ? (
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+                      <p className="min-w-0 text-sm">
+                        <span className="font-medium">{log.userName ?? 'Unknown user'}</span> {staticVerb}
+                        {routePrefix && log.entityId && (
+                          <>
+                            {' '}
+                            <Link to={`${routePrefix}/${log.entityId}`} className="text-primary hover:underline">
+                              {log.entityLabel ?? log.entityId}
+                            </Link>
+                          </>
+                        )}
+                      </p>
+                    </div>
                   ) : (
                     <div className="flex min-w-0 items-center gap-2">
                       <Badge variant="outline" className="shrink-0 text-[10px]">
                         {log.action.replaceAll('_', ' ')}
                       </Badge>
                       <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
-                      {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityId}</span>}
+                      {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityLabel ?? log.entityId}</span>}
                     </div>
                   )}
-                  <div className="flex shrink-0 flex-col items-end gap-0.5">
-                    <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
-                    {log.ipAddress && <span className="font-mono text-[10px] text-muted-foreground/70">{log.ipAddress}</span>}
-                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
                 </li>
               );
             })}
