@@ -302,7 +302,7 @@ export function EsignatureLogsPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="E-signature Logs" />
+      <RecentActivityPanel label="E-signature Logs" limit={10} />
     </div>
   );
 }

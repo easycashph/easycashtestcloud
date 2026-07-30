@@ -78,14 +78,17 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
           <ul className="space-y-2">
             {recent.map((log) => (
               <li key={log.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <Badge variant="outline" className="shrink-0 text-[10px]">
                     {log.action.replaceAll('_', ' ')}
                   </Badge>
-                  <span className="font-medium">{log.userName ?? '-'}</span>
-                  {log.entityId && <span className="font-mono text-xs text-muted-foreground">{log.entityId}</span>}
+                  <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
+                  {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityId}</span>}
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <span className="text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
+                  {log.ipAddress && <span className="font-mono text-[10px] text-muted-foreground/70">{log.ipAddress}</span>}
+                </div>
               </li>
             ))}
           </ul>
