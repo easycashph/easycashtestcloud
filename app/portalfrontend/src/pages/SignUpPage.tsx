@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { SignUpRequest, SignUpResponse } from '@/lib/portalApiTypes';
+import { SIGNUP_VERIFY_STORAGE_KEY } from './VerifyEmailPage';
 
 export function SignUpPage() {
   const navigate = useNavigate();
@@ -35,6 +36,11 @@ export function SignUpPage() {
     try {
       const body: SignUpRequest = { email, password, contactNumber: contactNumber || undefined };
       const result = await apiClient.post<SignUpResponse>('/portal/signup', body);
+      // 2026-07-30 (bug found in production testing): a client who navigated away from /verify
+      // (closed the tab, hit back, etc.) had no way back in - the challengeId only ever lived in
+      // React Router's in-memory navigation state. Persisted here too so VerifyEmailPage can
+      // recover it on a fresh mount/reload, not just via direct navigation from this page.
+      sessionStorage.setItem(SIGNUP_VERIFY_STORAGE_KEY, JSON.stringify({ challengeId: result.challengeId, channel: result.channel, email }));
       navigate('/verify', { state: { challengeId: result.challengeId, channel: result.channel, email } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create your account. Please try again.');

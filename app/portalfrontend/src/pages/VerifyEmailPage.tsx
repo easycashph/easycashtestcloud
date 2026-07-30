@@ -14,10 +14,29 @@ interface LocationState {
   email?: string;
 }
 
+/** 2026-07-30 (bug found in production testing) - shared with SignUpPage, which writes this entry
+ * right after a successful signup so this page can recover the in-progress challenge even if the
+ * client left and came back (router navigation state alone doesn't survive a reload/new tab). */
+export const SIGNUP_VERIFY_STORAGE_KEY = 'easycash-portal-signup-verify';
+
+function readStoredState(): LocationState | null {
+  try {
+    const raw = sessionStorage.getItem(SIGNUP_VERIFY_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as LocationState;
+  } catch {
+    return null;
+  }
+}
+
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const state = (location.state ?? {}) as LocationState;
+  const routerState = (location.state ?? {}) as LocationState;
+  // Router state (fresh navigation from Sign Up) wins when present; otherwise fall back to
+  // whatever SignUpPage last persisted - covers a reload, a closed tab reopened, or hitting Back
+  // then forward again, none of which router state alone survives.
+  const state = routerState.challengeId ? routerState : (readStoredState() ?? routerState);
 
   const [code, setCode] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
@@ -41,6 +60,7 @@ export function VerifyEmailPage() {
     try {
       const body: VerifySignUpRequest = { challengeId: state.challengeId!, code };
       await apiClient.post<void>('/portal/verify-signup', body);
+      sessionStorage.removeItem(SIGNUP_VERIFY_STORAGE_KEY);
       setSuccess(true);
       window.setTimeout(() => navigate('/login', { state: { email: state.email } }), 1500);
     } catch (err) {
@@ -67,6 +87,7 @@ export function VerifyEmailPage() {
               inputMode="numeric"
               maxLength={6}
               required
+              autoFocus
               value={code}
               onChange={(e) => setCode(e.target.value)}
               className="text-center text-lg tracking-[0.5em]"
@@ -76,6 +97,13 @@ export function VerifyEmailPage() {
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Verifying…' : 'Verify'}
           </Button>
+          <p className="text-center text-sm text-muted-foreground">
+            Didn&apos;t get a code, or it expired?{' '}
+            <Link to="/signup" className="font-medium text-primary hover:underline">
+              Sign up again
+            </Link>{' '}
+            with the same email to get a fresh one.
+          </p>
         </form>
       )}
     </AuthLayout>
