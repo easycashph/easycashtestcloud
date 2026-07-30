@@ -1,38 +1,8 @@
+import * as React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/layouts/AppLayout';
-import { DashboardPage } from '@/pages/DashboardPage';
 import { useRole } from '@/lib/roleContext';
 import { landingPagePath, readLandingPage } from '@/lib/landingPagePreference';
-import { LoanListPage } from '@/pages/LoanListPage';
-import { LoanAccountCreatePage } from '@/pages/LoanAccountCreatePage';
-import { LoanDetailPage } from '@/pages/LoanDetailPage';
-import { LoanApplicationsPage } from '@/pages/LoanApplicationsPage';
-import { LoanApplicationDetailPage } from '@/pages/LoanApplicationDetailPage';
-import { LoanApplicationCreatePage } from '@/pages/LoanApplicationCreatePage';
-import { PaymentRemindersPage } from '@/pages/PaymentRemindersPage';
-import { ReminderLogsPage } from '@/pages/ReminderLogsPage';
-import { EsignatureLogsPage } from '@/pages/EsignatureLogsPage';
-import { PaymentRecordingPage } from '@/pages/PaymentRecordingPage';
-import { ClientListPage } from '@/pages/ClientListPage';
-import { ClientCreatePage } from '@/pages/ClientCreatePage';
-import { ClientProfilePage } from '@/pages/ClientProfilePage';
-import { StatementOfAccountPage } from '@/pages/StatementOfAccountPage';
-import { LoanReportPage } from '@/pages/LoanReportPage';
-import { CollectionReportPage } from '@/pages/CollectionReportPage';
-import { TransactionReportPage } from '@/pages/TransactionReportPage';
-import { LoanReleasesReportPage } from '@/pages/LoanReleasesReportPage';
-import { AgingReportPage } from '@/pages/AgingReportPage';
-import { EndingBalanceReportPage } from '@/pages/EndingBalanceReportPage';
-import { AccountsWithPastDueReportPage } from '@/pages/AccountsWithPastDueReportPage';
-import { CollectionHistoryReportPage } from '@/pages/CollectionHistoryReportPage';
-import { ExpectedCollectionReportPage } from '@/pages/ExpectedCollectionReportPage';
-import { FirstAmortizationReportPage } from '@/pages/FirstAmortizationReportPage';
-import { DailyCollectionReportPage } from '@/pages/DailyCollectionReportPage';
-import { FullyPaidAccountsReportPage } from '@/pages/FullyPaidAccountsReportPage';
-import { ReportsHubPage } from '@/pages/ReportsHubPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { SystemPage } from '@/pages/SystemPage';
-import { AboutPage } from '@/pages/AboutPage';
 
 /**
  * Milestone 9.1 UI, ongoing frontend↔backend wiring (`docs/Architecture/
@@ -50,7 +20,63 @@ import { AboutPage } from '@/pages/AboutPage';
  * - `src/lib/mockData.ts` still exists for its genuinely-static config exports (`COMPANY_INFO`,
  *   payment method labels, intake document checklist) - not fake business data, see that file's
  *   own top-of-file comment.
+ *
+ * 2026-07-30 (user request, performance): every route below is now `React.lazy`-loaded instead of
+ * statically imported - previously all 35 pages were bundled into one ~1.4 MB JS chunk (Vite's own
+ * build warning), downloaded and parsed in full before *any* page could render, even just to show
+ * Login or Dashboard. Route-based code-splitting means a visit only pays for the page(s) it
+ * actually reaches. `lazyNamed` adapts each page's named export to the default export React.lazy
+ * requires, since none of these files use `export default`.
  */
+type PagelessComponent = React.ComponentType<Record<string, never>>;
+
+function lazyNamed(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  factory: () => Promise<any>,
+  exportName: string,
+): React.LazyExoticComponent<PagelessComponent> {
+  return React.lazy(() => factory().then((module) => ({ default: module[exportName] as PagelessComponent })));
+}
+
+const DashboardPage = lazyNamed(() => import('@/pages/DashboardPage'), 'DashboardPage');
+const LoanListPage = lazyNamed(() => import('@/pages/LoanListPage'), 'LoanListPage');
+const LoanAccountCreatePage = lazyNamed(() => import('@/pages/LoanAccountCreatePage'), 'LoanAccountCreatePage');
+const LoanDetailPage = lazyNamed(() => import('@/pages/LoanDetailPage'), 'LoanDetailPage');
+const LoanApplicationsPage = lazyNamed(() => import('@/pages/LoanApplicationsPage'), 'LoanApplicationsPage');
+const LoanApplicationDetailPage = lazyNamed(() => import('@/pages/LoanApplicationDetailPage'), 'LoanApplicationDetailPage');
+const LoanApplicationCreatePage = lazyNamed(() => import('@/pages/LoanApplicationCreatePage'), 'LoanApplicationCreatePage');
+const PaymentRemindersPage = lazyNamed(() => import('@/pages/PaymentRemindersPage'), 'PaymentRemindersPage');
+const ReminderLogsPage = lazyNamed(() => import('@/pages/ReminderLogsPage'), 'ReminderLogsPage');
+const EsignatureLogsPage = lazyNamed(() => import('@/pages/EsignatureLogsPage'), 'EsignatureLogsPage');
+const PaymentRecordingPage = lazyNamed(() => import('@/pages/PaymentRecordingPage'), 'PaymentRecordingPage');
+const ClientListPage = lazyNamed(() => import('@/pages/ClientListPage'), 'ClientListPage');
+const ClientCreatePage = lazyNamed(() => import('@/pages/ClientCreatePage'), 'ClientCreatePage');
+const ClientProfilePage = lazyNamed(() => import('@/pages/ClientProfilePage'), 'ClientProfilePage');
+const StatementOfAccountPage = lazyNamed(() => import('@/pages/StatementOfAccountPage'), 'StatementOfAccountPage');
+const LoanReportPage = lazyNamed(() => import('@/pages/LoanReportPage'), 'LoanReportPage');
+const CollectionReportPage = lazyNamed(() => import('@/pages/CollectionReportPage'), 'CollectionReportPage');
+const TransactionReportPage = lazyNamed(() => import('@/pages/TransactionReportPage'), 'TransactionReportPage');
+const LoanReleasesReportPage = lazyNamed(() => import('@/pages/LoanReleasesReportPage'), 'LoanReleasesReportPage');
+const AgingReportPage = lazyNamed(() => import('@/pages/AgingReportPage'), 'AgingReportPage');
+const EndingBalanceReportPage = lazyNamed(() => import('@/pages/EndingBalanceReportPage'), 'EndingBalanceReportPage');
+const AccountsWithPastDueReportPage = lazyNamed(() => import('@/pages/AccountsWithPastDueReportPage'), 'AccountsWithPastDueReportPage');
+const CollectionHistoryReportPage = lazyNamed(() => import('@/pages/CollectionHistoryReportPage'), 'CollectionHistoryReportPage');
+const ExpectedCollectionReportPage = lazyNamed(() => import('@/pages/ExpectedCollectionReportPage'), 'ExpectedCollectionReportPage');
+const FirstAmortizationReportPage = lazyNamed(() => import('@/pages/FirstAmortizationReportPage'), 'FirstAmortizationReportPage');
+const DailyCollectionReportPage = lazyNamed(() => import('@/pages/DailyCollectionReportPage'), 'DailyCollectionReportPage');
+const FullyPaidAccountsReportPage = lazyNamed(() => import('@/pages/FullyPaidAccountsReportPage'), 'FullyPaidAccountsReportPage');
+const ReportsHubPage = lazyNamed(() => import('@/pages/ReportsHubPage'), 'ReportsHubPage');
+const SettingsPage = lazyNamed(() => import('@/pages/SettingsPage'), 'SettingsPage');
+const SystemPage = lazyNamed(() => import('@/pages/SystemPage'), 'SystemPage');
+const AboutPage = lazyNamed(() => import('@/pages/AboutPage'), 'AboutPage');
+
+/** Bare, dependency-free fallback shown only for the brief window a lazy chunk is downloading -
+ * deliberately not a full skeleton (that's each page's own job once it renders) since this can
+ * appear for any route, layout-less. */
+function RouteLoadingFallback() {
+  return <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+}
+
 /**
  * Settings > Appearance > Landing Page (2026-07-17): sends the signed-in officer straight to their
  * preferred page instead of always Dashboard. Read once per mount (this component only exists on
@@ -67,45 +93,47 @@ function IndexRedirect() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route index element={<IndexRedirect />} />
-        <Route path="loans" element={<LoanListPage />} />
-        <Route path="loans/new" element={<LoanAccountCreatePage />} />
-        <Route path="loans/:loanId" element={<LoanDetailPage />} />
-        <Route path="applications" element={<LoanApplicationsPage />} />
-        <Route path="applications/new" element={<LoanApplicationCreatePage />} />
-        <Route path="applications/:applicationId" element={<LoanApplicationDetailPage />} />
-        <Route path="reminders" element={<PaymentRemindersPage />} />
-        <Route path="loans/:loanId/soa" element={<StatementOfAccountPage />} />
-        <Route path="clients" element={<ClientListPage />} />
-        <Route path="clients/new" element={<ClientCreatePage />} />
-        <Route path="clients/:borrowerId" element={<ClientProfilePage />} />
-        <Route path="products" element={<Navigate to="/admin/system?tab=products" replace />} />
-        <Route path="payments" element={<PaymentRecordingPage />} />
-        <Route path="reports" element={<ReportsHubPage />} />
-        <Route path="reports/loans" element={<LoanReportPage />} />
-        <Route path="reports/collections" element={<CollectionReportPage />} />
-        <Route path="reports/transactions" element={<TransactionReportPage />} />
-        <Route path="reports/loan-releases" element={<LoanReleasesReportPage />} />
-        <Route path="reports/aging" element={<AgingReportPage />} />
-        <Route path="reports/ending-balance" element={<EndingBalanceReportPage />} />
-        <Route path="reports/accounts-past-due" element={<AccountsWithPastDueReportPage />} />
-        <Route path="reports/collection-history" element={<CollectionHistoryReportPage />} />
-        <Route path="reports/expected-collection" element={<ExpectedCollectionReportPage />} />
-        <Route path="reports/first-amortization" element={<FirstAmortizationReportPage />} />
-        <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
-        <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
-        <Route path="reports/reminder-logs" element={<ReminderLogsPage />} />
-        <Route path="reports/esignature-logs" element={<EsignatureLogsPage />} />
-        <Route path="configuration/settings" element={<SettingsPage />} />
-        <Route path="admin/members" element={<Navigate to="/admin/system?tab=members" replace />} />
-        <Route path="admin/activity-logs" element={<Navigate to="/admin/system?tab=activity-logs" replace />} />
-        <Route path="admin/system" element={<SystemPage />} />
-        <Route path="admin/about" element={<Navigate to="/support/about" replace />} />
-        <Route path="support/about" element={<AboutPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <React.Suspense fallback={<RouteLoadingFallback />}>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route index element={<IndexRedirect />} />
+          <Route path="loans" element={<LoanListPage />} />
+          <Route path="loans/new" element={<LoanAccountCreatePage />} />
+          <Route path="loans/:loanId" element={<LoanDetailPage />} />
+          <Route path="applications" element={<LoanApplicationsPage />} />
+          <Route path="applications/new" element={<LoanApplicationCreatePage />} />
+          <Route path="applications/:applicationId" element={<LoanApplicationDetailPage />} />
+          <Route path="reminders" element={<PaymentRemindersPage />} />
+          <Route path="loans/:loanId/soa" element={<StatementOfAccountPage />} />
+          <Route path="clients" element={<ClientListPage />} />
+          <Route path="clients/new" element={<ClientCreatePage />} />
+          <Route path="clients/:borrowerId" element={<ClientProfilePage />} />
+          <Route path="products" element={<Navigate to="/admin/system?tab=products" replace />} />
+          <Route path="payments" element={<PaymentRecordingPage />} />
+          <Route path="reports" element={<ReportsHubPage />} />
+          <Route path="reports/loans" element={<LoanReportPage />} />
+          <Route path="reports/collections" element={<CollectionReportPage />} />
+          <Route path="reports/transactions" element={<TransactionReportPage />} />
+          <Route path="reports/loan-releases" element={<LoanReleasesReportPage />} />
+          <Route path="reports/aging" element={<AgingReportPage />} />
+          <Route path="reports/ending-balance" element={<EndingBalanceReportPage />} />
+          <Route path="reports/accounts-past-due" element={<AccountsWithPastDueReportPage />} />
+          <Route path="reports/collection-history" element={<CollectionHistoryReportPage />} />
+          <Route path="reports/expected-collection" element={<ExpectedCollectionReportPage />} />
+          <Route path="reports/first-amortization" element={<FirstAmortizationReportPage />} />
+          <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
+          <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
+          <Route path="reports/reminder-logs" element={<ReminderLogsPage />} />
+          <Route path="reports/esignature-logs" element={<EsignatureLogsPage />} />
+          <Route path="configuration/settings" element={<SettingsPage />} />
+          <Route path="admin/members" element={<Navigate to="/admin/system?tab=members" replace />} />
+          <Route path="admin/activity-logs" element={<Navigate to="/admin/system?tab=activity-logs" replace />} />
+          <Route path="admin/system" element={<SystemPage />} />
+          <Route path="admin/about" element={<Navigate to="/support/about" replace />} />
+          <Route path="support/about" element={<AboutPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </React.Suspense>
   );
 }

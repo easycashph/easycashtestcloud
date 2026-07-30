@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccount(null);
   }, []);
 
+  // 2026-07-30: apiClient dispatches this on any 401 from an authenticated call (invalid/expired/
+  // corrupted token) - without this, the app kept showing the authenticated shell with every
+  // subsequent call silently failing instead of dropping back to the login screen.
+  React.useEffect(() => {
+    const onSessionExpired = () => setAccount(null);
+    window.addEventListener('easycash-portal-session-expired', onSessionExpired);
+    return () => window.removeEventListener('easycash-portal-session-expired', onSessionExpired);
+  }, []);
+
   const refreshAccount = React.useCallback(async () => {
     if (!getStoredToken()) return;
     const me = await apiClient.get<MeResponse>('/portal/me');
