@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Eye, History, Search } from 'lucide-react';
+import { History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
 import { ACTION_VERB, ENTITY_ROUTE } from '@/lib/activityVerbs';
+import { initials } from '@/lib/initials';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { formatDateTime } from '@/lib/utils';
 
@@ -17,12 +18,6 @@ const ACTIVITY_SENTENCE: Record<string, (label: string, entityId: string | null)
   VIEW_SECTION: (label) => `viewed ${label}`,
   FILTER_SECTION: (label, entityId) => (entityId ? `filtered ${label} by ${entityId}` : `filtered ${label}`),
   OPEN_SIGNING_LOG: (_label, entityId) => (entityId ? `opened signing log for loan ${entityId}` : 'opened a signing log'),
-};
-
-const ACTIVITY_ICON: Record<string, typeof Eye> = {
-  VIEW_SECTION: Eye,
-  FILTER_SECTION: Search,
-  OPEN_SIGNING_LOG: Eye,
 };
 
 interface RecentActivityPanelProps {
@@ -96,20 +91,18 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
             {recent.map((log) => {
               const sentence = ACTIVITY_SENTENCE[log.action]?.(label, log.entityId);
               const staticVerb = ACTION_VERB[log.action];
-              const Icon = ACTIVITY_ICON[log.action] ?? (staticVerb ? Activity : undefined);
               const routePrefix = ENTITY_ROUTE[log.entityType];
               return (
                 <li key={log.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
-                  {sentence ? (
-                    <div className="flex min-w-0 items-start gap-2.5">
-                      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                      {initials(log.userName)}
+                    </div>
+                    {sentence ? (
                       <p className="min-w-0 text-sm">
                         <span className="font-medium">{log.userName ?? 'Unknown user'}</span> {sentence}
                       </p>
-                    </div>
-                  ) : staticVerb ? (
-                    <div className="flex min-w-0 items-start gap-2.5">
-                      {Icon && <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
+                    ) : staticVerb ? (
                       <p className="min-w-0 text-sm">
                         <span className="font-medium">{log.userName ?? 'Unknown user'}</span> {staticVerb}
                         {routePrefix && log.entityId && (
@@ -121,16 +114,16 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
                           </>
                         )}
                       </p>
-                    </div>
-                  ) : (
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
-                        {log.action.replaceAll('_', ' ')}
-                      </Badge>
-                      <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
-                      {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityLabel ?? log.entityId}</span>}
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          {log.action.replaceAll('_', ' ')}
+                        </Badge>
+                        <span className="shrink-0 font-medium">{log.userName ?? '-'}</span>
+                        {log.entityId && <span className="truncate font-mono text-xs text-muted-foreground">{log.entityLabel ?? log.entityId}</span>}
+                      </div>
+                    )}
+                  </div>
                   <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</span>
                 </li>
               );
