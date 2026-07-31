@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/apiClient';
-import type { PsgcBarangayOption, PsgcCityOption, PsgcOption } from '@/lib/portalApiTypes';
+import type { PsgcBarangayOption, PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '@/lib/portalApiTypes';
 import { toProperCase } from '@/lib/utils';
 
 export interface AddressDraft {
@@ -55,12 +55,16 @@ function usePsgcOptions<T extends PsgcOption = PsgcOption>(path: string, enabled
  * PsgcAddressPicker (app/frontend/src/components/PsgcAddressPicker.tsx) via a portal-facing
  * mirror of that API (`GET /portal/psgc/*`, requirePortalAuth - see backend's
  * portalPsgcRouter.ts). Deliberately a simpler plain-fetch port, not React Query (the portal app
- * doesn't depend on it) - no reverse-lookup-on-load behavior either, since this form only ever
- * starts blank (no "edit an existing application's address" flow exists yet).
+ * doesn't depend on it).
  *
  * `value`/`onChange` only ever carry resolved *names*, matching the wire shape
  * SubmitLoanApplicationRequest already expects - the cascade itself is driven by PSGC codes
  * internally, never exposed to the caller.
+ *
+ * 2026-07-31 (user request): when `value` arrives already populated (editing an existing loan
+ * application), a one-time reverse lookup (`GET /portal/psgc/resolve-address`, mirrors the
+ * internal LMS's own PsgcAddressPicker) resolves those names back to codes so the cascading
+ * dropdowns pre-select the existing address instead of starting blank.
  */
 export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; onChange: (patch: Partial<AddressDraft>) => void }) {
   const [regionCode, setRegionCode] = React.useState('');
@@ -72,6 +76,29 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
   const provinces = usePsgcOptions(`/portal/psgc/provinces?regionCode=${regionCode}`, Boolean(regionCode));
   const cities = usePsgcOptions<PsgcCityOption>(`/portal/psgc/cities?provinceCode=${provinceCode}`, Boolean(provinceCode));
   const barangays = usePsgcOptions<PsgcBarangayOption>(`/portal/psgc/barangays?cityMunicipalityCode=${cityCode}`, Boolean(cityCode));
+
+  // One-time reverse lookup for an already-populated `value` - only fires while `regionCode` is
+  // still unset, so it never fights a manual selection once the applicant starts picking.
+  React.useEffect(() => {
+    if (!value.province || regionCode) return;
+    let cancelled = false;
+    apiClient
+      .get<ResolvedAddressCodes>(
+        `/portal/psgc/resolve-address?province=${encodeURIComponent(value.province)}&cityMunicipality=${encodeURIComponent(value.cityMunicipality)}&barangay=${encodeURIComponent(value.barangay)}`,
+      )
+      .then((resolved) => {
+        if (cancelled) return;
+        if (resolved.regionCode) setRegionCode(resolved.regionCode);
+        if (resolved.provinceCode) setProvinceCode(resolved.provinceCode);
+        if (resolved.cityMunicipalityCode) setCityCode(resolved.cityMunicipalityCode);
+        if (resolved.barangayCode) setBarangayCode(resolved.barangayCode);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.province, value.cityMunicipality, value.barangay, regionCode]);
 
   // Tracks the last ZIP this component suggested, so a later upgrade (city -> barangay level)
   // never clobbers a ZIP the applicant has since typed in themselves - same guard as the internal

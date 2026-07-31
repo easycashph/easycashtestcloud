@@ -11,7 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Dialog } from '@/components/ui/Dialog';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
-import { DOCUMENT_LABELS, DOCUMENT_SLOTS } from '@/lib/loanRequirements';
+import { DOCUMENT_LABELS, DOCUMENT_SLOTS, type UploadableDocumentCategory } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { NumberInput } from '@/components/NumberInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
@@ -319,6 +319,23 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
     }
   }
   return next;
+}
+
+/** 2026-07-31 (user request): the "Other" slot's idle-state hint explains its dual purpose - a
+ * home for supporting documents that don't fit any specific category, and the place to re-upload
+ * a corrected replacement for something already uploaded wrong (name the file so it's clear it's
+ * a correction, e.g. "Valid ID - corrected"). */
+function documentSlotHint(
+  category: UploadableDocumentCategory,
+  status: 'idle' | 'uploading' | 'done' | 'error' | undefined,
+): string {
+  if (status === 'done') return 'Uploaded';
+  if (status === 'uploading') return 'Uploading…';
+  if (status === 'error') return 'Upload failed - try again';
+  if (category === 'OTHER_SUPPORTING_DOCUMENT') {
+    return 'For any other supporting document, or to re-upload a corrected file if something above was uploaded wrong - PDF, JPEG, or PNG, up to 10 MB';
+  }
+  return 'PDF, JPEG, or PNG, up to 10 MB';
 }
 
 function computeAge(birthDate: string): number | null {
@@ -683,15 +700,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
               <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
                 <div>
                   <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {uploadState[slot.category] === 'done'
-                      ? 'Uploaded'
-                      : uploadState[slot.category] === 'uploading'
-                        ? 'Uploading…'
-                        : uploadState[slot.category] === 'error'
-                          ? 'Upload failed - try again'
-                          : 'PDF, JPEG, or PNG, up to 10 MB'}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
                 </div>
                 <Input
                   type="file"
@@ -1012,15 +1021,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
                       <div>
                         <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {uploadState[slot.category] === 'done'
-                            ? 'Uploaded'
-                            : uploadState[slot.category] === 'uploading'
-                              ? 'Uploading…'
-                              : uploadState[slot.category] === 'error'
-                                ? 'Upload failed - try again'
-                                : 'PDF, JPEG, or PNG, up to 10 MB'}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
                       </div>
                       <Input
                         type="file"
