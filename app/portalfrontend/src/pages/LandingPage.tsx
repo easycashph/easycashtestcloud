@@ -18,13 +18,14 @@ import {
 import * as React from 'react';
 import { Button } from '@/components/ui/Button';
 import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
+import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
-import { COMPANY } from '@/lib/companyInfo';
+import { COMPANY, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 
@@ -271,6 +272,14 @@ export function LandingPage() {
                 {t.landing.trustDataProtected}
               </span>
             </motion.div>
+            {/* 2026-07-30 (user request, "polish like a trusted PH lending site"): the SEC Reg./CA
+                numbers themselves, not just a "SEC Registered" claim - trusted PH lenders
+                (Cashalo, Digido) surface these directly on the landing page, not just buried in
+                the footer's regulatory disclosure. Same verified constant the footer already
+                uses - never a second, divergent source of truth for these numbers. */}
+            <motion.p variants={fadeUp} className="mt-2 text-[11px] text-muted-foreground/80">
+              {REGULATORY_DISCLOSURE}
+            </motion.p>
           </motion.div>
 
           <motion.div
@@ -373,15 +382,22 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Eligibility self-check (2026-07-29) - placed right after Products, once a visitor has
-          picked a loan type they're interested in but before committing to the full application
-          form. See EligibilityCheckWidget's own doc comment for why this stops short of a full
-          "pre-qualification with an amount estimate" tool. */}
+      {/* Eligibility self-check + Loan Calculator (2026-07-29, widened 2026-07-30) - placed right
+          after Products, once a visitor has picked a loan type they're interested in but before
+          committing to the full application form. Paired side by side (stacked on mobile) - the
+          same "am I eligible" + "how much would I pay" combo near-universal on trusted PH lending
+          sites (Tala, Cashalo, Digido). See each widget's own doc comment for why neither invents
+          a business rule it can't back up. */}
       <section className="border-t border-border py-20 sm:py-24">
         <div className="container">
-          <Reveal>
-            <EligibilityCheckWidget />
-          </Reveal>
+          <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-2 lg:items-start">
+            <Reveal>
+              <EligibilityCheckWidget />
+            </Reveal>
+            <Reveal>
+              <LoanCalculatorWidget />
+            </Reveal>
+          </div>
         </div>
       </section>
 

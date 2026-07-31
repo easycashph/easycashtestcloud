@@ -147,6 +147,17 @@ export const en = {
     resultFailBody: 'Based on your answers, Easycash may not be able to approve an application right now. If you think this doesn\'t reflect your situation, feel free to contact us.',
     startOver: 'Start over',
   },
+  loanCalculator: {
+    title: 'How much could your payments be?',
+    subtitle: 'Move the sliders to get an instant estimate - no account needed.',
+    loanType: 'Loan type',
+    amountLabel: 'Loan amount',
+    termLabel: 'Term (months)',
+    monthlyPayment: 'Estimated monthly payment',
+    totalRepayment: 'Total repayment',
+    disclaimer:
+      'This is a rough estimate only, not a loan offer - your actual rate and approved amount depend on Easycash\'s full credit evaluation.',
+  },
   requirements: {
     title: 'Loan Requirements',
     intro: 'What you need to prepare before you apply. Getting these ready first makes the application much faster.',
@@ -386,6 +397,17 @@ export const fil: Translations = {
     resultFailTitle: 'Maaaring hindi mo pa natutugunan ang minimum na kinakailangan',
     resultFailBody: 'Batay sa iyong mga sagot, maaaring hindi ma-apruba ng Easycash ang aplikasyon sa ngayon. Kung sa tingin mo ay hindi ito tumutugma sa iyong sitwasyon, huwag mag-atubiling makipag-ugnayan sa amin.',
     startOver: 'Simulan ulit',
+  },
+  loanCalculator: {
+    title: 'Magkano kaya ang babayaran mo?',
+    subtitle: 'Igalaw ang mga slider para makakuha ng instant na tantiya - walang kailangang account.',
+    loanType: 'Uri ng loan',
+    amountLabel: 'Halaga ng loan',
+    termLabel: 'Termino (buwan)',
+    monthlyPayment: 'Tinatayang buwanang bayad',
+    totalRepayment: 'Kabuuang babayaran',
+    disclaimer:
+      'Tantiya lamang ito, hindi loan offer - ang aktwal na rate at inaprubahang halaga ay depende sa buong credit evaluation ng Easycash.',
   },
   requirements: {
     title: 'Mga Kailangan sa Pag-apply',
