@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from 
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
-import { useLogPageView } from '@/lib/activityLog';
+import { useLogPageView, logActivity } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { SigningNotificationLog } from '@/lib/signingNotificationLogApiTypes';
@@ -108,6 +108,32 @@ export function EsignatureLogsPage() {
   React.useEffect(() => {
     setPage(1);
   }, [search, type, channel, partyType, sort.key, sort.direction, logs.length]);
+
+  // 2026-07-30 (user request): log a specific "filtered by X" activity entry, debounced so typing
+  // in Search doesn't fire one write per keystroke - skips the initial mount (already covered by
+  // useLogPageView above) and skips logging when every filter is back to its default (nothing
+  // meaningful to record).
+  const filterDescription = React.useMemo(() => {
+    const parts: string[] = [];
+    if (search.trim()) parts.push(search.trim());
+    if (type !== 'ALL') parts.push(TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type);
+    if (channel !== 'ALL') parts.push(CHANNEL_OPTIONS.find((o) => o.value === channel)?.label ?? channel);
+    if (partyType !== 'ALL') parts.push(PARTY_OPTIONS.find((o) => o.value === partyType)?.label ?? partyType);
+    return parts.join(', ');
+  }, [search, type, channel, partyType]);
+
+  const isFirstFilterRender = React.useRef(true);
+  React.useEffect(() => {
+    if (isFirstFilterRender.current) {
+      isFirstFilterRender.current = false;
+      return;
+    }
+    if (!filterDescription) return;
+    const timeout = setTimeout(() => {
+      logActivity('E-signature Logs', 'FILTER_SECTION', filterDescription);
+    }, 800);
+    return () => clearTimeout(timeout);
+  }, [filterDescription]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -251,7 +277,10 @@ export function EsignatureLogsPage() {
                     </TableCell>
                     <TableCell
                       className="cursor-pointer font-mono text-xs hover:underline"
-                      onClick={() => navigate(`/loans/${log.loanAccountId}`)}
+                      onClick={() => {
+                        logActivity('E-signature Logs', 'OPEN_SIGNING_LOG', log.loanCode);
+                        navigate(`/loans/${log.loanAccountId}`);
+                      }}
                     >
                       {log.loanCode}
                     </TableCell>
@@ -302,7 +331,7 @@ export function EsignatureLogsPage() {
         </CardContent>
       </Card>
 
-      <RecentActivityPanel label="E-signature Logs" />
+      <RecentActivityPanel label="E-signature Logs" limit={10} />
     </div>
   );
 }

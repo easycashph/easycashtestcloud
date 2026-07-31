@@ -784,6 +784,21 @@ export function createApp(): Express {
     }),
     new PrismaReminderSettingsRepository(),
   );
+  // 2026-07-30 (user request): OTP codes send from a different "From" address than the signing
+  // link above (SIGNING_OTP_SMTP_FROM_ADDRESS), so recipients can tell the two apart - same SMTP
+  // host/credentials, just a different verified "Send As" alias. Only wired into
+  // RequestSigningOtpUseCase below; CreateLoanSigningSessionUseCase (the link send) keeps using
+  // signingEmailGateway unchanged.
+  const signingOtpEmailGateway = new DryRunAwareEmailGateway(
+    new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SIGNING_OTP_SMTP_FROM_ADDRESS,
+    }),
+    new PrismaReminderSettingsRepository(),
+  );
   const loanSigningRouter = createLoanSigningRouter(
     {
       createLoanSigningSessionUseCase: new CreateLoanSigningSessionUseCase({
@@ -829,7 +844,7 @@ export function createApp(): Express {
       loanSigningSessionRepository,
       signingNotificationLogRepository,
       smsGateway: signingSmsGateway,
-      emailGateway: signingEmailGateway,
+      emailGateway: signingOtpEmailGateway,
     }),
     verifySigningOtpUseCase: new VerifySigningOtpUseCase({ loanSigningSessionRepository, signingNotificationLogRepository }),
     getLoanSigningSessionUseCase: new GetLoanSigningSessionUseCase({

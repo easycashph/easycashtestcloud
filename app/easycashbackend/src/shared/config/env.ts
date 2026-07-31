@@ -108,6 +108,13 @@ const envSchema = z.object({
   // this must already be a verified "Send As" alias on that mailbox, or Gmail/Workspace will
   // reject or silently rewrite the From header (see NodemailerEmailGateway's own doc comment).
   SIGNING_SMTP_FROM_ADDRESS: z.string().default('esignature@easycash.ph'),
+
+  // 2026-07-30 (user request): the OTP code email now sends from a DIFFERENT address than the
+  // signing link above, so a recipient can tell the two apart at a glance instead of both reading
+  // as generic "esignature@" mail. Same Google Workspace SMTP credentials - like
+  // SIGNING_SMTP_FROM_ADDRESS above, this must already be a verified "Send As" alias on that
+  // mailbox or Gmail/Workspace will reject or silently rewrite the From header.
+  SIGNING_OTP_SMTP_FROM_ADDRESS: z.string().default('noreply-verify@easycash.ph'),
 });
 
 export type Env = z.infer<typeof envSchema> & {
