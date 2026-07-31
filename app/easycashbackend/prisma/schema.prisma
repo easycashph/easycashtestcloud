@@ -74,6 +74,10 @@ enum AttachmentDocumentCategory {
   CORPORATE_PAYSLIP
   SEAMANS_BOOK
   OVERSEAS_EMPLOYMENT_CERTIFICATE
+  /// 2026-07-31 (user request): a catch-all "Other" upload slot offered per loan product on the
+  /// Portal application form (Business/Salary/Seafarer each get one) - always optional/
+  /// supplementary, never counted toward the "documents complete" check.
+  OTHER_SUPPORTING_DOCUMENT
 }
 
 /// LP-1: a Loan Product Version has exactly one interest calculation method.

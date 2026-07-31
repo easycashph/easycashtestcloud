@@ -26,6 +26,7 @@ import type {
   PortalProfile,
   SubmitLoanApplicationRequest,
   UpdatePortalProfileRequest,
+  UploadedDocument,
 } from '@/lib/portalApiTypes';
 
 const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
@@ -405,6 +406,25 @@ export function LoanApplicationFormPage() {
       .catch(() => setEditState('error'));
   }, [editId]);
 
+  // 2026-07-31 (user request): while the form is still editable, an applicant can come back to
+  // finish uploading documents they skipped at submission - prefill which slots are already
+  // uploaded so re-visiting doesn't show them as empty.
+  React.useEffect(() => {
+    if (!editId) return;
+    apiClient
+      .get<UploadedDocument[]>(`/portal/loan-applications/${editId}/documents`)
+      .then((documents) => {
+        setUploadState((prev) => {
+          const next = { ...prev };
+          for (const doc of documents) {
+            if (doc.documentCategory) next[doc.documentCategory] = 'done';
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, [editId]);
+
   // 2026-07-31 (user request): a brand-new application prefills from My Profile if the applicant
   // already filled that in first - never runs in edit mode (detailToFormState already owns that
   // prefill) and is a one-shot best-effort fetch, silently skipped if it fails or the account has
@@ -563,10 +583,11 @@ export function LoanApplicationFormPage() {
   };
 
   const handleUpload = async (category: PortalDocumentCategory, file: File | undefined) => {
-    if (!file || !submitted) return;
+    const applicationId = submitted?.id ?? editId;
+    if (!file || !applicationId) return;
     setUploadState((prev) => ({ ...prev, [category]: 'uploading' }));
     try {
-      await apiClient.postFile(`/portal/loan-applications/${submitted.id}/documents`, file, { documentCategory: category });
+      await apiClient.postFile(`/portal/loan-applications/${applicationId}/documents`, file, { documentCategory: category });
       setUploadState((prev) => ({ ...prev, [category]: 'done' }));
     } catch {
       setUploadState((prev) => ({ ...prev, [category]: 'error' }));
@@ -634,8 +655,11 @@ export function LoanApplicationFormPage() {
         <div className="container max-w-2xl">
           <Card className="p-8">
             <Alert tone="success">Your loan application was submitted. We'll review it and notify you of any updates.</Alert>
-            <h1 className="mt-6 text-lg font-bold tracking-tight">10. Applicant Documents (optional)</h1>
-            <p className="mt-1 text-sm text-muted-foreground">You can also do this later - our staff may reach out for requirements too.</p>
+            <h1 className="mt-6 text-lg font-bold tracking-tight">10. Applicant Documents</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You can skip this for now and submit your application - come back anytime while it's still editable to finish uploading, or our
+              staff may reach out for requirements too.
+            </p>
             <div className="mt-5 space-y-4">
               {visibleDocumentSlots.map((slot) => (
                 <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
@@ -957,6 +981,36 @@ export function LoanApplicationFormPage() {
             <SectionCard number="9" title="Note" description="Anything else worth mentioning that doesn't have its own field above.">
               <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Optional" />
             </SectionCard>
+
+            {isEditMode && (
+              <SectionCard number="10" title="Applicant Documents" description="Upload any requirements you skipped earlier - you can still come back later while this application remains editable.">
+                <div className="space-y-4">
+                  {visibleDocumentSlots.map((slot) => (
+                    <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                      <div>
+                        <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {uploadState[slot.category] === 'done'
+                            ? 'Uploaded'
+                            : uploadState[slot.category] === 'uploading'
+                              ? 'Uploading…'
+                              : uploadState[slot.category] === 'error'
+                                ? 'Upload failed - try again'
+                                : 'PDF, JPEG, or PNG, up to 10 MB'}
+                        </p>
+                      </div>
+                      <Input
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        className="w-auto"
+                        disabled={uploadState[slot.category] === 'uploading' || uploadState[slot.category] === 'done'}
+                        onChange={(e) => handleUpload(slot.category, e.target.files?.[0])}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
 
             {!isEditMode && (
               <SectionCard number="10" title="Terms &amp; Consent">

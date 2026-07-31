@@ -24,6 +24,7 @@ export const DOCUMENT_LABELS: Record<UploadableDocumentCategory, string> = {
   CORPORATE_PAYSLIP: 'Payslip',
   SEAMANS_BOOK: "Seaman's Book",
   OVERSEAS_EMPLOYMENT_CERTIFICATE: 'Overseas Employment Certificate',
+  OTHER_SUPPORTING_DOCUMENT: 'Other',
 };
 
 export interface DocumentSlot {
@@ -44,6 +45,12 @@ export const DOCUMENT_SLOTS: DocumentSlot[] = [
   { category: 'BUSINESS_CLEARANCE', showWhen: (ctx) => ctx.loanCategory === 'Business Loan' },
   { category: 'SEAMANS_BOOK', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
   { category: 'OVERSEAS_EMPLOYMENT_CERTIFICATE', showWhen: (ctx) => ctx.loanCategory === 'Seafarer Loan' },
+  // 2026-07-31 (user request): a per-product "Other" catch-all slot - always optional/
+  // supplementary (see requiredDocumentCategories.ts on the backend), never counted as required.
+  {
+    category: 'OTHER_SUPPORTING_DOCUMENT',
+    showWhen: (ctx) => ctx.loanCategory === 'Business Loan' || ctx.loanCategory === 'Salary Loan' || ctx.loanCategory === 'Seafarer Loan',
+  },
 ];
 
 /**
@@ -59,7 +66,7 @@ export function getDocumentsForProduct(loanCategory: string): {
   const productSpecific: string[] = [];
 
   for (const slot of DOCUMENT_SLOTS) {
-    if (slot.category === 'VALID_ID_CO_BORROWER') continue;
+    if (slot.category === 'VALID_ID_CO_BORROWER' || slot.category === 'OTHER_SUPPORTING_DOCUMENT') continue;
 
     if (!slot.showWhen) {
       always.push(DOCUMENT_LABELS[slot.category]);

@@ -156,7 +156,7 @@ export const en = {
     monthlyPayment: 'Estimated monthly payment',
     totalRepayment: 'Total repayment',
     disclaimer:
-      'This is a rough estimate only, not a loan offer - your actual rate and approved amount depend on Easycash\'s full credit evaluation.',
+      'Sample computation only, not a loan offer. This uses a flat 3%/month rate as a rough approximation - actual interest rates vary by loan product and term, and your final rate and approved amount depend on Easycash\'s full credit evaluation.',
   },
   requirements: {
     title: 'Loan Requirements',
@@ -407,7 +407,7 @@ export const fil: Translations = {
     monthlyPayment: 'Tinatayang buwanang bayad',
     totalRepayment: 'Kabuuang babayaran',
     disclaimer:
-      'Tantiya lamang ito, hindi loan offer - ang aktwal na rate at inaprubahang halaga ay depende sa buong credit evaluation ng Easycash.',
+      'Sample computation lamang ito, hindi loan offer. Gumagamit ito ng flat 3%/buwan na rate bilang tantiya lamang - nag-iiba ang aktwal na interest rate depende sa loan product at termino, at ang final na rate at inaprubahang halaga ay depende sa buong credit evaluation ng Easycash.',
   },
   requirements: {
     title: 'Mga Kailangan sa Pag-apply',

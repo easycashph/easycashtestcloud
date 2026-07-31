@@ -193,6 +193,12 @@ export function DashboardPage() {
                       Submitted {new Date(application.createdAt).toLocaleDateString()} - {application.requestedTermMonths} months
                     </p>
                     <p className="mt-1.5 max-w-md text-xs text-muted-foreground">{STATUS_NEXT_STEPS[application.status]}</p>
+                    {!application.documentsComplete && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-warning">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
+                        Documents needed - some requirements are still missing.
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {EDITABLE_STATUSES.has(application.status) && (

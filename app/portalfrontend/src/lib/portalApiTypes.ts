@@ -189,6 +189,9 @@ export interface PortalLoanApplicationSummary {
   requestedAmount: number;
   requestedTermMonths: number;
   createdAt: string;
+  /** 2026-07-31 (user request) — true once every document this product requires has been
+   * attached; backs the dashboard's missing-documents indicator. */
+  documentsComplete: boolean;
 }
 
 /** 2026-07-24 (user request) - the full record shape returned by GET/PATCH
@@ -259,7 +262,8 @@ export type PortalDocumentCategory =
   | 'BUSINESS_CLEARANCE'
   | 'CORPORATE_PAYSLIP'
   | 'SEAMANS_BOOK'
-  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE';
+  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE'
+  | 'OTHER_SUPPORTING_DOCUMENT';
 
 export interface UploadedDocument {
   id: string;

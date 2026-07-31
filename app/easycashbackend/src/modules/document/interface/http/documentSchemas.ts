@@ -12,6 +12,7 @@ export const attachmentDocumentCategorySchema = z.enum([
   'CORPORATE_PAYSLIP',
   'SEAMANS_BOOK',
   'OVERSEAS_EMPLOYMENT_CERTIFICATE',
+  'OTHER_SUPPORTING_DOCUMENT',
 ]);
 
 export const listAttachmentsQuerySchema = z.object({

@@ -1185,7 +1185,7 @@ export function createApp(): Express {
         portalAccountRepository,
         createLoanApplicationUseCase: new CreateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, notificationService }),
       }),
-      listPortalLoanApplicationsUseCase: new ListPortalLoanApplicationsUseCase({ loanApplicationRepository }),
+      listPortalLoanApplicationsUseCase: new ListPortalLoanApplicationsUseCase({ loanApplicationRepository, attachmentRepository }),
       getPortalLoanApplicationUseCase: new GetPortalLoanApplicationUseCase({ loanApplicationRepository }),
       updatePortalLoanApplicationUseCase: new UpdatePortalLoanApplicationUseCase({
         loanApplicationRepository,
