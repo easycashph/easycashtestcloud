@@ -8,6 +8,12 @@ import { Alert } from '@/components/ui/Alert';
 import { PortalHeader } from '@/components/PortalHeader';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
+import type { PortalOtpChannel } from '@/lib/portalApiTypes';
+
+function channelLabel(channel: PortalOtpChannel): string {
+  if (channel === 'BOTH') return 'email address and mobile number';
+  return channel === 'SMS' ? 'mobile number' : 'email address';
+}
 
 /** Portal Security tab (2026-07-27 user request): self-service login email and password change.
  * Both require the current password (see backend's ChangePortalEmailUseCase/
@@ -32,7 +38,7 @@ export function SecurityPage() {
   const [passwordState, setPasswordState] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [passwordError, setPasswordError] = React.useState('');
 
-  const [twoFaChannel, setTwoFaChannel] = React.useState<'EMAIL' | 'SMS'>(account?.twoFactorChannel ?? 'EMAIL');
+  const [twoFaChannel, setTwoFaChannel] = React.useState<PortalOtpChannel>(account?.twoFactorChannel ?? 'EMAIL');
   const [twoFaChallengeId, setTwoFaChallengeId] = React.useState<string | null>(null);
   const [twoFaCode, setTwoFaCode] = React.useState('');
   const [twoFaDisablePassword, setTwoFaDisablePassword] = React.useState('');
@@ -49,7 +55,7 @@ export function SecurityPage() {
       const result = await apiClient.post<{ challengeId: string }>('/portal/security/2fa/request-enable', { channel: twoFaChannel }, true);
       setTwoFaChallengeId(result.challengeId);
       setTwoFaState('idle');
-      setTwoFaMessage(`Code sent to your ${twoFaChannel === 'EMAIL' ? 'email address' : 'mobile number'}.`);
+      setTwoFaMessage(`Code sent to your ${channelLabel(twoFaChannel)}.`);
     } catch (err) {
       setTwoFaError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       setTwoFaState('error');
@@ -181,7 +187,7 @@ export function SecurityPage() {
           <h2 className="text-base font-semibold">Two-Factor Authentication</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {account?.twoFactorEnabled
-              ? `Enabled - codes are sent to your ${account.twoFactorChannel === 'SMS' ? 'mobile number' : 'email address'} on every login.`
+              ? `Enabled - codes are sent to your ${channelLabel(account.twoFactorChannel ?? 'EMAIL')} on every login.`
               : 'Disabled - logging in only requires your password.'}
           </p>
 
@@ -248,6 +254,14 @@ export function SecurityPage() {
                     onClick={() => setTwoFaChannel('SMS')}
                   >
                     SMS
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={twoFaChannel === 'BOTH' ? 'primary' : 'outline'}
+                    disabled={!account?.contactNumber}
+                    onClick={() => setTwoFaChannel('BOTH')}
+                  >
+                    Both
                   </Button>
                 </div>
                 {!account?.contactNumber && <p className="text-xs text-muted-foreground">Add a mobile number to your profile to use SMS.</p>}

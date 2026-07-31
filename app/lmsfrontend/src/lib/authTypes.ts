@@ -23,6 +23,9 @@ export interface LoginSuccessResponse {
   accessToken: string;
   accessTokenExpiresAt: string;
   user: AuthenticatedUserView;
+  /** "Remember this device" (2026-07-30 user request) - present only when the staff member checked
+   * the box on the OTP step and a new trusted-device token was just issued. */
+  deviceToken?: string;
 }
 
 /** Settings > Security > Two-Factor Authentication (2026-07-22) - `POST /auth/login`'s other

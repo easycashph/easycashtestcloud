@@ -1,5 +1,9 @@
 export type PortalChallengePurpose = 'SIGNUP' | 'PASSWORD_RESET' | 'LOGIN' | 'ENABLE_2FA';
-export type PortalChallengeChannel = 'EMAIL' | 'SMS';
+/** 'BOTH' (2026-07-30 user request) - the same code sent to email AND SMS at once, not a choice
+ * between the two. SIGNUP always uses 'BOTH' when a contact number was given (see SignUpUseCase);
+ * LOGIN/ENABLE_2FA use whichever channel the account's own twoFactorChannel preference is set to,
+ * which can also be 'BOTH'. */
+export type PortalChallengeChannel = 'EMAIL' | 'SMS' | 'BOTH';
 
 export interface PortalAccountChallengeRecord {
   id: string;

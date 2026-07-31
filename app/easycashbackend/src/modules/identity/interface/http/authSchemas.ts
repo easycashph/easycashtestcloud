@@ -23,6 +23,8 @@ export const loginSchema = z.object({
     return email.value;
   }),
   password: z.string().min(1),
+  /** "Remember this device" (2026-07-30). */
+  deviceToken: z.string().min(1).optional(),
 });
 
 export type LoginRequestBody = z.infer<typeof loginSchema>;
@@ -31,6 +33,8 @@ export type LoginRequestBody = z.infer<typeof loginSchema>;
 export const verifyLoginOtpSchema = z.object({
   challengeId: z.string().min(1),
   code: z.string().min(1),
+  /** "Remember this device" (2026-07-30). */
+  rememberDevice: z.boolean().optional(),
 });
 
 export type VerifyLoginOtpRequestBody = z.infer<typeof verifyLoginOtpSchema>;

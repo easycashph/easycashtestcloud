@@ -38,10 +38,11 @@ export class AuthController {
 
   login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { email, password } = req.body as LoginRequestBody;
+      const { email, password, deviceToken } = req.body as LoginRequestBody;
       const result = await this.deps.loginUseCase.execute({
         email,
         password,
+        deviceToken,
         ipAddress: req.ip,
         userAgent: req.header('user-agent'),
       });
@@ -68,10 +69,11 @@ export class AuthController {
    * paused on `twoFactorRequired`. Same response shape as a normal `login` success. */
   verifyLoginOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { challengeId, code } = req.body as VerifyLoginOtpRequestBody;
+      const { challengeId, code, rememberDevice } = req.body as VerifyLoginOtpRequestBody;
       const result = await this.deps.verifyLoginOtpUseCase.execute({
         challengeId,
         code,
+        rememberDevice,
         ipAddress: req.ip,
         userAgent: req.header('user-agent'),
       });
@@ -81,6 +83,7 @@ export class AuthController {
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
         user: result.user,
+        ...(result.deviceToken ? { deviceToken: result.deviceToken } : {}),
       });
     } catch (error) {
       next(error);

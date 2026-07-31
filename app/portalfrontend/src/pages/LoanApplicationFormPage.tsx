@@ -15,6 +15,7 @@ import { DOCUMENT_LABELS, DOCUMENT_SLOTS } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { NumberInput } from '@/components/NumberInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
+import { PhoneInput } from '@/components/PhoneInput';
 import { TermsContent } from '@/pages/TermsPage';
 import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
 import type {
@@ -22,7 +23,9 @@ import type {
   PortalDocumentCategory,
   PortalLoanApplicationDetail,
   PortalLoanApplicationSummary,
+  PortalProfile,
   SubmitLoanApplicationRequest,
+  UpdatePortalProfileRequest,
 } from '@/lib/portalApiTypes';
 
 const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
@@ -275,6 +278,48 @@ function detailToFormState(detail: PortalLoanApplicationDetail): FormState {
   };
 }
 
+/** 2026-07-31 (user request): prefills a brand-new application from whatever the applicant has
+ * already saved on My Profile - only fills fields the form doesn't already have a value for
+ * (e.g. from a `?category=` deep link), never overwrites something the applicant already typed. */
+function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState {
+  const presentAddress = profile.addresses[0];
+  const next = { ...prev };
+  const fillIfEmpty = <K extends keyof FormState>(key: K, value: FormState[K] | null | undefined) => {
+    if (value === null || value === undefined || value === '') return;
+    const current = next[key];
+    if (typeof current === 'string' && current.trim()) return;
+    next[key] = value;
+  };
+  fillIfEmpty('firstName', profile.firstName);
+  fillIfEmpty('middleName', profile.middleName ?? '');
+  fillIfEmpty('lastName', profile.lastName);
+  fillIfEmpty('gender', profile.gender ?? '');
+  fillIfEmpty('civilStatus', profile.civilStatus ?? '');
+  fillIfEmpty('nationality', profile.nationality ?? '');
+  fillIfEmpty('birthDate', profile.birthDate ? profile.birthDate.slice(0, 10) : '');
+  fillIfEmpty('placeOfBirth', profile.placeOfBirth ?? '');
+  fillIfEmpty('homeOwnership', profile.homeOwnership ?? '');
+  fillIfEmpty('mobilePhone', profile.mobilePhone1 ?? '');
+  fillIfEmpty('email', profile.email ?? '');
+  fillIfEmpty('employer', profile.employer ?? '');
+  fillIfEmpty('occupation', profile.occupation ?? '');
+  fillIfEmpty('monthlyIncome', profile.monthlyIncome !== null ? String(profile.monthlyIncome) : '');
+  if (presentAddress) {
+    const hasTypedAddress = Object.values(next.presentAddress).some((v) => v.trim());
+    if (!hasTypedAddress) {
+      next.presentAddress = {
+        houseUnitNumber: presentAddress.houseUnitNumber ?? '',
+        street: presentAddress.street ?? '',
+        barangay: presentAddress.barangay ?? '',
+        cityMunicipality: presentAddress.cityMunicipality ?? '',
+        province: presentAddress.province ?? '',
+        zipCode: presentAddress.zipCode ?? '',
+      };
+    }
+  }
+  return next;
+}
+
 function computeAge(birthDate: string): number | null {
   if (!birthDate) return null;
   const dob = new Date(birthDate);
@@ -359,6 +404,18 @@ export function LoanApplicationFormPage() {
       })
       .catch(() => setEditState('error'));
   }, [editId]);
+
+  // 2026-07-31 (user request): a brand-new application prefills from My Profile if the applicant
+  // already filled that in first - never runs in edit mode (detailToFormState already owns that
+  // prefill) and is a one-shot best-effort fetch, silently skipped if it fails or the account has
+  // no profile data yet.
+  React.useEffect(() => {
+    if (isEditMode) return;
+    apiClient
+      .get<PortalProfile>('/portal/profile')
+      .then((profile) => setForm((prev) => applyProfilePrefill(prev, profile)))
+      .catch(() => {});
+  }, [isEditMode]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [key]: value }));
 
@@ -474,6 +531,29 @@ export function LoanApplicationFormPage() {
       } else {
         const result = await apiClient.post<PortalLoanApplicationSummary>('/portal/loan-applications', body, true);
         setSubmitted(result);
+        // 2026-07-31 (user request): the reverse direction of the profile<->application sync -
+        // some applicants fill out the application before ever touching My Profile, so mirror
+        // whatever they just entered back onto the profile. Best-effort/fire-and-forget: never
+        // blocks or fails the (already-successful) application submission, and the backend itself
+        // only actually applies this while the account is unlinked (UpdatePortalProfileUseCase).
+        const profileSync: UpdatePortalProfileRequest = {
+          firstName: form.firstName.trim() || undefined,
+          middleName: form.middleName.trim() || undefined,
+          lastName: form.lastName.trim() || undefined,
+          gender: form.gender || undefined,
+          birthDate: form.birthDate || undefined,
+          placeOfBirth: form.placeOfBirth.trim() || undefined,
+          nationality: form.nationality.trim() || undefined,
+          civilStatus: form.civilStatus || undefined,
+          homeOwnership: form.homeOwnership || undefined,
+          mobilePhone1: form.mobilePhone.trim() || undefined,
+          email: form.email.trim() || undefined,
+          occupation: form.occupation.trim() || undefined,
+          employer: form.employer.trim() || undefined,
+          monthlyIncome: form.monthlyIncome ? Number(form.monthlyIncome) : undefined,
+          addresses: Object.values(form.presentAddress).some((v) => v.trim()) ? [form.presentAddress] : undefined,
+        };
+        apiClient.patch('/portal/profile', profileSync, true).catch(() => {});
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Could not ${isEditMode ? 'save your changes' : 'submit your application'}. Please try again.`);
@@ -742,7 +822,7 @@ export function LoanApplicationFormPage() {
                   </Select>
                 </Field>
                 <Field label="Contact number">
-                  <Input id="mobilePhone" type="tel" value={form.mobilePhone} onChange={(e) => update('mobilePhone', e.target.value)} placeholder="09XX XXX XXXX" />
+                  <PhoneInput id="mobilePhone" value={form.mobilePhone} onChange={(e) => update('mobilePhone', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
                 <Field label="Email address" className="sm:col-span-2" hint="Uses your account email if left blank.">
                   <Input id="email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
@@ -845,7 +925,7 @@ export function LoanApplicationFormPage() {
                     <Input value={form.coBorrowerEmployer} onChange={(e) => update('coBorrowerEmployer', e.target.value)} />
                   </Field>
                   <Field label="Contact number">
-                    <Input type="tel" value={form.coBorrowerContactNumber} onChange={(e) => update('coBorrowerContactNumber', e.target.value)} />
+                    <PhoneInput value={form.coBorrowerContactNumber} onChange={(e) => update('coBorrowerContactNumber', e.target.value)} placeholder="09XX XXX XXXX" />
                   </Field>
                   <Field label="Email address">
                     <Input type="email" value={form.coBorrowerEmail} onChange={(e) => update('coBorrowerEmail', e.target.value)} />
@@ -863,13 +943,13 @@ export function LoanApplicationFormPage() {
                   <Input value={form.reference1Name} onChange={(e) => update('reference1Name', e.target.value)} />
                 </Field>
                 <Field label="1st reference - contact number">
-                  <Input type="tel" value={form.reference1Mobile} onChange={(e) => update('reference1Mobile', e.target.value)} />
+                  <PhoneInput value={form.reference1Mobile} onChange={(e) => update('reference1Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
                 <Field label="2nd reference - full name">
                   <Input value={form.reference2Name} onChange={(e) => update('reference2Name', e.target.value)} />
                 </Field>
                 <Field label="2nd reference - contact number">
-                  <Input type="tel" value={form.reference2Mobile} onChange={(e) => update('reference2Mobile', e.target.value)} />
+                  <PhoneInput value={form.reference2Mobile} onChange={(e) => update('reference2Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
               </div>
             </SectionCard>

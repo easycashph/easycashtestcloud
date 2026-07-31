@@ -13,7 +13,7 @@ export const changePortalEmailSchema = z.object({
 export type ChangePortalEmailRequestBody = z.infer<typeof changePortalEmailSchema>;
 
 export const requestEnablePortalTwoFactorSchema = z.object({
-  channel: z.enum(['EMAIL', 'SMS']),
+  channel: z.enum(['EMAIL', 'SMS', 'BOTH']),
 });
 export type RequestEnablePortalTwoFactorRequestBody = z.infer<typeof requestEnablePortalTwoFactorSchema>;
 

@@ -3,12 +3,15 @@ import type { ITokenService } from '../ports/ITokenService';
 import type { IRefreshTokenRepository } from '../ports/IRefreshTokenRepository';
 import type { IAuditLogger } from '../ports/IAuditLogger';
 import type { ITwoFactorChallengeRepository } from '../ports/ITwoFactorChallengeRepository';
+import type { ITrustedDeviceRepository } from '../ports/ITrustedDeviceRepository';
 import type { LoginOutput, VerifyLoginOtpInput } from '../dtos/AuthDtos';
 import { InvalidOtpError, TooManyOtpAttemptsError, UserInactiveError } from '../errors/AuthErrors';
 import { issueTokenPair } from '../authTokenIssuance';
 
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
+/** "Remember this device" (2026-07-30 user request) - how long a trusted-device token skips 2FA. */
+const TRUSTED_DEVICE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface VerifyLoginOtpUseCaseDeps {
   userRepository: IUserRepository;
@@ -16,6 +19,7 @@ export interface VerifyLoginOtpUseCaseDeps {
   refreshTokenRepository: IRefreshTokenRepository;
   auditLogger: IAuditLogger;
   twoFactorChallengeRepository: ITwoFactorChallengeRepository;
+  trustedDeviceRepository: ITrustedDeviceRepository;
   refreshTokenTtlMs?: number;
 }
 
@@ -29,7 +33,8 @@ export class VerifyLoginOtpUseCase {
   constructor(private readonly deps: VerifyLoginOtpUseCaseDeps) {}
 
   async execute(input: VerifyLoginOtpInput): Promise<LoginOutput> {
-    const { userRepository, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository } = this.deps;
+    const { userRepository, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, trustedDeviceRepository } =
+      this.deps;
 
     const challenge = await twoFactorChallengeRepository.findById(input.challengeId);
     // Same InvalidOtpError for "doesn't exist," "wrong purpose," "already consumed," and
@@ -76,8 +81,13 @@ export class VerifyLoginOtpUseCase {
       userAgent: input.userAgent,
     });
 
+    const deviceToken = input.rememberDevice
+      ? (await trustedDeviceRepository.issue({ userId: user.id, expiresAt: new Date(Date.now() + TRUSTED_DEVICE_TTL_MS) })).rawToken
+      : undefined;
+
     return {
       ...tokens,
+      ...(deviceToken ? { deviceToken } : {}),
       user: {
         id: user.id,
         email: user.email,

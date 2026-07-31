@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ComingSoonButton } from '@/components/ComingSoonButton';
+import { computeAge } from '@/lib/computeAge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { ACCENT_OPTIONS, FONT_SIZE_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
@@ -221,6 +222,7 @@ function UserProfileTab() {
             <div className="space-y-1.5">
               <Label htmlFor="profile-birthday">Birthday</Label>
               <Input id="profile-birthday" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+              {computeAge(birthday) !== null && <p className="text-xs text-muted-foreground">Age: {computeAge(birthday)}</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>

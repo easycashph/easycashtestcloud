@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
-import type { VerifySignUpRequest } from '@/lib/portalApiTypes';
+import type { VerifySignUpRequest, PortalOtpChannel } from '@/lib/portalApiTypes';
+
+const RESEND_COOLDOWN_SECONDS = 30;
 
 interface LocationState {
   challengeId?: string;
-  channel?: 'EMAIL' | 'SMS';
+  channel?: PortalOtpChannel;
   email?: string;
 }
 
@@ -29,6 +31,11 @@ function readStoredState(): LocationState | null {
   }
 }
 
+function channelLabel(channel: PortalOtpChannel): string {
+  if (channel === 'BOTH') return 'email address and mobile number';
+  return channel === 'EMAIL' ? 'email address' : 'mobile number';
+}
+
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,14 +43,27 @@ export function VerifyEmailPage() {
   // Router state (fresh navigation from Sign Up) wins when present; otherwise fall back to
   // whatever SignUpPage last persisted - covers a reload, a closed tab reopened, or hitting Back
   // then forward again, none of which router state alone survives.
-  const state = routerState.challengeId ? routerState : (readStoredState() ?? routerState);
+  const initialState = routerState.challengeId ? routerState : (readStoredState() ?? routerState);
 
+  const [challenge, setChallenge] = React.useState<{ challengeId: string; channel: PortalOtpChannel } | null>(
+    initialState.challengeId ? { challengeId: initialState.challengeId, channel: initialState.channel ?? 'EMAIL' } : null,
+  );
+  const [email] = React.useState(initialState.email);
   const [code, setCode] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isResending, setIsResending] = React.useState(false);
+  const [resendMessage, setResendMessage] = React.useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = React.useState(RESEND_COOLDOWN_SECONDS);
 
-  if (!state.challengeId) {
+  React.useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
+  if (!challenge) {
     return (
       <AuthLayout title="Verification link expired" subtitle="Please sign up again to get a new code.">
         <Link to="/signup">
@@ -58,11 +78,11 @@ export function VerifyEmailPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const body: VerifySignUpRequest = { challengeId: state.challengeId!, code };
+      const body: VerifySignUpRequest = { challengeId: challenge.challengeId, code };
       await apiClient.post<void>('/portal/verify-signup', body);
       sessionStorage.removeItem(SIGNUP_VERIFY_STORAGE_KEY);
       setSuccess(true);
-      window.setTimeout(() => navigate('/login', { state: { email: state.email } }), 1500);
+      window.setTimeout(() => navigate('/login', { state: { email } }), 1500);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not verify your code. Please try again.');
     } finally {
@@ -70,16 +90,42 @@ export function VerifyEmailPage() {
     }
   };
 
+  // 2026-07-30 (user request): a real "Request another code" action, not just "go back and
+  // re-submit sign-up" - calls POST /portal/resend-signup-otp directly, updates the in-progress
+  // challenge in place (and its sessionStorage copy) so a client who's already on this screen never
+  // has to leave it.
+  const handleResend = async () => {
+    if (resendCooldown > 0) return;
+    setError(null);
+    setResendMessage(null);
+    setIsResending(true);
+    try {
+      const result = await apiClient.post<{ challengeId: string; channel: PortalOtpChannel }>('/portal/resend-signup-otp', {
+        challengeId: challenge.challengeId,
+      });
+      setChallenge(result);
+      setCode('');
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      setResendMessage(`A new code was sent to your ${channelLabel(result.channel)}.`);
+      sessionStorage.setItem(SIGNUP_VERIFY_STORAGE_KEY, JSON.stringify({ ...result, email }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not resend your code. Please try again.');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
   return (
     <AuthLayout
       title="Verify your account"
-      subtitle={`Enter the 6-digit code sent to your ${state.channel === 'SMS' ? 'mobile number' : 'email address'}. It expires in 5 minutes.`}
+      subtitle={`Enter the 6-digit code sent to your ${channelLabel(challenge.channel)}. It expires in 5 minutes.`}
     >
       {success ? (
         <Alert tone="success">Verified! Taking you to log in…</Alert>
       ) : (
         <form className="space-y-4" onSubmit={handleSubmit}>
           {error && <Alert>{error}</Alert>}
+          {resendMessage && <Alert tone="success">{resendMessage}</Alert>}
           <div className="space-y-1.5">
             <Label htmlFor="code">Verification code</Label>
             <Input
@@ -97,13 +143,14 @@ export function VerifyEmailPage() {
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Verifying…' : 'Verify'}
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            Didn&apos;t get a code, or it expired?{' '}
-            <Link to="/signup" className="font-medium text-primary hover:underline">
-              Sign up again
-            </Link>{' '}
-            with the same email to get a fresh one.
-          </p>
+          <button
+            type="button"
+            className="w-full text-center text-sm text-muted-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline"
+            onClick={handleResend}
+            disabled={isResending || resendCooldown > 0}
+          >
+            {isResending ? 'Sending…' : resendCooldown > 0 ? `Request another code (${resendCooldown}s)` : 'Request another code'}
+          </button>
         </form>
       )}
     </AuthLayout>

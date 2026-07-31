@@ -11,8 +11,9 @@ import type { LoginResponse } from '@/lib/authTypes';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => Promise<LoginResponse>;
-  /** Settings > Security > Two-Factor Authentication (2026-07-22). */
-  onVerifyOtp: (challengeId: string, code: string) => Promise<void>;
+  /** Settings > Security > Two-Factor Authentication (2026-07-22). `rememberDevice` (2026-07-30
+   * user request) - the checkbox on this page's OTP step. */
+  onVerifyOtp: (challengeId: string, code: string, rememberDevice: boolean) => Promise<void>;
 }
 
 /** One of the four things this page can show at a time. An explicit enum rather than several
@@ -66,6 +67,7 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
 
   const [otpStep, setOtpStep] = React.useState<{ challengeId: string; channel: 'EMAIL' | 'SMS' } | null>(null);
   const [otpCode, setOtpCode] = React.useState('');
+  const [rememberDevice, setRememberDevice] = React.useState(true);
 
   const [resetEmail, setResetEmail] = React.useState('');
   const [resetChallengeId, setResetChallengeId] = React.useState<string | null>(null);
@@ -109,7 +111,7 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
     setError(null);
     setSubmitting(true);
     try {
-      await onVerifyOtp(otpStep.challengeId, otpCode.trim());
+      await onVerifyOtp(otpStep.challengeId, otpCode.trim(), rememberDevice);
     } catch (err) {
       setError(friendlyApiError(err));
     } finally {
@@ -189,6 +191,16 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
                   autoFocus
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                Remember this device for 30 days
+              </label>
 
               {error && <ErrorBanner message={error} />}
 

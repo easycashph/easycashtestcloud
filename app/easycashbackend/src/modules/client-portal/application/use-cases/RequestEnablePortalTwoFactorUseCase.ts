@@ -3,6 +3,7 @@ import type { IPortalAccountChallengeRepository } from '../ports/IPortalAccountC
 import type { IOtpSender } from '@modules/identity/application/ports/IOtpSender';
 import type { RequestEnablePortalTwoFactorInput, RequestEnablePortalTwoFactorOutput } from '../dtos/PortalAuthDtos';
 import { PortalAccountNotFoundError, PortalTwoFactorChannelUnavailableError } from '../../domain/errors/PortalAuthErrors';
+import { sendPortalOtp } from '../services/sendPortalOtp';
 import { PORTAL_LOGIN_OTP_TTL_MS } from './PortalLoginUseCase';
 
 export interface RequestEnablePortalTwoFactorUseCaseDeps {
@@ -24,8 +25,8 @@ export class RequestEnablePortalTwoFactorUseCase {
     const account = await portalAccountRepository.findById(input.portalAccountId);
     if (!account) throw new PortalAccountNotFoundError();
 
-    const destination = input.channel === 'EMAIL' ? account.email : account.contactNumber;
-    if (!destination) throw new PortalTwoFactorChannelUnavailableError(input.channel);
+    if (input.channel === 'SMS' && !account.contactNumber) throw new PortalTwoFactorChannelUnavailableError(input.channel);
+    if (input.channel === 'BOTH' && !account.contactNumber) throw new PortalTwoFactorChannelUnavailableError(input.channel);
 
     const { id: challengeId, code } = await portalAccountChallengeRepository.create({
       portalAccountId: account.id,
@@ -33,7 +34,7 @@ export class RequestEnablePortalTwoFactorUseCase {
       channel: input.channel,
       expiresAt: new Date(Date.now() + PORTAL_LOGIN_OTP_TTL_MS),
     });
-    await otpSender.send(input.channel, destination, code);
+    await sendPortalOtp(otpSender, input.channel, account.email, account.contactNumber, code);
 
     return { challengeId };
   }

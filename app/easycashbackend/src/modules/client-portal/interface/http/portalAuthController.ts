@@ -4,6 +4,7 @@ import type { VerifySignUpUseCase } from '../../application/use-cases/VerifySign
 import type { PortalLoginUseCase } from '../../application/use-cases/PortalLoginUseCase';
 import type { VerifyPortalLoginOtpUseCase } from '../../application/use-cases/VerifyPortalLoginOtpUseCase';
 import type { ResendPortalLoginOtpUseCase } from '../../application/use-cases/ResendPortalLoginOtpUseCase';
+import type { ResendSignUpOtpUseCase } from '../../application/use-cases/ResendSignUpOtpUseCase';
 import type { RequestPasswordResetUseCase } from '../../application/use-cases/RequestPasswordResetUseCase';
 import type { ConfirmPasswordResetUseCase } from '../../application/use-cases/ConfirmPasswordResetUseCase';
 import type { GetPortalAccountUseCase } from '../../application/use-cases/GetPortalAccountUseCase';
@@ -13,6 +14,7 @@ import type {
   PortalLoginRequestBody,
   PortalRequestPasswordResetRequestBody,
   PortalResendLoginOtpRequestBody,
+  PortalResendSignUpOtpRequestBody,
   PortalSignUpRequestBody,
   PortalVerifyLoginOtpRequestBody,
   PortalVerifySignUpRequestBody,
@@ -21,6 +23,7 @@ import type {
 export interface PortalAuthControllerDeps {
   signUpUseCase: SignUpUseCase;
   verifySignUpUseCase: VerifySignUpUseCase;
+  resendSignUpOtpUseCase: ResendSignUpOtpUseCase;
   portalLoginUseCase: PortalLoginUseCase;
   verifyPortalLoginOtpUseCase: VerifyPortalLoginOtpUseCase;
   resendPortalLoginOtpUseCase: ResendPortalLoginOtpUseCase;
@@ -65,6 +68,7 @@ export class PortalAuthController {
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
         account: result.account,
+        ...(result.deviceToken ? { deviceToken: result.deviceToken } : {}),
       });
     } catch (error) {
       next(error);
@@ -79,6 +83,7 @@ export class PortalAuthController {
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
         account: result.account,
+        ...(result.deviceToken ? { deviceToken: result.deviceToken } : {}),
       });
     } catch (error) {
       next(error);
@@ -89,6 +94,16 @@ export class PortalAuthController {
     try {
       const body = req.body as PortalResendLoginOtpRequestBody;
       const result = await this.deps.resendPortalLoginOtpUseCase.execute(body);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resendSignUpOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as PortalResendSignUpOtpRequestBody;
+      const result = await this.deps.resendSignUpOtpUseCase.execute(body);
       res.status(200).json(result);
     } catch (error) {
       next(error);

@@ -258,6 +258,7 @@ model User {
   roles                         UserRole[]
   refreshTokens                 RefreshToken[]
   twoFactorChallenges           TwoFactorChallenge[]
+  trustedDevices                TrustedDevice[]
   auditLogs                     AuditLog[]
   profileActivityLogs           ProfileActivityLog[]          @relation("ProfileActivityLogUser")
   borrowersAsLoanOfficer        Borrower[]                    @relation("BorrowerLoanOfficer")
@@ -412,6 +413,23 @@ model TwoFactorChallenge {
   @@map("two_factor_challenges")
 }
 
+/// "Remember this device" (2026-07-30 user request) - an opt-in checkbox on the login OTP step. On
+/// success, LoginUseCase/VerifyLoginOtpUseCase issues one of these (30-day expiry) and returns the
+/// plaintext token to the client once, for it to store and resend on future logins. A future login
+/// presenting a valid, non-expired, matching token skips the 2FA challenge entirely - same
+/// keyed-HMAC-hash storage as TwoFactorChallenge.codeHash (never the plaintext token at rest).
+model TrustedDevice {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("trusted_devices")
+}
+
 // ----------------------------------------------------------------------------
 // Easycash Portal — client-facing self-service (2026-07-23, Phase 1: auth foundation only)
 // Deliberately its own auth realm, never the `User`/`RefreshToken`/staff-side identity module -
@@ -484,6 +502,7 @@ model PortalAccount {
   challenges       PortalAccountChallenge[]
   loanApplications LoanApplication[]
   notifications    PortalNotification[]
+  trustedDevices   PortalTrustedDevice[]
 
   @@map("portal_accounts")
 }
@@ -524,7 +543,9 @@ model PortalAccountChallenge {
   /// 'SIGNUP' (verify email/contact before first login) | 'PASSWORD_RESET' | 'LOGIN' (2FA-gated
   /// login, 2026-07-30) | 'ENABLE_2FA' (re-enable/switch channel, 2026-07-30).
   purpose         String
-  /// 'EMAIL' | 'SMS' - which channel the code was sent to.
+  /// 'EMAIL' | 'SMS' | 'BOTH' (2026-07-30 user request: same code sent to both channels at once -
+  /// SIGNUP always uses this when a contact number was given; LOGIN/ENABLE_2FA only when the
+  /// account's own twoFactorChannel preference is 'BOTH').
   channel         String
   codeHash        String
   expiresAt       DateTime
@@ -534,6 +555,21 @@ model PortalAccountChallenge {
 
   @@index([portalAccountId])
   @@map("portal_account_challenges")
+}
+
+/// "Remember this device" (2026-07-30 user request) - Portal's own version of `TrustedDevice`, same
+/// shape/reasoning, kept as a separate table since this auth realm never shares storage with the
+/// staff-side identity module.
+model PortalTrustedDevice {
+  id              String        @id @default(uuid())
+  portalAccountId String
+  portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  tokenHash       String        @unique
+  expiresAt       DateTime
+  createdAt       DateTime      @default(now())
+
+  @@index([portalAccountId])
+  @@map("portal_trusted_devices")
 }
 
 // ----------------------------------------------------------------------------

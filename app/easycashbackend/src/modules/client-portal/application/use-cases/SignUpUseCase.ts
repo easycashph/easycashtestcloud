@@ -5,6 +5,7 @@ import type { IOtpSender } from '@modules/identity/application/ports/IOtpSender'
 import { PasswordPolicy } from '@modules/identity/domain/PasswordPolicy';
 import type { SignUpInput, SignUpOutput } from '../dtos/PortalAuthDtos';
 import { PortalEmailAlreadyInUseError, PortalWeakPasswordError } from '../../domain/errors/PortalAuthErrors';
+import { sendPortalOtp } from '../services/sendPortalOtp';
 
 export const PORTAL_OTP_TTL_MS = 5 * 60 * 1000;
 
@@ -48,12 +49,12 @@ export class SignUpUseCase {
           contactNumber: input.contactNumber,
         });
 
-    // SMS only if explicitly requested AND a contact number was actually given - defaults to
-    // email otherwise, since email is the only field this use case requires. On a resumed sign-up,
+    // 2026-07-30 (user request): always both email AND SMS when a contact number was actually
+    // given - not a choice between them anymore. Email-only when no contact number was provided,
+    // since that's the only field this use case requires. On a resumed sign-up,
     // `account.contactNumber` (not `input.contactNumber`) is authoritative - the update above can't
     // change it (see UpdatePortalAccountInput), so it always reflects what was captured originally.
-    const channel = input.verificationChannel === 'SMS' && account.contactNumber ? 'SMS' : 'EMAIL';
-    const destination = channel === 'SMS' ? account.contactNumber! : input.email;
+    const channel = account.contactNumber ? 'BOTH' : 'EMAIL';
 
     const { id: challengeId, code } = await portalAccountChallengeRepository.create({
       portalAccountId: account.id,
@@ -61,7 +62,7 @@ export class SignUpUseCase {
       channel,
       expiresAt: new Date(Date.now() + PORTAL_OTP_TTL_MS),
     });
-    await otpSender.send(channel, destination, code);
+    await sendPortalOtp(otpSender, channel, input.email, account.contactNumber, code);
 
     return { challengeId, channel };
   }

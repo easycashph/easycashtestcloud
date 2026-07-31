@@ -18,6 +18,8 @@ import { RoleAbbr } from '@/components/RoleAbbr';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { LoanStatusBadge } from '@/components/StatusBadge';
+import { NumberInput } from '@/components/NumberInput';
+import { computeAge } from '@/lib/computeAge';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
@@ -382,6 +384,9 @@ function RealEditClientDialog({
               onChange={(e) => setDraft({ ...draft, birthDate: e.target.value })}
               disabled={!unlocked.birthDate}
             />
+            {computeAge(draft.birthDate) !== null && (
+              <p className="text-xs text-muted-foreground">Age: {computeAge(draft.birthDate)}</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -464,8 +469,8 @@ function RealEditClientDialog({
               </Label>
               <FieldLockToggle unlocked={unlocked.monthlyIncome} onToggle={() => toggleUnlock('monthlyIncome')} />
             </div>
-            <Input
-              type="number"
+            <NumberInput
+              min="0"
               value={draft.monthlyIncome}
               onChange={(e) => setDraft({ ...draft, monthlyIncome: e.target.value })}
               disabled={!unlocked.monthlyIncome}

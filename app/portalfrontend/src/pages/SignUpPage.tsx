@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
+import { PhoneInput } from '@/components/PhoneInput';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { SignUpRequest, SignUpResponse } from '@/lib/portalApiTypes';
 import { SIGNUP_VERIFY_STORAGE_KEY } from './VerifyEmailPage';
@@ -59,13 +60,7 @@ export function SignUpPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="contact">Mobile number (optional)</Label>
-          <Input
-            id="contact"
-            type="tel"
-            value={contactNumber}
-            onChange={(e) => setContactNumber(e.target.value)}
-            placeholder="09XX XXX XXXX"
-          />
+          <PhoneInput id="contact" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">Password</Label>

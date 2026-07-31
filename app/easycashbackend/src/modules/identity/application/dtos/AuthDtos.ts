@@ -3,6 +3,10 @@ export interface LoginInput {
   password: string;
   ipAddress?: string;
   userAgent?: string;
+  /** "Remember this device" (2026-07-30 user request) - if this matches a valid, unexpired
+   * TrustedDevice for the account, the 2FA challenge is skipped entirely, same as if
+   * `twoFactorEnabled` were false. */
+  deviceToken?: string;
 }
 
 export interface AuthenticatedUserView {
@@ -31,6 +35,10 @@ export interface TokenPairOutput {
 
 export interface LoginOutput extends TokenPairOutput {
   user: AuthenticatedUserView;
+  /** "Remember this device" (2026-07-30) - present only when VerifyLoginOtpUseCase just issued a
+   * new TrustedDevice (the caller checked the box); the frontend stores this and resends it as
+   * `LoginInput.deviceToken` on future logins. Never present on a plain (non-2FA) login. */
+  deviceToken?: string;
 }
 
 /** Settings > Security > Two-Factor Authentication (2026-07-22) - LoginUseCase's alternate
@@ -49,6 +57,8 @@ export interface VerifyLoginOtpInput {
   code: string;
   ipAddress?: string;
   userAgent?: string;
+  /** "Remember this device" (2026-07-30) - the checkbox on the OTP step. */
+  rememberDevice?: boolean;
 }
 
 export interface RequestTwoFactorSetupInput {

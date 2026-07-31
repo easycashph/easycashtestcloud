@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { apiClient, ApiError, setAccessToken, setOnSessionExpired } from './apiClient';
+import { apiClient, ApiError, setAccessToken, setOnSessionExpired, getStoredDeviceToken, setStoredDeviceToken } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, LoginSuccessResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
 import { useDashboardLayout } from '@/components/dashboard-layout-provider';
@@ -125,6 +125,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const applySuccessfulLogin = React.useCallback(
     (result: LoginSuccessResponse) => {
+      if (result.deviceToken) setStoredDeviceToken(result.deviceToken);
       loggedInRef.current = true;
       setAccessToken(result.accessToken);
       setUser(result.user);
@@ -137,7 +138,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const login = React.useCallback(
     async (email: string, password: string): Promise<LoginResponse> => {
-      const result = await apiClient.post<LoginResponse>('/auth/login', { email, password });
+      // "Remember this device" (2026-07-30 user request) - a stored trusted-device token lets
+      // LoginUseCase skip the 2FA challenge entirely for a 2FA-enabled account.
+      const result = await apiClient.post<LoginResponse>('/auth/login', { email, password, deviceToken: getStoredDeviceToken() ?? undefined });
       // 2026-07-22 (Two-Factor Authentication) - LoginPage handles the `twoFactorRequired` branch
       // itself (shows the OTP entry step); only a genuine success is applied to session state here.
       if (!('twoFactorRequired' in result)) {
@@ -149,8 +152,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   );
 
   const verifyLoginOtp = React.useCallback(
-    async (challengeId: string, code: string) => {
-      const result = await apiClient.post<LoginSuccessResponse>('/auth/verify-login-otp', { challengeId, code });
+    async (challengeId: string, code: string, rememberDevice: boolean) => {
+      const result = await apiClient.post<LoginSuccessResponse>('/auth/verify-login-otp', { challengeId, code, rememberDevice });
       applySuccessfulLogin(result);
     },
     [applySuccessfulLogin],

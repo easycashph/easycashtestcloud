@@ -3,6 +3,7 @@ import type { IPortalAccountChallengeRepository, PortalChallengeChannel } from '
 import type { IOtpSender } from '@modules/identity/application/ports/IOtpSender';
 import type { ResendPortalLoginOtpInput, PortalLoginTwoFactorRequired } from '../dtos/PortalAuthDtos';
 import { PortalInvalidOtpError, PortalAccountNotFoundError } from '../../domain/errors/PortalAuthErrors';
+import { sendPortalOtp } from '../services/sendPortalOtp';
 import { PORTAL_LOGIN_OTP_TTL_MS } from './PortalLoginUseCase';
 
 export interface ResendPortalLoginOtpUseCaseDeps {
@@ -43,7 +44,6 @@ export class ResendPortalLoginOtpUseCase {
     if (!account) throw new PortalAccountNotFoundError();
 
     const channel = oldChallenge.channel;
-    const destination = channel === 'EMAIL' ? account.email : (account.contactNumber ?? account.email);
 
     const { id: challengeId, code } = await portalAccountChallengeRepository.create({
       portalAccountId: account.id,
@@ -52,7 +52,7 @@ export class ResendPortalLoginOtpUseCase {
       expiresAt: new Date(Date.now() + PORTAL_LOGIN_OTP_TTL_MS),
     });
     await portalAccountChallengeRepository.invalidate(oldChallenge.id);
-    await otpSender.send(channel, destination, code);
+    await sendPortalOtp(otpSender, channel, account.email, account.contactNumber, code);
 
     return { twoFactorRequired: true, challengeId, channel: channel as PortalChallengeChannel };
   }

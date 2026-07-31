@@ -10,6 +10,9 @@ import { PortalHeader } from '@/components/PortalHeader';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
+import { PhoneInput } from '@/components/PhoneInput';
+import { NumberInput } from '@/components/NumberInput';
+import { computeAge } from '@/lib/computeAge';
 import type { PortalProfile, UpdatePortalProfileRequest } from '@/lib/portalApiTypes';
 
 const GENDER_OPTIONS = ['Female', 'Male'];
@@ -239,6 +242,7 @@ export function ProfilePage() {
                 <div className="space-y-1.5">
                   <Label>Birth date</Label>
                   <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+                  {computeAge(birthDate) !== null && <p className="text-xs text-muted-foreground">Age: {computeAge(birthDate)}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Place of birth</Label>
@@ -261,11 +265,11 @@ export function ProfilePage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Mobile number</Label>
-                  <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XXXXXXXXX" />
+                  <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Alternate mobile number</Label>
-                  <Input value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="09XXXXXXXXX" />
+                  <PhoneInput value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Email</Label>
@@ -286,7 +290,7 @@ export function ProfilePage() {
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Monthly income</Label>
-                  <Input type="number" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
+                  <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Employer</Label>
