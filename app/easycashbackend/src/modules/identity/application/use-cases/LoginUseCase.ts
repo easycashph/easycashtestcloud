@@ -4,6 +4,7 @@ import type { ITokenService } from '../ports/ITokenService';
 import type { IRefreshTokenRepository } from '../ports/IRefreshTokenRepository';
 import type { IAuditLogger } from '../ports/IAuditLogger';
 import type { ITwoFactorChallengeRepository } from '../ports/ITwoFactorChallengeRepository';
+import type { ITrustedDeviceRepository } from '../ports/ITrustedDeviceRepository';
 import type { IOtpSender } from '../ports/IOtpSender';
 import type { LoginInput, LoginResult } from '../dtos/AuthDtos';
 import { InvalidCredentialsError, AccountInactiveError } from '../errors/AuthErrors';
@@ -26,6 +27,7 @@ export interface LoginUseCaseDeps {
   refreshTokenRepository: IRefreshTokenRepository;
   auditLogger: IAuditLogger;
   twoFactorChallengeRepository: ITwoFactorChallengeRepository;
+  trustedDeviceRepository: ITrustedDeviceRepository;
   otpSender: IOtpSender;
   refreshTokenTtlMs?: number;
 }
@@ -46,8 +48,16 @@ export class LoginUseCase {
   constructor(private readonly deps: LoginUseCaseDeps) {}
 
   async execute(input: LoginInput): Promise<LoginResult> {
-    const { userRepository, passwordHasher, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, otpSender } =
-      this.deps;
+    const {
+      userRepository,
+      passwordHasher,
+      tokenService,
+      refreshTokenRepository,
+      auditLogger,
+      twoFactorChallengeRepository,
+      trustedDeviceRepository,
+      otpSender,
+    } = this.deps;
 
     const user = await userRepository.findByEmail(input.email);
 
@@ -80,7 +90,13 @@ export class LoginUseCase {
       throw new AccountInactiveError();
     }
 
-    if (user.twoFactorEnabled && user.twoFactorChannel) {
+    // "Remember this device" (2026-07-30 user request) - a valid, unexpired trusted-device token
+    // skips the 2FA challenge entirely, same as if twoFactorEnabled were false. Checked ownership
+    // (record.userId === user.id) so one account's device token can never skip 2FA for another.
+    const trustedDevice = input.deviceToken ? await trustedDeviceRepository.findValidByRawToken(input.deviceToken) : null;
+    const skip2fa = trustedDevice?.userId === user.id;
+
+    if (user.twoFactorEnabled && user.twoFactorChannel && !skip2fa) {
       const destination = user.twoFactorChannel === 'EMAIL' ? user.email : (user.contactNumber ?? user.email);
       const { id: challengeId, code } = await twoFactorChallengeRepository.create({
         userId: user.id,

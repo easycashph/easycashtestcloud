@@ -10,6 +10,7 @@ import {
   portalLoginSchema,
   portalRequestPasswordResetSchema,
   portalResendLoginOtpSchema,
+  portalResendSignUpOtpSchema,
   portalSignUpSchema,
   portalVerifyLoginOtpSchema,
   portalVerifySignUpSchema,
@@ -40,6 +41,12 @@ export function createPortalAuthRouter(deps: PortalAuthControllerDeps, portalTok
     makeLimiter('Too many attempts. Try again later.'),
     validateBody(portalVerifySignUpSchema),
     controller.verifySignUp,
+  );
+  router.post(
+    '/resend-signup-otp',
+    makeLimiter('Too many resend attempts. Please wait a few minutes.', 3),
+    validateBody(portalResendSignUpOtpSchema),
+    controller.resendSignUpOtp,
   );
   router.post('/login', makeLimiter('Too many login attempts. Try again later.'), validateBody(portalLoginSchema), controller.login);
   router.post(

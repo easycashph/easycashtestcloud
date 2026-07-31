@@ -14,7 +14,6 @@ export const portalSignUpSchema = z.object({
   }),
   password: z.string().min(1),
   contactNumber: z.string().min(1).optional(),
-  verificationChannel: z.enum(['EMAIL', 'SMS']).optional(),
 });
 export type PortalSignUpRequestBody = z.infer<typeof portalSignUpSchema>;
 
@@ -23,6 +22,12 @@ export const portalVerifySignUpSchema = z.object({
   code: z.string().min(1),
 });
 export type PortalVerifySignUpRequestBody = z.infer<typeof portalVerifySignUpSchema>;
+
+/** Signup verification resend (2026-07-30 user request). */
+export const portalResendSignUpOtpSchema = z.object({
+  challengeId: z.string().min(1),
+});
+export type PortalResendSignUpOtpRequestBody = z.infer<typeof portalResendSignUpOtpSchema>;
 
 export const portalLoginSchema = z.object({
   email: z.string().transform((value, ctx) => {
@@ -34,12 +39,16 @@ export const portalLoginSchema = z.object({
     return email.value;
   }),
   password: z.string().min(1),
+  /** "Remember this device" (2026-07-30). */
+  deviceToken: z.string().min(1).optional(),
 });
 export type PortalLoginRequestBody = z.infer<typeof portalLoginSchema>;
 
 export const portalVerifyLoginOtpSchema = z.object({
   challengeId: z.string().min(1),
   code: z.string().min(1),
+  /** "Remember this device" (2026-07-30). */
+  rememberDevice: z.boolean().optional(),
 });
 export type PortalVerifyLoginOtpRequestBody = z.infer<typeof portalVerifyLoginOtpSchema>;
 

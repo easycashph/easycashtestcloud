@@ -27,6 +27,7 @@ import { JwtTokenService } from '@modules/identity/infrastructure/JwtTokenServic
 import { PrismaUserRepository } from '@modules/identity/infrastructure/PrismaUserRepository';
 import { PrismaRefreshTokenRepository } from '@modules/identity/infrastructure/PrismaRefreshTokenRepository';
 import { PrismaTwoFactorChallengeRepository } from '@modules/identity/infrastructure/PrismaTwoFactorChallengeRepository';
+import { PrismaTrustedDeviceRepository } from '@modules/identity/infrastructure/PrismaTrustedDeviceRepository';
 import { OtpSender } from '@modules/identity/infrastructure/OtpSender';
 import { PrismaAuditLogger } from '@modules/identity/infrastructure/PrismaAuditLogger';
 import { M360SmsGateway } from '@modules/sms-reminder/infrastructure/M360SmsGateway';
@@ -37,6 +38,7 @@ import { VerifySignUpUseCase } from '@modules/client-portal/application/use-case
 import { PortalLoginUseCase } from '@modules/client-portal/application/use-cases/PortalLoginUseCase';
 import { VerifyPortalLoginOtpUseCase } from '@modules/client-portal/application/use-cases/VerifyPortalLoginOtpUseCase';
 import { ResendPortalLoginOtpUseCase } from '@modules/client-portal/application/use-cases/ResendPortalLoginOtpUseCase';
+import { ResendSignUpOtpUseCase } from '@modules/client-portal/application/use-cases/ResendSignUpOtpUseCase';
 import { RequestEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/RequestEnablePortalTwoFactorUseCase';
 import { ConfirmEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/ConfirmEnablePortalTwoFactorUseCase';
 import { DisablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/DisablePortalTwoFactorUseCase';
@@ -63,6 +65,7 @@ import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/po
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
+import { PrismaPortalTrustedDeviceRepository } from '@modules/client-portal/infrastructure/PrismaPortalTrustedDeviceRepository';
 import { PrismaPortalNotificationRepository } from '@modules/client-portal/infrastructure/PrismaPortalNotificationRepository';
 import { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import { ListPortalNotificationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalNotificationsUseCase';
@@ -349,6 +352,7 @@ export function createApp(): Express {
   const refreshTokenRepository = new PrismaRefreshTokenRepository();
   const auditLogger = new PrismaAuditLogger();
   const twoFactorChallengeRepository = new PrismaTwoFactorChallengeRepository();
+  const trustedDeviceRepository = new PrismaTrustedDeviceRepository();
   // Settings > Security > Two-Factor Authentication (2026-07-22) - the same M360/SMTP gateways
   // Payment Reminders already uses, gated by the same SMS_ENABLED/EMAIL_ENABLED dry-run flags
   // (see OtpSender's own doc comment) - safe to enable 2FA on any account in every environment.
@@ -388,6 +392,7 @@ export function createApp(): Express {
         refreshTokenRepository,
         auditLogger,
         twoFactorChallengeRepository,
+        trustedDeviceRepository,
         otpSender,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
@@ -408,6 +413,7 @@ export function createApp(): Express {
         refreshTokenRepository,
         auditLogger,
         twoFactorChallengeRepository,
+        trustedDeviceRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({
@@ -461,27 +467,39 @@ export function createApp(): Express {
       password: env.M360_PASSWORD ?? '',
       shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
     }),
+    // 2026-07-30 (user request): Portal verification emails (signup, login OTP, etc.) send from
+    // this dedicated no-reply address, not the generic collections@ mailbox - same address/env var
+    // Nomer's e-signature OTP already uses (SIGNING_OTP_SMTP_FROM_ADDRESS), since both are "here's
+    // your code" mail with the same intent.
     emailGateway: new NodemailerEmailGateway({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
       username: env.SMTP_USERNAME ?? '',
       password: env.SMTP_PASSWORD ?? '',
-      fromAddress: env.SMTP_FROM_ADDRESS,
+      fromAddress: env.SIGNING_OTP_SMTP_FROM_ADDRESS,
     }),
     reminderSettingsRepository: new PrismaReminderSettingsRepository(),
   });
+  const portalTrustedDeviceRepository = new PrismaPortalTrustedDeviceRepository();
   const portalAuthRouter = createPortalAuthRouter(
     {
       signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender: portalOtpSender }),
       verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
+      resendSignUpOtpUseCase: new ResendSignUpOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       portalLoginUseCase: new PortalLoginUseCase({
         portalAccountRepository,
         passwordHasher,
         portalTokenService,
         portalAccountChallengeRepository,
+        portalTrustedDeviceRepository,
         otpSender: portalOtpSender,
       }),
-      verifyPortalLoginOtpUseCase: new VerifyPortalLoginOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, portalTokenService }),
+      verifyPortalLoginOtpUseCase: new VerifyPortalLoginOtpUseCase({
+        portalAccountRepository,
+        portalAccountChallengeRepository,
+        portalTrustedDeviceRepository,
+        portalTokenService,
+      }),
       resendPortalLoginOtpUseCase: new ResendPortalLoginOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       requestPasswordResetUseCase: new RequestPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       confirmPasswordResetUseCase: new ConfirmPasswordResetUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher }),

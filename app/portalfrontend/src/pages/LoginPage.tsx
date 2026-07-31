@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/Input';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
-import { apiClient, ApiError } from '@/lib/apiClient';
+import { apiClient, ApiError, getStoredDeviceToken, setStoredDeviceToken } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
-import type { LoginRequest, LoginResult, LoginResponse, LoginTwoFactorRequired } from '@/lib/portalApiTypes';
+import type { LoginRequest, LoginResult, LoginResponse, LoginTwoFactorRequired, PortalOtpChannel } from '@/lib/portalApiTypes';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
 function friendlyApiError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   return 'Could not log in. Please try again.';
+}
+
+function channelLabel(channel: PortalOtpChannel): string {
+  if (channel === 'BOTH') return 'email address and mobile number';
+  return channel === 'EMAIL' ? 'email address' : 'mobile number';
 }
 
 /**
@@ -40,8 +45,9 @@ export function LoginPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const [otpStep, setOtpStep] = React.useState<{ challengeId: string; channel: 'EMAIL' | 'SMS' } | null>(null);
+  const [otpStep, setOtpStep] = React.useState<{ challengeId: string; channel: PortalOtpChannel } | null>(null);
   const [otpCode, setOtpCode] = React.useState('');
+  const [rememberDevice, setRememberDevice] = React.useState(true);
   const [isResending, setIsResending] = React.useState(false);
   const [resendMessage, setResendMessage] = React.useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = React.useState(0);
@@ -53,6 +59,7 @@ export function LoginPage() {
   }, [resendCooldown]);
 
   const completeLogin = (result: LoginResponse) => {
+    if (result.deviceToken) setStoredDeviceToken(result.deviceToken);
     login(result.accessToken, result.account);
     navigate('/dashboard');
   };
@@ -62,7 +69,7 @@ export function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const body: LoginRequest = { email, password };
+      const body: LoginRequest = { email, password, deviceToken: getStoredDeviceToken() ?? undefined };
       const result = await apiClient.post<LoginResult>('/portal/login', body);
       if ('twoFactorRequired' in result) {
         setOtpStep({ challengeId: result.challengeId, channel: result.channel });
@@ -83,7 +90,11 @@ export function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const result = await apiClient.post<LoginResponse>('/portal/verify-login-otp', { challengeId: otpStep.challengeId, code: otpCode.trim() });
+      const result = await apiClient.post<LoginResponse>('/portal/verify-login-otp', {
+        challengeId: otpStep.challengeId,
+        code: otpCode.trim(),
+        rememberDevice,
+      });
       completeLogin(result);
     } catch (err) {
       setError(friendlyApiError(err));
@@ -102,7 +113,7 @@ export function LoginPage() {
       setOtpStep({ challengeId: result.challengeId, channel: result.channel });
       setOtpCode('');
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
-      setResendMessage(`A new code was sent to your ${result.channel === 'EMAIL' ? 'email address' : 'mobile number'}.`);
+      setResendMessage(`A new code was sent to your ${channelLabel(result.channel)}.`);
     } catch (err) {
       setError(friendlyApiError(err));
     } finally {
@@ -114,7 +125,7 @@ export function LoginPage() {
     return (
       <AuthLayout
         title="Verify it's you"
-        subtitle={`Enter the 6-digit code sent to your ${otpStep.channel === 'EMAIL' ? 'email address' : 'mobile number'}. It expires in 5 minutes.`}
+        subtitle={`Enter the 6-digit code sent to your ${channelLabel(otpStep.channel)}. It expires in 5 minutes.`}
       >
         <form className="space-y-4" onSubmit={handleVerifyOtp}>
           {error && <Alert>{error}</Alert>}
@@ -134,6 +145,15 @@ export function LoginPage() {
               placeholder="000000"
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={rememberDevice}
+              onChange={(e) => setRememberDevice(e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+            Remember this device for 30 days
+          </label>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Verifying…' : 'Verify'}
           </Button>

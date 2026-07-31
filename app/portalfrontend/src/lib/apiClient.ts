@@ -14,6 +14,10 @@
  */
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
 const TOKEN_STORAGE_KEY = 'easycash-portal-token';
+/** "Remember this device" (2026-07-30 user request) - deliberately a SEPARATE key from the access
+ * token, and never cleared by clearStoredToken()/logout(): the whole point is that it survives a
+ * normal logout/login cycle so a future login from this same browser can skip 2FA. */
+const DEVICE_TOKEN_STORAGE_KEY = 'easycash-portal-device-token';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -49,6 +53,17 @@ export function setStoredToken(token: string): void {
 
 export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+/** "Remember this device" (2026-07-30). */
+export function getStoredDeviceToken(): string | null {
+  const value = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  return value && value !== 'undefined' && value !== 'null' ? value : null;
+}
+
+export function setStoredDeviceToken(token: string): void {
+  if (!token) return;
+  localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
 }
 
 interface RequestOptions {

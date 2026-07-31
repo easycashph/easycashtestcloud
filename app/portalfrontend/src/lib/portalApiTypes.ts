@@ -2,16 +2,18 @@
  * comment for why this hand-maintains the shape instead of generating it (same reasoning as the
  * internal LMS frontend's own apiClient.ts). */
 
+/** 'BOTH' (2026-07-30 user request) - the same code sent to email AND SMS at once. */
+export type PortalOtpChannel = 'EMAIL' | 'SMS' | 'BOTH';
+
 export interface SignUpRequest {
   email: string;
   password: string;
   contactNumber?: string;
-  verificationChannel?: 'EMAIL' | 'SMS';
 }
 
 export interface SignUpResponse {
   challengeId: string;
-  channel: 'EMAIL' | 'SMS';
+  channel: PortalOtpChannel;
 }
 
 export interface VerifySignUpRequest {
@@ -19,9 +21,16 @@ export interface VerifySignUpRequest {
   code: string;
 }
 
+/** Signup verification resend (2026-07-30 user request). */
+export interface ResendSignUpOtpRequest {
+  challengeId: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
+  /** "Remember this device" (2026-07-30 user request). */
+  deviceToken?: string;
 }
 
 export interface PortalAccountView {
@@ -30,13 +39,16 @@ export interface PortalAccountView {
   contactNumber: string | null;
   borrowerId: string | null;
   twoFactorEnabled: boolean;
-  twoFactorChannel: 'EMAIL' | 'SMS' | null;
+  twoFactorChannel: PortalOtpChannel | null;
 }
 
 export interface LoginResponse {
   accessToken: string;
   accessTokenExpiresAt: string;
   account: PortalAccountView;
+  /** "Remember this device" (2026-07-30) - present only when the client checked the box on the OTP
+   * step and a new trusted-device token was just issued. */
+  deviceToken?: string;
 }
 
 /** Login 2FA (2026-07-30) - PortalLoginUseCase returns this instead of tokens when the account has
@@ -44,7 +56,7 @@ export interface LoginResponse {
 export interface LoginTwoFactorRequired {
   twoFactorRequired: true;
   challengeId: string;
-  channel: 'EMAIL' | 'SMS';
+  channel: PortalOtpChannel;
 }
 
 export type LoginResult = LoginResponse | LoginTwoFactorRequired;
@@ -52,6 +64,8 @@ export type LoginResult = LoginResponse | LoginTwoFactorRequired;
 export interface VerifyLoginOtpRequest {
   challengeId: string;
   code: string;
+  /** "Remember this device" (2026-07-30 user request). */
+  rememberDevice?: boolean;
 }
 
 /** Login 2FA resend (2026-07-30 user request). */
@@ -60,7 +74,7 @@ export interface ResendLoginOtpRequest {
 }
 
 export interface RequestEnableTwoFactorRequest {
-  channel: 'EMAIL' | 'SMS';
+  channel: PortalOtpChannel;
 }
 
 export interface RequestEnableTwoFactorResponse {

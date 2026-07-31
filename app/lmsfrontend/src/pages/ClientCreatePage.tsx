@@ -7,11 +7,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PhoneInput } from '@/components/PhoneInput';
+import { NumberInput } from '@/components/NumberInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { computeAge } from '@/lib/computeAge';
 import type { Borrower, CreateBorrowerRequest, CreateCoBorrowerRequest, PaginatedResponse } from '@/lib/loanApiTypes';
 
 interface CharacterReferenceField {
@@ -54,6 +58,7 @@ export function ClientCreatePage() {
   const [lastName, setLastName] = React.useState('');
   const [suffix, setSuffix] = React.useState('');
   const [birthDate, setBirthDate] = React.useState('');
+  const computedAge = computeAge(birthDate);
   const [gender, setGender] = React.useState('');
   const [civilStatus, setCivilStatus] = React.useState('');
 
@@ -260,7 +265,7 @@ export function ClientCreatePage() {
           <Field label="Suffix">
             <Input value={suffix} onChange={(e) => setSuffix(e.target.value)} placeholder="Jr., Sr., III" />
           </Field>
-          <Field label="Birth Date">
+          <Field label="Birth Date" hint={computedAge !== null ? `Age: ${computedAge}` : undefined}>
             <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
           </Field>
           <Field label="Gender">
@@ -314,10 +319,10 @@ export function ClientCreatePage() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Mobile Number 1">
-            <Input value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} />
+            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <Field label="Mobile Number 2">
-            <Input value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} />
+            <PhoneInput value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="09XX XXX XXXX" />
           </Field>
           <Field label="Email">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -407,7 +412,7 @@ export function ClientCreatePage() {
             <Input type="number" min="0" max="11" value={monthsEmployed} onChange={(e) => setMonthsEmployed(e.target.value)} />
           </Field>
           <Field label="Monthly Income">
-            <Input type="number" min="0" step="0.01" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
+            <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
           </Field>
         </CardContent>
       </Card>
@@ -418,10 +423,10 @@ export function ClientCreatePage() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="SSS Number">
-            <Input value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
+            <GroupedDigitsInput value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
           </Field>
           <Field label="TIN">
-            <Input value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
+            <GroupedDigitsInput value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
           </Field>
         </CardContent>
       </Card>
@@ -531,13 +536,27 @@ export function ClientCreatePage() {
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  hint,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  /** 2026-07-31 (user request) - e.g. a live computed-age readout next to a birth date field. */
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label>
-        {label}
-        {required && <span className="text-destructive"> *</span>}
-      </Label>
+      <div className="flex items-center justify-between">
+        <Label>
+          {label}
+          {required && <span className="text-destructive"> *</span>}
+        </Label>
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      </div>
       {children}
     </div>
   );

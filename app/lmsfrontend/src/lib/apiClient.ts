@@ -35,6 +35,24 @@ export class ApiError extends Error {
   }
 }
 
+/** "Remember this device" (2026-07-30 user request) - deliberately the ONE exception to this
+ * file's own in-memory-only rule above: the whole point is that it survives a page reload and a
+ * normal logout/login cycle, which an in-memory variable cannot. Never holds a session credential
+ * itself (that's still the HttpOnly refresh cookie) - only a long-lived, single-purpose token that
+ * skips the 2FA challenge on a future login, same trust level as "this browser proved it received
+ * an OTP here before." */
+const DEVICE_TOKEN_STORAGE_KEY = 'easycash-lms-device-token';
+
+export function getStoredDeviceToken(): string | null {
+  const value = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+  return value && value !== 'undefined' && value !== 'null' ? value : null;
+}
+
+export function setStoredDeviceToken(token: string): void {
+  if (!token) return;
+  localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+}
+
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null): void {

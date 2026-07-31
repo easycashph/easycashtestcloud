@@ -1,10 +1,12 @@
 import type { IPortalAccountRepository } from '../ports/IPortalAccountRepository';
 import type { IPortalAccountChallengeRepository, PortalChallengeChannel } from '../ports/IPortalAccountChallengeRepository';
+import type { IPortalTrustedDeviceRepository } from '../ports/IPortalTrustedDeviceRepository';
 import type { IPasswordHasher } from '@modules/identity/application/ports/IPasswordHasher';
 import type { IOtpSender } from '@modules/identity/application/ports/IOtpSender';
 import type { IPortalTokenService } from '../ports/IPortalTokenService';
 import type { PortalLoginInput, PortalLoginResult } from '../dtos/PortalAuthDtos';
 import { PortalInvalidCredentialsError, PortalAccountNotVerifiedError } from '../../domain/errors/PortalAuthErrors';
+import { sendPortalOtp } from '../services/sendPortalOtp';
 
 export const PORTAL_LOGIN_OTP_TTL_MS = 5 * 60 * 1000;
 
@@ -13,6 +15,7 @@ export interface PortalLoginUseCaseDeps {
   passwordHasher: IPasswordHasher;
   portalTokenService: IPortalTokenService;
   portalAccountChallengeRepository: IPortalAccountChallengeRepository;
+  portalTrustedDeviceRepository: IPortalTrustedDeviceRepository;
   otpSender: IOtpSender;
 }
 
@@ -23,12 +26,16 @@ export interface PortalLoginUseCaseDeps {
  * 2026-07-30 (Login 2FA, user request) - once credentials check out, an account with
  * `twoFactorEnabled` gets a LOGIN-purpose challenge instead of a token - the caller must complete
  * VerifyPortalLoginOtpUseCase next. Mirrors identity's LoginUseCase branch exactly.
+ *
+ * 2026-07-30 ("Remember this device", user request) - a valid, unexpired PortalTrustedDevice token
+ * skips the 2FA challenge entirely, same as identity's LoginUseCase.
  */
 export class PortalLoginUseCase {
   constructor(private readonly deps: PortalLoginUseCaseDeps) {}
 
   async execute(input: PortalLoginInput): Promise<PortalLoginResult> {
-    const { portalAccountRepository, passwordHasher, portalTokenService, portalAccountChallengeRepository, otpSender } = this.deps;
+    const { portalAccountRepository, passwordHasher, portalTokenService, portalAccountChallengeRepository, portalTrustedDeviceRepository, otpSender } =
+      this.deps;
 
     const account = await portalAccountRepository.findByEmail(input.email);
 
@@ -44,16 +51,18 @@ export class PortalLoginUseCase {
       throw new PortalAccountNotVerifiedError();
     }
 
-    if (account.twoFactorEnabled && account.twoFactorChannel) {
+    const trustedDevice = input.deviceToken ? await portalTrustedDeviceRepository.findValidByRawToken(input.deviceToken) : null;
+    const skip2fa = trustedDevice?.portalAccountId === account.id;
+
+    if (account.twoFactorEnabled && account.twoFactorChannel && !skip2fa) {
       const channel = account.twoFactorChannel as PortalChallengeChannel;
-      const destination = channel === 'EMAIL' ? account.email : (account.contactNumber ?? account.email);
       const { id: challengeId, code } = await portalAccountChallengeRepository.create({
         portalAccountId: account.id,
         purpose: 'LOGIN',
         channel,
         expiresAt: new Date(Date.now() + PORTAL_LOGIN_OTP_TTL_MS),
       });
-      await otpSender.send(channel, destination, code);
+      await sendPortalOtp(otpSender, channel, account.email, account.contactNumber, code);
       return { twoFactorRequired: true, challengeId, channel };
     }
 

@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
+import { computeAge } from '@/lib/computeAge';
 import { PhoneInput } from '@/components/PhoneInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { Label } from '@/components/ui/label';
@@ -371,6 +372,7 @@ function CreateClientProfileDialog({
           <div className="space-y-1.5">
             <Label>Date of Birth</Label>
             <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+            {computeAge(birthDate) !== null && <p className="text-xs text-muted-foreground">Age: {computeAge(birthDate)}</p>}
           </div>
           <div className="space-y-1.5">
             <Label>Place of Birth</Label>
@@ -2277,7 +2279,11 @@ export function LoanApplicationDetailPage() {
             <IconDt icon={Heart}>Civil Status</IconDt>
             <dd className="text-right font-medium">{application.civilStatus ?? '-'}</dd>
             <IconDt icon={Cake}>Birth Date</IconDt>
-            <dd className="text-right font-medium">{application.birthDate ? formatDate(application.birthDate) : '-'}</dd>
+            <dd className="text-right font-medium">
+              {application.birthDate
+                ? `${formatDate(application.birthDate)} (Age: ${computeAge(application.birthDate)})`
+                : '-'}
+            </dd>
             <IconDt icon={MapPin}>Place of Birth</IconDt>
             <dd className="text-right font-medium">{application.placeOfBirth ?? '-'}</dd>
             <IconDt icon={Flag}>Nationality</IconDt>

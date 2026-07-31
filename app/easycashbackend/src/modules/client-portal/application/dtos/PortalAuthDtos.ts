@@ -4,9 +4,6 @@ export interface SignUpInput {
   email: string;
   password: string;
   contactNumber?: string;
-  /** Which channel to send the verification code to - defaults to EMAIL in the use case if the
-   * caller didn't specify SMS (and only honored if a contactNumber was actually given). */
-  verificationChannel?: PortalChallengeChannel;
 }
 
 export interface SignUpOutput {
@@ -19,9 +16,17 @@ export interface VerifySignUpInput {
   code: string;
 }
 
+/** Signup verification resend (2026-07-30 user request) - "Request another code" on the Verify
+ * Email screen. Mirrors ResendPortalLoginOtpInput's shape/reasoning exactly. */
+export interface ResendSignUpOtpInput {
+  challengeId: string;
+}
+
 export interface PortalLoginInput {
   email: string;
   password: string;
+  /** "Remember this device" (2026-07-30 user request). */
+  deviceToken?: string;
 }
 
 export interface PortalAuthenticatedAccountView {
@@ -37,6 +42,9 @@ export interface PortalLoginOutput {
   accessToken: string;
   accessTokenExpiresAt: Date;
   account: PortalAuthenticatedAccountView;
+  /** "Remember this device" (2026-07-30) - present only when the client checked the box on the OTP
+   * step and a new PortalTrustedDevice was just issued. */
+  deviceToken?: string;
 }
 
 /** Login 2FA (2026-07-30) - PortalLoginUseCase returns this instead of tokens when the account has
@@ -53,6 +61,8 @@ export type PortalLoginResult = PortalLoginOutput | PortalLoginTwoFactorRequired
 export interface VerifyPortalLoginOtpInput {
   challengeId: string;
   code: string;
+  /** "Remember this device" (2026-07-30 user request). */
+  rememberDevice?: boolean;
 }
 
 /** Login 2FA resend (2026-07-30 user request) - a client stuck on the OTP step (didn't receive
