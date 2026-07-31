@@ -7,6 +7,23 @@ import type { DownloadAttachmentUseCase } from '../../application/use-cases/Down
 import { attachmentOwnerTypeSchema, uploadAttachmentBodySchema } from './documentSchemas';
 import { presentAttachment } from './presenters/AttachmentPresenter';
 
+/** `Attachment.fileType` holds a real MIME type for attachments uploaded through the app, but a
+ * plain file extension (".jpg", ".pdf") for rows backfilled from the legacy SDevTech export
+ * (scripts/backfill-legacy-attachments.ts) - see AttachmentPreviewModal.tsx's resolvePreviewKind
+ * for the frontend half of this same mismatch. Serving an extension as-is in the Content-Type
+ * header produces an invalid value that Chrome's built-in PDF viewer refuses to render inline
+ * (an <img> tag is more lenient and mostly still worked, which is why only PDFs looked broken). */
+const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+};
+
+function resolveContentType(fileType: string): string {
+  return MIME_TYPE_BY_EXTENSION[fileType.toLowerCase()] ?? fileType;
+}
+
 export interface DocumentControllerDeps {
   uploadAttachmentUseCase: UploadAttachmentUseCase;
   listAttachmentsForOwnerUseCase: ListAttachmentsForOwnerUseCase;
@@ -54,7 +71,7 @@ export class DocumentController {
   download = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { record, data } = await this.deps.downloadAttachmentUseCase.execute(req.params.id as string);
-      res.setHeader('Content-Type', record.fileType);
+      res.setHeader('Content-Type', resolveContentType(record.fileType));
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.fileName)}"`);
       res.status(200).send(data);
     } catch (error) {

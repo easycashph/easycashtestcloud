@@ -5,7 +5,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
 import type { Attachment } from '@/lib/documentApiTypes';
 
-const PREVIEWABLE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+/** `fileType` holds a real MIME type for attachments uploaded through the app (browser-supplied,
+ * validated by UploadAttachmentUseCase's ALLOWED_MIME_TYPES), but a plain file extension
+ * (".jpg", ".pdf") for rows backfilled from the legacy SDevTech export (scripts/
+ * backfill-legacy-attachments.ts / migrate-legacy-data.ts), which only ever had SDevTech's own
+ * extension to go on - both formats need to resolve to the same preview kind. */
+function resolvePreviewKind(fileType: string): 'image' | 'pdf' | null {
+  switch (fileType.toLowerCase()) {
+    case 'application/pdf':
+    case '.pdf':
+      return 'pdf';
+    case 'image/jpeg':
+    case 'image/png':
+    case '.jpg':
+    case '.jpeg':
+    case '.png':
+      return 'image';
+    default:
+      return null;
+  }
+}
 
 /**
  * Inline preview for an attachment (image or PDF) so reviewing a document no longer requires
@@ -41,7 +60,7 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
     };
   }, [attachment]);
 
-  const previewable = attachment ? PREVIEWABLE_MIME_TYPES.has(attachment.fileType) : false;
+  const previewKind = attachment ? resolvePreviewKind(attachment.fileType) : null;
 
   return (
     <Dialog open={attachment !== null} onOpenChange={(open) => !open && onClose()}>
@@ -73,9 +92,9 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
 
         {!loading && !error && objectUrl && attachment && (
           <>
-            {attachment.fileType === 'application/pdf' ? (
+            {previewKind === 'pdf' ? (
               <iframe src={objectUrl} className="h-[85vh] w-full rounded-md border" title={attachment.fileName} />
-            ) : previewable ? (
+            ) : previewKind === 'image' ? (
               <img src={objectUrl} alt={attachment.fileName} className="mx-auto max-h-[85vh] w-auto rounded-md object-contain" />
             ) : (
               <div className="space-y-3 py-8 text-center">

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
 import { ACTION_VERB, ENTITY_ROUTE } from '@/lib/activityVerbs';
+import { initials } from '@/lib/initials';
 
 interface RecentSystemActivityPanelProps {
   limit?: number;
@@ -18,15 +19,6 @@ interface RecentActivityRecord {
   entityId: string;
   entityLabel: string | null;
   createdAt: string;
-}
-
-function initials(name: string | null): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
 }
 
 function formatRelative(dateString: string): string {
