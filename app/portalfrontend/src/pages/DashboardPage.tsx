@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { useAuth } from '@/lib/authContext';
+import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
 import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary } from '@/lib/portalApiTypes';
 
@@ -89,6 +90,7 @@ function ApplicationDetailSkeleton() {
 export function DashboardPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
+  const { openProfileDialog, openApplicationDialog } = usePortalDialogs();
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
   const [viewingApplicationId, setViewingApplicationId] = React.useState<string | null>(null);
   const [viewingDetail, setViewingDetail] = React.useState<PortalLoanApplicationDetail | null>(null);
@@ -154,7 +156,7 @@ export function DashboardPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {account?.borrowerId ? 'Linked to an existing client profile.' : 'Not yet linked to a client profile.'}
             </p>
-            <Button variant="outline" className="mt-4" onClick={() => navigate('/profile')}>
+            <Button variant="outline" className="mt-4" onClick={openProfileDialog}>
               View Profile
             </Button>
           </Card>
@@ -207,7 +209,7 @@ export function DashboardPage() {
                         size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(`/apply/${application.id}`);
+                          openApplicationDialog(application.id);
                         }}
                       >
                         Edit

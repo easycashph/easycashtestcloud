@@ -4,13 +4,18 @@ import { Button } from '@/components/ui/Button';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
+import { usePortalDialogs } from '@/lib/portalDialogContext';
 
 /** Shared header for every logged-in page (Dashboard, My Profile, ...) - extracted so nav links
  * stay in one place as more authenticated pages get added. "Loan Products" tab removed 2026-07-27
- * (user request) - the /products page itself still exists, just no longer linked from the nav. */
+ * (user request) - the /products page itself still exists, just no longer linked from the nav.
+ *
+ * 2026-07-31 (user request): "My Profile" and "Security" now open as a Dialog on top of the
+ * current page (via PortalDialogHost) instead of navigating to a separate route. */
 export function PortalHeader() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { openProfileDialog, openSecurityDialog } = usePortalDialogs();
 
   const handleLogout = () => {
     logout();
@@ -28,12 +33,12 @@ export function PortalHeader() {
           <Link to="/dashboard" className="hover:text-foreground">
             Dashboard
           </Link>
-          <Link to="/profile" className="hover:text-foreground">
+          <button type="button" onClick={openProfileDialog} className="hover:text-foreground">
             My Profile
-          </Link>
-          <Link to="/security" className="hover:text-foreground">
+          </button>
+          <button type="button" onClick={openSecurityDialog} className="hover:text-foreground">
             Security
-          </Link>
+          </button>
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />

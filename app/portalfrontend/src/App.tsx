@@ -3,8 +3,10 @@ import { MotionConfig } from 'framer-motion';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/lib/authContext';
 import { LanguageProvider } from '@/lib/i18n/LanguageContext';
+import { PortalDialogProvider } from '@/lib/portalDialogContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
+import { PortalDialogHost } from '@/components/PortalDialogHost';
 import { LandingPage } from '@/pages/LandingPage';
 
 /** The landing page is imported eagerly (above) because it is the entry point for almost every
@@ -149,24 +151,32 @@ export default function App() {
         <HashRouter>
           <LanguageProvider>
             <AuthProvider>
-              {/* Lets keyboard and screen-reader users jump past the nav straight to the page
-                  content (WCAG 2.4.1 "Bypass Blocks"). Visually hidden until focused. */}
-              <a
-                href="#main-content"
-                className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
-              >
-                Skip to main content
-              </a>
-              <OfflineBanner />
-              <PreviewBanner />
-              {/* A plain div, not <main>: each page owns its own landmarks (the landing page
-                  renders its own <header> nav, which must not sit inside <main>). tabIndex=-1
-                  makes the skip link reliably move focus here in all browsers. */}
-              <div id="main-content" tabIndex={-1} className="outline-none">
-                <React.Suspense fallback={<RouteFallback />}>
-                  <AppRoutes />
+              <PortalDialogProvider>
+                {/* Lets keyboard and screen-reader users jump past the nav straight to the page
+                    content (WCAG 2.4.1 "Bypass Blocks"). Visually hidden until focused. */}
+                <a
+                  href="#main-content"
+                  className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-primary-foreground"
+                >
+                  Skip to main content
+                </a>
+                <OfflineBanner />
+                <PreviewBanner />
+                {/* A plain div, not <main>: each page owns its own landmarks (the landing page
+                    renders its own <header> nav, which must not sit inside <main>). tabIndex=-1
+                    makes the skip link reliably move focus here in all browsers. */}
+                <div id="main-content" tabIndex={-1} className="outline-none">
+                  <React.Suspense fallback={<RouteFallback />}>
+                    <AppRoutes />
+                  </React.Suspense>
+                </div>
+                {/* 2026-07-31 (user request): "My Profile"/"Security"/loan application editing
+                    open as a Dialog on top of the current page instead of navigating away - see
+                    PortalDialogHost's own doc comment. */}
+                <React.Suspense fallback={null}>
+                  <PortalDialogHost />
                 </React.Suspense>
-              </div>
+              </PortalDialogProvider>
             </AuthProvider>
           </LanguageProvider>
         </HashRouter>

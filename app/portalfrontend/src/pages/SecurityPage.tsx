@@ -24,7 +24,10 @@ function channelLabel(channel: PortalOtpChannel): string {
  * was received first (RequestEnableTwoFactorUseCase / ConfirmEnableTwoFactorUseCase); turning it
  * off only requires the current password (DisableTwoFactorUseCase) - same asymmetric posture as
  * the internal LMS's own staff-side 2FA. */
-export function SecurityPage() {
+/** The reusable form content, with no page chrome of its own - used both by the full-page
+ * `SecurityPage` route (direct-link/bookmark entry point) and by `PortalDialogHost` when opened as
+ * a dialog (2026-07-31 user request) from the header nav or Dashboard. */
+export function SecurityForm() {
   const { account, refreshAccount } = useAuth();
 
   const [newEmail, setNewEmail] = React.useState('');
@@ -133,12 +136,8 @@ export function SecurityPage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <PortalHeader />
-
-      <main className="container max-w-2xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Security</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage your login email and password.</p>
+    <>
+      <p className="text-sm text-muted-foreground">Manage your login email and password.</p>
 
         <Card className="mt-8 p-6">
           <h2 className="text-base font-semibold">Login Email</h2>
@@ -272,6 +271,21 @@ export function SecurityPage() {
             </form>
           )}
         </Card>
+    </>
+  );
+}
+
+/** Full-page route wrapper (direct-link/bookmark entry point) - the everyday in-app flow now opens
+ * `SecurityForm` inside a Dialog instead (see PortalDialogHost). */
+export function SecurityPage() {
+  return (
+    <div className="min-h-screen bg-secondary/30">
+      <PortalHeader />
+      <main className="container max-w-2xl py-10">
+        <h1 className="text-2xl font-bold tracking-tight">Security</h1>
+        <div className="mt-8">
+          <SecurityForm />
+        </div>
       </main>
     </div>
   );
