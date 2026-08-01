@@ -2,8 +2,8 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
-set "BACKEND_ENV=%ROOT_DIR%app\backend\.env"
-set "FRONTEND_ENV=%ROOT_DIR%app\frontend\.env"
+set "BACKEND_ENV=%ROOT_DIR%app\easycashbackend\.env"
+set "FRONTEND_ENV=%ROOT_DIR%app\lmsfrontend\.env"
 set "DOCKER_DIR=%ROOT_DIR%app\docker"
 
 echo ============================================
@@ -73,9 +73,20 @@ if "%NEW_IP%"=="" (
 echo       Nahanap: %NEW_IP%
 echo.
 
-echo [3/5] Ina-update ang app\backend\.env at app\frontend\.env...
+echo [3/5] Ina-update ang app\easycashbackend\.env at app\lmsfrontend\.env...
+REM 2026-08-01: CORS_ORIGIN can carry more than just the LAN entry now (e.g. the
+REM https://easycash-lms.pages.dev / https://easycash-portal.pages.dev origins for the
+REM Cloudflare Pages-hosted sites) - a blind whole-line replace used to wipe those out on every
+REM LAN IP change. Instead: drop only the old LAN-IP-shaped entries (private ranges, port 5173),
+REM keep everything else untouched, then add the new LAN IP.
 powershell -NoProfile -Command ^
-  "(Get-Content '%BACKEND_ENV%') -replace '^CORS_ORIGIN=.*', 'CORS_ORIGIN=http://%NEW_IP%:5173' | Set-Content '%BACKEND_ENV%';" ^
+  "$lines = Get-Content '%BACKEND_ENV%';" ^
+  "$corsLine = $lines | Where-Object { $_ -match '^CORS_ORIGIN=' } | Select-Object -First 1;" ^
+  "$current = if ($corsLine) { $corsLine -replace '^CORS_ORIGIN=', '' } else { '' };" ^
+  "$origins = $current -split ',' | Where-Object { $_ -and ($_ -notmatch '^https?://(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[0-9]+\.[0-9]+:5173$') };" ^
+  "$origins = @($origins) + @('http://%NEW_IP%:5173') | Select-Object -Unique;" ^
+  "$newCors = 'CORS_ORIGIN=' + ($origins -join ',');" ^
+  "(Get-Content '%BACKEND_ENV%') -replace '^CORS_ORIGIN=.*', $newCors | Set-Content '%BACKEND_ENV%';" ^
   "(Get-Content '%FRONTEND_ENV%') -replace '^VITE_API_BASE_URL=.*', 'VITE_API_BASE_URL=http://%NEW_IP%:4000/api/v1' | Set-Content '%FRONTEND_ENV%';"
 
 echo       Tapos na i-update ang config files.
@@ -89,7 +100,7 @@ echo       binabasa iyon habang tumatakbo, hindi habang nagbi-build.
 echo       ^(Mas mabilis ngayon - nalaktawan na ang backend's mabigat na
 echo       LibreOffice/npm rebuild, na hindi naman kailangan dito.^)
 pushd "%DOCKER_DIR%"
-docker compose up -d --build frontend
+docker compose up -d --build lmsfrontend
 if errorlevel 1 (
   popd
   echo.
@@ -101,7 +112,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-docker compose up -d --force-recreate backend
+docker compose up -d --force-recreate easycashbackend
 if errorlevel 1 (
   popd
   echo.

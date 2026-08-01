@@ -2,8 +2,8 @@
 set -u
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_ENV="$ROOT_DIR/app/backend/.env"
-FRONTEND_ENV="$ROOT_DIR/app/frontend/.env"
+BACKEND_ENV="$ROOT_DIR/app/easycashbackend/.env"
+FRONTEND_ENV="$ROOT_DIR/app/lmsfrontend/.env"
 DOCKER_DIR="$ROOT_DIR/app/docker"
 
 echo "============================================"
@@ -79,8 +79,17 @@ fi
 echo "      Nahanap: $NEW_IP"
 echo
 
-echo "[3/5] Ina-update ang app/backend/.env at app/frontend/.env..."
-sed -i '' -E "s|^CORS_ORIGIN=.*|CORS_ORIGIN=http://${NEW_IP}:5173|" "$BACKEND_ENV"
+echo "[3/5] Ina-update ang app/easycashbackend/.env at app/lmsfrontend/.env..."
+# 2026-08-01: CORS_ORIGIN can carry more than just the LAN entry now (e.g. the
+# https://easycash-lms.pages.dev / https://easycash-portal.pages.dev origins for the
+# Cloudflare Pages-hosted sites) - a blind whole-line replace used to wipe those out on every
+# LAN IP change. Instead: drop only the old LAN-IP-shaped entries (private ranges, port 5173),
+# keep everything else untouched, then add the new LAN IP.
+CURRENT_CORS="$(grep -E '^CORS_ORIGIN=' "$BACKEND_ENV" | head -1 | cut -d= -f2-)"
+KEPT_ORIGINS="$(echo "$CURRENT_CORS" | tr ',' '\n' | grep -vE '^https?://(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[0-9]+\.[0-9]+:5173$' | grep -v '^$')"
+NEW_CORS="$(printf '%s\n%s\n' "$KEPT_ORIGINS" "http://${NEW_IP}:5173" | awk '!seen[$0]++' | paste -sd, -)"
+ESCAPED_CORS="$(printf '%s' "$NEW_CORS" | sed 's/[&|]/\\&/g')"
+sed -i '' -E "s|^CORS_ORIGIN=.*|CORS_ORIGIN=${ESCAPED_CORS}|" "$BACKEND_ENV"
 sed -i '' -E "s|^VITE_API_BASE_URL=.*|VITE_API_BASE_URL=http://${NEW_IP}:4000/api/v1|" "$FRONTEND_ENV"
 echo "      Tapos na i-update ang config files."
 echo
@@ -92,7 +101,7 @@ echo "      rebuild - basta CORS_ORIGIN lang naman ang nagbabago, at"
 echo "      binabasa iyon habang tumatakbo, hindi habang nagbi-build."
 echo "      (Mas mabilis ngayon - nalaktawan na ang backend's mabigat na"
 echo "      LibreOffice/npm rebuild, na hindi naman kailangan dito.)"
-if ! (cd "$DOCKER_DIR" && docker compose up -d --build frontend); then
+if ! (cd "$DOCKER_DIR" && docker compose up -d --build lmsfrontend); then
   echo
   echo "      May error sa Docker rebuild ng frontend - malamang may ibang"
   echo "      proseso (hal. \"npm run dev\") na humahawak pa rin sa"
@@ -102,7 +111,7 @@ if ! (cd "$DOCKER_DIR" && docker compose up -d --build frontend); then
   read -n 1 -s -r -p "Pindutin ang kahit anong key para lumabas..."
   exit 1
 fi
-if ! (cd "$DOCKER_DIR" && docker compose up -d --force-recreate backend); then
+if ! (cd "$DOCKER_DIR" && docker compose up -d --force-recreate easycashbackend); then
   echo
   echo "      May error sa pag-restart ng backend - malamang may ibang"
   echo "      proseso na humahawak pa rin sa port 4000. Isara muna iyon"
@@ -120,6 +129,10 @@ echo "============================================"
 echo
 echo "Sa phone mo, buksan din ang URL na ito (basta"
 echo "parehong WiFi/network) para ma-access ang LMS system."
+echo
+echo "Kung may \"insecure download\" warning ang Chrome sa"
+echo "pag-download ng file, normal iyan sa plain HTTP + LAN"
+echo "IP setup - pindutin lang ang \"Download insecure file\"."
 echo
 open "http://${NEW_IP}:5173/"
 read -n 1 -s -r -p "Pindutin ang kahit anong key para isara ang window na ito..."
