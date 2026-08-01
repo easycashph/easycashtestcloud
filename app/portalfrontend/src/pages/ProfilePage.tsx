@@ -68,7 +68,10 @@ function ProfileFormSkeleton() {
  * (firstName/middleName/lastName/suffix): editable pre-linkage since there's no staff-owned
  * Borrower record yet to defer to, locked afterward exactly as before.
  */
-export function ProfilePage() {
+/** The reusable form content, with no page chrome of its own - used both by the full-page
+ * `ProfilePage` route (direct-link/bookmark entry point) and by `PortalDialogHost` when opened as
+ * a dialog (2026-07-31 user request) from the header nav or Dashboard. */
+export function ProfileForm() {
   const { account } = useAuth();
   const isLinked = Boolean(account?.borrowerId);
 
@@ -157,18 +160,14 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <PortalHeader />
+    <>
+      <p className="text-sm text-muted-foreground">
+        {isLinked
+          ? 'This is the same client record Easycash staff sees - you can update your contact info here.'
+          : "Personalize your profile now, or fill it in later when you apply for a loan."}
+      </p>
 
-      <main className="container max-w-3xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {isLinked
-            ? 'This is the same client record Easycash staff sees - you can update your contact info here.'
-            : "Personalize your profile now, or fill it in later when you apply for a loan."}
-        </p>
-
-        {state === 'loading' && <ProfileFormSkeleton />}
+      {state === 'loading' && <ProfileFormSkeleton />}
 
         {state === 'error' && (
           <Alert tone="error" className="mt-8">
@@ -311,6 +310,21 @@ export function ProfilePage() {
             </Card>
           </form>
         )}
+    </>
+  );
+}
+
+/** Full-page route wrapper (direct-link/bookmark entry point) - the everyday in-app flow now opens
+ * `ProfileForm` inside a Dialog instead (see PortalDialogHost). */
+export function ProfilePage() {
+  return (
+    <div className="min-h-screen bg-secondary/30">
+      <PortalHeader />
+      <main className="container max-w-3xl py-10">
+        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
+        <div className="mt-8">
+          <ProfileForm />
+        </div>
       </main>
     </div>
   );

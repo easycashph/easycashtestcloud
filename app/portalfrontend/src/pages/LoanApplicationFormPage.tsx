@@ -11,7 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Dialog } from '@/components/ui/Dialog';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
-import { DOCUMENT_LABELS, DOCUMENT_SLOTS } from '@/lib/loanRequirements';
+import { DOCUMENT_LABELS, DOCUMENT_SLOTS, type UploadableDocumentCategory } from '@/lib/loanRequirements';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { NumberInput } from '@/components/NumberInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
@@ -26,6 +26,7 @@ import type {
   PortalProfile,
   SubmitLoanApplicationRequest,
   UpdatePortalProfileRequest,
+  UploadedDocument,
 } from '@/lib/portalApiTypes';
 
 const LOAN_CATEGORIES = LOAN_PRODUCTS.map((p) => p.category);
@@ -320,6 +321,23 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
   return next;
 }
 
+/** 2026-07-31 (user request): the "Other" slot's idle-state hint explains its dual purpose - a
+ * home for supporting documents that don't fit any specific category, and the place to re-upload
+ * a corrected replacement for something already uploaded wrong (name the file so it's clear it's
+ * a correction, e.g. "Valid ID - corrected"). */
+function documentSlotHint(
+  category: UploadableDocumentCategory,
+  status: 'idle' | 'uploading' | 'done' | 'error' | undefined,
+): string {
+  if (status === 'done') return 'Uploaded';
+  if (status === 'uploading') return 'Uploading…';
+  if (status === 'error') return 'Upload failed - try again';
+  if (category === 'OTHER_SUPPORTING_DOCUMENT') {
+    return 'For any other supporting document, or to re-upload a corrected file if something above was uploaded wrong - PDF, JPEG, or PNG, up to 10 MB';
+  }
+  return 'PDF, JPEG, or PNG, up to 10 MB';
+}
+
 function computeAge(birthDate: string): number | null {
   if (!birthDate) return null;
   const dob = new Date(birthDate);
@@ -357,11 +375,38 @@ function getBestEffortGeolocation(): Promise<{ latitude: number; longitude: numb
  * freshly-created record. */
 const EDITABLE_STATUSES = new Set(['PREAPPROVED', 'PREDECLINED']);
 
-export function LoanApplicationFormPage() {
+/** Strips the full-page chrome (min-h-screen background, container width) when rendered inside a
+ * Dialog - the Dialog already supplies its own box/scroll/padding. */
+function PageShell({ embedded, children }: { embedded: boolean; children: React.ReactNode }) {
+  if (embedded) return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-secondary/30 py-10">
+      <div className="container max-w-2xl">{children}</div>
+    </div>
+  );
+}
+
+/** 2026-07-31 (user request): when opened as a Dialog (edit-only - see PortalDialogHost), the
+ * caller supplies the application id and a close handler directly instead of this reading them
+ * off the route (`/apply/:id` still works standalone for direct links/bookmarks). Only editing is
+ * ever embedded - a brand-new application is a longer, deliberate multi-step flow (Terms &amp;
+ * Consent, geolocation capture) that stays a full page. */
+interface LoanApplicationFormPageProps {
+  embeddedEditId?: string;
+  onEmbeddedClose?: () => void;
+}
+
+export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: LoanApplicationFormPageProps = {}) {
   const navigate = useNavigate();
-  const { id: editId } = useParams<{ id?: string }>();
+  const { id: routeEditId } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
+  const editId = embeddedEditId ?? routeEditId;
+  const isEmbedded = Boolean(embeddedEditId);
   const isEditMode = Boolean(editId);
+  const goToDashboard = () => {
+    if (isEmbedded) onEmbeddedClose?.();
+    else navigate('/dashboard');
+  };
   const [branches, setBranches] = React.useState<PortalBranch[]>([]);
   // Pre-selects the product when arriving from LoanProductsPage's "Apply Now" (?category=...) -
   // only honored if it's a real, currently-offered category, never trusted blindly from the URL.
@@ -403,6 +448,25 @@ export function LoanApplicationFormPage() {
         setEditState('ready');
       })
       .catch(() => setEditState('error'));
+  }, [editId]);
+
+  // 2026-07-31 (user request): while the form is still editable, an applicant can come back to
+  // finish uploading documents they skipped at submission - prefill which slots are already
+  // uploaded so re-visiting doesn't show them as empty.
+  React.useEffect(() => {
+    if (!editId) return;
+    apiClient
+      .get<UploadedDocument[]>(`/portal/loan-applications/${editId}/documents`)
+      .then((documents) => {
+        setUploadState((prev) => {
+          const next = { ...prev };
+          for (const doc of documents) {
+            if (doc.documentCategory) next[doc.documentCategory] = 'done';
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
   }, [editId]);
 
   // 2026-07-31 (user request): a brand-new application prefills from My Profile if the applicant
@@ -563,10 +627,11 @@ export function LoanApplicationFormPage() {
   };
 
   const handleUpload = async (category: PortalDocumentCategory, file: File | undefined) => {
-    if (!file || !submitted) return;
+    const applicationId = submitted?.id ?? editId;
+    if (!file || !applicationId) return;
     setUploadState((prev) => ({ ...prev, [category]: 'uploading' }));
     try {
-      await apiClient.postFile(`/portal/loan-applications/${submitted.id}/documents`, file, { documentCategory: category });
+      await apiClient.postFile(`/portal/loan-applications/${applicationId}/documents`, file, { documentCategory: category });
       setUploadState((prev) => ({ ...prev, [category]: 'done' }));
     } catch {
       setUploadState((prev) => ({ ...prev, [category]: 'error' }));
@@ -575,111 +640,102 @@ export function LoanApplicationFormPage() {
 
   if (isEditMode && editState === 'loading') {
     return (
-      <div className="min-h-screen bg-secondary/30 py-10">
-        <div className="container max-w-2xl">
-          <Card className="p-8 text-center text-sm text-muted-foreground">Loading your application…</Card>
-        </div>
-      </div>
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8 text-center text-sm text-muted-foreground">Loading your application…</Card>
+      </PageShell>
     );
   }
 
   if (isEditMode && editState === 'not-editable') {
     return (
-      <div className="min-h-screen bg-secondary/30 py-10">
-        <div className="container max-w-2xl">
-          <Card className="p-8">
-            <Alert>This application can no longer be edited - it's already under review or has been decided.</Alert>
-            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
-              Go to Dashboard
-            </Button>
-          </Card>
-        </div>
-      </div>
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8">
+          <Alert>This application can no longer be edited - it's already under review or has been decided.</Alert>
+          <Button className="mt-6 w-full" onClick={goToDashboard}>
+            Go to Dashboard
+          </Button>
+        </Card>
+      </PageShell>
     );
   }
 
   if (isEditMode && editState === 'error') {
     return (
-      <div className="min-h-screen bg-secondary/30 py-10">
-        <div className="container max-w-2xl">
-          <Card className="p-8">
-            <Alert>Could not load this application. It may not exist, or may belong to a different account.</Alert>
-            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
-              Go to Dashboard
-            </Button>
-          </Card>
-        </div>
-      </div>
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8">
+          <Alert>Could not load this application. It may not exist, or may belong to a different account.</Alert>
+          <Button className="mt-6 w-full" onClick={goToDashboard}>
+            Go to Dashboard
+          </Button>
+        </Card>
+      </PageShell>
     );
   }
 
   if (isEditMode && editSaved) {
     return (
-      <div className="min-h-screen bg-secondary/30 py-10">
-        <div className="container max-w-2xl">
-          <Card className="p-8">
-            <Alert tone="success">Your changes were saved.</Alert>
-            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
-              Go to Dashboard
-            </Button>
-          </Card>
-        </div>
-      </div>
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8">
+          <Alert tone="success">Your changes were saved.</Alert>
+          <Button className="mt-6 w-full" onClick={goToDashboard}>
+            Go to Dashboard
+          </Button>
+        </Card>
+      </PageShell>
     );
   }
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-secondary/30 py-10">
-        <div className="container max-w-2xl">
-          <Card className="p-8">
-            <Alert tone="success">Your loan application was submitted. We'll review it and notify you of any updates.</Alert>
-            <h1 className="mt-6 text-lg font-bold tracking-tight">10. Applicant Documents (optional)</h1>
-            <p className="mt-1 text-sm text-muted-foreground">You can also do this later - our staff may reach out for requirements too.</p>
-            <div className="mt-5 space-y-4">
-              {visibleDocumentSlots.map((slot) => (
-                <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
-                  <div>
-                    <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {uploadState[slot.category] === 'done'
-                        ? 'Uploaded'
-                        : uploadState[slot.category] === 'uploading'
-                          ? 'Uploading…'
-                          : uploadState[slot.category] === 'error'
-                            ? 'Upload failed - try again'
-                            : 'PDF, JPEG, or PNG, up to 10 MB'}
-                    </p>
-                  </div>
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/jpeg,image/png"
-                    className="w-auto"
-                    disabled={uploadState[slot.category] === 'uploading' || uploadState[slot.category] === 'done'}
-                    onChange={(e) => handleUpload(slot.category, e.target.files?.[0])}
-                  />
+      <PageShell embedded={isEmbedded}>
+        <Card className="p-8">
+          <Alert tone="success">Your loan application was submitted. We'll review it and notify you of any updates.</Alert>
+          <h1 className="mt-6 text-lg font-bold tracking-tight">10. Applicant Documents</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You can skip this for now and submit your application - come back anytime while it's still editable to finish uploading, or our
+            staff may reach out for requirements too.
+          </p>
+          <div className="mt-5 space-y-4">
+            {visibleDocumentSlots.map((slot) => (
+              <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                <div>
+                  <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
+                  <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
                 </div>
-              ))}
-            </div>
-            <Button className="mt-6 w-full" onClick={() => navigate('/dashboard')}>
-              Go to Dashboard
-            </Button>
-          </Card>
-        </div>
-      </div>
+                <Input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  className="w-auto"
+                  disabled={uploadState[slot.category] === 'uploading' || uploadState[slot.category] === 'done'}
+                  onChange={(e) => handleUpload(slot.category, e.target.files?.[0])}
+                />
+              </div>
+            ))}
+          </div>
+          <Button className="mt-6 w-full" onClick={goToDashboard}>
+            Go to Dashboard
+          </Button>
+        </Card>
+      </PageShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30 py-10">
-      <div className="container max-w-2xl">
-        <Link to="/dashboard" className="mb-6 flex items-center gap-2.5">
-          <img src="./logo-easycash.png" alt="Easycash" className="h-8 w-8 rounded-lg object-contain" />
-          <span className="text-base font-bold tracking-tight">Easycash Portal</span>
-        </Link>
+    <PageShell embedded={isEmbedded}>
+      <>
+        {!isEmbedded && (
+          <Link to="/dashboard" className="mb-6 flex items-center gap-2.5">
+            <img src="./logo-easycash.png" alt="Easycash" className="h-8 w-8 rounded-lg object-contain" />
+            <span className="text-base font-bold tracking-tight">Easycash Portal</span>
+          </Link>
+        )}
         <Card className="p-8">
-          <h1 className="text-xl font-bold tracking-tight">{isEditMode ? 'Edit Loan Application' : 'Loan Application'}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Fields marked * are required. Everything else can be filled in during review.</p>
+          {!isEmbedded && (
+            <>
+              <h1 className="text-xl font-bold tracking-tight">{isEditMode ? 'Edit Loan Application' : 'Loan Application'}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">Fields marked * are required. Everything else can be filled in during review.</p>
+            </>
+          )}
 
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
             {error && <Alert>{error}</Alert>}
@@ -958,6 +1014,28 @@ export function LoanApplicationFormPage() {
               <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Optional" />
             </SectionCard>
 
+            {isEditMode && (
+              <SectionCard number="10" title="Applicant Documents" description="Upload any requirements you skipped earlier - you can still come back later while this application remains editable.">
+                <div className="space-y-4">
+                  {visibleDocumentSlots.map((slot) => (
+                    <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                      <div>
+                        <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
+                        <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
+                      </div>
+                      <Input
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        className="w-auto"
+                        disabled={uploadState[slot.category] === 'uploading' || uploadState[slot.category] === 'done'}
+                        onChange={(e) => handleUpload(slot.category, e.target.files?.[0])}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
             {!isEditMode && (
               <SectionCard number="10" title="Terms &amp; Consent">
                 <label className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm">
@@ -1003,14 +1081,14 @@ export function LoanApplicationFormPage() {
             </Button>
           </form>
         </Card>
-      </div>
 
-      <Dialog open={showTerms} onClose={() => setShowTerms(false)} title="Terms and Conditions">
-        <TermsContent />
-      </Dialog>
-      <Dialog open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Data Privacy Statement and Consent Form">
-        <PrivacyContent />
-      </Dialog>
-    </div>
+        <Dialog open={showTerms} onClose={() => setShowTerms(false)} title="Terms and Conditions">
+          <TermsContent />
+        </Dialog>
+        <Dialog open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Data Privacy Statement and Consent Form">
+          <PrivacyContent />
+        </Dialog>
+      </>
+    </PageShell>
   );
 }

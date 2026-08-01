@@ -421,7 +421,7 @@ function TwoFactorAuthCard() {
                   Codes are sent via {me.twoFactorChannel === 'EMAIL' ? 'email' : 'SMS'} on every sign-in.
                 </p>
               </div>
-              <Badge variant="success">On</Badge>
+              <Switch checked={true} onCheckedChange={() => setShowDisableForm(true)} aria-label="Turn off two-factor authentication" />
             </div>
 
             {showDisableForm ? (
@@ -470,7 +470,12 @@ function TwoFactorAuthCard() {
                 <p className="text-sm font-medium">Disabled</p>
                 <p className="text-xs text-muted-foreground">Your account only requires a password to sign in.</p>
               </div>
-              <Badge variant="outline">Off</Badge>
+              <Switch
+                checked={false}
+                disabled={requestSetupMutation.isPending}
+                onCheckedChange={() => requestSetupMutation.mutate()}
+                aria-label="Turn on two-factor authentication"
+              />
             </div>
 
             {!challengeId ? (

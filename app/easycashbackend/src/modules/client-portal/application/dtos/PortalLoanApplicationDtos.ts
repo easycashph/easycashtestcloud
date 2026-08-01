@@ -73,6 +73,10 @@ export interface PortalLoanApplicationSummary {
   requestedAmount: number;
   requestedTermMonths: number;
   createdAt: Date;
+  /** 2026-07-31 (user request): true once every required document for this product (see
+   * requiredDocumentCategories.ts) has been attached - backs the Portal dashboard's
+   * missing-documents indicator. */
+  documentsComplete: boolean;
 }
 
 export interface PortalBranchSummary {

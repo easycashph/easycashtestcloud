@@ -9,7 +9,8 @@ import { estimateMonthlyPayment, estimateTotalRepayment } from '@/lib/loanEstima
 const AMOUNT_MIN = 5_000;
 const AMOUNT_MAX = 200_000;
 const AMOUNT_STEP = 5_000;
-const TERM_OPTIONS = [3, 6, 9, 12, 18, 24];
+const TERM_MIN = 1;
+const TERM_MAX = 24;
 
 function peso(value: number): string {
   return `₱${Math.round(value).toLocaleString()}`;
@@ -23,9 +24,17 @@ function peso(value: number): string {
  * inventing a number - the eligibility widget next to this one drew that exact line for the same
  * reason (see EligibilityCheckWidget's doc comment: never fabricate a business rule).
  *
- * The slider/term bounds below (₱5,000-200,000, 3-24 months) are calculator UI convenience only -
+ * The slider/term bounds below (₱5,000-200,000, 1-24 months) are calculator UI convenience only -
  * never presented as Easycash's official minimum/maximum loan amount or term, which aren't
  * published anywhere this codebase has verified.
+ *
+ * 2026-07-31 (user request/analysis): the REAL contractual rate actually used at loan booking
+ * comes from the `interest_rate_chart` table (add-on rate × term -> a per-term contractual rate,
+ * see backend's interest-rate-chart module) and from each `LoanProductVersion`'s own assigned
+ * add-on rate - both vary per product AND per term length, unlike this widget's single flat 3%/
+ * month approximation. That real chart isn't safe to fold into a public marketing widget (it needs
+ * a specific product's assigned rate, which a not-yet-applying visitor hasn't chosen), so this
+ * stays a simplified estimate - the disclaimer below says so explicitly.
  */
 export function LoanCalculatorWidget() {
   const { t } = useLanguage();
@@ -100,17 +109,16 @@ export function LoanCalculatorWidget() {
           <input
             id="calc-term"
             type="range"
-            min={0}
-            max={TERM_OPTIONS.length - 1}
+            min={TERM_MIN}
+            max={TERM_MAX}
             step={1}
-            value={TERM_OPTIONS.indexOf(termMonths)}
-            onChange={(e) => setTermMonths(TERM_OPTIONS[Number(e.target.value)])}
+            value={termMonths}
+            onChange={(e) => setTermMonths(Number(e.target.value))}
             className="mt-2 w-full accent-primary"
           />
           <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-            {TERM_OPTIONS.map((term) => (
-              <span key={term}>{term}</span>
-            ))}
+            <span>{TERM_MIN} month</span>
+            <span>{TERM_MAX} months</span>
           </div>
         </div>
       </div>

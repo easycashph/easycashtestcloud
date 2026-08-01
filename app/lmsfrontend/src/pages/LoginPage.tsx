@@ -12,7 +12,9 @@ import type { LoginResponse } from '@/lib/authTypes';
 interface LoginPageProps {
   onLogin: (email: string, password: string) => Promise<LoginResponse>;
   /** Settings > Security > Two-Factor Authentication (2026-07-22). `rememberDevice` (2026-07-30
-   * user request) - the checkbox on this page's OTP step. */
+   * user request, moved to the initial login screen 2026-07-31) - only takes effect once a 2FA
+   * challenge is actually triggered, but shown upfront so it isn't hidden behind a screen most
+   * logins never reach. */
   onVerifyOtp: (challengeId: string, code: string, rememberDevice: boolean) => Promise<void>;
 }
 
@@ -192,16 +194,6 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={rememberDevice}
-                  onChange={(e) => setRememberDevice(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border accent-primary"
-                />
-                Remember this device for 30 days
-              </label>
-
               {error && <ErrorBanner message={error} />}
 
               <Button type="submit" className="w-full" disabled={submitting}>
@@ -342,6 +334,16 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
                   required
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => setRememberDevice(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-primary"
+                />
+                Remember this device for 30 days
+              </label>
 
               {error && <ErrorBanner message={error} />}
 

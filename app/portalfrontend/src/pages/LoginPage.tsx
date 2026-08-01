@@ -145,15 +145,6 @@ export function LoginPage() {
               placeholder="000000"
             />
           </div>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={rememberDevice}
-              onChange={(e) => setRememberDevice(e.target.checked)}
-              className="h-4 w-4 rounded border-border accent-primary"
-            />
-            Remember this device for 30 days
-          </label>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? 'Verifying…' : 'Verify'}
           </Button>
@@ -200,6 +191,15 @@ export function LoginPage() {
           </div>
           <PasswordInput id="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={rememberDevice}
+            onChange={(e) => setRememberDevice(e.target.checked)}
+            className="h-4 w-4 rounded border-border accent-primary"
+          />
+          Remember this device for 30 days
+        </label>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? 'Logging in…' : 'Log In'}
         </Button>

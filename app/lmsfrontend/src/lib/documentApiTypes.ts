@@ -11,7 +11,8 @@ export type AttachmentDocumentCategory =
   | 'BUSINESS_CLEARANCE'
   | 'CORPORATE_PAYSLIP'
   | 'SEAMANS_BOOK'
-  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE';
+  | 'OVERSEAS_EMPLOYMENT_CERTIFICATE'
+  | 'OTHER_SUPPORTING_DOCUMENT';
 
 /** Single source of truth for how each category reads in the UI - reused by the Loan Application
  * create form's upload slots and by `AttachmentsPanel`'s display. */
@@ -25,6 +26,7 @@ export const DOCUMENT_CATEGORY_LABELS: Record<AttachmentDocumentCategory, string
   CORPORATE_PAYSLIP: 'Corporate payslip',
   SEAMANS_BOOK: "Seaman's book",
   OVERSEAS_EMPLOYMENT_CERTIFICATE: 'Overseas Employment Certificate',
+  OTHER_SUPPORTING_DOCUMENT: 'Other',
 };
 
 export interface Attachment {
