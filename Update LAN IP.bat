@@ -16,6 +16,11 @@ echo tumatakbo ang Docker, ide-detect ang bagong LAN IP,
 echo ia-update ang config, ire-rebuild ang Docker, at
 echo bubuksan sa browser.
 echo.
+echo Hindi ito magbabago/magbubura ng Cloudflare Pages entries
+echo (easycash-lms.pages.dev, easycash-portal.pages.dev) sa
+echo CORS_ORIGIN - ang LAN IP entry lang ang ia-update, kaya
+echo pareho pa ring gagana ang Cloudflare access pagkatapos.
+echo.
 
 echo [1/5] Chinicheck kung tumatakbo ang Docker Desktop...
 docker info >nul 2>&1
@@ -73,21 +78,22 @@ if "%NEW_IP%"=="" (
 echo       Nahanap: %NEW_IP%
 echo.
 
-echo [3/5] Ina-update ang app\easycashbackend\.env at app\lmsfrontend\.env...
-REM 2026-08-01: CORS_ORIGIN can carry more than just the LAN entry now (e.g. the
-REM https://easycash-lms.pages.dev / https://easycash-portal.pages.dev origins for the
-REM Cloudflare Pages-hosted sites) - a blind whole-line replace used to wipe those out on every
-REM LAN IP change. Instead: drop only the old LAN-IP-shaped entries (private ranges, port 5173),
-REM keep everything else untouched, then add the new LAN IP.
+echo [3/5] Ina-update ang LAN IP sa app\easycashbackend\.env at
+echo       app\lmsfrontend\.env - iniiwan ang Cloudflare Pages
+echo       entries sa CORS_ORIGIN...
 powershell -NoProfile -Command ^
-  "$lines = Get-Content '%BACKEND_ENV%';" ^
-  "$corsLine = $lines | Where-Object { $_ -match '^CORS_ORIGIN=' } | Select-Object -First 1;" ^
-  "$current = if ($corsLine) { $corsLine -replace '^CORS_ORIGIN=', '' } else { '' };" ^
-  "$origins = $current -split ',' | Where-Object { $_ -and ($_ -notmatch '^https?://(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)[0-9]+\.[0-9]+:5173$') };" ^
-  "$origins = @($origins) + @('http://%NEW_IP%:5173') | Select-Object -Unique;" ^
-  "$newCors = 'CORS_ORIGIN=' + ($origins -join ',');" ^
-  "(Get-Content '%BACKEND_ENV%') -replace '^CORS_ORIGIN=.*', $newCors | Set-Content '%BACKEND_ENV%';" ^
-  "(Get-Content '%FRONTEND_ENV%') -replace '^VITE_API_BASE_URL=.*', 'VITE_API_BASE_URL=http://%NEW_IP%:4000/api/v1' | Set-Content '%FRONTEND_ENV%';"
+  "$newIp = '%NEW_IP%';" ^
+  "$backendEnv = '%BACKEND_ENV%';" ^
+  "$content = Get-Content $backendEnv;" ^
+  "$corsLine = $content | Where-Object { $_ -match '^CORS_ORIGIN=' } | Select-Object -First 1;" ^
+  "$origins = ($corsLine -replace '^CORS_ORIGIN=', '') -split ',';" ^
+  "$lanPattern = '^http://\d+\.\d+\.\d+\.\d+:5173$';" ^
+  "$hadLan = $false;" ^
+  "$newOrigins = foreach ($o in $origins) { if ($o -match $lanPattern) { $hadLan = $true; \"http://$newIp`:5173\" } else { $o } };" ^
+  "if (-not $hadLan) { $newOrigins = @(\"http://$newIp`:5173\") + $newOrigins };" ^
+  "$newLine = 'CORS_ORIGIN=' + ($newOrigins -join ',');" ^
+  "($content -replace '^CORS_ORIGIN=.*', $newLine) | Set-Content $backendEnv;" ^
+  "(Get-Content '%FRONTEND_ENV%') -replace '^VITE_API_BASE_URL=.*', \"VITE_API_BASE_URL=http://$newIp`:4000/api/v1\" | Set-Content '%FRONTEND_ENV%';"
 
 echo       Tapos na i-update ang config files.
 echo.
@@ -97,8 +103,6 @@ echo       Ire-rebuild lang ang frontend ^(kailangan - naka-bake ang IP sa
 echo       loob ng bundle nito^). Ire-restart lang ang backend, walang
 echo       rebuild - basta CORS_ORIGIN lang naman ang nagbabago, at
 echo       binabasa iyon habang tumatakbo, hindi habang nagbi-build.
-echo       ^(Mas mabilis ngayon - nalaktawan na ang backend's mabigat na
-echo       LibreOffice/npm rebuild, na hindi naman kailangan dito.^)
 pushd "%DOCKER_DIR%"
 docker compose up -d --build lmsfrontend
 if errorlevel 1 (

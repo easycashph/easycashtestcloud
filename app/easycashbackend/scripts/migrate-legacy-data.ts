@@ -401,7 +401,24 @@ async function migrateLoanAccounts(
   // real records each (different uid/creationDate — a renewal-style reuse pattern, not a data
   // error), but `LoanAccount.loanCode` is `@unique`. Both records are real financial history and
   // must both migrate — the second occurrence gets a `-LEGACY2` suffix so neither is dropped.
+  //
+  // 2026-08-01 bug fix: this map used to start empty on every run, so it only knew about reused
+  // codes it had itself seen THIS run. Fine for a single one-shot full migration, but this script
+  // is also re-run incrementally against newer legacy snapshots (idempotent upserts elsewhere in
+  // this file are designed for exactly that) — if occurrence #1 of a reused code was migrated in
+  // an earlier run and occurrence #2 only shows up in a later snapshot, this run would see it as
+  // "occurrence #1" too and collide on the unique loanCode constraint (P2002). Seed the map from
+  // every loanCode already in Postgres so usage counts survive across runs.
   const loanCodeUsageCount = new Map<string, number>();
+  if (APPLY) {
+    const existing = await prisma.loanAccount.findMany({ select: { loanCode: true } });
+    for (const { loanCode } of existing) {
+      const match = /^(.*)-LEGACY(\d+)$/.exec(loanCode);
+      const base = match ? match[1]! : loanCode;
+      const count = match ? Number(match[2]) : 1;
+      loanCodeUsageCount.set(base, Math.max(loanCodeUsageCount.get(base) ?? 0, count));
+    }
+  }
 
   const disbursementsByUid = indexBy(loadAll<any>('disbursements'), 'uid');
   const coBorrowersByClientId = groupBy(loadAll<any>('co_borrowers'), 'parent_key');
