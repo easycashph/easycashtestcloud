@@ -62,12 +62,14 @@ function FaqAccordion() {
  *
  * 2026-08-03 (user request): opening the widget no longer creates/activates a chat session by
  * itself - it only peeks at an existing one (GET /portal/chat/active, no side effect). A brand-new
- * visit shows an automated greeting + FAQ; the conversation only enters the real Waiting queue
- * once the client explicitly clicks "Request Loan Officer Support".
+ * visit shows an automated greeting + FAQ; clicking "Request Loan Officer Support" only opens a
+ * message composer - the conversation STILL isn't created yet at that point either (2026-08-03
+ * follow-up: a click with no message typed/sent must not flood the LMS Waiting queue). It's only
+ * created, and only then enters Waiting, the moment the client actually sends their first message.
  */
 export function PortalChatWidget() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [mode, setMode] = React.useState<'preChat' | 'chatting'>('preChat');
+  const [mode, setMode] = React.useState<'preChat' | 'composing' | 'chatting'>('preChat');
   const [conversation, setConversation] = React.useState<ChatConversation | null>(null);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [draft, setDraft] = React.useState('');
@@ -94,6 +96,9 @@ export function PortalChatWidget() {
       poll(conversation.id);
       return;
     }
+    // Already mid-composing a first message (nothing sent/created yet) - just reopen into that,
+    // no need to re-check the backend.
+    if (mode === 'composing') return;
     setIsLoading(true);
     apiClient
       .get<ChatConversation | null>('/portal/chat/active')
@@ -110,17 +115,36 @@ export function PortalChatWidget() {
       .finally(() => setIsLoading(false));
   };
 
+  /** Just opens the composer - deliberately does NOT call /portal/chat/start yet (see the
+   * component's own doc comment). */
   const handleRequestSupport = () => {
-    setIsLoading(true);
-    apiClient
-      .post<ChatConversation>('/portal/chat/start', undefined, true)
-      .then((started) => {
-        setConversation(started);
-        setMode('chatting');
-        poll(started.id);
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+    setMode('composing');
+  };
+
+  /** The actual moment a conversation gets created and enters the real Waiting queue - only once
+   * the client has typed/attached something and hit Send. */
+  const handleComposeSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if ((!draft.trim() && !file) || isSending) return;
+    setIsSending(true);
+    try {
+      const started = await apiClient.post<ChatConversation>('/portal/chat/start', undefined, true);
+      if (file) {
+        await apiClient.postFile(`/portal/chat/${started.id}/messages`, file, { body: draft.trim() });
+      } else {
+        await apiClient.post(`/portal/chat/${started.id}/messages`, { body: draft.trim() }, true);
+      }
+      setDraft('');
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setConversation(started);
+      setMode('chatting');
+      poll(started.id);
+    } catch {
+      // Best-effort - the composer stays open so they can just try Send again.
+    } finally {
+      setIsSending(false);
+    }
   };
 
   React.useEffect(() => {
@@ -173,7 +197,13 @@ export function PortalChatWidget() {
         <div>
           <p className="text-sm font-semibold">Chat with Easycash</p>
           <p className="text-xs text-muted-foreground">
-            {mode === 'preChat' ? 'Automated assistant' : conversation ? statusLabel(conversation) : 'Starting…'}
+            {mode === 'preChat'
+              ? 'Automated assistant'
+              : mode === 'composing'
+                ? 'Type your message to reach a loan officer'
+                : conversation
+                  ? statusLabel(conversation)
+                  : 'Starting…'}
           </p>
         </div>
         <button type="button" onClick={() => setIsOpen(false)} aria-label="Close chat" className="rounded-md p-1 text-muted-foreground hover:bg-secondary">
@@ -200,6 +230,45 @@ export function PortalChatWidget() {
             </>
           )}
         </div>
+      ) : mode === 'composing' ? (
+        <>
+          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            <div className="flex justify-start">
+              <div className="max-w-[90%] rounded-2xl bg-secondary px-3 py-2 text-sm text-secondary-foreground">
+                Type your question or concern below and send it - a loan officer will be notified once you do.
+              </div>
+            </div>
+            <button type="button" onClick={() => setMode('preChat')} className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+              ← Back to FAQ
+            </button>
+          </div>
+          <form onSubmit={handleComposeSend} className="border-t border-border p-3">
+            {file && (
+              <p className="mb-2 flex items-center justify-between rounded-md bg-secondary px-2 py-1 text-xs">
+                <span className="truncate">{file.name}</span>
+                <button type="button" onClick={() => setFile(null)} className="ml-2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file">
+                <Paperclip className="h-4 w-4" />
+              </Button>
+              <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message…" className="flex-1" autoFocus />
+              <Button type="submit" size="sm" disabled={isSending || (!draft.trim() && !file)} aria-label="Send">
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </>
       ) : (
         <>
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
