@@ -510,17 +510,15 @@ export class PrismaReportingRepository implements IReportingRepository {
     return installments.map((installment) => {
       const loanSchedule = scheduleByLoanId.get(installment.loanAccountId) ?? [];
       const maturityDate = loanSchedule.length > 0 ? loanSchedule[loanSchedule.length - 1]!.dueDate : null;
+      // 2026-08-03 (user-confirmed business rule, via a SDevTech vs LMS report comparison):
+      // principal + interest shortfall only - deliberately excludes fees/penalty. Matches
+      // SDevTech's own "Past Due Amount" convention exactly (confirmed against 6 loans where the
+      // two disagreed): fees/penalty are tracked and collected separately, never folded into this
+      // figure. Previously included fees/penalty, which let an overpaid penalty on one installment
+      // silently cancel out a real unpaid principal/interest shortfall in the total.
       const pastDueAmount = loanSchedule
         .filter((i) => i.id !== installment.id && i.status !== 'PAID' && filter.from && i.dueDate < filter.from)
-        .reduce(
-          (sum, i) =>
-            sum +
-            Number(i.principalDue) - Number(i.principalPaid) +
-            (Number(i.interestDue) - Number(i.interestPaid)) +
-            (effectiveFees(i) - Number(i.feesPaid)) +
-            (effectivePenalty(i) - Number(i.penaltyPaid)),
-          0,
-        );
+        .reduce((sum, i) => sum + (Number(i.principalDue) - Number(i.principalPaid)) + (Number(i.interestDue) - Number(i.interestPaid)), 0);
 
       return {
         clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
