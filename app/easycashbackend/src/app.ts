@@ -42,12 +42,33 @@ import { ResendSignUpOtpUseCase } from '@modules/client-portal/application/use-c
 import { RequestEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/RequestEnablePortalTwoFactorUseCase';
 import { ConfirmEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/ConfirmEnablePortalTwoFactorUseCase';
 import { DisablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/DisablePortalTwoFactorUseCase';
+import { ListPortalTrustedDevicesUseCase } from '@modules/client-portal/application/use-cases/ListPortalTrustedDevicesUseCase';
+import { RevokePortalTrustedDeviceUseCase } from '@modules/client-portal/application/use-cases/RevokePortalTrustedDeviceUseCase';
 import { RequestPasswordResetUseCase } from '@modules/client-portal/application/use-cases/RequestPasswordResetUseCase';
 import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/use-cases/ConfirmPasswordResetUseCase';
 import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
 import { SubmitLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/SubmitLoanApplicationUseCase';
 import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationsUseCase';
 import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationUseCase';
+import { GetPortalLoanApplicationStatusTimelineUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
+import { createPortalLoanAccountRouter } from '@modules/client-portal/interface/http/portalLoanAccountRouter';
+import { ListPortalLoanAccountsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountsUseCase';
+import { ListPortalLoanAccountInstallmentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
+import { PrismaChatRepository } from '@modules/chat/infrastructure/PrismaChatRepository';
+import { StartOrResumePortalChatUseCase } from '@modules/chat/application/use-cases/StartOrResumePortalChatUseCase';
+import { GetPortalChatUseCase } from '@modules/chat/application/use-cases/GetPortalChatUseCase';
+import { SendPortalChatMessageUseCase } from '@modules/chat/application/use-cases/SendPortalChatMessageUseCase';
+import { createPortalChatRouter } from '@modules/chat/interface/http/portalChatRouter';
+import { ListChatQueueUseCase } from '@modules/chat/application/use-cases/ListChatQueueUseCase';
+import { ClaimChatConversationUseCase } from '@modules/chat/application/use-cases/ClaimChatConversationUseCase';
+import { TransferChatConversationToManagerUseCase } from '@modules/chat/application/use-cases/TransferChatConversationToManagerUseCase';
+import { SendStaffChatMessageUseCase } from '@modules/chat/application/use-cases/SendStaffChatMessageUseCase';
+import { CloseChatConversationUseCase } from '@modules/chat/application/use-cases/CloseChatConversationUseCase';
+import { ListMyClaimedChatConversationsUseCase } from '@modules/chat/application/use-cases/ListMyClaimedChatConversationsUseCase';
+import { GetChatConversationForStaffUseCase } from '@modules/chat/application/use-cases/GetChatConversationForStaffUseCase';
+import { DownloadPortalChatAttachmentUseCase } from '@modules/chat/application/use-cases/DownloadPortalChatAttachmentUseCase';
+import { DownloadChatAttachmentForStaffUseCase } from '@modules/chat/application/use-cases/DownloadChatAttachmentForStaffUseCase';
+import { createChatRouter } from '@modules/chat/interface/http/chatRouter';
 import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
@@ -1202,10 +1223,60 @@ export function createApp(): Express {
         attachmentRepository,
         fileStorage,
       }),
+      getPortalLoanApplicationStatusTimelineUseCase: new GetPortalLoanApplicationStatusTimelineUseCase({
+        loanApplicationRepository,
+        auditLogRepository: new PrismaAuditLogRepository(),
+      }),
     },
     portalTokenService,
   );
   app.use('/api/v1/portal', portalLoanApplicationRouter);
+
+  // Payment history / amortization schedule for a linked client's real, booked loan account(s)
+  // (2026-07-31 user request) - reuses the same loanAccountRepository/repaymentInstallmentRepository
+  // instances the staff-facing loan-account module already wires above.
+  const portalLoanAccountRouter = createPortalLoanAccountRouter(
+    {
+      listPortalLoanAccountsUseCase: new ListPortalLoanAccountsUseCase({ portalAccountRepository, loanAccountRepository }),
+      listPortalLoanAccountInstallmentsUseCase: new ListPortalLoanAccountInstallmentsUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+      }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalLoanAccountRouter);
+
+  // Portal<->LMS support chat (2026-07-31 user request) - one shared repository, two separate
+  // routers (Portal client side vs. LMS staff side), since the two auth realms and permission
+  // models are genuinely different, matching every other cross-realm feature in this codebase.
+  const chatRepository = new PrismaChatRepository();
+  const portalChatRouter = createPortalChatRouter(
+    {
+      startOrResumePortalChatUseCase: new StartOrResumePortalChatUseCase({ chatRepository }),
+      getPortalChatUseCase: new GetPortalChatUseCase({ chatRepository }),
+      sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
+      downloadPortalChatAttachmentUseCase: new DownloadPortalChatAttachmentUseCase({ chatRepository, attachmentRepository, fileStorage }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalChatRouter);
+
+  const chatRouter = createChatRouter(
+    {
+      listChatQueueUseCase: new ListChatQueueUseCase({ userRepository, chatRepository }),
+      listMyClaimedChatConversationsUseCase: new ListMyClaimedChatConversationsUseCase({ chatRepository }),
+      getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository }),
+      claimChatConversationUseCase: new ClaimChatConversationUseCase({ userRepository, chatRepository }),
+      transferChatConversationToManagerUseCase: new TransferChatConversationToManagerUseCase({ userRepository, chatRepository }),
+      sendStaffChatMessageUseCase: new SendStaffChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
+      closeChatConversationUseCase: new CloseChatConversationUseCase({ userRepository, chatRepository }),
+      downloadChatAttachmentForStaffUseCase: new DownloadChatAttachmentForStaffUseCase({ userRepository, chatRepository, attachmentRepository, fileStorage }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', chatRouter);
 
   // Easycash Portal Notification Center, Phase C (2026-07-24): bell notifications for Approved/
   // Declined decisions, mounted at the same /api/v1/portal prefix.
@@ -1252,6 +1323,8 @@ export function createApp(): Express {
       }),
       confirmEnablePortalTwoFactorUseCase: new ConfirmEnablePortalTwoFactorUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
       disablePortalTwoFactorUseCase: new DisablePortalTwoFactorUseCase({ portalAccountRepository, passwordHasher }),
+      listPortalTrustedDevicesUseCase: new ListPortalTrustedDevicesUseCase({ portalTrustedDeviceRepository }),
+      revokePortalTrustedDeviceUseCase: new RevokePortalTrustedDeviceUseCase({ portalTrustedDeviceRepository }),
     },
     portalTokenService,
   );

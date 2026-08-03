@@ -9,6 +9,7 @@ import type { ListPortalBranchesUseCase } from '../../application/use-cases/List
 import type { UploadPortalLoanApplicationDocumentUseCase } from '../../application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
 import type { ListPortalLoanApplicationDocumentsUseCase } from '../../application/use-cases/ListPortalLoanApplicationDocumentsUseCase';
 import type { DownloadPortalLoanApplicationDocumentUseCase } from '../../application/use-cases/DownloadPortalLoanApplicationDocumentUseCase';
+import type { GetPortalLoanApplicationStatusTimelineUseCase } from '../../application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   SubmitLoanApplicationRequestBody,
@@ -26,6 +27,7 @@ export interface PortalLoanApplicationControllerDeps {
   uploadPortalLoanApplicationDocumentUseCase: UploadPortalLoanApplicationDocumentUseCase;
   listPortalLoanApplicationDocumentsUseCase: ListPortalLoanApplicationDocumentsUseCase;
   downloadPortalLoanApplicationDocumentUseCase: DownloadPortalLoanApplicationDocumentUseCase;
+  getPortalLoanApplicationStatusTimelineUseCase: GetPortalLoanApplicationStatusTimelineUseCase;
 }
 
 /** The full self-service-editable shape - same field set updateSelfServiceIntake() accepts, plus
@@ -180,6 +182,16 @@ export class PortalLoanApplicationController {
       const account = getCurrentPortalAccount(req);
       const attachments = await this.deps.listPortalLoanApplicationDocumentsUseCase.execute(account.sub, req.params.id as string);
       res.status(200).json(attachments.map((a) => ({ id: a.id, fileName: a.fileName, documentCategory: a.documentCategory })));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStatusTimeline = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const timeline = await this.deps.getPortalLoanApplicationStatusTimelineUseCase.execute(account.sub, req.params.id as string);
+      res.status(200).json(timeline);
     } catch (error) {
       next(error);
     }

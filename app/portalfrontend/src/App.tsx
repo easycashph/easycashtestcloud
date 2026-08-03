@@ -7,6 +7,7 @@ import { PortalDialogProvider } from '@/lib/portalDialogContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PortalDialogHost } from '@/components/PortalDialogHost';
+import { PortalChatWidget } from '@/components/PortalChatWidget';
 import { LandingPage } from '@/pages/LandingPage';
 
 /** The landing page is imported eagerly (above) because it is the entry point for almost every
@@ -44,6 +45,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
+}
+
+/** Only shown once logged in - a visitor who hasn't signed up yet has no account for a loan
+ * officer to chat with. */
+function AuthenticatedChatWidget() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return null;
+  return <PortalChatWidget />;
 }
 
 function AppRoutes() {
@@ -176,6 +185,7 @@ export default function App() {
                 <React.Suspense fallback={null}>
                   <PortalDialogHost />
                 </React.Suspense>
+                <AuthenticatedChatWidget />
               </PortalDialogProvider>
             </AuthProvider>
           </LanguageProvider>

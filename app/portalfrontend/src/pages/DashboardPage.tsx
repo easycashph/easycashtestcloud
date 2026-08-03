@@ -8,10 +8,11 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
+import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
-import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary } from '@/lib/portalApiTypes';
+import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary, PortalLoanApplicationTimelineEntry } from '@/lib/portalApiTypes';
 
 const STATUS_LABELS: Record<PortalLoanApplicationSummary['status'], string> = {
   PREAPPROVED: 'Pre-approved',
@@ -85,6 +86,35 @@ function ApplicationDetailSkeleton() {
   );
 }
 
+/** 2026-07-31 (user request, "top reputable lending site" checklist) - a real status timeline,
+ * built only from actual recorded events (see backend's
+ * GetPortalLoanApplicationStatusTimelineUseCase). Renders nothing while still loading (`null`) so
+ * it never flashes an empty state before the fetch resolves. */
+function StatusTimeline({ entries }: { entries: PortalLoanApplicationTimelineEntry[] | null }) {
+  if (!entries || entries.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <h3 className="text-sm font-semibold">Status Timeline</h3>
+      <ol className="mt-3 space-y-3">
+        {entries.map((entry, index) => (
+          <li key={`${entry.label}-${entry.occurredAt}`} className="flex items-start gap-3">
+            <div className="mt-1 flex flex-col items-center">
+              <span className={`h-2.5 w-2.5 rounded-full ${index === entries.length - 1 ? 'bg-primary' : 'bg-primary/40'}`} />
+              {index < entries.length - 1 && <span className="mt-1 h-full w-px flex-1 bg-border" />}
+            </div>
+            <div className="pb-1">
+              <p className="text-sm font-medium">{entry.label}</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(entry.occurredAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 /** Phase 2 (2026-07-23): "Create Loan Application" now routes to the real form, and this page
  * shows the client's own submitted applications and their current status. */
 export function DashboardPage() {
@@ -94,6 +124,7 @@ export function DashboardPage() {
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
   const [viewingApplicationId, setViewingApplicationId] = React.useState<string | null>(null);
   const [viewingDetail, setViewingDetail] = React.useState<PortalLoanApplicationDetail | null>(null);
+  const [viewingTimeline, setViewingTimeline] = React.useState<PortalLoanApplicationTimelineEntry[] | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
 
@@ -109,6 +140,7 @@ export function DashboardPage() {
   const openApplicationDetail = (applicationId: string) => {
     setViewingApplicationId(applicationId);
     setViewingDetail(null);
+    setViewingTimeline(null);
     setDetailError(null);
     setIsLoadingDetail(true);
     apiClient
@@ -116,6 +148,10 @@ export function DashboardPage() {
       .then(setViewingDetail)
       .catch(() => setDetailError('Unable to load this application right now.'))
       .finally(() => setIsLoadingDetail(false));
+    apiClient
+      .get<PortalLoanApplicationTimelineEntry[]>(`/portal/loan-applications/${applicationId}/status-timeline`)
+      .then(setViewingTimeline)
+      .catch(() => setViewingTimeline([]));
   };
 
   return (
@@ -162,6 +198,8 @@ export function DashboardPage() {
           </Card>
           </motion.div>
         </motion.div>
+
+        <PortalLoanAccountsSection />
 
         <motion.div initial="hidden" animate="show" variants={fadeUp}>
         <Card className="mt-5 p-6">
@@ -230,7 +268,12 @@ export function DashboardPage() {
       <Dialog open={viewingApplicationId !== null} onClose={() => setViewingApplicationId(null)} title="Loan Application">
         {isLoadingDetail && <ApplicationDetailSkeleton />}
         {detailError && <p className="text-sm text-destructive">{detailError}</p>}
-        {viewingDetail && <LoanApplicationDetailView detail={viewingDetail} />}
+        {viewingDetail && (
+          <div className="space-y-5">
+            <StatusTimeline entries={viewingTimeline} />
+            <LoanApplicationDetailView detail={viewingDetail} />
+          </div>
+        )}
       </Dialog>
     </div>
   );

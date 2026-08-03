@@ -379,3 +379,79 @@ export interface UpdatePortalProfileRequest {
     zipCode?: string;
   }[];
 }
+
+/** 2026-07-31 (user request) - "session security visibility" on the Security tab: GET
+ * /portal/security/trusted-devices. No user-agent/device-name is captured, so only real
+ * creation/expiry dates are shown - never a fabricated device label. */
+export interface PortalTrustedDevice {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** 2026-07-31 (user request) - GET /portal/loan-applications/:id/status-timeline. Built only from
+ * real recorded events (submission + staff review actions) - never a fabricated per-stage date. */
+export interface PortalLoanApplicationTimelineEntry {
+  label: string;
+  occurredAt: string;
+}
+
+/** 2026-07-31 (user request) - GET /portal/loan-accounts / GET /portal/loan-accounts/:id/installments.
+ * Only ever populated once staff has linked the account to a real Borrower and booked a real
+ * LoanAccount - never fabricated. */
+export interface PortalLoanAccountSummary {
+  id: string;
+  loanCode: string;
+  status: string;
+  principalAmount: string;
+  outstandingBalance: string;
+  contractualInterestRate: string | null;
+  installmentCount: number;
+  firstRepaymentDate: string;
+  activatedAt: string | null;
+}
+
+export interface PortalInstallmentEntry {
+  installmentNumber: number;
+  dueDate: string;
+  principalDue: string;
+  interestDue: string;
+  feesDue: string;
+  penaltyDue: string;
+  totalDue: string;
+  totalPaid: string;
+  status: string;
+  lastPaidAt: string | null;
+}
+
+/** 2026-07-31 (user request) - Portal<->LMS support chat. Mirrors backend's IChatRepository DTOs. */
+export type ChatConversationStatus = 'WAITING' | 'CLAIMED' | 'CLOSED';
+export type ChatMessageSenderType = 'PORTAL_ACCOUNT' | 'STAFF' | 'SYSTEM';
+
+export interface ChatConversation {
+  id: string;
+  portalAccountId: string;
+  status: ChatConversationStatus;
+  claimedByUserId: string | null;
+  claimedByUserName: string | null;
+  requiresManager: boolean;
+  createdAt: string;
+  claimedAt: string | null;
+  closedAt: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderType: ChatMessageSenderType;
+  senderUserId: string | null;
+  senderUserName: string | null;
+  body: string | null;
+  attachment: { id: string; fileName: string } | null;
+  createdAt: string;
+}
+
+export interface PortalChatView {
+  conversation: ChatConversation;
+  messages: ChatMessage[];
+}

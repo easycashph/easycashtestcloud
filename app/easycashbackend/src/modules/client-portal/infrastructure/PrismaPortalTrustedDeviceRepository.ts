@@ -6,6 +6,7 @@ import type {
   IssuedPortalTrustedDevice,
   IPortalTrustedDeviceRepository,
   PortalTrustedDeviceRecord,
+  PortalTrustedDeviceSummary,
 } from '../application/ports/IPortalTrustedDeviceRepository';
 
 /** Same keyed-HMAC approach as PrismaPortalAccountChallengeRepository - keyed with
@@ -30,5 +31,17 @@ export class PrismaPortalTrustedDeviceRepository implements IPortalTrustedDevice
       where: { tokenHash, expiresAt: { gt: new Date() } },
     });
     return row ? { id: row.id, portalAccountId: row.portalAccountId, expiresAt: row.expiresAt } : null;
+  }
+
+  async listValidByAccount(portalAccountId: string): Promise<PortalTrustedDeviceSummary[]> {
+    const rows = await prisma.portalTrustedDevice.findMany({
+      where: { portalAccountId, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => ({ id: row.id, createdAt: row.createdAt, expiresAt: row.expiresAt }));
+  }
+
+  async revoke(id: string, portalAccountId: string): Promise<void> {
+    await prisma.portalTrustedDevice.deleteMany({ where: { id, portalAccountId } });
   }
 }

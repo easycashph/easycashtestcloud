@@ -33,6 +33,8 @@ export function createPortalSecurityRouter(deps: PortalSecurityControllerDeps, p
     controller.confirmEnableTwoFactor,
   );
   router.post('/security/2fa/disable', requirePortalAuth, validateBody(disablePortalTwoFactorSchema), controller.disableTwoFactor);
+  router.get('/security/trusted-devices', requirePortalAuth, controller.listTrustedDevices);
+  router.delete('/security/trusted-devices/:id', requirePortalAuth, controller.revokeTrustedDevice);
 
   return router;
 }

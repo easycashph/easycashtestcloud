@@ -58,6 +58,9 @@ enum AttachmentOwnerType {
   /// Added 2026-07-10 for the Loan Application intake attachment-upload feature — a scanned
   /// supporting document (payslip, valid ID, etc.) attached before a Borrower/LoanAccount exists.
   LOAN_APPLICATION
+  /// Added 2026-07-31 for the Portal<->LMS support chat (user request) - a file attached to one
+  /// ChatMessage.
+  CHAT_MESSAGE
 }
 
 /// Tags a Loan Application intake attachment by what it actually is (valid ID vs. payslip vs.
@@ -288,6 +291,8 @@ model User {
   loanAdjustmentsMade           LoanAdjustment[]
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
+  chatConversationsClaimed      ChatConversation[]
+  chatMessagesSent              ChatMessage[]
 
   @@map("users")
 }
@@ -507,6 +512,7 @@ model PortalAccount {
   loanApplications LoanApplication[]
   notifications    PortalNotification[]
   trustedDevices   PortalTrustedDevice[]
+  chatConversations ChatConversation[]
 
   @@map("portal_accounts")
 }
@@ -534,6 +540,61 @@ model PortalNotification {
 
   @@index([portalAccountId, read, createdAt])
   @@map("portal_notifications")
+}
+
+/// Portal<->LMS support chat (2026-07-31 user request) - a call-center-style claim queue, not a
+/// generic open inbox. One conversation per "session" a client starts (they resume their existing
+/// WAITING/CLAIMED one rather than starting a second); `requiresManager` distinguishes the normal
+/// claim-eligible queue (Collection Officer role, or Loan Operation Manager) from one a staff
+/// member has explicitly transferred up (visible only to Loan Operation Manager, or a Collection
+/// Officer whose RoleClass is "Collection Manager" - see ChatEligibility.ts for the exact,
+/// business-confirmed mapping onto real roles/role classes).
+enum ChatConversationStatus {
+  WAITING
+  CLAIMED
+  CLOSED
+}
+
+model ChatConversation {
+  id              String                 @id @default(uuid())
+  portalAccountId String
+  portalAccount   PortalAccount          @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  status          ChatConversationStatus @default(WAITING)
+  claimedByUserId String?
+  claimedByUser   User?                  @relation(fields: [claimedByUserId], references: [id])
+  claimedAt       DateTime?
+  requiresManager Boolean                @default(false)
+  closedAt        DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  messages        ChatMessage[]
+
+  @@index([status, requiresManager, createdAt])
+  @@index([claimedByUserId])
+  @@index([portalAccountId, status])
+  @@map("chat_conversations")
+}
+
+enum ChatMessageSenderType {
+  PORTAL_ACCOUNT
+  STAFF
+  /// An automatic narration of a real event (claimed/transferred/closed, who/when) - never a
+  /// fabricated message, always generated as a direct side effect of the action it describes.
+  SYSTEM
+}
+
+model ChatMessage {
+  id             String                @id @default(uuid())
+  conversationId String
+  conversation   ChatConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType     ChatMessageSenderType
+  senderUserId   String?
+  senderUser     User?                 @relation(fields: [senderUserId], references: [id])
+  body           String?
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
 }
 
 /// Same opaque-OTP-challenge shape as `TwoFactorChallenge` (see that model's own doc comment for
