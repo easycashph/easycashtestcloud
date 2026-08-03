@@ -579,7 +579,12 @@ function CreateClientProfileDialog({
           </Button>
           <Button
             onClick={() => createMutation.mutate()}
-            disabled={!firstName.trim() || !lastName.trim() || createMutation.isPending}
+            disabled={
+              !firstName.trim() ||
+              !lastName.trim() ||
+              (includeCoBorrower && (!coBorrowerFirstName.trim() || !coBorrowerLastName.trim())) ||
+              createMutation.isPending
+            }
           >
             Create Client Profile
           </Button>

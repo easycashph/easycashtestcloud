@@ -2,8 +2,8 @@
 setlocal
 
 set "ROOT_DIR=%~dp0"
-set "BACKEND_ENV=%ROOT_DIR%app\backend\.env"
-set "FRONTEND_ENV=%ROOT_DIR%app\frontend\.env"
+set "BACKEND_ENV=%ROOT_DIR%app\easycashbackend\.env"
+set "FRONTEND_ENV=%ROOT_DIR%app\lmsfrontend\.env"
 set "DOCKER_DIR=%ROOT_DIR%app\docker"
 
 echo ============================================
@@ -15,6 +15,11 @@ echo Isang click lang ito para sa lahat: sisiguraduhing
 echo tumatakbo ang Docker, ide-detect ang bagong LAN IP,
 echo ia-update ang config, ire-rebuild ang Docker, at
 echo bubuksan sa browser.
+echo.
+echo Hindi ito magbabago/magbubura ng Cloudflare Pages entries
+echo (easycash-lms.pages.dev, easycash-portal.pages.dev) sa
+echo CORS_ORIGIN - ang LAN IP entry lang ang ia-update, kaya
+echo pareho pa ring gagana ang Cloudflare access pagkatapos.
 echo.
 
 echo [1/5] Chinicheck kung tumatakbo ang Docker Desktop...
@@ -73,10 +78,22 @@ if "%NEW_IP%"=="" (
 echo       Nahanap: %NEW_IP%
 echo.
 
-echo [3/5] Ina-update ang app\backend\.env at app\frontend\.env...
+echo [3/5] Ina-update ang LAN IP sa app\easycashbackend\.env at
+echo       app\lmsfrontend\.env - iniiwan ang Cloudflare Pages
+echo       entries sa CORS_ORIGIN...
 powershell -NoProfile -Command ^
-  "(Get-Content '%BACKEND_ENV%') -replace '^CORS_ORIGIN=.*', 'CORS_ORIGIN=http://%NEW_IP%:5173' | Set-Content '%BACKEND_ENV%';" ^
-  "(Get-Content '%FRONTEND_ENV%') -replace '^VITE_API_BASE_URL=.*', 'VITE_API_BASE_URL=http://%NEW_IP%:4000/api/v1' | Set-Content '%FRONTEND_ENV%';"
+  "$newIp = '%NEW_IP%';" ^
+  "$backendEnv = '%BACKEND_ENV%';" ^
+  "$content = Get-Content $backendEnv;" ^
+  "$corsLine = $content | Where-Object { $_ -match '^CORS_ORIGIN=' } | Select-Object -First 1;" ^
+  "$origins = ($corsLine -replace '^CORS_ORIGIN=', '') -split ',';" ^
+  "$lanPattern = '^http://\d+\.\d+\.\d+\.\d+:5173$';" ^
+  "$hadLan = $false;" ^
+  "$newOrigins = foreach ($o in $origins) { if ($o -match $lanPattern) { $hadLan = $true; \"http://$newIp`:5173\" } else { $o } };" ^
+  "if (-not $hadLan) { $newOrigins = @(\"http://$newIp`:5173\") + $newOrigins };" ^
+  "$newLine = 'CORS_ORIGIN=' + ($newOrigins -join ',');" ^
+  "($content -replace '^CORS_ORIGIN=.*', $newLine) | Set-Content $backendEnv;" ^
+  "(Get-Content '%FRONTEND_ENV%') -replace '^VITE_API_BASE_URL=.*', \"VITE_API_BASE_URL=http://$newIp`:4000/api/v1\" | Set-Content '%FRONTEND_ENV%';"
 
 echo       Tapos na i-update ang config files.
 echo.
@@ -86,10 +103,8 @@ echo       Ire-rebuild lang ang frontend ^(kailangan - naka-bake ang IP sa
 echo       loob ng bundle nito^). Ire-restart lang ang backend, walang
 echo       rebuild - basta CORS_ORIGIN lang naman ang nagbabago, at
 echo       binabasa iyon habang tumatakbo, hindi habang nagbi-build.
-echo       ^(Mas mabilis ngayon - nalaktawan na ang backend's mabigat na
-echo       LibreOffice/npm rebuild, na hindi naman kailangan dito.^)
 pushd "%DOCKER_DIR%"
-docker compose up -d --build frontend
+docker compose up -d --build lmsfrontend
 if errorlevel 1 (
   popd
   echo.
@@ -101,7 +116,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-docker compose up -d --force-recreate backend
+docker compose up -d --force-recreate easycashbackend
 if errorlevel 1 (
   popd
   echo.

@@ -5,3 +5,8 @@ coverage
 .env.*
 .git
 *.log
+# Uploaded documents (local storage driver) + legacy attachment backfill files - runtime data,
+# never part of the image, mounted in via the backend_storage volume instead (docker-compose.yml).
+# Grew to 8GB+ after the 2026-08-01 SDevTech attachment backfill, which made every build
+# (even ones that don't touch this service) needlessly re-transfer it as build context.
+storage
