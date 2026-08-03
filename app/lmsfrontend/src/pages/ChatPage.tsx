@@ -1,10 +1,28 @@
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { Copy, Paperclip, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
+
+/** Standardized display labels for the real, short role names stored in the database
+ * (2026-08-03 user request) - shown everywhere a role type appears in the chat feature. The
+ * underlying stored role names (MIS, CRM, Collection Officer, ...) are unchanged - this is
+ * display-only, scoped to this page. */
+const ROLE_TYPE_LABELS: Record<string, string> = {
+  Accounting: 'Accounting',
+  'Collection Officer': 'Collection',
+  CRM: 'Customer Relation Management',
+  Finance: 'Finance',
+  'Loan Operation Manager': 'Loan Operation Management',
+  MIS: 'Management Information System',
+};
+
+function roleTypeLabel(name: string): string {
+  return ROLE_TYPE_LABELS[name] ?? name;
+}
 
 interface ChatParticipant {
   userId: string;
@@ -45,10 +63,23 @@ interface ChatMessage {
   createdAt: string;
 }
 
+interface ChatClientLoanApplication {
+  id: string;
+  applicantName: string;
+  requestedCategory: string;
+  status: string;
+}
+
+interface ChatClientInfo {
+  portalAccountEmail: string | null;
+  loanApplications: ChatClientLoanApplication[];
+}
+
 interface StaffChatView {
   conversation: ChatConversation;
   messages: ChatMessage[];
   isReadOnly: boolean;
+  client: ChatClientInfo;
 }
 
 interface ChatOversightStaffSummary {
@@ -395,7 +426,7 @@ export function ChatPage() {
                 <option value="">Select a staff member…</option>
                 {oversightStaff?.map((staff) => (
                   <option key={staff.id} value={staff.id}>
-                    {staff.name} ({staff.roles.join(', ')})
+                    {staff.name} ({staff.roles.map(roleTypeLabel).join(', ')})
                   </option>
                 ))}
               </select>
@@ -441,6 +472,24 @@ export function ChatPage() {
                           ? 'Transfer pending confirmation'
                           : 'Client conversation'}
                 </CardTitle>
+                {view.client.portalAccountEmail && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">Chatting with: {view.client.portalAccountEmail}</p>
+                )}
+                {view.client.loanApplications.length > 0 && (
+                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs">
+                    {view.client.loanApplications.map((application) => (
+                      <Link
+                        key={application.id}
+                        to={`/applications/${application.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {application.requestedCategory} - {application.applicantName} ({application.status})
+                      </Link>
+                    ))}
+                  </p>
+                )}
                 {view.conversation.participants.length > 0 && (
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {view.conversation.participants
@@ -485,7 +534,7 @@ export function ChatPage() {
                     <option value="">Select role type…</option>
                     {roleTypes.map((role) => (
                       <option key={role.id} value={role.name}>
-                        {role.name}
+                        {roleTypeLabel(role.name)}
                       </option>
                     ))}
                   </select>
