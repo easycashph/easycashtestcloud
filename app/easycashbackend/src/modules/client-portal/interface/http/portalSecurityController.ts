@@ -4,6 +4,8 @@ import type { ChangePortalEmailUseCase } from '../../application/use-cases/Chang
 import type { RequestEnablePortalTwoFactorUseCase } from '../../application/use-cases/RequestEnablePortalTwoFactorUseCase';
 import type { ConfirmEnablePortalTwoFactorUseCase } from '../../application/use-cases/ConfirmEnablePortalTwoFactorUseCase';
 import type { DisablePortalTwoFactorUseCase } from '../../application/use-cases/DisablePortalTwoFactorUseCase';
+import type { ListPortalTrustedDevicesUseCase } from '../../application/use-cases/ListPortalTrustedDevicesUseCase';
+import type { RevokePortalTrustedDeviceUseCase } from '../../application/use-cases/RevokePortalTrustedDeviceUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   ChangePortalPasswordRequestBody,
@@ -19,6 +21,8 @@ export interface PortalSecurityControllerDeps {
   requestEnablePortalTwoFactorUseCase: RequestEnablePortalTwoFactorUseCase;
   confirmEnablePortalTwoFactorUseCase: ConfirmEnablePortalTwoFactorUseCase;
   disablePortalTwoFactorUseCase: DisablePortalTwoFactorUseCase;
+  listPortalTrustedDevicesUseCase: ListPortalTrustedDevicesUseCase;
+  revokePortalTrustedDeviceUseCase: RevokePortalTrustedDeviceUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other portal controller's shape. */
@@ -78,6 +82,26 @@ export class PortalSecurityController {
       const account = getCurrentPortalAccount(req);
       const body = req.body as DisablePortalTwoFactorRequestBody;
       await this.deps.disablePortalTwoFactorUseCase.execute({ portalAccountId: account.sub, currentPassword: body.currentPassword });
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listTrustedDevices = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const devices = await this.deps.listPortalTrustedDevicesUseCase.execute(account.sub);
+      res.status(200).json(devices);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revokeTrustedDevice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      await this.deps.revokePortalTrustedDeviceUseCase.execute(req.params.id as string, account.sub);
       res.status(204).send();
     } catch (error) {
       next(error);

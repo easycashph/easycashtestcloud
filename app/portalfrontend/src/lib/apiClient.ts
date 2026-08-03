@@ -145,5 +145,6 @@ export const apiClient = {
   get: <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, auth = false): Promise<T> => request<T>(path, { method: 'POST', body, auth }),
   patch: <T>(path: string, body?: unknown, auth = false): Promise<T> => request<T>(path, { method: 'PATCH', body, auth }),
+  delete: <T>(path: string, auth = false): Promise<T> => request<T>(path, { method: 'DELETE', auth }),
   postFile: <T>(path: string, file: File, fields?: Record<string, string>): Promise<T> => postFile<T>(path, file, fields),
 };

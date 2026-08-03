@@ -42,12 +42,15 @@ import { ResendSignUpOtpUseCase } from '@modules/client-portal/application/use-c
 import { RequestEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/RequestEnablePortalTwoFactorUseCase';
 import { ConfirmEnablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/ConfirmEnablePortalTwoFactorUseCase';
 import { DisablePortalTwoFactorUseCase } from '@modules/client-portal/application/use-cases/DisablePortalTwoFactorUseCase';
+import { ListPortalTrustedDevicesUseCase } from '@modules/client-portal/application/use-cases/ListPortalTrustedDevicesUseCase';
+import { RevokePortalTrustedDeviceUseCase } from '@modules/client-portal/application/use-cases/RevokePortalTrustedDeviceUseCase';
 import { RequestPasswordResetUseCase } from '@modules/client-portal/application/use-cases/RequestPasswordResetUseCase';
 import { ConfirmPasswordResetUseCase } from '@modules/client-portal/application/use-cases/ConfirmPasswordResetUseCase';
 import { GetPortalAccountUseCase } from '@modules/client-portal/application/use-cases/GetPortalAccountUseCase';
 import { SubmitLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/SubmitLoanApplicationUseCase';
 import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationsUseCase';
 import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationUseCase';
+import { GetPortalLoanApplicationStatusTimelineUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
 import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
@@ -1202,6 +1205,10 @@ export function createApp(): Express {
         attachmentRepository,
         fileStorage,
       }),
+      getPortalLoanApplicationStatusTimelineUseCase: new GetPortalLoanApplicationStatusTimelineUseCase({
+        loanApplicationRepository,
+        auditLogRepository: new PrismaAuditLogRepository(),
+      }),
     },
     portalTokenService,
   );
@@ -1252,6 +1259,8 @@ export function createApp(): Express {
       }),
       confirmEnablePortalTwoFactorUseCase: new ConfirmEnablePortalTwoFactorUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
       disablePortalTwoFactorUseCase: new DisablePortalTwoFactorUseCase({ portalAccountRepository, passwordHasher }),
+      listPortalTrustedDevicesUseCase: new ListPortalTrustedDevicesUseCase({ portalTrustedDeviceRepository }),
+      revokePortalTrustedDeviceUseCase: new RevokePortalTrustedDeviceUseCase({ portalTrustedDeviceRepository }),
     },
     portalTokenService,
   );

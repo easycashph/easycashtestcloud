@@ -19,6 +19,7 @@ export function createPortalLoanApplicationRouter(deps: PortalLoanApplicationCon
   router.post('/loan-applications', requirePortalAuth, validateBody(submitLoanApplicationSchema), controller.submit);
   router.get('/loan-applications', requirePortalAuth, controller.list);
   router.get('/loan-applications/:id', requirePortalAuth, controller.get);
+  router.get('/loan-applications/:id/status-timeline', requirePortalAuth, controller.getStatusTimeline);
   router.patch('/loan-applications/:id', requirePortalAuth, validateBody(updateLoanApplicationSchema), controller.update);
   router.post('/loan-applications/:id/documents', requirePortalAuth, upload.single('file'), controller.uploadDocument);
   router.get('/loan-applications/:id/documents', requirePortalAuth, controller.listDocuments);

@@ -8,7 +8,7 @@ import { Alert } from '@/components/ui/Alert';
 import { PortalHeader } from '@/components/PortalHeader';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
-import type { PortalOtpChannel } from '@/lib/portalApiTypes';
+import type { PortalOtpChannel, PortalTrustedDevice } from '@/lib/portalApiTypes';
 
 function channelLabel(channel: PortalOtpChannel): string {
   if (channel === 'BOTH') return 'email address and mobile number';
@@ -48,6 +48,30 @@ export function SecurityForm() {
   const [twoFaState, setTwoFaState] = React.useState<'idle' | 'saving' | 'error'>('idle');
   const [twoFaError, setTwoFaError] = React.useState('');
   const [twoFaMessage, setTwoFaMessage] = React.useState('');
+
+  const [trustedDevices, setTrustedDevices] = React.useState<PortalTrustedDevice[] | null>(null);
+  const [revokingDeviceId, setRevokingDeviceId] = React.useState<string | null>(null);
+
+  const loadTrustedDevices = React.useCallback(() => {
+    apiClient
+      .get<PortalTrustedDevice[]>('/portal/security/trusted-devices')
+      .then(setTrustedDevices)
+      .catch(() => setTrustedDevices([]));
+  }, []);
+
+  React.useEffect(() => {
+    loadTrustedDevices();
+  }, [loadTrustedDevices]);
+
+  const handleRevokeDevice = async (id: string) => {
+    setRevokingDeviceId(id);
+    try {
+      await apiClient.delete(`/portal/security/trusted-devices/${id}`, true);
+      setTrustedDevices((prev) => (prev ? prev.filter((d) => d.id !== id) : prev));
+    } finally {
+      setRevokingDeviceId(null);
+    }
+  };
 
   const handleRequestEnable = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -269,6 +293,40 @@ export function SecurityForm() {
                 {twoFaState === 'saving' ? 'Sending…' : 'Turn On'}
               </Button>
             </form>
+          )}
+        </Card>
+
+        <Card className="mt-5 p-6">
+          <h2 className="text-base font-semibold">Trusted Devices</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Devices you've chosen to remember skip the two-factor code for 30 days. Remove one if it's no longer yours or you want it to
+            require a code again.
+          </p>
+
+          {trustedDevices === null ? (
+            <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
+          ) : trustedDevices.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">No remembered devices right now.</p>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {trustedDevices.map((device) => (
+                <div key={device.id} className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                  <div>
+                    <p className="text-sm font-medium">Remembered since {new Date(device.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-muted-foreground">Expires {new Date(device.expiresAt).toLocaleDateString()}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={revokingDeviceId === device.id}
+                    onClick={() => handleRevokeDevice(device.id)}
+                  >
+                    {revokingDeviceId === device.id ? 'Removing…' : 'Remove'}
+                  </Button>
+                </div>
+              ))}
+            </div>
           )}
         </Card>
     </>

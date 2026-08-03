@@ -379,3 +379,19 @@ export interface UpdatePortalProfileRequest {
     zipCode?: string;
   }[];
 }
+
+/** 2026-07-31 (user request) - "session security visibility" on the Security tab: GET
+ * /portal/security/trusted-devices. No user-agent/device-name is captured, so only real
+ * creation/expiry dates are shown - never a fabricated device label. */
+export interface PortalTrustedDevice {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** 2026-07-31 (user request) - GET /portal/loan-applications/:id/status-timeline. Built only from
+ * real recorded events (submission + staff review actions) - never a fabricated per-stage date. */
+export interface PortalLoanApplicationTimelineEntry {
+  label: string;
+  occurredAt: string;
+}
