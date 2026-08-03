@@ -296,6 +296,7 @@ model User {
   chatConversationsPendingTransferTo ChatConversation[] @relation("ChatConversationPendingTransferTo")
   chatConversationsPendingTransferFrom ChatConversation[] @relation("ChatConversationPendingTransferFrom")
   chatMessagesSent              ChatMessage[]
+  chatConversationParticipations ChatConversationParticipant[]
 
   @@map("users")
 }
@@ -606,6 +607,7 @@ model ChatConversation {
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   messages        ChatMessage[]
+  participants    ChatConversationParticipant[]
 
   @@index([status, createdAt])
   @@index([claimedByUserId])
@@ -613,6 +615,28 @@ model ChatConversation {
   @@index([pendingTransferToUserId])
   @@index([portalAccountId, status])
   @@map("chat_conversations")
+}
+
+/// 2026-08-03 (user request: "gusto ko maging trackable talaga ang chat logs") - one row per
+/// hand-off, every staff member who has EVER been the claimant, not just the first and current
+/// one (which `originalClaimedByUserId`/`claimedByUserId` alone can't reconstruct across more than
+/// one transfer). Written alongside claim/transfer/close, never edited afterward - append-only
+/// audit trail, same posture as AuditLog.
+model ChatConversationParticipant {
+  id             String           @id @default(uuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  joinedAt       DateTime         @default(now())
+  /// Null while this is the CURRENT claimant's still-open span.
+  leftAt         DateTime?
+  /// 'TRANSFERRED' | 'CLOSED' - null while still open.
+  leftReason     String?
+
+  @@index([conversationId, joinedAt])
+  @@index([userId])
+  @@map("chat_conversation_participants")
 }
 
 enum ChatMessageSenderType {

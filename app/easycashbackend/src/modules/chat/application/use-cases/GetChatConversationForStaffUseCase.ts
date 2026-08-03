@@ -17,10 +17,11 @@ export interface StaffChatView {
   isReadOnly: boolean;
 }
 
-/** A staff member can view a conversation's messages if they're the current claimant, the
- * ORIGINAL claimant (read-only history, even after transferring it away - 2026-07-31 user
- * request), the pending-transfer sender/recipient, or (still WAITING) an eligible staff member
- * previewing before claiming. */
+/** A staff member can view a conversation's messages if they're the current claimant, EVER a
+ * participant on it (read-only history, even after transferring it away - 2026-07-31 user
+ * request, and now covering every hop of the chain via ChatConversationParticipant - 2026-08-03
+ * user request), the pending-transfer sender/recipient, or (still WAITING) an eligible staff
+ * member previewing before claiming. */
 export class GetChatConversationForStaffUseCase {
   constructor(private readonly deps: GetChatConversationForStaffUseCaseDeps) {}
 
@@ -32,10 +33,10 @@ export class GetChatConversationForStaffUseCase {
     if (!conversation) throw new ChatConversationNotFoundError();
 
     const isCurrentClaimant = conversation.claimedByUserId === userId;
-    const isOriginalClaimant = conversation.originalClaimedByUserId === userId;
+    const wasEverParticipant = conversation.participants.some((p) => p.userId === userId);
     const isPendingTransferParty = conversation.pendingTransferFromUserId === userId || conversation.pendingTransferToUserId === userId;
 
-    if (!isCurrentClaimant && !isOriginalClaimant && !isPendingTransferParty) {
+    if (!isCurrentClaimant && !wasEverParticipant && !isPendingTransferParty) {
       if (conversation.status !== 'WAITING' || !canClaimNewConversations({ roles: user.roles, roleClassName: user.roleClassName })) {
         throw new ChatNotEligibleError();
       }
