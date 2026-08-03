@@ -71,8 +71,12 @@ async function main() {
   }
   console.log(`Unique accountIds: ${byAccountId.size}`);
 
+  // 2026-08-03: also match loans whose code was disambiguated with a `-LEGACYN` suffix by
+  // migrate-legacy-data.ts's loan-code reuse handling (e.g. "SML-REG_00378-LEGACY2") - the source
+  // collection only ever has the plain, un-suffixed accountId.
+  const accountIdPattern = [...byAccountId.keys()];
   const loans = await prisma.loanAccount.findMany({
-    where: { loanCode: { in: [...byAccountId.keys()] } },
+    where: { OR: [{ loanCode: { in: accountIdPattern } }, { loanCode: { in: accountIdPattern.map((c) => `${c}-LEGACY2`) } }] },
     select: {
       id: true,
       loanCode: true,
@@ -93,7 +97,7 @@ async function main() {
   const toApply: { loanCode: string; id: string; data: Record<string, number> }[] = [];
 
   for (const loan of loans) {
-    const doc = byAccountId.get(loan.loanCode);
+    const doc = byAccountId.get(loan.loanCode) ?? byAccountId.get(loan.loanCode.replace(/-LEGACY\d+$/, ''));
     if (!doc) continue;
     matched++;
 
