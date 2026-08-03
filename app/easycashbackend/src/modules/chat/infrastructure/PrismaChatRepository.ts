@@ -6,13 +6,25 @@ import type {
   CreateChatMessageInput,
 } from '../application/ports/IChatRepository';
 
+type UserNameRow = { firstName: string; lastName: string } | null;
+
+function fullName(user: UserNameRow): string | null {
+  return user ? `${user.firstName} ${user.lastName}` : null;
+}
+
 function mapConversation(row: {
   id: string;
   portalAccountId: string;
   status: string;
   claimedByUserId: string | null;
-  claimedByUser: { firstName: string; lastName: string } | null;
-  requiresManager: boolean;
+  claimedByUser: UserNameRow;
+  originalClaimedByUserId: string | null;
+  originalClaimedByUser: UserNameRow;
+  pendingTransferToUserId: string | null;
+  pendingTransferToUser: UserNameRow;
+  pendingTransferFromUserId: string | null;
+  pendingTransferFromUser: UserNameRow;
+  pendingTransferPin: string | null;
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
@@ -22,15 +34,26 @@ function mapConversation(row: {
     portalAccountId: row.portalAccountId,
     status: row.status as ChatConversationRecord['status'],
     claimedByUserId: row.claimedByUserId,
-    claimedByUserName: row.claimedByUser ? `${row.claimedByUser.firstName} ${row.claimedByUser.lastName}` : null,
-    requiresManager: row.requiresManager,
+    claimedByUserName: fullName(row.claimedByUser),
+    originalClaimedByUserId: row.originalClaimedByUserId,
+    originalClaimedByUserName: fullName(row.originalClaimedByUser),
+    pendingTransferToUserId: row.pendingTransferToUserId,
+    pendingTransferToUserName: fullName(row.pendingTransferToUser),
+    pendingTransferFromUserId: row.pendingTransferFromUserId,
+    pendingTransferFromUserName: fullName(row.pendingTransferFromUser),
+    pendingTransferPin: row.pendingTransferPin,
     createdAt: row.createdAt,
     claimedAt: row.claimedAt,
     closedAt: row.closedAt,
   };
 }
 
-const CONVERSATION_INCLUDE = { claimedByUser: { select: { firstName: true, lastName: true } } } as const;
+const CONVERSATION_INCLUDE = {
+  claimedByUser: { select: { firstName: true, lastName: true } },
+  originalClaimedByUser: { select: { firstName: true, lastName: true } },
+  pendingTransferToUser: { select: { firstName: true, lastName: true } },
+  pendingTransferFromUser: { select: { firstName: true, lastName: true } },
+} as const;
 
 async function mapMessage(row: {
   id: string;
@@ -70,7 +93,7 @@ export class PrismaChatRepository implements IChatRepository {
 
   async findActiveConversationForPortalAccount(portalAccountId: string): Promise<ChatConversationRecord | null> {
     const row = await prisma.chatConversation.findFirst({
-      where: { portalAccountId, status: { in: ['WAITING', 'CLAIMED'] } },
+      where: { portalAccountId, status: { in: ['WAITING', 'CLAIMED', 'PENDING_TRANSFER'] } },
       orderBy: { createdAt: 'desc' },
       include: CONVERSATION_INCLUDE,
     });
@@ -88,45 +111,88 @@ export class PrismaChatRepository implements IChatRepository {
   async claimConversation(id: string, userId: string): Promise<boolean> {
     const result = await prisma.chatConversation.updateMany({
       where: { id, status: 'WAITING', claimedByUserId: null },
-      data: { status: 'CLAIMED', claimedByUserId: userId, claimedAt: new Date() },
+      data: { status: 'CLAIMED', claimedByUserId: userId, originalClaimedByUserId: userId, claimedAt: new Date() },
     });
     return result.count === 1;
   }
 
-  async transferToManager(id: string): Promise<void> {
-    await prisma.chatConversation.update({
-      where: { id },
-      data: { status: 'WAITING', claimedByUserId: null, claimedAt: null, requiresManager: true },
+  async initiateTransfer(id: string, fromUserId: string, toUserId: string, pin: string): Promise<boolean> {
+    const result = await prisma.chatConversation.updateMany({
+      where: { id, status: 'CLAIMED', claimedByUserId: fromUserId },
+      data: {
+        status: 'PENDING_TRANSFER',
+        pendingTransferToUserId: toUserId,
+        pendingTransferFromUserId: fromUserId,
+        pendingTransferPin: pin,
+      },
     });
+    return result.count === 1;
+  }
+
+  async completeTransfer(id: string, toUserId: string, pin: string): Promise<boolean> {
+    const result = await prisma.chatConversation.updateMany({
+      where: { id, status: 'PENDING_TRANSFER', pendingTransferToUserId: toUserId, pendingTransferPin: pin },
+      data: {
+        status: 'CLAIMED',
+        claimedByUserId: toUserId,
+        claimedAt: new Date(),
+        pendingTransferToUserId: null,
+        pendingTransferFromUserId: null,
+        pendingTransferPin: null,
+      },
+    });
+    return result.count === 1;
+  }
+
+  async cancelTransfer(id: string, fromUserId: string): Promise<boolean> {
+    const result = await prisma.chatConversation.updateMany({
+      where: { id, status: 'PENDING_TRANSFER', pendingTransferFromUserId: fromUserId },
+      data: {
+        status: 'CLAIMED',
+        pendingTransferToUserId: null,
+        pendingTransferFromUserId: null,
+        pendingTransferPin: null,
+      },
+    });
+    return result.count === 1;
   }
 
   async closeConversation(id: string): Promise<void> {
     await prisma.chatConversation.update({ where: { id }, data: { status: 'CLOSED', closedAt: new Date() } });
   }
 
-  async listWaitingConversations(requiresManager: boolean): Promise<ChatConversationRecord[]> {
-    // A manager's queue includes both plain and transferred-up requests - see
-    // ChatEligibility.ts's doc comment on why a manager is a superset of the general claim pool.
-    const where = requiresManager ? { status: 'WAITING' as const } : { status: 'WAITING' as const, requiresManager: false };
-    const rows = await prisma.chatConversation.findMany({ where, orderBy: { createdAt: 'asc' }, include: CONVERSATION_INCLUDE });
+  async listWaitingConversations(): Promise<ChatConversationRecord[]> {
+    const rows = await prisma.chatConversation.findMany({
+      where: { status: 'WAITING' },
+      orderBy: { createdAt: 'asc' },
+      include: CONVERSATION_INCLUDE,
+    });
     return rows.map(mapConversation);
   }
 
-  async listClaimedConversationsForUser(userId: string): Promise<ChatConversationRecord[]> {
+  async listConversationsForUserHistory(userId: string): Promise<ChatConversationRecord[]> {
     const rows = await prisma.chatConversation.findMany({
-      where: { claimedByUserId: userId, status: 'CLAIMED' },
-      orderBy: { claimedAt: 'desc' },
+      where: {
+        OR: [{ claimedByUserId: userId }, { originalClaimedByUserId: userId }],
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: CONVERSATION_INCLUDE,
+    });
+    return rows.map(mapConversation);
+  }
+
+  async listIncomingTransfersForUser(userId: string): Promise<ChatConversationRecord[]> {
+    const rows = await prisma.chatConversation.findMany({
+      where: { status: 'PENDING_TRANSFER', pendingTransferToUserId: userId },
+      orderBy: { updatedAt: 'desc' },
       include: CONVERSATION_INCLUDE,
     });
     return rows.map(mapConversation);
   }
 
   async listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]> {
-    // Scoped to conversations still bearing this user's claimedByUserId - a transfer clears it
-    // (see transferToManager), so a conversation later handed off loses this trace here; that
-    // history still lives in the conversation's own SYSTEM messages if opened another way.
     const rows = await prisma.chatConversation.findMany({
-      where: { claimedByUserId: userId },
+      where: { OR: [{ claimedByUserId: userId }, { originalClaimedByUserId: userId }] },
       orderBy: { createdAt: 'desc' },
       include: CONVERSATION_INCLUDE,
     });

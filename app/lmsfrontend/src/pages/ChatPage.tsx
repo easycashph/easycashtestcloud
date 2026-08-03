@@ -1,19 +1,24 @@
 import * as React from 'react';
-import { Paperclip, Send } from 'lucide-react';
+import { Copy, Paperclip, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
 
 interface ChatConversation {
   id: string;
   portalAccountId: string;
-  status: 'WAITING' | 'CLAIMED' | 'CLOSED';
+  status: 'WAITING' | 'CLAIMED' | 'PENDING_TRANSFER' | 'CLOSED';
   claimedByUserId: string | null;
   claimedByUserName: string | null;
-  requiresManager: boolean;
+  originalClaimedByUserId: string | null;
+  originalClaimedByUserName: string | null;
+  pendingTransferToUserId: string | null;
+  pendingTransferToUserName: string | null;
+  pendingTransferFromUserId: string | null;
+  pendingTransferFromUserName: string | null;
+  pendingTransferPin: string | null;
   createdAt: string;
   claimedAt: string | null;
   closedAt: string | null;
@@ -33,6 +38,7 @@ interface ChatMessage {
 interface StaffChatView {
   conversation: ChatConversation;
   messages: ChatMessage[];
+  isReadOnly: boolean;
 }
 
 interface ChatOversightStaffSummary {
@@ -41,21 +47,41 @@ interface ChatOversightStaffSummary {
   roles: string[];
 }
 
+interface RoleTypeRecord {
+  id: string;
+  name: string;
+}
+
+interface RoleClassRecord {
+  id: string;
+  roleId: string;
+  roleName: string;
+  name: string;
+}
+
+interface ChatTransferCandidate {
+  id: string;
+  name: string;
+  roles: string[];
+  roleClassName: string | null;
+}
+
 const POLL_INTERVAL_MS = 4000;
 
 /**
- * Portal<->LMS support chat, staff side (2026-07-31 user request) - a call-center-style claim
- * queue: "Waiting" lists every unclaimed request this staff member is eligible to answer (server
- * decides eligibility - Collection Officer/Loan Operation Manager for the plain queue, only
- * manager-eligible staff for anything transferred up); "My Chats" is whatever they've already
- * claimed. Polling, not WebSockets - matches the Portal widget's own tradeoff (see its doc
- * comment).
+ * Portal<->LMS support chat, staff side (2026-07-31 user request, transfer redesign) - a
+ * call-center-style claim queue for brand-new requests ("Waiting", eligibility server-decided -
+ * see ChatEligibility.ts), but a DIRECT hand-off for transfers: the current claimant picks any LMS
+ * user (Role -> Role Class -> person) and sets a 4-digit PIN; the recipient sees the pending
+ * transfer (PIN included) under "Incoming Transfers" and pastes it back to take over. Polling,
+ * not WebSockets - matches the Portal widget's own tradeoff (see its doc comment).
  */
 export function ChatPage() {
   const { canManageMembers: isMis } = useRole();
 
   const [queue, setQueue] = React.useState<ChatConversation[] | null>(null);
   const [mine, setMine] = React.useState<ChatConversation[] | null>(null);
+  const [incomingTransfers, setIncomingTransfers] = React.useState<ChatConversation[] | null>(null);
   const [activeConversationId, setActiveConversationId] = React.useState<string | null>(null);
   const [view, setView] = React.useState<StaffChatView | null>(null);
   const [draft, setDraft] = React.useState('');
@@ -66,13 +92,39 @@ export function ChatPage() {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   // MIS-only "Staff Chat Oversight" (2026-07-31 user request) - a read-only window into any
-  // staff member's chat history, any status. `oversightMode` marks the currently-open thread as
-  // one loaded through this path (hides the reply box/Transfer/Close - a real conversation
-  // action still has to come from its actual claimant, not from someone just reviewing it).
+  // staff member's chat history, any status.
   const [oversightStaff, setOversightStaff] = React.useState<ChatOversightStaffSummary[] | null>(null);
   const [oversightStaffId, setOversightStaffId] = React.useState<string | null>(null);
   const [oversightConversations, setOversightConversations] = React.useState<ChatConversation[] | null>(null);
   const [oversightMode, setOversightMode] = React.useState(false);
+
+  // Transfer redesign state - Role -> Role Class -> person, plus the 4-digit PIN.
+  const [roleTypes, setRoleTypes] = React.useState<RoleTypeRecord[]>([]);
+  const [roleClasses, setRoleClasses] = React.useState<RoleClassRecord[]>([]);
+  const [transferCandidates, setTransferCandidates] = React.useState<ChatTransferCandidate[]>([]);
+  const [showTransferPanel, setShowTransferPanel] = React.useState(false);
+  const [transferRole, setTransferRole] = React.useState('');
+  const [transferRoleClass, setTransferRoleClass] = React.useState('');
+  const [transferToUserId, setTransferToUserId] = React.useState('');
+  const [transferPin, setTransferPin] = React.useState('');
+  const [transferError, setTransferError] = React.useState<string | null>(null);
+  const [isTransferring, setIsTransferring] = React.useState(false);
+  const [confirmPinDrafts, setConfirmPinDrafts] = React.useState<Record<string, string>>({});
+  const [confirmError, setConfirmError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    apiClient
+      .get<{ roleTypes: RoleTypeRecord[]; roleClasses: RoleClassRecord[] }>('/role-classes')
+      .then((res) => {
+        setRoleTypes(res.roleTypes);
+        setRoleClasses(res.roleClasses);
+      })
+      .catch(() => {});
+    apiClient
+      .get<ChatTransferCandidate[]>('/chat/transfer-candidates')
+      .then(setTransferCandidates)
+      .catch(() => setTransferCandidates([]));
+  }, []);
 
   React.useEffect(() => {
     if (!isMis) return;
@@ -105,6 +157,10 @@ export function ChatPage() {
       .get<ChatConversation[]>('/chat/mine')
       .then(setMine)
       .catch(() => setMine([]));
+    apiClient
+      .get<ChatConversation[]>('/chat/incoming-transfers')
+      .then(setIncomingTransfers)
+      .catch(() => setIncomingTransfers([]));
   }, []);
 
   React.useEffect(() => {
@@ -144,12 +200,55 @@ export function ChatPage() {
     }
   };
 
-  const handleTransfer = async () => {
+  const openTransferPanel = () => {
+    setTransferRole('');
+    setTransferRoleClass('');
+    setTransferToUserId('');
+    setTransferPin('');
+    setTransferError(null);
+    setShowTransferPanel(true);
+  };
+
+  const candidatesForSelection = transferCandidates.filter(
+    (c) => c.roles.includes(transferRole) && (!transferRoleClass || c.roleClassName === transferRoleClass),
+  );
+
+  const handleInitiateTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeConversationId || !transferToUserId || !/^\d{4}$/.test(transferPin)) return;
+    setIsTransferring(true);
+    setTransferError(null);
+    try {
+      await apiClient.post(`/chat/${activeConversationId}/transfer/initiate`, { toUserId: transferToUserId, pin: transferPin });
+      setShowTransferPanel(false);
+      loadConversation(activeConversationId, false);
+      refreshLists();
+    } catch (err) {
+      setTransferError(err instanceof Error ? err.message : 'Could not start the transfer.');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleCancelTransfer = async () => {
     if (!activeConversationId) return;
-    await apiClient.post(`/chat/${activeConversationId}/transfer`);
-    setActiveConversationId(null);
-    setView(null);
+    await apiClient.post(`/chat/${activeConversationId}/transfer/cancel`);
+    loadConversation(activeConversationId, false);
     refreshLists();
+  };
+
+  const handleCompleteTransfer = async (conversationId: string) => {
+    setConfirmError(null);
+    const pin = confirmPinDrafts[conversationId] ?? '';
+    try {
+      await apiClient.post(`/chat/${conversationId}/transfer/complete`, { pin });
+      setConfirmPinDrafts((prev) => ({ ...prev, [conversationId]: '' }));
+      refreshLists();
+      setOversightMode(false);
+      setActiveConversationId(conversationId);
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : 'That PIN did not match - try copying it again.');
+    }
   };
 
   const handleClose = async () => {
@@ -195,14 +294,7 @@ export function ChatPage() {
               <div key={conversation.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
                 <div>
                   <p className="font-medium">Chat request</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(conversation.createdAt).toLocaleTimeString()}
-                    {conversation.requiresManager && (
-                      <Badge variant="outline" className="ml-1.5">
-                        Transferred
-                      </Badge>
-                    )}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{new Date(conversation.createdAt).toLocaleTimeString()}</p>
                 </div>
                 <Button size="sm" onClick={() => handleClaim(conversation.id)}>
                   Answer
@@ -212,26 +304,69 @@ export function ChatPage() {
           </CardContent>
         </Card>
 
+        {incomingTransfers && incomingTransfers.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Incoming Transfers ({incomingTransfers.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {confirmError && <p className="text-xs text-destructive">{confirmError}</p>}
+              {incomingTransfers.map((conversation) => (
+                <div key={conversation.id} className="space-y-2 rounded-md border p-2">
+                  <p className="text-xs text-muted-foreground">From {conversation.pendingTransferFromUserName}</p>
+                  <div className="flex items-center justify-between gap-2 rounded bg-muted px-2 py-1">
+                    <span className="font-mono text-sm tracking-widest">{conversation.pendingTransferPin}</span>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Copy PIN"
+                      onClick={() => navigator.clipboard?.writeText(conversation.pendingTransferPin ?? '')}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste PIN"
+                      maxLength={4}
+                      value={confirmPinDrafts[conversation.id] ?? ''}
+                      onChange={(e) => setConfirmPinDrafts((prev) => ({ ...prev, [conversation.id]: e.target.value }))}
+                    />
+                    <Button size="sm" onClick={() => handleCompleteTransfer(conversation.id)}>
+                      Take Over
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">My Chats ({mine?.length ?? '…'})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {mine?.length === 0 && <p className="text-xs text-muted-foreground">Nothing claimed right now.</p>}
-            {mine?.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                onClick={() => {
-                  setOversightMode(false);
-                  setActiveConversationId(conversation.id);
-                }}
-                className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${!oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
-              >
-                <p className="font-medium">Active conversation</p>
-                <p className="text-xs text-muted-foreground">Claimed {new Date(conversation.claimedAt ?? conversation.createdAt).toLocaleTimeString()}</p>
-              </button>
-            ))}
+            {mine?.length === 0 && <p className="text-xs text-muted-foreground">Nothing here yet.</p>}
+            {mine?.map((conversation) => {
+              const isActive = conversation.status === 'CLAIMED';
+              return (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => {
+                    setOversightMode(false);
+                    setActiveConversationId(conversation.id);
+                  }}
+                  className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${!isActive ? 'opacity-60 grayscale' : ''} ${!oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
+                >
+                  <p className="font-medium">
+                    {conversation.status === 'CLOSED' ? 'Closed conversation' : conversation.status === 'PENDING_TRANSFER' ? 'Transfer pending' : isActive ? 'Active conversation' : 'Transferred away (read-only)'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Started {new Date(conversation.createdAt).toLocaleTimeString()}</p>
+                </button>
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -279,7 +414,7 @@ export function ChatPage() {
       <Card className="flex flex-col overflow-hidden">
         {!view ? (
           <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Select a waiting request or one of your active chats.
+            Select a waiting request or one of your chats.
           </div>
         ) : (
           <>
@@ -290,22 +425,109 @@ export function ChatPage() {
                     ? 'Oversight view (read-only)'
                     : view.conversation.status === 'CLOSED'
                       ? 'Closed conversation'
-                      : 'Client conversation'}
+                      : view.isReadOnly
+                        ? 'Transferred away (read-only)'
+                        : view.conversation.status === 'PENDING_TRANSFER'
+                          ? 'Transfer pending confirmation'
+                          : 'Client conversation'}
                 </CardTitle>
                 {actionError && <p className="text-xs text-destructive">{actionError}</p>}
               </div>
-              {!oversightMode && view.conversation.status === 'CLAIMED' && (
+              {!oversightMode && !view.isReadOnly && view.conversation.status === 'CLAIMED' && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={handleTransfer}>
-                    Transfer to Manager
+                  <Button size="sm" variant="outline" onClick={openTransferPanel}>
+                    Transfer
                   </Button>
                   <Button size="sm" variant="outline" onClick={handleClose}>
                     Close
                   </Button>
                 </div>
               )}
+              {!oversightMode && !view.isReadOnly && view.conversation.status === 'PENDING_TRANSFER' && (
+                <Button size="sm" variant="outline" onClick={handleCancelTransfer}>
+                  Cancel Transfer
+                </Button>
+              )}
             </CardHeader>
-            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+
+            {showTransferPanel && (
+              <form onSubmit={handleInitiateTransfer} className="space-y-3 border-b bg-muted/40 p-4">
+                <p className="text-sm font-medium">Transfer this conversation</p>
+                {transferError && <p className="text-xs text-destructive">{transferError}</p>}
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                    value={transferRole}
+                    onChange={(e) => {
+                      setTransferRole(e.target.value);
+                      setTransferRoleClass('');
+                      setTransferToUserId('');
+                    }}
+                    required
+                  >
+                    <option value="">Select role type…</option>
+                    {roleTypes.map((role) => (
+                      <option key={role.id} value={role.name}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                    value={transferRoleClass}
+                    onChange={(e) => {
+                      setTransferRoleClass(e.target.value);
+                      setTransferToUserId('');
+                    }}
+                    disabled={!transferRole}
+                    required
+                  >
+                    <option value="">Select role class…</option>
+                    {roleClasses.filter((rc) => rc.roleName === transferRole).map((rc) => (
+                      <option key={rc.id} value={rc.name}>
+                        {rc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <select
+                  className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                  value={transferToUserId}
+                  onChange={(e) => setTransferToUserId(e.target.value)}
+                  disabled={!transferRoleClass}
+                  required
+                >
+                  <option value="">Select staff member…</option>
+                  {candidatesForSelection.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  placeholder="Set a 4-digit PIN"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={transferPin}
+                  onChange={(e) => setTransferPin(e.target.value.replace(/\D/g, ''))}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Share this PIN with them however you normally would (in person, call, etc.) - they'll also see it themselves under
+                  "Incoming Transfers" and need to paste it back to confirm.
+                </p>
+                <div className="flex gap-2">
+                  <Button type="submit" size="sm" disabled={isTransferring || !transferToUserId || !/^\d{4}$/.test(transferPin)}>
+                    {isTransferring ? 'Starting…' : 'Start Transfer'}
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setShowTransferPanel(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            <div ref={scrollRef} className={`flex-1 space-y-3 overflow-y-auto p-4 ${view.isReadOnly || oversightMode ? 'opacity-70 grayscale' : ''}`}>
               {view.messages.map((message) => (
                 <div
                   key={message.id}
@@ -319,6 +541,9 @@ export function ChatPage() {
                         message.senderType === 'STAFF' ? 'bg-primary text-primary-foreground' : 'bg-muted'
                       }`}
                     >
+                      {message.senderType === 'STAFF' && message.senderUserName && (
+                        <p className="mb-0.5 text-xs font-semibold opacity-80">{message.senderUserName}</p>
+                      )}
                       {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
                       {message.attachment && (
                         <button
@@ -334,7 +559,7 @@ export function ChatPage() {
                 </div>
               ))}
             </div>
-            {!oversightMode && view.conversation.status === 'CLAIMED' && (
+            {!oversightMode && !view.isReadOnly && view.conversation.status === 'CLAIMED' && (
               <form onSubmit={handleSend} className="border-t p-3">
                 {file && (
                   <p className="mb-2 flex items-center justify-between rounded-md bg-muted px-2 py-1 text-xs">

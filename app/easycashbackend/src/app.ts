@@ -61,7 +61,11 @@ import { SendPortalChatMessageUseCase } from '@modules/chat/application/use-case
 import { createPortalChatRouter } from '@modules/chat/interface/http/portalChatRouter';
 import { ListChatQueueUseCase } from '@modules/chat/application/use-cases/ListChatQueueUseCase';
 import { ClaimChatConversationUseCase } from '@modules/chat/application/use-cases/ClaimChatConversationUseCase';
-import { TransferChatConversationToManagerUseCase } from '@modules/chat/application/use-cases/TransferChatConversationToManagerUseCase';
+import { InitiateChatTransferUseCase } from '@modules/chat/application/use-cases/InitiateChatTransferUseCase';
+import { CompleteChatTransferUseCase } from '@modules/chat/application/use-cases/CompleteChatTransferUseCase';
+import { CancelChatTransferUseCase } from '@modules/chat/application/use-cases/CancelChatTransferUseCase';
+import { ListChatTransferCandidatesUseCase } from '@modules/chat/application/use-cases/ListChatTransferCandidatesUseCase';
+import { ListIncomingChatTransfersUseCase } from '@modules/chat/application/use-cases/ListIncomingChatTransfersUseCase';
 import { SendStaffChatMessageUseCase } from '@modules/chat/application/use-cases/SendStaffChatMessageUseCase';
 import { CloseChatConversationUseCase } from '@modules/chat/application/use-cases/CloseChatConversationUseCase';
 import { ListMyClaimedChatConversationsUseCase } from '@modules/chat/application/use-cases/ListMyClaimedChatConversationsUseCase';
@@ -1272,7 +1276,11 @@ export function createApp(): Express {
       listMyClaimedChatConversationsUseCase: new ListMyClaimedChatConversationsUseCase({ chatRepository }),
       getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository }),
       claimChatConversationUseCase: new ClaimChatConversationUseCase({ userRepository, chatRepository }),
-      transferChatConversationToManagerUseCase: new TransferChatConversationToManagerUseCase({ userRepository, chatRepository }),
+      initiateChatTransferUseCase: new InitiateChatTransferUseCase({ userRepository, chatRepository }),
+      completeChatTransferUseCase: new CompleteChatTransferUseCase({ userRepository, chatRepository }),
+      cancelChatTransferUseCase: new CancelChatTransferUseCase({ chatRepository }),
+      listChatTransferCandidatesUseCase: new ListChatTransferCandidatesUseCase({ userRepository }),
+      listIncomingChatTransfersUseCase: new ListIncomingChatTransfersUseCase({ chatRepository }),
       sendStaffChatMessageUseCase: new SendStaffChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
       closeChatConversationUseCase: new CloseChatConversationUseCase({ userRepository, chatRepository }),
       downloadChatAttachmentForStaffUseCase: new DownloadChatAttachmentForStaffUseCase({ userRepository, chatRepository, attachmentRepository, fileStorage }),

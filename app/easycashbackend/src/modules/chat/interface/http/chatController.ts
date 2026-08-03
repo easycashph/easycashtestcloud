@@ -3,7 +3,11 @@ import { ValidationError } from '@shared/errors/DomainError';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
 import type { ListChatQueueUseCase } from '../../application/use-cases/ListChatQueueUseCase';
 import type { ClaimChatConversationUseCase } from '../../application/use-cases/ClaimChatConversationUseCase';
-import type { TransferChatConversationToManagerUseCase } from '../../application/use-cases/TransferChatConversationToManagerUseCase';
+import type { InitiateChatTransferUseCase } from '../../application/use-cases/InitiateChatTransferUseCase';
+import type { CompleteChatTransferUseCase } from '../../application/use-cases/CompleteChatTransferUseCase';
+import type { CancelChatTransferUseCase } from '../../application/use-cases/CancelChatTransferUseCase';
+import type { ListChatTransferCandidatesUseCase } from '../../application/use-cases/ListChatTransferCandidatesUseCase';
+import type { ListIncomingChatTransfersUseCase } from '../../application/use-cases/ListIncomingChatTransfersUseCase';
 import type { SendStaffChatMessageUseCase } from '../../application/use-cases/SendStaffChatMessageUseCase';
 import type { CloseChatConversationUseCase } from '../../application/use-cases/CloseChatConversationUseCase';
 import type { ListMyClaimedChatConversationsUseCase } from '../../application/use-cases/ListMyClaimedChatConversationsUseCase';
@@ -16,7 +20,11 @@ import type { GetChatConversationForMisUseCase } from '../../application/use-cas
 export interface ChatControllerDeps {
   listChatQueueUseCase: ListChatQueueUseCase;
   claimChatConversationUseCase: ClaimChatConversationUseCase;
-  transferChatConversationToManagerUseCase: TransferChatConversationToManagerUseCase;
+  initiateChatTransferUseCase: InitiateChatTransferUseCase;
+  completeChatTransferUseCase: CompleteChatTransferUseCase;
+  cancelChatTransferUseCase: CancelChatTransferUseCase;
+  listChatTransferCandidatesUseCase: ListChatTransferCandidatesUseCase;
+  listIncomingChatTransfersUseCase: ListIncomingChatTransfersUseCase;
   sendStaffChatMessageUseCase: SendStaffChatMessageUseCase;
   closeChatConversationUseCase: CloseChatConversationUseCase;
   listMyClaimedChatConversationsUseCase: ListMyClaimedChatConversationsUseCase;
@@ -71,10 +79,51 @@ export class ChatController {
     }
   };
 
-  transfer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  listTransferCandidates = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const candidates = await this.deps.listChatTransferCandidatesUseCase.execute();
+      res.status(200).json(candidates);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listIncomingTransfers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const currentUser = getCurrentUser(req);
-      await this.deps.transferChatConversationToManagerUseCase.execute(currentUser.sub, req.params.id as string);
+      const conversations = await this.deps.listIncomingChatTransfersUseCase.execute(currentUser.sub);
+      res.status(200).json(conversations);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  initiateTransfer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const body = req.body as { toUserId: string; pin: string };
+      const conversation = await this.deps.initiateChatTransferUseCase.execute(currentUser.sub, req.params.id as string, body.toUserId, body.pin);
+      res.status(200).json(conversation);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  completeTransfer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const body = req.body as { pin: string };
+      const conversation = await this.deps.completeChatTransferUseCase.execute(currentUser.sub, req.params.id as string, body.pin);
+      res.status(200).json(conversation);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cancelTransfer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.cancelChatTransferUseCase.execute(currentUser.sub, req.params.id as string);
       res.status(204).send();
     } catch (error) {
       next(error);

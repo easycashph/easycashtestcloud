@@ -291,7 +291,10 @@ model User {
   loanAdjustmentsMade           LoanAdjustment[]
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
-  chatConversationsClaimed      ChatConversation[]
+  chatConversationsClaimed         ChatConversation[] @relation("ChatConversationClaimedBy")
+  chatConversationsOriginallyClaimed ChatConversation[] @relation("ChatConversationOriginallyClaimedBy")
+  chatConversationsPendingTransferTo ChatConversation[] @relation("ChatConversationPendingTransferTo")
+  chatConversationsPendingTransferFrom ChatConversation[] @relation("ChatConversationPendingTransferFrom")
   chatMessagesSent              ChatMessage[]
 
   @@map("users")
@@ -563,25 +566,51 @@ model PortalNotification {
 enum ChatConversationStatus {
   WAITING
   CLAIMED
+  /// 2026-07-31 (user request, transfer redesign) - a transfer has been started (PIN set, target
+  /// picked) but not yet confirmed by the receiving officer; the current claimant can no longer
+  /// send while in this state.
+  PENDING_TRANSFER
   CLOSED
 }
 
+/// 2026-07-31 (user request, transfer redesign): a claim no longer feeds back into a shared
+/// manager queue - the current claimant hands off DIRECTLY to a specific person they pick (any
+/// LMS user, via Role -> Role Class -> user), confirmed by a 4-digit PIN both sides can see in
+/// their own UI (a deliberate two-actor confirmation gesture against an accidental take-over
+/// click, NOT a cryptographic secret - see pendingTransferPin's own doc comment for why it's
+/// stored plaintext).
 model ChatConversation {
   id              String                 @id @default(uuid())
   portalAccountId String
   portalAccount   PortalAccount          @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
   status          ChatConversationStatus @default(WAITING)
   claimedByUserId String?
-  claimedByUser   User?                  @relation(fields: [claimedByUserId], references: [id])
+  claimedByUser   User?                  @relation("ChatConversationClaimedBy", fields: [claimedByUserId], references: [id])
   claimedAt       DateTime?
-  requiresManager Boolean                @default(false)
+  /// Set once, the first time this conversation is claimed from WAITING - never changed again,
+  /// even across further transfers. Lets the very first responder still see (read-only) the
+  /// whole conversation history after handing it off, instead of losing all trace of it.
+  originalClaimedByUserId String?
+  originalClaimedByUser   User?   @relation("ChatConversationOriginallyClaimedBy", fields: [originalClaimedByUserId], references: [id])
+  pendingTransferToUserId   String?
+  pendingTransferToUser     User?   @relation("ChatConversationPendingTransferTo", fields: [pendingTransferToUserId], references: [id])
+  pendingTransferFromUserId String?
+  pendingTransferFromUser   User?   @relation("ChatConversationPendingTransferFrom", fields: [pendingTransferFromUserId], references: [id])
+  /// Deliberately plaintext, 4 digits - the intended recipient already sees this same value in
+  /// their own "Incoming Transfers" list (it's not hidden from them), so hashing it would only
+  /// prevent displaying it back, not add real access control. This is a confirmation gesture
+  /// (proves the receiving officer actually opened the specific handoff meant for them) more
+  /// than a secret - the real access control is `pendingTransferToUserId` itself.
+  pendingTransferPin String?
   closedAt        DateTime?
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
   messages        ChatMessage[]
 
-  @@index([status, requiresManager, createdAt])
+  @@index([status, createdAt])
   @@index([claimedByUserId])
+  @@index([originalClaimedByUserId])
+  @@index([pendingTransferToUserId])
   @@index([portalAccountId, status])
   @@map("chat_conversations")
 }

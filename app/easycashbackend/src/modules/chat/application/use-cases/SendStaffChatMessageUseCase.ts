@@ -15,8 +15,11 @@ export interface SendStaffChatMessageUseCaseDeps {
   uploadAttachmentUseCase: UploadAttachmentUseCase;
 }
 
-/** Only the current claimant may reply - a conversation not yet claimed by this staff member
- * can't be replied to (they'd need to claim it first, via ClaimChatConversationUseCase). */
+/** Only the current claimant may reply, and only while the conversation is actually CLAIMED - a
+ * conversation not yet claimed by this staff member can't be replied to (they'd need to claim it
+ * first), and neither can one they've started transferring away (2026-07-31 user request:
+ * "hindi na dapat makapag-chat si loan officer" once a transfer is underway, even before the
+ * recipient confirms it). */
 export class SendStaffChatMessageUseCase {
   constructor(private readonly deps: SendStaffChatMessageUseCaseDeps) {}
 
@@ -24,7 +27,7 @@ export class SendStaffChatMessageUseCase {
     const conversation = await this.deps.chatRepository.findConversationById(input.conversationId);
     if (!conversation) throw new ChatConversationNotFoundError();
     if (conversation.status === 'CLOSED') throw new ChatConversationClosedError();
-    if (conversation.claimedByUserId !== input.userId) throw new ChatNotClaimantError();
+    if (conversation.status !== 'CLAIMED' || conversation.claimedByUserId !== input.userId) throw new ChatNotClaimantError();
     if (!input.body?.trim() && !input.file) {
       throw new ValidationError('Enter a message or attach a file.');
     }
