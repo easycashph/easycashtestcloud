@@ -70,3 +70,13 @@ export class PortalLoanApplicationNotFoundError extends DomainError {
   }
 }
 
+/** Same "same shape either way" reasoning as PortalLoanApplicationNotFoundError, for the payment
+ * history / amortization schedule view (2026-07-31 user request) - a loan account that doesn't
+ * exist, or belongs to a different client's Borrower record, is indistinguishable to the caller. */
+export class PortalLoanAccountNotFoundError extends DomainError {
+  constructor() {
+    super('PORTAL_LOAN_ACCOUNT_NOT_FOUND', 'Loan account not found.', undefined, 404);
+    this.name = 'PortalLoanAccountNotFoundError';
+  }
+}
+

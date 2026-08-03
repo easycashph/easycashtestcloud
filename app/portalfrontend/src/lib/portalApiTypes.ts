@@ -395,3 +395,31 @@ export interface PortalLoanApplicationTimelineEntry {
   label: string;
   occurredAt: string;
 }
+
+/** 2026-07-31 (user request) - GET /portal/loan-accounts / GET /portal/loan-accounts/:id/installments.
+ * Only ever populated once staff has linked the account to a real Borrower and booked a real
+ * LoanAccount - never fabricated. */
+export interface PortalLoanAccountSummary {
+  id: string;
+  loanCode: string;
+  status: string;
+  principalAmount: string;
+  outstandingBalance: string;
+  contractualInterestRate: string | null;
+  installmentCount: number;
+  firstRepaymentDate: string;
+  activatedAt: string | null;
+}
+
+export interface PortalInstallmentEntry {
+  installmentNumber: number;
+  dueDate: string;
+  principalDue: string;
+  interestDue: string;
+  feesDue: string;
+  penaltyDue: string;
+  totalDue: string;
+  totalPaid: string;
+  status: string;
+  lastPaidAt: string | null;
+}

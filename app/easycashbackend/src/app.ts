@@ -51,6 +51,9 @@ import { SubmitLoanApplicationUseCase } from '@modules/client-portal/application
 import { ListPortalLoanApplicationsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanApplicationsUseCase';
 import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationUseCase';
 import { GetPortalLoanApplicationStatusTimelineUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
+import { createPortalLoanAccountRouter } from '@modules/client-portal/interface/http/portalLoanAccountRouter';
+import { ListPortalLoanAccountsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountsUseCase';
+import { ListPortalLoanAccountInstallmentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
 import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
 import { UploadPortalLoanApplicationDocumentUseCase } from '@modules/client-portal/application/use-cases/UploadPortalLoanApplicationDocumentUseCase';
@@ -1213,6 +1216,22 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalLoanApplicationRouter);
+
+  // Payment history / amortization schedule for a linked client's real, booked loan account(s)
+  // (2026-07-31 user request) - reuses the same loanAccountRepository/repaymentInstallmentRepository
+  // instances the staff-facing loan-account module already wires above.
+  const portalLoanAccountRouter = createPortalLoanAccountRouter(
+    {
+      listPortalLoanAccountsUseCase: new ListPortalLoanAccountsUseCase({ portalAccountRepository, loanAccountRepository }),
+      listPortalLoanAccountInstallmentsUseCase: new ListPortalLoanAccountInstallmentsUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+      }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalLoanAccountRouter);
 
   // Easycash Portal Notification Center, Phase C (2026-07-24): bell notifications for Approved/
   // Declined decisions, mounted at the same /api/v1/portal prefix.

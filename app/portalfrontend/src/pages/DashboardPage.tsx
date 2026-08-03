@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
+import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
@@ -197,6 +198,8 @@ export function DashboardPage() {
           </Card>
           </motion.div>
         </motion.div>
+
+        <PortalLoanAccountsSection />
 
         <motion.div initial="hidden" animate="show" variants={fadeUp}>
         <Card className="mt-5 p-6">
