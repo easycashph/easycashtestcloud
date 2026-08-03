@@ -423,3 +423,35 @@ export interface PortalInstallmentEntry {
   status: string;
   lastPaidAt: string | null;
 }
+
+/** 2026-07-31 (user request) - Portal<->LMS support chat. Mirrors backend's IChatRepository DTOs. */
+export type ChatConversationStatus = 'WAITING' | 'CLAIMED' | 'CLOSED';
+export type ChatMessageSenderType = 'PORTAL_ACCOUNT' | 'STAFF' | 'SYSTEM';
+
+export interface ChatConversation {
+  id: string;
+  portalAccountId: string;
+  status: ChatConversationStatus;
+  claimedByUserId: string | null;
+  claimedByUserName: string | null;
+  requiresManager: boolean;
+  createdAt: string;
+  claimedAt: string | null;
+  closedAt: string | null;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderType: ChatMessageSenderType;
+  senderUserId: string | null;
+  senderUserName: string | null;
+  body: string | null;
+  attachment: { id: string; fileName: string } | null;
+  createdAt: string;
+}
+
+export interface PortalChatView {
+  conversation: ChatConversation;
+  messages: ChatMessage[];
+}

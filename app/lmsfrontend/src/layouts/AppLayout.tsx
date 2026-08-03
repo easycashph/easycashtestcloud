@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  MessageCircle,
 } from 'lucide-react';
 import * as React from 'react';
 import { AccountMenu } from '@/components/AccountMenu';
@@ -21,9 +22,38 @@ import { HelpButton } from '@/components/HelpButton';
 import { NotificationBell } from '@/components/NotificationBell';
 import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
+import { apiClient } from '@/lib/apiClient';
 import { COMPANY_INFO } from '@/lib/staticConfig';
 import { useRole } from '@/lib/roleContext';
 import { cn } from '@/lib/utils';
+
+/** 2026-07-31 (user request): a live count of unclaimed Portal chat requests, polled from the
+ * sidebar so any eligible staff member sees a fresh "someone's waiting" indicator without opening
+ * the Chat page - same 403-means-not-eligible handling as the page itself (silently shows 0 rather
+ * than an error badge for a role that simply can't see the queue). */
+function useChatQueueCount(): number {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    const poll = () => {
+      apiClient
+        .get<unknown[]>('/chat/queue')
+        .then((queue) => {
+          if (!cancelled) setCount(queue.length);
+        })
+        .catch(() => {
+          if (!cancelled) setCount(0);
+        });
+    };
+    poll();
+    const timer = window.setInterval(poll, 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+  return count;
+}
 
 /**
  * Section/tab order confirmed by the business: Home → Loan → Collection → Configuration →
@@ -65,11 +95,15 @@ const NAV_GROUPS = [
   },
   {
     label: 'Support',
-    items: [{ to: '/support/about', label: 'About', icon: Info, end: false }],
+    items: [
+      { to: '/chat', label: 'Chat', icon: MessageCircle, end: false },
+      { to: '/support/about', label: 'About', icon: Info, end: false },
+    ],
   },
 ];
 
 function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
+  const chatQueueCount = useChatQueueCount();
   return (
     <div
       className={cn(
@@ -115,6 +149,11 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
                     {item.label}
+                    {item.to === '/chat' && chatQueueCount > 0 && (
+                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                        {chatQueueCount}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
               </div>
