@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ValidationError } from '@shared/errors/DomainError';
 import type { StartOrResumePortalChatUseCase } from '../../application/use-cases/StartOrResumePortalChatUseCase';
+import type { GetActivePortalChatUseCase } from '../../application/use-cases/GetActivePortalChatUseCase';
 import type { GetPortalChatUseCase } from '../../application/use-cases/GetPortalChatUseCase';
 import type { SendPortalChatMessageUseCase } from '../../application/use-cases/SendPortalChatMessageUseCase';
 import type { DownloadPortalChatAttachmentUseCase } from '../../application/use-cases/DownloadPortalChatAttachmentUseCase';
@@ -8,6 +9,7 @@ import { getCurrentPortalAccount } from '@modules/client-portal/interface/http/r
 
 export interface PortalChatControllerDeps {
   startOrResumePortalChatUseCase: StartOrResumePortalChatUseCase;
+  getActivePortalChatUseCase: GetActivePortalChatUseCase;
   getPortalChatUseCase: GetPortalChatUseCase;
   sendPortalChatMessageUseCase: SendPortalChatMessageUseCase;
   downloadPortalChatAttachmentUseCase: DownloadPortalChatAttachmentUseCase;
@@ -21,6 +23,16 @@ export class PortalChatController {
     try {
       const account = getCurrentPortalAccount(req);
       const conversation = await this.deps.startOrResumePortalChatUseCase.execute(account.sub);
+      res.status(200).json(conversation);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getActive = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const conversation = await this.deps.getActivePortalChatUseCase.execute(account.sub);
       res.status(200).json(conversation);
     } catch (error) {
       next(error);

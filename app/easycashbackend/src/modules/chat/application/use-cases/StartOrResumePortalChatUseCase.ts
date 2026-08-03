@@ -4,9 +4,11 @@ export interface StartOrResumePortalChatUseCaseDeps {
   chatRepository: IChatRepository;
 }
 
-/** A client resumes their existing open (WAITING/CLAIMED) conversation rather than starting a
- * second one every time they open the chat widget - only creates a new one if their last
- * conversation was CLOSED or they've never chatted before. */
+/** Called only when the client explicitly clicks "Request Loan Officer Support" (2026-08-03 user
+ * request) - opening the chat widget alone no longer calls this (see GetActivePortalChatUseCase).
+ * Still resumes an existing open (WAITING/CLAIMED/PENDING_TRANSFER) conversation rather than
+ * starting a second one if they click the button again mid-conversation - only creates a new one
+ * if their last conversation was CLOSED or they've never chatted before. */
 export class StartOrResumePortalChatUseCase {
   constructor(private readonly deps: StartOrResumePortalChatUseCaseDeps) {}
 

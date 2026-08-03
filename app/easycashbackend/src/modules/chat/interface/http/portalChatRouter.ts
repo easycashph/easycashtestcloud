@@ -14,6 +14,7 @@ export function createPortalChatRouter(deps: PortalChatControllerDeps, portalTok
   const requirePortalAuth = createRequirePortalAuth(portalTokenService);
 
   router.post('/chat/start', requirePortalAuth, controller.start);
+  router.get('/chat/active', requirePortalAuth, controller.getActive);
   router.get('/chat/:id', requirePortalAuth, controller.get);
   router.post('/chat/:id/messages', requirePortalAuth, upload.single('file'), controller.sendMessage);
   router.get('/chat/:id/attachments/:attachmentId/download', requirePortalAuth, controller.downloadAttachment);
