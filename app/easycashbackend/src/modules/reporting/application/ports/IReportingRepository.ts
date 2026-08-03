@@ -86,11 +86,17 @@ export interface LoanReleaseReportRow {
 /**
  * 2026-07-17: the remaining 8 legacy reports (`docs/SESSION_LOG_2026-07-15.md`'s Report Generation
  * scoping section), header layouts verified directly against the real legacy `.xlsx` samples
- * (`C:\Users\EASYCASH\Downloads\Reports\`). Four are "as-of-today" snapshots (no date filter,
- * confirmed with the user — matches the legacy files having no date-range columns): Aging,
- * Detailed Ending Current Balance, Accounts with Past Due, Fully Paid Accounts. The other four
- * (Collection, Expected Collection, First Amortization, Daily Collection) filter like every other
- * report in this module.
+ * (`C:\Users\EASYCASH\Downloads\Reports\`). Originally believed "as-of-today" snapshots with no
+ * date filter for Aging, Detailed Ending Current Balance, Accounts with Past Due, Fully Paid
+ * Accounts, matching those legacy sample files having no date-range columns.
+ *
+ * 2026-08-03 correction (user-verified directly against the live SDevTech UI, not just the old
+ * static file sample): SDevTech's own "Accounts with Past Due" report DOES prompt for a start/end
+ * date — the "no date filter" assumption for this one was wrong. Found via a scale mismatch (1206
+ * LMS rows vs 16 SDevTech rows) — the extra ~1190 were genuinely ancient (2012-2021) unpaid
+ * installments with no upper bound, since this report had never had a date filter to begin with.
+ * Aging/Detailed Ending Current Balance/Fully Paid Accounts are unconfirmed either way — left
+ * unfiltered until similarly verified.
  */
 export interface AgingReportRow {
   clientName: string;
@@ -228,7 +234,7 @@ export interface IReportingRepository {
   getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]>;
   getAgingReport(filter: { branchId?: string }): Promise<AgingReportRow[]>;
   getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]>;
-  getAccountsWithPastDueReport(filter: { branchId?: string }): Promise<AccountsWithPastDueReportRow[]>;
+  getAccountsWithPastDueReport(filter: DateRangeFilter & { branchId?: string }): Promise<AccountsWithPastDueReportRow[]>;
   getCollectionHistoryReport(filter: DateRangeFilter & { branchId?: string }): Promise<CollectionHistoryReportRow[]>;
   getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;

@@ -158,7 +158,9 @@ export class ReportingController {
   accountsWithPastDueXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const rows = await this.deps.getAccountsWithPastDueReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getAccountsWithPastDueReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeAccountsWithPastDueReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Accounts with Past Due.xlsx"');
