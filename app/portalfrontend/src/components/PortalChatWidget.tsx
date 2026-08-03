@@ -276,7 +276,10 @@ export function PortalChatWidget() {
             {messages.map((message) => (
               <div key={message.id} className={message.senderType === 'SYSTEM' ? 'text-center' : message.senderType === 'PORTAL_ACCOUNT' ? 'flex justify-end' : 'flex justify-start'}>
                 {message.senderType === 'SYSTEM' ? (
-                  <p className="text-xs italic text-muted-foreground">{message.body}</p>
+                  <p className="text-xs italic text-muted-foreground">
+                    {message.body}{' '}
+                    <span className="opacity-70">({new Date(message.createdAt).toLocaleString()})</span>
+                  </p>
                 ) : (
                   <div
                     className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
@@ -294,6 +297,7 @@ export function PortalChatWidget() {
                         <Paperclip className="h-3 w-3" /> {message.attachment.fileName}
                       </button>
                     )}
+                    <p className="mt-1 text-[10px] opacity-70">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 )}
               </div>

@@ -32,6 +32,7 @@ function mapParticipant(row: {
 function mapConversation(row: {
   id: string;
   portalAccountId: string;
+  portalAccount: { email: string } | null;
   status: string;
   claimedByUserId: string | null;
   claimedByUser: UserNameRow;
@@ -50,6 +51,7 @@ function mapConversation(row: {
   return {
     id: row.id,
     portalAccountId: row.portalAccountId,
+    portalAccountEmail: row.portalAccount?.email ?? null,
     status: row.status as ChatConversationRecord['status'],
     claimedByUserId: row.claimedByUserId,
     claimedByUserName: fullName(row.claimedByUser),
@@ -68,6 +70,7 @@ function mapConversation(row: {
 }
 
 const CONVERSATION_INCLUDE = {
+  portalAccount: { select: { email: true } },
   claimedByUser: { select: { firstName: true, lastName: true } },
   originalClaimedByUser: { select: { firstName: true, lastName: true } },
   pendingTransferToUser: { select: { firstName: true, lastName: true } },
