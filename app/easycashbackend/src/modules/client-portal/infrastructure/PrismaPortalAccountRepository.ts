@@ -1,4 +1,4 @@
-import type { PortalAccount as PrismaPortalAccountRow } from '@prisma/client';
+import type { Prisma, PortalAccount as PrismaPortalAccountRow } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import type {
   CreatePortalAccountInput,
@@ -33,6 +33,14 @@ function toRecord(row: PrismaPortalAccountRow): PortalAccountRecord {
     occupation: row.occupation,
     employer: row.employer,
     monthlyIncome: row.monthlyIncome ? Number(row.monthlyIncome) : null,
+    officeAddress: row.officeAddress,
+    tinNumber: row.tinNumber,
+    sssNumber: row.sssNumber,
+    dependants: (row.dependants as PortalAccountRecord['dependants']) ?? null,
+    reference1Name: row.reference1Name,
+    reference1Mobile: row.reference1Mobile,
+    reference2Name: row.reference2Name,
+    reference2Mobile: row.reference2Mobile,
     houseUnitNumber: row.houseUnitNumber,
     street: row.street,
     barangay: row.barangay,
@@ -92,6 +100,14 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         occupation: patch.occupation,
         employer: patch.employer,
         monthlyIncome: patch.monthlyIncome,
+        officeAddress: patch.officeAddress,
+        tinNumber: patch.tinNumber,
+        sssNumber: patch.sssNumber,
+        dependants: (patch.dependants as Prisma.InputJsonValue | undefined) ?? undefined,
+        reference1Name: patch.reference1Name,
+        reference1Mobile: patch.reference1Mobile,
+        reference2Name: patch.reference2Name,
+        reference2Mobile: patch.reference2Mobile,
         houseUnitNumber: patch.houseUnitNumber,
         street: patch.street,
         barangay: patch.barangay,

@@ -48,6 +48,14 @@ export class UpdatePortalProfileUseCase {
         occupation: input.occupation,
         employer: input.employer,
         monthlyIncome: input.monthlyIncome,
+        officeAddress: input.officeAddress,
+        tinNumber: input.tinNumber,
+        sssNumber: input.sssNumber,
+        dependants: input.dependants,
+        reference1Name: input.reference1Name,
+        reference1Mobile: input.reference1Mobile,
+        reference2Name: input.reference2Name,
+        reference2Mobile: input.reference2Mobile,
         houseUnitNumber: input.addresses?.[0]?.houseUnitNumber,
         street: input.addresses?.[0]?.street,
         barangay: input.addresses?.[0]?.barangay,
@@ -71,6 +79,21 @@ export class UpdatePortalProfileUseCase {
       occupation: input.occupation,
       employer: input.employer,
       monthlyIncome: input.monthlyIncome,
+      officeAddress: input.officeAddress,
+      tinNumber: input.tinNumber,
+      sssNumber: input.sssNumber,
+      dependants: input.dependants,
+      // References are always sent as a pair (My Profile's form always has both reference
+      // fields, whether filled or not) - undefined only when this update touches neither field
+      // at all (e.g. the application<->profile backfill sync, which never sends references),
+      // never a partial replace of "just reference 1".
+      characterReferences:
+        input.reference1Name === undefined && input.reference1Mobile === undefined && input.reference2Name === undefined && input.reference2Mobile === undefined
+          ? undefined
+          : [
+              { name: input.reference1Name ?? '', mobile: input.reference1Mobile },
+              { name: input.reference2Name ?? '', mobile: input.reference2Mobile },
+            ],
       addresses: input.addresses,
     });
     return this.deps.getPortalProfileUseCase.execute(portalAccountId);

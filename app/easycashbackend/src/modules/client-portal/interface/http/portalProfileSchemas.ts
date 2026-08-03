@@ -1,9 +1,8 @@
 import { z } from 'zod';
 
 /** Phase D (2026-07-24), widened 2026-07-27 (user request, LMS parity) to also cover Personal and
- * Employment - see UpdatePortalProfileInput's own doc comment for exactly which Borrower fields
- * remain staff-editable-only (name, government IDs, dependants, references, etc. - identity/legal
- * fields that shouldn't be self-service). */
+ * Employment, and again 2026-07-31 (user request) to also cover government IDs, Dependants, and
+ * Character References - see UpdatePortalProfileInput's own doc comment. */
 export const updatePortalProfileSchema = z.object({
   // 2026-07-30 (user request): editable ONLY before the account is linked to a real Borrower -
   // see UpdatePortalProfileUseCase's branch. Once linked, these are silently ignored (name stays
@@ -24,6 +23,14 @@ export const updatePortalProfileSchema = z.object({
   occupation: z.string().min(1).optional(),
   employer: z.string().min(1).optional(),
   monthlyIncome: z.coerce.number().nonnegative().optional(),
+  officeAddress: z.string().min(1).optional(),
+  tinNumber: z.string().min(1).optional(),
+  sssNumber: z.string().min(1).optional(),
+  dependants: z.array(z.object({ name: z.string().min(1), age: z.string().optional(), relationship: z.string().optional() })).optional(),
+  reference1Name: z.string().optional(),
+  reference1Mobile: z.string().optional(),
+  reference2Name: z.string().optional(),
+  reference2Mobile: z.string().optional(),
   addresses: z
     .array(
       z.object({

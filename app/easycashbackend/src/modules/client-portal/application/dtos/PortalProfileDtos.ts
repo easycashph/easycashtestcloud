@@ -1,9 +1,10 @@
 import type { CreateBorrowerAddressInput } from '@modules/borrower/application/dtos/BorrowerDtos';
 
 /**
- * Phase D (2026-07-24 user request), widened 2026-07-27 (user request, LMS parity): Personal,
- * Address, and Employment are self-service editable. Still deliberately excludes name, government
- * IDs, dependants, and references - those stay staff-editable-only.
+ * Phase D (2026-07-24 user request), widened 2026-07-27 (user request, LMS parity), and again
+ * 2026-07-31 (user request): Personal, Address, Employment, government IDs, Dependants, and
+ * Character References are all self-service editable now. Name stays editable only pre-linkage
+ * (see UpdatePortalProfileUseCase's own doc comment).
  */
 export interface UpdatePortalProfileInput {
   firstName?: string;
@@ -22,6 +23,14 @@ export interface UpdatePortalProfileInput {
   occupation?: string;
   employer?: string;
   monthlyIncome?: number;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
+  dependants?: { name: string; age?: string; relationship?: string }[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
   addresses?: CreateBorrowerAddressInput[];
 }
 
@@ -46,6 +55,14 @@ export interface PortalProfileDto {
   occupation: string | null;
   employer: string | null;
   monthlyIncome: number | null;
+  officeAddress: string | null;
+  tinNumber: string | null;
+  sssNumber: string | null;
+  dependants: { name: string; age?: string; relationship?: string }[];
+  reference1Name: string | null;
+  reference1Mobile: string | null;
+  reference2Name: string | null;
+  reference2Mobile: string | null;
   addresses: {
     addressType: string | null;
     houseUnitNumber: string | null;

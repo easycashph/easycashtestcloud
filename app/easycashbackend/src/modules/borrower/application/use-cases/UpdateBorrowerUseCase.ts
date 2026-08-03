@@ -23,6 +23,20 @@ export interface UpdateBorrowerInput {
   occupation?: string;
   employer?: string;
   monthlyIncome?: number;
+  /** 2026-07-31 (user request, Portal "My Profile" Employment section) - maps onto
+   * BorrowerIncomeDetail.employerAddress, matching the label the loan application form already
+   * uses for the same concept ("Office address"). */
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
+  dependants?: { name: string; age?: string; relationship?: string }[];
+  /** Always replaces the whole set (see Borrower.replaceCharacterReferences' own doc comment) -
+   * a flat 2-reference shape matching the Portal loan application form's own
+   * reference1Name/reference1Mobile/reference2Name/reference2Mobile fields, not the richer
+   * firstName/lastName/relationship/email shape staff can enter elsewhere. `name` is stored
+   * whole in `firstName` (lastName left blank) - self-service references are a single free-text
+   * full name, not separately captured first/last. */
+  characterReferences?: { name: string; mobile?: string }[];
   addresses?: AddressProps[];
 }
 
@@ -55,12 +69,29 @@ export class UpdateBorrowerUseCase {
       facebookLink: input.facebookLink,
     });
 
-    if (input.occupation !== undefined || input.employer !== undefined || input.monthlyIncome !== undefined) {
+    if (input.occupation !== undefined || input.employer !== undefined || input.monthlyIncome !== undefined || input.officeAddress !== undefined) {
       borrower.updateIncomeDetail({
         position: input.occupation,
         employerName: input.employer,
+        employerAddress: input.officeAddress,
         monthlyIncome: input.monthlyIncome,
       });
+    }
+
+    if (input.tinNumber !== undefined || input.sssNumber !== undefined) {
+      borrower.updateGovernmentId({ tinNumber: input.tinNumber, sssNumber: input.sssNumber });
+    }
+
+    if (input.dependants !== undefined) {
+      borrower.updateDependants(input.dependants);
+    }
+
+    if (input.characterReferences !== undefined) {
+      borrower.replaceCharacterReferences(
+        input.characterReferences
+          .filter((r) => r.name.trim())
+          .map((r) => ({ firstName: r.name.trim(), lastName: '', phoneNumber: r.mobile?.trim() || undefined })),
+      );
     }
 
     if (input.addresses !== undefined) {

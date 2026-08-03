@@ -330,4 +330,27 @@ export class Borrower {
     this.props.addresses = addresses;
     this.props.updatedAt = new Date();
   }
+
+  /** Merges into the existing 1:1 government id (creates one if none exists yet) - PATCH-style
+   * like updateIncomeDetail (2026-07-31 user request, Portal "My Profile" TIN/SSS fields). */
+  updateGovernmentId(patch: Partial<BorrowerGovernmentId>): void {
+    this.props.governmentId = { ...this.props.governmentId, ...patch };
+    this.props.updatedAt = new Date();
+  }
+
+  /** Always replaces the whole list, same reasoning as replaceAddresses - a dependant has no
+   * independent identity of its own to merge against (2026-07-31 user request). */
+  updateDependants(dependants: BorrowerDependant[]): void {
+    this.props.dependants = dependants;
+    this.props.updatedAt = new Date();
+  }
+
+  /** Always replaces the whole list (2026-07-31 user request, Portal "My Profile" - previously
+   * create-only, set once at Borrower creation from the source LoanApplication and never
+   * editable afterward by anyone, staff included). `id` is ignored on input - the repository
+   * always deletes and recreates this bounded collection, matching replaceAddresses. */
+  replaceCharacterReferences(references: Array<Omit<CharacterReference, 'id'>>): void {
+    this.props.characterReferences = references.map((r) => ({ id: '', ...r }));
+    this.props.updatedAt = new Date();
+  }
 }
