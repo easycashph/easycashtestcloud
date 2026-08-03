@@ -533,7 +533,15 @@ export class PrismaReportingRepository implements IReportingRepository {
         interestDue: installment.interestDue.toString(),
         principalPaid: installment.principalPaid.toString(),
         interestPaid: installment.interestPaid.toString(),
-        monthDue: (Number(installment.principalDue) + Number(installment.interestDue)).toFixed(2),
+        // 2026-08-03 (user-reported, same SDevTech comparison as pastDueAmount above): this must
+        // be the REMAINING unpaid amount for this installment (0 once fully paid), not the static
+        // principal+interest due - a paid installment was showing its full original due amount
+        // here instead of 0, matching every case where SDevTech's own figure differed.
+        monthDue: (
+          Number(installment.principalDue) -
+          Number(installment.principalPaid) +
+          (Number(installment.interestDue) - Number(installment.interestPaid))
+        ).toFixed(2),
         pastDueAmount: Math.max(0, pastDueAmount).toFixed(2),
         daysLate: daysLateOf(installment.dueDate, today),
         repayment: (
