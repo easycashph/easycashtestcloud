@@ -386,7 +386,7 @@ export class PrismaReportingRepository implements IReportingRepository {
   /** As-of-today snapshot: only loans with the oldest unpaid installment currently overdue.
    * AMOUNT DUE / REPAYMENT / LACK-EXCESS are that one installment's total due, total paid, and
    * their difference - matches the legacy sample's exact arithmetic. */
-  async getAccountsWithPastDueReport(filter: { branchId?: string }): Promise<AccountsWithPastDueReportRow[]> {
+  async getAccountsWithPastDueReport(filter: DateRangeFilter & { branchId?: string }): Promise<AccountsWithPastDueReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
         status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] },
@@ -410,6 +410,13 @@ export class PrismaReportingRepository implements IReportingRepository {
       if (!oldestUnpaid) continue;
       const daysLate = daysLateOf(oldestUnpaid.dueDate, today);
       if (daysLate === 0) continue;
+      // 2026-08-03 (user-confirmed, verified directly against the live SDevTech UI): SDevTech's
+      // own report prompts for a start/end date - previously assumed "as-of-today, no filter"
+      // from an old static sample file that had no date columns, which was wrong for this report.
+      // Without this, every unpaid installment ever migrated stayed in scope forever, including
+      // ones from as far back as 2012.
+      if (filter.from && oldestUnpaid.dueDate < filter.from) continue;
+      if (filter.to && oldestUnpaid.dueDate > filter.to) continue;
 
       const amountDue =
         Number(oldestUnpaid.principalDue) + Number(oldestUnpaid.interestDue) + effectiveFees(oldestUnpaid) + effectivePenalty(oldestUnpaid);
