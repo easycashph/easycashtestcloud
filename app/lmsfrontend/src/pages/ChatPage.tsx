@@ -6,6 +6,14 @@ import { Input } from '@/components/ui/input';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
 
+interface ChatParticipant {
+  userId: string;
+  userName: string;
+  joinedAt: string;
+  leftAt: string | null;
+  leftReason: 'TRANSFERRED' | 'CLOSED' | null;
+}
+
 interface ChatConversation {
   id: string;
   portalAccountId: string;
@@ -19,6 +27,8 @@ interface ChatConversation {
   pendingTransferFromUserId: string | null;
   pendingTransferFromUserName: string | null;
   pendingTransferPin: string | null;
+  /** Full hand-off chain, oldest first (2026-08-03 user request, "trackable chat logs"). */
+  participants: ChatParticipant[];
   createdAt: string;
   claimedAt: string | null;
   closedAt: string | null;
@@ -431,6 +441,13 @@ export function ChatPage() {
                           ? 'Transfer pending confirmation'
                           : 'Client conversation'}
                 </CardTitle>
+                {view.conversation.participants.length > 0 && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {view.conversation.participants
+                      .map((p) => `${p.userName}${p.leftAt ? ` (${p.leftReason === 'TRANSFERRED' ? 'transferred' : 'closed'})` : ''}`)
+                      .join(' → ')}
+                  </p>
+                )}
                 {actionError && <p className="text-xs text-destructive">{actionError}</p>}
               </div>
               {!oversightMode && !view.isReadOnly && view.conversation.status === 'CLAIMED' && (
