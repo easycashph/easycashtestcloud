@@ -1,5 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
+import { Money } from '@shared/domain/Money';
+import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
+import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
+import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
+import { isSecMc3Covered } from '@shared/domain/compliance/SecMc3Coverage';
 import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,
@@ -29,6 +34,50 @@ function effectivePenalty(installment: { penaltyDue: Prisma.Decimal; penaltyOver
 
 function effectiveFees(installment: { feesDue: Prisma.Decimal; feesOverrideAmount: Prisma.Decimal | null }): number {
   return installment.feesOverrideAmount !== null ? Number(installment.feesOverrideAmount) : Number(installment.feesDue);
+}
+
+/**
+ * 2026-08-03 (user-confirmed, "sa ngayon baguhin mo muna"): SDevTech's own "Accounts with Past
+ * Due" report live-recomputes penalty as-of-today even for migrated loans, so this report must do
+ * the same to reconcile against it - a deliberate, report-local override of `CurrentPenaltyResolver`
+ * / ADR-050 §5's "prospective-only" scope (forcing `isProspectiveLoan: true` here does not touch the
+ * loan's real `legacyId`/status). Every OTHER consumer of a migrated loan's penalty - the ledger,
+ * `LoanAccount.balances`, Reduce Penalty's ceiling, other reports - keeps reading the frozen
+ * `penaltyDue` snapshot exactly as before; only this report's displayed figure goes live, and it
+ * reuses the exact same `resolveComputedPenalty` formula every other live-penalty consumer already
+ * uses rather than re-deriving ADR-050 a second time.
+ */
+function liveEffectivePenalty(
+  installment: {
+    principalDue: Prisma.Decimal;
+    interestDue: Prisma.Decimal;
+    principalPaid: Prisma.Decimal;
+    interestPaid: Prisma.Decimal;
+    penaltyDue: Prisma.Decimal;
+    penaltyOverrideAmount: Prisma.Decimal | null;
+    status: string;
+    dueDate: Date;
+  },
+  context: Omit<PenaltyComputationContext, 'isProspectiveLoan'>,
+  asOfDate: Date,
+): number {
+  if (installment.penaltyOverrideAmount !== null) return Number(installment.penaltyOverrideAmount);
+
+  const adapter = {
+    due: InstallmentAmounts.of({
+      principal: Money.of(installment.principalDue),
+      interest: Money.of(installment.interestDue),
+      penalty: Money.of(installment.penaltyDue),
+    }),
+    paid: InstallmentAmounts.of({
+      principal: Money.of(installment.principalPaid),
+      interest: Money.of(installment.interestPaid),
+    }),
+    status: installment.status,
+    dueDate: installment.dueDate,
+  } as unknown as RepaymentInstallment;
+
+  return Number(resolveComputedPenalty(adapter, { ...context, isProspectiveLoan: true }, asOfDate).toString());
 }
 
 function daysLateOf(dueDate: Date, today: Date): number {
@@ -436,7 +485,19 @@ export class PrismaReportingRepository implements IReportingRepository {
       const daysLate = daysLateOf(reported.dueDate, today);
       if (daysLate === 0) continue;
 
-      const amountDue = Number(reported.principalDue) + Number(reported.interestDue) + effectiveFees(reported) + effectivePenalty(reported);
+      const originationDate = loan.activatedAt ?? loan.anticipatedDisbursementDate ?? loan.firstRepaymentDate;
+      const livePenaltyContext: Omit<PenaltyComputationContext, 'isProspectiveLoan'> = {
+        principalAmount: Money.of(loan.principalAmount),
+        isSecMc3Covered: isSecMc3Covered({
+          principalAmount: Money.of(loan.principalAmount),
+          installmentCount: loan.installmentCount,
+          isUnsecuredGeneralPurpose: loan.loanProductVersion.loanProduct.isUnsecuredGeneralPurpose,
+          originationDate,
+        }),
+        maturityDate: maturityDate ?? today,
+      };
+      const penalty = liveEffectivePenalty(reported, livePenaltyContext, today);
+      const amountDue = Number(reported.principalDue) + Number(reported.interestDue) + effectiveFees(reported) + penalty;
       const repayment =
         Number(reported.principalPaid) + Number(reported.interestPaid) + Number(reported.feesPaid) + Number(reported.penaltyPaid);
       const lastPaid = [...installments].filter((i) => i.lastPaidAt).sort((a, b) => b.lastPaidAt!.getTime() - a.lastPaidAt!.getTime())[0];
