@@ -415,8 +415,15 @@ export class PrismaReportingRepository implements IReportingRepository {
       // from an old static sample file that had no date columns, which was wrong for this report.
       // Without this, every unpaid installment ever migrated stayed in scope forever, including
       // ones from as far back as 2012.
-      if (filter.from && oldestUnpaid.dueDate < filter.from) continue;
-      if (filter.to && oldestUnpaid.dueDate > filter.to) continue;
+      //
+      // 2026-08-03 follow-up fix (user-reported): checking only the OLDEST unpaid installment's
+      // due date against the range wrongly excluded an account whose delinquency started earlier
+      // but has a MORE RECENT unpaid installment inside the selected range too (e.g. oldest unpaid
+      // is June, but July is also unpaid and the user filtered on July) - the row is still built
+      // from the oldest unpaid (the true overdue picture, unchanged), only the eligibility check
+      // now accepts the account if ANY unpaid installment falls in range.
+      const anyUnpaidInRange = unpaid.some((i) => (!filter.from || i.dueDate >= filter.from) && (!filter.to || i.dueDate <= filter.to));
+      if (!anyUnpaidInRange) continue;
 
       const amountDue =
         Number(oldestUnpaid.principalDue) + Number(oldestUnpaid.interestDue) + effectiveFees(oldestUnpaid) + effectivePenalty(oldestUnpaid);
