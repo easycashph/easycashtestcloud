@@ -1,11 +1,16 @@
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import type { IChatRepository, ChatConversationRecord, ChatMessageRecord } from '../ports/IChatRepository';
 import { canClaimNewConversations } from '../../domain/ChatEligibility';
 import { ChatConversationNotFoundError, ChatNotEligibleError } from '../../domain/errors/ChatErrors';
+import { buildChatClientInfo, type ChatClientInfo } from '../ChatClientInfo';
 
 export interface GetChatConversationForStaffUseCaseDeps {
   userRepository: IUserRepository;
   chatRepository: IChatRepository;
+  portalAccountRepository: IPortalAccountRepository;
+  loanApplicationRepository: ILoanApplicationRepository;
 }
 
 export interface StaffChatView {
@@ -15,6 +20,9 @@ export interface StaffChatView {
    * case (2026-07-31 user request): the original claimant keeps seeing a conversation they've
    * since transferred away, but can't chat in it anymore. */
   isReadOnly: boolean;
+  /** Who the loan officer is actually talking to, and their loan application(s) if any
+   * (2026-08-03 user request). */
+  client: ChatClientInfo;
 }
 
 /** A staff member can view a conversation's messages if they're the current claimant, EVER a
@@ -48,6 +56,7 @@ export class GetChatConversationForStaffUseCase {
     const conversationForViewer: ChatConversationRecord = isPendingTransferParty ? conversation : { ...conversation, pendingTransferPin: null };
 
     const messages = await this.deps.chatRepository.listMessages(conversationId);
-    return { conversation: conversationForViewer, messages, isReadOnly: !isCurrentClaimant };
+    const client = await buildChatClientInfo(this.deps, conversation.portalAccountId);
+    return { conversation: conversationForViewer, messages, isReadOnly: !isCurrentClaimant, client };
   }
 }
