@@ -558,9 +558,17 @@ export class PrismaReportingRepository implements IReportingRepository {
     return installments.map((installment) => {
       const loanSchedule = scheduleByLoanId.get(installment.loanAccountId) ?? [];
       const maturityDate = loanSchedule.length > 0 ? loanSchedule[loanSchedule.length - 1]!.dueDate : null;
-      const amountDue = Number(installment.principalDue) + Number(installment.interestDue) + effectiveFees(installment) + effectivePenalty(installment);
-      const repayment =
-        Number(installment.principalPaid) + Number(installment.interestPaid) + Number(installment.feesPaid) + Number(installment.penaltyPaid);
+      // 2026-08-03 (user-confirmed): penalty excluded from Amount Due here - found via direct
+      // comparison against SDevTech's own "Collection" export, where several already-fully-repaid
+      // (principal+interest+fees) installments still carry a leftover `penaltyDue` (e.g.
+      // SML-REG_00322 #4: 5,300.54, an exact duplicate of installment #3's already-paid penalty -
+      // looks like a migration mis-attribution), inflating Amount Due above what SDevTech shows and
+      // above what was actually collected, even though the installment is legitimately "Paid".
+      // `penaltyPaid` is dropped from Repayment for the same reason - so the two figures stay
+      // apples-to-apples (both cover principal/interest/fees only) rather than Repayment including
+      // a penalty component Amount Due no longer does.
+      const amountDue = Number(installment.principalDue) + Number(installment.interestDue) + effectiveFees(installment);
+      const repayment = Number(installment.principalPaid) + Number(installment.interestPaid) + Number(installment.feesPaid);
 
       return {
         clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
