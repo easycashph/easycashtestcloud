@@ -425,7 +425,14 @@ export class PrismaReportingRepository implements IReportingRepository {
       // be the oldest unpaid installment THAT IS ITSELF within the filter range (falls back to the
       // overall oldest when no range is given, matching the un-filtered behavior).
       const inRange = (d: Date) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to);
-      const reported = (filter.from || filter.to ? unpaid.find((i) => inRange(i.dueDate)) : undefined) ?? unpaid[0]!;
+      const hasRangeFilter = Boolean(filter.from || filter.to);
+      // 2026-08-03 bug fix (found while investigating why the date filter above appeared to do
+      // nothing at all - it was still returning all 1206 unfiltered rows): fix #2's `?? unpaid[0]!`
+      // fallback silently readmitted every account whose unpaid installments simply didn't include
+      // one in range, since `Array.find` returning undefined always fell through to it - this
+      // eligibility gate never got reinstated after fix #1's version of it was replaced.
+      if (hasRangeFilter && !unpaid.some((i) => inRange(i.dueDate))) continue;
+      const reported = (hasRangeFilter ? unpaid.find((i) => inRange(i.dueDate)) : undefined) ?? unpaid[0]!;
       const daysLate = daysLateOf(reported.dueDate, today);
       if (daysLate === 0) continue;
 
