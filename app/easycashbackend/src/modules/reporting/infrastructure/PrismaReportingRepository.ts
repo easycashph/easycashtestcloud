@@ -433,8 +433,10 @@ export class PrismaReportingRepository implements IReportingRepository {
   }
 
   /** As-of-today snapshot: only loans with the oldest unpaid installment currently overdue.
-   * AMOUNT DUE / REPAYMENT / LACK-EXCESS are that one installment's total due, total paid, and
-   * their difference - matches the legacy sample's exact arithmetic. */
+   * CURRENT AMOUNT DUE / REPAYMENT / LACK-EXCESS are the reported (current-cycle) installment's
+   * total due, total paid, and their difference. PAST AMOUNT DUE is the account's total arrears -
+   * every overdue unpaid installment as of today, not just the reported one (see 2026-08-03 note
+   * below) - so it only equals Current when the account has exactly one overdue installment. */
   async getAccountsWithPastDueReport(filter: DateRangeFilter & { branchId?: string }): Promise<AccountsWithPastDueReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
@@ -498,6 +500,19 @@ export class PrismaReportingRepository implements IReportingRepository {
       };
       const penalty = liveEffectivePenalty(reported, livePenaltyContext, today);
       const amountDue = Number(reported.principalDue) + Number(reported.interestDue) + effectiveFees(reported) + penalty;
+      // 2026-08-03 (user-confirmed): "Past Amount Due" is the account's TOTAL arrears - every
+      // overdue unpaid installment as of today, not just the one `reported` row (which drives Due
+      // Date/Days Late/Repayment State and represents only the CURRENT cycle). Previously this
+      // column was a copy of `amountDue`, so it silently matched Current for every account
+      // regardless of how many months were actually unpaid; found via a real case (SL-CORP_00090
+      // etc.) with 2 overdue unpaid installments where the two figures should differ. Falls back to
+      // `amountDue` when `reported` is the only overdue installment, matching the user's own
+      // expectation ("dapat magkapareho lang kung 1 buwan lang ang late").
+      const overdueUnpaid = installments.filter((i) => i.status !== 'PAID' && i.dueDate < today);
+      const pastAmountDue = overdueUnpaid.reduce((sum, installment) => {
+        const installmentPenalty = installment.id === reported.id ? penalty : liveEffectivePenalty(installment, livePenaltyContext, today);
+        return sum + Number(installment.principalDue) + Number(installment.interestDue) + effectiveFees(installment) + installmentPenalty;
+      }, 0);
       const repayment =
         Number(reported.principalPaid) + Number(reported.interestPaid) + Number(reported.feesPaid) + Number(reported.penaltyPaid);
       const lastPaid = [...installments].filter((i) => i.lastPaidAt).sort((a, b) => b.lastPaidAt!.getTime() - a.lastPaidAt!.getTime())[0];
@@ -511,7 +526,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         maturityDate,
         lastPaidDate: lastPaid?.lastPaidAt ?? null,
         currentAmountDue: amountDue.toFixed(2),
-        pastAmountDue: amountDue.toFixed(2),
+        pastAmountDue: pastAmountDue.toFixed(2),
         daysLate,
         repayment: repayment.toFixed(2),
         lackOrExcess: (amountDue - repayment).toFixed(2),
