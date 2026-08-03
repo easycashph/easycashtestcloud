@@ -289,6 +289,21 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
           });
         }
       }
+
+      // 2026-07-31 (user request, Portal "My Profile" character references) - same
+      // delete-then-recreate/bounded-collection reasoning as addresses above. Previously
+      // create-only (only ever written by the initial borrower.upsert's `create` branch above,
+      // at Borrower creation from a LoanApplication) - this is what actually makes
+      // replaceCharacterReferences() persist on an UPDATE to an existing Borrower.
+      const existingReferenceCount = await client.characterReference.count({ where: { borrowerId: borrower.id } });
+      if (borrower.characterReferences.length > 0 || existingReferenceCount > 0) {
+        await client.characterReference.deleteMany({ where: { borrowerId: borrower.id } });
+        if (borrower.characterReferences.length > 0) {
+          await client.characterReference.createMany({
+            data: borrower.characterReferences.map(({ id: _id, ...rest }) => ({ borrowerId: borrower.id, ...rest })),
+          });
+        }
+      }
     });
   }
 }

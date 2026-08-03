@@ -19,6 +19,14 @@ export interface PortalAccountProfileFields {
   occupation: string | null;
   employer: string | null;
   monthlyIncome: number | null;
+  officeAddress: string | null;
+  tinNumber: string | null;
+  sssNumber: string | null;
+  dependants: { name: string; age?: string; relationship?: string }[] | null;
+  reference1Name: string | null;
+  reference1Mobile: string | null;
+  reference2Name: string | null;
+  reference2Mobile: string | null;
   houseUnitNumber: string | null;
   street: string | null;
   barangay: string | null;

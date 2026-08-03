@@ -23,6 +23,14 @@ function fromBorrower(borrower: Borrower): PortalProfileDto {
     occupation: borrower.incomeDetail?.position ?? null,
     employer: borrower.incomeDetail?.employerName ?? null,
     monthlyIncome: borrower.incomeDetail?.monthlyIncome ?? null,
+    officeAddress: borrower.incomeDetail?.employerAddress ?? null,
+    tinNumber: borrower.governmentId?.tinNumber ?? null,
+    sssNumber: borrower.governmentId?.sssNumber ?? null,
+    dependants: (borrower.dependants ?? []).map((d) => ({ name: d.name, age: d.age, relationship: d.relationship })),
+    reference1Name: borrower.characterReferences[0] ? [borrower.characterReferences[0].firstName, borrower.characterReferences[0].lastName].filter(Boolean).join(' ') : null,
+    reference1Mobile: borrower.characterReferences[0]?.phoneNumber ?? null,
+    reference2Name: borrower.characterReferences[1] ? [borrower.characterReferences[1].firstName, borrower.characterReferences[1].lastName].filter(Boolean).join(' ') : null,
+    reference2Mobile: borrower.characterReferences[1]?.phoneNumber ?? null,
     addresses: borrower.addresses.map((address) => ({
       addressType: address.addressType ?? null,
       houseUnitNumber: address.houseUnitNumber ?? null,
@@ -58,6 +66,14 @@ function fromPortalAccount(account: PortalAccountRecord): PortalProfileDto {
     occupation: account.occupation,
     employer: account.employer,
     monthlyIncome: account.monthlyIncome,
+    officeAddress: account.officeAddress,
+    tinNumber: account.tinNumber,
+    sssNumber: account.sssNumber,
+    dependants: account.dependants ?? [],
+    reference1Name: account.reference1Name,
+    reference1Mobile: account.reference1Mobile,
+    reference2Name: account.reference2Name,
+    reference2Mobile: account.reference2Mobile,
     addresses:
       account.houseUnitNumber || account.street || account.barangay || account.cityMunicipality || account.province || account.zipCode
         ? [

@@ -17,6 +17,11 @@ export function createChatRouter(deps: ChatControllerDeps, tokenService: ITokenS
 
   router.get('/chat/queue', requireAuth, controller.listQueue);
   router.get('/chat/mine', requireAuth, controller.listMine);
+  // MIS-only oversight (2026-07-31 user request) - enforced inside the use cases themselves
+  // (role check), same reasoning as the rest of this router.
+  router.get('/chat/oversight/staff', requireAuth, controller.listOversightStaff);
+  router.get('/chat/oversight/staff/:userId/conversations', requireAuth, controller.listOversightConversationsForStaff);
+  router.get('/chat/oversight/conversations/:id', requireAuth, controller.getOversightConversation);
   router.get('/chat/:id', requireAuth, controller.get);
   router.post('/chat/:id/claim', requireAuth, controller.claim);
   router.post('/chat/:id/transfer', requireAuth, controller.transfer);

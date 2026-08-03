@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -12,8 +13,15 @@ import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
 import { PhoneInput } from '@/components/PhoneInput';
 import { NumberInput } from '@/components/NumberInput';
+import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { computeAge } from '@/lib/computeAge';
 import type { PortalProfile, UpdatePortalProfileRequest } from '@/lib/portalApiTypes';
+
+interface DependantRow {
+  name: string;
+  age: string;
+  relationship: string;
+}
 
 const GENDER_OPTIONS = ['Female', 'Male'];
 const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
@@ -91,7 +99,15 @@ export function ProfileForm() {
   const [email, setEmail] = React.useState('');
   const [occupation, setOccupation] = React.useState('');
   const [employer, setEmployer] = React.useState('');
+  const [officeAddress, setOfficeAddress] = React.useState('');
   const [monthlyIncome, setMonthlyIncome] = React.useState('');
+  const [tinNumber, setTinNumber] = React.useState('');
+  const [sssNumber, setSssNumber] = React.useState('');
+  const [dependants, setDependants] = React.useState<DependantRow[]>([]);
+  const [reference1Name, setReference1Name] = React.useState('');
+  const [reference1Mobile, setReference1Mobile] = React.useState('');
+  const [reference2Name, setReference2Name] = React.useState('');
+  const [reference2Mobile, setReference2Mobile] = React.useState('');
   const [addressDraft, setAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
   const [saveState, setSaveState] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = React.useState('');
@@ -108,7 +124,10 @@ export function ProfileForm() {
         setGender(data.gender ?? '');
         setBirthDate(data.birthDate ?? '');
         setPlaceOfBirth(data.placeOfBirth ?? '');
-        setNationality(data.nationality ?? '');
+        // 2026-07-31 (user request): defaults to "Filipino" when genuinely empty, matching the
+        // loan application form's own INITIAL_FORM default - never overwrites a real (possibly
+        // different) value already on file.
+        setNationality(data.nationality ?? 'Filipino');
         setCivilStatus(data.civilStatus ?? '');
         setHomeOwnership(data.homeOwnership ?? '');
         setMobilePhone1(data.mobilePhone1 ?? '');
@@ -116,7 +135,15 @@ export function ProfileForm() {
         setEmail(data.email ?? '');
         setOccupation(data.occupation ?? '');
         setEmployer(data.employer ?? '');
+        setOfficeAddress(data.officeAddress ?? '');
         setMonthlyIncome(data.monthlyIncome != null ? String(data.monthlyIncome) : '');
+        setTinNumber(data.tinNumber ?? '');
+        setSssNumber(data.sssNumber ?? '');
+        setDependants(data.dependants.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' })));
+        setReference1Name(data.reference1Name ?? '');
+        setReference1Mobile(data.reference1Mobile ?? '');
+        setReference2Name(data.reference2Name ?? '');
+        setReference2Mobile(data.reference2Mobile ?? '');
         setAddressDraft(addressToDraft(data.addresses[0]));
         setState('ready');
       })
@@ -148,7 +175,17 @@ export function ProfileForm() {
         email: email.trim() || undefined,
         occupation: occupation.trim() || undefined,
         employer: employer.trim() || undefined,
+        officeAddress: officeAddress.trim() || undefined,
         monthlyIncome: monthlyIncome.trim() ? Number(monthlyIncome) : undefined,
+        tinNumber: tinNumber.trim() || undefined,
+        sssNumber: sssNumber.trim() || undefined,
+        dependants: dependants.some((d) => d.name.trim())
+          ? dependants.filter((d) => d.name.trim()).map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined }))
+          : undefined,
+        reference1Name: reference1Name.trim() || undefined,
+        reference1Mobile: reference1Mobile.trim() || undefined,
+        reference2Name: reference2Name.trim() || undefined,
+        reference2Mobile: reference2Mobile.trim() || undefined,
         addresses: Object.values(addressDraft).some((v) => v.trim()) ? [addressDraft] : undefined,
       };
       await apiClient.patch<PortalProfile>('/portal/profile', body, true);
@@ -285,26 +322,94 @@ export function ProfileForm() {
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Employment</h2>
+              <h2 className="text-sm font-semibold">Employment Information</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Skip if you're unemployed, self-employed, or retired.</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Monthly income</Label>
-                  <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Employer</Label>
+                  <Label>Name of employer</Label>
                   <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Occupation</Label>
                   <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Office address</Label>
+                  <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Monthly income (₱)</Label>
+                  <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>TIN</Label>
+                  <GroupedDigitsInput value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>SSS no.</Label>
+                  <GroupedDigitsInput value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
+                </div>
               </div>
+            </Card>
 
-              {saveState === 'error' && <Alert tone="error" className="mt-4">{saveError}</Alert>}
-              {saveState === 'saved' && <Alert tone="success" className="mt-4">Profile updated.</Alert>}
+            <Card className="p-6">
+              <h2 className="text-sm font-semibold">Dependants</h2>
+              <div className="mt-4 space-y-2">
+                {dependants.map((row, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-40 flex-1 space-y-1.5">
+                      <Label>Name</Label>
+                      <Input value={row.name} onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))} />
+                    </div>
+                    <div className="w-20 space-y-1.5">
+                      <Label>Age</Label>
+                      <Input type="number" value={row.age} onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, age: e.target.value } : r)))} />
+                    </div>
+                    <div className="w-36 space-y-1.5">
+                      <Label>Relationship</Label>
+                      <Input
+                        value={row.relationship}
+                        onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, relationship: e.target.value } : r)))}
+                      />
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" aria-label="Remove dependant" onClick={() => setDependants(dependants.filter((_, j) => j !== i))}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={() => setDependants([...dependants, { name: '', age: '', relationship: '' }])}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add dependant
+                </Button>
+              </div>
+            </Card>
 
-              <Button type="submit" className="mt-4" disabled={saveState === 'saving'}>
+            <Card className="p-6">
+              <h2 className="text-sm font-semibold">Character References</h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>1st reference - full name</Label>
+                  <Input value={reference1Name} onChange={(e) => setReference1Name(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>1st reference - contact number</Label>
+                  <PhoneInput value={reference1Mobile} onChange={(e) => setReference1Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>2nd reference - full name</Label>
+                  <Input value={reference2Name} onChange={(e) => setReference2Name(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>2nd reference - contact number</Label>
+                  <PhoneInput value={reference2Mobile} onChange={(e) => setReference2Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              {saveState === 'error' && <Alert tone="error" className="mb-4">{saveError}</Alert>}
+              {saveState === 'saved' && <Alert tone="success" className="mb-4">Profile updated.</Alert>}
+
+              <Button type="submit" disabled={saveState === 'saving'}>
                 {saveState === 'saving' ? 'Saving…' : 'Save Changes'}
               </Button>
             </Card>

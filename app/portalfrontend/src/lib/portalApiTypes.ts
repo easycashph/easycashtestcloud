@@ -347,6 +347,14 @@ export interface PortalProfile {
   occupation: string | null;
   employer: string | null;
   monthlyIncome: number | null;
+  officeAddress: string | null;
+  tinNumber: string | null;
+  sssNumber: string | null;
+  dependants: { name: string; age?: string; relationship?: string }[];
+  reference1Name: string | null;
+  reference1Mobile: string | null;
+  reference2Name: string | null;
+  reference2Mobile: string | null;
   addresses: PortalProfileAddress[];
 }
 
@@ -369,6 +377,14 @@ export interface UpdatePortalProfileRequest {
   occupation?: string;
   employer?: string;
   monthlyIncome?: number;
+  officeAddress?: string;
+  tinNumber?: string;
+  sssNumber?: string;
+  dependants?: { name: string; age?: string; relationship?: string }[];
+  reference1Name?: string;
+  reference1Mobile?: string;
+  reference2Name?: string;
+  reference2Mobile?: string;
   addresses?: {
     addressType?: string;
     houseUnitNumber?: string;

@@ -304,7 +304,17 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
   fillIfEmpty('email', profile.email ?? '');
   fillIfEmpty('employer', profile.employer ?? '');
   fillIfEmpty('occupation', profile.occupation ?? '');
+  fillIfEmpty('officeAddress', profile.officeAddress ?? '');
+  fillIfEmpty('tinNumber', profile.tinNumber ?? '');
+  fillIfEmpty('sssNumber', profile.sssNumber ?? '');
   fillIfEmpty('monthlyIncome', profile.monthlyIncome !== null ? String(profile.monthlyIncome) : '');
+  fillIfEmpty('reference1Name', profile.reference1Name ?? '');
+  fillIfEmpty('reference1Mobile', profile.reference1Mobile ?? '');
+  fillIfEmpty('reference2Name', profile.reference2Name ?? '');
+  fillIfEmpty('reference2Mobile', profile.reference2Mobile ?? '');
+  if (next.dependants.length === 0 && profile.dependants.length > 0) {
+    next.dependants = profile.dependants.map((d) => ({ name: d.name, age: d.age ?? '', relationship: d.relationship ?? '' }));
+  }
   if (presentAddress) {
     const hasTypedAddress = Object.values(next.presentAddress).some((v) => v.trim());
     if (!hasTypedAddress) {
@@ -336,6 +346,54 @@ function documentSlotHint(
     return 'For any other supporting document, or to re-upload a corrected file if something above was uploaded wrong - PDF, JPEG, or PNG, up to 10 MB';
   }
   return 'PDF, JPEG, or PNG, up to 10 MB';
+}
+
+/** 2026-07-31 (user request): the reverse direction of applyProfilePrefill - after a NEW
+ * application is submitted, mirror whatever the applicant just typed back onto My Profile, but
+ * ONLY for fields still empty there. Never overwrites a field the applicant already filled in on
+ * Profile directly - "hindi ireplace ni loan application form ang mga fields na meron na naka
+ * encoded sa my profile". */
+function buildProfileBackfill(profile: PortalProfile, form: FormState): UpdatePortalProfileRequest {
+  const backfill: UpdatePortalProfileRequest = {};
+  const fillIfEmpty = <K extends keyof UpdatePortalProfileRequest>(key: K, currentValue: unknown, newValue: UpdatePortalProfileRequest[K]) => {
+    const isEmpty = currentValue === null || currentValue === undefined || currentValue === '';
+    if (!isEmpty) return;
+    if (newValue === undefined || newValue === '') return;
+    backfill[key] = newValue;
+  };
+
+  fillIfEmpty('firstName', profile.firstName, form.firstName.trim() || undefined);
+  fillIfEmpty('middleName', profile.middleName, form.middleName.trim() || undefined);
+  fillIfEmpty('lastName', profile.lastName, form.lastName.trim() || undefined);
+  fillIfEmpty('gender', profile.gender, form.gender || undefined);
+  fillIfEmpty('birthDate', profile.birthDate, form.birthDate || undefined);
+  fillIfEmpty('placeOfBirth', profile.placeOfBirth, form.placeOfBirth.trim() || undefined);
+  fillIfEmpty('nationality', profile.nationality, form.nationality.trim() || undefined);
+  fillIfEmpty('civilStatus', profile.civilStatus, form.civilStatus || undefined);
+  fillIfEmpty('homeOwnership', profile.homeOwnership, form.homeOwnership || undefined);
+  fillIfEmpty('mobilePhone1', profile.mobilePhone1, form.mobilePhone.trim() || undefined);
+  fillIfEmpty('email', profile.email, form.email.trim() || undefined);
+  fillIfEmpty('occupation', profile.occupation, form.occupation.trim() || undefined);
+  fillIfEmpty('employer', profile.employer, form.employer.trim() || undefined);
+  fillIfEmpty('officeAddress', profile.officeAddress, form.officeAddress.trim() || undefined);
+  fillIfEmpty('tinNumber', profile.tinNumber, form.tinNumber.trim() || undefined);
+  fillIfEmpty('sssNumber', profile.sssNumber, form.sssNumber.trim() || undefined);
+  fillIfEmpty('monthlyIncome', profile.monthlyIncome, form.monthlyIncome ? Number(form.monthlyIncome) : undefined);
+  fillIfEmpty('reference1Name', profile.reference1Name, form.reference1Name.trim() || undefined);
+  fillIfEmpty('reference1Mobile', profile.reference1Mobile, form.reference1Mobile.trim() || undefined);
+  fillIfEmpty('reference2Name', profile.reference2Name, form.reference2Name.trim() || undefined);
+  fillIfEmpty('reference2Mobile', profile.reference2Mobile, form.reference2Mobile.trim() || undefined);
+
+  if ((!profile.dependants || profile.dependants.length === 0) && form.dependants.some((d) => d.name.trim())) {
+    backfill.dependants = form.dependants.filter((d) => d.name.trim()).map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined }));
+  }
+
+  const hasProfileAddress = profile.addresses[0] && Object.values(profile.addresses[0]).some((v) => v);
+  if (!hasProfileAddress && Object.values(form.presentAddress).some((v) => v.trim())) {
+    backfill.addresses = [form.presentAddress];
+  }
+
+  return backfill;
 }
 
 function computeAge(birthDate: string): number | null {
@@ -600,24 +658,19 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
         // whatever they just entered back onto the profile. Best-effort/fire-and-forget: never
         // blocks or fails the (already-successful) application submission, and the backend itself
         // only actually applies this while the account is unlinked (UpdatePortalProfileUseCase).
-        const profileSync: UpdatePortalProfileRequest = {
-          firstName: form.firstName.trim() || undefined,
-          middleName: form.middleName.trim() || undefined,
-          lastName: form.lastName.trim() || undefined,
-          gender: form.gender || undefined,
-          birthDate: form.birthDate || undefined,
-          placeOfBirth: form.placeOfBirth.trim() || undefined,
-          nationality: form.nationality.trim() || undefined,
-          civilStatus: form.civilStatus || undefined,
-          homeOwnership: form.homeOwnership || undefined,
-          mobilePhone1: form.mobilePhone.trim() || undefined,
-          email: form.email.trim() || undefined,
-          occupation: form.occupation.trim() || undefined,
-          employer: form.employer.trim() || undefined,
-          monthlyIncome: form.monthlyIncome ? Number(form.monthlyIncome) : undefined,
-          addresses: Object.values(form.presentAddress).some((v) => v.trim()) ? [form.presentAddress] : undefined,
-        };
-        apiClient.patch('/portal/profile', profileSync, true).catch(() => {});
+        // 2026-07-31 (user request, refined): must NEVER overwrite a field the applicant already
+        // filled in on My Profile directly - re-fetches the current profile first and only
+        // includes still-empty fields in the sync, rather than blindly overwriting with whatever
+        // the application form happens to hold.
+        apiClient
+          .get<PortalProfile>('/portal/profile')
+          .then((profile) => {
+            const backfill = buildProfileBackfill(profile, form);
+            if (Object.keys(backfill).length > 0) {
+              return apiClient.patch('/portal/profile', backfill, true);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Could not ${isEditMode ? 'save your changes' : 'submit your application'}. Please try again.`);

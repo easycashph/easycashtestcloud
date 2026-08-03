@@ -121,6 +121,18 @@ export class PrismaChatRepository implements IChatRepository {
     return rows.map(mapConversation);
   }
 
+  async listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]> {
+    // Scoped to conversations still bearing this user's claimedByUserId - a transfer clears it
+    // (see transferToManager), so a conversation later handed off loses this trace here; that
+    // history still lives in the conversation's own SYSTEM messages if opened another way.
+    const rows = await prisma.chatConversation.findMany({
+      where: { claimedByUserId: userId },
+      orderBy: { createdAt: 'desc' },
+      include: CONVERSATION_INCLUDE,
+    });
+    return rows.map(mapConversation);
+  }
+
   async addMessage(input: CreateChatMessageInput): Promise<ChatMessageRecord> {
     const row = await prisma.chatMessage.create({
       data: {

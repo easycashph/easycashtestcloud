@@ -498,6 +498,17 @@ model PortalAccount {
   occupation    String?
   employer      String?
   monthlyIncome Decimal? @db.Decimal(14, 2)
+  /// 2026-07-31 (user request) - "Office address" on the Employment section, same concept as
+  /// Borrower's incomeDetail.employerAddress once linked.
+  officeAddress String?
+  tinNumber     String?
+  sssNumber     String?
+  /// {name, age, relationship}[] - same shape as Borrower.dependants/LoanApplication.dependants.
+  dependants        Json?
+  reference1Name    String?
+  reference1Mobile  String?
+  reference2Name    String?
+  reference2Mobile  String?
   houseUnitNumber   String?
   street            String?
   barangay          String?
