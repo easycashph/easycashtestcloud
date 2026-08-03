@@ -61,6 +61,24 @@ function toDecimalString(v: number): string {
 async function main(): Promise<void> {
   console.log(`=== Migrate repayment schedules ${DRY_RUN ? '(DRY RUN — no writes)' : ''} ===`);
 
+  // 2026-08-03 (user-reported, via an Expected Collection report comparison against live
+  // SDevTech): `update: {}` below meant an installment's paid amounts/status froze at whatever
+  // they were the first time it was migrated - staff still record every payment in SDevTech (the
+  // LMS isn't live yet), so a later payment there was invisible here forever. Mirrors the same
+  // fix and the same safety condition applied to migrate-legacy-data.ts's migrateLoanAccounts:
+  // resync is safe only for loans with NO native (non-legacy) LoanTransaction recorded directly
+  // in this system - the moment one exists, this system is the source of truth for that loan and
+  // must never again be overwritten by a legacy re-sync.
+  const lockedLoanAccountIds = new Set(
+    (
+      await prisma.loanTransaction.findMany({
+        where: { legacyId: null, loanAccount: { legacyId: { not: null } } },
+        select: { loanAccountId: true },
+        distinct: ['loanAccountId'],
+      })
+    ).map((t) => t.loanAccountId),
+  );
+
   const legacyLoans = readAll<{ uid: string }>('loan_accounts.bson');
   const loanUidSet = new Set(legacyLoans.map((l) => l.uid));
 
@@ -83,10 +101,20 @@ async function main(): Promise<void> {
 
     records.sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
 
+    const isLocked = lockedLoanAccountIds.has(loanAccount.id);
+
     for (let i = 0; i < records.length; i++) {
       const r = records[i]!;
       const legacyId = String(r._id);
       if (!DRY_RUN) {
+        const paymentSnapshot = {
+          principalPaid: toDecimalString(r.principal_paid),
+          interestPaid: toDecimalString(r.interest_paid),
+          feesPaid: toDecimalString(r.fees_paid),
+          penaltyPaid: toDecimalString(r.penalty_paid),
+          status: r.state,
+          lastPaidAt: r.last_paid_date ? new Date(r.last_paid_date) : null,
+        };
         await prisma.repaymentSchedule.upsert({
           where: { legacyId },
           create: {
@@ -98,14 +126,9 @@ async function main(): Promise<void> {
             interestDue: toDecimalString(r.interest_due),
             feesDue: toDecimalString(r.fees_due),
             penaltyDue: toDecimalString(r.penalty_due),
-            principalPaid: toDecimalString(r.principal_paid),
-            interestPaid: toDecimalString(r.interest_paid),
-            feesPaid: toDecimalString(r.fees_paid),
-            penaltyPaid: toDecimalString(r.penalty_paid),
-            status: r.state,
-            lastPaidAt: r.last_paid_date ? new Date(r.last_paid_date) : null,
+            ...paymentSnapshot,
           },
-          update: {},
+          update: isLocked ? {} : paymentSnapshot,
         });
       }
       installmentsWritten++;
