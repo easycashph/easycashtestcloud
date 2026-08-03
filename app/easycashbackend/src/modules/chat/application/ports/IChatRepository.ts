@@ -1,4 +1,4 @@
-export type ChatConversationStatus = 'WAITING' | 'CLAIMED' | 'CLOSED';
+export type ChatConversationStatus = 'WAITING' | 'CLAIMED' | 'PENDING_TRANSFER' | 'CLOSED';
 export type ChatMessageSenderType = 'PORTAL_ACCOUNT' | 'STAFF' | 'SYSTEM';
 
 export interface ChatConversationRecord {
@@ -7,7 +7,16 @@ export interface ChatConversationRecord {
   status: ChatConversationStatus;
   claimedByUserId: string | null;
   claimedByUserName: string | null;
-  requiresManager: boolean;
+  originalClaimedByUserId: string | null;
+  originalClaimedByUserName: string | null;
+  pendingTransferToUserId: string | null;
+  pendingTransferToUserName: string | null;
+  pendingTransferFromUserId: string | null;
+  pendingTransferFromUserName: string | null;
+  /** Deliberately plaintext - see the Prisma model's own doc comment for why. Only ever included
+   * in a response to the two people who are supposed to see it (the initiating officer, and the
+   * intended recipient) - use cases are responsible for that filtering, not this record shape. */
+  pendingTransferPin: string | null;
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
@@ -38,21 +47,34 @@ export interface CreateChatMessageInput {
 
 export interface IChatRepository {
   createConversation(portalAccountId: string): Promise<ChatConversationRecord>;
-  /** The client's own most recent still-open (WAITING or CLAIMED) conversation, if any - resumed
-   * instead of starting a second thread every time they open the chat widget. */
+  /** The client's own most recent still-open (WAITING/CLAIMED/PENDING_TRANSFER) conversation, if
+   * any - resumed instead of starting a second thread every time they open the chat widget. */
   findActiveConversationForPortalAccount(portalAccountId: string): Promise<ChatConversationRecord | null>;
   findConversationById(id: string): Promise<ChatConversationRecord | null>;
   /** Atomic claim: only succeeds (returns true) if the conversation was still WAITING and
    * unclaimed at the moment of the write - the real "first click wins" guarantee, not a
-   * check-then-write race. */
+   * check-then-write race. Also stamps `originalClaimedByUserId` (first claim only). */
   claimConversation(id: string, userId: string): Promise<boolean>;
-  transferToManager(id: string): Promise<void>;
+  /** Atomic: only succeeds if the conversation is still CLAIMED by `fromUserId` at the moment of
+   * the write. Sets status to PENDING_TRANSFER and records the target + PIN. */
+  initiateTransfer(id: string, fromUserId: string, toUserId: string, pin: string): Promise<boolean>;
+  /** Atomic: only succeeds if the conversation is PENDING_TRANSFER, addressed to `toUserId`, and
+   * `pin` matches exactly - the actual "confirm the handoff" gate. On success, `toUserId` becomes
+   * the new claimedByUserId and the pending fields are cleared. */
+  completeTransfer(id: string, toUserId: string, pin: string): Promise<boolean>;
+  /** Lets the initiating officer back out before the other side confirms (e.g. wrong person
+   * picked) - clears the pending fields and returns to CLAIMED under `fromUserId`. */
+  cancelTransfer(id: string, fromUserId: string): Promise<boolean>;
   closeConversation(id: string): Promise<void>;
-  listWaitingConversations(requiresManager: boolean): Promise<ChatConversationRecord[]>;
-  listClaimedConversationsForUser(userId: string): Promise<ChatConversationRecord[]>;
-  /** MIS oversight (2026-07-31 user request) - every conversation this user has EVER claimed,
-   * any status (including CLOSED) - unlike listClaimedConversationsForUser, which is that same
-   * staff member's own "My Chats" list and only shows what's currently CLAIMED. */
+  listWaitingConversations(): Promise<ChatConversationRecord[]>;
+  /** "My Chats" - conversations currently claimed by this user (actionable) OR that they were
+   * ever the original/first claimant on (read-only history once transferred away) - excludes
+   * WAITING (never claimed). */
+  listConversationsForUserHistory(userId: string): Promise<ChatConversationRecord[]>;
+  /** Conversations pending a transfer TO this user, awaiting their PIN confirmation. */
+  listIncomingTransfersForUser(userId: string): Promise<ChatConversationRecord[]>;
+  /** MIS oversight (2026-07-31 user request) - every conversation this user has EVER claimed
+   * (current OR original claimant), any status (including CLOSED). */
   listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]>;
   /** Attachments are looked up separately (Attachment.ownerType='CHAT_MESSAGE', ownerId=message.id)
    * by whichever use case handles the file upload - `addMessage` never receives one directly. */

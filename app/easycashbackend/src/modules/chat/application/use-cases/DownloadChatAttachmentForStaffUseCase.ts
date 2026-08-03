@@ -2,7 +2,7 @@ import type { IUserRepository } from '@modules/identity/application/ports/IUserR
 import type { AttachmentRecord, IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
 import type { IFileStorage } from '@modules/document/application/ports/IFileStorage';
 import type { IChatRepository } from '../ports/IChatRepository';
-import { canClaimManagerConversations, canClaimNewConversations } from '../../domain/ChatEligibility';
+import { canClaimNewConversations } from '../../domain/ChatEligibility';
 import { ChatConversationNotFoundError, ChatNotEligibleError } from '../../domain/errors/ChatErrors';
 
 export interface DownloadChatAttachmentForStaffUseCaseDeps {
@@ -25,15 +25,14 @@ export class DownloadChatAttachmentForStaffUseCase {
     if (!conversation) throw new ChatConversationNotFoundError();
 
     const isClaimant = conversation.claimedByUserId === userId;
+    const isOriginalClaimant = conversation.originalClaimedByUserId === userId;
+    const isPendingTransferParty = conversation.pendingTransferFromUserId === userId || conversation.pendingTransferToUserId === userId;
     // MIS oversight (2026-07-31 user request) - can download from any conversation, not just
     // ones they've claimed or that are still WAITING.
-    if (!isClaimant && !user.roles.includes('MIS')) {
-      if (conversation.status !== 'WAITING') throw new ChatNotEligibleError();
-      const eligibilityUser = { roles: user.roles, roleClassName: user.roleClassName };
-      const eligible = conversation.requiresManager
-        ? canClaimManagerConversations(eligibilityUser)
-        : canClaimNewConversations(eligibilityUser);
-      if (!eligible) throw new ChatNotEligibleError();
+    if (!isClaimant && !isOriginalClaimant && !isPendingTransferParty && !user.roles.includes('MIS')) {
+      if (conversation.status !== 'WAITING' || !canClaimNewConversations({ roles: user.roles, roleClassName: user.roleClassName })) {
+        throw new ChatNotEligibleError();
+      }
     }
 
     const record = await this.deps.attachmentRepository.findById(attachmentId);

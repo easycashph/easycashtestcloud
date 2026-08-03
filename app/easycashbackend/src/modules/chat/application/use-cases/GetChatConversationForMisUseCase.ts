@@ -24,7 +24,9 @@ export class GetChatConversationForMisUseCase {
     const conversation = await this.deps.chatRepository.findConversationById(conversationId);
     if (!conversation) throw new ChatConversationNotFoundError();
 
+    // Same redaction as GetChatConversationForStaffUseCase - the PIN is only ever shown to the
+    // two people actually party to that specific handoff, not to MIS reviewing after the fact.
     const messages = await this.deps.chatRepository.listMessages(conversationId);
-    return { conversation, messages };
+    return { conversation: { ...conversation, pendingTransferPin: null }, messages };
   }
 }

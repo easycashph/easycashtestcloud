@@ -1,6 +1,6 @@
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
 import type { IChatRepository, ChatConversationRecord } from '../ports/IChatRepository';
-import { canClaimManagerConversations, canClaimNewConversations } from '../../domain/ChatEligibility';
+import { canClaimNewConversations } from '../../domain/ChatEligibility';
 import { ChatNotEligibleError } from '../../domain/errors/ChatErrors';
 
 export interface ListChatQueueUseCaseDeps {
@@ -8,21 +8,18 @@ export interface ListChatQueueUseCaseDeps {
   chatRepository: IChatRepository;
 }
 
-/** The LMS "incoming chats" queue - a manager sees both the plain queue and anything transferred
- * up to them (see ChatEligibility.ts); anyone else claim-eligible sees only the plain queue. */
+/** The LMS "incoming chats" queue - every unclaimed, brand-new request, visible to every
+ * claim-eligible staff member (see ChatEligibility.ts). */
 export class ListChatQueueUseCase {
   constructor(private readonly deps: ListChatQueueUseCaseDeps) {}
 
   async execute(userId: string): Promise<ChatConversationRecord[]> {
     const user = await this.deps.userRepository.findById(userId);
     if (!user) throw new ChatNotEligibleError();
-
-    const eligibilityUser = { roles: user.roles, roleClassName: user.roleClassName };
-    const isManager = canClaimManagerConversations(eligibilityUser);
-    if (!isManager && !canClaimNewConversations(eligibilityUser)) {
+    if (!canClaimNewConversations({ roles: user.roles, roleClassName: user.roleClassName })) {
       throw new ChatNotEligibleError();
     }
 
-    return this.deps.chatRepository.listWaitingConversations(isManager);
+    return this.deps.chatRepository.listWaitingConversations();
   }
 }
