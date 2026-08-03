@@ -15,6 +15,9 @@ export interface ChatParticipantRecord {
 export interface ChatConversationRecord {
   id: string;
   portalAccountId: string;
+  /** 2026-08-03 (user request) - lets "My Chats" group conversations by client instead of a flat
+   * list, so backtracking through chat history for a specific person isn't confusing. */
+  portalAccountEmail: string | null;
   status: ChatConversationStatus;
   claimedByUserId: string | null;
   claimedByUserName: string | null;

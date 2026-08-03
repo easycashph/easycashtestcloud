@@ -56,6 +56,7 @@ import { ListPortalLoanAccountsUseCase } from '@modules/client-portal/applicatio
 import { ListPortalLoanAccountInstallmentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
 import { PrismaChatRepository } from '@modules/chat/infrastructure/PrismaChatRepository';
 import { StartOrResumePortalChatUseCase } from '@modules/chat/application/use-cases/StartOrResumePortalChatUseCase';
+import { GetActivePortalChatUseCase } from '@modules/chat/application/use-cases/GetActivePortalChatUseCase';
 import { GetPortalChatUseCase } from '@modules/chat/application/use-cases/GetPortalChatUseCase';
 import { SendPortalChatMessageUseCase } from '@modules/chat/application/use-cases/SendPortalChatMessageUseCase';
 import { createPortalChatRouter } from '@modules/chat/interface/http/portalChatRouter';
@@ -1262,6 +1263,7 @@ export function createApp(): Express {
   const portalChatRouter = createPortalChatRouter(
     {
       startOrResumePortalChatUseCase: new StartOrResumePortalChatUseCase({ chatRepository }),
+      getActivePortalChatUseCase: new GetActivePortalChatUseCase({ chatRepository }),
       getPortalChatUseCase: new GetPortalChatUseCase({ chatRepository }),
       sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
       downloadPortalChatAttachmentUseCase: new DownloadPortalChatAttachmentUseCase({ chatRepository, attachmentRepository, fileStorage }),
