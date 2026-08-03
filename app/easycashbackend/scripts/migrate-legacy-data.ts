@@ -394,6 +394,25 @@ async function migrateLoanAccounts(
   productVersionIdByLegacyKey: Map<string, string>,
   borrowerIdByLegacyKey: Map<string, string>,
 ): Promise<{ rec: Reconciliation; loanAccountIdByLegacyKey: Map<string, string> }> {
+  // 2026-08-03 (user-reported): the plain `update: {}` below meant a loan's status/balances froze
+  // at whatever they were the FIRST time it was migrated - fine for a one-shot migration, but this
+  // script is now re-run regularly against fresh SDevTech snapshots (see scripts/lib/
+  // legacyDumpPath.ts), and staff still record everything in SDevTech (the LMS isn't live yet per
+  // user confirmation 2026-08-03) - so an already-migrated loan that advances from APPROVED to
+  // ACTIVE (or gets new payments) in SDevTech needs that reflected here too. Only safe to do while
+  // NO native (non-legacy) activity exists on that loan in the new system - the moment a real
+  // ProcessPaymentUseCase/etc. transaction is recorded here, this system becomes the source of
+  // truth for that loan and must never again be overwritten by a legacy re-sync.
+  const lockedLoanAccountIds = new Set(
+    (
+      await prisma.loanTransaction.findMany({
+        where: { legacyId: null, loanAccount: { legacyId: { not: null } } },
+        select: { loanAccountId: true },
+        distinct: ['loanAccountId'],
+      })
+    ).map((t) => t.loanAccountId),
+  );
+
   const loans = loadAll<any>('loan_accounts');
   const rec = newReconciliation('loan_accounts', loans.length);
   const loanAccountIdByLegacyKey = new Map<string, string>();
@@ -468,15 +487,38 @@ async function migrateLoanAccounts(
     const loanCode = usageCount === 1 ? baseCode : `${baseCode}-LEGACY${usageCount}`;
 
     if (APPLY) {
+      // Shared between create (first migration) and the resync update (subsequent re-runs) so the
+      // two paths can never drift apart - see the "locked" comment above migrateLoanAccounts.
+      const financialSnapshot = {
+        status: status as never,
+        principalBalance: toDecimalString(la.principalBalance ?? 0),
+        principalPaid: toDecimalString(la.principalPaid ?? 0),
+        principalDue: toDecimalString(la.principalDue ?? 0),
+        interestBalance: toDecimalString(la.interestBalance ?? 0),
+        interestPaid: toDecimalString(la.interestPaid ?? 0),
+        interestDue: toDecimalString(la.interestDue ?? 0),
+        feesBalance: toDecimalString(la.feesBalance ?? 0),
+        feesPaid: toDecimalString(la.feesPaid ?? 0),
+        feesDue: toDecimalString(la.feesDue ?? 0),
+        penaltyBalance: toDecimalString(la.penaltyBalance ?? 0),
+        penaltyPaid: toDecimalString(la.penaltyPaid ?? 0),
+        penaltyDue: toDecimalString(la.penaltyDue ?? 0),
+        approvedAt: toDate(la.approvedDate),
+        activatedAt,
+        closedAt: toDate(la.closedDate),
+      };
+
+      const existing = await prisma.loanAccount.findUnique({ where: { legacyId }, select: { id: true } });
+      const isLocked = existing ? lockedLoanAccountIds.has(existing.id) : false;
+
       const loanAccount = await prisma.loanAccount.upsert({
         where: { legacyId },
-        update: {},
+        update: isLocked ? {} : financialSnapshot,
         create: {
           loanCode,
           borrowerId,
           loanProductVersionId: productVersionId,
           branchId: hqBranchId,
-          status: status as never,
           // 2026-07-17 bug fix (user-reported): without this, Prisma's `@default(now())` recorded
           // the migration run's own timestamp as "created," not the real SDevTech loan-account
           // creation date. See `scripts/backfill-legacy-loan-created-dates.ts`, which corrected
@@ -486,27 +528,13 @@ async function migrateLoanAccounts(
           // disbursement, so they're some other event, not account creation.)
           createdAt: toDate(la.creationDate) ?? undefined,
           principalAmount: toDecimalString(la.loanAmount ?? la.principalBalance ?? 0),
-          principalBalance: toDecimalString(la.principalBalance ?? 0),
-          principalPaid: toDecimalString(la.principalPaid ?? 0),
-          principalDue: toDecimalString(la.principalDue ?? 0),
           interestRate: toDecimalString(la.interestRate ?? 0),
-          interestBalance: toDecimalString(la.interestBalance ?? 0),
-          interestPaid: toDecimalString(la.interestPaid ?? 0),
-          interestDue: toDecimalString(la.interestDue ?? 0),
-          feesBalance: toDecimalString(la.feesBalance ?? 0),
-          feesPaid: toDecimalString(la.feesPaid ?? 0),
-          feesDue: toDecimalString(la.feesDue ?? 0),
-          penaltyBalance: toDecimalString(la.penaltyBalance ?? 0),
-          penaltyPaid: toDecimalString(la.penaltyPaid ?? 0),
-          penaltyDue: toDecimalString(la.penaltyDue ?? 0),
           installmentCount: Number(la.repaymentInstallments ?? 1),
           repaymentPeriodUnit: 'MONTHS',
           gracePeriodDays: Number(la.gracePeriod ?? 0),
           firstRepaymentDate,
-          approvedAt: toDate(la.approvedDate),
-          activatedAt,
-          closedAt: toDate(la.closedDate),
           legacyId,
+          ...financialSnapshot,
         },
       });
       loanAccountIdByLegacyKey.set(legacyId, loanAccount.id);
