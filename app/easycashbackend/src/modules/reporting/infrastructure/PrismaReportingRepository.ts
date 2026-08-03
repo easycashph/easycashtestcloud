@@ -406,29 +406,32 @@ export class PrismaReportingRepository implements IReportingRepository {
       const installments = scheduleByLoanId.get(loan.id) ?? [];
       const maturityDate = installments.length > 0 ? installments[installments.length - 1]!.dueDate : null;
       const unpaid = installments.filter((i) => i.status !== 'PAID');
-      const oldestUnpaid = unpaid[0];
-      if (!oldestUnpaid) continue;
-      const daysLate = daysLateOf(oldestUnpaid.dueDate, today);
-      if (daysLate === 0) continue;
+      if (unpaid.length === 0) continue;
       // 2026-08-03 (user-confirmed, verified directly against the live SDevTech UI): SDevTech's
       // own report prompts for a start/end date - previously assumed "as-of-today, no filter"
       // from an old static sample file that had no date columns, which was wrong for this report.
       // Without this, every unpaid installment ever migrated stayed in scope forever, including
       // ones from as far back as 2012.
       //
-      // 2026-08-03 follow-up fix (user-reported): checking only the OLDEST unpaid installment's
-      // due date against the range wrongly excluded an account whose delinquency started earlier
-      // but has a MORE RECENT unpaid installment inside the selected range too (e.g. oldest unpaid
-      // is June, but July is also unpaid and the user filtered on July) - the row is still built
-      // from the oldest unpaid (the true overdue picture, unchanged), only the eligibility check
-      // now accepts the account if ANY unpaid installment falls in range.
-      const anyUnpaidInRange = unpaid.some((i) => (!filter.from || i.dueDate >= filter.from) && (!filter.to || i.dueDate <= filter.to));
-      if (!anyUnpaidInRange) continue;
+      // 2026-08-03 follow-up fix #1 (user-reported): checking only the OVERALL oldest unpaid
+      // installment's due date against the range wrongly excluded an account whose delinquency
+      // started earlier but also has a MORE RECENT unpaid installment inside the selected range
+      // (e.g. oldest unpaid is June, but July is unpaid too and the user filtered on July).
+      //
+      // 2026-08-03 follow-up fix #2 (same report, re-verified against SDevTech afterward): fix #1
+      // widened eligibility but still built the row from the OVERALL oldest unpaid installment,
+      // so an account admitted only because of its July installment kept showing June's figures -
+      // wrong Current/Past Amount Due, Days Late, Repayment State. The reported installment must
+      // be the oldest unpaid installment THAT IS ITSELF within the filter range (falls back to the
+      // overall oldest when no range is given, matching the un-filtered behavior).
+      const inRange = (d: Date) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to);
+      const reported = (filter.from || filter.to ? unpaid.find((i) => inRange(i.dueDate)) : undefined) ?? unpaid[0]!;
+      const daysLate = daysLateOf(reported.dueDate, today);
+      if (daysLate === 0) continue;
 
-      const amountDue =
-        Number(oldestUnpaid.principalDue) + Number(oldestUnpaid.interestDue) + effectiveFees(oldestUnpaid) + effectivePenalty(oldestUnpaid);
+      const amountDue = Number(reported.principalDue) + Number(reported.interestDue) + effectiveFees(reported) + effectivePenalty(reported);
       const repayment =
-        Number(oldestUnpaid.principalPaid) + Number(oldestUnpaid.interestPaid) + Number(oldestUnpaid.feesPaid) + Number(oldestUnpaid.penaltyPaid);
+        Number(reported.principalPaid) + Number(reported.interestPaid) + Number(reported.feesPaid) + Number(reported.penaltyPaid);
       const lastPaid = [...installments].filter((i) => i.lastPaidAt).sort((a, b) => b.lastPaidAt!.getTime() - a.lastPaidAt!.getTime())[0];
 
       rows.push({
@@ -436,7 +439,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
         accountState: loan.status,
-        dueDate: oldestUnpaid.dueDate,
+        dueDate: reported.dueDate,
         maturityDate,
         lastPaidDate: lastPaid?.lastPaidAt ?? null,
         currentAmountDue: amountDue.toFixed(2),
@@ -444,7 +447,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         daysLate,
         repayment: repayment.toFixed(2),
         lackOrExcess: (amountDue - repayment).toFixed(2),
-        repaymentState: INSTALLMENT_STATUS_LABEL[oldestUnpaid.status] ?? oldestUnpaid.status,
+        repaymentState: INSTALLMENT_STATUS_LABEL[reported.status] ?? reported.status,
         countOfPaidDue: installments.filter((i) => i.status === 'PAID').length,
       });
     }
