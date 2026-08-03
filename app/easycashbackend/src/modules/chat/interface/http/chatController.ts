@@ -9,6 +9,9 @@ import type { CloseChatConversationUseCase } from '../../application/use-cases/C
 import type { ListMyClaimedChatConversationsUseCase } from '../../application/use-cases/ListMyClaimedChatConversationsUseCase';
 import type { GetChatConversationForStaffUseCase } from '../../application/use-cases/GetChatConversationForStaffUseCase';
 import type { DownloadChatAttachmentForStaffUseCase } from '../../application/use-cases/DownloadChatAttachmentForStaffUseCase';
+import type { ListChatOversightStaffUseCase } from '../../application/use-cases/ListChatOversightStaffUseCase';
+import type { ListChatConversationsForStaffUseCase } from '../../application/use-cases/ListChatConversationsForStaffUseCase';
+import type { GetChatConversationForMisUseCase } from '../../application/use-cases/GetChatConversationForMisUseCase';
 
 export interface ChatControllerDeps {
   listChatQueueUseCase: ListChatQueueUseCase;
@@ -19,6 +22,9 @@ export interface ChatControllerDeps {
   listMyClaimedChatConversationsUseCase: ListMyClaimedChatConversationsUseCase;
   getChatConversationForStaffUseCase: GetChatConversationForStaffUseCase;
   downloadChatAttachmentForStaffUseCase: DownloadChatAttachmentForStaffUseCase;
+  listChatOversightStaffUseCase: ListChatOversightStaffUseCase;
+  listChatConversationsForStaffUseCase: ListChatConversationsForStaffUseCase;
+  getChatConversationForMisUseCase: GetChatConversationForMisUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture). */
@@ -99,6 +105,36 @@ export class ChatController {
         file: req.file ? { fileName: req.file.originalname, fileType: req.file.mimetype, data: req.file.buffer } : undefined,
       });
       res.status(201).json(message);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listOversightStaff = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const staff = await this.deps.listChatOversightStaffUseCase.execute(currentUser.sub);
+      res.status(200).json(staff);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listOversightConversationsForStaff = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const conversations = await this.deps.listChatConversationsForStaffUseCase.execute(currentUser.sub, req.params.userId as string);
+      res.status(200).json(conversations);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getOversightConversation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const view = await this.deps.getChatConversationForMisUseCase.execute(currentUser.sub, req.params.id as string);
+      res.status(200).json(view);
     } catch (error) {
       next(error);
     }

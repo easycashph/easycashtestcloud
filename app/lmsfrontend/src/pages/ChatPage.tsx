@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
+import { useRole } from '@/lib/roleContext';
 
 interface ChatConversation {
   id: string;
@@ -34,6 +35,12 @@ interface StaffChatView {
   messages: ChatMessage[];
 }
 
+interface ChatOversightStaffSummary {
+  id: string;
+  name: string;
+  roles: string[];
+}
+
 const POLL_INTERVAL_MS = 4000;
 
 /**
@@ -45,6 +52,8 @@ const POLL_INTERVAL_MS = 4000;
  * comment).
  */
 export function ChatPage() {
+  const { canManageMembers: isMis } = useRole();
+
   const [queue, setQueue] = React.useState<ChatConversation[] | null>(null);
   const [mine, setMine] = React.useState<ChatConversation[] | null>(null);
   const [activeConversationId, setActiveConversationId] = React.useState<string | null>(null);
@@ -55,6 +64,37 @@ export function ChatPage() {
   const [actionError, setActionError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // MIS-only "Staff Chat Oversight" (2026-07-31 user request) - a read-only window into any
+  // staff member's chat history, any status. `oversightMode` marks the currently-open thread as
+  // one loaded through this path (hides the reply box/Transfer/Close - a real conversation
+  // action still has to come from its actual claimant, not from someone just reviewing it).
+  const [oversightStaff, setOversightStaff] = React.useState<ChatOversightStaffSummary[] | null>(null);
+  const [oversightStaffId, setOversightStaffId] = React.useState<string | null>(null);
+  const [oversightConversations, setOversightConversations] = React.useState<ChatConversation[] | null>(null);
+  const [oversightMode, setOversightMode] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isMis) return;
+    apiClient
+      .get<ChatOversightStaffSummary[]>('/chat/oversight/staff')
+      .then(setOversightStaff)
+      .catch(() => setOversightStaff([]));
+  }, [isMis]);
+
+  const handleSelectOversightStaff = (staffId: string) => {
+    setOversightStaffId(staffId);
+    setOversightConversations(null);
+    apiClient
+      .get<ChatConversation[]>(`/chat/oversight/staff/${staffId}/conversations`)
+      .then(setOversightConversations)
+      .catch(() => setOversightConversations([]));
+  };
+
+  const handleSelectOversightConversation = (id: string) => {
+    setOversightMode(true);
+    setActiveConversationId(id);
+  };
 
   const refreshLists = React.useCallback(() => {
     apiClient
@@ -73,19 +113,19 @@ export function ChatPage() {
     return () => window.clearInterval(timer);
   }, [refreshLists]);
 
-  const loadConversation = React.useCallback((id: string) => {
+  const loadConversation = React.useCallback((id: string, viaOversight: boolean) => {
     apiClient
-      .get<StaffChatView>(`/chat/${id}`)
+      .get<StaffChatView>(viaOversight ? `/chat/oversight/conversations/${id}` : `/chat/${id}`)
       .then(setView)
       .catch(() => setView(null));
   }, []);
 
   React.useEffect(() => {
     if (!activeConversationId) return;
-    loadConversation(activeConversationId);
-    const timer = window.setInterval(() => loadConversation(activeConversationId), POLL_INTERVAL_MS);
+    loadConversation(activeConversationId, oversightMode);
+    const timer = window.setInterval(() => loadConversation(activeConversationId, oversightMode), POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [activeConversationId, loadConversation]);
+  }, [activeConversationId, oversightMode, loadConversation]);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -96,6 +136,7 @@ export function ChatPage() {
     try {
       await apiClient.post(`/chat/${id}/claim`);
       refreshLists();
+      setOversightMode(false);
       setActiveConversationId(id);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not claim this conversation - someone else may have just taken it.');
@@ -114,7 +155,7 @@ export function ChatPage() {
   const handleClose = async () => {
     if (!activeConversationId) return;
     await apiClient.post(`/chat/${activeConversationId}/close`);
-    loadConversation(activeConversationId);
+    loadConversation(activeConversationId, false);
     refreshLists();
   };
 
@@ -134,7 +175,7 @@ export function ChatPage() {
       setDraft('');
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      loadConversation(activeConversationId);
+      loadConversation(activeConversationId, false);
     } finally {
       setIsSending(false);
     }
@@ -181,8 +222,11 @@ export function ChatPage() {
               <button
                 key={conversation.id}
                 type="button"
-                onClick={() => setActiveConversationId(conversation.id)}
-                className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
+                onClick={() => {
+                  setOversightMode(false);
+                  setActiveConversationId(conversation.id);
+                }}
+                className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${!oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
               >
                 <p className="font-medium">Active conversation</p>
                 <p className="text-xs text-muted-foreground">Claimed {new Date(conversation.claimedAt ?? conversation.createdAt).toLocaleTimeString()}</p>
@@ -190,6 +234,46 @@ export function ChatPage() {
             ))}
           </CardContent>
         </Card>
+
+        {isMis && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Staff Chat Oversight</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">MIS-only. Review any staff member's chat history.</p>
+              <select
+                className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                value={oversightStaffId ?? ''}
+                onChange={(e) => (e.target.value ? handleSelectOversightStaff(e.target.value) : setOversightStaffId(null))}
+              >
+                <option value="">Select a staff member…</option>
+                {oversightStaff?.map((staff) => (
+                  <option key={staff.id} value={staff.id}>
+                    {staff.name} ({staff.roles.join(', ')})
+                  </option>
+                ))}
+              </select>
+              {oversightStaffId && (
+                <div className="space-y-2">
+                  {oversightConversations === null && <p className="text-xs text-muted-foreground">Loading…</p>}
+                  {oversightConversations?.length === 0 && <p className="text-xs text-muted-foreground">No chats for this staff member yet.</p>}
+                  {oversightConversations?.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      onClick={() => handleSelectOversightConversation(conversation.id)}
+                      className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
+                    >
+                      <p className="font-medium">{conversation.status === 'CLOSED' ? 'Closed conversation' : 'Active conversation'}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(conversation.createdAt).toLocaleString()}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card className="flex flex-col overflow-hidden">
@@ -202,11 +286,15 @@ export function ChatPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b py-3">
               <div>
                 <CardTitle className="text-sm">
-                  {view.conversation.status === 'CLOSED' ? 'Closed conversation' : 'Client conversation'}
+                  {oversightMode
+                    ? 'Oversight view (read-only)'
+                    : view.conversation.status === 'CLOSED'
+                      ? 'Closed conversation'
+                      : 'Client conversation'}
                 </CardTitle>
                 {actionError && <p className="text-xs text-destructive">{actionError}</p>}
               </div>
-              {view.conversation.status === 'CLAIMED' && (
+              {!oversightMode && view.conversation.status === 'CLAIMED' && (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={handleTransfer}>
                     Transfer to Manager
@@ -246,7 +334,7 @@ export function ChatPage() {
                 </div>
               ))}
             </div>
-            {view.conversation.status === 'CLAIMED' && (
+            {!oversightMode && view.conversation.status === 'CLAIMED' && (
               <form onSubmit={handleSend} className="border-t p-3">
                 {file && (
                   <p className="mb-2 flex items-center justify-between rounded-md bg-muted px-2 py-1 text-xs">

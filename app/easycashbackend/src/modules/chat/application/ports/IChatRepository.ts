@@ -50,6 +50,10 @@ export interface IChatRepository {
   closeConversation(id: string): Promise<void>;
   listWaitingConversations(requiresManager: boolean): Promise<ChatConversationRecord[]>;
   listClaimedConversationsForUser(userId: string): Promise<ChatConversationRecord[]>;
+  /** MIS oversight (2026-07-31 user request) - every conversation this user has EVER claimed,
+   * any status (including CLOSED) - unlike listClaimedConversationsForUser, which is that same
+   * staff member's own "My Chats" list and only shows what's currently CLAIMED. */
+  listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]>;
   /** Attachments are looked up separately (Attachment.ownerType='CHAT_MESSAGE', ownerId=message.id)
    * by whichever use case handles the file upload - `addMessage` never receives one directly. */
   addMessage(input: CreateChatMessageInput): Promise<ChatMessageRecord>;

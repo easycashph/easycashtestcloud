@@ -25,7 +25,9 @@ export class DownloadChatAttachmentForStaffUseCase {
     if (!conversation) throw new ChatConversationNotFoundError();
 
     const isClaimant = conversation.claimedByUserId === userId;
-    if (!isClaimant) {
+    // MIS oversight (2026-07-31 user request) - can download from any conversation, not just
+    // ones they've claimed or that are still WAITING.
+    if (!isClaimant && !user.roles.includes('MIS')) {
       if (conversation.status !== 'WAITING') throw new ChatNotEligibleError();
       const eligibilityUser = { roles: user.roles, roleClassName: user.roleClassName };
       const eligible = conversation.requiresManager

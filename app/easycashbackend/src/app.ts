@@ -68,6 +68,9 @@ import { ListMyClaimedChatConversationsUseCase } from '@modules/chat/application
 import { GetChatConversationForStaffUseCase } from '@modules/chat/application/use-cases/GetChatConversationForStaffUseCase';
 import { DownloadPortalChatAttachmentUseCase } from '@modules/chat/application/use-cases/DownloadPortalChatAttachmentUseCase';
 import { DownloadChatAttachmentForStaffUseCase } from '@modules/chat/application/use-cases/DownloadChatAttachmentForStaffUseCase';
+import { ListChatOversightStaffUseCase } from '@modules/chat/application/use-cases/ListChatOversightStaffUseCase';
+import { ListChatConversationsForStaffUseCase } from '@modules/chat/application/use-cases/ListChatConversationsForStaffUseCase';
+import { GetChatConversationForMisUseCase } from '@modules/chat/application/use-cases/GetChatConversationForMisUseCase';
 import { createChatRouter } from '@modules/chat/interface/http/chatRouter';
 import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
@@ -1273,6 +1276,9 @@ export function createApp(): Express {
       sendStaffChatMessageUseCase: new SendStaffChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
       closeChatConversationUseCase: new CloseChatConversationUseCase({ userRepository, chatRepository }),
       downloadChatAttachmentForStaffUseCase: new DownloadChatAttachmentForStaffUseCase({ userRepository, chatRepository, attachmentRepository, fileStorage }),
+      listChatOversightStaffUseCase: new ListChatOversightStaffUseCase({ userRepository }),
+      listChatConversationsForStaffUseCase: new ListChatConversationsForStaffUseCase({ userRepository, chatRepository }),
+      getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository }),
     },
     tokenService,
   );
