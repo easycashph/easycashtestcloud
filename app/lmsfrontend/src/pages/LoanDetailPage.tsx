@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Coins,
   Download,
   Eye,
   FileCheck2,
@@ -21,6 +22,7 @@ import {
   MessageSquareText,
   Lock,
   MoreHorizontal,
+  Percent,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -211,14 +213,40 @@ function RiskAssessmentCard({ loanId }: { loanId: string }) {
   );
 }
 
-/** Compact stat tile - replaces `RealLoanDetailView`'s old three separate bordered Cards (Collections
- * Balance / Loan Terms / Accounting Balance) with one dense grid, per this session's "make it
- * compact" request. */
-function MiniStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+/** 2026-08-04 (user-confirmed, mocked up first): icon-led tile for the balance breakdown row -
+ * `accentClassName` is a `border-l-*` color, distinguishing Principal/Interest/Penalty/Fees at a
+ * glance without a full legend. */
+function BalanceBreakdownItem({
+  icon: Icon,
+  label,
+  value,
+  accentClassName,
+  valueClassName,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  accentClassName: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className={cn('border-l-2 bg-card px-4 py-3', accentClassName)}>
+      <div className="mb-1 flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      </div>
+      <p className={cn('text-base font-medium tabular-nums', valueClassName)}>{value}</p>
+    </div>
+  );
+}
+
+/** Quiet footer stat for loan terms (Principal Amount/Interest Rate/Installments/First Repayment)
+ * - demoted below the balance breakdown, which is what staff actually need at a glance. */
+function LoanTermStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn('tabular-nums', emphasize ? 'text-xl font-semibold' : 'text-sm text-muted-foreground')}>{value}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-sm tabular-nums text-muted-foreground">{value}</p>
     </div>
   );
 }
@@ -2151,21 +2179,50 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       <RiskAssessmentCard loanId={loan.id} />
 
       <Card>
-        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
+        <CardContent className="pt-6">
           {/* Not yet Activated - every balance column is genuinely 0 only because the amortization
               schedule hasn't been generated yet, not because there's no obligation. Showing "—"
               here avoids that reading as "nothing owed"/"fully paid" for a loan that hasn't
               started. */}
-          <MiniStat label="Collections Balance" value={notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))} emphasize />
-          <MiniStat label="Accounting Balance" value={notYetActivated ? '—' : formatPeso(num(loan.accountingBalance))} emphasize />
-          <MiniStat label="Principal" value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))} />
-          <MiniStat label="Interest" value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))} />
-          <MiniStat label="Penalty" value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))} />
-          <MiniStat label="Fees" value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))} />
-          <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
-          <MiniStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
-          <MiniStat label="Installments" value={String(loan.installmentCount)} />
-          <MiniStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Collections Balance</p>
+          <p className="mb-5 text-3xl font-semibold tracking-tight tabular-nums">
+            {notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))}
+          </p>
+
+          <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-border sm:grid-cols-4">
+            <BalanceBreakdownItem
+              icon={Coins}
+              label="Principal"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))}
+              accentClassName="border-l-blue-500"
+            />
+            <BalanceBreakdownItem
+              icon={Percent}
+              label="Interest"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))}
+              accentClassName="border-l-teal-500"
+            />
+            <BalanceBreakdownItem
+              icon={AlertTriangle}
+              label="Penalty"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))}
+              accentClassName="border-l-destructive"
+              valueClassName={!notYetActivated && num(loan.balances.penaltyBalance) > 0 ? 'text-destructive' : undefined}
+            />
+            <BalanceBreakdownItem
+              icon={Receipt}
+              label="Fees"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))}
+              accentClassName="border-l-border"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-x-8 gap-y-2 border-t pt-3">
+            <LoanTermStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
+            <LoanTermStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
+            <LoanTermStat label="Installments" value={String(loan.installmentCount)} />
+            <LoanTermStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
+          </div>
         </CardContent>
       </Card>
 
