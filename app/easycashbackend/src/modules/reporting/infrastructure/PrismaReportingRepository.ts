@@ -85,6 +85,32 @@ function daysLateOf(dueDate: Date, today: Date): number {
   return late > 0 ? late : 0;
 }
 
+/**
+ * 2026-08-04 (user-confirmed, found via a real case - WILLFORD COMETA's SML-MAX_Q1H0Q showing
+ * "08/04/2020" on the Ending Balance report but "August 5, 2020" everywhere else in the LMS):
+ * `RepaymentSchedule.dueDate` for a migrated loan is stored as Asia/Manila midnight encoded as a
+ * UTC instant (e.g. "2020-08-04T16:00:00.000Z" = August 5 00:00 PHT) - a correct UTC timestamp,
+ * but ExcelJS (and this container, which runs in UTC) reads the UTC calendar day back out,
+ * landing one day earlier than the Manila calendar day every other part of the LMS shows (a
+ * browser's local-timezone rendering). A native (non-migrated) loan's dueDate is stored at UTC
+ * midnight (`ActivateLoanUseCase`'s `addMonths`), so +8h never crosses into the next UTC day
+ * there either - safe for both.
+ *
+ * Deliberately ONLY applied where a `RepaymentSchedule.dueDate` is written out as a REPORT
+ * CELL (Due Date / Maturity Date columns) - never at a `daysLateOf()`/live-penalty call site,
+ * which must keep comparing the raw, unshifted instant. This is a display-only correction, not a
+ * change to any stored value or financial calculation.
+ */
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+function toReportCalendarDate(date: Date | null | undefined): Date | null {
+  return date ? new Date(date.getTime() + MANILA_OFFSET_MS) : null;
+}
+
+/** Same as `toReportCalendarDate`, for the report columns sourced from a `RepaymentSchedule.dueDate` that's never null (the installment always exists). */
+function toReportCalendarDateRequired(date: Date): Date {
+  return new Date(date.getTime() + MANILA_OFFSET_MS);
+}
+
 /** Matches `RepaymentInstallmentStatus` exactly to the legacy reports' own "REPAYMENT STATE"/"STATE" text. */
 const INSTALLMENT_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
@@ -381,7 +407,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
         state: loan.status,
-        maturityDate,
+        maturityDate: toReportCalendarDate(maturityDate),
         current: buckets.current.toFixed(2),
         days1to30: buckets.days1to30.toFixed(2),
         days31to60: buckets.days31to60.toFixed(2),
@@ -432,7 +458,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       interestBalance: loan.interestBalance.toString(),
       feesBalance: loan.feesBalance.toString(),
       totalObligation: (Number(loan.principalBalance) + Number(loan.interestBalance) + Number(loan.feesBalance)).toFixed(2),
-      maturityDate: maturityByLoanId.get(loan.id) ?? null,
+      maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
       termRate: `${loan.installmentCount} Month/s`,
       interestRate: loan.interestRate.toString(),
       accountState: loan.status,
@@ -529,8 +555,8 @@ export class PrismaReportingRepository implements IReportingRepository {
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
         accountState: loan.status,
-        dueDate: reported.dueDate,
-        maturityDate,
+        dueDate: toReportCalendarDateRequired(reported.dueDate),
+        maturityDate: toReportCalendarDate(maturityDate),
         lastPaidDate: lastPaid?.lastPaidAt ?? null,
         currentAmountDue: amountDue.toFixed(2),
         pastAmountDue: pastAmountDue.toFixed(2),
@@ -581,8 +607,8 @@ export class PrismaReportingRepository implements IReportingRepository {
         clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
         product: installment.loanAccount.loanProductVersion.loanProduct.name,
         accountId: installment.loanAccount.loanCode,
-        dueDate: installment.dueDate,
-        maturityDate,
+        dueDate: toReportCalendarDateRequired(installment.dueDate),
+        maturityDate: toReportCalendarDate(maturityDate),
         lastPaidDate: installment.lastPaidAt,
         amountDue: amountDue.toFixed(2),
         repayment: repayment.toFixed(2),
@@ -641,8 +667,8 @@ export class PrismaReportingRepository implements IReportingRepository {
         accountId: installment.loanAccount.loanCode,
         mobileNumber: installment.loanAccount.borrower.mobilePhone1 ?? '',
         accountState: installment.loanAccount.status,
-        dueDate: installment.dueDate,
-        maturityDate,
+        dueDate: toReportCalendarDateRequired(installment.dueDate),
+        maturityDate: toReportCalendarDate(maturityDate),
         lastPaidDate: installment.lastPaidAt,
         principalDue: installment.principalDue.toString(),
         interestDue: installment.interestDue.toString(),
@@ -694,7 +720,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         product: installment.loanAccount.loanProductVersion.loanProduct.name,
         accountId: installment.loanAccount.loanCode,
         accountState: installment.loanAccount.status,
-        firstAmortizationDate: installment.dueDate,
+        firstAmortizationDate: toReportCalendarDateRequired(installment.dueDate),
         principalDue: installment.principalDue.toString(),
         interestDue: installment.interestDue.toString(),
         feesDue: fees.toFixed(2),
@@ -737,7 +763,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       interestAmount: transaction.interestComponent.toString(),
       feesAmount: transaction.feesComponent.toString(),
       penaltyAmount: transaction.penaltyComponent.toString(),
-      expectedMaturityDate: maturityByLoanId.get(transaction.loanAccountId) ?? null,
+      expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(transaction.loanAccountId)),
       valueDate: transaction.entryDate,
       orNumber: transaction.orNumber ?? '',
       arNumber: transaction.arNumber ?? '',
@@ -775,7 +801,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       productId: loan.loanProductVersion.loanProduct.code,
       accountId: loan.loanCode,
       loanAmount: loan.principalAmount.toString(),
-      maturityDate: maturityByLoanId.get(loan.id) ?? null,
+      maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
       fullyPaidDate: loan.closedAt,
     }));
   }
