@@ -336,7 +336,7 @@ export class PrismaReportingRepository implements IReportingRepository {
 
       return {
         clientId: loan.borrowerId,
-        clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+        clientName: formatFullName(loan.borrower),
         address: formatAddress(address),
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
@@ -411,7 +411,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       const total = Object.values(buckets).reduce((sum, v) => sum + v, 0);
 
       return {
-        clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+        clientName: formatFullName(loan.borrower),
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
         state: loan.status,
@@ -559,7 +559,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       const lastPaid = [...installments].filter((i) => i.lastPaidAt).sort((a, b) => b.lastPaidAt!.getTime() - a.lastPaidAt!.getTime())[0];
 
       rows.push({
-        clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+        clientName: formatFullName(loan.borrower),
         product: loan.loanProductVersion.loanProduct.name,
         accountId: loan.loanCode,
         accountState: loan.status,
@@ -612,7 +612,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       const repayment = Number(installment.principalPaid) + Number(installment.interestPaid) + Number(installment.feesPaid);
 
       return {
-        clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
+        clientName: formatFullName(installment.loanAccount.borrower),
         product: installment.loanAccount.loanProductVersion.loanProduct.name,
         accountId: installment.loanAccount.loanCode,
         dueDate: toReportCalendarDateRequired(installment.dueDate),
@@ -670,7 +670,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         .reduce((sum, i) => sum + (Number(i.principalDue) - Number(i.principalPaid)) + (Number(i.interestDue) - Number(i.interestPaid)), 0);
 
       return {
-        clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
+        clientName: formatFullName(installment.loanAccount.borrower),
         product: installment.loanAccount.loanProductVersion.loanProduct.name,
         accountId: installment.loanAccount.loanCode,
         mobileNumber: installment.loanAccount.borrower.mobilePhone1 ?? '',
@@ -724,7 +724,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         Number(installment.principalPaid) + Number(installment.interestPaid) + Number(installment.feesPaid) + Number(installment.penaltyPaid);
 
       return {
-        clientName: `${installment.loanAccount.borrower.firstName} ${installment.loanAccount.borrower.lastName}`,
+        clientName: formatFullName(installment.loanAccount.borrower),
         product: installment.loanAccount.loanProductVersion.loanProduct.name,
         accountId: installment.loanAccount.loanCode,
         accountState: installment.loanAccount.status,
@@ -762,7 +762,7 @@ export class PrismaReportingRepository implements IReportingRepository {
     }
 
     return transactions.map((transaction) => ({
-      fullName: `${transaction.loanAccount.borrower.firstName} ${transaction.loanAccount.borrower.lastName}`,
+      fullName: formatFullName(transaction.loanAccount.borrower),
       productId: transaction.loanAccount.loanProductVersion.loanProduct.code,
       accountId: transaction.loanAccount.loanCode,
       totalBalance: transaction.balanceAfter.toString(),
@@ -804,7 +804,7 @@ export class PrismaReportingRepository implements IReportingRepository {
     }
 
     return loans.map((loan) => ({
-      clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+      clientName: formatFullName(loan.borrower),
       product: loan.loanProductVersion.loanProduct.name,
       productId: loan.loanProductVersion.loanProduct.code,
       accountId: loan.loanCode,
