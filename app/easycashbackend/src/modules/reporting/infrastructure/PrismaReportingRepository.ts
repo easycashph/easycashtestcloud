@@ -393,11 +393,16 @@ export class PrismaReportingRepository implements IReportingRepository {
       const buckets = { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days91to120: 0, days121to150: 0, days150Plus: 0 };
       for (const installment of installments) {
         if (installment.status === 'PAID') continue;
+        // 2026-08-04 (user-confirmed): penalty excluded - found via direct comparison against
+        // SDevTech's own Aging Report, whose bucket/Total figures match `accountingBalance`
+        // (principal+interest+fees, no penalty), not `collectionsBalance` (which is correctly
+        // penalty-inclusive per ADR-007, just not what this report shows). Including penalty here
+        // roughly doubled the grand total (₱130M vs SDevTech's ₱67M) for old migrated loans with a
+        // large accrued penaltyDue.
         const remaining =
           Number(installment.principalDue) - Number(installment.principalPaid) +
           (Number(installment.interestDue) - Number(installment.interestPaid)) +
-          (effectiveFees(installment) - Number(installment.feesPaid)) +
-          (effectivePenalty(installment) - Number(installment.penaltyPaid));
+          (effectiveFees(installment) - Number(installment.feesPaid));
         if (remaining <= 0) continue;
         const late = daysLateOf(installment.dueDate, today);
         if (late === 0) buckets.current += remaining;
