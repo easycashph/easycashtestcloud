@@ -2223,18 +2223,47 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableCell colSpan={2} />
+                      <TableCell colSpan={5} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Expected
+                      </TableCell>
+                      <TableCell colSpan={6} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Paid
+                      </TableCell>
+                      <TableCell colSpan={5} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Due
+                      </TableCell>
+                      <TableCell rowSpan={2} className="align-bottom font-medium text-muted-foreground">
+                        Status
+                      </TableCell>
+                      <TableCell rowSpan={2} className="align-bottom text-right font-medium text-muted-foreground">
+                        Balance
+                      </TableCell>
+                      {canManageInstallments && (
+                        <TableCell rowSpan={2} className="border-l text-center align-bottom font-medium text-muted-foreground">
+                          Actions
+                        </TableCell>
+                      )}
+                    </TableRow>
+                    <TableRow>
                       <TableCell className="font-medium text-muted-foreground">#</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Fees Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Total Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Remaining</TableCell>
-                      <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
-                      {canManageInstallments && <TableCell className="text-center font-medium text-muted-foreground">Actions</TableCell>}
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Paid Date</TableCell>
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2272,11 +2301,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         const balance = Math.max(0, totalObligation - cumulativeDue);
                         const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
                         const canAdjustFeesThisRow = i.status !== 'PAID' && num(i.paid.fees) === 0;
+                        // 2026-08-04 (user request): "Amount Expected/Paid/Due" grouped layout, per
+                        // component - matches the legacy SDevTech schedule view's own convention
+                        // (same source of truth, same figures, just broken out instead of summed).
+                        const expectedTotal = num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay;
+                        const rowRemaining = Math.max(0, expectedTotal - rowPaid);
+                        const dueP = Math.max(0, num(i.due.principal) - num(i.paid.principal));
+                        const dueI = Math.max(0, num(i.due.interest) - num(i.paid.interest));
+                        const dueF = Math.max(0, feesDisplay - num(i.paid.fees));
+                        const duePen = Math.max(0, penaltyDisplay - num(i.paid.penalty));
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
                             <TableCell>{formatDate(i.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
+                            <TableCell className="border-l text-right">{formatPeso(num(i.due.principal))}</TableCell>
                             <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.feesOverride ? (
@@ -2309,26 +2347,30 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 </>
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatPeso(num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay)}
+                            <TableCell className="text-right font-medium">{formatPeso(expectedTotal)}</TableCell>
+                            <TableCell className="border-l text-right text-muted-foreground">
+                              {num(i.paid.principal) > 0 ? formatPeso(num(i.paid.principal)) : '—'}
                             </TableCell>
-                            <TableCell className="text-right">{formatPeso(rowPaid)}</TableCell>
-                            {(() => {
-                              const rowRemaining = Math.max(
-                                0,
-                                num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay - rowPaid,
-                              );
-                              return (
-                                <TableCell
-                                  className={cn(
-                                    'text-right',
-                                    rowRemaining > 0 ? 'font-medium text-warning' : 'text-muted-foreground',
-                                  )}
-                                >
-                                  {formatPeso(rowRemaining)}
-                                </TableCell>
-                              );
-                            })()}
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.interest) > 0 ? formatPeso(num(i.paid.interest)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.fees) > 0 ? formatPeso(num(i.paid.fees)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.penalty) > 0 ? formatPeso(num(i.paid.penalty)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">{rowPaid > 0 ? formatPeso(rowPaid) : '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{i.lastPaidAt ? formatDate(i.lastPaidAt) : '—'}</TableCell>
+                            <TableCell className="border-l text-right">{formatPeso(dueP)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(dueI)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(dueF)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(duePen)}</TableCell>
+                            <TableCell
+                              className={cn('text-right font-medium', rowRemaining > 0 ? 'text-warning' : 'text-muted-foreground')}
+                            >
+                              {formatPeso(rowRemaining)}
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
                                 <InstallmentStatusBadge status={i.status} />
@@ -2341,7 +2383,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             </TableCell>
                             <TableCell className="text-right font-medium">{formatPeso(balance)}</TableCell>
                             {canManageInstallments && (
-                              <TableCell className="text-center">
+                              <TableCell className="border-l text-center">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
@@ -2373,7 +2415,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     })()}
                     <TableRow className="border-t-2 font-semibold">
                       <TableCell colSpan={2}>Total</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="border-l text-right">
                         {formatPeso(installments.reduce((sum, i) => sum + num(i.due.principal), 0))}
                       </TableCell>
                       <TableCell className="text-right">
@@ -2398,12 +2440,42 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           }, 0),
                         )}
                       </TableCell>
+                      <TableCell className="border-l text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.principal), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.interest), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.fees), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.penalty), 0))}
+                      </TableCell>
                       <TableCell className="text-right">
                         {formatPeso(
                           installments.reduce(
                             (sum, i) => sum + num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty),
                             0,
                           ),
+                        )}
+                      </TableCell>
+                      <TableCell />
+                      <TableCell className="border-l text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.due.principal) - num(i.paid.principal)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.due.interest) - num(i.paid.interest)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.currentFeesDue) - num(i.paid.fees)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(
+                          installments.reduce((sum, i) => {
+                            const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                            return sum + Math.max(0, penalty - num(i.paid.penalty));
+                          }, 0),
                         )}
                       </TableCell>
                       <TableCell className="text-right">
