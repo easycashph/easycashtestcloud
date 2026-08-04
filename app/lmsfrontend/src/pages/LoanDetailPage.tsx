@@ -2220,7 +2220,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               ) : installments.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
               ) : (
-                <Table>
+                <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
                   <TableHeader>
                     <TableRow>
                       <TableCell colSpan={2} />
