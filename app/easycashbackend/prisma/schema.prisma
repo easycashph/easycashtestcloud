@@ -194,10 +194,8 @@ enum RepaymentInstallmentStatus {
 // role baseline)
 // ----------------------------------------------------------------------------
 
-/// ADR-005 (Critical/Blocking, resolved provisionally): no legacy branch
-/// list exists. Seeded with one placeholder "Head Office" branch. The
-/// schema will never need to change when the real branch list is supplied —
-/// only seed/admin data does.
+/// ADR-005 (Critical/Blocking, resolved 2026-08-04): Easycash operates a single branch
+/// ("Head Office") - user-confirmed, no further branch list to come.
 model Branch {
   id        String   @id @default(uuid())
   code      String   @unique

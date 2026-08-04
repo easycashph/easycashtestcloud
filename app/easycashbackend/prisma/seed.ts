@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
- * Seeds only stable reference data: one provisional Branch (ADR-005), the
+ * Seeds only stable reference data: the single Branch (ADR-005), the
  * minimum Role baseline (AUDIT-4), and a starter Permission set (AUDIT-3).
  *
  * Deliberately does NOT create a default admin user with a known password —
@@ -11,10 +11,8 @@ const prisma = new PrismaClient();
  * guarded interactive bootstrap step in Milestone 6 (Authentication).
  */
 async function main() {
-  // ADR-005 (Critical/Blocking, resolved provisionally): no legacy branch
-  // list exists. This seed creates exactly one placeholder branch. Adding
-  // the real branch list later is a data change only — the schema does not
-  // need to change.
+  // ADR-005 (Critical/Blocking, resolved 2026-08-04 - user-confirmed Easycash operates a single
+  // branch, no further branch list to come): this seed creates exactly that one branch.
   // Address confirmed 2026-07-11 for the loan-application pre-qualification distance rule
   // (LoanApplicationPreQualificationService) — latitude/longitude are left null here and geocoded
   // lazily on first use, so seeding never makes a network call.
@@ -24,7 +22,7 @@ async function main() {
     update: { address: headOfficeAddress },
     create: {
       code: 'HQ',
-      name: 'Head Office (provisional — pending ADR-005)',
+      name: 'Head Office',
       isActive: true,
       address: headOfficeAddress,
     },
