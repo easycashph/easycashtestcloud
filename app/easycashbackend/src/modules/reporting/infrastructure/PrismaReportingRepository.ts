@@ -142,6 +142,14 @@ const TRANSACTION_TYPE_LABEL: Record<string, string> = {
   REVERSAL: 'Reversal',
 };
 
+/** 2026-08-04 (user-confirmed): "First Middle Last" - matches SDevTech's own "Detailed Ending
+ * Current Balance" export convention (e.g. "YASMIN KATRINA DELFIN SACLAO"). `middleName` is
+ * optional on `Borrower` (not every borrower has one on file) - omitted entirely rather than
+ * leaving a double space when absent. */
+function formatFullName(borrower: { firstName: string; middleName: string | null; lastName: string }): string {
+  return [borrower.firstName, borrower.middleName, borrower.lastName].filter(Boolean).join(' ');
+}
+
 function groupByLoanId<T extends { loanAccountId: string }>(rows: T[]): Map<string, T[]> {
   const map = new Map<string, T[]>();
   for (const row of rows) {
@@ -450,7 +458,7 @@ export class PrismaReportingRepository implements IReportingRepository {
     }
 
     return loans.map((loan) => ({
-      clientName: `${loan.borrower.firstName} ${loan.borrower.lastName}`,
+      clientName: formatFullName(loan.borrower),
       product: loan.loanProductVersion.loanProduct.name,
       loanAccountId: loan.loanCode,
       loanAmount: loan.principalAmount.toString(),
