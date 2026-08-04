@@ -444,6 +444,21 @@ async function migrateLoanAccounts(
   const clientAccounts = loadAll<any>('client_accounts');
   const clientIdByAccountHolderKey = indexBy(clientAccounts, 'uid');
 
+  // 2026-08-04 (user-confirmed): fallback for `firstRepaymentDate` when `disbursements` is missing
+  // it (7 loans, e.g. OTH-COMP_U0O3O) - NOT fabrication, since these loans have a real, already-
+  // scheduled `repayments.bson` record with its own genuine `due_date`; that collection was simply
+  // never consulted here (only by the separate `migrate-repayment-schedules.ts`). Uses the earliest
+  // due_date across each loan's repayment rows, same "anchor = first scheduled installment" concept
+  // ADR-045 already uses for `disbursements.first_repayment_date` itself.
+  const earliestRepaymentDueDateByUid = new Map<string, Date>();
+  for (const r of loadAll<any>('repayments')) {
+    const uid = String(r.parent_account_key);
+    const due = toDate(r.due_date);
+    if (!due) continue;
+    const existing = earliestRepaymentDueDateByUid.get(uid);
+    if (!existing || due < existing) earliestRepaymentDueDateByUid.set(uid, due);
+  }
+
   for (const la of loans) {
     const legacyId = String(la.uid ?? la._id);
     const status = LOAN_STATUS_MAP[String(la.accountState)];
@@ -463,7 +478,7 @@ async function migrateLoanAccounts(
       continue;
     }
     const disb = disbursementsByUid.get(String(la.disbursementDetailsKey));
-    const firstRepaymentDate = toDate(disb?.first_repayment_date);
+    const firstRepaymentDate = toDate(disb?.first_repayment_date) ?? earliestRepaymentDueDateByUid.get(String(la.uid));
     // 2026-07-17 bug fix (user-reported): `activatedAt` - treated everywhere downstream as the
     // official Disbursement Date (ADR-032; read by LoanDocumentMergeDataResolver and the Loan
     // Releases report) - used to be sourced from `la.creationDate` (the loan-account record's
@@ -474,9 +489,10 @@ async function migrateLoanAccounts(
     // existing rows - `update: {}` below - so a fix here alone wouldn't have reached them).
     const activatedAt = toDate(disb?.disbursment_date) ?? toDate(disb?.expected_disbursement_date);
     if (!firstRepaymentDate) {
-      // Design doc §3 point "firstRepaymentDate": no fabrication rule exists (ADR-045) — 7 legacy
-      // loans have no source value; skipped rather than guessed, per CLAUDE.md "never fabricate
-      // financial logic."
+      // Design doc §3 point "firstRepaymentDate": no fabrication rule exists (ADR-045) - skipped
+      // rather than guessed, per CLAUDE.md "never fabricate financial logic". Genuinely reachable
+      // only when a loan has neither a `disbursements.first_repayment_date` NOR any `repayments`
+      // row at all (the fallback above) - i.e. no real source anywhere in the dump for this date.
       recordSkip(rec, 'missing firstRepaymentDate (no fabrication per ADR-045)');
       continue;
     }
