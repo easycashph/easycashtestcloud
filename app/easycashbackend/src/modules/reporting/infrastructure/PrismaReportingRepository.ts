@@ -395,11 +395,18 @@ export class PrismaReportingRepository implements IReportingRepository {
   }
 
   /** As-of-today snapshot. TOTAL OBLIGATION = principal + interest + fees balance only, matching
-   * the legacy sample's column set (no penalty column on this report). */
+   * the legacy sample's column set (no penalty column on this report).
+   *
+   * 2026-08-04 (user-confirmed): CLOSED/written-off/restructured/adjusted accounts excluded - found
+   * via direct comparison against SDevTech's own "Detailed Ending Current Balance" export, which
+   * never lists a closed or zero-balance account (a report titled "ending CURRENT balance" has
+   * nothing meaningful to say about a loan with no balance left). Previously including the whole
+   * CLOSED_* family inflated this report to 1,788 rows against SDevTech's 1,277 - 623 of those extra
+   * LMS rows had zero Total Obligation. */
   async getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
-        status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED'] },
+        status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] },
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
       include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } },
