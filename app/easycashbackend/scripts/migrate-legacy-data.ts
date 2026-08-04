@@ -503,10 +503,22 @@ async function migrateLoanAccounts(
     const loanCode = usageCount === 1 ? baseCode : `${baseCode}-LEGACY${usageCount}`;
 
     if (APPLY) {
+      // 2026-08-04 bug fix (user-reported, found via a real case - OTH-COMP_00002 showing ₱0
+      // balance in the LMS despite owing ₱1.6M+ per SDevTech's own live report): 183 legacy loans
+      // have NO account-level balance snapshot fields at all in the source (not zero - absent),
+      // same population `flag-missing-balance-loans.ts`/`legacyBalanceDataMissing` already exists
+      // for. `recompute-active-loan-balances-from-schedule.ts` correctly derives their real balance
+      // from RepaymentSchedule - but every subsequent incremental re-migration run was blindly
+      // resyncing these loans' balance fields back to `la.principalBalance ?? 0`, silently
+      // destroying that correction and making real, uncollected debt disappear from the LMS again.
+      // Balance fields are now excluded from the resync entirely (not defaulted to 0) whenever the
+      // source itself has no balance snapshot - `recompute-active-loan-balances-from-schedule.ts`
+      // remains the one source of truth for these loans' balance until a real snapshot exists.
+      const hasAccountLevelBalanceData = la.principalBalance !== undefined || la.interestBalance !== undefined;
+
       // Shared between create (first migration) and the resync update (subsequent re-runs) so the
       // two paths can never drift apart - see the "locked" comment above migrateLoanAccounts.
-      const financialSnapshot = {
-        status: status as never,
+      const balanceFields = {
         principalBalance: toDecimalString(la.principalBalance ?? 0),
         principalPaid: toDecimalString(la.principalPaid ?? 0),
         principalDue: toDecimalString(la.principalDue ?? 0),
@@ -519,17 +531,24 @@ async function migrateLoanAccounts(
         penaltyBalance: toDecimalString(la.penaltyBalance ?? 0),
         penaltyPaid: toDecimalString(la.penaltyPaid ?? 0),
         penaltyDue: toDecimalString(la.penaltyDue ?? 0),
+      };
+      const financialSnapshot = {
+        status: status as never,
+        ...balanceFields,
         approvedAt: toDate(la.approvedDate),
         activatedAt,
         closedAt: toDate(la.closedDate),
       };
+      const resyncSnapshot = hasAccountLevelBalanceData
+        ? financialSnapshot
+        : { status: status as never, approvedAt: toDate(la.approvedDate), activatedAt, closedAt: toDate(la.closedDate) };
 
       const existing = await prisma.loanAccount.findUnique({ where: { legacyId }, select: { id: true } });
       const isLocked = existing ? lockedLoanAccountIds.has(existing.id) : false;
 
       const loanAccount = await prisma.loanAccount.upsert({
         where: { legacyId },
-        update: isLocked ? {} : financialSnapshot,
+        update: isLocked ? {} : resyncSnapshot,
         create: {
           loanCode,
           borrowerId,
@@ -550,6 +569,7 @@ async function migrateLoanAccounts(
           gracePeriodDays: Number(la.gracePeriod ?? 0),
           firstRepaymentDate,
           legacyId,
+          legacyBalanceDataMissing: !hasAccountLevelBalanceData,
           ...financialSnapshot,
         },
       });
