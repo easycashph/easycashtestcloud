@@ -233,7 +233,9 @@ export class ReportingController {
   fullyPaidXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const rows = await this.deps.getFullyPaidAccountsReportUseCase.execute({ branchId: resolveBranchFilter(scope) });
+      const from = parseDate(req.query.from, 'from');
+      const to = parseDate(req.query.to, 'to');
+      const rows = await this.deps.getFullyPaidAccountsReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeFullyPaidAccountsReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Fully Paid Accounts.xlsx"');

@@ -787,14 +787,27 @@ export class PrismaReportingRepository implements IReportingRepository {
 
   /** As-of-today snapshot: every loan the system considers fully paid (CLOSED - excludes
    * CLOSED_WRITTEN_OFF/CLOSED_REJECTED, same "fully paid" semantics `isFullyPaid`/`reopen()` already use). */
-  async getFullyPaidAccountsReport(filter: { branchId?: string }): Promise<FullyPaidAccountsReportRow[]> {
+  /**
+   * 2026-08-04 (user-confirmed): date-filtered on Fully Paid Date (defaults to the current month
+   * on the frontend, same convention as every other date-ranged report) - previously "as-of-today,
+   * no filter" (like Accounts with Past Due used to be), which listed all 517 CLOSED loans ever,
+   * against SDevTech's own report showing only 8 (its own report is date-scoped too).
+   *
+   * `closedAt` is null for 491 of those 517 loans - confirmed this is genuinely absent in
+   * SDevTech's own source data too (`loan_accounts.closedDate`), not a migration bug. SDevTech's
+   * own "Fully Paid Date" column turns out to be sourced from `lastModifiedDate`
+   * (loan_accounts)/the last repayment's date instead when `closedDate` is absent - confirmed by
+   * matching 3 sample loans' exact timestamps. Mirrors that here: falls back to the latest
+   * `RepaymentSchedule.lastPaidAt` across the loan's own installments (real, already-migrated
+   * data, not fabricated) whenever `closedAt` itself is null.
+   */
+  async getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
         status: 'CLOSED',
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
       include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } },
-      orderBy: { closedAt: 'desc' },
     });
     if (loans.length === 0) return [];
 
@@ -804,19 +817,34 @@ export class PrismaReportingRepository implements IReportingRepository {
       orderBy: { installmentNumber: 'desc' },
     });
     const maturityByLoanId = new Map<string, Date>();
+    const latestPaidByLoanId = new Map<string, Date>();
     for (const installment of schedule) {
       if (!maturityByLoanId.has(installment.loanAccountId)) maturityByLoanId.set(installment.loanAccountId, installment.dueDate);
+      if (installment.lastPaidAt) {
+        const current = latestPaidByLoanId.get(installment.loanAccountId);
+        if (!current || installment.lastPaidAt > current) latestPaidByLoanId.set(installment.loanAccountId, installment.lastPaidAt);
+      }
     }
 
-    return loans.map((loan) => ({
-      clientName: formatFullName(loan.borrower),
-      product: loan.loanProductVersion.loanProduct.name,
-      productId: loan.loanProductVersion.loanProduct.code,
-      accountId: loan.loanCode,
-      loanAmount: loan.principalAmount.toString(),
-      maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
-      fullyPaidDate: loan.closedAt,
-    }));
+    const inRange = (d: Date) => (!filter.from || d >= filter.from) && (!filter.to || d <= filter.to);
+    const hasRangeFilter = Boolean(filter.from || filter.to);
+
+    const rows: FullyPaidAccountsReportRow[] = [];
+    for (const loan of loans) {
+      const effectiveClosedAt = loan.closedAt ?? latestPaidByLoanId.get(loan.id) ?? null;
+      if (hasRangeFilter && (!effectiveClosedAt || !inRange(effectiveClosedAt))) continue;
+      rows.push({
+        clientName: formatFullName(loan.borrower),
+        product: loan.loanProductVersion.loanProduct.name,
+        productId: loan.loanProductVersion.loanProduct.code,
+        accountId: loan.loanCode,
+        loanAmount: loan.principalAmount.toString(),
+        maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
+        fullyPaidDate: toReportCalendarDate(effectiveClosedAt),
+      });
+    }
+    rows.sort((a, b) => (b.fullyPaidDate?.getTime() ?? 0) - (a.fullyPaidDate?.getTime() ?? 0));
+    return rows;
   }
 }
 

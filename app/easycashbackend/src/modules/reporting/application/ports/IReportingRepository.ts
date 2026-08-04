@@ -239,5 +239,5 @@ export interface IReportingRepository {
   getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
   getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<DailyCollectionReportRow[]>;
-  getFullyPaidAccountsReport(filter: { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
+  getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
 }
