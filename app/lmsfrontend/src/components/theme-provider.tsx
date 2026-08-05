@@ -142,10 +142,16 @@ function dragReorderStorageKey(userId: string | null): string {
   return `${DRAG_REORDER_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
 }
 
+/** 2026-08-05 (user request): dark, not the OS/browser's `prefers-color-scheme`, is the platform
+ * default for anyone who hasn't picked a theme yet - a new officer's first login, or the Login
+ * page itself before anyone's signed in. Anyone who has already chosen light or dark (`stored`
+ * below) keeps that choice untouched; this only changes what a never-configured user sees. */
+export const DEFAULT_THEME: Theme = 'dark';
+
 function readTheme(userId: string | null): Theme {
   const stored = window.localStorage.getItem(themeStorageKey(userId));
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return DEFAULT_THEME;
 }
 
 function readAccent(userId: string | null): Accent {
