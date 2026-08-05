@@ -84,7 +84,7 @@ export function TransactionReportPage() {
   useLogPageView('Transaction Report');
   const [range, setRange] = React.useState<DateRange>(() => {
     const to = new Date();
-    const from = new Date(to.getTime() - 90 * 86_400_000);
+    const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
   const [type, setType] = React.useState<LoanTransactionType | 'ALL'>('ALL');

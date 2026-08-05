@@ -52,7 +52,7 @@ function ErrorBanner({ message }: { message: string }) {
 function DailyLoanReport() {
   const [range, setRange] = React.useState<DateRange>(() => {
     const to = new Date();
-    const from = new Date(to.getTime() - 13 * 86_400_000);
+    const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
 
