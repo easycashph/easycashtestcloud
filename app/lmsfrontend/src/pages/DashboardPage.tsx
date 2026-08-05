@@ -30,6 +30,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
   TrendingUp,
 } from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
@@ -210,6 +211,35 @@ function buildRealDisbursementTrend(loans: PortfolioLoanRow[], monthsBack = 6) {
     buckets.push({ month: MONTH_SHORT_NAMES[target.getMonth()]!, year: target.getFullYear(), monthIndex: target.getMonth(), disbursed: Math.round(disbursed * 100) / 100 });
   }
   return buckets;
+}
+
+/**
+ * 2026-08-05 (user-reported bug fix): Portfolio Growth used to compare the CURRENT month's
+ * disbursement bucket (partial - only however many days have elapsed so far, e.g. just Aug 1-5)
+ * directly against the FULL previous month - always reading a huge, misleading negative number
+ * early in any month regardless of actual disbursement pace. Mirrors the backend's own
+ * `sameElapsedPointLastMonth` convention (`PrismaDashboardRepository.ts`, already used correctly
+ * for Collections This Month's trend) - compares "this month so far" against "the same number of
+ * days into last month" instead.
+ */
+function buildElapsedMatchedDisbursementComparison(loans: PortfolioLoanRow[]) {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthElapsedEnd = new Date(previousMonthStart.getTime() + (now.getTime() - currentMonthStart.getTime()));
+
+  let current = 0;
+  let previous = 0;
+  for (const loan of loans) {
+    if (!loan.activatedAt) continue;
+    const activated = new Date(loan.activatedAt);
+    if (activated >= currentMonthStart && activated <= now) {
+      current += loan.principalAmount;
+    } else if (activated >= previousMonthStart && activated < previousMonthElapsedEnd) {
+      previous += loan.principalAmount;
+    }
+  }
+  return { current: Math.round(current * 100) / 100, previous: Math.round(previous * 100) / 100 };
 }
 
 // Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too - reads
@@ -506,7 +536,14 @@ function SummaryCard({
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-2">
-          <div className={cn(compact ? 'text-xl font-bold' : 'text-2xl font-bold', highlight && 'text-primary')}>{value}</div>
+          <div
+            className={cn(
+              compact ? 'text-xl font-bold' : 'text-2xl font-bold',
+              tone === 'destructive' ? 'text-destructive' : highlight && 'text-primary',
+            )}
+          >
+            {value}
+          </div>
           {trend && trend.changePercent !== null && (
             <span
               className={cn(
@@ -757,15 +794,18 @@ export function DashboardPage() {
     [portfolioFilteredLoans],
   );
   /** 2026-07-23: real month-over-month disbursement growth (replaces the old hardcoded "+4.8%
-   * sample data"). Reuses the same buildRealDisbursementTrend helper the Disbursement Trend chart
-   * below already calls, on the full portfolio-wide loan set (not scoped to the Portfolio Filter
-   * above) - same "portfolio-wide by design" treatment as Collections This Month. `null` when
-   * there's no prior-month disbursement to compare against (division by zero), matching the
-   * backend's own collectionsThisMonth.trend.changePercent null convention. */
+   * sample data"), on the full portfolio-wide loan set (not scoped to the Portfolio Filter above) -
+   * same "portfolio-wide by design" treatment as Collections This Month. `null` when there's no
+   * prior-month disbursement to compare against (division by zero), matching the backend's own
+   * collectionsThisMonth.trend.changePercent null convention.
+   *
+   * 2026-08-05 (user-reported bug fix): now uses `buildElapsedMatchedDisbursementComparison`
+   * (elapsed-day-matched, e.g. Aug 1-5 vs Jul 1-5) instead of the old full-calendar-month compare -
+   * see that function's own doc comment for why the old version was misleading. */
   const portfolioGrowthPercent = React.useMemo(() => {
-    const [previous, current] = buildRealDisbursementTrend(allPortfolioLoans, 2);
-    if (!previous || !current || previous.disbursed === 0) return null;
-    return Math.round(((current.disbursed - previous.disbursed) / previous.disbursed) * 10000) / 100;
+    const { current, previous } = buildElapsedMatchedDisbursementComparison(allPortfolioLoans);
+    if (!previous) return null;
+    return Math.round(((current - previous) / previous) * 10000) / 100;
   }, [allPortfolioLoans]);
   const liveSummary = !isFiltered ? summaryQuery.data : undefined;
   const filteredActiveCount =
@@ -1018,8 +1058,13 @@ export function DashboardPage() {
             <SummaryCard
               title={t('dashboard.stat.portfolioGrowth')}
               value={portfolioGrowthPercent === null ? '—' : `${portfolioGrowthPercent >= 0 ? '+' : ''}${portfolioGrowthPercent.toFixed(1)}%`}
-              hint={portfolioGrowthPercent === null ? 'Not enough disbursement history yet' : 'Month-over-month disbursement, portfolio-wide'}
-              icon={TrendingUp}
+              hint={
+                portfolioGrowthPercent === null
+                  ? 'Not enough disbursement history yet'
+                  : 'Month-over-month disbursement, portfolio-wide, same elapsed days'
+              }
+              icon={portfolioGrowthPercent !== null && portfolioGrowthPercent < 0 ? TrendingDown : TrendingUp}
+              tone={portfolioGrowthPercent !== null && portfolioGrowthPercent < 0 ? 'destructive' : 'default'}
               compact={compact}
               highlight
             />
