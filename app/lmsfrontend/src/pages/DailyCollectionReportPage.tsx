@@ -6,8 +6,7 @@ import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { downloadFile, ApiError } from '@/lib/apiClient';
-
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+import { isoDate } from '@/lib/utils';
 
 /**
  * Real `.xlsx` download (`GET /reports/daily-collection.xlsx`) - a like-for-like replacement of

@@ -37,6 +37,23 @@ export function formatPeso(amount: number): string {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }).format(amount);
 }
 
+/**
+ * 2026-08-05 bug fix (user-reported): every report page's date-range default computed a `Date` at
+ * LOCAL midnight (e.g. `new Date(year, month, 1)` for "the 1st of this month") then read it back
+ * via `.toISOString()` - which converts to UTC first. In any timezone ahead of UTC (Philippine
+ * Time is UTC+8), local midnight is still the PREVIOUS day in UTC, so "August 1" silently became
+ * "July 31" in the date input. Reads the LOCAL calendar date components directly instead, with no
+ * UTC round-trip - this is the one correct way to turn a `Date` into the "YYYY-MM-DD" a native
+ * `<input type="date">` expects. Was duplicated (with the bug) in 10 separate report page files;
+ * consolidated here as the one implementation every page now imports.
+ */
+export function isoDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /** 2026-07-24 bug fix: `Intl.DateTimeFormat().format()` throws `RangeError: Invalid time value` on
  * an Invalid Date - e.g. `new Date('')`, which is exactly what a controlled `<input type="date">`
  * reports mid-keystroke while manually typing a date (browsers emit an empty-string `onChange`

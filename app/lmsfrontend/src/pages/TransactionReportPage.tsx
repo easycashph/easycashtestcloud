@@ -13,9 +13,8 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
 import type { LoanTransactionType, TransactionReportRow } from '@/lib/reportApiTypes';
-import { formatDate, formatPeso } from '@/lib/utils';
+import { formatDate, formatPeso, isoDate } from '@/lib/utils';
 
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 const TRANSACTION_TYPES: LoanTransactionType[] = [
   'DISBURSEMENT',
@@ -114,6 +113,7 @@ export function TransactionReportPage() {
       const params = new URLSearchParams();
       if (range.from) params.set('from', range.from);
       if (range.to) params.set('to', range.to);
+      if (type !== 'ALL') params.set('type', type);
       const query = params.toString();
       await downloadFile(`/reports/daily-collection.xlsx${query ? `?${query}` : ''}`, 'Daily Collection Report.xlsx');
     } catch (err) {

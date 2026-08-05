@@ -12,7 +12,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { OriginationReportRow, ReportGranularity } from '@/lib/reportApiTypes';
-import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { formatDate, formatPeso, isoDate, pesoTooltipFormatter } from '@/lib/utils';
 
 function getSortValue(row: OriginationReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -26,8 +26,6 @@ function getSortValue(row: OriginationReportRow, key: string): string | number |
       return undefined;
   }
 }
-
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 function useOriginationReport(granularity: ReportGranularity, from?: string, to?: string) {
   return useQuery({
