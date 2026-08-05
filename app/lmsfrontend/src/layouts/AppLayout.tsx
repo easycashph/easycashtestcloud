@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Landmark,
@@ -175,6 +175,10 @@ function Topbar({
   collapsed: boolean;
   onCollapseToggle: () => void;
 }) {
+  // 2026-08-05 (user request): the global search box only makes sense on the Dashboard - every
+  // other page removed it from the topbar entirely rather than just hiding it visually.
+  const isDashboard = useLocation().pathname === '/';
+
   return (
     <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
@@ -195,7 +199,7 @@ function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <GlobalSearch />
+        {isDashboard && <GlobalSearch />}
         <HelpButton />
         <NotificationBell />
         <AccountMenu />
