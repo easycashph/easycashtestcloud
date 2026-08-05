@@ -595,16 +595,42 @@ function ReportPreviewCard({
   );
 }
 
+/**
+ * 2026-08-05 (user request): Delinquency Rate/PAR used to render in the same teal "this is
+ * clickable" color as every other metric here, including Average Loan Size and Write-off - no
+ * visual distinction between "this number is bad news" and "this is just a neutral figure." These
+ * thresholds are a general risk-coloring convention for portfolio-quality percentages (the higher,
+ * the worse), not a sourced company policy - purely a visual affordance, not a business rule.
+ */
+type MetricSeverity = 'default' | 'warning' | 'destructive';
+
+const SEVERITY_TEXT_CLASS: Record<MetricSeverity, string> = {
+  default: 'text-primary',
+  warning: 'text-warning',
+  destructive: 'text-destructive',
+};
+
+/** Below 10% is a healthy figure for either metric; 10-30% is worth watching; above 30% is a
+ * clear red flag - a coarse, generic risk-coloring convention (not sourced from a specific
+ * company policy), applied identically to Delinquency Rate and Portfolio at Risk. */
+function riskPercentSeverity(percent: number): MetricSeverity {
+  if (percent >= 30) return 'destructive';
+  if (percent >= 10) return 'warning';
+  return 'default';
+}
+
 function MetricItem({
   term,
   definition,
   value,
   onClick,
+  severity = 'default',
 }: {
   term: string;
   definition: string;
   value: string;
   onClick?: () => void;
+  severity?: MetricSeverity;
 }) {
   return (
     <div className="rounded-md border p-3">
@@ -616,13 +642,16 @@ function MetricItem({
         <button
           type="button"
           onClick={onClick}
-          className="mt-1 text-xl font-bold text-primary underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+          className={cn(
+            'mt-1 text-xl font-bold underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-ring',
+            SEVERITY_TEXT_CLASS[severity],
+          )}
           title="View the loan accounts behind this figure"
         >
           {value}
         </button>
       ) : (
-        <p className="mt-1 text-xl font-bold">{value}</p>
+        <p className={cn('mt-1 text-xl font-bold', severity !== 'default' && SEVERITY_TEXT_CLASS[severity])}>{value}</p>
       )}
     </div>
   );
@@ -1123,12 +1152,14 @@ export function DashboardPage() {
             term={FINANCIAL_GLOSSARY.delinquencyRate.term}
             definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
             value={`${filteredQualityMetrics.delinquencyRatePercent.toFixed(1)}%`}
+            severity={riskPercentSeverity(filteredQualityMetrics.delinquencyRatePercent)}
             onClick={openDelinquentAccounts}
           />
           <MetricItem
             term={FINANCIAL_GLOSSARY.portfolioAtRisk.term}
             definition={FINANCIAL_GLOSSARY.portfolioAtRisk.definition}
             value={`${filteredQualityMetrics.portfolioAtRiskPercent.toFixed(1)}%`}
+            severity={riskPercentSeverity(filteredQualityMetrics.portfolioAtRiskPercent)}
             onClick={openDelinquentAccounts}
           />
           <MetricItem
