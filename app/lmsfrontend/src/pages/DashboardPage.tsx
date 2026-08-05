@@ -1042,16 +1042,22 @@ export function DashboardPage() {
           overdueAccounts: (
             <SummaryCard
               title={t('dashboard.stat.overdueAccounts')}
-              value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
+              value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredDelinquentLoans.length.toString()}
               hint={
                 liveSummary
                   ? `${formatPeso(Number(liveSummary.overdueAccounts.atRiskCollectionsBalance))} at risk (collections balance)`
-                  : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`
+                  : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance + filteredPortfolioHealth.matured.collectionsBalance)} at risk (collections balance)`
               }
               icon={AlertOctagon}
               tone="destructive"
               compact={compact}
-              onClick={() => openVennSegment('activeInArrears')}
+              // 2026-08-05 (user-reported bug fix): was openVennSegment('activeInArrears') - only
+              // showed the "in arrears within term" subset, silently dropping matured loans from
+              // the drill-down even though the headline count (liveSummary.overdueAccounts.count)
+              // already includes both (matured is a subset of the live overdueIds set - see
+              // findOverdueLoanAccounts in PrismaDashboardRepository.ts). openDelinquentAccounts is
+              // the existing handler that already combines both correctly.
+              onClick={openDelinquentAccounts}
             />
           ),
           portfolioGrowth: (
