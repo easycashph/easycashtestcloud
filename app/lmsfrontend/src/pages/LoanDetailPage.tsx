@@ -3434,7 +3434,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <DialogTitle>Adjust penalty</DialogTitle>
             <DialogDescription>
               {reduceTarget &&
-                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Can't go above what the penalty formula would produce today. Approved outside this system; the reason below records that reference.`}
+                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Approved outside this system; the reason below records that reference.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">

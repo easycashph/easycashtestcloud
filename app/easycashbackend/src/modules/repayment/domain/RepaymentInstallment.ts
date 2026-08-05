@@ -4,8 +4,8 @@ import { InstallmentAmounts } from './valueObjects/InstallmentAmounts';
 import {
   FeesAlreadyPaidError,
   InvalidFeesAdjustmentAmountError,
+  InvalidPenaltyAdjustmentAmountError,
   PenaltyAlreadyPaidError,
-  PenaltyReductionExceedsCurrentAmountError,
 } from './errors/RepaymentDomainErrors';
 
 export type RepaymentInstallmentStatus = 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'LATE';
@@ -228,14 +228,16 @@ export class RepaymentInstallment {
   }
 
   /**
-   * 2026-07-15 (Reduce Penalty feature, user-confirmed business rules):
-   * - Accounting/MIS can partially or fully reduce this installment's penalty.
-   * - A reduction FREEZES the penalty at `newAmount` — it stops growing per ADR-050's live daily
-   *   formula from this point on, until paid or reduced again. This is why the override is stored
-   *   here rather than applied as a one-time subtraction: a stored, static value is what "frozen"
-   *   means, as opposed to a delta that a live recomputation would immediately swallow.
-   * - Cannot exceed `currentPenaltyAmount` (the live-computed or migrated-snapshot figure the
-   *   caller already resolved) — a reduction only ever lowers what's owed, never raises it.
+   * 2026-07-15 (Reduce Penalty) / 2026-07-23 (Adjust Penalty) / 2026-08-05 (user-confirmed - ceiling
+   * removed): staff can set this installment's penalty to any non-negative amount, above OR below
+   * the live ADR-050/SEC-MC3-computed figure — a real out-of-band approval (e.g. a manually-
+   * assessed penalty from before this system, or a correction that legitimately exceeds the
+   * formula) is a valid business case the old ceiling blocked. The caller (`ReducePenaltyUseCase`)
+   * still resolves the live figure separately, to record as the audit trail's "previous" value.
+   * - The override FREEZES the penalty at `newAmount` — it stops growing/shrinking per ADR-050's
+   *   live daily formula from this point on, until paid or adjusted again. This is why the override
+   *   is stored here rather than applied as a one-time delta: a stored, static value is what
+   *   "frozen" means, as opposed to a delta a live recomputation would immediately swallow.
    * - Cannot be applied once any penalty has already been paid on this installment (approval
    *   happens outside this system; an already-collected amount is out of scope for a waiver -
    *   that would be a refund/credit decision, explicitly not part of this feature).
@@ -244,21 +246,12 @@ export class RepaymentInstallment {
    * repository), same division of responsibility as `ProcessPaymentUseCase` building
    * `PaymentAllocation` rows alongside this entity's own `recordPayment()` call.
    */
-  /**
-   * 2026-07-15 (Reduce Penalty) / 2026-07-23 (Adjust Penalty, user-confirmed): may raise OR lower
-   * the penalty override — unlike the original reduce-only rule, staff can now correct a penalty
-   * upward too. Still bounded by the live ADR-050/SEC-MC3-computed ceiling (`currentPenaltyAmount`)
-   * on both ends: never negative, never above what the formula would actually produce today.
-   */
-  reducePenalty(newAmount: Money, currentPenaltyAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
+  reducePenalty(newAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
     if (this.props.paid.penalty.isPositive()) {
       throw new PenaltyAlreadyPaidError(this.props.id);
     }
     if (newAmount.isNegative()) {
-      throw new PenaltyReductionExceedsCurrentAmountError(newAmount.toString(), currentPenaltyAmount.toString());
-    }
-    if (newAmount.greaterThan(currentPenaltyAmount)) {
-      throw new PenaltyReductionExceedsCurrentAmountError(newAmount.toString(), currentPenaltyAmount.toString());
+      throw new InvalidPenaltyAdjustmentAmountError(newAmount.toString());
     }
     this.props.penaltyOverride = { amount: newAmount, reason, byUserId, at };
     this.props.updatedAt = new Date();

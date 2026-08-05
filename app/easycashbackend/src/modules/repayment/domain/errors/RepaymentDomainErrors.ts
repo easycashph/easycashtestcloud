@@ -1,15 +1,12 @@
 import { DomainError } from '@shared/errors/DomainError';
 
-/** 2026-07-15 (Reduce Penalty feature) / 2026-07-23 (Adjust Penalty, user-confirmed): the override may raise or lower the amount, but never past the live ADR-050/SEC-MC3-computed ceiling — it can never invent a penalty higher than what the formula would actually produce today. */
-export class PenaltyReductionExceedsCurrentAmountError extends DomainError {
-  constructor(newAmount: string, currentAmount: string) {
-    super(
-      'PENALTY_REDUCTION_EXCEEDS_CURRENT_AMOUNT',
-      `New penalty amount ${newAmount} must not exceed the current penalty ceiling ${currentAmount}.`,
-      undefined,
-      400,
-    );
-    this.name = 'PenaltyReductionExceedsCurrentAmountError';
+/** 2026-08-05 (user-confirmed): the override may raise or lower the amount freely — the old ceiling
+ * (couldn't exceed the live ADR-050/SEC-MC3-computed figure) was removed so staff can record a real
+ * out-of-band approval that legitimately exceeds the formula. Only a negative amount is invalid. */
+export class InvalidPenaltyAdjustmentAmountError extends DomainError {
+  constructor(newAmount: string) {
+    super('INVALID_PENALTY_ADJUSTMENT_AMOUNT', `New penalty amount ${newAmount} must not be negative.`, undefined, 400);
+    this.name = 'InvalidPenaltyAdjustmentAmountError';
   }
 }
 
