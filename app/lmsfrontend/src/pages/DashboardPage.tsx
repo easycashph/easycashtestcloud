@@ -816,18 +816,35 @@ export function DashboardPage() {
       filteredPortfolioHealth.activeInArrears.collectionsBalance +
       filteredPortfolioHealth.matured.collectionsBalance;
 
+  // 2026-08-05 (user-reported bug fix): `PortfolioLoanRow.status` is the raw, legacy-migrated
+  // LoanAccountStatus field - it doesn't reliably track the live good/arrears bucket a loan is
+  // actually in right now (see `openVennSegment`'s identical `displayStatusOverride` and its own
+  // doc comment for the full explanation - the live overdueLoanIds/maturedLoanIds computation is
+  // what decided which bucket each loan is already in here). Without this override,
+  // LoanDrillDownDialog's status badge falls back to that stale raw field, so a loan the Loan
+  // Portfolio Health Venn correctly buckets as "Active in Arrears" could still show a green
+  // "Active" badge in these drill-down lists - found via a real case where 25 of 32 live-in-arrears
+  // loans still carried a stale `ACTIVE` status. "Matured" loans are left as-is - LoanStatusBadge
+  // already shows "Matured" whenever `isMatured` is true, regardless of `status`.
+  const overrideStatus = <T extends { status: LoanAccountStatus }>(loans: T[], status: LoanAccountStatus): T[] =>
+    loans.map((loan) => ({ ...loan, status }));
+
   // Every active loan under the current filter (performing, in arrears, and past-maturity-but-
   // unpaid) - the denominator/drill-down set behind the filtered Total Active Loans and Average
   // Loan Size figures.
   const filteredActivePortfolioLoans = React.useMemo(
-    () => [...filteredPortfolioHealth.good.loans, ...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    () => [
+      ...overrideStatus(filteredPortfolioHealth.good.loans, 'ACTIVE'),
+      ...overrideStatus(filteredPortfolioHealth.activeInArrears.loans, 'ACTIVE_IN_ARREARS'),
+      ...filteredPortfolioHealth.matured.loans,
+    ],
     [filteredPortfolioHealth],
   );
 
   // Delinquent = overdue but still active: in arrears (overdue within term) + matured (past the
   // full term, still unpaid). This is the numerator behind the Delinquency Rate and PAR metrics.
   const filteredDelinquentLoans = React.useMemo(
-    () => [...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    () => [...overrideStatus(filteredPortfolioHealth.activeInArrears.loans, 'ACTIVE_IN_ARREARS'), ...filteredPortfolioHealth.matured.loans],
     [filteredPortfolioHealth],
   );
 
