@@ -218,7 +218,7 @@ export function LoanListPage() {
         id: l.id,
         loanCode: l.loanCode,
         borrowerId: l.borrowerId,
-        borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
+        borrowerName: borrower ? borrower.fullName : l.borrowerId,
         productName: productInfo?.name ?? '-',
         productActive: productInfo?.isActive ?? true,
         status: l.status,
