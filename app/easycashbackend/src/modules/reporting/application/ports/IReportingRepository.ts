@@ -29,6 +29,18 @@ export interface TransactionReportRow {
   components: { principal: string; interest: string; fees: string; penalty: string };
   entryDate: Date;
   comment: string | null;
+  /**
+   * 2026-08-05 (user-confirmed): column set/order matches the Daily Collection Report export
+   * exactly (same underlying data - `getDailyCollectionReport`'s own field computation is
+   * reused verbatim in `listTransactions`), so the on-screen Transaction Report table can show
+   * every field as a direct column instead of a click-to-expand breakdown row.
+   */
+  productId: string;
+  totalBalance: string;
+  expectedMaturityDate: Date | null;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
 }
 
 export interface ListReportTransactionsOptions extends DateRangeFilter {

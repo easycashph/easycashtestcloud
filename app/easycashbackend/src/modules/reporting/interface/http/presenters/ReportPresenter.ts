@@ -12,6 +12,12 @@ export interface TransactionReportResponse {
   components: { principal: string; interest: string; fees: string; penalty: string };
   entryDate: string;
   comment: string | null;
+  productId: string;
+  totalBalance: string;
+  expectedMaturityDate: string | null;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
 }
 
 export function presentTransactionReportRow(row: TransactionReportRow): TransactionReportResponse {
@@ -27,5 +33,11 @@ export function presentTransactionReportRow(row: TransactionReportRow): Transact
     components: row.components,
     entryDate: row.entryDate.toISOString(),
     comment: row.comment,
+    productId: row.productId,
+    totalBalance: row.totalBalance,
+    expectedMaturityDate: row.expectedMaturityDate ? row.expectedMaturityDate.toISOString() : null,
+    orNumber: row.orNumber,
+    arNumber: row.arNumber,
+    channel: row.channel,
   };
 }

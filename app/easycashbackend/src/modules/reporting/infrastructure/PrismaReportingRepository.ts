@@ -262,18 +262,27 @@ export class PrismaReportingRepository implements IReportingRepository {
     const found = await prisma.loanTransaction.findMany({
       where: { id: { in: orderedIds.map((r) => r.id) } },
       include: {
-        loanAccount: { select: { loanCode: true, borrower: { select: { firstName: true, lastName: true } } } },
+        loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } },
         branch: { select: { name: true } },
       },
     });
     const byId = new Map(found.map((row) => [row.id, row]));
     const rows = orderedIds.map((r) => byId.get(r.id)!);
 
+    // 2026-08-05 (user-confirmed): same maturity-date lookup `getDailyCollectionReport` already
+    // does, reused here so both reports agree on Expected Maturity Date for the same loan.
+    const loanIds = [...new Set(rows.map((row) => row.loanAccountId))];
+    const schedule = await prisma.repaymentSchedule.findMany({ where: { loanAccountId: { in: loanIds } }, orderBy: { installmentNumber: 'desc' } });
+    const maturityByLoanId = new Map<string, Date>();
+    for (const installment of schedule) {
+      if (!maturityByLoanId.has(installment.loanAccountId)) maturityByLoanId.set(installment.loanAccountId, installment.dueDate);
+    }
+
     return rows.map((row) => ({
       id: row.id,
       loanAccountId: row.loanAccountId,
       loanCode: row.loanAccount.loanCode,
-      borrowerName: `${row.loanAccount.borrower.firstName} ${row.loanAccount.borrower.lastName}`,
+      borrowerName: formatFullName(row.loanAccount.borrower),
       branchId: row.branchId,
       branchName: row.branch.name,
       type: row.type,
@@ -286,6 +295,12 @@ export class PrismaReportingRepository implements IReportingRepository {
       },
       entryDate: row.entryDate,
       comment: row.comment ?? null,
+      productId: row.loanAccount.loanProductVersion.loanProduct.code,
+      totalBalance: row.balanceAfter.toString(),
+      expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(row.loanAccountId)),
+      orNumber: row.orNumber ?? '',
+      arNumber: row.arNumber ?? '',
+      channel: row.paymentMethod ? (PAYMENT_METHOD_LABEL[row.paymentMethod] ?? row.paymentMethod) : '',
     }));
   }
 
