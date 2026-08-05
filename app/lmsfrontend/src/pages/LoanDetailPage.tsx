@@ -477,8 +477,10 @@ function LoanSigningPanel({
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
   const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(defaultCoBorrowerPhoneNumber ?? '');
-  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('SMS');
-  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('SMS');
+  // 2026-08-05 (user request): Email is the default signing channel for both parties - SMS remains
+  // available but must be picked explicitly.
+  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('EMAIL');
+  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('EMAIL');
 
   // The borrower profile (and its phone number) is fetched by a query on the parent page and may
   // resolve after this component's first render, same "slower-loading query" gap as the
