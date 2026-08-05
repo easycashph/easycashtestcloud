@@ -52,7 +52,7 @@ import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { cn, formatPeso, isoDate, pesoTooltipFormatter } from '@/lib/utils';
 
 /** Loan row shape every portfolio widget below reads - assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
@@ -685,7 +685,7 @@ export function DashboardPage() {
   const reportsPreviewFrom = React.useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
   }, []);
   const loanReleasesPreviewQuery = useQuery({
     queryKey: ['reports', 'loan-origination', 'DAILY', reportsPreviewFrom, 'preview'],
@@ -707,7 +707,7 @@ export function DashboardPage() {
     const d = new Date();
     d.setMonth(d.getMonth() - 9);
     d.setDate(1);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
   }, []);
   const monthlyCollectionsHistoryQuery = useQuery({
     queryKey: ['reports', 'collections', 'MONTHLY', targetHistoryFrom, 'dashboard-target-history'],
@@ -748,7 +748,7 @@ export function DashboardPage() {
       return {
         id: l.id,
         loanCode: l.loanCode,
-        borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
+        borrowerName: borrower ? borrower.fullName : l.borrowerId,
         productType: productName,
         category: categorizeProductName(productName),
         status: l.status,
