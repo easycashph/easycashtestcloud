@@ -900,7 +900,7 @@ function RealRemindersPanel({
   const num = (v: string) => Number.parseFloat(v) || 0;
   const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
   const dateTriggers = computeReminderTriggers(new Date(nextDue.dueDate), false); // only the 4 date-anchored ones - PAST_DUE_WEEKLY handled separately below, from real logs
-  const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
+  const borrowerName = borrower ? borrower.fullName : 'the borrower';
 
   const pastDueLogs = logs.filter((l) => l.triggerType === 'PAST_DUE_WEEKLY').sort((a, b) => a.triggerDate.localeCompare(b.triggerDate));
 
@@ -2008,7 +2008,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <p className="text-sm text-muted-foreground">
             {borrower ? (
               <Link to={`/clients/${loan.borrowerId}`} className="text-primary underline-offset-2 hover:underline">
-                {borrower.firstName} {borrower.lastName}
+                {borrower.fullName}
               </Link>
             ) : (
               'Loading borrower…'
@@ -3816,7 +3816,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              {loan.loanCode} - {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+              {loan.loanCode} - {borrower ? borrower.fullName : 'Loading borrower…'}
             </DialogDescription>
           </DialogHeader>
           {recordPaymentOpen && borrower && (
