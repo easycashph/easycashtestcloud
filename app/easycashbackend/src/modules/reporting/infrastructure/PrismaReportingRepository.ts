@@ -762,12 +762,18 @@ export class PrismaReportingRepository implements IReportingRepository {
   }
 
   /** One row per `LoanTransaction` in range (every type, not just REPAYMENT - the legacy sample has
-   * a "Type" column). Channel = the newly-persisted `paymentMethod` (§0 of this feature). */
-  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<DailyCollectionReportRow[]> {
+   * a "Type" column). Channel = the newly-persisted `paymentMethod` (§0 of this feature).
+   *
+   * 2026-08-05 (user-confirmed): `type` narrows to a single `LoanTransactionType` when given -
+   * the Transaction Report page's "Download report" button reuses this same endpoint, and must
+   * only export what the on-screen "All types" dropdown is currently filtered to, not everything.
+   */
+  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; type?: string }): Promise<DailyCollectionReportRow[]> {
     const transactions = await prisma.loanTransaction.findMany({
       where: {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
+        ...(filter.type ? { type: filter.type as never } : {}),
       },
       include: { loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } } },
       orderBy: { entryDate: 'desc' },

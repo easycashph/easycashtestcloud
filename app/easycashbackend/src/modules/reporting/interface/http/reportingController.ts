@@ -220,7 +220,8 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from');
       const to = parseDate(req.query.to, 'to');
-      const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+      const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, type, branchId: resolveBranchFilter(scope) });
       const buffer = await writeDailyCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Daily Collection Report.xlsx"');
