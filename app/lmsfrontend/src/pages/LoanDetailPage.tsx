@@ -2373,40 +2373,48 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
                             <TableCell>{formatDate(i.dueDate)}</TableCell>
-                            <TableCell className="border-l text-right">{formatPeso(num(i.due.principal))}</TableCell>
-                            <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                            <TableCell className="border-l text-right">
+                              {num(i.due.principal) > 0 ? formatPeso(num(i.due.principal)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right">{num(i.due.interest) > 0 ? formatPeso(num(i.due.interest)) : '—'}</TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.feesOverride ? (
                                 <div className="flex flex-col items-end">
-                                  <span>{formatPeso(feesDisplay)}</span>
+                                  <span>{feesDisplay > 0 ? formatPeso(feesDisplay) : '—'}</span>
                                   <span className="text-[10px] text-primary" title={i.feesOverride.reason}>
                                     Adjusted by {i.feesOverride.byName ?? 'Accounting'}
                                   </span>
                                 </div>
-                              ) : (
+                              ) : feesDisplay > 0 ? (
                                 formatPeso(feesDisplay)
+                              ) : (
+                                '—'
                               )}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.penaltyOverride ? (
                                 <div className="flex flex-col items-end">
-                                  <span>{formatPeso(penaltyDisplay)}</span>
+                                  <span>{penaltyDisplay > 0 ? formatPeso(penaltyDisplay) : '—'}</span>
                                   <span className="text-[10px] text-primary" title={i.penaltyOverride.reason}>
                                     Reduced by {i.penaltyOverride.byName ?? 'Accounting'}
                                   </span>
                                 </div>
-                              ) : (
+                              ) : penaltyDisplay > 0 ? (
                                 <>
                                   {formatPeso(penaltyDisplay)}
-                                  {i.isLivePenalty && penaltyDisplay > 0 && (
+                                  {i.isLivePenalty && (
                                     <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
                                       (as of today)
                                     </span>
                                   )}
                                 </>
+                              ) : (
+                                '—'
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-medium">{formatPeso(expectedTotal)}</TableCell>
+                            <TableCell className="text-right font-medium">
+                              {expectedTotal > 0 ? formatPeso(expectedTotal) : '—'}
+                            </TableCell>
                             <TableCell className="border-l text-right text-muted-foreground">
                               {num(i.paid.principal) > 0 ? formatPeso(num(i.paid.principal)) : '—'}
                             </TableCell>
@@ -2421,14 +2429,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             </TableCell>
                             <TableCell className="text-right font-medium">{rowPaid > 0 ? formatPeso(rowPaid) : '—'}</TableCell>
                             <TableCell className="text-muted-foreground">{i.lastPaidAt ? formatDate(i.lastPaidAt) : '—'}</TableCell>
-                            <TableCell className="border-l text-right">{formatPeso(dueP)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(dueI)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(dueF)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(duePen)}</TableCell>
+                            <TableCell className="border-l text-right">{dueP > 0 ? formatPeso(dueP) : '—'}</TableCell>
+                            <TableCell className="text-right">{dueI > 0 ? formatPeso(dueI) : '—'}</TableCell>
+                            <TableCell className="text-right">{dueF > 0 ? formatPeso(dueF) : '—'}</TableCell>
+                            <TableCell className="text-right">{duePen > 0 ? formatPeso(duePen) : '—'}</TableCell>
                             <TableCell
                               className={cn('text-right font-medium', rowRemaining > 0 ? 'text-warning' : 'text-muted-foreground')}
                             >
-                              {formatPeso(rowRemaining)}
+                              {rowRemaining > 0 ? formatPeso(rowRemaining) : '—'}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
