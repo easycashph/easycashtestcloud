@@ -566,19 +566,31 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
           <p className="text-sm text-muted-foreground">Could not load the risk summary.</p>
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-y-1.5 text-xs sm:grid-cols-4">
-              <dt className="text-muted-foreground">Active loans</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.activeLoanCount}</dd>
-              <dt className="text-muted-foreground">Total exposure</dt>
-              <dd className="text-right font-medium sm:text-left">{formatPeso(Number(summary.totalExposure))}</dd>
-              <dt className="text-muted-foreground">Worst days past due</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.worstDaysPastDue}</dd>
-              <dt className="text-muted-foreground">Late payments (lifetime)</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.lifetimeLateInstallmentCount}</dd>
-              <dt className="text-muted-foreground">On-time payment rate</dt>
-              <dd className="text-right font-medium sm:text-left">
-                {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
-              </dd>
+            {/* 2026-08-06 (user request): one row per field, full width, instead of the
+                2/4-column grid a half-width card forced - matches the approved mockup. */}
+            <dl className="divide-y divide-border border-t text-xs">
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Active loans</dt>
+                <dd className="font-medium">{summary.activeLoanCount}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Total exposure</dt>
+                <dd className="font-medium">{formatPeso(Number(summary.totalExposure))}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Worst days past due</dt>
+                <dd className="font-medium">{summary.worstDaysPastDue}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Late payments (lifetime)</dt>
+                <dd className="font-medium">{summary.lifetimeLateInstallmentCount}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">On-time payment rate</dt>
+                <dd className="font-medium">
+                  {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
+                </dd>
+              </div>
             </dl>
             <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
             <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
@@ -1354,7 +1366,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                   // 2026-07-26 (user request): Loan History's 8-column balance table was cramped
                   // into a half-width column, forcing horizontal scroll - full-width gives it room
                   // to breathe, same reasoning as Activity Timeline/Recent Activity below.
-                  fullWidth={id === 'loanHistory' || id === 'activityTimeline' || id === 'recentActivity'}
+                  // 2026-08-06 (user request): Risk & Payment Summary made full-width too, one row
+                  // per field instead of the cramped 2/4-column grid a half-width card forced.
+                  fullWidth={id === 'loanHistory' || id === 'activityTimeline' || id === 'recentActivity' || id === 'riskSummary'}
                 >
                   {cardsById[id]}
                 </SortableSection>
