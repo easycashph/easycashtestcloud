@@ -28,6 +28,7 @@ import { useAuth } from '@/lib/authContext';
 import { COMPANY, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
+import { getDocumentsForProduct } from '@/lib/loanRequirements';
 
 const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
 const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
@@ -361,6 +362,20 @@ export function LandingPage() {
                 <div className="p-6">
                   <h3 className="text-base font-semibold">{product.category}</h3>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
+                  {/* 2026-08-06 (user request, "mas informative, mas descriptive" - competitor
+                      review): what this product specifically asks for, on top of the documents
+                      every applicant provides - real data from loanRequirements.ts (single source
+                      of truth shared with the actual application form and the /requirements
+                      page), never invented copy. */}
+                  {getDocumentsForProduct(product.category).productSpecific.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {getDocumentsForProduct(product.category).productSpecific.map((doc) => (
+                        <span key={doc} className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+                          {doc}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <Link
                       to="/signup"
