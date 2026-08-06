@@ -303,20 +303,40 @@ function ReminderSettingsCard() {
  * and Activity Logs - as tabs alongside the Payment reminders switches (moved here earlier the same
  * day from Configuration > Settings). Each embedded page keeps its own internal access gate exactly
  * as before (`MemberListPage`/`LoanProductsPage` stay viewable by every role, only editing is
- * MIS-only; `ActivityLogPage` is MIS-only end to end) - this page itself is not gated as a whole, so
- * that visibility doesn't regress for non-MIS roles who could already see Members/Loan Products.
+ * MIS-only; `ActivityLogPage` is MIS-only end to end).
  * `?tab=` supports deep-linking (e.g. `RecentActivityPanel`'s "See all" link into Activity Logs).
  * Product Types (rename the Loan Products catalog's category labels) lived here briefly
  * (2026-07-20) and was moved into the Loan Products tab itself as its own sub-tab, per user
  * request - it's specifically about Loan Products, not a platform-wide System setting.
+ *
+ * 2026-08-06 (user request, supersedes the "not gated as a whole" note above): the whole page is
+ * now MIS-only - the sidebar link is already hidden for every other role
+ * (`AppLayout.tsx`'s `NAV_VISIBILITY`), and this guard covers direct navigation by URL. This IS a
+ * visibility regression for the "Members/Loan Products stay viewable by every role" case the
+ * original design deliberately preserved - accepted per this explicit, later request.
  */
 export function SystemPage() {
   useLogPageView('System');
   const [searchParams] = useSearchParams();
+  const { currentAccount } = useRole();
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = React.useState<SystemTab>(
     initialTab && (SYSTEM_TABS as string[]).includes(initialTab) ? (initialTab as SystemTab) : 'reminders',
   );
+
+  if (!currentAccount.roles.includes('MIS')) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">Restricted to MIS accounts</p>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
