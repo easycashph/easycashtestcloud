@@ -1,5 +1,5 @@
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import type { LoanTransaction } from '../../domain/LoanTransaction';
+import type { LoanTransaction, LoanTransactionType } from '../../domain/LoanTransaction';
 
 export interface FindByLoanAccountIdOptions {
   /** Cursor-paginated by design (ADR-042 §6/§11) — this table is the system's highest-volume by construction; an unbounded "all transactions" read is not offered. */
@@ -7,6 +7,11 @@ export interface FindByLoanAccountIdOptions {
   cursor?: string;
   /** Milestone 8.1 / H-1: filters to one branch when supplied (a branch-scoped caller); omitted entirely for a global caller. */
   branchId?: string;
+  /** 2026-08-06 (Portal "Recent Payments" widget) - filters to one transaction type (e.g.
+   * 'REPAYMENT' for "money the client actually paid in", excluding disbursements/fees/interest
+   * accruals/etc. that also live in this same append-only ledger table). Omitted entirely for
+   * every existing staff-facing caller, which still sees every transaction type unfiltered. */
+  type?: LoanTransactionType;
 }
 
 export interface ILoanTransactionRepository {

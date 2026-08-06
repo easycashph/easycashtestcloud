@@ -141,6 +141,35 @@ export async function fetchFileBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
+/**
+ * Fetches a binary response (e.g. a Statement of Account PDF) and triggers the browser's normal
+ * save-file flow (2026-08-06, "My Statement of Account") - needed because the endpoint requires a
+ * Bearer token header, which a plain `<a href>` navigation can't send. Mirrors the internal LMS
+ * frontend's own `downloadFile` helper.
+ */
+export async function downloadFile(path: string, fallbackFileName: string): Promise<void> {
+  const token = getStoredToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!res.ok) throw new ApiError(res.status, 'DOWNLOAD_FAILED', 'Could not download the file.');
+
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const fileName = match?.[1] ? decodeURIComponent(match[1]) : fallbackFileName;
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const apiClient = {
   get: <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' }),
   post: <T>(path: string, body?: unknown, auth = false): Promise<T> => request<T>(path, { method: 'POST', body, auth }),

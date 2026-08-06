@@ -65,6 +65,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     // within a day, while entryDate still governs cross-day ordering (a backdated transaction
     // still sits near its stated date, not at the top of the list).
     const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
+    const typeClause = options.type ? Prisma.sql`AND lt."type" = ${options.type}` : Prisma.empty;
     const cursorClause = options.cursor
       ? Prisma.sql`AND (DATE(lt."entryDate"), lt."createdAt", lt.id) < (
           SELECT DATE(c."entryDate"), c."createdAt", c.id FROM loan_transactions c WHERE c.id = ${options.cursor}
@@ -76,6 +77,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
       FROM loan_transactions lt
       WHERE lt."loanAccountId" = ${loanAccountId}
       ${branchClause}
+      ${typeClause}
       ${cursorClause}
       ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
       LIMIT ${options.limit}

@@ -108,6 +108,11 @@ import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/ap
 import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
 import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import { RequestPortalAccountDeletionUseCase } from '@modules/client-portal/application/use-cases/RequestPortalAccountDeletionUseCase';
+import { GetPortalNextPaymentDueUseCase } from '@modules/client-portal/application/use-cases/GetPortalNextPaymentDueUseCase';
+import { ListPortalRecentPaymentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalRecentPaymentsUseCase';
+import { ListPortalStatementsOfAccountUseCase } from '@modules/client-portal/application/use-cases/ListPortalStatementsOfAccountUseCase';
+import { DownloadPortalStatementOfAccountUseCase } from '@modules/client-portal/application/use-cases/DownloadPortalStatementOfAccountUseCase';
+import { GetPortalAssignedLoanOfficerUseCase } from '@modules/client-portal/application/use-cases/GetPortalAssignedLoanOfficerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -1288,6 +1293,34 @@ export function createApp(): Express {
         loanAccountRepository,
         repaymentInstallmentRepository,
       }),
+      // "Next Payment Due" / "Recent Payments" dashboard widgets (2026-08-06 user request) - reuse
+      // the same loanAccountRepository/repaymentInstallmentRepository/loanTransactionRepository
+      // instances the staff-facing modules already wire above.
+      getPortalNextPaymentDueUseCase: new GetPortalNextPaymentDueUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+      }),
+      listPortalRecentPaymentsUseCase: new ListPortalRecentPaymentsUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        loanTransactionRepository,
+      }),
+      // "My Statement of Account" (2026-08-06 user request) - view/download only, reusing the
+      // same generatedStatementOfAccountRepository/loanDocumentFileStorage instances the
+      // statement-of-account module wires above. No generate capability here - see the use case's
+      // own doc comment for why.
+      listPortalStatementsOfAccountUseCase: new ListPortalStatementsOfAccountUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        generatedStatementOfAccountRepository,
+      }),
+      downloadPortalStatementOfAccountUseCase: new DownloadPortalStatementOfAccountUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        generatedStatementOfAccountRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
     },
     portalTokenService,
   );
@@ -1357,6 +1390,8 @@ export function createApp(): Express {
         updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
         getPortalProfileUseCase,
       }),
+      // "Chat with your loan officer" dashboard card (2026-08-06 user request).
+      getPortalAssignedLoanOfficerUseCase: new GetPortalAssignedLoanOfficerUseCase({ portalAccountRepository, borrowerRepository, userRepository }),
     },
     portalTokenService,
   );

@@ -423,11 +423,53 @@ export interface PortalLoanAccountSummary {
   loanCode: string;
   status: string;
   principalAmount: string;
+  /** Also the "Payoff Amount" total (2026-08-06) - see backend DTO's own doc comment on the
+   * "as of last posted transaction" caveat. */
   outstandingBalance: string;
+  principalBalance: string;
+  interestBalance: string;
+  feesBalance: string;
+  penaltyBalance: string;
   contractualInterestRate: string | null;
   installmentCount: number;
   firstRepaymentDate: string;
   activatedAt: string | null;
+}
+
+/** Dashboard "Next Payment Due" reminder (2026-08-06) - null when there's genuinely nothing
+ * upcoming (no open loan, or everything already paid). */
+export interface PortalNextPaymentDue {
+  loanAccountId: string;
+  loanCode: string;
+  installmentNumber: number;
+  dueDate: string;
+  totalDue: string;
+  totalPaid: string;
+  status: string;
+}
+
+/** Dashboard "Recent Payments" widget (2026-08-06) - actual posted payments, not the schedule. */
+export interface PortalPaymentEntry {
+  id: string;
+  loanAccountId: string;
+  loanCode: string;
+  entryDate: string;
+  amount: string;
+  principalComponent: string;
+  interestComponent: string;
+  feesComponent: string;
+  penaltyComponent: string;
+  orNumber: string | null;
+  paymentMethod: string | null;
+}
+
+/** "My Statement of Account" list item (2026-08-06) - view/download only, scoped to one loan
+ * account (no loanCode repeated per row). */
+export interface PortalStatementOfAccountEntry {
+  id: string;
+  soaNumber: string;
+  totalAmountDue: string;
+  generatedAt: string;
 }
 
 export interface PortalInstallmentEntry {
