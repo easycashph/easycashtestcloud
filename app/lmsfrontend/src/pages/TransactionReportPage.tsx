@@ -168,8 +168,14 @@ export function TransactionReportPage() {
             </Button>
           </div>
 
+          {/* 2026-08-06 (user request): every matching row is already fetched (fetchAllPages above) -
+              rather than paginate, show ~25 rows at a time and let the rest scroll within this fixed-
+              height box. Header stays pinned while scrolling; Total stays pinned to the bottom
+              (sticky, not inside the scrolling body) so it's always visible regardless of scroll
+              position. */}
+          <div className="max-h-[820px] overflow-y-auto rounded-md border">
           <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>
                   Full Name (Client)
@@ -228,7 +234,7 @@ export function TransactionReportPage() {
                 </TableRow>
               )}
             </TableBody>
-            <TableFooter>
+            <TableFooter className="sticky bottom-0 z-10">
               <TableRow>
                 <TableCell colSpan={4}>Total ({transactions.length} entries)</TableCell>
                 <TableCell className="text-right">{formatPeso(total)}</TableCell>
@@ -236,6 +242,7 @@ export function TransactionReportPage() {
               </TableRow>
             </TableFooter>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
