@@ -42,6 +42,7 @@ export type PermissionCode =
   | 'penalty.reduce'
   | 'fees.adjust'
   | 'document.generate'
+  | 'statement_of_account.generate'
   | 'attachment.upload'
   | 'esignature.manage'
   | 'borrower.write'
@@ -90,6 +91,10 @@ interface RoleContextValue {
   /** Generate a loan document (e.g. Loan Agreement, Disclosure Statement) - previously unrestricted
    * beyond authentication (ADR-051 §5), configurable per role since 2026-08-06. */
   canGenerateDocuments: boolean;
+  /** Generate a Statement of Account - previously unrestricted beyond authentication (ADR-052,
+   * mirrors ADR-051 §5), same gap `canGenerateDocuments` had, configurable per role since
+   * 2026-08-06. */
+  canGenerateStatementOfAccount: boolean;
   /** Send/manage an e-signature session - previously unrestricted beyond authentication, same
    * class of action as `canGenerateDocuments`, configurable per role since 2026-08-06. */
   canManageESignature: boolean;
@@ -283,6 +288,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canApproveLoanApplication: hasPermission('loan_application.final_approve'),
     canManageReminderSettings: hasPermission('reminder_settings.manage'),
     canGenerateDocuments: hasPermission('document.generate'),
+    canGenerateStatementOfAccount: hasPermission('statement_of_account.generate'),
     canManageESignature: hasPermission('esignature.manage'),
     canRecordPayment: hasPermission('payment.record'),
     canReversePayment: hasPermission('payment.reverse'),
