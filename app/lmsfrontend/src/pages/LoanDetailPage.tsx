@@ -2748,7 +2748,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory
           // Note, and other legal documents applicable to this loan's product, available once
           // APPROVED.
-          documents: (
+          // 2026-08-06 (user-reported): the whole card is now hidden, not just its inner content,
+          // when the signed-in role lacks `document.generate` outright - previously it stayed
+          // visible showing "Available once this loan is approved," which was misleading (and
+          // still showed the section to a role that will never be allowed to use it) when the
+          // real reason was the permission, not the loan's status. A role that DOES have the
+          // permission but is viewing a not-yet-approved loan still sees that placeholder, since
+          // that case is genuinely "not yet, but will be."
+          documents: !canGenerateDocumentsPermission ? null : (
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -2851,7 +2858,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           ),
           // ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection
           // document, distinct from the required/conditional Documents above (ADR-051 §1).
-          soa: (
+          // 2026-08-06 (user-reported, same fix as Documents above): hidden entirely, not just
+          // its inner content, when the signed-in role lacks `statement_of_account.generate`.
+          soa: !canGenerateStatementOfAccountPermission ? null : (
       <Card>
         <CardHeader className="flex-row items-start justify-between space-y-0">
           <div>
