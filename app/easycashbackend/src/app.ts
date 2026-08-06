@@ -107,6 +107,7 @@ import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/C
 import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
 import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
 import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
+import { RequestPortalAccountDeletionUseCase } from '@modules/client-portal/application/use-cases/RequestPortalAccountDeletionUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -1377,6 +1378,14 @@ export function createApp(): Express {
       disablePortalTwoFactorUseCase: new DisablePortalTwoFactorUseCase({ portalAccountRepository, passwordHasher }),
       listPortalTrustedDevicesUseCase: new ListPortalTrustedDevicesUseCase({ portalTrustedDeviceRepository }),
       revokePortalTrustedDeviceUseCase: new RevokePortalTrustedDeviceUseCase({ portalTrustedDeviceRepository }),
+      // Delete My Portal Account (2026-08-06) - reuses the same loanAccountRepository instance as
+      // the loan-account module's own wiring above.
+      requestPortalAccountDeletionUseCase: new RequestPortalAccountDeletionUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        passwordHasher,
+        auditLogger,
+      }),
     },
     portalTokenService,
   );

@@ -9,6 +9,7 @@ import {
   requestEnablePortalTwoFactorSchema,
   confirmEnablePortalTwoFactorSchema,
   disablePortalTwoFactorSchema,
+  deletePortalAccountSchema,
 } from './portalSecuritySchemas';
 
 /** Portal Security tab (2026-07-27 user request) - self-service email/password change, gated by
@@ -35,6 +36,7 @@ export function createPortalSecurityRouter(deps: PortalSecurityControllerDeps, p
   router.post('/security/2fa/disable', requirePortalAuth, validateBody(disablePortalTwoFactorSchema), controller.disableTwoFactor);
   router.get('/security/trusted-devices', requirePortalAuth, controller.listTrustedDevices);
   router.delete('/security/trusted-devices/:id', requirePortalAuth, controller.revokeTrustedDevice);
+  router.post('/security/delete-account', requirePortalAuth, validateBody(deletePortalAccountSchema), controller.deleteAccount);
 
   return router;
 }

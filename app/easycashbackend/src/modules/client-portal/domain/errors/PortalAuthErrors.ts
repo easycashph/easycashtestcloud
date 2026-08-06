@@ -23,6 +23,29 @@ export class PortalAccountNotVerifiedError extends DomainError {
   }
 }
 
+/** 2026-08-06 (Delete My Portal Account) - distinct from PortalAccountNotVerifiedError so a client
+ * who deleted their own account doesn't see the confusing "please verify your email" message. */
+export class PortalAccountDeletedError extends DomainError {
+  constructor() {
+    super('PORTAL_ACCOUNT_DELETED', 'This account has been deleted.', undefined, 403);
+    this.name = 'PortalAccountDeletedError';
+  }
+}
+
+/** 2026-08-06 (Delete My Portal Account, explicit user decision) - a client with any
+ * ACTIVE/ACTIVE_IN_ARREARS LoanAccount cannot delete their Portal login until it closes. */
+export class PortalAccountHasActiveLoanError extends DomainError {
+  constructor() {
+    super(
+      'PORTAL_ACCOUNT_HAS_ACTIVE_LOAN',
+      'Your Portal account cannot be deleted while you have an active loan. Please settle or close it first.',
+      undefined,
+      409,
+    );
+    this.name = 'PortalAccountHasActiveLoanError';
+  }
+}
+
 /** Same "wrong code / expired / already used" unified error as identity's InvalidOtpError - never
  * lets a caller distinguish which one occurred. */
 export class PortalInvalidOtpError extends DomainError {

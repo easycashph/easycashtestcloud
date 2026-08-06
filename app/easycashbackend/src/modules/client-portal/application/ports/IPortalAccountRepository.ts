@@ -1,4 +1,4 @@
-export type PortalAccountStatus = 'PENDING_VERIFICATION' | 'ACTIVE';
+export type PortalAccountStatus = 'PENDING_VERIFICATION' | 'ACTIVE' | 'DELETED';
 
 /** Pre-application profile fields (2026-07-30) - see schema.prisma's PortalAccount doc comment.
  * Shared between the record shape and the update-patch shape since every field here is optional
