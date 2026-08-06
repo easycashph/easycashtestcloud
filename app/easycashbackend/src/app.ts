@@ -112,6 +112,7 @@ import { GetPortalNextPaymentDueUseCase } from '@modules/client-portal/applicati
 import { ListPortalRecentPaymentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalRecentPaymentsUseCase';
 import { ListPortalStatementsOfAccountUseCase } from '@modules/client-portal/application/use-cases/ListPortalStatementsOfAccountUseCase';
 import { DownloadPortalStatementOfAccountUseCase } from '@modules/client-portal/application/use-cases/DownloadPortalStatementOfAccountUseCase';
+import { GetPortalAssignedLoanOfficerUseCase } from '@modules/client-portal/application/use-cases/GetPortalAssignedLoanOfficerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -1389,6 +1390,8 @@ export function createApp(): Express {
         updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
         getPortalProfileUseCase,
       }),
+      // "Chat with your loan officer" dashboard card (2026-08-06 user request).
+      getPortalAssignedLoanOfficerUseCase: new GetPortalAssignedLoanOfficerUseCase({ portalAccountRepository, borrowerRepository, userRepository }),
     },
     portalTokenService,
   );

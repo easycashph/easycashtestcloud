@@ -423,7 +423,13 @@ export interface PortalLoanAccountSummary {
   loanCode: string;
   status: string;
   principalAmount: string;
+  /** Also the "Payoff Amount" total (2026-08-06) - see backend DTO's own doc comment on the
+   * "as of last posted transaction" caveat. */
   outstandingBalance: string;
+  principalBalance: string;
+  interestBalance: string;
+  feesBalance: string;
+  penaltyBalance: string;
   contractualInterestRate: string | null;
   installmentCount: number;
   firstRepaymentDate: string;

@@ -11,6 +11,7 @@ import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailVie
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
 import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
+import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
@@ -167,6 +168,8 @@ export function DashboardPage() {
         </motion.div>
 
         <PortalNextPaymentDueCard />
+
+        <PortalLoanOfficerCard />
 
         <motion.div initial="hidden" animate="show" variants={stagger} className="mt-8 grid gap-5 sm:grid-cols-2">
           <motion.div variants={fadeUp}>

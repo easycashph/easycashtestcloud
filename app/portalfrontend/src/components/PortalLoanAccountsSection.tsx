@@ -208,6 +208,53 @@ function StatementsOfAccountDialog({ loanAccount, onClose }: { loanAccount: Port
   );
 }
 
+/**
+ * "Payoff Amount" dialog (2026-08-06 user request) - how much the client would need to pay TODAY
+ * to fully close this loan. Deliberately just `outstandingBalance` (the system's own definition of
+ * "settled" - see `LoanAccount.isFullyPaid`) broken into its four components, with an explicit
+ * caveat that it may not include interest still accruing since the last posted transaction - NOT a
+ * full recalculation like the staff-only Statement of Account generator, which needs judgment-call
+ * inputs (collection/other fee, penalty date range) with no honest client-facing default. Showing
+ * a client a more "precise-looking" number that quietly bakes in unconfirmed assumptions would be
+ * worse than being upfront about what this figure does and doesn't include.
+ */
+function PayoffAmountDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
+  return (
+    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? `Payoff Amount - ${loanAccount.loanCode}` : 'Payoff Amount'}>
+      {loanAccount && (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
+            <p className="text-xs text-muted-foreground">Pay this amount today to fully close this loan</p>
+            <p className="mt-1 text-2xl font-bold text-primary">{peso(loanAccount.outstandingBalance)}</p>
+          </div>
+          <dl className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <dt className="text-muted-foreground">Principal</dt>
+              <dd>{peso(loanAccount.principalBalance)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-muted-foreground">Interest</dt>
+              <dd>{peso(loanAccount.interestBalance)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-muted-foreground">Fees</dt>
+              <dd>{peso(loanAccount.feesBalance)}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-muted-foreground">Penalty</dt>
+              <dd>{peso(loanAccount.penaltyBalance)}</dd>
+            </div>
+          </dl>
+          <p className="text-xs text-muted-foreground">
+            As of your last posted transaction - may not include interest still accruing since then. Confirm the exact amount with your loan
+            officer before paying.
+          </p>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
 /** "My Loans" section on the Portal dashboard (2026-07-31 user request, "top reputable lending
  * site" checklist) - payment history and a printable amortization schedule for a client's real,
  * booked loan account(s). Renders nothing at all once loaded if the account has none yet (still
@@ -217,6 +264,7 @@ export function PortalLoanAccountsSection() {
   const [loanAccounts, setLoanAccounts] = React.useState<PortalLoanAccountSummary[] | null>(null);
   const [viewingLoanAccount, setViewingLoanAccount] = React.useState<PortalLoanAccountSummary | null>(null);
   const [viewingStatementsFor, setViewingStatementsFor] = React.useState<PortalLoanAccountSummary | null>(null);
+  const [viewingPayoffFor, setViewingPayoffFor] = React.useState<PortalLoanAccountSummary | null>(null);
 
   React.useEffect(() => {
     apiClient
@@ -267,6 +315,9 @@ export function PortalLoanAccountsSection() {
                   <Button type="button" variant="outline" size="sm" onClick={() => setViewingStatementsFor(loanAccount)}>
                     Statement of Account
                   </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setViewingPayoffFor(loanAccount)}>
+                    Payoff Amount
+                  </Button>
                 </div>
               </div>
             ))}
@@ -276,6 +327,7 @@ export function PortalLoanAccountsSection() {
 
       <InstallmentScheduleDialog loanAccount={viewingLoanAccount} onClose={() => setViewingLoanAccount(null)} />
       <StatementsOfAccountDialog loanAccount={viewingStatementsFor} onClose={() => setViewingStatementsFor(null)} />
+      <PayoffAmountDialog loanAccount={viewingPayoffFor} onClose={() => setViewingPayoffFor(null)} />
     </>
   );
 }

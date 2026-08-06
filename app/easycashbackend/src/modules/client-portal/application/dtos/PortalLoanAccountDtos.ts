@@ -8,8 +8,20 @@ export interface PortalLoanAccountSummary {
   loanCode: string;
   status: string;
   principalAmount: string;
-  /** Penalty-inclusive total still owed (LoanAccount.collectionsBalance) - see ADR-007 §3. */
+  /** Penalty-inclusive total still owed (LoanAccount.collectionsBalance) - see ADR-007 §3. Doubles
+   * as the "Payoff Amount" figure (2026-08-06 user request): the system's own definition of
+   * "settled" (see LoanAccount.isFullyPaid) - not a full accrual recalculation like the staff-only
+   * Statement of Account generator, which needs judgment-call inputs (collection/other fee,
+   * penalty date range) with no honest client-facing default. Shown to the client with an explicit
+   * "as of last posted transaction" caveat rather than silently implying more precision than this
+   * figure actually has. */
   outstandingBalance: string;
+  /** Payoff Amount breakdown (2026-08-06 user request) - same four components summed into
+   * `outstandingBalance`, shown individually so a client can see what they actually still owe. */
+  principalBalance: string;
+  interestBalance: string;
+  feesBalance: string;
+  penaltyBalance: string;
   contractualInterestRate: string | null;
   installmentCount: number;
   firstRepaymentDate: Date;
