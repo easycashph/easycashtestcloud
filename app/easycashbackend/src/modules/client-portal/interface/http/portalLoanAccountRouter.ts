@@ -17,6 +17,12 @@ export function createPortalLoanAccountRouter(deps: PortalLoanAccountControllerD
   router.get('/loan-accounts/next-payment-due', requirePortalAuth, controller.nextPaymentDue);
   router.get('/loan-accounts/recent-payments', requirePortalAuth, controller.recentPayments);
   router.get('/loan-accounts/:id/installments', requirePortalAuth, controller.listInstallments);
+  router.get('/loan-accounts/:id/statements-of-account', requirePortalAuth, controller.listStatementsOfAccount);
+  router.get(
+    '/loan-accounts/:id/statements-of-account/:generatedStatementId/download',
+    requirePortalAuth,
+    controller.downloadStatementOfAccount,
+  );
 
   return router;
 }

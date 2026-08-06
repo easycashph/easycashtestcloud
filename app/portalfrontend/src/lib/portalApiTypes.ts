@@ -457,6 +457,15 @@ export interface PortalPaymentEntry {
   paymentMethod: string | null;
 }
 
+/** "My Statement of Account" list item (2026-08-06) - view/download only, scoped to one loan
+ * account (no loanCode repeated per row). */
+export interface PortalStatementOfAccountEntry {
+  id: string;
+  soaNumber: string;
+  totalAmountDue: string;
+  generatedAt: string;
+}
+
 export interface PortalInstallmentEntry {
   installmentNumber: number;
   dueDate: string;

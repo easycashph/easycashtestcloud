@@ -59,3 +59,15 @@ export interface PortalPaymentEntry {
   orNumber: string | null;
   paymentMethod: string | null;
 }
+
+/** "My Statement of Account" list item (2026-08-06 user request) - narrowed from the staff-facing
+ * `GeneratedStatementOfAccountView`: no `generatedByUserId`/`generatedByName` (irrelevant to the
+ * client viewing their own statement) or the fee/penalty-window fields (only meaningful context
+ * for the staff member who generated it). Scoped to one loan account (the route's `:id`), same
+ * "no loanCode repeated per row" convention as `PortalInstallmentEntry`. */
+export interface PortalStatementOfAccountEntry {
+  id: string;
+  soaNumber: string;
+  totalAmountDue: string;
+  generatedAt: Date;
+}
