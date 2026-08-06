@@ -146,8 +146,11 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       PastDuePrincipal: figures.pastDuePrincipal.toString(),
       PastDueInterest: figures.pastDueInterest.toString(),
       PastDuePenalty: figures.pastDuePenalty.toString(),
-      PenaltyFromDate: formatDate(effectivePenaltyFromDate),
-      PenaltyToDate: formatDate(penaltyToDate),
+      // 2026-08-06 (user-reported): a printed date range next to a ₱0.00 penalty read as if a
+      // penalty accrued over that period - blank instead, same as every other empty/zero merge
+      // field in this template (e.g. CoBorrowerName above already blanks out when absent).
+      PenaltyFromDate: figures.pastDuePenalty.isZero() ? '' : formatDate(effectivePenaltyFromDate),
+      PenaltyToDate: figures.pastDuePenalty.isZero() ? '' : formatDate(penaltyToDate),
       TotalPastDue: figures.totalPastDue.toString(),
       AccruedInterest: figures.accruedInterest.toString(),
       AccruedInterestAsOfDate: formatDate(accruedInterestAsOfDate),
