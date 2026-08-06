@@ -12,6 +12,7 @@ import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSectio
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
 import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
 import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
+import { PortalTwoFactorNudgeCard } from '@/components/PortalTwoFactorNudgeCard';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
@@ -166,6 +167,8 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight">Welcome back{account ? `, ${account.email}` : ''}</h1>
           <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
         </motion.div>
+
+        <PortalTwoFactorNudgeCard />
 
         <PortalNextPaymentDueCard />
 
