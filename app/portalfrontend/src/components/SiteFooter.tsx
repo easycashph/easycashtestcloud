@@ -55,6 +55,7 @@ export function SiteFooter() {
             <li>{COMPANY.contact.landline}</li>
             <li>SMART: {COMPANY.contact.mobileSmart}</li>
             <li>GLOBE: {COMPANY.contact.mobileGlobe}</li>
+            <li>{COMPANY.contact.businessHours}</li>
             <li>
               <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="hover:text-foreground">
                 {COMPANY.contact.dpoEmail}

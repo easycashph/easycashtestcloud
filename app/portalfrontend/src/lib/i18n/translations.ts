@@ -128,6 +128,11 @@ export const en = {
         question: 'Do I need collateral to apply?',
         answer: 'No. Easycash loans are unsecured and do not require collateral.',
       },
+      {
+        question: 'I already have a loan with Easycash - can I apply again?',
+        answer:
+          "Yes. Once your current loan is fully settled and closed, you can submit a new (renewal) application right from your Easycash Portal account - no need to start over as a new applicant.",
+      },
     ],
     ctaTitle: 'Ready to get started?',
     ctaBody: 'Create your free Easycash account and apply for a loan in minutes.',
@@ -259,6 +264,7 @@ export const en = {
     emailHeading: 'Email',
     emailNote: 'For data privacy matters and formal written concerns.',
     officeHeading: 'Registered office',
+    hoursHeading: 'Business hours',
     impostorsHeading: 'Beware of impostors',
     impostorsBody: 'If someone contacts you from a number or account not listed on this page claiming to be Easycash, treat it as a scam. Read our {securityLink}.',
     impostorsLinkText: 'Security & Anti-Scam guide',
@@ -384,6 +390,11 @@ export const fil: Translations = {
       {
         question: 'Sino ang karapat-dapat mag-apply ng loan?',
         answer: 'Dapat ay hindi bababa sa 18 taong gulang ang aplikante, mamamayan o residente ng Pilipinas, may wastong government-issued ID, at may matatag na kinikita.',
+      },
+      {
+        question: 'Meron na akong loan sa Easycash - puwede pa ba akong mag-apply ulit?',
+        answer:
+          'Oo. Kapag nabayaran na nang buo at nasarahan na ang iyong kasalukuyang loan, puwede ka nang mag-submit ng bagong (renewal) application diretso sa iyong Easycash Portal account - hindi mo na kailangang magsimula bilang bagong aplikante.',
       },
       {
         question: 'Kailangan ba ng collateral para mag-apply?',
@@ -517,6 +528,7 @@ export const fil: Translations = {
     emailHeading: 'Email',
     emailNote: 'Para sa mga usaping data privacy at pormal na nakasulat na alalahanin.',
     officeHeading: 'Rehistradong opisina',
+    hoursHeading: 'Oras ng negosyo',
     impostorsHeading: 'Mag-ingat sa mga nagpapanggap',
     impostorsBody: 'Kung may nakipag-ugnayan sa iyo gamit ang numero o account na hindi nakalista sa pahinang ito habang nagpapanggap na Easycash, ituring itong scam. Basahin ang aming {securityLink}.',
     impostorsLinkText: 'gabay sa Seguridad at Anti-Scam',
