@@ -2,16 +2,31 @@ import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { LoanDocumentController, type LoanDocumentControllerDeps } from './loanDocumentController';
 import { generateLoanDocumentSchema } from './loanDocumentSchemas';
 
-/** No role restriction beyond authentication — same access level as GET /loan-accounts/:id itself (ADR-051 §5: any staff working a loan account can generate/view/download its documents). */
+/**
+ * 2026-08-06: generating a document is now gated by `document.generate` (Roles & Permissions
+ * feature) — previously no role restriction at all beyond authentication (ADR-051 §5: "any staff
+ * working a loan account can generate/view/download its documents"). Default grant is every role
+ * (preserving that decision), configurable by MIS from there — this was the concrete example that
+ * motivated the feature (a role that should NOT be able to generate documents). Viewing/
+ * downloading an already-generated document remains open to any authenticated role, unchanged —
+ * only the act of generating a new one is gated.
+ */
 export function createLoanDocumentRouter(deps: LoanDocumentControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new LoanDocumentController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
-  router.post('/loan-accounts/:id/documents', requireAuth, validateBody(generateLoanDocumentSchema), controller.generate);
+  router.post(
+    '/loan-accounts/:id/documents',
+    requireAuth,
+    requirePermission('document.generate'),
+    validateBody(generateLoanDocumentSchema),
+    controller.generate,
+  );
   router.get('/loan-accounts/:id/documents', requireAuth, controller.list);
   router.get('/loan-accounts/:id/documents/:generatedDocumentId/download', requireAuth, controller.download);
 

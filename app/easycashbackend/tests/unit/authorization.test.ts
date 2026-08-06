@@ -24,12 +24,35 @@ import request from 'supertest';
  * the request fully succeeds end-to-end, which is the opt-in integration
  * suite's job once a live database is available.
  */
+/**
+ * 2026-08-06 (Roles & Permissions feature): router wiring now checks `requirePermission(code)`
+ * (a live `rolePermission.findFirst` DB lookup) instead of the old hard-coded `requireRole(...)`
+ * allow-lists this file was originally written against. Mirrors, for exactly the permission codes
+ * this file exercises, the same default per-role grants seeded in `prisma/seed.ts` — a local copy
+ * (not an import of the seed script, which has real side effects/DB connections of its own) kept
+ * intentionally narrow to what these tests actually touch.
+ */
+const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  'borrower.write': ['MIS', 'Loan Operation Manager', 'CRM'],
+  'loan_account.approve': ['MIS', 'Loan Operation Manager'],
+  'loan_account.activate': ['MIS', 'Loan Operation Manager', 'Accounting'],
+  'payment.record': ['MIS', 'Loan Operation Manager', 'Accounting', 'Collection Officer'],
+  'loan_product.write': ['MIS', 'Loan Operation Manager', 'Finance', 'Accounting'],
+};
+
 const prismaMock = {
   $transaction: vi.fn(async (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock)),
   borrower: { upsert: vi.fn().mockResolvedValue({}) },
   address: { count: vi.fn().mockResolvedValue(0) },
   loanAccount: { findUnique: vi.fn().mockResolvedValue(null) },
   loanProduct: { findUnique: vi.fn().mockResolvedValue(null) },
+  rolePermission: {
+    findFirst: vi.fn(async ({ where }: { where: { permission: { code: string }; role: { name: { in: string[] } } } }) => {
+      const grantedRoles = DEFAULT_ROLE_PERMISSIONS[where.permission.code] ?? [];
+      const hasGrant = where.role.name.in.some((role) => grantedRoles.includes(role));
+      return hasGrant ? { roleId: 'role-1' } : null;
+    }),
+  },
 };
 
 vi.mock('@shared/database/prismaClient', () => ({ prisma: prismaMock }));

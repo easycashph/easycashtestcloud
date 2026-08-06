@@ -2,11 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { AiExtractionController, type AiExtractionControllerDeps } from './aiExtractionController';
-
-/** Same role set as loan-application/attachment writes — encoding staff only. */
-const EXTRACTION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -25,7 +22,7 @@ export function createAiExtractionRouter(deps: AiExtractionControllerDeps, token
   router.post(
     '/ai-extraction/loan-application-fields',
     requireAuth,
-    requireRole(...EXTRACTION_ROLES),
+    requirePermission('ai_extraction.use'),
     upload.single('file'),
     controller.extract,
   );

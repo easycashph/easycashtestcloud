@@ -17,6 +17,9 @@ export interface AuthenticatedUserView {
   /** Settings > Security > Two-Factor Authentication (2026-07-22). */
   twoFactorEnabled: boolean;
   twoFactorChannel: 'EMAIL' | 'SMS' | null;
+  /** 2026-08-06 (Roles & Permissions feature): the union of every Permission.code granted to any
+   * of `roles` above, right now - see the backend DTO's own doc comment. */
+  permissionCodes: string[];
 }
 
 export interface LoginSuccessResponse {

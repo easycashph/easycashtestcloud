@@ -2,13 +2,13 @@ import { Router } from 'express';
 import multer from 'multer';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { DocumentController, type DocumentControllerDeps } from './documentController';
 
-/** Same role set as loan-application's own write gate — whoever may encode/decide an application
- * may attach its supporting documents. Reads (list/download) only require authentication, matching
- * the precedent set by borrower/loan-account's own GET routes. */
-const ATTACHMENT_WRITE_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
+/** 2026-08-06: `attachment.upload` moved to a DB-backed `requirePermission` check (Roles &
+ * Permissions feature). Default grant: same role set as loan-application's own write gate (MIS,
+ * Loan Operation Manager, CRM) — whoever may encode/decide an application may attach its
+ * supporting documents. Reads (list/download) remain open to any authenticated role. */
 
 // Buffered in memory, not streamed to a temp file — attachments here are small scans/PDFs (10 MB
 // cap enforced again inside UploadAttachmentUseCase, not just here) so this is a deliberate
@@ -20,7 +20,7 @@ export function createDocumentRouter(deps: DocumentControllerDeps, tokenService:
   const controller = new DocumentController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
-  router.post('/attachments', requireAuth, requireRole(...ATTACHMENT_WRITE_ROLES), upload.single('file'), controller.upload);
+  router.post('/attachments', requireAuth, requirePermission('attachment.upload'), upload.single('file'), controller.upload);
   router.get('/attachments', requireAuth, controller.list);
   router.get('/attachments/:id/download', requireAuth, controller.download);
 

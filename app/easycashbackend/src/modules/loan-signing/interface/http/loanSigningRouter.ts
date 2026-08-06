@@ -2,13 +2,19 @@ import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { LoanSigningController, type LoanSigningControllerDeps } from './loanSigningController';
 import { SigningNotificationLogController, type SigningNotificationLogControllerDeps } from './signingNotificationLogController';
 import { createLoanSigningSessionSchema } from './loanSigningSchemas';
 
-/** Staff-side (authenticated) routes. No role restriction beyond authentication - same access
- * level as `loanDocumentRouter`'s own routes (ADR-051 §5: any staff working a loan account can
- * generate/view its documents; sending them for signature is the same class of action). */
+/**
+ * Staff-side (authenticated) routes. 2026-08-06: sending an e-signature session is now gated by
+ * `esignature.manage` (Roles & Permissions feature) — previously no role restriction beyond
+ * authentication, same access level as `loanDocumentRouter`'s own routes (ADR-051 §5). Default
+ * grant is every role (preserving that prior decision), configurable by MIS from there — this was
+ * one of the concrete examples that motivated the feature. Viewing sessions/documents/logs
+ * remains open to any authenticated role, unchanged.
+ */
 export function createLoanSigningRouter(
   deps: LoanSigningControllerDeps & SigningNotificationLogControllerDeps,
   tokenService: ITokenService,
@@ -21,6 +27,7 @@ export function createLoanSigningRouter(
   router.post(
     '/loan-accounts/:loanAccountId/signing-sessions',
     requireAuth,
+    requirePermission('esignature.manage'),
     validateBody(createLoanSigningSessionSchema),
     controller.create,
   );

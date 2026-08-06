@@ -1032,7 +1032,21 @@ function RealRemindersPanel({
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentAccount, canCreateLoanAccount, canApproveLoanAccount, canActivateLoanAccount } = useRole();
+  const {
+    currentAccount,
+    canCreateLoanAccount,
+    canApproveLoanAccount,
+    canActivateLoanAccount,
+    canRecordPayment: canRecordPaymentPermission,
+    canReversePayment: canReversePaymentPermission,
+    canReducePenalty: canReducePenaltyPermission,
+    canAdjustFees: canAdjustFeesPermission,
+    canRestructureLoan: canRestructureLoanPermission,
+    canAdjustLoan: canAdjustLoanPermission,
+    canGenerateDocuments: canGenerateDocumentsPermission,
+    canManageESignature: canManageESignaturePermission,
+    hasPermission,
+  } = useRole();
 
   // 2026-07-22 (user request): the lower sections of this page (Reminders through Recent Activity)
   // are drag-to-reorder - each staff member's own arrangement, saved per-user like the sidebar
@@ -1857,19 +1871,25 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // is genuinely 0 before Activation - not because there's no obligation, but because
   // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
   const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
-  const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
-  const canReversePayment = currentAccount.roles.includes('MIS');
+  // 2026-08-06 (Roles & Permissions feature): every `can*` below now ANDs the loan-status
+  // eligibility (unchanged) with the signed-in user's actual granted permission
+  // (`canRecordPaymentPermission` etc., from `useRole()`) - previously several of these were a
+  // second, page-local hard-coded role check (`currentAccount.roles.includes('MIS')` etc.),
+  // completely blind to whatever MIS configures on the new Roles & Permissions screen.
+  const canRecordPayment = (loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS') && canRecordPaymentPermission;
+  const canReversePayment = canReversePaymentPermission;
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
-  // officer" - matches the backend's REDUCE_PENALTY_ROLES/ADJUST_FEES_ROLES gates (identical).
+  // officer" - matches the backend's `penalty.reduce`/`fees.adjust` default grants (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
-  const canManageInstallments = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
+  const canManageInstallments = canReducePenaltyPermission || canAdjustFeesPermission;
   // 2026-07-24 (Loan Restructure feature, user-confirmed): "Ino offer lang ito sa mga past due at
   // matured account" - any installment currently `LATE` (RepaymentInstallment.status's own live
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
   // account" - once this loan is the OLD side of a restructure, never offered again.
   const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
   const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
-  const canRestructure = canManageInstallments && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
+  const canRestructure =
+    canManageInstallments && canRestructureLoanPermission && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
   // account... kailangan before ng 1st due date lang pwede i Loan Adjust ang account" - ACTIVE
   // only, zero payments recorded on any installment, and still before the first installment's own
@@ -1883,9 +1903,15 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   );
   const isBeforeFirstDueDate = firstInstallmentDueDate === null || new Date() < firstInstallmentDueDate;
   const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id;
-  const canAdjust = canManageInstallments && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
+  const canAdjust =
+    canManageInstallments && canAdjustLoanPermission && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
-  const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const documentsEligibleStatus = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const canGenerateDocuments = documentsEligibleStatus && canGenerateDocumentsPermission;
+  // Separate from `canGenerateDocuments` above - e-signature is gated by its own
+  // `esignature.manage` permission, not `document.generate` (a role can have one without the
+  // other since 2026-08-06).
+  const canSendForSigning = documentsEligibleStatus && canManageESignaturePermission;
   const documents = documentsQuery.data?.items ?? [];
   const requiredDocuments = documents.filter((d) => d.isRequired);
   const conditionalDocuments = documents.filter((d) => !d.isRequired);
@@ -2042,8 +2068,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             // 2026-07-16/24 (Undo Approve / Undo Activate, user request): MIS-only, matching the
             // backend's requireRole('MIS') gate — a narrower tier than canCreateLoanAccount
             // (ORIGINATION_ROLES), same reasoning as Reverse Payment below.
-            const canUndoApprove = currentAccount.roles.includes('MIS') && loan.status === 'APPROVED';
-            const canUndoActivate = currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE';
+            const canUndoApprove = hasPermission('loan_account.undo_approve') && loan.status === 'APPROVED';
+            const canUndoActivate = hasPermission('loan_account.undo_activate') && loan.status === 'ACTIVE';
             const canEdit = canCreateLoanAccount && loan.status === 'PENDING_APPROVAL';
             const hasAnySecondaryAction = canUndoApprove || canUndoActivate || canRestructure || canAdjust || canEdit;
             if (!hasAnySecondaryAction) return null;
@@ -2816,7 +2842,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               coBorrowerName={coBorrower?.fullName}
               borrowerEmail={borrower?.email ?? undefined}
               coBorrowerEmail={coBorrower?.emailAddress ?? undefined}
-              canSend={canGenerateDocuments}
+              canSend={canSendForSigning}
             />
           ),
           // ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection

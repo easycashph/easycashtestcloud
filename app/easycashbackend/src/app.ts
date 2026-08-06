@@ -14,6 +14,7 @@ import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/Ref
 import { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import { PrismaPermissionCodesRepository } from '@modules/identity/infrastructure/PrismaPermissionCodesRepository';
 import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
@@ -217,6 +218,11 @@ import { ListRoleClassesUseCase } from '@modules/role-class/application/use-case
 import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
 import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
 import { DeleteRoleClassUseCase } from '@modules/role-class/application/use-cases/DeleteRoleClassUseCase';
+import { createAccessControlRouter } from '@modules/access-control/interface/http/AccessControlRouter';
+import { AccessControlController } from '@modules/access-control/interface/http/AccessControlController';
+import { PrismaAccessControlRepository } from '@modules/access-control/infrastructure/PrismaAccessControlRepository';
+import { ListRolesAndPermissionsUseCase } from '@modules/access-control/application/use-cases/ListRolesAndPermissionsUseCase';
+import { UpdateRolePermissionsUseCase } from '@modules/access-control/application/use-cases/UpdateRolePermissionsUseCase';
 import { createProductTypeLabelRouter } from '@modules/product-type-label/interface/http/ProductTypeLabelRouter';
 import { ProductTypeLabelController } from '@modules/product-type-label/interface/http/ProductTypeLabelController';
 import { ListProductTypeLabelsUseCase } from '@modules/product-type-label/application/use-cases/ListProductTypeLabelsUseCase';
@@ -415,6 +421,7 @@ export function createApp(): Express {
   // Audit finding H-01: env.JWT_REFRESH_TTL_MS (pre-parsed, fail-fast in
   // env.ts) is now actually threaded through, instead of the use cases'
   // internal hardcoded fallback constants silently taking over.
+  const permissionCodesRepository = new PrismaPermissionCodesRepository();
   const authRouter = createAuthRouter(
     {
       loginUseCase: new LoginUseCase({
@@ -426,6 +433,7 @@ export function createApp(): Express {
         twoFactorChallengeRepository,
         trustedDeviceRepository,
         otpSender,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       refreshTokenUseCase: new RefreshTokenUseCase({
@@ -436,7 +444,7 @@ export function createApp(): Express {
       }),
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
-      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),
+      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository, permissionCodesRepository }),
       listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
       revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
       verifyLoginOtpUseCase: new VerifyLoginOtpUseCase({
@@ -446,6 +454,7 @@ export function createApp(): Express {
         auditLogger,
         twoFactorChallengeRepository,
         trustedDeviceRepository,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({
@@ -555,6 +564,15 @@ export function createApp(): Express {
   });
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);
+
+  // --- access-control module wiring: Roles & Permissions screen (Administration > System, MIS-only) ---
+  const accessControlRepository = new PrismaAccessControlRepository();
+  const accessControlController = new AccessControlController({
+    listRolesAndPermissionsUseCase: new ListRolesAndPermissionsUseCase({ accessControlRepository }),
+    updateRolePermissionsUseCase: new UpdateRolePermissionsUseCase({ accessControlRepository, auditLogger }),
+  });
+  const accessControlRouter = createAccessControlRouter(accessControlController, tokenService);
+  app.use('/api/v1', accessControlRouter);
 
   // --- product-type-label module wiring: renamable display labels for the Loan Products catalog's Product Type groupings ---
   const productTypeLabelRepository = new PrismaProductTypeLabelRepository();

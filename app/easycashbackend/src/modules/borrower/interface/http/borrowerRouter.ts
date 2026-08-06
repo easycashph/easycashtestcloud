@@ -2,23 +2,23 @@ import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { BorrowerController, type BorrowerControllerDeps } from './borrowerController';
 import { createBorrowerSchema, createCoBorrowerSchema, updateBorrowerSchema, updateCoBorrowerSchema } from './borrowerSchemas';
 
 /**
- * ADR-038 §3.1 (business-confirmed, 2026-07-06): origination staff only for
- * writes, any authenticated role for reads. Supersedes ADR-043's interim
- * placeholder allow-list.
+ * 2026-08-06: `borrower.write` moved from a hard-coded `requireRole(...)` allow-list to a
+ * DB-backed `requirePermission` check (Roles & Permissions feature). Default grant (ADR-038 §3.1,
+ * business-confirmed 2026-07-06): origination staff (MIS, Loan Operation Manager, CRM) — reads
+ * remain open to any authenticated role, unchanged.
  */
-const ORIGINATION_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
 
 export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new BorrowerController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
-  router.post('/borrowers', requireAuth, requireRole(...ORIGINATION_ROLES), validateBody(createBorrowerSchema), controller.create);
+  router.post('/borrowers', requireAuth, requirePermission('borrower.write'), validateBody(createBorrowerSchema), controller.create);
   router.get('/borrowers/:id', requireAuth, controller.get);
   router.get('/borrowers/:id/risk-summary', requireAuth, controller.riskSummary);
   router.get('/borrowers/:id/co-borrowers', requireAuth, controller.listCoBorrowers);
@@ -32,7 +32,7 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.patch(
     '/borrowers/:id',
     requireAuth,
-    requireRole(...ORIGINATION_ROLES),
+    requirePermission('borrower.write'),
     validateBody(updateBorrowerSchema),
     controller.update,
   );
@@ -40,7 +40,7 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.post(
     '/co-borrowers',
     requireAuth,
-    requireRole(...ORIGINATION_ROLES),
+    requirePermission('borrower.write'),
     validateBody(createCoBorrowerSchema),
     controller.createCoBorrower,
   );
@@ -48,7 +48,7 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.patch(
     '/co-borrowers/:id',
     requireAuth,
-    requireRole(...ORIGINATION_ROLES),
+    requirePermission('borrower.write'),
     validateBody(updateCoBorrowerSchema),
     controller.updateCoBorrower,
   );

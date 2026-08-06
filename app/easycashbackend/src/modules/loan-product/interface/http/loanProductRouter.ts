@@ -2,19 +2,18 @@ import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { LoanProductController, type LoanProductControllerDeps } from './loanProductController';
 import { createLoanProductSchema, createLoanProductVersionSchema } from './loanProductSchemas';
 
 /**
- * ADR-038 §3.1 (business-confirmed, 2026-07-06): product configuration
- * (create product/version, activate a version) is a Finance/Accounting
- * responsibility, not a loan-processing one — a wider tier than
- * origination (adds Finance, Accounting) but deliberately excludes CRM
- * (which IS included in origination). Supersedes ADR-043's interim
- * placeholder allow-list.
+ * 2026-08-06: `loan_product.write` moved from a hard-coded `requireRole(...)` allow-list to a
+ * DB-backed `requirePermission` check (Roles & Permissions feature). Default grant (ADR-038 §3.1,
+ * business-confirmed 2026-07-06): product configuration (create product/version, activate a
+ * version) is a Finance/Accounting responsibility, not a loan-processing one — a wider tier than
+ * origination (adds Finance, Accounting) but deliberately excludes CRM (which IS included in
+ * origination).
  */
-const PRODUCT_CONFIG_ROLES = ['MIS', 'Loan Operation Manager', 'Finance', 'Accounting'];
 
 export function createLoanProductRouter(deps: LoanProductControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -24,7 +23,7 @@ export function createLoanProductRouter(deps: LoanProductControllerDeps, tokenSe
   router.post(
     '/loan-products',
     requireAuth,
-    requireRole(...PRODUCT_CONFIG_ROLES),
+    requirePermission('loan_product.write'),
     validateBody(createLoanProductSchema),
     controller.create,
   );
@@ -34,14 +33,14 @@ export function createLoanProductRouter(deps: LoanProductControllerDeps, tokenSe
   router.post(
     '/loan-products/:id/versions',
     requireAuth,
-    requireRole(...PRODUCT_CONFIG_ROLES),
+    requirePermission('loan_product.write'),
     validateBody(createLoanProductVersionSchema),
     controller.createVersion,
   );
   router.post(
     '/loan-products/:id/versions/:versionId/activate',
     requireAuth,
-    requireRole(...PRODUCT_CONFIG_ROLES),
+    requirePermission('loan_product.write'),
     controller.activateVersion,
   );
 
