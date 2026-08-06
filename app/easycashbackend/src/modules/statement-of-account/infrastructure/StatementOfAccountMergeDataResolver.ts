@@ -22,6 +22,15 @@ function formatDate(date: Date): string {
   return `${MONTH_NAMES[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
 }
 
+/** 2026-08-06 (user-reported): the printed SOA showed raw `Money.toString()` figures ("25583.92")
+ * with no thousands separator - hard to read at a glance on a document meant for a borrower.
+ * Deliberately NOT a change to `Money.toString()` itself (used elsewhere for persistence/API
+ * payloads that must stay machine-parseable) - comma-grouping is print-display-only, scoped to
+ * this resolver's own merge data. */
+function formatMoney(money: Money): string {
+  return Number(money.toString()).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 /** Same "first address on file, comma-joined" convention as `LoanDocumentMergeDataResolver.ts`/`ClientProfilePage.tsx`. */
 function formatAddress(address: { houseUnitNumber?: string; street?: string; barangay?: string; cityMunicipality?: string; province?: string } | undefined): string {
   if (!address) return '';
@@ -126,6 +135,14 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       .add(collectionFee)
       .add(otherFee);
 
+    // 2026-08-06 (user-confirmed): the Remaining Amortization table only makes sense while the
+    // loan still has installments ahead of it - once past its own full maturity date (same
+    // "latest installment due date" basis as the "Matured" badge/AccruedInterestCalculator), every
+    // row in it is already past due and already accounted for in the Past Due section above, so
+    // printing it again is redundant/confusing. Hidden via docxtemplater's `{#ShowRemainingSchedule}`
+    // conditional block wrapping that whole section in the template.
+    const showRemainingSchedule = !lastInstallment || lastInstallment.dueDate.getTime() >= statementDate.getTime();
+
     const mergeData: Record<string, unknown> = {
       StatementDate: formatDate(statementDate),
       BorrowerName: borrower.name.fullName(),
@@ -140,29 +157,30 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       })(),
       Term: `${loanAccount.installmentCount} months`,
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
-      PNValue: pnValue.toString(),
+      PNValue: formatMoney(pnValue),
 
-      CurrentAmortizationDue: figures.currentAmortizationDue.toString(),
-      PastDuePrincipal: figures.pastDuePrincipal.toString(),
-      PastDueInterest: figures.pastDueInterest.toString(),
-      PastDuePenalty: figures.pastDuePenalty.toString(),
+      CurrentAmortizationDue: formatMoney(figures.currentAmortizationDue),
+      PastDuePrincipal: formatMoney(figures.pastDuePrincipal),
+      PastDueInterest: formatMoney(figures.pastDueInterest),
+      PastDuePenalty: formatMoney(figures.pastDuePenalty),
       // 2026-08-06 (user-reported): a printed date range next to a ₱0.00 penalty read as if a
       // penalty accrued over that period - blank instead, same as every other empty/zero merge
       // field in this template (e.g. CoBorrowerName above already blanks out when absent).
       PenaltyFromDate: figures.pastDuePenalty.isZero() ? '' : formatDate(effectivePenaltyFromDate),
       PenaltyToDate: figures.pastDuePenalty.isZero() ? '' : formatDate(penaltyToDate),
-      TotalPastDue: figures.totalPastDue.toString(),
-      AccruedInterest: figures.accruedInterest.toString(),
+      TotalPastDue: formatMoney(figures.totalPastDue),
+      AccruedInterest: formatMoney(figures.accruedInterest),
       AccruedInterestAsOfDate: formatDate(accruedInterestAsOfDate),
-      CollectionFee: collectionFee.toString(),
-      OtherFee: otherFee.toString(),
-      TotalAmountDue: totalAmountDue.toString(),
+      CollectionFee: formatMoney(collectionFee),
+      OtherFee: formatMoney(otherFee),
+      TotalAmountDue: formatMoney(totalAmountDue),
 
+      ShowRemainingSchedule: showRemainingSchedule,
       RemainingSchedule: figures.remainingSchedule.map((row) => ({
         DueDate: formatDate(row.dueDate),
-        Principal: row.principal.toString(),
-        Interest: row.interest.toString(),
-        TotalDue: row.totalDue.toString(),
+        Principal: formatMoney(row.principal),
+        Interest: formatMoney(row.interest),
+        TotalDue: formatMoney(row.totalDue),
       })),
     };
 
