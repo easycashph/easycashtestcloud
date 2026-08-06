@@ -55,6 +55,7 @@ export const en = {
       'Easycash is a lending company registered with the Securities and Exchange Commission of the Philippines. Loan approval and final terms are subject to credit evaluation.',
     contactHeading: 'Contact',
     contactPageLink: 'Contact page',
+    viewOnMap: 'View on map',
     quickLinksHeading: 'Quick Links',
     requirements: 'Loan Requirements',
     news: 'News & Announcements',
@@ -94,6 +95,12 @@ export const en = {
       { title: 'Easy & convenient', body: 'Apply anytime, anywhere, from your phone or desktop.' },
       { title: 'Flexible terms', body: 'Payment schedules that work with how you actually get paid.' },
       { title: 'Safe & secure', body: 'Your information is protected - we take confidentiality seriously.' },
+    ],
+    waysToPayTitle: 'Ways to pay',
+    waysToPaySubtitle: 'Settle your installments through either of these channels.',
+    waysToPay: [
+      { title: 'Bank Transfer', body: 'Pay directly from your bank account.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Set up post-dated checks matched to your payment schedule.' },
     ],
     testimonialsTitle: 'People say the nicest things',
     testimonialsSubtitle:
@@ -309,6 +316,7 @@ export const fil: Translations = {
       'Ang Easycash ay isang lending company na rehistrado sa Securities and Exchange Commission ng Pilipinas. Ang pag-apruba ng loan at pangwakas na mga termino ay sasailalim sa credit evaluation.',
     contactHeading: 'Contact',
     contactPageLink: 'Contact page',
+    viewOnMap: 'Tingnan sa mapa',
     quickLinksHeading: 'Mga Mabilisang Link',
     requirements: 'Mga Kailangan sa Pag-apply',
     news: 'Balita at mga Anunsyo',
@@ -348,6 +356,12 @@ export const fil: Translations = {
       { title: 'Madali at maginhawa', body: 'Mag-apply anumang oras, kahit saan, gamit ang iyong telepono o computer.' },
       { title: 'Flexible na mga termino', body: 'Mga iskedyul ng bayad na akma sa paraan ng iyong pagkita.' },
       { title: 'Ligtas at secure', body: 'Ang iyong impormasyon ay protektado - seryoso kami sa pagiging kumpidensyal.' },
+    ],
+    waysToPayTitle: 'Mga paraan ng pagbabayad',
+    waysToPaySubtitle: 'Bayaran ang iyong mga hulog gamit ang alinman sa mga channel na ito.',
+    waysToPay: [
+      { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Mag-set up ng post-dated checks na naka-tugma sa iskedyul ng iyong bayad.' },
     ],
     testimonialsTitle: 'Ang sinasabi ng aming mga kliyente',
     testimonialsSubtitle:

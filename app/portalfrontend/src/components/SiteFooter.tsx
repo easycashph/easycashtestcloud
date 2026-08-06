@@ -29,7 +29,22 @@ export function SiteFooter() {
             <img src="./logo-easycash.png" alt="" className="h-8 w-8 rounded-lg object-contain" />
             <span className="text-sm font-bold tracking-tight">{COMPANY.legalName}</span>
           </div>
-          <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">{FORMATTED_ADDRESS}</p>
+          <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
+            {FORMATTED_ADDRESS}
+            {' · '}
+            {/* 2026-08-06 (user request, borrowed from a competitor site review): links to the
+                registered office's REAL address above on Google Maps - no new claim, just a
+                convenience link built from the same single source of truth every other address
+                display already uses. */}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(FORMATTED_ADDRESS)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:underline"
+            >
+              {t.footer.viewOnMap}
+            </a>
+          </p>
           <p className="mt-2 text-xs text-muted-foreground">{REGULATORY_DISCLOSURE}</p>
           <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">{t.footer.tagline}</p>
         </div>
