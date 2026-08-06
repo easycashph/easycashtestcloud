@@ -49,8 +49,20 @@ function buildDeps(overrides: { user?: UserRecord | null; passwordMatches?: bool
     incrementAttempts: vi.fn(),
   };
   const otpSender = { send: vi.fn() };
+  const trustedDeviceRepository = { issue: vi.fn(), findValidByRawToken: vi.fn() };
+  const permissionCodesRepository = { getGrantedPermissionCodes: vi.fn().mockResolvedValue([]) };
 
-  return { userRepository, passwordHasher, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, otpSender };
+  return {
+    userRepository,
+    passwordHasher,
+    tokenService,
+    refreshTokenRepository,
+    auditLogger,
+    twoFactorChallengeRepository,
+    otpSender,
+    trustedDeviceRepository,
+    permissionCodesRepository,
+  };
 }
 
 describe('LoginUseCase', () => {

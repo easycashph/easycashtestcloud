@@ -14,6 +14,7 @@ import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/Ref
 import { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import { PrismaPermissionCodesRepository } from '@modules/identity/infrastructure/PrismaPermissionCodesRepository';
 import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
@@ -417,6 +418,7 @@ export function createApp(): Express {
   // Audit finding H-01: env.JWT_REFRESH_TTL_MS (pre-parsed, fail-fast in
   // env.ts) is now actually threaded through, instead of the use cases'
   // internal hardcoded fallback constants silently taking over.
+  const permissionCodesRepository = new PrismaPermissionCodesRepository();
   const authRouter = createAuthRouter(
     {
       loginUseCase: new LoginUseCase({
@@ -428,6 +430,7 @@ export function createApp(): Express {
         twoFactorChallengeRepository,
         trustedDeviceRepository,
         otpSender,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       refreshTokenUseCase: new RefreshTokenUseCase({
@@ -438,7 +441,7 @@ export function createApp(): Express {
       }),
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
-      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),
+      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository, permissionCodesRepository }),
       listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
       revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
       verifyLoginOtpUseCase: new VerifyLoginOtpUseCase({
@@ -448,6 +451,7 @@ export function createApp(): Express {
         auditLogger,
         twoFactorChallengeRepository,
         trustedDeviceRepository,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({

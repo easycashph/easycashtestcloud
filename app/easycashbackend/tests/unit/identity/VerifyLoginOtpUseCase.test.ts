@@ -37,7 +37,8 @@ function buildDeps(overrides: { challenge?: TwoFactorChallengeRecord | null; con
     verifyAndConsume: vi.fn().mockResolvedValue(overrides.consumed ?? true),
     incrementAttempts: vi.fn(),
   };
-  return { userRepository, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository } as never;
+  const permissionCodesRepository = { getGrantedPermissionCodes: vi.fn().mockResolvedValue([]) };
+  return { userRepository, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, permissionCodesRepository } as never;
 }
 
 describe('VerifyLoginOtpUseCase', () => {
