@@ -144,6 +144,14 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const showRemainingSchedule = !lastInstallment || lastInstallment.dueDate.getTime() >= statementDate.getTime();
 
     const mergeData: Record<string, unknown> = {
+      // 2026-08-06 (user-confirmed): a prospective loan's penalty "From date" is a display-only
+      // derived value (see `effectivePenaltyFromDate` above), not something staff actually entered
+      // - printing it next to "To date" read as a real range the user chose, when they only ever
+      // set one date (the "As of date" field on this loan's Penalty form). A migrated loan's From
+      // AND To dates are both genuinely staff-entered (no live figure to derive from), so that one
+      // keeps the real range. The template picks between "Penalty {ToDate}" and
+      // "Penalty {FromDate} / {ToDate}" via this flag.
+      IsProspectiveLoan: isProspectiveLoan,
       StatementDate: formatDate(statementDate),
       BorrowerName: borrower.name.fullName(),
       BorrowerAddress: formatAddress(borrower.addresses[0]?.toProps()),
