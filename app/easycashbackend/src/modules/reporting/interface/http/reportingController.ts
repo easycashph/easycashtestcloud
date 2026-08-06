@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { parsePaginationParams, toPaginatedResponse } from '@shared/http/pagination';
 import { resolveBranchFilter, resolveBranchScope } from '@shared/http/branchScope';
 import { ValidationError } from '@shared/errors/DomainError';
+import { manilaDayRange } from '@shared/domain/manilaTime';
 import type { GetLoanOriginationReportUseCase } from '../../application/use-cases/GetLoanOriginationReportUseCase';
 import type { GetCollectionReportUseCase } from '../../application/use-cases/GetCollectionReportUseCase';
 import type { ListReportTransactionsUseCase } from '../../application/use-cases/ListReportTransactionsUseCase';
@@ -54,12 +55,24 @@ function parseGranularity(value: unknown): ReportGranularity {
   return upper as ReportGranularity;
 }
 
-function parseDate(value: unknown, paramName: string): Date | undefined {
+/**
+ * 2026-08-06 (user-reported): every report's "from"/"to" filter is a plain `type="date"` input
+ * (see `DateRangeFilter.tsx`) meant as an Asia/Manila calendar day - but a transaction/loan's own
+ * date-only fields are stored as that Manila day's UTC-shifted midnight (`entryDate`
+ * "2026-08-03T16:00:00.000Z" = Manila Aug 4), same convention `manilaDayRange` already handles for
+ * SMS/email reminders. Parsing "from"/"to" as literal UTC midnight (the old behavior) put the
+ * boundary 8 hours AFTER a same-Manila-day record's real timestamp, silently excluding it. `from`
+ * now resolves to the Manila day's start, `to` to its last instant (`end - 1`) - both in UTC, so
+ * every report using these values via `entryDateFilter`/`filter.from`/`filter.to` gets a
+ * Manila-calendar-day-accurate range instead of a UTC one.
+ */
+function parseDate(value: unknown, paramName: string, boundary: 'start' | 'end'): Date | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'string') throw new ValidationError(`${paramName} must be a date string.`);
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) throw new ValidationError(`${paramName} is not a valid date.`);
-  return parsed;
+  const range = manilaDayRange(parsed);
+  return boundary === 'start' ? range.start : new Date(range.end.getTime() - 1);
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -70,8 +83,8 @@ export class ReportingController {
     try {
       const scope = resolveBranchScope(req);
       const granularity = parseGranularity(req.query.granularity);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getLoanOriginationReportUseCase.execute(granularity, { from, to, branchId: resolveBranchFilter(scope) });
       res.status(200).json({ items: rows });
     } catch (error) {
@@ -83,8 +96,8 @@ export class ReportingController {
     try {
       const scope = resolveBranchScope(req);
       const granularity = parseGranularity(req.query.granularity);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getCollectionReportUseCase.execute(granularity, { from, to, branchId: resolveBranchFilter(scope) });
       res.status(200).json({ items: rows });
     } catch (error) {
@@ -96,8 +109,8 @@ export class ReportingController {
     try {
       const scope = resolveBranchScope(req);
       const { limit, cursor } = parsePaginationParams(req.query);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const type = typeof req.query.type === 'string' ? req.query.type : undefined;
       const rows = await this.deps.listReportTransactionsUseCase.execute({
         limit,
@@ -116,8 +129,8 @@ export class ReportingController {
   loanReleasesXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await this.deps.loanReleasesReportWriter.write(rows);
 
@@ -158,8 +171,8 @@ export class ReportingController {
   accountsWithPastDueXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getAccountsWithPastDueReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeAccountsWithPastDueReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -173,8 +186,8 @@ export class ReportingController {
   collectionHistoryXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getCollectionHistoryReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeCollectionHistoryReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -188,8 +201,8 @@ export class ReportingController {
   expectedCollectionXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeExpectedCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -203,8 +216,8 @@ export class ReportingController {
   firstAmortizationXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getFirstAmortizationReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeFirstAmortizationReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -218,8 +231,8 @@ export class ReportingController {
   dailyCollectionXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const type = typeof req.query.type === 'string' ? req.query.type : undefined;
       const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, type, branchId: resolveBranchFilter(scope) });
       const buffer = await writeDailyCollectionReportXlsx(rows);
@@ -234,8 +247,8 @@ export class ReportingController {
   fullyPaidXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
-      const from = parseDate(req.query.from, 'from');
-      const to = parseDate(req.query.to, 'to');
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
       const rows = await this.deps.getFullyPaidAccountsReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
       const buffer = await writeFullyPaidAccountsReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
