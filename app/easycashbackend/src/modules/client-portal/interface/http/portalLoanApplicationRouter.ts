@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { validateBody } from '@shared/middleware/validate';
+import { cacheControl } from '@shared/middleware/cacheControl';
 import type { IPortalTokenService } from '../../application/ports/IPortalTokenService';
 import { createRequirePortalAuth } from './requirePortalAuth';
 import { PortalLoanApplicationController, type PortalLoanApplicationControllerDeps } from './portalLoanApplicationController';
@@ -15,7 +16,9 @@ export function createPortalLoanApplicationRouter(deps: PortalLoanApplicationCon
   const controller = new PortalLoanApplicationController(deps);
   const requirePortalAuth = createRequirePortalAuth(portalTokenService);
 
-  router.get('/branches', requirePortalAuth, controller.listBranches);
+  // Branch list rarely changes - 1h private caching (2026-08-06 performance audit) removes a DB
+  // round trip from every loan application form load.
+  router.get('/branches', requirePortalAuth, cacheControl(3600, 'private'), controller.listBranches);
   router.post('/loan-applications', requirePortalAuth, validateBody(submitLoanApplicationSchema), controller.submit);
   router.get('/loan-applications', requirePortalAuth, controller.list);
   router.get('/loan-applications/:id', requirePortalAuth, controller.get);

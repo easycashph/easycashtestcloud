@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
@@ -338,6 +339,12 @@ export function createApp(): Express {
 
   // Secure-by-default baseline (CLAUDE.md §Security).
   app.use(helmet());
+  // Performance (2026-08-06 user request): gzip/brotli-negotiated response compression at the
+  // origin - previously left entirely to whatever sits in front (Cloudflare Tunnel), so a direct
+  // hit (local dev, internal testing, or if the tunnel is ever bypassed) shipped every JSON/HTML
+  // response uncompressed. `compression()`'s default threshold (1kb) already skips tiny responses
+  // where the gzip framing overhead isn't worth it.
+  app.use(compression());
   // CORS_ORIGIN may be a comma-separated list (e.g. multiple local dev ports
   // running side by side) — split rather than assume a single origin.
   const corsOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
