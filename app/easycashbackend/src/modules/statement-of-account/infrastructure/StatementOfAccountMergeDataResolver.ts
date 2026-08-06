@@ -178,7 +178,9 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       PenaltyToDate: figures.pastDuePenalty.isZero() ? '' : formatDate(penaltyToDate),
       TotalPastDue: formatMoney(figures.totalPastDue),
       AccruedInterest: formatMoney(figures.accruedInterest),
-      AccruedInterestAsOfDate: formatDate(accruedInterestAsOfDate),
+      // 2026-08-06 (user-confirmed): same rule as PenaltyFromDate/PenaltyToDate above - a date next
+      // to a ₱0.00 accrued interest read as if interest accrued over that period when it didn't.
+      AccruedInterestAsOfDate: figures.accruedInterest.isZero() ? '' : formatDate(accruedInterestAsOfDate),
       CollectionFee: formatMoney(collectionFee),
       OtherFee: formatMoney(otherFee),
       TotalAmountDue: formatMoney(totalAmountDue),
