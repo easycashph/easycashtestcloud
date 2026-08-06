@@ -3,6 +3,7 @@ import type { ITokenService } from '@modules/identity/application/ports/ITokenSe
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requirePermission } from '@shared/middleware/requirePermission';
+import { requireRole } from '@shared/middleware/requireRole';
 import { BorrowerController, type BorrowerControllerDeps } from './borrowerController';
 import { createBorrowerSchema, createCoBorrowerSchema, updateBorrowerSchema, updateCoBorrowerSchema } from './borrowerSchemas';
 
