@@ -192,8 +192,8 @@ export function TransactionReportPage() {
               (sticky, not inside the scrolling body) so it's always visible regardless of scroll
               position. */}
           <div className="relative rounded-md border">
-          <div ref={scrollBoxRef} onScroll={updateScrollHint} className="max-h-[820px] overflow-y-auto">
-          <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
+          <div ref={scrollBoxRef} onScroll={updateScrollHint} className="max-h-[820px] overflow-auto">
+          <Table containerClassName="w-full" className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <SortableTableHead sortKey="borrowerName" currentSort={sort} onSort={toggleSort}>

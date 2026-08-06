@@ -1,8 +1,20 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * Overrides the default wrapper div's className (default: `relative w-full overflow-auto`).
+   * Needed when a caller wraps `<Table>` in its OWN scrollable container (e.g. a fixed-height
+   * `overflow-y-auto` box with sticky thead/tfoot, as on TransactionReportPage) — a nested
+   * `overflow-auto` div here would compete to be the sticky positioning's scroll ancestor and break
+   * it, even though this inner div never actually scrolls vertically itself. Pass e.g. `"w-full"` in
+   * that case so the caller's own container is the only scrolling ancestor.
+   */
+  containerClassName?: string;
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(({ className, containerClassName, ...props }, ref) => (
+  <div className={containerClassName ?? 'relative w-full overflow-auto'}>
     <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
   </div>
 ));
