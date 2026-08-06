@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
@@ -92,6 +93,9 @@ import { createPortalSecurityRouter } from '@modules/client-portal/interface/htt
 import { ChangePortalPasswordUseCase } from '@modules/client-portal/application/use-cases/ChangePortalPasswordUseCase';
 import { ChangePortalEmailUseCase } from '@modules/client-portal/application/use-cases/ChangePortalEmailUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
+import { createExternalNewsLinkRouter } from '@modules/finance-news/interface/http/externalNewsLinkRouter';
+import { ListExternalNewsLinksUseCase } from '@modules/finance-news/application/use-cases/ListExternalNewsLinksUseCase';
+import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastructure/PrismaExternalNewsLinkRepository';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
@@ -335,6 +339,12 @@ export function createApp(): Express {
 
   // Secure-by-default baseline (CLAUDE.md §Security).
   app.use(helmet());
+  // Performance (2026-08-06 user request): gzip/brotli-negotiated response compression at the
+  // origin - previously left entirely to whatever sits in front (Cloudflare Tunnel), so a direct
+  // hit (local dev, internal testing, or if the tunnel is ever bypassed) shipped every JSON/HTML
+  // response uncompressed. `compression()`'s default threshold (1kb) already skips tiny responses
+  // where the gzip framing overhead isn't worth it.
+  app.use(compression());
   // CORS_ORIGIN may be a comma-separated list (e.g. multiple local dev ports
   // running side by side) — split rather than assume a single origin.
   const corsOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
@@ -1434,6 +1444,15 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalPsgcRouter);
+
+  // Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+  // public, unauthenticated - see externalNewsLinkRouter.ts's own doc comment.
+  const externalNewsLinkRouter = createExternalNewsLinkRouter({
+    listExternalNewsLinksUseCase: new ListExternalNewsLinksUseCase({
+      externalNewsLinkRepository: new PrismaExternalNewsLinkRepository(),
+    }),
+  });
+  app.use('/api/v1/portal', externalNewsLinkRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
   // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"

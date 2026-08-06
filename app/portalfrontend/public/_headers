@@ -1,0 +1,29 @@
+# Cloudflare Pages custom response headers (2026-08-06 user request, security audit).
+# Applies to every response Cloudflare Pages serves for this project.
+#
+# Content-Security-Policy: locks down which origins this SPA may load scripts/styles/connect to,
+# to reduce XSS/data-exfiltration impact if a dependency or injected content is ever compromised.
+#
+# - script-src 'self' + a hash allowlist for the ONE inline script in index.html (the dark-mode
+#   flash-prevention IIFE) - no 'unsafe-inline', so an injected <script> tag still can't execute.
+#   The other inline block (<script type="application/ld+json"> structured data) needs no entry -
+#   browsers never execute non-JS-type <script> elements, so CSP script-src doesn't govern it.
+#   If index.html's inline script content ever changes, this hash must be recomputed
+#   (`node -e "console.log('sha256-' + require('crypto').createHash('sha256').update(SCRIPT_TEXT).digest('base64'))"`)
+#   or the page will silently lose dark-mode-on-load (a CSP violation, not a hard crash).
+# - connect-src allows this app's own origin plus `https://*.trycloudflare.com` (wildcard, not the
+#   exact current subdomain) - the backend runs behind a Cloudflare "quick tunnel", whose random
+#   subdomain changes every time it's restarted (confirmed 2026-08-06: currently
+#   equilibrium-photographs-else-technical.trycloudflare.com, but this WILL change). Pinning the
+#   exact current subdomain would break the site on the next tunnel restart - the wildcard is
+#   deliberately looser but still meaningfully scoped (only trycloudflare.com subdomains, not "any
+#   HTTPS origin"). Update this if the backend ever moves to a permanent custom domain instead.
+# - style-src allows 'unsafe-inline' - React's inline `style={{...}}` attributes (e.g.
+#   ImageWithFallback's placeholder pattern) require it; CSS injection is a materially smaller risk
+#   than script injection, and there is no practical nonce/hash mechanism for per-render inline
+#   style attributes.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-K4FhznYcAmezAd81fxsr1D5abAnzWd0Uf3drmVqil1Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.trycloudflare.com; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()

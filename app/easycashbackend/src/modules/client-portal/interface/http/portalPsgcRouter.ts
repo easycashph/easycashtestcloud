@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import type { IPortalTokenService } from '../../application/ports/IPortalTokenService';
 import { PsgcController, type PsgcControllerDeps } from '@modules/psgc/interface/http/psgcController';
+import { cacheControl } from '@shared/middleware/cacheControl';
 import { createRequirePortalAuth } from './requirePortalAuth';
+
+/** PSGC (Philippine Standard Geographic Code) reference data effectively never changes -
+ * 24h `private` caching (2026-08-06 performance audit) removes a DB round trip from the loan
+ * application form's address picker on every keystroke/step, without letting any shared cache
+ * (CDN/proxy) reuse an authenticated response across different portal accounts. */
+const psgcCache = cacheControl(86400, 'private');
 
 /** Same read-only PSGC lookups as the staff-facing psgcRouter.ts, mounted separately under
  * requirePortalAuth (the psgc module's own router is gated by the STAFF requireAuth, which
@@ -13,11 +20,11 @@ export function createPortalPsgcRouter(deps: PsgcControllerDeps, portalTokenServ
   const controller = new PsgcController(deps);
   const requirePortalAuth = createRequirePortalAuth(portalTokenService);
 
-  router.get('/psgc/regions', requirePortalAuth, controller.listRegions);
-  router.get('/psgc/provinces', requirePortalAuth, controller.listProvinces);
-  router.get('/psgc/cities', requirePortalAuth, controller.listCities);
-  router.get('/psgc/barangays', requirePortalAuth, controller.listBarangays);
-  router.get('/psgc/resolve-address', requirePortalAuth, controller.resolveAddressCodes);
+  router.get('/psgc/regions', requirePortalAuth, psgcCache, controller.listRegions);
+  router.get('/psgc/provinces', requirePortalAuth, psgcCache, controller.listProvinces);
+  router.get('/psgc/cities', requirePortalAuth, psgcCache, controller.listCities);
+  router.get('/psgc/barangays', requirePortalAuth, psgcCache, controller.listBarangays);
+  router.get('/psgc/resolve-address', requirePortalAuth, psgcCache, controller.resolveAddressCodes);
 
   return router;
 }

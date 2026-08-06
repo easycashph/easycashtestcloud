@@ -12,6 +12,9 @@ import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/N
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
 import { startOverdueNotificationScheduler } from '@modules/notification/infrastructure/OverdueNotificationScheduler';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
+import { startFinanceNewsScheduler } from '@modules/finance-news/infrastructure/financeNewsScheduler';
+import { FetchExternalFinanceNewsUseCase, RssParserAdapter, type FeedSource } from '@modules/finance-news/application/use-cases/FetchExternalFinanceNewsUseCase';
+import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastructure/PrismaExternalNewsLinkRepository';
 
 const app = createApp();
 
@@ -55,6 +58,27 @@ startEmailReminderScheduler({
 const stopOverdueNotificationScheduler = startOverdueNotificationScheduler(
   app.locals.notificationService as NotificationService,
 );
+
+// Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) - see
+// financeNewsScheduler.ts's own doc comment. Feed URLs are comma-separated env vars; a category
+// with no configured feeds is simply skipped (empty list), so this is a no-op until an operator
+// sets at least one real, reachable feed URL.
+function parseFeedUrls(commaSeparated: string, category: 'FINANCE' | 'ADVISORY'): FeedSource[] {
+  return commaSeparated
+    .split(',')
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0)
+    .map((url) => ({ url, category }));
+}
+
+startFinanceNewsScheduler({
+  fetchExternalFinanceNewsUseCase: new FetchExternalFinanceNewsUseCase({
+    externalNewsLinkRepository: new PrismaExternalNewsLinkRepository(),
+    rssFeedParser: new RssParserAdapter(),
+  }),
+  feeds: [...parseFeedUrls(env.FINANCE_NEWS_FEED_URLS, 'FINANCE'), ...parseFeedUrls(env.ADVISORY_NEWS_FEED_URLS, 'ADVISORY')],
+  cronExpression: env.FINANCE_NEWS_FETCH_CRON,
+});
 
 function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down gracefully.`);

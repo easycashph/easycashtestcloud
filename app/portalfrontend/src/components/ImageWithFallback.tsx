@@ -4,6 +4,12 @@ import { cn } from '@/lib/utils';
 interface ImageWithFallbackProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   fallbackClassName?: string;
   fallbackIcon?: React.ReactNode;
+  /** 2026-08-06 (performance audit) - set true ONLY for the single above-the-fold hero image (the
+   * page's LCP element), which must load eagerly/high-priority, never lazily. Every other usage
+   * (product cards, etc.) defaults to `loading="lazy"` + `decoding="async"` - previously every
+   * image loaded eagerly regardless of position, competing with the hero image for bandwidth on
+   * first paint. Matters once real photos replace the current gradient placeholders. */
+  priority?: boolean;
 }
 
 /** Renders `src` if it loads; otherwise renders a branded gradient placeholder with
@@ -18,7 +24,7 @@ interface ImageWithFallbackProps extends React.ImgHTMLAttributes<HTMLImageElemen
  * intentional brand texture, not a broken/missing asset. The "still needs a real photo" signal now
  * only reaches a developer, via this comment and the README, not a live visitor.
  */
-export function ImageWithFallback({ src, alt, className, fallbackClassName, fallbackIcon, ...rest }: ImageWithFallbackProps) {
+export function ImageWithFallback({ src, alt, className, fallbackClassName, fallbackIcon, priority = false, ...rest }: ImageWithFallbackProps) {
   const [failed, setFailed] = React.useState(false);
 
   if (failed || !src) {
@@ -42,5 +48,20 @@ export function ImageWithFallback({ src, alt, className, fallbackClassName, fall
     );
   }
 
-  return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} {...rest} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
+      // @types/react already types this (forward-compat with React 19, which special-cases it);
+      // React 18's runtime doesn't yet, so it logs a harmless "should be lowercase" console
+      // warning in dev while still setting the DOM attribute either way - not worth a type-unsafe
+      // workaround for a cosmetic dev-only warning.
+      fetchPriority={priority ? 'high' : 'auto'}
+      onError={() => setFailed(true)}
+      {...rest}
+    />
+  );
 }

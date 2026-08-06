@@ -96,6 +96,16 @@ const envSchema = z.object({
     .default('false')
     .transform((v) => v === 'true'),
   EMAIL_REMINDER_CRON: z.string().default('0 8 * * *'), // 8:00 AM Asia/Manila daily
+
+  // Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+  // curated links only (headline + short excerpt + link out), never republished full articles -
+  // see ExternalNewsLink's own doc comment (schema.prisma). Comma-separated RSS feed URL lists,
+  // kept configurable (not hardcoded) specifically because feed reachability from this codebase's
+  // actual deployment host could not be verified during planning (WebFetch got HTTP 403 from every
+  // candidate source tried) - swap a blocked source here without a code change.
+  FINANCE_NEWS_FEED_URLS: z.string().default(''),
+  ADVISORY_NEWS_FEED_URLS: z.string().default(''),
+  FINANCE_NEWS_FETCH_CRON: z.string().default('0 6 * * *'), // 6:00 AM Asia/Manila daily
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USERNAME: z.string().optional(), // the real mailbox's own login, NOT the Send As alias

@@ -2478,3 +2478,37 @@ model ReminderSettings {
 
   @@map("reminder_settings")
 }
+
+/// Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+/// curated LINKS to real external articles (headline + short excerpt + link back to the source),
+/// never republished full article content (copyright). Fetched on a daily cron
+/// (`financeNewsScheduler.ts`) from a small, env-configured allowlist of RSS feeds, filtered by
+/// keyword relevance, and published with NO human review step before appearing live - an explicit
+/// user decision (accepted after being warned this trades away a moderation safety net) - so the
+/// keyword filter and the hard-truncated `excerpt` length are the only automated guardrails.
+enum ExternalNewsCategory {
+  /// PH lending/banking/finance news - shown on the public News page.
+  FINANCE
+  /// Road/weather advisories around Metro Manila - relevant to clients/prospective clients and to
+  /// onsite loan officers who need to report to the Easycash main office. Surfaced both in the
+  /// homepage "News Flash" ticker and the News page.
+  ADVISORY
+}
+
+model ExternalNewsLink {
+  id         String               @id @default(uuid())
+  category   ExternalNewsCategory
+  title      String
+  sourceName String
+  /// Dedupe key - the fetch job skips a URL it has already stored, so re-running the cron (or a
+  /// feed re-listing the same item) never creates duplicates.
+  sourceUrl  String               @unique
+  /// Hard-truncated to ~200 chars server-side (see FetchExternalFinanceNewsUseCase) - a short
+  /// pointer to the source, never the full article body.
+  excerpt    String
+  publishedAt DateTime
+  fetchedAt  DateTime             @default(now())
+
+  @@index([category, publishedAt])
+  @@map("external_news_links")
+}

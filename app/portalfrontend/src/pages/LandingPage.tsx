@@ -23,6 +23,7 @@ import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
 import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
+import { NewsFlashTicker } from '@/components/NewsFlashTicker';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -230,6 +231,7 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <NewsFlashTicker />
       <MobileApplyBar sentinelRef={heroEndRef} />
 
       {/* Hero */}
@@ -302,6 +304,7 @@ export function LandingPage() {
               alt="Easycash client"
               className="aspect-[4/3] w-full rounded-3xl object-cover shadow-lg"
               fallbackIcon={<ShieldCheck className="h-16 w-16" />}
+              priority
             />
             <div className="absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-card p-5 shadow-xl sm:p-6">
               <div className="grid grid-cols-3 gap-3">
