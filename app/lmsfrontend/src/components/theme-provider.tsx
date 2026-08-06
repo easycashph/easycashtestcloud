@@ -96,6 +96,20 @@ const FONT_SIZE_VALUES = FONT_SIZE_OPTIONS.map((o) => o.value);
  * saved card order, just stops further rearranging until switched back on. */
 export const DEFAULT_DRAG_REORDER_ENABLED = false;
 
+/** Settings > Appearance > Theme Style (2026-08-07 user request, mocked up first) - a personal,
+ * per-user choice between the platform's default surfaces and "Premium," a full alternate
+ * navy/gold/ivory light-only look, driven by `[data-theme-style='premium']` in index.css. */
+export type ThemeStyle = 'classic' | 'premium';
+
+export const DEFAULT_THEME_STYLE: ThemeStyle = 'classic';
+
+export const THEME_STYLE_OPTIONS: { value: ThemeStyle; label: string; description: string }[] = [
+  { value: 'classic', label: 'Classic', description: 'Current default look' },
+  { value: 'premium', label: 'Premium', description: 'Navy and gold, ivory cards, soft shadows' },
+];
+
+const THEME_STYLE_VALUES = THEME_STYLE_OPTIONS.map((o) => o.value);
+
 interface ThemeContextValue {
   theme: Theme;
   toggleTheme: () => void;
@@ -108,6 +122,8 @@ interface ThemeContextValue {
   setFontSize: (fontSize: FontSize) => void;
   dragReorderEnabled: boolean;
   setDragReorderEnabled: (enabled: boolean) => void;
+  themeStyle: ThemeStyle;
+  setThemeStyle: (themeStyle: ThemeStyle) => void;
   /**
    * Switches whose saved preference is active. Called by `roleContext.tsx` on bootstrap, login,
    * and logout - `userId: null` means "no signed-in user," which loads the system-preference/
@@ -124,6 +140,7 @@ const ACCENT_KEY_PREFIX = 'easycash-preview-accent';
 const CUSTOM_COLOR_KEY_PREFIX = 'easycash-preview-custom-color';
 const FONT_SIZE_KEY_PREFIX = 'easycash-preview-font-size';
 const DRAG_REORDER_KEY_PREFIX = 'easycash-preview-drag-reorder-enabled';
+const THEME_STYLE_KEY_PREFIX = 'easycash-preview-theme-style';
 const ANON_SCOPE = 'anon';
 
 function themeStorageKey(userId: string | null): string {
@@ -140,6 +157,9 @@ function fontSizeStorageKey(userId: string | null): string {
 }
 function dragReorderStorageKey(userId: string | null): string {
   return `${DRAG_REORDER_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
+}
+function themeStyleStorageKey(userId: string | null): string {
+  return `${THEME_STYLE_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
 }
 
 /** 2026-08-05 (user request): dark, not the OS/browser's `prefers-color-scheme`, is the platform
@@ -176,6 +196,11 @@ function readDragReorderEnabled(userId: string | null): boolean {
   return DEFAULT_DRAG_REORDER_ENABLED;
 }
 
+function readThemeStyle(userId: string | null): ThemeStyle {
+  const stored = window.localStorage.getItem(themeStyleStorageKey(userId));
+  return THEME_STYLE_VALUES.includes(stored as ThemeStyle) ? (stored as ThemeStyle) : DEFAULT_THEME_STYLE;
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Ref, not state: mutated synchronously by loadPreferenceFor() and read by the persistence
   // effects below at their next run, without itself needing to trigger a re-render.
@@ -185,11 +210,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [customColor, setCustomColor] = React.useState<string>(() => readCustomColor(null));
   const [fontSize, setFontSize] = React.useState<FontSize>(() => readFontSize(null));
   const [dragReorderEnabled, setDragReorderEnabled] = React.useState<boolean>(() => readDragReorderEnabled(null));
+  const [themeStyle, setThemeStyleState] = React.useState<ThemeStyle>(() => readThemeStyle(null));
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     window.localStorage.setItem(themeStorageKey(currentUserIdRef.current), theme);
   }, [theme]);
+
+  React.useEffect(() => {
+    document.documentElement.dataset.themeStyle = themeStyle;
+    window.localStorage.setItem(themeStyleStorageKey(currentUserIdRef.current), themeStyle);
+  }, [themeStyle]);
 
   React.useEffect(() => {
     document.documentElement.dataset.accent = accent;
@@ -220,6 +251,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }, []);
 
+  // Premium is light-only by design - picking it also switches out of dark mode, same as how
+  // picking 'custom' elsewhere in this file immediately takes effect rather than needing a second
+  // action from the officer.
+  const setThemeStyle = React.useCallback((next: ThemeStyle) => {
+    setThemeStyleState(next);
+    if (next === 'premium') setTheme('light');
+  }, []);
+
   const loadPreferenceFor = React.useCallback((userId: string | null) => {
     currentUserIdRef.current = userId;
     setTheme(readTheme(userId));
@@ -227,6 +266,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setCustomColor(readCustomColor(userId));
     setFontSize(readFontSize(userId));
     setDragReorderEnabled(readDragReorderEnabled(userId));
+    setThemeStyleState(readThemeStyle(userId));
   }, []);
 
   return (
@@ -242,6 +282,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setFontSize,
         dragReorderEnabled,
         setDragReorderEnabled,
+        themeStyle,
+        setThemeStyle,
         loadPreferenceFor,
       }}
     >

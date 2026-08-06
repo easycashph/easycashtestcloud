@@ -124,6 +124,48 @@
     --sidebar-accent: 158 55% 38%;
     --chart-1: 158 55% 50%;
   }
+
+  /* Theme style (Settings → Appearance → Theme Style, 2026-08-07 user request): "Premium" is a
+     full alternate light-only look (navy/gold/ivory) - deliberately overrides --primary/--ring/
+     --sidebar-accent too (after the [data-accent] blocks above, so it wins the cascade), rather
+     than layering on top of the officer's separate Theme Color pick, since it's meant to read as
+     one coherent signature look, not a tint applied over whichever accent happened to be active.
+     ThemeProvider also forces `theme` to 'light' the moment Premium is selected - there is no dark
+     variant, by design. */
+  [data-theme-style='premium'] {
+    --background: 47 27% 94%;
+    --foreground: 60 4% 11%;
+
+    --card: 45 60% 98%;
+    --card-foreground: 60 4% 11%;
+
+    --popover: 45 60% 98%;
+    --popover-foreground: 60 4% 11%;
+
+    --primary: 221 51% 16%;
+    --primary-foreground: 45 30% 96%;
+
+    --secondary: 45 45% 95%;
+    --secondary-foreground: 60 4% 11%;
+
+    --muted: 45 45% 95%;
+    --muted-foreground: 43 7% 45%;
+
+    --accent: 41 54% 54%;
+    --accent-foreground: 221 51% 16%;
+
+    --border: 45 39% 86%;
+    --input: 45 39% 86%;
+    --ring: 41 54% 54%;
+
+    --sidebar-background: 221 51% 16%;
+    --sidebar-foreground: 45 30% 94%;
+    --sidebar-border: 221 40% 22%;
+    --sidebar-accent: 41 54% 54%;
+    --sidebar-accent-foreground: 221 51% 16%;
+
+    --chart-1: 41 54% 54%;
+  }
 }
 
 @layer base {
