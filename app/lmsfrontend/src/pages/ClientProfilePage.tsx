@@ -832,7 +832,11 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 // client info header is drag-to-reorder - each staff member's own arrangement, saved per-user in
 // localStorage (same key style as the sidebar-collapse preference in AppLayout.tsx), so one
 // officer's preferred layout doesn't affect anyone else logged into the same shared machine.
-const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'riskSummary', 'loanHistory', 'activityTimeline', 'recentActivity'];
+// 2026-08-06 (user request): default order updated to match MIS Nomer's own current arrangement
+// (Loan Applications, Co-Borrower, Loan History, Risk & Payment Summary, Activity Timeline,
+// Recent Activity) - only changes the starting point for a staff member who hasn't personally
+// reordered yet; anyone with their own saved localStorage order keeps it, unaffected.
+const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'loanHistory', 'riskSummary', 'activityTimeline', 'recentActivity'];
 const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
