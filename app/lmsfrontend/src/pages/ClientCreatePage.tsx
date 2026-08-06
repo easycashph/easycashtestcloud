@@ -51,7 +51,7 @@ function emptyCoBorrower(): CoBorrowerField {
 export function ClientCreatePage() {
   useLogPageView('Create Client Account');
   const navigate = useNavigate();
-  const { currentAccount } = useRole();
+  const { currentAccount, canManageClients } = useRole();
 
   const [firstName, setFirstName] = React.useState('');
   const [middleName, setMiddleName] = React.useState('');
@@ -231,6 +231,23 @@ export function ClientCreatePage() {
   const coBorrowerIncomplete =
     includeCoBorrower && coBorrowers.some((c) => c.firstName.trim().length === 0 || c.lastName.trim().length === 0);
   const canSubmit = firstName.trim().length > 0 && lastName.trim().length > 0 && !coBorrowerIncomplete;
+
+  // 2026-08-06 (user-reported): the "Add Client" button on List of Clients is already hidden for
+  // a role without `borrower.write` - this guard covers direct navigation to `/clients/new` by
+  // URL, same "restricted" placeholder shape as every other permission-gated page in this app.
+  if (!canManageClients) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+          <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">Restricted</p>
+          <p className="text-sm text-muted-foreground">
+            Your role ({currentAccount.role}) does not have permission to create clients.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

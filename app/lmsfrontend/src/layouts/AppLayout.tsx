@@ -102,8 +102,17 @@ const NAV_GROUPS = [
   },
 ];
 
+/** 2026-08-06 (user-reported): a nav link to a page the signed-in role can't actually use (e.g.
+ * Record Payment for a role without `payment.record`) shouldn't appear at all - same "hide, don't
+ * just block after the click" fix already applied to the in-page actions this leads to. Keyed by
+ * route path; a route with no entry here is visible to every role (unchanged default). */
+const NAV_VISIBILITY: Partial<Record<string, (permissions: ReturnType<typeof useRole>) => boolean>> = {
+  '/payments': (permissions) => permissions.canRecordPayment,
+};
+
 function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
   const chatQueueCount = useChatQueueCount();
+  const permissions = useRole();
   return (
     <div
       className={cn(
@@ -129,11 +138,14 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
-          {NAV_GROUPS.map((group) => (
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter((item) => (NAV_VISIBILITY[item.to] ?? (() => true))(permissions));
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={group.label}>
               <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{group.label}</p>
               <div className="flex flex-col gap-1">
-                {group.items.map((item) => (
+                {visibleItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -158,7 +170,8 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
     </div>

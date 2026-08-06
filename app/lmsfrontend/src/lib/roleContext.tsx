@@ -110,6 +110,8 @@ interface RoleContextValue {
   canRestructureLoan: boolean;
   /** Write off/adjust a loan account. */
   canAdjustLoan: boolean;
+  /** Create or edit a Client (Borrower) profile. */
+  canManageClients: boolean;
   /** True if the signed-in user's role currently has the given permission code granted - the
    * general-purpose escape hatch for a check that doesn't already have its own named `can*`
    * boolean above. */
@@ -296,6 +298,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canAdjustFees: hasPermission('fees.adjust'),
     canRestructureLoan: hasPermission('loan_account.restructure'),
     canAdjustLoan: hasPermission('loan_account.adjust'),
+    canManageClients: hasPermission('borrower.write'),
     hasPermission,
     refreshCurrentUser,
   };

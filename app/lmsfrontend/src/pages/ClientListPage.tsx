@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -81,6 +82,7 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  */
 export function ClientListPage() {
   const navigate = useNavigate();
+  const { canManageClients } = useRole();
   useLogPageView('List of Clients');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -148,7 +150,7 @@ export function ClientListPage() {
           <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
           <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
         </div>
-        <Button onClick={() => navigate('/clients/new')}>Add Client</Button>
+        {canManageClients && <Button onClick={() => navigate('/clients/new')}>Add Client</Button>}
       </div>
 
       {borrowersQuery.isError && (
