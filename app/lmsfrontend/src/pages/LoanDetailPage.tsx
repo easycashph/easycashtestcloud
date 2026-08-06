@@ -1044,6 +1044,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     canRestructureLoan: canRestructureLoanPermission,
     canAdjustLoan: canAdjustLoanPermission,
     canGenerateDocuments: canGenerateDocumentsPermission,
+    canGenerateStatementOfAccount: canGenerateStatementOfAccountPermission,
     canManageESignature: canManageESignaturePermission,
     hasPermission,
   } = useRole();
@@ -1912,6 +1913,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // `esignature.manage` permission, not `document.generate` (a role can have one without the
   // other since 2026-08-06).
   const canSendForSigning = documentsEligibleStatus && canManageESignaturePermission;
+  // Separate from `canGenerateDocuments` above - Statement of Account is gated by its own
+  // `statement_of_account.generate` permission, not `document.generate`.
+  const canGenerateStatementOfAccount = documentsEligibleStatus && canGenerateStatementOfAccountPermission;
   const documents = documentsQuery.data?.items ?? [];
   const requiredDocuments = documents.filter((d) => d.isRequired);
   const conditionalDocuments = documents.filter((d) => !d.isRequired);
@@ -2854,14 +2858,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <CardTitle>Statement of Account</CardTitle>
             <CardDescription>Generate a Statement of Account PDF for this loan, as of a chosen date.</CardDescription>
           </div>
-          {canGenerateDocuments && (
+          {canGenerateStatementOfAccount && (
             <Button size="sm" onClick={() => setSoaDialogOpen(true)}>
               <Receipt className="mr-2 h-4 w-4" /> Create SOA
             </Button>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
-          {!canGenerateDocuments ? (
+          {!documentsEligibleStatus ? (
             <p className="py-4 text-center text-sm text-muted-foreground">Available once this loan is approved.</p>
           ) : statementsQuery.isLoading ? (
             <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>

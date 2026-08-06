@@ -34,6 +34,7 @@ const MODULE_META: Record<string, { label: string; icon: React.ComponentType<{ c
   penalty: { label: 'Payments', icon: Banknote },
   fees: { label: 'Payments', icon: Banknote },
   document: { label: 'Documents', icon: FileText },
+  statement_of_account: { label: 'Documents', icon: FileText },
   attachment: { label: 'Documents', icon: FileText },
   esignature: { label: 'E-signature', icon: PenLine },
   borrower: { label: 'Clients', icon: Users },
