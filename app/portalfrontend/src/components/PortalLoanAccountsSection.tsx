@@ -26,6 +26,42 @@ const INSTALLMENT_STATUS_TONE: Record<string, string> = {
   LATE: 'bg-destructive/15 text-destructive',
 };
 
+/** 2026-08-06 (user request) - mirrors app/lmsfrontend's own LoanAccountStatus labels/tones (see
+ * its StatusBadge component) so "Active"/"Closed" reads the same way to a client here as it does
+ * to staff internally. Every value of the backend's LoanAccountStatus enum is covered so an
+ * unrecognized future status still renders as its raw string rather than disappearing silently. */
+const LOAN_ACCOUNT_STATUS_LABELS: Record<string, string> = {
+  PENDING_APPROVAL: 'Pending Approval',
+  APPROVED: 'Approved',
+  ACTIVE: 'Active',
+  ACTIVE_IN_ARREARS: 'Active (Past Due)',
+  CLOSED: 'Closed',
+  CLOSED_WRITTEN_OFF: 'Closed (Written Off)',
+  CLOSED_REJECTED: 'Closed (Rejected)',
+  CLOSED_RESTRUCTURED: 'Closed (Restructured)',
+  CLOSED_ADJUSTED: 'Closed (Adjusted)',
+};
+
+const LOAN_ACCOUNT_STATUS_TONE: Record<string, string> = {
+  PENDING_APPROVAL: 'bg-secondary text-secondary-foreground',
+  APPROVED: 'bg-secondary text-secondary-foreground',
+  ACTIVE: 'bg-success/15 text-success',
+  ACTIVE_IN_ARREARS: 'bg-destructive/15 text-destructive',
+  CLOSED: 'bg-secondary text-secondary-foreground',
+  CLOSED_WRITTEN_OFF: 'bg-secondary text-secondary-foreground',
+  CLOSED_REJECTED: 'bg-secondary text-secondary-foreground',
+  CLOSED_RESTRUCTURED: 'bg-secondary text-secondary-foreground',
+  CLOSED_ADJUSTED: 'bg-secondary text-secondary-foreground',
+};
+
+function LoanAccountStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${LOAN_ACCOUNT_STATUS_TONE[status] ?? 'bg-secondary text-secondary-foreground'}`}>
+      {LOAN_ACCOUNT_STATUS_LABELS[status] ?? status}
+    </span>
+  );
+}
+
 function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
   const [installments, setInstallments] = React.useState<PortalInstallmentEntry[] | null>(null);
 
@@ -125,7 +161,10 @@ export function PortalLoanAccountsSection() {
                     <Landmark className="h-4 w-4" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{loanAccount.loanCode}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium">{loanAccount.loanCode}</p>
+                      <LoanAccountStatusBadge status={loanAccount.status} />
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       Outstanding balance: {peso(loanAccount.outstandingBalance)} of {peso(loanAccount.principalAmount)}
                     </p>
