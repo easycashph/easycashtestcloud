@@ -430,6 +430,33 @@ export interface PortalLoanAccountSummary {
   activatedAt: string | null;
 }
 
+/** Dashboard "Next Payment Due" reminder (2026-08-06) - null when there's genuinely nothing
+ * upcoming (no open loan, or everything already paid). */
+export interface PortalNextPaymentDue {
+  loanAccountId: string;
+  loanCode: string;
+  installmentNumber: number;
+  dueDate: string;
+  totalDue: string;
+  totalPaid: string;
+  status: string;
+}
+
+/** Dashboard "Recent Payments" widget (2026-08-06) - actual posted payments, not the schedule. */
+export interface PortalPaymentEntry {
+  id: string;
+  loanAccountId: string;
+  loanCode: string;
+  entryDate: string;
+  amount: string;
+  principalComponent: string;
+  interestComponent: string;
+  feesComponent: string;
+  penaltyComponent: string;
+  orNumber: string | null;
+  paymentMethod: string | null;
+}
+
 export interface PortalInstallmentEntry {
   installmentNumber: number;
   dueDate: string;

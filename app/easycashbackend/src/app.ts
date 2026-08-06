@@ -108,6 +108,8 @@ import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/ap
 import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
 import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import { RequestPortalAccountDeletionUseCase } from '@modules/client-portal/application/use-cases/RequestPortalAccountDeletionUseCase';
+import { GetPortalNextPaymentDueUseCase } from '@modules/client-portal/application/use-cases/GetPortalNextPaymentDueUseCase';
+import { ListPortalRecentPaymentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalRecentPaymentsUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -1287,6 +1289,19 @@ export function createApp(): Express {
         portalAccountRepository,
         loanAccountRepository,
         repaymentInstallmentRepository,
+      }),
+      // "Next Payment Due" / "Recent Payments" dashboard widgets (2026-08-06 user request) - reuse
+      // the same loanAccountRepository/repaymentInstallmentRepository/loanTransactionRepository
+      // instances the staff-facing modules already wire above.
+      getPortalNextPaymentDueUseCase: new GetPortalNextPaymentDueUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+      }),
+      listPortalRecentPaymentsUseCase: new ListPortalRecentPaymentsUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        loanTransactionRepository,
       }),
     },
     portalTokenService,

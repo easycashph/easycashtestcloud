@@ -28,3 +28,34 @@ export interface PortalInstallmentEntry {
   status: string;
   lastPaidAt: Date | null;
 }
+
+/** Dashboard "Next Payment Due" reminder (2026-08-06 user request) - the single soonest unpaid
+ * (PENDING/PARTIALLY_PAID/LATE) installment across every one of the client's still-open
+ * (ACTIVE/ACTIVE_IN_ARREARS) loan accounts. `null` (not this type) when there is nothing upcoming -
+ * no open loan, or every installment already paid. */
+export interface PortalNextPaymentDue {
+  loanAccountId: string;
+  loanCode: string;
+  installmentNumber: number;
+  dueDate: Date;
+  totalDue: string;
+  totalPaid: string;
+  status: string;
+}
+
+/** Dashboard "Recent Payments" widget (2026-08-06 user request) - ACTUAL posted payments (real
+ * money the client paid in), never the schedule - narrowed from the ledger's `LoanTransaction`
+ * (type `REPAYMENT` only; disbursements/fees/interest accruals/reversals/etc. never appear here). */
+export interface PortalPaymentEntry {
+  id: string;
+  loanAccountId: string;
+  loanCode: string;
+  entryDate: Date;
+  amount: string;
+  principalComponent: string;
+  interestComponent: string;
+  feesComponent: string;
+  penaltyComponent: string;
+  orNumber: string | null;
+  paymentMethod: string | null;
+}
