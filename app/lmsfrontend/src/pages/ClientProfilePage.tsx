@@ -832,7 +832,7 @@ function cardOrderKey(userId: string): string {
 interface PortalAccountSummary {
   id: string;
   email: string;
-  status: 'PENDING_VERIFICATION' | 'ACTIVE';
+  status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'DELETED';
   mustChangePassword: boolean;
   createdAt: string;
 }
@@ -923,14 +923,19 @@ function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasE
             <div>
               <span className="text-muted-foreground">Status: </span>
               <Badge variant="outline" className="text-[11px]">
-                {status.linked.status === 'ACTIVE' ? 'Active' : 'Pending Verification'}
+                {status.linked.status === 'ACTIVE' ? 'Active' : status.linked.status === 'DELETED' ? 'Deleted by client' : 'Pending Verification'}
               </Badge>
             </div>
             <div>
               <span className="text-muted-foreground">Linked: </span>
               {formatDate(status.linked.createdAt)}
             </div>
-            {status.linked.mustChangePassword && (
+            {status.linked.status === 'DELETED' && (
+              <div className="col-span-2 text-muted-foreground">
+                This Portal login was deleted (self-service, Security tab) - client/loan data here is unaffected.
+              </div>
+            )}
+            {status.linked.mustChangePassword && status.linked.status !== 'DELETED' && (
               <div className="col-span-2 text-warning">Client has not yet changed their temporary password.</div>
             )}
           </dl>

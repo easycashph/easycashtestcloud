@@ -453,6 +453,13 @@ enum PortalAccountStatus {
   /// Just signed up - email not yet verified via PortalAccountChallenge, cannot log in yet.
   PENDING_VERIFICATION
   ACTIVE
+  /// 2026-08-06 (Delete My Portal Account, user request) - self-service deletion of the LOGIN
+  /// ONLY, never the linked Borrower/loan data (disclosed to the client at request time) - blocked
+  /// entirely while any linked LoanAccount is ACTIVE/ACTIVE_IN_ARREARS (RequestPortalAccountDeletionUseCase).
+  /// A soft status flip, not a real row delete - matches this codebase's only existing
+  /// deactivation convention (`User.status`), and avoids the FK-restrict failure a real DELETE
+  /// would hit on any `LoanApplication.portalAccountId` still pointing at this row.
+  DELETED
 }
 
 model PortalAccount {

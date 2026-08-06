@@ -1,10 +1,12 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
+import { Dialog } from '@/components/ui/Dialog';
 import { PortalHeader } from '@/components/PortalHeader';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
@@ -28,7 +30,13 @@ function channelLabel(channel: PortalOtpChannel): string {
  * `SecurityPage` route (direct-link/bookmark entry point) and by `PortalDialogHost` when opened as
  * a dialog (2026-07-31 user request) from the header nav or Dashboard. */
 export function SecurityForm() {
-  const { account, refreshAccount } = useAuth();
+  const { account, refreshAccount, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const [deletePassword, setDeletePassword] = React.useState('');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+  const [deleteState, setDeleteState] = React.useState<'idle' | 'saving' | 'error'>('idle');
+  const [deleteError, setDeleteError] = React.useState('');
 
   const [newEmail, setNewEmail] = React.useState('');
   const [emailPassword, setEmailPassword] = React.useState('');
@@ -156,6 +164,21 @@ export function SecurityForm() {
     } catch (err) {
       setPasswordError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
       setPasswordState('error');
+    }
+  };
+
+  const handleDeleteAccount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setDeleteState('saving');
+    setDeleteError('');
+    try {
+      await apiClient.post('/portal/security/delete-account', { currentPassword: deletePassword }, true);
+      setDeleteConfirmOpen(false);
+      logout();
+      navigate('/', { replace: true });
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setDeleteState('error');
     }
   };
 
@@ -329,6 +352,49 @@ export function SecurityForm() {
             </div>
           )}
         </Card>
+
+        <Card className="mt-5 border-destructive/30 p-6">
+          <h2 className="text-base font-semibold text-destructive">Delete My Portal Account</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>This deletes only your Easycash Portal login - it does NOT delete your loan account or loan history with Easycash.</li>
+            <li>If you still have an active loan, your Portal account cannot be deleted until it's settled or closed.</li>
+          </ul>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 border-destructive text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              setDeleteError('');
+              setDeletePassword('');
+              setDeleteState('idle');
+              setDeleteConfirmOpen(true);
+            }}
+          >
+            Delete My Portal Account
+          </Button>
+        </Card>
+
+        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Delete My Portal Account">
+          <form onSubmit={handleDeleteAccount} className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Enter your password to confirm. This only removes your Portal login - your client profile and loan records with Easycash stay
+              exactly as they are.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Current password</Label>
+              <PasswordInput value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required autoFocus />
+            </div>
+            {deleteState === 'error' && <Alert tone="error">{deleteError}</Alert>}
+            <div className="flex gap-2">
+              <Button type="submit" variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" disabled={deleteState === 'saving'}>
+                {deleteState === 'saving' ? 'Deleting…' : 'Confirm Deletion'}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Dialog>
     </>
   );
 }
