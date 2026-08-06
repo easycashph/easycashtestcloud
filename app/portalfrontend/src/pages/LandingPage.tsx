@@ -23,6 +23,7 @@ import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
 import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
+import { NewsFlashTicker } from '@/components/NewsFlashTicker';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -230,6 +231,7 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <NewsFlashTicker />
       <MobileApplyBar sentinelRef={heroEndRef} />
 
       {/* Hero */}

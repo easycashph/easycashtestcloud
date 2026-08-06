@@ -472,6 +472,20 @@ export interface PortalStatementOfAccountEntry {
   generatedAt: string;
 }
 
+/** Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06) - a curated LINK to
+ * a real external article (headline + short excerpt + link back to the source), never republished
+ * article content. Public endpoint, no auth required. */
+export type ExternalNewsCategory = 'FINANCE' | 'ADVISORY';
+export interface ExternalNewsLinkView {
+  id: string;
+  category: ExternalNewsCategory;
+  title: string;
+  sourceName: string;
+  sourceUrl: string;
+  excerpt: string;
+  publishedAt: string;
+}
+
 export interface PortalInstallmentEntry {
   installmentNumber: number;
   dueDate: string;

@@ -92,6 +92,9 @@ import { createPortalSecurityRouter } from '@modules/client-portal/interface/htt
 import { ChangePortalPasswordUseCase } from '@modules/client-portal/application/use-cases/ChangePortalPasswordUseCase';
 import { ChangePortalEmailUseCase } from '@modules/client-portal/application/use-cases/ChangePortalEmailUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
+import { createExternalNewsLinkRouter } from '@modules/finance-news/interface/http/externalNewsLinkRouter';
+import { ListExternalNewsLinksUseCase } from '@modules/finance-news/application/use-cases/ListExternalNewsLinksUseCase';
+import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastructure/PrismaExternalNewsLinkRepository';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
@@ -1434,6 +1437,15 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalPsgcRouter);
+
+  // Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+  // public, unauthenticated - see externalNewsLinkRouter.ts's own doc comment.
+  const externalNewsLinkRouter = createExternalNewsLinkRouter({
+    listExternalNewsLinksUseCase: new ListExternalNewsLinksUseCase({
+      externalNewsLinkRepository: new PrismaExternalNewsLinkRepository(),
+    }),
+  });
+  app.use('/api/v1/portal', externalNewsLinkRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
   // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"
