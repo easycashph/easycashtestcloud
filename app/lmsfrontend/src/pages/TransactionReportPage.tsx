@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,6 +106,24 @@ export function TransactionReportPage() {
 
   const total = transactions.reduce((sum, t) => sum + Number(t.amount), 0);
 
+  // 2026-08-06 (user request, mocked up first): a fixed-height scrollable table gives no visual cue
+  // that rows exist below the fold - this fade + "N more below" chip (hidden once scrolled to the
+  // bottom) is that cue, same pattern as Notion/Linear-style data tables. ~29px is this table's own
+  // row height (text-xs + the [&_td]:py-1.5 override below) - approximate is fine, it's a hint, not
+  // a precise count.
+  const ROW_HEIGHT_PX = 29;
+  const scrollBoxRef = React.useRef<HTMLDivElement>(null);
+  const [rowsBelowFold, setRowsBelowFold] = React.useState(0);
+  const updateScrollHint = React.useCallback(() => {
+    const el = scrollBoxRef.current;
+    if (!el) return;
+    const pixelsBelow = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setRowsBelowFold(pixelsBelow > 8 ? Math.max(1, Math.round(pixelsBelow / ROW_HEIGHT_PX)) : 0);
+  }, []);
+  React.useEffect(() => {
+    updateScrollHint();
+  }, [sorted, updateScrollHint]);
+
   const handleDownload = async () => {
     setIsDownloading(true);
     setDownloadError(null);
@@ -173,7 +191,8 @@ export function TransactionReportPage() {
               height box. Header stays pinned while scrolling; Total stays pinned to the bottom
               (sticky, not inside the scrolling body) so it's always visible regardless of scroll
               position. */}
-          <div className="max-h-[820px] overflow-y-auto rounded-md border">
+          <div className="relative rounded-md border">
+          <div ref={scrollBoxRef} onScroll={updateScrollHint} className="max-h-[820px] overflow-y-auto">
           <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
             <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
@@ -242,6 +261,14 @@ export function TransactionReportPage() {
               </TableRow>
             </TableFooter>
           </Table>
+          </div>
+          {rowsBelowFold > 0 && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-9 flex h-12 items-end justify-center bg-gradient-to-b from-transparent to-background">
+              <span className="mb-1.5 flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                <ChevronDown className="h-3 w-3" /> {rowsBelowFold} more below
+              </span>
+            </div>
+          )}
           </div>
         </CardContent>
       </Card>
