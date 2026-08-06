@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { apiClient, ApiError, setAccessToken, setOnSessionExpired, getStoredDeviceToken, setStoredDeviceToken } from './apiClient';
+import { apiClient, ApiError, applyAuthTokens, clearAuthTokens, setOnSessionExpired, getStoredDeviceToken, setStoredDeviceToken } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, LoginSuccessResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
 import { useDashboardLayout } from '@/components/dashboard-layout-provider';
@@ -101,7 +101,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const refreshed = await apiClient.post<RefreshResponse>('/auth/refresh');
-        setAccessToken(refreshed.accessToken);
+        applyAuthTokens(refreshed.accessToken, refreshed.accessTokenExpiresAt);
         const me = await apiClient.get<AuthenticatedUserView>('/auth/me');
         if (cancelled || loggedInRef.current) return;
         setUser(me);
@@ -110,7 +110,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setStatus('authenticated');
       } catch {
         if (cancelled || loggedInRef.current) return;
-        setAccessToken(null);
+        clearAuthTokens();
         loadPreferenceFor(null);
         loadDashboardLayoutFor(null);
         setStatus('unauthenticated');
@@ -127,7 +127,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     (result: LoginSuccessResponse) => {
       if (result.deviceToken) setStoredDeviceToken(result.deviceToken);
       loggedInRef.current = true;
-      setAccessToken(result.accessToken);
+      applyAuthTokens(result.accessToken, result.accessTokenExpiresAt);
       setUser(result.user);
       loadPreferenceFor(result.user.id);
       loadDashboardLayoutFor(result.user.id);
@@ -171,7 +171,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       // Best-effort - even if the network call fails, clear local session state below so the
       // user isn't stuck "logged in" against a UI that can no longer reach the backend.
     }
-    setAccessToken(null);
+    clearAuthTokens();
     setUser(null);
     loadPreferenceFor(null);
     loadDashboardLayoutFor(null);
@@ -184,7 +184,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   // once per failed background refresh, and this bounces the user back to the Login page instead.
   React.useEffect(() => {
     setOnSessionExpired(() => {
-      setAccessToken(null);
+      clearAuthTokens();
       setUser(null);
       loadPreferenceFor(null);
       loadDashboardLayoutFor(null);

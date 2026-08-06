@@ -64,6 +64,74 @@ export function getAccessToken(): string | null {
 }
 
 /**
+ * Proactive silent refresh (2026-08-06, fixes unexplained auto-logout). Previously the app only
+ * refreshed reactively - on a 401 - and never scheduled anything off the `accessTokenExpiresAt`
+ * the backend already returns from login/refresh. That meant an access token expiring during a
+ * lull (e.g. 15 idle minutes) could line up two independent tabs/requests hitting 401 at nearly
+ * the same time, both presenting the same rotating refresh-token cookie to `/auth/refresh` - the
+ * backend's rotate-on-use reuse detection then treats the second presentation as theft and
+ * revokes the ENTIRE session, which looked to users like a random forced logout.
+ *
+ * Fix has two parts: (1) schedule a refresh a safety margin *before* actual expiry so the reactive
+ * 401 path is rarely exercised at all, and (2) serialize every refresh attempt - scheduled or
+ * reactive, in this tab or any other tab of the same browser - behind the Web Locks API. Locks are
+ * scoped per-origin across all tabs/windows (not per-tab), and the refresh-token cookie is a
+ * genuine browser-level cookie jar shared by every tab of this origin, so once one tab's refresh
+ * completes and rotates the cookie, a second tab's queued refresh (running after the lock is
+ * released) automatically presents the *new* cookie value and succeeds too - never a stale/reused
+ * one. This never changes the backend's rotation/reuse-detection security guarantee; it only
+ * removes the false-positive race that was tripping it.
+ */
+const REFRESH_SAFETY_MARGIN_MS = 60_000;
+const MIN_REFRESH_DELAY_MS = 5_000;
+
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearScheduledRefresh(): void {
+  if (refreshTimer !== null) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function scheduleProactiveRefresh(accessTokenExpiresAt: string): void {
+  clearScheduledRefresh();
+  const delay = Math.max(new Date(accessTokenExpiresAt).getTime() - Date.now() - REFRESH_SAFETY_MARGIN_MS, MIN_REFRESH_DELAY_MS);
+  refreshTimer = setTimeout(() => {
+    void refreshAccessToken();
+  }, delay);
+}
+
+/** Call after every successful login/refresh/OTP-verify - stores the token and (re)schedules the next silent refresh. */
+export function applyAuthTokens(token: string, accessTokenExpiresAt: string): void {
+  accessToken = token;
+  scheduleProactiveRefresh(accessTokenExpiresAt);
+}
+
+/** Call on logout / session-expiry - clears the token and cancels any pending scheduled refresh. */
+export function clearAuthTokens(): void {
+  accessToken = null;
+  clearScheduledRefresh();
+}
+
+/**
+ * Runs `fn` behind a same-origin, cross-tab Web Locks API lock when available, so at most one
+ * `/auth/refresh` call is ever in flight across every tab of this browser at once - see the doc
+ * comment above `REFRESH_SAFETY_MARGIN_MS`. Falls back to running `fn` directly on browsers
+ * without Web Locks support (all real deployment targets here have it, but this keeps the app from
+ * breaking rather than relying on a feature every environment must have).
+ */
+function withCrossTabRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && 'locks' in navigator) {
+    // `LockManager.request`'s TS typings model the callback as returning `T` synchronously; at
+    // runtime it fully supports (and is designed for) an async callback whose returned promise is
+    // awaited before the lock releases - the cast below only corrects the type, not the behavior.
+    return navigator.locks.request('easycash-lms-auth-refresh', fn) as Promise<T>;
+  }
+  return fn();
+}
+
+/**
  * Fires once whenever a background `/auth/refresh` fails while the app believed it had a live
  * session (i.e. every 401-triggered refresh attempt in `apiRequest`, not the initial bootstrap
  * refresh in `roleContext.tsx`, which has its own try/catch). Without this, a session that goes
@@ -89,26 +157,26 @@ let refreshPromise: Promise<boolean> | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
   if (!refreshPromise) {
-    refreshPromise = (async () => {
+    refreshPromise = withCrossTabRefreshLock(async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
           method: 'POST',
           credentials: 'include',
         });
         if (!res.ok) {
-          accessToken = null;
+          clearAuthTokens();
           return false;
         }
-        const body = (await res.json()) as { accessToken: string };
-        accessToken = body.accessToken;
+        const body = (await res.json()) as { accessToken: string; accessTokenExpiresAt: string };
+        applyAuthTokens(body.accessToken, body.accessTokenExpiresAt);
         return true;
       } catch {
-        accessToken = null;
+        clearAuthTokens();
         return false;
       } finally {
         refreshPromise = null;
       }
-    })();
+    });
   }
   return refreshPromise;
 }
