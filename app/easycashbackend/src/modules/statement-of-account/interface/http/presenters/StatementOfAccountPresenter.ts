@@ -31,6 +31,8 @@ export function presentStatementOfAccountListItem(item: GeneratedStatementOfAcco
     penaltyFromDate: item.penaltyFromDate.toISOString().slice(0, 10),
     penaltyToDate: item.penaltyToDate.toISOString().slice(0, 10),
     accruedInterestAsOfDate: item.accruedInterestAsOfDate.toISOString().slice(0, 10),
+    pastDuePenalty: item.pastDuePenalty,
+    accruedInterest: item.accruedInterest,
     totalAmountDue: item.totalAmountDue,
     generatedByUserId: item.generatedByUserId,
     generatedByName: item.generatedByName,

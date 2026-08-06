@@ -519,6 +519,8 @@ export interface GeneratedStatementOfAccountListItem {
   penaltyFromDate: string;
   penaltyToDate: string;
   accruedInterestAsOfDate: string;
+  pastDuePenalty: string;
+  accruedInterest: string;
   totalAmountDue: string;
   generatedByUserId: string;
   generatedByName: string;

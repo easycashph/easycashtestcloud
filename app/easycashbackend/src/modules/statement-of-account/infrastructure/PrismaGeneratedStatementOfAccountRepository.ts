@@ -83,6 +83,8 @@ export class PrismaGeneratedStatementOfAccountRepository implements IGeneratedSt
       penaltyFromDate: row.penaltyFromDate,
       penaltyToDate: row.penaltyToDate,
       accruedInterestAsOfDate: row.accruedInterestAsOfDate,
+      pastDuePenalty: Money.of(row.pastDuePenalty).toString(),
+      accruedInterest: Money.of(row.accruedInterest).toString(),
       totalAmountDue: Money.of(row.totalAmountDue).toString(),
       generatedByUserId: row.generatedByUserId,
       generatedByName: `${row.generatedBy.firstName} ${row.generatedBy.lastName}`.trim(),
