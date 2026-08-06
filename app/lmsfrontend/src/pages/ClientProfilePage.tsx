@@ -834,10 +834,13 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 // officer's preferred layout doesn't affect anyone else logged into the same shared machine.
 // 2026-08-06 (user request): default order updated to match MIS Nomer's own current arrangement
 // (Loan Applications, Co-Borrower, Loan History, Risk & Payment Summary, Activity Timeline,
-// Recent Activity) - only changes the starting point for a staff member who hasn't personally
-// reordered yet; anyone with their own saved localStorage order keeps it, unaffected.
+// Recent Activity). 2026-08-06 follow-up (user-confirmed): applied to EVERY user, not just those
+// without a saved preference - the localStorage key itself was bumped (v2) so any
+// already-saved order under the old key is orphaned/ignored, and every user reads this new
+// default on next load. A user who then personally re-drags again still only affects their own
+// saved order going forward, same as before.
 const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'loanHistory', 'riskSummary', 'activityTimeline', 'recentActivity'];
-const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder';
+const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder.v2';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
 }
