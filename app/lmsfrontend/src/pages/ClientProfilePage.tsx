@@ -666,6 +666,11 @@ function formatCoBorrowerAddress(cb: CoBorrower): string {
  * an unrelated second one. "Add" only appears while none exists yet - for older applications
  * that never captured a co-borrower, or clients created without one. */
 function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
+  // 2026-08-06 (user-reported gap): Add/Edit Co-Borrower posts through the same `borrower.write`
+  // permission the backend already gates (POST/PATCH /co-borrowers - see borrowerRouter.ts), but
+  // this button itself was never wired to it, so every role saw it regardless of their Roles &
+  // Permissions setting.
+  const { canManageClients } = useRole();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<CoBorrowerDraft>({ ...EMPTY_CO_BORROWER_DRAFT });
@@ -719,17 +724,19 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
           <Users className="h-4 w-4 text-muted-foreground" />
           <CardTitle className="text-sm">Co-Borrower</CardTitle>
         </div>
-        <Button size="sm" onClick={openDialog}>
-          {existing ? (
-            <>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
-            </>
-          ) : (
-            <>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
-            </>
-          )}
-        </Button>
+        {canManageClients && (
+          <Button size="sm" onClick={openDialog}>
+            {existing ? (
+              <>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+              </>
+            ) : (
+              <>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
+              </>
+            )}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {query.isLoading ? (
