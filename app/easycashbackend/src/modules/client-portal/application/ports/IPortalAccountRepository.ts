@@ -45,6 +45,8 @@ export interface PortalAccountRecord extends PortalAccountProfileFields {
   borrowerId: string | null;
   twoFactorEnabled: boolean;
   twoFactorChannel: string | null;
+  /** 2026-08-06 (Bind existing Client data to Portal) - see schema.prisma's own doc comment. */
+  mustChangePassword: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +55,13 @@ export interface CreatePortalAccountInput {
   email: string;
   passwordHash: string;
   contactNumber?: string;
+  /** Staff-issued account creation (2026-08-06) - defaults to PENDING_VERIFICATION/false/unlinked
+   * (open self-signup's existing behavior) when omitted; a staff-created account instead passes
+   * ACTIVE + mustChangePassword: true + borrowerId up front, skipping email verification since
+   * staff already confirmed identity. */
+  status?: PortalAccountStatus;
+  borrowerId?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface UpdatePortalAccountInput extends Partial<PortalAccountProfileFields> {
@@ -63,11 +72,15 @@ export interface UpdatePortalAccountInput extends Partial<PortalAccountProfileFi
   email?: string;
   twoFactorEnabled?: boolean;
   twoFactorChannel?: string | null;
+  mustChangePassword?: boolean;
 }
 
 export interface IPortalAccountRepository {
   create(input: CreatePortalAccountInput): Promise<PortalAccountRecord>;
   findByEmail(email: string): Promise<PortalAccountRecord | null>;
   findById(id: string): Promise<PortalAccountRecord | null>;
+  /** 2026-08-06 (Bind existing Client data to Portal) - looks up the one PortalAccount already
+   * linked to a Borrower, if any (`borrowerId` is `@unique`, so at most one). */
+  findByBorrowerId(borrowerId: string): Promise<PortalAccountRecord | null>;
   update(id: string, patch: UpdatePortalAccountInput): Promise<PortalAccountRecord>;
 }

@@ -463,6 +463,14 @@ model PortalAccount {
   status          PortalAccountStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?
 
+  /// 2026-08-06 (Bind existing Client data to Portal, user request) - true when this account's
+  /// current password is a staff-issued shared temporary password (see
+  /// CreatePortalAccountForBorrowerUseCase), until the client sets their own. The portal frontend
+  /// must block access to every other page until this clears - the shared temp password is not a
+  /// secret (any staff member can issue it, and it's the same string for every client), so this
+  /// flag is the only thing standing between "knows a client's email" and "is logged in as them."
+  mustChangePassword Boolean @default(false)
+
   /// Portal login 2FA (2026-07-30 user request) - unlike the internal LMS's opt-in-default-off
   /// 2FA, this defaults ON: `twoFactorChannel` is populated automatically from whichever channel
   /// the client already verified at sign-up (see VerifySignUpUseCase), so it's never null while

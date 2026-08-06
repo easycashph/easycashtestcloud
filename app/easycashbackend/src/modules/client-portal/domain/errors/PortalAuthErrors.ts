@@ -80,3 +80,13 @@ export class PortalLoanAccountNotFoundError extends DomainError {
   }
 }
 
+/** 2026-08-06 (Bind existing Client data to Portal) - the on-demand staff "Bind Existing Portal
+ * Account" action found a PortalAccount matching the client's email, but it's already linked to a
+ * DIFFERENT Borrower - binding it here would silently steal it from whoever it actually belongs to. */
+export class PortalAccountAlreadyLinkedError extends DomainError {
+  constructor() {
+    super('PORTAL_ACCOUNT_ALREADY_LINKED', 'This Portal account is already linked to a different client.', undefined, 409);
+    this.name = 'PortalAccountAlreadyLinkedError';
+  }
+}
+

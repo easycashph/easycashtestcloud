@@ -40,6 +40,9 @@ export interface PortalAccountView {
   borrowerId: string | null;
   twoFactorEnabled: boolean;
   twoFactorChannel: PortalOtpChannel | null;
+  /** Bind existing Client data to Portal (2026-08-06) - true while this account is still on the
+   * staff-issued shared temp password. The app must block every other page until this clears. */
+  mustChangePassword: boolean;
 }
 
 export interface LoginResponse {

@@ -22,6 +22,12 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.get('/borrowers/:id', requireAuth, controller.get);
   router.get('/borrowers/:id/risk-summary', requireAuth, controller.riskSummary);
   router.get('/borrowers/:id/co-borrowers', requireAuth, controller.listCoBorrowers);
+  // Bind existing Client data to Portal (2026-08-06) - MIS-only, mirrors "Only MIS may
+  // add/edit LMS member accounts" (canManageMembers on the frontend): creating/linking a client's
+  // portal login is the same class of sensitive account-provisioning action.
+  router.get('/borrowers/:id/portal-account', requireAuth, requireRole('MIS'), controller.getPortalAccountStatus);
+  router.post('/borrowers/:id/portal-account', requireAuth, requireRole('MIS'), controller.createPortalAccount);
+  router.post('/borrowers/:id/portal-account/bind', requireAuth, requireRole('MIS'), controller.bindPortalAccount);
   router.get('/borrowers', requireAuth, controller.list);
   router.patch(
     '/borrowers/:id',

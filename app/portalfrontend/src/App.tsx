@@ -19,6 +19,9 @@ import { LandingPage } from '@/pages/LandingPage';
 const SignUpPage = React.lazy(() => import('@/pages/SignUpPage').then((m) => ({ default: m.SignUpPage })));
 const VerifyEmailPage = React.lazy(() => import('@/pages/VerifyEmailPage').then((m) => ({ default: m.VerifyEmailPage })));
 const LoginPage = React.lazy(() => import('@/pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const ChangePasswordRequiredPage = React.lazy(() =>
+  import('@/pages/ChangePasswordRequiredPage').then((m) => ({ default: m.ChangePasswordRequiredPage })),
+);
 const ForgotPasswordPage = React.lazy(() => import('@/pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = React.lazy(() => import('@/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
 const DashboardPage = React.lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
@@ -41,10 +44,24 @@ const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage').then((m) =>
  * (#/dashboard) never hit the server for anything but the initial index.html load, so this works
  * on GitHub Pages with zero extra configuration. */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { account, isAuthenticated, isLoading } = useAuth();
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  // Bind existing Client data to Portal (2026-08-06): an account still on the shared staff-issued
+  // temp password cannot reach ANY other authenticated page until it's changed - see
+  // ChangePasswordRequiredPage's own doc comment for why this has no skip/dismiss option.
+  if (account?.mustChangePassword) return <Navigate to="/change-password-required" replace />;
   return <>{children}</>;
+}
+
+/** Reachable only while `mustChangePassword` is true - once cleared, nothing routes here again, so
+ * a direct visit just sends the client on to the dashboard instead of re-showing a stale form. */
+function ChangePasswordRequiredRoute() {
+  const { account, isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!account?.mustChangePassword) return <Navigate to="/dashboard" replace />;
+  return <ChangePasswordRequiredPage />;
 }
 
 /** Only shown once logged in - a visitor who hasn't signed up yet has no account for a loan
@@ -62,6 +79,7 @@ function AppRoutes() {
       <Route path="/signup" element={<SignUpPage />} />
       <Route path="/verify" element={<VerifyEmailPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/change-password-required" element={<ChangePasswordRequiredRoute />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />

@@ -64,6 +64,7 @@ export class VerifyPortalLoginOtpUseCase {
         borrowerId: account.borrowerId,
         twoFactorEnabled: account.twoFactorEnabled,
         twoFactorChannel: account.twoFactorChannel as PortalChallengeChannel | null,
+        mustChangePassword: account.mustChangePassword,
       },
     };
   }

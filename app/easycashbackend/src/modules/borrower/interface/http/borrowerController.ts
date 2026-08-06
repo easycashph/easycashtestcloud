@@ -11,6 +11,9 @@ import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorr
 import type { ListCoBorrowersUseCase } from '../../application/use-cases/ListCoBorrowersUseCase';
 import type { UpdateCoBorrowerUseCase } from '../../application/use-cases/UpdateCoBorrowerUseCase';
 import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
+import type { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
+import type { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
+import type { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import type {
   CreateBorrowerRequestBody,
   CreateCoBorrowerRequestBody,
@@ -29,6 +32,10 @@ export interface BorrowerControllerDeps {
   listCoBorrowersUseCase: ListCoBorrowersUseCase;
   updateCoBorrowerUseCase: UpdateCoBorrowerUseCase;
   getBorrowerRiskSummaryUseCase: GetBorrowerRiskSummaryUseCase;
+  /** Bind existing Client data to Portal (2026-08-06, MIS-only, Client Profile page). */
+  getBorrowerPortalAccountStatusUseCase: GetBorrowerPortalAccountStatusUseCase;
+  createPortalAccountForBorrowerUseCase: CreatePortalAccountForBorrowerUseCase;
+  bindPortalAccountToBorrowerUseCase: BindPortalAccountToBorrowerUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture), matching AuthController's shape. */
@@ -143,6 +150,44 @@ export class BorrowerController {
       assertBranchAccess(scope, existing.branchId);
       const summary = await this.deps.getBorrowerRiskSummaryUseCase.execute(req.params.id as string);
       res.status(200).json(summary);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPortalAccountStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const status = await this.deps.getBorrowerPortalAccountStatusUseCase.execute(req.params.id as string);
+      res.status(200).json(status);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createPortalAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const currentUser = getCurrentUser(req);
+      const result = await this.deps.createPortalAccountForBorrowerUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  bindPortalAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const currentUser = getCurrentUser(req);
+      const result = await this.deps.bindPortalAccountToBorrowerUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json({ id: result.id, email: result.email, status: result.status, mustChangePassword: result.mustChangePassword });
     } catch (error) {
       next(error);
     }

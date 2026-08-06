@@ -103,6 +103,9 @@ import { MarkAllPortalNotificationsReadUseCase } from '@modules/client-portal/ap
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
+import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
+import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
+import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -481,6 +484,10 @@ export function createApp(): Express {
   // separate auth realm from the staff identity module above (own JwtPortalTokenService/
   // PORTAL_JWT_SECRET, own PortalAccount/PortalAccountChallenge tables) - only passwordHasher and
   // otpSender are shared, since both are already generic, stateless infrastructure. ---
+  // Hoisted above this section's own wiring (2026-08-06, Bind existing Client data to Portal) -
+  // VerifySignUpUseCase below needs it for signup auto-bind-by-email, ahead of the borrower
+  // module's own wiring section (its canonical home) further down this file.
+  const borrowerRepository = new PrismaBorrowerRepository();
   const portalAccountRepository = new PrismaPortalAccountRepository();
   const portalAccountChallengeRepository = new PrismaPortalAccountChallengeRepository();
   const portalTokenService = new JwtPortalTokenService();
@@ -513,7 +520,7 @@ export function createApp(): Express {
   const portalAuthRouter = createPortalAuthRouter(
     {
       signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender: portalOtpSender }),
-      verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
+      verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, borrowerRepository, auditLogger }),
       resendSignUpOtpUseCase: new ResendSignUpOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       portalLoginUseCase: new PortalLoginUseCase({
         portalAccountRepository,
@@ -564,7 +571,8 @@ export function createApp(): Express {
   const profileActivityLogService = new ProfileActivityLogService(profileActivityLogRepository);
 
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
-  const borrowerRepository = new PrismaBorrowerRepository();
+  // borrowerRepository is hoisted above the Easycash Portal wiring section - see that section's own
+  // comment for why.
   const coBorrowerRepository = new PrismaCoBorrowerRepository();
   // Hoisted above the loan-account module's own wiring section below (their canonical home) since
   // the borrower risk-summary use case, wired here, needs them too — same instances, not duplicated.
@@ -597,6 +605,16 @@ export function createApp(): Express {
         repaymentInstallmentRepository: repaymentInstallmentRepositoryForBorrowerRisk,
         riskSummaryService: borrowerRiskSummaryService,
       }),
+      // Bind existing Client data to Portal (2026-08-06) - reuses the same portalAccountRepository/
+      // passwordHasher instances as the Easycash Portal module above.
+      getBorrowerPortalAccountStatusUseCase: new GetBorrowerPortalAccountStatusUseCase({ borrowerRepository, portalAccountRepository }),
+      createPortalAccountForBorrowerUseCase: new CreatePortalAccountForBorrowerUseCase({
+        borrowerRepository,
+        portalAccountRepository,
+        passwordHasher,
+        profileActivityLogService,
+      }),
+      bindPortalAccountToBorrowerUseCase: new BindPortalAccountToBorrowerUseCase({ borrowerRepository, portalAccountRepository, profileActivityLogService }),
     },
     tokenService,
   );

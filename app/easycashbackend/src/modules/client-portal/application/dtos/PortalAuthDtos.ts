@@ -36,6 +36,10 @@ export interface PortalAuthenticatedAccountView {
   borrowerId: string | null;
   twoFactorEnabled: boolean;
   twoFactorChannel: PortalChallengeChannel | null;
+  /** 2026-08-06 (Bind existing Client data to Portal) - true while this account is still on the
+   * staff-issued shared temp password. The portal frontend must block every other page until this
+   * clears (via `POST /portal/security/change-password`, which clears it on success). */
+  mustChangePassword: boolean;
 }
 
 export interface PortalLoginOutput {

@@ -31,6 +31,9 @@ export class ChangePortalPasswordUseCase {
     if (violations.length > 0) throw new PortalWeakPasswordError(violations);
 
     const passwordHash = await passwordHasher.hash(input.newPassword);
-    await portalAccountRepository.update(portalAccountId, { passwordHash });
+    // 2026-08-06 (Bind existing Client data to Portal): clears the forced-change flag whenever it
+    // was set (self-service password changes are a no-op here since it's already false) - this is
+    // the only way a staff-issued temp-password account becomes fully usable.
+    await portalAccountRepository.update(portalAccountId, { passwordHash, mustChangePassword: false });
   }
 }
