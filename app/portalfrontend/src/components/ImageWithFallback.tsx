@@ -55,6 +55,10 @@ export function ImageWithFallback({ src, alt, className, fallbackClassName, fall
       className={className}
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
+      // @types/react already types this (forward-compat with React 19, which special-cases it);
+      // React 18's runtime doesn't yet, so it logs a harmless "should be lowercase" console
+      // warning in dev while still setting the DOM attribute either way - not worth a type-unsafe
+      // workaround for a cosmetic dev-only warning.
       fetchPriority={priority ? 'high' : 'auto'}
       onError={() => setFailed(true)}
       {...rest}
