@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { validateBody } from '@shared/middleware/validate';
 import { RepaymentController, type RepaymentControllerDeps } from './repaymentController';
 import { adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
@@ -10,17 +10,11 @@ import { adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
  * Mostly D-2 (read-only) — CreateRepaymentInstallmentUseCase and RecordInstallmentPaymentUseCase
  * still have no route. `reduce-penalty`/`adjust-fees` below are the deliberate write exceptions
  * (2026-07-15/16, user-confirmed business rules).
+ *
+ * 2026-08-06: both moved from a hard-coded `requireRole(...)` allow-list to a DB-backed
+ * `requirePermission` check (Roles & Permissions feature). Default grant for both (2026-07-15/16,
+ * user-confirmed): "the accounting officer" — the seeded `Accounting` role, plus MIS.
  */
-
-/**
- * 2026-07-15 (Reduce Penalty feature, user-confirmed): "the accounting officer" — mapped to the
- * seeded `Accounting` role (`prisma/seed.ts`'s job-function roster). MIS included per this
- * codebase's standing convention of MIS being included in every role-gated allow-list.
- */
-const REDUCE_PENALTY_ROLES = ['MIS', 'Accounting'];
-
-/** 2026-07-16 (Adjust Fees feature, user-confirmed): same allow-list as Reduce Penalty. */
-const ADJUST_FEES_ROLES = ['MIS', 'Accounting'];
 
 export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
@@ -33,14 +27,14 @@ export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenServic
   router.post(
     '/repayment-installments/:id/reduce-penalty',
     requireAuth,
-    requireRole(...REDUCE_PENALTY_ROLES),
+    requirePermission('penalty.reduce'),
     validateBody(reducePenaltySchema),
     controller.reducePenalty,
   );
   router.post(
     '/repayment-installments/:id/adjust-fees',
     requireAuth,
-    requireRole(...ADJUST_FEES_ROLES),
+    requirePermission('fees.adjust'),
     validateBody(adjustFeesSchema),
     controller.adjustFees,
   );

@@ -214,6 +214,11 @@ import { ListRoleClassesUseCase } from '@modules/role-class/application/use-case
 import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
 import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
 import { DeleteRoleClassUseCase } from '@modules/role-class/application/use-cases/DeleteRoleClassUseCase';
+import { createAccessControlRouter } from '@modules/access-control/interface/http/AccessControlRouter';
+import { AccessControlController } from '@modules/access-control/interface/http/AccessControlController';
+import { PrismaAccessControlRepository } from '@modules/access-control/infrastructure/PrismaAccessControlRepository';
+import { ListRolesAndPermissionsUseCase } from '@modules/access-control/application/use-cases/ListRolesAndPermissionsUseCase';
+import { UpdateRolePermissionsUseCase } from '@modules/access-control/application/use-cases/UpdateRolePermissionsUseCase';
 import { createProductTypeLabelRouter } from '@modules/product-type-label/interface/http/ProductTypeLabelRouter';
 import { ProductTypeLabelController } from '@modules/product-type-label/interface/http/ProductTypeLabelController';
 import { ListProductTypeLabelsUseCase } from '@modules/product-type-label/application/use-cases/ListProductTypeLabelsUseCase';
@@ -548,6 +553,15 @@ export function createApp(): Express {
   });
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);
+
+  // --- access-control module wiring: Roles & Permissions screen (Administration > System, MIS-only) ---
+  const accessControlRepository = new PrismaAccessControlRepository();
+  const accessControlController = new AccessControlController({
+    listRolesAndPermissionsUseCase: new ListRolesAndPermissionsUseCase({ accessControlRepository }),
+    updateRolePermissionsUseCase: new UpdateRolePermissionsUseCase({ accessControlRepository, auditLogger }),
+  });
+  const accessControlRouter = createAccessControlRouter(accessControlController, tokenService);
+  app.use('/api/v1', accessControlRouter);
 
   // --- product-type-label module wiring: renamable display labels for the Loan Products catalog's Product Type groupings ---
   const productTypeLabelRepository = new PrismaProductTypeLabelRepository();
