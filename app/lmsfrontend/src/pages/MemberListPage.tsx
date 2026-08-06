@@ -15,6 +15,7 @@ import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { FieldLockToggle } from '@/components/FieldLockToggle';
+import { RolesPermissionsRestricted, RolesPermissionsTab } from '@/pages/RolesPermissionsTab';
 import { roleFullLabel } from '@/lib/roleGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
@@ -491,7 +492,7 @@ export function MemberListPage() {
   const [editDraft, setEditDraft] = React.useState<MemberDraft>(emptyDraft());
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
-  const [memberTab, setMemberTab] = React.useState<'members' | 'roles'>('members');
+  const [memberTab, setMemberTab] = React.useState<'members' | 'roles' | 'permissions'>('members');
 
   const {
     items: members,
@@ -577,15 +578,22 @@ export function MemberListPage() {
         <p className="text-sm text-muted-foreground">Staff accounts and organizational role classifications.</p>
       </div>
 
-      <Tabs value={memberTab} onValueChange={(v) => setMemberTab(v as 'members' | 'roles')}>
-        <TabsList className="grid w-full grid-cols-2 sm:w-64">
+      <Tabs value={memberTab} onValueChange={(v) => setMemberTab(v as 'members' | 'roles' | 'permissions')}>
+        <TabsList className="grid w-full grid-cols-3 sm:w-96">
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="roles">Roles</TabsTrigger>
+          <TabsTrigger value="permissions">Permissions</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {memberTab === 'roles' ? (
         <RolesTab canManageMembers={canManageMembers} />
+      ) : memberTab === 'permissions' ? (
+        canManageMembers ? (
+          <RolesPermissionsTab />
+        ) : (
+          <RolesPermissionsRestricted currentAccountName={currentAccount.name} currentAccountRole={currentAccount.role} />
+        )
       ) : (
         <div className="space-y-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
