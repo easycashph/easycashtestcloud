@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { motion, type Variants } from 'framer-motion';
 import {
+  Banknote,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -32,6 +34,12 @@ import { getDocumentsForProduct } from '@/lib/loanRequirements';
 
 const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
 const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
+/** 2026-08-06 (user request, competitor site review): only the two channels confirmed as real
+ * client-facing payment methods (see ACTIVE_PAYMENT_METHODS in app/lmsfrontend's staticConfig.ts) -
+ * most of that list is internal accounting/ledger categories (Suspense Account, Adjustment,
+ * Unearned Income, etc.), never something a client actually pays through, so this is deliberately
+ * a curated subset, not the full list. */
+const WAYS_TO_PAY_ICONS = [Banknote, CalendarClock];
 
 /** Client stories inherited from the legacy Easycash website. The numeric star ratings that
  * previously accompanied these were removed on 2026-07-28: they implied a verified review system
@@ -471,6 +479,42 @@ export function LandingPage() {
             );
           })}
         </motion.div>
+      </section>
+
+      {/* Ways to Pay (2026-08-06 user request, competitor site review) */}
+      <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
+        <div className="container">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.waysToPayTitle}</h2>
+            <p className="mt-3 text-muted-foreground">{t.landing.waysToPaySubtitle}</p>
+          </Reveal>
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: '-80px' }}
+            variants={stagger}
+            className="mx-auto mt-10 grid max-w-2xl gap-6 sm:grid-cols-2"
+          >
+            {t.landing.waysToPay.map((way, index) => {
+              const Icon = WAYS_TO_PAY_ICONS[index];
+              return (
+                <motion.div
+                  key={way.title}
+                  variants={fadeUp}
+                  className="flex items-start gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold">{way.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{way.body}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
       </section>
 
       {/* Testimonials */}
