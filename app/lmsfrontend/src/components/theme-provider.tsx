@@ -101,7 +101,10 @@ export const DEFAULT_DRAG_REORDER_ENABLED = false;
  * navy/gold/ivory light-only look, driven by `[data-theme-style='premium']` in index.css. */
 export type ThemeStyle = 'classic' | 'premium';
 
-export const DEFAULT_THEME_STYLE: ThemeStyle = 'classic';
+/** 2026-08-07 (user request): Premium, not Classic, is the platform default for anyone who hasn't
+ * picked a style yet - mirrors DEFAULT_THEME's own "changes what a never-configured user sees,
+ * never touches an already-stored choice" scope. */
+export const DEFAULT_THEME_STYLE: ThemeStyle = 'premium';
 
 export const THEME_STYLE_OPTIONS: { value: ThemeStyle; label: string; description: string }[] = [
   { value: 'classic', label: 'Classic', description: 'Current default look' },
@@ -201,16 +204,25 @@ function readThemeStyle(userId: string | null): ThemeStyle {
   return THEME_STYLE_VALUES.includes(stored as ThemeStyle) ? (stored as ThemeStyle) : DEFAULT_THEME_STYLE;
 }
 
+/** Premium has no dark variant (by design) - whenever it's the resolved style (stored or default),
+ * `theme` must resolve to 'light' too, same as `setThemeStyle` already forces on an explicit pick,
+ * so a never-configured user (or one who picked a theme before Premium became the default style)
+ * never lands on the contradictory dark+Premium combination. An officer who explicitly stored
+ * 'dark' AND explicitly stored 'classic'/no style opinion keeps dark, untouched. */
+function readEffectiveTheme(userId: string | null, themeStyle: ThemeStyle): Theme {
+  return themeStyle === 'premium' ? 'light' : readTheme(userId);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Ref, not state: mutated synchronously by loadPreferenceFor() and read by the persistence
   // effects below at their next run, without itself needing to trigger a re-render.
   const currentUserIdRef = React.useRef<string | null>(null);
-  const [theme, setTheme] = React.useState<Theme>(() => readTheme(null));
+  const [themeStyle, setThemeStyleState] = React.useState<ThemeStyle>(() => readThemeStyle(null));
+  const [theme, setTheme] = React.useState<Theme>(() => readEffectiveTheme(null, readThemeStyle(null)));
   const [accent, setAccent] = React.useState<Accent>(() => readAccent(null));
   const [customColor, setCustomColor] = React.useState<string>(() => readCustomColor(null));
   const [fontSize, setFontSize] = React.useState<FontSize>(() => readFontSize(null));
   const [dragReorderEnabled, setDragReorderEnabled] = React.useState<boolean>(() => readDragReorderEnabled(null));
-  const [themeStyle, setThemeStyleState] = React.useState<ThemeStyle>(() => readThemeStyle(null));
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -261,12 +273,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const loadPreferenceFor = React.useCallback((userId: string | null) => {
     currentUserIdRef.current = userId;
-    setTheme(readTheme(userId));
+    const style = readThemeStyle(userId);
+    setThemeStyleState(style);
+    setTheme(readEffectiveTheme(userId, style));
     setAccent(readAccent(userId));
     setCustomColor(readCustomColor(userId));
     setFontSize(readFontSize(userId));
     setDragReorderEnabled(readDragReorderEnabled(userId));
-    setThemeStyleState(readThemeStyle(userId));
   }, []);
 
   return (
