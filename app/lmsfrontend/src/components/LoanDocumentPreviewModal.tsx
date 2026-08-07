@@ -84,7 +84,13 @@ export function LoanDocumentPreviewModal({
 
         {!loading && !error && objectUrl && target && (
           <>
-            <iframe ref={iframeRef} src={objectUrl} className="h-[85vh] w-full rounded-md border" title={target.title} />
+            {/* 2026-08-07 (user-reported): Chrome's built-in PDF viewer renders its OWN toolbar inside
+                this iframe, including its own Download button - since that button downloads the raw
+                blob: URL directly (bypassing downloadFile()/buildDocumentFileName() below entirely),
+                it saved with the browser's generic default name instead of our naming convention.
+                #toolbar=0 (a standard PDF open parameter Chrome's viewer honors) hides that built-in
+                toolbar, so the button below is the only way to download and always gets the right name. */}
+            <iframe ref={iframeRef} src={`${objectUrl}#toolbar=0`} className="h-[85vh] w-full rounded-md border" title={target.title} />
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
