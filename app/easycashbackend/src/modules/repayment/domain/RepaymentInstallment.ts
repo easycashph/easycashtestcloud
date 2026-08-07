@@ -221,9 +221,17 @@ export class RepaymentInstallment {
    * algorithm's job, not this method's. This is the mechanical primitive
    * that algorithm will call once it exists.
    */
+  /**
+   * 2026-08-07 (user-reported): `ReversePaymentUseCase` calls this same method with negated
+   * amounts to undo a payment, and this unconditionally overwrote `lastPaidAt` to `paidAt`
+   * (`reversedAt` in that case) regardless of the result - a fully-reversed installment (paid back
+   * down to zero) kept showing a stale "Paid Date" even though every Amount Paid column reads
+   * "—". Only set `lastPaidAt` when something is actually still paid after this operation; clear
+   * it back to `undefined` otherwise, matching the Amount Paid columns' own "—" state.
+   */
   recordPayment(amount: InstallmentAmounts, paidAt: Date = new Date()): void {
     this.props.paid = this.props.paid.add(amount);
-    this.props.lastPaidAt = paidAt;
+    this.props.lastPaidAt = this.props.paid.total().isPositive() ? paidAt : undefined;
     this.props.updatedAt = new Date();
   }
 
