@@ -9,6 +9,9 @@ export interface LoanAdjustmentProps {
   reason?: string;
   adjustedByUserId: string;
   createdAt: Date;
+  /** 2026-08-07 (Undo Adjustment feature) — both undefined until undone; see `markUndone()`. */
+  undoneAt?: Date;
+  undoneByUserId?: string;
 }
 
 export interface CreateLoanAdjustmentProps {
@@ -47,6 +50,21 @@ export class LoanAdjustment {
     return new LoanAdjustment(props);
   }
 
+  /**
+   * 2026-08-07 (Undo Adjustment feature, user-confirmed): the ONE exception to this row's own
+   * "immutable, never edited" doc comment above - marks it undone rather than deleting it, so the
+   * adjustment still shows in this loan's history. Throws if already undone (the use-case layer's
+   * `LoanAdjustmentAlreadyUndoneError` pre-check is the friendlier path; this is a last-resort
+   * guard).
+   */
+  markUndone(undoneByUserId: string, undoneAt: Date = new Date()): void {
+    if (this.props.undoneAt) {
+      throw new Error(`LoanAdjustment ${this.props.id} is already undone.`);
+    }
+    this.props.undoneAt = undoneAt;
+    this.props.undoneByUserId = undoneByUserId;
+  }
+
   get id(): string {
     return this.props.id;
   }
@@ -77,5 +95,13 @@ export class LoanAdjustment {
 
   get createdAt(): Date {
     return this.props.createdAt;
+  }
+
+  get undoneAt(): Date | undefined {
+    return this.props.undoneAt;
+  }
+
+  get undoneByUserId(): string | undefined {
+    return this.props.undoneByUserId;
   }
 }

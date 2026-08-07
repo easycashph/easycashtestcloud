@@ -139,6 +139,60 @@ export class LoanAlreadyAdjustedError extends DomainError {
 }
 
 /**
+ * 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed, same "safety net for an
+ * accidental/premature action, not a general-purpose unwind" posture as `LoanAccountHasActivityError`
+ * - a distinct class rather than reusing that one outright, since its message hardcodes "undo
+ * activation" wording that wouldn't fit this case): refuses to undo once the NEW loan the
+ * restructure/adjustment created already has a recorded REPAYMENT, or a Reduce Penalty/Adjust Fees
+ * override on any of its installments.
+ */
+export class NewLoanAccountHasActivityError extends DomainError {
+  constructor(newLoanAccountId: string, reason: string) {
+    super('NEW_LOAN_ACCOUNT_HAS_ACTIVITY', `Cannot undo: the new LoanAccount ${newLoanAccountId} ${reason}.`, undefined, 400);
+    this.name = 'NewLoanAccountHasActivityError';
+  }
+}
+
+/**
+ * 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed): a restructure/adjustment
+ * may only be undone once - guards a double-undo (e.g. a double-click) rather than silently
+ * no-opping or corrupting the audit row's `undoneAt`.
+ */
+export class LoanRestructureAlreadyUndoneError extends DomainError {
+  constructor(loanRestructureId: string) {
+    super('LOAN_RESTRUCTURE_ALREADY_UNDONE', `LoanRestructure ${loanRestructureId} has already been undone.`, undefined, 409);
+    this.name = 'LoanRestructureAlreadyUndoneError';
+  }
+}
+
+/** Same as `LoanRestructureAlreadyUndoneError`, for `LoanAdjustment`. */
+export class LoanAdjustmentAlreadyUndoneError extends DomainError {
+  constructor(loanAdjustmentId: string) {
+    super('LOAN_ADJUSTMENT_ALREADY_UNDONE', `LoanAdjustment ${loanAdjustmentId} has already been undone.`, undefined, 409);
+    this.name = 'LoanAdjustmentAlreadyUndoneError';
+  }
+}
+
+/**
+ * 2026-08-07 (Undo Restructure / Undo Adjustment feature): thrown when a loan account has never
+ * been restructured/adjusted at all (nothing to undo) - distinct from "already undone" above.
+ */
+export class LoanNotRestructuredError extends DomainError {
+  constructor(loanAccountId: string) {
+    super('LOAN_NOT_RESTRUCTURED', `LoanAccount ${loanAccountId} has not been restructured.`, undefined, 404);
+    this.name = 'LoanNotRestructuredError';
+  }
+}
+
+/** Same as `LoanNotRestructuredError`, for adjustment. */
+export class LoanNotAdjustedError extends DomainError {
+  constructor(loanAccountId: string) {
+    super('LOAN_NOT_ADJUSTED', `LoanAccount ${loanAccountId} has not been adjusted.`, undefined, 404);
+    this.name = 'LoanNotAdjustedError';
+  }
+}
+
+/**
  * Milestone 9.1 checkpoint 8 / `CALCULATION_ENGINE_SPEC.md` §4: only
  * `DECLINING_BALANCE`/`DECLINING_BALANCE_DISCOUNTED` are `STATUS: CONFIRMED`
  * and implemented (`AmortizationScheduleGenerator`, CP3) - both are

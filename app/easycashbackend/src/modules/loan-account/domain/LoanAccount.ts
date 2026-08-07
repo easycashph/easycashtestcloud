@@ -16,7 +16,8 @@ export type LoanAccountStatus =
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED'
   | 'CLOSED_RESTRUCTURED'
-  | 'CLOSED_ADJUSTED';
+  | 'CLOSED_ADJUSTED'
+  | 'CLOSED_UNDONE';
 
 export type RepaymentPeriodUnit = 'MONTHS';
 
@@ -51,11 +52,33 @@ export type RepaymentPeriodUnit = 'MONTHS';
  * `ACTIVE_IN_ARREARS` - by definition a loan eligible for adjustment has zero payments and hasn't
  * reached its first due date yet, so it can never have been in arrears). Same "no outbound
  * transitions" shape as CLOSED_RESTRUCTURED - the new account it produced is the live one now.
+ *
+ * 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed, permission-gated -
+ * `loan_account.undo_restructure`/`loan_account.undo_adjust`, independently grantable, not tied to
+ * MIS or to the permission that performs the restructure/adjustment itself): `CLOSED_RESTRUCTURED
+ * -> ACTIVE` (`undoRestructureClose()`) and `CLOSED_ADJUSTED -> ACTIVE` (`undoAdjustClose()`) on
+ * the OLD account - always to ACTIVE regardless of whether it was ACTIVE or ACTIVE_IN_ARREARS
+ * before closing (arrears is a live-computed bucket elsewhere, not reliably tracked by this raw
+ * enum - see `openVennSegment`'s `displayStatusOverride` in `DashboardPage.tsx` for the same
+ * observation). The NEW account the restructure/adjustment created transitions `ACTIVE ->
+ * CLOSED_UNDONE` (`markUndoneByRestructure()`/`markUndoneByAdjustment()`) - retired, not deleted,
+ * since the `LoanRestructure`/`LoanAdjustment` audit row that references it is itself never
+ * deleted (see that model's own doc comment). Both guarded at the use-case layer
+ * (`UndoRestructureLoanUseCase`/`UndoAdjustLoanUseCase`) against the new loan already having a
+ * recorded payment or penalty/fee override, mirroring `UndoActivateLoanUseCase`'s own guard.
  */
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
   APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
-  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED', 'APPROVED'],
+  ACTIVE: [
+    'ACTIVE_IN_ARREARS',
+    'CLOSED',
+    'CLOSED_WRITTEN_OFF',
+    'CLOSED_RESTRUCTURED',
+    'CLOSED_ADJUSTED',
+    'CLOSED_UNDONE',
+    'APPROVED',
+  ],
   ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED'],
   // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
   // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
@@ -64,8 +87,11 @@ const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   CLOSED: ['ACTIVE'],
   CLOSED_WRITTEN_OFF: [],
   CLOSED_REJECTED: [],
-  CLOSED_ADJUSTED: [],
-  CLOSED_RESTRUCTURED: [],
+  // -> ACTIVE only, via undoAdjustClose()/undoRestructureClose() - see this constant's own doc
+  // comment above for the full undo design.
+  CLOSED_ADJUSTED: ['ACTIVE'],
+  CLOSED_RESTRUCTURED: ['ACTIVE'],
+  CLOSED_UNDONE: [],
 };
 
 export interface LoanAccountProps {
@@ -679,6 +705,45 @@ export class LoanAccount {
     this.transitionTo('CLOSED_ADJUSTED');
     this.props.closedAt = new Date();
     this.props.closedReason = 'Adjusted';
+  }
+
+  /**
+   * 2026-08-07 (Undo Restructure feature, user-confirmed): undoes `restructureClose()` on the OLD
+   * account — transitions `CLOSED_RESTRUCTURED -> ACTIVE`, clears `closedAt`/`closedReason`.
+   * Always to `ACTIVE` (not `ACTIVE_IN_ARREARS`) regardless of which one this loan was in before
+   * the restructure - see `ALLOWED_TRANSITIONS`'s own doc comment for why. Balances were never
+   * touched by `restructureClose()` in the first place, so nothing to restore here. The use-case
+   * layer (`UndoRestructureLoanUseCase`) is responsible for confirming the NEW loan has no
+   * recorded payment/penalty-fee-override before calling this, and for retiring that new loan via
+   * `markUndone()` below - this entity has no ledger/installment access and cannot check either
+   * itself.
+   */
+  undoRestructureClose(): void {
+    this.transitionTo('ACTIVE');
+    this.props.closedAt = undefined;
+    this.props.closedReason = undefined;
+  }
+
+  /** 2026-08-07 (Undo Adjustment feature, user-confirmed): same as `undoRestructureClose()` above, for `CLOSED_ADJUSTED -> ACTIVE`. */
+  undoAdjustClose(): void {
+    this.transitionTo('ACTIVE');
+    this.props.closedAt = undefined;
+    this.props.closedReason = undefined;
+  }
+
+  /**
+   * 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed): retires the NEW
+   * account a restructure/adjustment created, once that action is undone - `ACTIVE ->
+   * CLOSED_UNDONE`. Retired rather than deleted since the `LoanRestructure`/`LoanAdjustment` audit
+   * row that references it is itself never deleted (see that model's own doc comment) - a Prisma
+   * foreign key requires the row it points to to still exist. Deliberately does NOT touch this
+   * loan's `RepaymentInstallment` rows or `DISBURSEMENT` `LoanTransaction` - same "financial
+   * records are never deleted" posture `undoActivate()` already established for its own case.
+   */
+  markUndone(): void {
+    this.transitionTo('CLOSED_UNDONE');
+    this.props.closedAt = new Date();
+    this.props.closedReason = 'Restructure/adjustment undone';
   }
 
   /**

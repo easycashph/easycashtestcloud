@@ -19,15 +19,20 @@ export interface LoanRestructureView {
   restructuredByUserId: string;
   restructuredByName: string | null;
   createdAt: Date;
+  /** 2026-08-07 (Undo Restructure feature) — both null unless this restructure has been undone. */
+  undoneAt: Date | null;
+  undoneByName: string | null;
 }
 
 export interface ILoanRestructureRepository {
-  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated. */
+  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated except via `update()`. */
   create(restructure: LoanRestructure, ctx?: TransactionContext): Promise<void>;
-  /** Non-null only when `loanAccountId` was the OLD side of a restructure (enforces the one-time-only rule). */
+  /** Non-null only when `loanAccountId` was the OLD side of a currently-ACTIVE (not undone) restructure. */
   findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
   /** Non-null only when `loanAccountId` was the NEW side of a restructure. */
   findByNewLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
+  /** 2026-08-07 (Undo Restructure feature): persists `LoanRestructure.markUndone()` - the one field this row is ever allowed to change after creation. */
+  update(restructure: LoanRestructure, ctx?: TransactionContext): Promise<void>;
   /** Display-ready view for either side of a restructure, whichever `loanAccountId` participated in — used by the Loan Detail page. */
   findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructureView | null>;
 }

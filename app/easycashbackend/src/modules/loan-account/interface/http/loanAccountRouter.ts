@@ -109,6 +109,11 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     controller.restructure,
   );
   router.get('/loan-accounts/:id/restructure', requireAuth, controller.getRestructure);
+  // 2026-08-07 (Undo Restructure feature, user-confirmed): a separate, independently-grantable
+  // permission from 'loan_account.restructure' - who can UNDO one is not necessarily who can
+  // perform one. Eligibility (new loan has no payment/penalty/fee activity) enforced by
+  // UndoRestructureLoanUseCase, not this router.
+  router.post('/loan-accounts/:id/undo-restructure', requireAuth, requirePermission('loan_account.undo_restructure'), controller.undoRestructure);
   router.get('/loan-accounts/:id/accrued-interest', requireAuth, controller.accruedInterest);
 
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): offered only for a zero-payment ACTIVE
@@ -122,6 +127,9 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     controller.adjust,
   );
   router.get('/loan-accounts/:id/adjust', requireAuth, controller.getAdjustment);
+  // 2026-08-07 (Undo Adjustment feature, user-confirmed): same "separate, independently-grantable
+  // permission" posture as undo-restructure above.
+  router.post('/loan-accounts/:id/undo-adjust', requireAuth, requirePermission('loan_account.undo_adjust'), controller.undoAdjust);
 
   return router;
 }

@@ -160,6 +160,13 @@ enum LoanAccountStatus {
   /// the LoanAdjustment model). Distinct from CLOSED_RESTRUCTURED - no balance/principal change at
   /// all here, purely a due-date correction.
   CLOSED_ADJUSTED
+  /// 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed): the terminal state
+  /// for the NEW loan account a restructure/adjustment created, once that action is undone. The
+  /// OLD loan account returns to ACTIVE (see LoanAccount.ts's undoRestructureClose()/
+  /// undoAdjustClose()); this new one is retired here instead of deleted, since the
+  /// LoanRestructure/LoanAdjustment audit row that references it is never deleted either
+  /// (undoneAt/undoneByUserId mark it undone, the row itself stays forever as history).
+  CLOSED_UNDONE
 }
 
 /// TXN-1..2: append-only ledger entry types. Note: "DISBURSEMENT" is
@@ -285,8 +292,10 @@ model User {
   penaltyReductionsMade         PenaltyReduction[]
   feesOverridesSet              RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade            FeeAdjustment[]
-  loanRestructuresMade          LoanRestructure[]
-  loanAdjustmentsMade           LoanAdjustment[]
+  loanRestructuresMade          LoanRestructure[] @relation("LoanRestructureBy")
+  loanAdjustmentsMade           LoanAdjustment[]  @relation("LoanAdjustmentBy")
+  loanRestructuresUndone        LoanRestructure[] @relation("LoanRestructureUndoneBy")
+  loanAdjustmentsUndone         LoanAdjustment[]  @relation("LoanAdjustmentUndoneBy")
   notificationsReceived         Notification[]
   reminderSettingsUpdated       ReminderSettings[]
   chatConversationsClaimed         ChatConversation[] @relation("ChatConversationClaimedBy")
@@ -1315,11 +1324,15 @@ model LoanAccount {
   loanSigningSessions          LoanSigningSession[]
   signingNotificationLogs      SigningNotificationLog[]
   /// 2026-07-24 (Loan Restructure) — set on the OLD account when it was closed via restructure.
-  restructuredFromRecord       LoanRestructure?              @relation("OldLoanRestructure")
+  /// 2026-08-07 (Undo Restructure): plural now that oldLoanAccountId is no longer @unique on
+  /// LoanRestructure - an old loan can accumulate more than one row over its lifetime (an undone
+  /// one, then a fresh one). Most callers only care about the latest/active one.
+  restructuredFromRecords      LoanRestructure[]             @relation("OldLoanRestructure")
   /// 2026-07-24 (Loan Restructure) — set on the NEW account created by a restructure.
   restructuredIntoRecord       LoanRestructure?              @relation("NewLoanRestructure")
   /// 2026-07-24 (Loan Adjustment) — set on the OLD account when it was closed via adjustment.
-  adjustedFromRecord           LoanAdjustment?               @relation("OldLoanAdjustment")
+  /// 2026-08-07 (Undo Adjustment): plural, same reason as restructuredFromRecords above.
+  adjustedFromRecords          LoanAdjustment[]              @relation("OldLoanAdjustment")
   /// 2026-07-24 (Loan Adjustment) — set on the NEW account created by an adjustment.
   adjustedIntoRecord           LoanAdjustment?               @relation("NewLoanAdjustment")
 
@@ -1543,10 +1556,21 @@ model PenaltyReduction {
 model LoanRestructure {
   id String @id @default(uuid())
 
-  oldLoanAccountId String      @unique
+  /// 2026-08-07 (Undo Restructure feature, user-confirmed): was `@unique` - relaxed to a plain
+  /// index so a loan account can have more than one LoanRestructure row over its lifetime (an
+  /// undone one, then a fresh one). `LoanAlreadyRestructuredError`'s pre-check now only counts a
+  /// row with `undoneAt IS NULL` as "already restructured."
+  oldLoanAccountId String
   oldLoanAccount   LoanAccount @relation("OldLoanRestructure", fields: [oldLoanAccountId], references: [id])
   newLoanAccountId String      @unique
   newLoanAccount   LoanAccount @relation("NewLoanRestructure", fields: [newLoanAccountId], references: [id])
+
+  /// 2026-08-07 (Undo Restructure feature, user-confirmed): this row is NEVER deleted, even once
+  /// undone - undoneAt/undoneByUserId mark it as reversed instead, so the restructure still shows
+  /// in this loan's history. Both null until undone.
+  undoneAt       DateTime?
+  undoneByUserId String?
+  undoneBy       User?     @relation("LoanRestructureUndoneBy", fields: [undoneByUserId], references: [id])
 
   /// The old loan's full Collections Balance (principal + interest + fees + penalty) at the
   /// moment of restructure — user-confirmed to become the new loan's entire principal amount,
@@ -1562,9 +1586,10 @@ model LoanRestructure {
   reason String?
 
   restructuredByUserId String
-  restructuredBy       User     @relation(fields: [restructuredByUserId], references: [id])
+  restructuredBy       User     @relation("LoanRestructureBy", fields: [restructuredByUserId], references: [id])
   createdAt            DateTime @default(now())
 
+  @@index([oldLoanAccountId])
   @@map("loan_restructures")
 }
 
@@ -1576,10 +1601,18 @@ model LoanRestructure {
 model LoanAdjustment {
   id String @id @default(uuid())
 
-  oldLoanAccountId String      @unique
+  /// 2026-08-07 (Undo Adjustment feature) - same "@unique relaxed to a plain index" change as
+  /// LoanRestructure.oldLoanAccountId, for the same reason.
+  oldLoanAccountId String
   oldLoanAccount   LoanAccount @relation("OldLoanAdjustment", fields: [oldLoanAccountId], references: [id])
   newLoanAccountId String      @unique
   newLoanAccount   LoanAccount @relation("NewLoanAdjustment", fields: [newLoanAccountId], references: [id])
+
+  /// 2026-08-07 (Undo Adjustment feature) - same "never deleted, just marked" posture as
+  /// LoanRestructure.undoneAt/undoneByUserId.
+  undoneAt       DateTime?
+  undoneByUserId String?
+  undoneBy       User?     @relation("LoanAdjustmentUndoneBy", fields: [undoneByUserId], references: [id])
 
   previousFirstRepaymentDate DateTime
   newFirstRepaymentDate      DateTime
@@ -1587,9 +1620,10 @@ model LoanAdjustment {
   reason String?
 
   adjustedByUserId String
-  adjustedBy       User     @relation(fields: [adjustedByUserId], references: [id])
+  adjustedBy       User     @relation("LoanAdjustmentBy", fields: [adjustedByUserId], references: [id])
   createdAt        DateTime @default(now())
 
+  @@index([oldLoanAccountId])
   @@map("loan_adjustments")
 }
 

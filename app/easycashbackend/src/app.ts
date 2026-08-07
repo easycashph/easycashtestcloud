@@ -153,6 +153,8 @@ import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cas
 import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
+import { UndoRestructureLoanUseCase } from '@modules/loan-account/application/use-cases/UndoRestructureLoanUseCase';
+import { UndoAdjustLoanUseCase } from '@modules/loan-account/application/use-cases/UndoAdjustLoanUseCase';
 import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
 import { AdjustLoanUseCase } from '@modules/loan-account/application/use-cases/AdjustLoanUseCase';
 import { GetLoanAdjustmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanAdjustmentUseCase';
@@ -771,6 +773,18 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
+      // 2026-08-07 (Undo Restructure feature, user-confirmed): same local-repository-instance
+      // precedent as undoActivateLoanUseCase above.
+      undoRestructureLoanUseCase: new UndoRestructureLoanUseCase({
+        loanAccountRepository,
+        loanRestructureRepository,
+        loanTransactionRepository,
+        penaltyReductionRepository: new PrismaPenaltyReductionRepository(),
+        feeAdjustmentRepository: new PrismaFeeAdjustmentRepository(),
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
       // 2026-07-24 (Loan Adjustment feature, user-confirmed): same local-repository-instance
       // precedent as restructureLoanUseCase above.
       adjustLoanUseCase: new AdjustLoanUseCase({
@@ -784,6 +798,18 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanAdjustmentUseCase: new GetLoanAdjustmentUseCase({ loanAdjustmentRepository }),
+      // 2026-08-07 (Undo Adjustment feature, user-confirmed): same local-repository-instance
+      // precedent as undoRestructureLoanUseCase above.
+      undoAdjustLoanUseCase: new UndoAdjustLoanUseCase({
+        loanAccountRepository,
+        loanAdjustmentRepository,
+        loanTransactionRepository,
+        penaltyReductionRepository: new PrismaPenaltyReductionRepository(),
+        feeAdjustmentRepository: new PrismaFeeAdjustmentRepository(),
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
       getAccruedInterestUseCase: new GetAccruedInterestUseCase({ loanAccountRepository, repaymentInstallmentRepository, loanProductRepository }),
       idempotencyKeyStore,
     },

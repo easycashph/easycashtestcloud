@@ -17,15 +17,20 @@ export interface LoanAdjustmentView {
   adjustedByUserId: string;
   adjustedByName: string | null;
   createdAt: Date;
+  /** 2026-08-07 (Undo Adjustment feature) — both null unless this adjustment has been undone. */
+  undoneAt: Date | null;
+  undoneByName: string | null;
 }
 
 export interface ILoanAdjustmentRepository {
-  /** Immutable rows (see `LoanAdjustment`'s own doc comment) — never updated. */
+  /** Immutable rows (see `LoanAdjustment`'s own doc comment) — never updated except via `update()`. */
   create(adjustment: LoanAdjustment, ctx?: TransactionContext): Promise<void>;
-  /** Non-null only when `loanAccountId` was the OLD side of an adjustment (enforces the one-time-only rule). */
+  /** Non-null only when `loanAccountId` was the OLD side of a currently-ACTIVE (not undone) adjustment. */
   findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustment | null>;
   /** Non-null only when `loanAccountId` was the NEW side of an adjustment. */
   findByNewLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustment | null>;
+  /** 2026-08-07 (Undo Adjustment feature): persists `LoanAdjustment.markUndone()` - the one field this row is ever allowed to change after creation. */
+  update(adjustment: LoanAdjustment, ctx?: TransactionContext): Promise<void>;
   /** Display-ready view for either side of an adjustment, whichever `loanAccountId` participated in — used by the Loan Detail page. */
   findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustmentView | null>;
 }

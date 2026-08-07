@@ -14,5 +14,7 @@ export function presentLoanAdjustment(view: LoanAdjustmentView) {
     adjustedByUserId: view.adjustedByUserId,
     adjustedByName: view.adjustedByName,
     createdAt: view.createdAt.toISOString(),
+    undoneAt: view.undoneAt ? view.undoneAt.toISOString() : null,
+    undoneByName: view.undoneByName,
   };
 }

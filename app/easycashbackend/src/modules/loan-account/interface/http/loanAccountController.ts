@@ -21,8 +21,10 @@ import type { ReversePaymentUseCase } from '../../application/use-cases/ReverseP
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
 import type { RestructureLoanUseCase } from '../../application/use-cases/RestructureLoanUseCase';
 import type { GetLoanRestructureUseCase } from '../../application/use-cases/GetLoanRestructureUseCase';
+import type { UndoRestructureLoanUseCase } from '../../application/use-cases/UndoRestructureLoanUseCase';
 import type { AdjustLoanUseCase } from '../../application/use-cases/AdjustLoanUseCase';
 import type { GetLoanAdjustmentUseCase } from '../../application/use-cases/GetLoanAdjustmentUseCase';
+import type { UndoAdjustLoanUseCase } from '../../application/use-cases/UndoAdjustLoanUseCase';
 import type { GetAccruedInterestUseCase } from '../../application/use-cases/GetAccruedInterestUseCase';
 import { presentAccruedInterest } from './presenters/AccruedInterestPresenter';
 import type {
@@ -54,8 +56,10 @@ export interface LoanAccountControllerDeps {
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   restructureLoanUseCase: RestructureLoanUseCase;
   getLoanRestructureUseCase: GetLoanRestructureUseCase;
+  undoRestructureLoanUseCase: UndoRestructureLoanUseCase;
   adjustLoanUseCase: AdjustLoanUseCase;
   getLoanAdjustmentUseCase: GetLoanAdjustmentUseCase;
+  undoAdjustLoanUseCase: UndoAdjustLoanUseCase;
   getAccruedInterestUseCase: GetAccruedInterestUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
@@ -406,6 +410,36 @@ export class LoanAccountController {
       assertBranchAccess(scope, existing.branchId);
       const view = await this.deps.getLoanAdjustmentUseCase.execute(req.params.id as string);
       res.status(200).json(view ? presentLoanAdjustment(view) : null);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-07 (Undo Restructure feature, user-confirmed) — permission gate enforced at the router (`loan_account.undo_restructure`, independently grantable). */
+  undoRestructure = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      await this.deps.undoRestructureLoanUseCase.execute(req.params.id as string, currentUser.sub);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      res.status(200).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-07 (Undo Adjustment feature, user-confirmed) — permission gate enforced at the router (`loan_account.undo_adjust`, independently grantable). */
+  undoAdjust = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      await this.deps.undoAdjustLoanUseCase.execute(req.params.id as string, currentUser.sub);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      res.status(200).json(presentLoanAccount(loanAccount));
     } catch (error) {
       next(error);
     }

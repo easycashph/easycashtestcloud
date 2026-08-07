@@ -14,5 +14,7 @@ export function presentLoanRestructure(view: LoanRestructureView) {
     restructuredByUserId: view.restructuredByUserId,
     restructuredByName: view.restructuredByName,
     createdAt: view.createdAt.toISOString(),
+    undoneAt: view.undoneAt ? view.undoneAt.toISOString() : null,
+    undoneByName: view.undoneByName,
   };
 }

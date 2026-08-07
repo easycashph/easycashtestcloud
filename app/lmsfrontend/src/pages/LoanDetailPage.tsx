@@ -1081,7 +1081,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     });
   };
 
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<
+    'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | 'UNDO_RESTRUCTURE' | 'UNDO_ADJUST' | null
+  >(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
   const restructureIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -1374,8 +1376,33 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onSuccess: onActionSuccess,
     onError: onActionError,
   });
+  // 2026-08-07 (Undo Restructure / Undo Adjustment, user-confirmed): same safety-net shape as
+  // Undo Approve/Undo Activate above, gated by their own independently-grantable permissions
+  // ('loan_account.undo_restructure'/'loan_account.undo_adjust') rather than reusing the
+  // restructure/adjust permission - who can perform one isn't necessarily who can undo one.
+  const undoRestructureMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-restructure`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['loan-restructure', loanId] });
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+  const undoAdjustMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-adjust`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['loan-adjustment', loanId] });
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
   const actionPending =
-    approveMutation.isPending || activateMutation.isPending || undoApproveMutation.isPending || undoActivateMutation.isPending;
+    approveMutation.isPending ||
+    activateMutation.isPending ||
+    undoApproveMutation.isPending ||
+    undoActivateMutation.isPending ||
+    undoRestructureMutation.isPending ||
+    undoAdjustMutation.isPending;
 
   const reverseMutation = useMutation({
     mutationFn: () =>
@@ -1475,7 +1502,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
-  const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE') => {
+  const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | 'UNDO_RESTRUCTURE' | 'UNDO_ADJUST') => {
     setActionError(null);
     setConfirmAction(action);
   };
@@ -1522,6 +1549,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
     else if (confirmAction === 'UNDO_APPROVE') undoApproveMutation.mutate();
     else if (confirmAction === 'UNDO_ACTIVATE') undoActivateMutation.mutate();
+    else if (confirmAction === 'UNDO_RESTRUCTURE') undoRestructureMutation.mutate();
+    else if (confirmAction === 'UNDO_ADJUST') undoAdjustMutation.mutate();
   };
 
   const borrowerQuery = useQuery({
@@ -1898,7 +1927,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
   // account" - once this loan is the OLD side of a restructure, never offered again.
   const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
-  const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
+  // 2026-08-07 (Undo Restructure, user-confirmed): "pwede pang mag-restructure ulit pagkatapos" -
+  // an undone restructure no longer blocks a fresh one.
+  const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id && !restructureQuery.data.undoneAt;
   const canRestructure =
     canManageInstallments && canRestructureLoanPermission && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
@@ -1913,7 +1944,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     null,
   );
   const isBeforeFirstDueDate = firstInstallmentDueDate === null || new Date() < firstInstallmentDueDate;
-  const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id;
+  // 2026-08-07 (Undo Adjustment, user-confirmed): same "can redo after undo" posture as
+  // restructure above.
+  const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id && !adjustmentQuery.data.undoneAt;
   const canAdjust =
     canManageInstallments && canAdjustLoanPermission && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
@@ -2084,8 +2117,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             // (ORIGINATION_ROLES), same reasoning as Reverse Payment below.
             const canUndoApprove = hasPermission('loan_account.undo_approve') && loan.status === 'APPROVED';
             const canUndoActivate = hasPermission('loan_account.undo_activate') && loan.status === 'ACTIVE';
+            // 2026-08-07 (Undo Restructure / Undo Adjustment, user-confirmed): separate,
+            // independently-grantable permissions from restructure/adjust themselves - gated the
+            // same way as undo_approve/undo_activate above, keyed off the OLD loan's closed status.
+            const canUndoRestructure = hasPermission('loan_account.undo_restructure') && loan.status === 'CLOSED_RESTRUCTURED';
+            const canUndoAdjust = hasPermission('loan_account.undo_adjust') && loan.status === 'CLOSED_ADJUSTED';
             const canEdit = canCreateLoanAccount && loan.status === 'PENDING_APPROVAL';
-            const hasAnySecondaryAction = canUndoApprove || canUndoActivate || canRestructure || canAdjust || canEdit;
+            const hasAnySecondaryAction =
+              canUndoApprove || canUndoActivate || canUndoRestructure || canUndoAdjust || canRestructure || canAdjust || canEdit;
             if (!hasAnySecondaryAction) return null;
             return (
               <DropdownMenu>
@@ -2106,6 +2145,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       Undo Disburse
                     </DropdownMenuItem>
                   )}
+                  {canUndoRestructure && (
+                    <DropdownMenuItem onSelect={() => openConfirm('UNDO_RESTRUCTURE')}>Undo Restructure</DropdownMenuItem>
+                  )}
+                  {canUndoAdjust && <DropdownMenuItem onSelect={() => openConfirm('UNDO_ADJUST')}>Undo Loan Adjustment</DropdownMenuItem>}
                   {canRestructure && <DropdownMenuItem onSelect={openRestructureConfirm}>Restructure</DropdownMenuItem>}
                   {canAdjust && <DropdownMenuItem onSelect={openAdjustConfirm}>Loan Adjustment</DropdownMenuItem>}
                 </DropdownMenuContent>
@@ -2149,6 +2192,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {restructureQuery.data.newLoanCode}
               </Link>
               {' '}on {formatDate(restructureQuery.data.createdAt)}.
+              {restructureQuery.data.undoneAt && (
+                <>
+                  {' '}This restructure was later undone
+                  {restructureQuery.data.undoneByName ? ` by ${restructureQuery.data.undoneByName}` : ''} on{' '}
+                  {formatDate(restructureQuery.data.undoneAt)}.
+                </>
+              )}
             </span>
           ) : (
             <span>
@@ -2174,6 +2224,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {adjustmentQuery.data.newLoanCode}
               </Link>
               {' '}on {formatDate(adjustmentQuery.data.createdAt)}.
+              {adjustmentQuery.data.undoneAt && (
+                <>
+                  {' '}This adjustment was later undone
+                  {adjustmentQuery.data.undoneByName ? ` by ${adjustmentQuery.data.undoneByName}` : ''} on{' '}
+                  {formatDate(adjustmentQuery.data.undoneAt)}.
+                </>
+              )}
             </span>
           ) : (
             <span>
@@ -3377,7 +3434,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   ? 'disbursement'
                   : confirmAction === 'UNDO_APPROVE'
                     ? 'undo approve'
-                    : 'undo disburse'}
+                    : confirmAction === 'UNDO_ACTIVATE'
+                      ? 'undo disburse'
+                      : confirmAction === 'UNDO_RESTRUCTURE'
+                        ? 'undo restructure'
+                        : 'undo loan adjustment'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'APPROVE' &&
@@ -3388,6 +3449,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 `This will move ${loan.loanCode} back from Approved to Pending Approval, so its term/amount can be corrected before approving again.`}
               {confirmAction === 'UNDO_ACTIVATE' &&
                 `This will move ${loan.loanCode} back from Active to Approved — its repayment schedule will be deleted and balances reset to zero. Only allowed while no payment or penalty/fee adjustment has been recorded yet. The original disbursement stays in Payment History as a record of what happened.`}
+              {confirmAction === 'UNDO_RESTRUCTURE' &&
+                `This will move ${loan.loanCode} back to Active and retire the loan it was restructured into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. The restructure stays in this loan's history, marked as undone.`}
+              {confirmAction === 'UNDO_ADJUST' &&
+                `This will move ${loan.loanCode} back to Active and retire the loan it was adjusted into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. The adjustment stays in this loan's history, marked as undone.`}
             </DialogDescription>
           </DialogHeader>
           {confirmAction === 'ACTIVATE' && (
