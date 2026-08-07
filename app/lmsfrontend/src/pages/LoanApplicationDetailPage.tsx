@@ -607,8 +607,8 @@ type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 // down to whatever's actually present, so a hidden section leaves no dangling empty slot.
 const DEFAULT_CARD_ORDER = [
   'applicantDetails',
-  'coBorrowerDetails',
   'requestedLoan',
+  'coBorrowerDetails',
   'personalHousehold',
   'attachments',
   'recentActivity',
@@ -617,7 +617,11 @@ const DEFAULT_CARD_ORDER = [
   'notes',
   'activityTimeline',
 ];
-const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder';
+// 2026-08-07 (user request): ".v2" forces every officer onto the new default order below
+// (Requested Loan moved up next to Applicant Details, ahead of Co-Borrower Details) - same
+// key-version-bump technique ClientProfilePage.tsx used for its own default-order change, so it
+// applies even to an officer who already has a saved custom order under the old key.
+const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v2';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
 }
