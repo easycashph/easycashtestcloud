@@ -206,6 +206,22 @@
   background-color: hsl(var(--muted-foreground) / 0.5);
 }
 
+/* 2026-08-07 (user-reported): Premium's border color is a light warm tan, barely distinguishable
+   from its own ivory card/background - the theme-matched scrollbar above (readable in Classic's
+   higher-contrast border) became nearly invisible there. Higher-contrast, still-subtle override
+   scoped to Premium only. */
+[data-theme-style='premium'] {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+
+[data-theme-style='premium'] ::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground) / 0.4);
+}
+
+[data-theme-style='premium'] ::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.7);
+}
+
 /* Settings > Appearance > Text Size (2026-07-17 user request) - scales the root font-size, so
    every `rem`-based Tailwind utility across the app (text, padding, icon sizes, etc.) scales with
    it uniformly. `medium` is the default, no attribute needed (browser default 16px). Applied to
