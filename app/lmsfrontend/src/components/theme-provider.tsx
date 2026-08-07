@@ -8,11 +8,14 @@ type Theme = 'light' | 'dark';
  * arbitrary (a user-picked hex). See `applyCustomAccent()` below. */
 export type Accent = 'emerald' | 'easycash-blue' | 'custom';
 
-/** The platform's default theme color - business-confirmed as Easycash Emerald (not the legacy brand blue). */
-export const DEFAULT_ACCENT: Accent = 'emerald';
+/** 2026-08-07 (user request): default is now the officer's own picked custom color (see
+ * DEFAULT_CUSTOM_COLOR) rather than the Easycash Emerald preset - applies to anyone who hasn't
+ * chosen their own Theme Color yet, never touches an already-stored choice. */
+export const DEFAULT_ACCENT: Accent = 'custom';
 
-/** Fallback shown for the "Custom" swatch before the officer has picked their own color. */
-export const DEFAULT_CUSTOM_COLOR = '#0f766e';
+/** 2026-08-07 (user request): the officer's own picked color (#dc5d18), now the platform default -
+ * also shown as the "Custom" swatch's fallback before anyone repicks. */
+export const DEFAULT_CUSTOM_COLOR = '#dc5d18';
 
 export const ACCENT_OPTIONS: { value: Exclude<Accent, 'custom'>; label: string; swatch: string }[] = [
   { value: 'emerald', label: 'Easycash Emerald (default)', swatch: 'hsl(158 64% 32%)' },
@@ -104,8 +107,8 @@ export type ThemeStyle = 'classic' | 'premium';
 
 /** 2026-08-07 (user request): Premium, not Classic, is the platform default for anyone who hasn't
  * picked a style yet - mirrors DEFAULT_THEME's own "changes what a never-configured user sees,
- * never touches an already-stored choice" scope. Combined with DEFAULT_THEME ('dark'), a
- * never-configured user lands on Premium + Dark, per the user's explicit request the same day. */
+ * never touches an already-stored choice" scope. Combined with DEFAULT_THEME (now 'light'), a
+ * never-configured user lands on Premium + Light, matching the officer's own account at the time. */
 export const DEFAULT_THEME_STYLE: ThemeStyle = 'premium';
 
 export const THEME_STYLE_OPTIONS: { value: ThemeStyle; label: string; description: string }[] = [
@@ -167,11 +170,12 @@ function themeStyleStorageKey(userId: string | null): string {
   return `${THEME_STYLE_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
 }
 
-/** 2026-08-05 (user request): dark, not the OS/browser's `prefers-color-scheme`, is the platform
- * default for anyone who hasn't picked a theme yet - a new officer's first login, or the Login
- * page itself before anyone's signed in. Anyone who has already chosen light or dark (`stored`
- * below) keeps that choice untouched; this only changes what a never-configured user sees. */
-export const DEFAULT_THEME: Theme = 'dark';
+/** 2026-08-05 (user request): was 'dark' by default. 2026-08-07 (user request, own current setup
+ * made the platform default): flipped to 'light', matching the officer's own account at the time -
+ * still just the default for anyone who hasn't picked a theme yet (a new officer's first login, or
+ * the Login page itself before anyone's signed in); anyone who has already chosen light or dark
+ * (`stored` below) keeps that choice untouched. */
+export const DEFAULT_THEME: Theme = 'light';
 
 function readTheme(userId: string | null): Theme {
   const stored = window.localStorage.getItem(themeStorageKey(userId));
