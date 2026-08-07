@@ -208,18 +208,24 @@
 
 /* 2026-08-07 (user-reported): Premium's border color is a light warm tan, barely distinguishable
    from its own ivory card/background - the theme-matched scrollbar above (readable in Classic's
-   higher-contrast border) became nearly invisible there. Higher-contrast, still-subtle override
-   scoped to Premium only. */
+   higher-contrast border) became nearly invisible there. First attempt (--muted-foreground / 0.4)
+   still read as too subtle against the near-white popover/card surfaces - darkened further and
+   widened slightly so it's unambiguous rather than merely "technically higher contrast." */
 [data-theme-style='premium'] {
-  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.65) transparent;
+}
+
+[data-theme-style='premium'] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
 }
 
 [data-theme-style='premium'] ::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--muted-foreground) / 0.4);
+  background-color: hsl(var(--muted-foreground) / 0.65);
 }
 
 [data-theme-style='premium'] ::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.7);
+  background-color: hsl(var(--muted-foreground) / 0.9);
 }
 
 /* Settings > Appearance > Text Size (2026-07-17 user request) - scales the root font-size, so
