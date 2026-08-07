@@ -251,6 +251,17 @@ export function AppLayout() {
     window.localStorage.setItem(sidebarCollapsedKey(currentAccount.id), collapsed ? '1' : '0');
   }, [collapsed, currentAccount.id]);
 
+  // 2026-08-07 (user-reported): switching sidebar menus landed on whatever scroll position the
+  // PREVIOUS page was left at, not the top of the new one. Root cause - <main> below (not
+  // window/document) is the actual scroll container per this layout's own "sidebar and main
+  // content scroll independently" design above, and React Router has no built-in scroll reset for
+  // a custom scroll container (only for window scroll, which this app deliberately doesn't use).
+  const mainRef = React.useRef<HTMLElement>(null);
+  const location = useLocation();
+  React.useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
+
   return (
     // 2026-07-19 (user request): sidebar and main content must scroll independently of each other
     // - scrolling over the side menu should only move the side menu, scrolling over the center
@@ -277,7 +288,7 @@ export function AppLayout() {
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
+          <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
             <Outlet />
             <PreviewFooterNote />
           </main>
