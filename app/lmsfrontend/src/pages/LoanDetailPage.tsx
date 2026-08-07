@@ -1665,6 +1665,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
   const [soaError, setSoaError] = React.useState<string | null>(null);
+  // 2026-08-07 (user request, mocked up first): this dialog's content can run taller than the
+  // viewport - a "Scroll more" hint (hidden once scrolled to the bottom) so it's clear there's more
+  // to review before Generate/Cancel, same fade-hint pattern as the Transaction Report table.
+  const soaDialogScrollRef = React.useRef<HTMLDivElement>(null);
+  const [soaDialogHasMoreBelow, setSoaDialogHasMoreBelow] = React.useState(false);
+  const updateSoaDialogScrollHint = React.useCallback(() => {
+    const el = soaDialogScrollRef.current;
+    if (!el) return;
+    setSoaDialogHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
 
   // Client-side preview only (mirrors StatementOfAccountCalculator's formula) - lets staff check
   // the Penalty/Accrued Interest figures live as they adjust dates, before generating. The backend
@@ -2928,8 +2938,15 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         // so it doesn't need to live inside the reorderable cardsById map above - it's tied to the
         // "soa" card's own state/button regardless of where "soa" lands in the current order.
         const soaDialog = (
-      <Dialog open={soaDialogOpen} onOpenChange={(open) => { setSoaDialogOpen(open); if (!open) setSoaError(null); }}>
-        <DialogContent>
+      <Dialog
+        open={soaDialogOpen}
+        onOpenChange={(open) => {
+          setSoaDialogOpen(open);
+          if (!open) setSoaError(null);
+          else requestAnimationFrame(updateSoaDialogScrollHint);
+        }}
+      >
+        <DialogContent ref={soaDialogScrollRef} onScroll={updateSoaDialogScrollHint}>
           <DialogHeader>
             <DialogTitle>Create Statement of Account</DialogTitle>
             <DialogDescription>Account details are filled in automatically. Review the figures below before generating.</DialogDescription>
@@ -3100,6 +3117,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               <p className="text-lg font-medium text-primary">{formatPeso(soaPreview.totalAmountDue)}</p>
             </div>
           </div>
+          {soaDialogHasMoreBelow && (
+            <div className="pointer-events-none sticky bottom-0 -mx-6 -mt-4 flex h-10 items-end justify-center bg-gradient-to-b from-transparent to-background">
+              <span className="mb-1.5 flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                <ChevronDown className="h-3 w-3" /> Scroll more
+              </span>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSoaDialogOpen(false)}>
               Cancel
