@@ -42,6 +42,8 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useLanguage } from '@/lib/languageContext';
+import { useRole } from '@/lib/roleContext';
+import { COMPANY_INFO } from '@/lib/staticConfig';
 import { useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
@@ -663,6 +665,22 @@ export function DashboardPage() {
     reorderCards(String(active.id) as DashboardCardId, String(over.id) as DashboardCardId);
   };
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
+  const { currentAccount } = useRole();
+
+  // 2026-08-06 (user request, mocked up first): "Good morning/afternoon/evening, {first name}" +
+  // today's date + branch, above the Overview section. Computed once per page load (not live-
+  // ticking) - a greeting that flips mid-glance would be more distracting than useful.
+  const firstName = currentAccount.name.split(' ')[0] || currentAccount.name;
+  const greeting = React.useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+  const todayLabel = React.useMemo(
+    () => new Intl.DateTimeFormat('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date()),
+    [],
+  );
 
   // Live portfolio-wide totals from the real backend (GET /dashboard/summary) - backs the three
   // Overview cards while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range).
@@ -941,6 +959,15 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="font-serif text-2xl text-foreground">
+          {greeting}, {firstName}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {todayLabel} · {COMPANY_INFO.branchName} branch
+        </p>
+      </div>
+
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t('dashboard.overview.title')}</h2>
         <p className="text-sm text-muted-foreground">
