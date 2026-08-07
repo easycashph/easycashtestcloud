@@ -78,6 +78,7 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'MATURED' | 'ALL'; label: str
   { value: 'CLOSED_REJECTED', label: 'Rejected' },
   { value: 'CLOSED_RESTRUCTURED', label: 'Restructured' },
   { value: 'CLOSED_ADJUSTED', label: 'Adjusted' },
+  { value: 'CLOSED_UNDONE', label: 'Undone' },
 ];
 
 /**

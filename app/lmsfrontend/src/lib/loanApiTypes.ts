@@ -30,7 +30,8 @@ export type LoanAccountStatus =
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED'
   | 'CLOSED_RESTRUCTURED'
-  | 'CLOSED_ADJUSTED';
+  | 'CLOSED_ADJUSTED'
+  | 'CLOSED_UNDONE';
 
 /** 2026-07-24 (Loan Restructure feature) - mirrors `LoanRestructurePresenter`'s output. Fetched via
  * `GET /loan-accounts/:id/restructure`, null unless this loan account was either side of one. */
