@@ -5,7 +5,12 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
   <div
     ref={ref}
     className={cn(
-      'rounded-lg border bg-card text-card-foreground shadow-[0_1px_2px_rgba(20,22,26,0.04),0_4px_10px_rgba(20,22,26,0.06)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_4px_12px_rgba(0,0,0,0.35)]',
+      // Deliberately [box-shadow:var(--shadow-card)] (raw arbitrary-property syntax), not
+      // shadow-[var(--shadow-card)] - Tailwind's shadow-[...] utility heuristically treats a bare
+      // var() as a shadow COLOR override (producing --tw-shadow-color + an empty --tw-shadow with
+      // no shape, i.e. no visible shadow at all) rather than the full box-shadow value it actually
+      // is here. The arbitrary-property form skips that heuristic and sets box-shadow directly.
+      'rounded-lg border bg-card text-card-foreground [box-shadow:var(--shadow-card)]',
       className,
     )}
     {...props}
