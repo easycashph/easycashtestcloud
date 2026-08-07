@@ -24,10 +24,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
-  Filter,
   GripVertical,
   Landmark,
-  RotateCcw,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -36,10 +34,7 @@ import {
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
+import type { DateRange } from '@/components/DateRangeFilter';
 import { RecentSystemActivityPanel } from '@/components/RecentSystemActivityPanel';
 import { LoanPortfolioVennDiagram, type PortfolioHealthSegment } from '@/components/LoanPortfolioVennDiagram';
 import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillDownDialog';
@@ -82,9 +77,6 @@ interface PortfolioLoanRow {
  * loan whose full term is over but still unpaid — `buildRealPortfolioHealth` below) is derived
  * from `/dashboard/summary`'s live `maturedLoanAccountIds`, not from status. */
 const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
-
-/** Stable empty-Set reference for call sites that don't need the good/arrears/matured split. */
-const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
 /** Same product-family grouping already approved for the mock dashboard (see the historical
  * `getDashboardLoanCategory` in `mockData.ts`) - every SML-* product is a Seafarer Loan sub-class,
@@ -766,28 +758,14 @@ export function DashboardPage() {
     });
   }, [loanAccountsQuery.data, borrowersQuery.data, productsQuery.data]);
 
-  // Just enumerating category names for the filter dropdown - the active/pastDue/matured split
-  // (which needs overdueLoanIds/maturedLoanIds) is irrelevant here, so pass empty sets.
-  const loanCategoryOptions = React.useMemo(
-    () => [...new Set(buildRealPortfolioByCategory(allPortfolioLoans, EMPTY_ID_SET, EMPTY_ID_SET).map((s) => s.category))].sort(),
-    [allPortfolioLoans],
-  );
-
-  // Portfolio Filter - the master filter for the whole Dashboard (loan category + origination
-  // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
-  // Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health) reacts
-  // to it. Two cards are deliberately exempt, by design, not oversight: Collections Forecast
-  // (a bottom-up projection from each active loan's own fixed repayment schedule - filtering it
-  // by category/date would just be a different, narrower forecast, not a clearer one, and the
-  // point of a portfolio-wide cash-flow forecast is to answer "how much is coming in overall") and
-  // Recommendation (portfolio-wide strategic guidance, not a report figure).
-  const [categoryFilter, setCategoryFilter] = React.useState<string>(ALL_CATEGORIES);
-  const [dateRange, setDateRange] = React.useState<DateRange>(EMPTY_DATE_RANGE);
-  const isFiltered = categoryFilter !== ALL_CATEGORIES || dateRange.from !== '' || dateRange.to !== '';
-  const resetFilters = () => {
-    setCategoryFilter(ALL_CATEGORIES);
-    setDateRange(EMPTY_DATE_RANGE);
-  };
+  // 2026-08-06 (user request): the Portfolio Filter UI is gone - every portfolio card below always
+  // reflects the whole portfolio now, same as this filter's own "no filter selected" default
+  // already behaved. Kept as constants (not state) rather than threading a "remove isFiltered
+  // entirely" change through every card description below, since every one of them already reads
+  // correctly with isFiltered permanently false.
+  const categoryFilter = ALL_CATEGORIES;
+  const dateRange = EMPTY_DATE_RANGE;
+  const isFiltered = false;
 
   const portfolioFilteredLoans = React.useMemo(() => {
     const fromTime = dateRange.from ? new Date(dateRange.from).getTime() : null;
@@ -963,56 +941,6 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex items-start gap-2">
-            <Filter className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <div>
-              <CardTitle className="text-base">{t('dashboard.portfolioFilter.title')}</CardTitle>
-              <CardDescription>
-                Drives every portfolio card below - Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target,
-                Portfolio Breakdown, and Loan Portfolio Health all recompute live. Collections Forecast and Recommendation are
-                portfolio-wide by design and stay unaffected.
-              </CardDescription>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="dashboard-category-filter" className="text-xs">
-                Loan Category
-              </Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger id="dashboard-category-filter" className="w-full sm:w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_CATEGORIES}>All Categories</SelectItem>
-                  {loanCategoryOptions.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DateRangeFilter value={dateRange} onChange={setDateRange} />
-            {isFiltered && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reset
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{filteredActiveCount}</span> active loan account
-            {filteredActiveCount === 1 ? '' : 's'} · <span className="font-medium text-foreground">{formatPeso(filteredOutstandingTotal)}</span>{' '}
-            total outstanding principal
-            {isFiltered ? ' matching the selected filter' : ' across the whole portfolio'}.
-          </p>
-        </CardContent>
-      </Card>
-
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t('dashboard.overview.title')}</h2>
         <p className="text-sm text-muted-foreground">
