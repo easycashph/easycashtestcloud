@@ -76,9 +76,16 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     ]);
     if (!borrower) throw new NotFoundError('Borrower', loanAccount.borrowerId);
 
+    // 2026-08-07 (user-reported): two different, non-overlapping co-borrower linkage mechanisms
+    // exist in the live data - a per-LOAN join (`loanAccount.coBorrowerIds`, what every
+    // CP12-migrated co-borrower uses) and a per-BORROWER direct attachment (what Client Profile's
+    // "Add Co-Borrower" - ADR-015 - actually creates). Same fallback LoanDetailPage.tsx's
+    // e-signature default-fill already applies: try the loan-level join first, fall back to the
+    // client's directly-attached co-borrower if this loan has no join row, so a co-borrower added
+    // via Client Profile still shows up on this loan's printed SOA.
     const coBorrower = loanAccount.coBorrowerIds[0]
       ? await this.deps.coBorrowerRepository.findById(loanAccount.coBorrowerIds[0])
-      : null;
+      : (await this.deps.coBorrowerRepository.findByBorrowerId(loanAccount.borrowerId))[0] ?? null;
 
     const sortedInstallments = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sortedInstallments[sortedInstallments.length - 1];
