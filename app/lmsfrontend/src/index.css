@@ -126,12 +126,13 @@
   }
 
   /* Theme style (Settings → Appearance → Theme Style, 2026-08-07 user request): "Premium" is a
-     full alternate light-only look (navy/gold/ivory) - deliberately overrides --primary/--ring/
-     --sidebar-accent too (after the [data-accent] blocks above, so it wins the cascade), rather
-     than layering on top of the officer's separate Theme Color pick, since it's meant to read as
-     one coherent signature look, not a tint applied over whichever accent happened to be active.
-     ThemeProvider also forces `theme` to 'light' the moment Premium is selected - there is no dark
-     variant, by design. */
+     full alternate look (navy/gold/ivory in light, navy/gold-on-charcoal in dark) - deliberately
+     overrides --primary/--ring/--sidebar-accent too (after the [data-accent] blocks above, so it
+     wins the cascade), rather than layering on top of the officer's separate Theme Color pick,
+     since it's meant to read as one coherent signature look, not a tint applied over whichever
+     accent happened to be active. Originally light-only (Premium forced `theme` to 'light' on
+     pick); a dark variant was added the same day so Premium could become the platform default
+     alongside the existing dark-by-default (see DEFAULT_THEME) without that contradiction. */
   [data-theme-style='premium'] {
     --background: 47 27% 94%;
     --foreground: 60 4% 11%;
@@ -165,6 +166,44 @@
     --sidebar-accent-foreground: 221 51% 16%;
 
     --chart-1: 41 54% 54%;
+  }
+
+  /* 2026-08-07: Premium's dark variant - same navy/gold identity, inverted for a dark charcoal-navy
+     surface instead of ivory. Primary/accent swap to gold here (a dark navy primary button would
+     nearly vanish against this background) - card-foreground/foreground stay ivory for contrast. */
+  .dark[data-theme-style='premium'] {
+    --background: 222 42% 9%;
+    --foreground: 45 30% 94%;
+
+    --card: 222 38% 13%;
+    --card-foreground: 45 30% 94%;
+
+    --popover: 222 38% 13%;
+    --popover-foreground: 45 30% 94%;
+
+    --primary: 41 54% 54%;
+    --primary-foreground: 221 51% 14%;
+
+    --secondary: 222 32% 18%;
+    --secondary-foreground: 45 30% 94%;
+
+    --muted: 222 32% 18%;
+    --muted-foreground: 43 15% 68%;
+
+    --accent: 41 54% 54%;
+    --accent-foreground: 221 51% 14%;
+
+    --border: 222 28% 24%;
+    --input: 222 28% 24%;
+    --ring: 41 54% 54%;
+
+    --sidebar-background: 221 55% 11%;
+    --sidebar-foreground: 45 30% 94%;
+    --sidebar-border: 221 40% 20%;
+    --sidebar-accent: 41 54% 54%;
+    --sidebar-accent-foreground: 221 51% 14%;
+
+    --chart-1: 41 54% 60%;
   }
 }
 

@@ -752,8 +752,8 @@ function AppearanceTab() {
           <div>
             <CardTitle>Theme Style</CardTitle>
             <CardDescription>
-              How cards, the sidebar, and dashboard surfaces look. Premium is a light-only look and switches off Dark Mode when
-              selected. Applies only to your account.
+              How cards, the sidebar, and dashboard surfaces look. Premium follows your Dark Mode setting above, same as Classic.
+              Applies only to your account.
             </CardDescription>
           </div>
         </CardHeader>

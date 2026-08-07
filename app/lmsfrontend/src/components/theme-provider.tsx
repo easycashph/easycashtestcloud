@@ -98,12 +98,14 @@ export const DEFAULT_DRAG_REORDER_ENABLED = false;
 
 /** Settings > Appearance > Theme Style (2026-08-07 user request, mocked up first) - a personal,
  * per-user choice between the platform's default surfaces and "Premium," a full alternate
- * navy/gold/ivory light-only look, driven by `[data-theme-style='premium']` in index.css. */
+ * navy/gold/ivory look (both light and dark variants), driven by `[data-theme-style='premium']`
+ * in index.css. */
 export type ThemeStyle = 'classic' | 'premium';
 
 /** 2026-08-07 (user request): Premium, not Classic, is the platform default for anyone who hasn't
  * picked a style yet - mirrors DEFAULT_THEME's own "changes what a never-configured user sees,
- * never touches an already-stored choice" scope. */
+ * never touches an already-stored choice" scope. Combined with DEFAULT_THEME ('dark'), a
+ * never-configured user lands on Premium + Dark, per the user's explicit request the same day. */
 export const DEFAULT_THEME_STYLE: ThemeStyle = 'premium';
 
 export const THEME_STYLE_OPTIONS: { value: ThemeStyle; label: string; description: string }[] = [
@@ -204,13 +206,13 @@ function readThemeStyle(userId: string | null): ThemeStyle {
   return THEME_STYLE_VALUES.includes(stored as ThemeStyle) ? (stored as ThemeStyle) : DEFAULT_THEME_STYLE;
 }
 
-/** Premium has no dark variant (by design) - whenever it's the resolved style (stored or default),
- * `theme` must resolve to 'light' too, same as `setThemeStyle` already forces on an explicit pick,
- * so a never-configured user (or one who picked a theme before Premium became the default style)
- * never lands on the contradictory dark+Premium combination. An officer who explicitly stored
- * 'dark' AND explicitly stored 'classic'/no style opinion keeps dark, untouched. */
-function readEffectiveTheme(userId: string | null, themeStyle: ThemeStyle): Theme {
-  return themeStyle === 'premium' ? 'light' : readTheme(userId);
+/** 2026-08-07: Premium originally had no dark variant, so this forced 'light' whenever it was the
+ * resolved style. Now that index.css ships a `.dark[data-theme-style='premium']` block too, Premium
+ * follows the officer's own dark-mode preference like Classic always has - kept as a thin wrapper
+ * (rather than inlining `readTheme` at each call site) in case a style-specific override is needed
+ * again later. */
+function readEffectiveTheme(userId: string | null, _themeStyle: ThemeStyle): Theme {
+  return readTheme(userId);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -263,12 +265,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }, []);
 
-  // Premium is light-only by design - picking it also switches out of dark mode, same as how
-  // picking 'custom' elsewhere in this file immediately takes effect rather than needing a second
-  // action from the officer.
   const setThemeStyle = React.useCallback((next: ThemeStyle) => {
     setThemeStyleState(next);
-    if (next === 'premium') setTheme('light');
   }, []);
 
   const loadPreferenceFor = React.useCallback((userId: string | null) => {
