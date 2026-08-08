@@ -89,13 +89,51 @@ page, mirroring the existing Undo Approve / Undo Activate pattern.
 - `npm run build` (frontend): succeeded.
 - Docker rebuild of `easycashbackend` and `lmsfrontend` (`docker compose up -d --build --no-deps`):
   both containers came up healthy, backend log showed a clean startup.
-- Committed as `b84ad88`. Not yet pushed to `origin/main` — push on request.
+- Committed as `b84ad88`, pushed as part of `7a08581`.
+
+## 2026-08-08 follow-up: reported crash, then a design revision to delete instead of retire
+
+After deploying, the user hit "Something went wrong loading this page" right after testing Undo
+Restructure. Root cause: `StatusBadge.tsx`'s `LOAN_STATUS_STYLE` map (a
+`Record<LoanAccountStatus, ...>`) didn't have an entry for the new `CLOSED_UNDONE` status, so
+looking it up returned `undefined` and `.variant` threw. Fixed by adding `CLOSED_UNDONE` to both
+the `LoanAccountStatus` type union and the badge map, plus the loan list status filter (commit
+`08ba629`).
+
+While looking at the retired loan, the user asked "hindi nabura yung restructured account?" ("wasn't
+it deleted?") and, after explanation, explicitly changed the design: **undo should now delete the
+new loan account (and the restructure/adjustment audit row) outright**, not retire it as
+`CLOSED_UNDONE` - a reversal of the "keep and mark undone" decision from earlier in this document.
+Confirmed via a follow-up question that the `LoanRestructure`/`LoanAdjustment` row itself should
+also be deleted (not kept with the link removed), since it can't reference a deleted account anyway.
+
+Implemented as commit `2371034`:
+- `LoanRestructure`/`LoanAdjustment.oldLoanAccountId` reverted to `@unique` (a loan can have at
+  most one row at a time again); dropped the `undoneAt`/`undoneByUserId` columns and `undoneBy`
+  relation entirely (migration `20260808010000_revert_undo_to_delete_based`).
+- `UndoRestructureLoanUseCase`/`UndoAdjustLoanUseCase` now delete the new loan's
+  `RepaymentInstallment` and `LoanTransaction` rows, the `LoanRestructure`/`LoanAdjustment` row,
+  and the new `LoanAccount` row itself, inside the same transaction that reverts the old loan to
+  `ACTIVE`.
+- Added `ILoanAccountRepository.delete()` and a narrowly-scoped
+  `ILoanTransactionRepository.deleteAllByLoanAccountId()` - the latter is a deliberate, one-purpose
+  exception to TXN-1 (append-only ledger), used only when the entire loan account it belongs to is
+  being purged, never as a general-purpose way to remove a posted transaction.
+- `LoanAccountStatus` keeps `CLOSED_UNDONE` as a documented-deprecated, never-written enum value
+  (Postgres can't drop an enum value without recreating the type, so it stays for schema safety),
+  but the domain's `ALLOWED_TRANSITIONS`/`LoanAccount.markUndone()` no longer produce it.
+- One live record from the user's own earlier test (loan `SML-Self_00059`, retired via the old
+  design) was manually cleaned up to match — confirmed with the user before deleting, per this
+  project's live-data-backfill convention.
+- Re-verified clean: `tsc` both apps, `vitest` at the same known baseline, frontend build, and a
+  fresh Docker rebuild of both containers.
 
 ## Known follow-up
 
-- The "block undo if new loan has activity" guard condition was my own inferred default (the
-  clarifying question was dismissed rather than answered) — worth confirming with the user that
-  this matches their intent, or adjusting the guard if not.
+- The "block undo if new loan has activity" guard condition (refuses to undo if the new loan
+  already has a payment, penalty reduction, or fee adjustment) was my own inferred default — never
+  explicitly confirmed by the user. Still applies under the new delete-based design; worth a final
+  check that this matches intent.
 - No UI mockup was shown before implementing this feature's frontend (unlike earlier UI work this
   session) — the user didn't ask for one this time, but it's a deviation from this session's
   otherwise-established convention worth noting.
