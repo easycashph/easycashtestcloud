@@ -47,8 +47,6 @@ export interface LoanRestructureView {
   restructuredByUserId: string;
   restructuredByName: string | null;
   createdAt: string;
-  undoneAt: string | null;
-  undoneByName: string | null;
 }
 
 /** 2026-07-24 (Loan Adjustment feature) - mirrors `LoanAdjustmentPresenter`'s output. Fetched via
@@ -65,8 +63,6 @@ export interface LoanAdjustmentView {
   adjustedByUserId: string;
   adjustedByName: string | null;
   createdAt: string;
-  undoneAt: string | null;
-  undoneByName: string | null;
 }
 
 /** 2026-07-24 (user-confirmed) - mirrors `AccruedInterestPresenter`'s output. Fetched via

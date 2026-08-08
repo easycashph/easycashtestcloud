@@ -19,20 +19,21 @@ export interface LoanRestructureView {
   restructuredByUserId: string;
   restructuredByName: string | null;
   createdAt: Date;
-  /** 2026-08-07 (Undo Restructure feature) — both null unless this restructure has been undone. */
-  undoneAt: Date | null;
-  undoneByName: string | null;
 }
 
 export interface ILoanRestructureRepository {
-  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated except via `update()`. */
+  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated, only created or deleted (via `delete()`). */
   create(restructure: LoanRestructure, ctx?: TransactionContext): Promise<void>;
-  /** Non-null only when `loanAccountId` was the OLD side of a currently-ACTIVE (not undone) restructure. */
+  /** Non-null only when `loanAccountId` was the OLD side of a restructure that hasn't since been undone. */
   findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
   /** Non-null only when `loanAccountId` was the NEW side of a restructure. */
   findByNewLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
-  /** 2026-08-07 (Undo Restructure feature): persists `LoanRestructure.markUndone()` - the one field this row is ever allowed to change after creation. */
-  update(restructure: LoanRestructure, ctx?: TransactionContext): Promise<void>;
+  /**
+   * 2026-08-08 (Undo Restructure feature, user-confirmed revision): a reverted restructure is
+   * deleted outright, not marked - see `LoanRestructure`'s own doc comment for why. Must run in
+   * the same transaction as deleting the new `LoanAccount` it points to (the FK requires it).
+   */
+  delete(loanRestructureId: string, ctx?: TransactionContext): Promise<void>;
   /** Display-ready view for either side of a restructure, whichever `loanAccountId` participated in — used by the Loan Detail page. */
   findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructureView | null>;
 }

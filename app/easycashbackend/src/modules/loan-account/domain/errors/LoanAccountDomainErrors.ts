@@ -154,28 +154,9 @@ export class NewLoanAccountHasActivityError extends DomainError {
 }
 
 /**
- * 2026-08-07 (Undo Restructure / Undo Adjustment feature, user-confirmed): a restructure/adjustment
- * may only be undone once - guards a double-undo (e.g. a double-click) rather than silently
- * no-opping or corrupting the audit row's `undoneAt`.
- */
-export class LoanRestructureAlreadyUndoneError extends DomainError {
-  constructor(loanRestructureId: string) {
-    super('LOAN_RESTRUCTURE_ALREADY_UNDONE', `LoanRestructure ${loanRestructureId} has already been undone.`, undefined, 409);
-    this.name = 'LoanRestructureAlreadyUndoneError';
-  }
-}
-
-/** Same as `LoanRestructureAlreadyUndoneError`, for `LoanAdjustment`. */
-export class LoanAdjustmentAlreadyUndoneError extends DomainError {
-  constructor(loanAdjustmentId: string) {
-    super('LOAN_ADJUSTMENT_ALREADY_UNDONE', `LoanAdjustment ${loanAdjustmentId} has already been undone.`, undefined, 409);
-    this.name = 'LoanAdjustmentAlreadyUndoneError';
-  }
-}
-
-/**
- * 2026-08-07 (Undo Restructure / Undo Adjustment feature): thrown when a loan account has never
- * been restructured/adjusted at all (nothing to undo) - distinct from "already undone" above.
+ * 2026-08-08 (Undo Restructure / Undo Adjustment feature): thrown when a loan account has never
+ * been restructured/adjusted at all (nothing to undo) - also what a double-undo attempt hits,
+ * since the first undo deletes the `LoanRestructure`/`LoanAdjustment` row outright.
  */
 export class LoanNotRestructuredError extends DomainError {
   constructor(loanAccountId: string) {

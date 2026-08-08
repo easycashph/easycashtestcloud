@@ -24,10 +24,19 @@ export interface ILoanTransactionRepository {
   /** 2026-07-11 (Reverse Payment feature): looks up the (at most one, per the schema's `@unique` constraint) REVERSAL transaction that already reverses `transactionId`, if any — how `ReversePaymentUseCase` rejects a double-reversal. */
   findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null>;
   /**
-   * TXN-1: append-only. Deliberately no `update()`/`delete()` method on
-   * this port at all — the type signature itself makes editing a posted
-   * transaction impossible from the application layer, not just
-   * discouraged by convention.
+   * TXN-1: append-only. Deliberately no `update()` method on this port at
+   * all — the type signature itself makes editing a posted transaction
+   * impossible from the application layer, not just discouraged by
+   * convention.
    */
   create(transaction: LoanTransaction, ctx?: TransactionContext): Promise<void>;
+  /**
+   * 2026-08-08 (Undo Restructure / Undo Adjustment feature, user-confirmed): the ONE narrow
+   * exception to TXN-1's "no delete" rule — used only by `UndoRestructureLoanUseCase`/
+   * `UndoAdjustLoanUseCase` to purge the transactions of a NEW loan account that is itself about
+   * to be deleted outright (the account never had a real payment on it — that's guarded before
+   * this is ever called). Not a general-purpose way to remove a posted transaction from a loan
+   * that stays alive.
+   */
+  deleteAllByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<void>;
 }

@@ -391,4 +391,12 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     `);
     return new Set(rows.map((r) => r.id));
   }
+
+  /** 2026-08-08 (Undo Restructure / Undo Adjustment feature): see `ILoanAccountRepository.delete()`'s doc comment for the narrow scope this is meant for. */
+  async delete(id: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.loanAccountCoBorrower.deleteMany({ where: { loanAccountId: id } });
+    await client.appliedFee.deleteMany({ where: { loanAccountId: id } });
+    await client.loanAccount.delete({ where: { id } });
+  }
 }

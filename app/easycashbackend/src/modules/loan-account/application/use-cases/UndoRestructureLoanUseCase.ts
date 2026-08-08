@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
+import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import type { IPenaltyReductionRepository } from '@modules/repayment/application/ports/IPenaltyReductionRepository';
 import type { IFeeAdjustmentRepository } from '@modules/repayment/application/ports/IFeeAdjustmentRepository';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
@@ -13,6 +14,7 @@ export interface UndoRestructureLoanUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
   loanRestructureRepository: ILoanRestructureRepository;
   loanTransactionRepository: ILoanTransactionRepository;
+  repaymentInstallmentRepository: IRepaymentInstallmentRepository;
   penaltyReductionRepository: IPenaltyReductionRepository;
   feeAdjustmentRepository: IFeeAdjustmentRepository;
   financialAuditLogger: IFinancialAuditLogger;
@@ -21,7 +23,7 @@ export interface UndoRestructureLoanUseCaseDeps {
 }
 
 /**
- * 2026-08-07 (Undo Restructure feature, user-confirmed, permission-gated -
+ * 2026-08-08 (Undo Restructure feature, user-confirmed, permission-gated -
  * `loan_account.undo_restructure`, independently grantable per role, not tied to MIS or to
  * whichever permission performs the restructure itself): undoes `RestructureLoanUseCase` for a
  * given OLD loan account - same "safety net for an accidental/premature action, not a
@@ -29,13 +31,13 @@ export interface UndoRestructureLoanUseCaseDeps {
  *   - Refuses if the NEW loan (the one the restructure created) already has a `REPAYMENT`
  *     transaction, or a Reduce Penalty / Adjust Fees override on any of its installments.
  *   - Refuses if the loan was never restructured, or its restructure was already undone
- *     (`ILoanRestructureRepository.findByOldLoanAccountId` only returns an ACTIVE, not-yet-undone
- *     row - see that method's own doc comment).
- * Mechanically: `oldLoanAccount.undoRestructureClose()` (-> ACTIVE), `newLoanAccount.markUndone()`
- * (-> CLOSED_UNDONE, retired not deleted), `LoanRestructure.markUndone()` (the row itself is never
- * deleted - see that entity's own doc comment). Deliberately does NOT delete the new loan's
- * `RepaymentInstallment` rows or `DISBURSEMENT` `LoanTransaction` - same "financial records are
- * never deleted" posture `UndoActivateLoanUseCase` already established for its own case.
+ *     (the row no longer exists once undone - see below).
+ * Mechanically: `oldLoanAccount.undoRestructureClose()` (-> ACTIVE) on the old loan, then - once
+ * confirmed the new loan has no real activity - deletes the new loan's `RepaymentInstallment` and
+ * `LoanTransaction` rows, the `LoanRestructure` row itself, and finally the new `LoanAccount` row.
+ * User-confirmed revision (2026-08-08): a reverted restructure leaves no trace, rather than being
+ * retired/marked-undone - the old loan can be restructured again afterward as if the first one had
+ * never happened.
  */
 export class UndoRestructureLoanUseCase {
   constructor(private readonly deps: UndoRestructureLoanUseCaseDeps) {}
@@ -71,13 +73,13 @@ export class UndoRestructureLoanUseCase {
     }
 
     oldLoanAccount.undoRestructureClose();
-    newLoanAccount.markUndone();
-    restructure.markUndone(undoneByUserId);
 
     await this.deps.unitOfWork.run(async (ctx) => {
       await this.deps.loanAccountRepository.save(oldLoanAccount, ctx);
-      await this.deps.loanAccountRepository.save(newLoanAccount, ctx);
-      await this.deps.loanRestructureRepository.update(restructure, ctx);
+      await this.deps.repaymentInstallmentRepository.deleteAllByLoanAccountId(newLoanAccount.id, ctx);
+      await this.deps.loanTransactionRepository.deleteAllByLoanAccountId(newLoanAccount.id, ctx);
+      await this.deps.loanRestructureRepository.delete(restructure.id, ctx);
+      await this.deps.loanAccountRepository.delete(newLoanAccount.id, ctx);
       await this.deps.financialAuditLogger.log(
         {
           userId: undoneByUserId,
@@ -85,7 +87,7 @@ export class UndoRestructureLoanUseCase {
           entityType: 'LoanAccount',
           entityId: oldLoanAccount.id,
           previousValue: { status: 'CLOSED_RESTRUCTURED', newLoanAccountId: newLoanAccount.id },
-          newValue: { status: 'ACTIVE', newLoanAccountStatus: 'CLOSED_UNDONE' },
+          newValue: { status: 'ACTIVE', newLoanAccountDeleted: newLoanAccount.id },
         },
         ctx,
       );

@@ -16,8 +16,6 @@ function toDomain(row: LoanAdjustmentRow): LoanAdjustment {
     reason: row.reason ?? undefined,
     adjustedByUserId: row.adjustedByUserId,
     createdAt: row.createdAt,
-    undoneAt: row.undoneAt ?? undefined,
-    undoneByUserId: row.undoneByUserId ?? undefined,
   };
   return LoanAdjustment.reconstitute(props);
 }
@@ -39,15 +37,9 @@ export class PrismaLoanAdjustmentRepository implements ILoanAdjustmentRepository
     });
   }
 
-  /**
-   * 2026-08-07 (Undo Adjustment feature): `oldLoanAccountId` is no longer `@unique` (a loan can
-   * accumulate more than one row over its lifetime - an undone one, then a fresh one), so this is
-   * a `findFirst` now, scoped to `undoneAt: null` - only the currently-ACTIVE adjustment counts for
-   * "already adjusted" purposes. An undone one is deliberately invisible here.
-   */
   async findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustment | null> {
     const client = resolveClient(ctx);
-    const row = await client.loanAdjustment.findFirst({ where: { oldLoanAccountId: loanAccountId, undoneAt: null } });
+    const row = await client.loanAdjustment.findFirst({ where: { oldLoanAccountId: loanAccountId } });
     return row ? toDomain(row) : null;
   }
 
@@ -57,27 +49,21 @@ export class PrismaLoanAdjustmentRepository implements ILoanAdjustmentRepository
     return row ? toDomain(row) : null;
   }
 
-  /** 2026-08-07 (Undo Adjustment feature): the ONE exception to `create()`-only - persists `markUndone()`. */
-  async update(adjustment: LoanAdjustment, ctx?: TransactionContext): Promise<void> {
+  /** 2026-08-08 (Undo Adjustment feature, user-confirmed revision): deletes the row outright - see `ILoanAdjustmentRepository.delete()`. */
+  async delete(loanAdjustmentId: string, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
-    await client.loanAdjustment.update({
-      where: { id: adjustment.id },
-      data: { undoneAt: adjustment.undoneAt ?? null, undoneByUserId: adjustment.undoneByUserId ?? null },
-    });
+    await client.loanAdjustment.delete({ where: { id: loanAdjustmentId } });
   }
 
   async findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustmentView | null> {
     const client = resolveClient(ctx);
     const row = await client.loanAdjustment.findFirst({
       where: { OR: [{ oldLoanAccountId: loanAccountId }, { newLoanAccountId: loanAccountId }] },
-      // 2026-08-07 (Undo Adjustment feature): the OLD side can now have more than one row - show
-      // the most recent (whichever is currently relevant).
       orderBy: { createdAt: 'desc' },
       include: {
         oldLoanAccount: { select: { loanCode: true } },
         newLoanAccount: { select: { loanCode: true } },
         adjustedBy: { select: { firstName: true, lastName: true } },
-        undoneBy: { select: { firstName: true, lastName: true } },
       },
     });
     if (!row) return null;
@@ -93,8 +79,6 @@ export class PrismaLoanAdjustmentRepository implements ILoanAdjustmentRepository
       adjustedByUserId: row.adjustedByUserId,
       adjustedByName: row.adjustedBy ? `${row.adjustedBy.firstName} ${row.adjustedBy.lastName}`.trim() : null,
       createdAt: row.createdAt,
-      undoneAt: row.undoneAt,
-      undoneByName: row.undoneBy ? `${row.undoneBy.firstName} ${row.undoneBy.lastName}`.trim() : null,
     };
   }
 }

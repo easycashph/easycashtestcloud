@@ -2,6 +2,7 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
+import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import type { IPenaltyReductionRepository } from '@modules/repayment/application/ports/IPenaltyReductionRepository';
 import type { IFeeAdjustmentRepository } from '@modules/repayment/application/ports/IFeeAdjustmentRepository';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
@@ -13,6 +14,7 @@ export interface UndoAdjustLoanUseCaseDeps {
   loanAccountRepository: ILoanAccountRepository;
   loanAdjustmentRepository: ILoanAdjustmentRepository;
   loanTransactionRepository: ILoanTransactionRepository;
+  repaymentInstallmentRepository: IRepaymentInstallmentRepository;
   penaltyReductionRepository: IPenaltyReductionRepository;
   feeAdjustmentRepository: IFeeAdjustmentRepository;
   financialAuditLogger: IFinancialAuditLogger;
@@ -21,12 +23,14 @@ export interface UndoAdjustLoanUseCaseDeps {
 }
 
 /**
- * 2026-08-07 (Undo Adjustment feature, user-confirmed, permission-gated -
+ * 2026-08-08 (Undo Adjustment feature, user-confirmed, permission-gated -
  * `loan_account.undo_adjust`, independently grantable per role): same shape as
  * `UndoRestructureLoanUseCase` (see that use case's own doc comment for the full reasoning) -
  * undoes `AdjustLoanUseCase` for a given OLD loan account, refusing if the NEW loan already has a
  * `REPAYMENT` transaction or a penalty/fee override, or if the loan was never adjusted / its
- * adjustment was already undone.
+ * adjustment was already undone. Deletes the new loan account, its `RepaymentInstallment`/
+ * `LoanTransaction` rows, and the `LoanAdjustment` row itself outright - leaves no trace, per the
+ * user-confirmed 2026-08-08 revision.
  */
 export class UndoAdjustLoanUseCase {
   constructor(private readonly deps: UndoAdjustLoanUseCaseDeps) {}
@@ -62,13 +66,13 @@ export class UndoAdjustLoanUseCase {
     }
 
     oldLoanAccount.undoAdjustClose();
-    newLoanAccount.markUndone();
-    adjustment.markUndone(undoneByUserId);
 
     await this.deps.unitOfWork.run(async (ctx) => {
       await this.deps.loanAccountRepository.save(oldLoanAccount, ctx);
-      await this.deps.loanAccountRepository.save(newLoanAccount, ctx);
-      await this.deps.loanAdjustmentRepository.update(adjustment, ctx);
+      await this.deps.repaymentInstallmentRepository.deleteAllByLoanAccountId(newLoanAccount.id, ctx);
+      await this.deps.loanTransactionRepository.deleteAllByLoanAccountId(newLoanAccount.id, ctx);
+      await this.deps.loanAdjustmentRepository.delete(adjustment.id, ctx);
+      await this.deps.loanAccountRepository.delete(newLoanAccount.id, ctx);
       await this.deps.financialAuditLogger.log(
         {
           userId: undoneByUserId,
@@ -76,7 +80,7 @@ export class UndoAdjustLoanUseCase {
           entityType: 'LoanAccount',
           entityId: oldLoanAccount.id,
           previousValue: { status: 'CLOSED_ADJUSTED', newLoanAccountId: newLoanAccount.id },
-          newValue: { status: 'ACTIVE', newLoanAccountStatus: 'CLOSED_UNDONE' },
+          newValue: { status: 'ACTIVE', newLoanAccountDeleted: newLoanAccount.id },
         },
         ctx,
       );

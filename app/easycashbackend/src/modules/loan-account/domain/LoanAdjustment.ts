@@ -9,9 +9,6 @@ export interface LoanAdjustmentProps {
   reason?: string;
   adjustedByUserId: string;
   createdAt: Date;
-  /** 2026-08-07 (Undo Adjustment feature) — both undefined until undone; see `markUndone()`. */
-  undoneAt?: Date;
-  undoneByUserId?: string;
 }
 
 export interface CreateLoanAdjustmentProps {
@@ -29,6 +26,10 @@ export interface CreateLoanAdjustmentProps {
  * `LoanRestructure`, there is no principal/balance change to record here at all - the ONLY thing
  * that changes is the schedule's due dates (same principal, rate, term, product copied verbatim),
  * so this entity just links old<->new loan account ids and captures the date change itself.
+ *
+ * 2026-08-08 (Undo Adjustment, user-confirmed revision): undo now DELETES this row (and the new
+ * LoanAccount it points to) outright rather than marking it "undone" — the user decided a
+ * reverted adjustment should leave no trace, not a retired record. See `UndoAdjustLoanUseCase`.
  */
 export class LoanAdjustment {
   private constructor(private readonly props: LoanAdjustmentProps) {}
@@ -48,21 +49,6 @@ export class LoanAdjustment {
 
   static reconstitute(props: LoanAdjustmentProps): LoanAdjustment {
     return new LoanAdjustment(props);
-  }
-
-  /**
-   * 2026-08-07 (Undo Adjustment feature, user-confirmed): the ONE exception to this row's own
-   * "immutable, never edited" doc comment above - marks it undone rather than deleting it, so the
-   * adjustment still shows in this loan's history. Throws if already undone (the use-case layer's
-   * `LoanAdjustmentAlreadyUndoneError` pre-check is the friendlier path; this is a last-resort
-   * guard).
-   */
-  markUndone(undoneByUserId: string, undoneAt: Date = new Date()): void {
-    if (this.props.undoneAt) {
-      throw new Error(`LoanAdjustment ${this.props.id} is already undone.`);
-    }
-    this.props.undoneAt = undoneAt;
-    this.props.undoneByUserId = undoneByUserId;
   }
 
   get id(): string {
@@ -95,13 +81,5 @@ export class LoanAdjustment {
 
   get createdAt(): Date {
     return this.props.createdAt;
-  }
-
-  get undoneAt(): Date | undefined {
-    return this.props.undoneAt;
-  }
-
-  get undoneByUserId(): string | undefined {
-    return this.props.undoneByUserId;
   }
 }

@@ -1927,9 +1927,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
   // account" - once this loan is the OLD side of a restructure, never offered again.
   const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
-  // 2026-08-07 (Undo Restructure, user-confirmed): "pwede pang mag-restructure ulit pagkatapos" -
-  // an undone restructure no longer blocks a fresh one.
-  const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id && !restructureQuery.data.undoneAt;
+  // 2026-08-08 (Undo Restructure, user-confirmed): an undo deletes the restructure record outright
+  // (UndoRestructureLoanUseCase), so `restructureQuery.data` naturally goes back to null once
+  // undone - "pwede pang mag-restructure ulit pagkatapos" falls out of this for free.
+  const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
   const canRestructure =
     canManageInstallments && canRestructureLoanPermission && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
@@ -1944,9 +1945,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     null,
   );
   const isBeforeFirstDueDate = firstInstallmentDueDate === null || new Date() < firstInstallmentDueDate;
-  // 2026-08-07 (Undo Adjustment, user-confirmed): same "can redo after undo" posture as
-  // restructure above.
-  const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id && !adjustmentQuery.data.undoneAt;
+  // 2026-08-08 (Undo Adjustment, user-confirmed): same "delete on undo, query goes back to null"
+  // posture as restructure above.
+  const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id;
   const canAdjust =
     canManageInstallments && canAdjustLoanPermission && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
@@ -2192,13 +2193,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {restructureQuery.data.newLoanCode}
               </Link>
               {' '}on {formatDate(restructureQuery.data.createdAt)}.
-              {restructureQuery.data.undoneAt && (
-                <>
-                  {' '}This restructure was later undone
-                  {restructureQuery.data.undoneByName ? ` by ${restructureQuery.data.undoneByName}` : ''} on{' '}
-                  {formatDate(restructureQuery.data.undoneAt)}.
-                </>
-              )}
             </span>
           ) : (
             <span>
@@ -2224,13 +2218,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {adjustmentQuery.data.newLoanCode}
               </Link>
               {' '}on {formatDate(adjustmentQuery.data.createdAt)}.
-              {adjustmentQuery.data.undoneAt && (
-                <>
-                  {' '}This adjustment was later undone
-                  {adjustmentQuery.data.undoneByName ? ` by ${adjustmentQuery.data.undoneByName}` : ''} on{' '}
-                  {formatDate(adjustmentQuery.data.undoneAt)}.
-                </>
-              )}
             </span>
           ) : (
             <span>
@@ -3450,9 +3437,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               {confirmAction === 'UNDO_ACTIVATE' &&
                 `This will move ${loan.loanCode} back from Active to Approved — its repayment schedule will be deleted and balances reset to zero. Only allowed while no payment or penalty/fee adjustment has been recorded yet. The original disbursement stays in Payment History as a record of what happened.`}
               {confirmAction === 'UNDO_RESTRUCTURE' &&
-                `This will move ${loan.loanCode} back to Active and retire the loan it was restructured into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. The restructure stays in this loan's history, marked as undone.`}
+                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was restructured into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this restructure record will be gone for good.`}
               {confirmAction === 'UNDO_ADJUST' &&
-                `This will move ${loan.loanCode} back to Active and retire the loan it was adjusted into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. The adjustment stays in this loan's history, marked as undone.`}
+                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was adjusted into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this adjustment record will be gone for good.`}
             </DialogDescription>
           </DialogHeader>
           {confirmAction === 'ACTIVATE' && (
