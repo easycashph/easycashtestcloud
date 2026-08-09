@@ -200,6 +200,66 @@ backend (`loanApplicationSchemas.ts`) already treats `employer` as optional
 `LoanApplicationCreatePage.tsx`. Removed the `missing.push('Name of employer (§4)')` validation
 line and the `*` on the field label to match.
 
+## Feature: Quit Claim auto-fill (commits `5e671d7`, `8895021`, `a2d33c0`)
+
+User: "pwede ba natin ma auto fill yung quit claim? Borrower name, Complete address, Loan Amount,
+Date, Contact no, Loan DAte, Maturity date, Atm card no, account no, bank and branch" — followed
+by "patingin muna mockup" per this session's established mockup-first convention. Built a data-card
+mockup (`mcp__visualize`) showing sample values per field, color-coded by data-source confidence,
+then asked two clarifying questions before touching the template: what "Date" vs "Loan Date" mean
+(user-confirmed: Date = generation date, Loan Date = ApprovalDate), and what to do when a loan has
+no ATM/bank data on file (user-confirmed: leave blank, don't refuse generation).
+
+Investigation found the template had **no blank at all** for ATM Card No./Account No./Branch (only
+a bare "Bank: ___" line) — flagged this and got explicit confirmation to add the missing blanks
+rather than only filling what already existed.
+
+- `LoanDocumentMergeDataResolver.ts`: added `GeneratedDate` (computed fresh at generation time, not
+  stored), `LoanDate` (reuses `ApprovalDate`'s existing convention), and `Bank`/`Branch`/
+  `AccountNumber`/`ATMCardNumber` — read from the source `LoanApplication.reviewReport.mitigation`
+  (the same surrendered-account data `CreateLoanSigningSessionUseCase` already reads for its Deed
+  of Assignment routing), blank when absent rather than an error. Needed
+  `loanApplicationRepository` added to the resolver's deps — wired as a dedicated local instance in
+  `app.ts` since the module-scoped one isn't declared until later in that file.
+- `QUIT_CLAIM.docx`: edited the raw `word/document.xml` directly via a one-off Node/PizZip script
+  (each blank was confirmed to be its own isolated `<w:t>` run first, so a straight text swap for
+  `{Tag}` was safe) — 7 existing blanks got merge tags, and the ATM Card row was extended to also
+  carry Branch/Account No./ATM Card No. (previously just "Bank: ___"). Verified with
+  `docxtemplater.getFullText()` (structure intact) and an actual `.render()` call (no template
+  errors) before wiring the backend.
+- Verified end-to-end against a real loan account (`SP-Flash_U6X7R`) — real merge data resolved,
+  real docx rendered successfully.
+
+### Follow-up: broke the 1-page layout, twice, fixing it
+
+User: "hindi nag kasya sa 1 page yung quit claim" — the longer auto-filled ATM Card text wrapped to
+extra lines and pushed the "5. INTERNAL VERIFICATION & APPROVAL" signature blocks onto a near-empty
+page 2. Investigated by actually rendering to PDF via `LibreOfficeDocxToPdfConverter` (the same
+converter production uses) and reading the PDF page-by-page — critically, **confirmed the
+never-filled original template was already 2 pages before any of today's edits** (LibreOffice wraps
+differently than Word, so this pre-existing issue was never visible until now). Fixed by: shrinking/
+abbreviating the ATM Card row's font and wording, and a global trim of table cell margins
+(45→25 twips), line spacing (216→204), and paragraph spacing (40→20 twips) across ~250 occurrences
+in the document — individually unnoticeable, collectively enough to reclaim a full page. Verified
+via a real LibreOffice PDF render, not just docxtemplater XML validity (`8895021`).
+
+User then asked for the ATM Card row to go back to one line with a bigger font ("i haba mo nalang
+at medyo lakihan ang font size") and whether it would still fit — tested empirically (not
+guessed): single line, sz 11→13 (5.5pt→6.5pt), rendered with both a short sample (BDO/ERMITA) and a
+deliberately long one (Banco De Oro (BDO)/Quezon Avenue Branch) to confirm long real-world values
+wrap gracefully rather than overflowing, and the whole document stayed on 1 page either way
+(`a2d33c0`).
+
+### Follow-up: "does Regenerate work? it didn't work earlier"
+
+Couldn't find historical error logs — the backend container had been rebuilt several times since
+("kanina"), which resets Docker's log buffer. Verified instead by running the actual
+`GenerateLoanDocumentUseCase` end-to-end against a real loan on a product QUIT_CLAIM is mapped to
+(`SML-DELUXE`), using a real user id — succeeded, and the generated test record was cleaned up
+immediately after. Most likely explanation: the user's earlier attempt landed while the `.docx` was
+briefly in an invalid intermediate state during my own edit-and-verify cycle, or mid-container-
+rebuild — both should be resolved now that every change lands only after passing a render check.
+
 ## Verification (this whole session)
 
 - `npx tsc --noEmit` clean on both apps after every change.
@@ -213,14 +273,22 @@ line and the `*` on the field label to match.
   above. The user did do real UI click-throughs on their end (their own credentials) for the
   Document Templates screen, which is how the accidental-Required-toggle bug surfaced and got
   fixed.
+- For the Quit Claim document work specifically, verified with real `.docx`→PDF renders via
+  `LibreOfficeDocxToPdfConverter` (the actual production conversion path), not just
+  docxtemplater's XML-validity check — this is what caught the pre-existing 1-page overflow that a
+  structural check alone would have missed.
 
 ## Current state / known follow-up
 
-- All work today is committed and pushed to `origin/main` (commits `08ba629` through `91109de`).
+- All work today is committed and pushed to `origin/main` (commits `08ba629` through `a2d33c0`).
 - The Loan Products admin screen (Add Product/Add Version/Activate) has never been exercised
   through the actual browser UI — same caveat as Document Templates initially had; worth a real
   click-through, especially the dynamic Fee Rules list and the Penalty Rule toggle section.
 - Legacy attachment *files* (not just metadata) from the new SDevTech sync still need
   `backfill-legacy-attachments.ts` (SFTP) run whenever the user wants them — explicitly deferred.
-- `QUIT_CLAIM` still has no product mapping as of this log — available for the user to set
-  themselves via the Document Templates screen whenever they decide which products it applies to.
+- `QUIT_CLAIM` and `ACKNOWLEDGEMENT_RECEIPT` product mappings were both fully configured by the
+  user themselves via the Document Templates screen this session (no longer an open item).
+- Quit Claim's auto-fill Bank/Branch/Account No./ATM Card No. fields depend on the source
+  `LoanApplication`'s `mitigation` data existing — many loans (especially ones not sourced from a
+  mitigation-bearing application, or migrated from SDevTech without that detail) will render those
+  4 fields blank, by design (user-confirmed fallback), not a bug.
