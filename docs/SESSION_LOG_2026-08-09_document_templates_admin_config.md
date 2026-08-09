@@ -106,12 +106,121 @@ new `.docx` file on disk.
 - Docker rebuilt (`easycashbackend` + `lmsfrontend`) after every code change this session; both
   came up healthy each time.
 
+## Follow-up: the user actually tested the new screen, and it surfaced a real bug + a design change
+
+Right after the Document Templates admin config shipped, the user opened it in a real browser
+(they have credentials I don't) and:
+
+1. **Accidentally toggled 5 conditional templates to Required** while exploring (`LOAN_AGREEMENT_SALARY`,
+   `LOAN_AGREEMENT_SEAFARER`, `DEED_OF_ASSIGNMENT_BORROWER`, `DEED_OF_ASSIGNMENT_SALARY`,
+   `SPECIAL_POWER_OF_ATTORNEY`) — caught via a DB timestamp spot-check (sequential `updatedAt`
+   values ~3-5 min apart, consistent with manual clicking) after the user asked "bakit nawala ang
+   Undo Restructure" and, separately, asked to double-check the whole screen. Confirmed with the
+   user, then walked back through the same admin UI: reverted all 5 to Conditional and restored
+   their per-product mappings (SL products for the two Salary/salary-adjacent docs, SML products
+   for the Seafarer/Deed/SPA group) — the user did this themselves via the screen, not me via a
+   script, which is itself a good sign the feature works end-to-end.
+2. Asked "lahat ba ng required ay automatic kasama sa e-signature?" — answer: **no**, Required only
+   controls whether a document applies to a loan at all; a separate, until-now seed-only pair of
+   flags (`requiresBorrowerSignature`/`requiresCoBorrowerSignature`) decides which e-signature batch
+   it lands in. This gap led straight into the next feature.
+
+## Feature: configurable signature requirements (commit `edc2378`)
+
+Same shape as the Required/Conditional toggle — `DocumentTemplate.setSignatureRequirements()`
+(independent of `setRequired()`, single-field write, no side effects, no transaction needed), a
+new `PATCH /document-templates/:id/signature-requirements` route (same `document_template.manage`
+gate), and two more `Switch` controls per row in `DocumentTemplatesTab.tsx` ("Signed by: Borrower
+/ Co-Borrower"). Verified against the live DB (flip both flags, confirm persisted, revert) and
+confirmed the route returns `401` not `404`.
+
+## Feature: Loan Products admin config — Add Product / Add Version / Activate (commit `b482726`)
+
+User asked me to review the existing "Loan Products" feature ("paano mag dagdag ng product at mag
+edit dito? may features ba na ganito?"). Investigation found the exact same shape of gap as
+Document Templates: `LoanProductsPage.tsx` was a read-only catalog viewer with a banner literally
+saying "adding or customizing a product here would need a proper create-version + activate
+workflow — not yet built" — but the backend `POST /loan-products`, `POST
+/loan-products/:id/versions`, `POST /loan-products/:id/versions/:versionId/activate` endpoints
+were already fully wired and working in `app.ts`, just never called from any UI.
+
+Planned in Plan Mode (two Explore agents: one on the loan-product backend/schemas, one on the
+existing `LoanProductsPage.tsx` structure), then implemented — purely frontend, zero backend
+changes:
+- `roleContext.tsx`: new `canManageLoanProducts` (`hasPermission('loan_product.write')`).
+- New `LoanProductForms.tsx`: `AddLoanProductDialog` (code/name/description) and
+  `AddLoanProductVersionDialog` (interest method + rate range, loan amount range, installment
+  range, grace period, rounding method, an optional Penalty Rule section, and a dynamic Fee Rules
+  list with add/remove rows). **Deliberately no "Edit Version" form** — a `LoanProductVersion` is
+  immutable once created (LPV-1/LPV-2/LPV-3: must never retroactively change a historical loan's
+  rules), so "editing" a product means create-new-version-then-activate, never in-place edit.
+- `LoanProductsPage.tsx`: "Add Product" button in the Catalog card header; the expandable row now
+  lists the FULL version history (not just active/latest) with an "Activate" button on any
+  non-active version; the stale read-only banner replaced with accurate copy.
+
+Verified end-to-end against the live DB with a one-off script (create product → create version
+with a fee rule + penalty rule → activate it → clean up the test product), since no UI login
+credentials exist in this environment.
+
+## SDevTech legacy database sync (no code changes — a data operation)
+
+User: "i update natin ang lms database meron na akong updated database galing sdev ngayon", using
+the pre-existing `Update Database From SDevTech.bat` (from an earlier session) as the runbook.
+Followed its exact steps manually (the .bat itself needs an interactive terminal this environment
+doesn't have):
+
+1. Extracted the newest export (`legacy/mongodb/20260809_113129.zip`) via `Expand-Archive`.
+2. **Dry run** (`migrate-legacy-data.ts`, no `--apply`) — reported to the user before touching
+   anything: 43 Loan Products, 4,630 Client Accounts (~22 new vs the live DB's 4,608), 1,800 Loan
+   Accounts (15 skipped, unresolved borrower), 280,081 Loan Transactions (~40 new vs 280,041
+   live), 21,314 Attachments (metadata only). Got explicit confirmation before applying.
+3. **Applied** (`--apply`) — matched the dry run exactly, "Migration complete."
+4. `recompute-active-loan-balances-from-schedule.ts` — 181 newly-migrated loans had no
+   account-level balance snapshot in the SDevTech source; recomputed from their own repayment
+   schedule instead.
+5. `check-legacy-balance-integrity.ts` — flagged one loan (`SL-CORP_00127`) with no
+   `RepaymentSchedule` rows at all yet, so its balance couldn't be recomputed.
+6. Per that script's own doc comment, ran `migrate-repayment-schedules.ts` (idempotent,
+   upsert-by-legacyId) to backfill schedules — picked up 8,810 installments across 1,799 loans,
+   including the flagged one.
+7. Re-ran steps 4 and 5: recompute now covered all 182 flagged loans (0 left without schedule
+   data), and the integrity check came back clean — "no issues found."
+
+This whole operation is additive-only by design (per the `.bat`'s own description: never modifies
+or deletes existing data, including anything created directly in the LMS) — no schema/code changes
+were involved, so nothing to commit for this step. The user was told attachment *files* themselves
+(not just metadata) still need a separate SFTP backfill (`backfill-legacy-attachments.ts`) if
+wanted — deferred, user said "hindi muna."
+
+## Fix: "Name of employer" no longer required on the Loan Application create form (commit `91109de`)
+
+User request, prompted by a screenshot of the form's "Required before submitting" checklist. The
+backend (`loanApplicationSchemas.ts`) already treats `employer` as optional
+(`z.string().min(1).optional()`) — this was a frontend-only requirement in
+`LoanApplicationCreatePage.tsx`. Removed the `missing.push('Name of employer (§4)')` validation
+line and the `*` on the field label to match.
+
+## Verification (this whole session)
+
+- `npx tsc --noEmit` clean on both apps after every change.
+- `npx vitest run` (backend): matched the known baseline (5 failed files/135 passed/1 skipped, 10
+  failed/892 passed/7 skipped) every time run — zero regressions across the entire session.
+- `npm run build` (frontend): succeeded after every frontend change.
+- Docker rebuilt (`easycashbackend` and/or `lmsfrontend`, whichever changed) after every code
+  change; healthy every time.
+- No UI click-through possible for anything I built myself (no login credentials in this
+  environment) — verified via live-DB scripts + route-registration checks instead, as detailed
+  above. The user did do real UI click-throughs on their end (their own credentials) for the
+  Document Templates screen, which is how the accidental-Required-toggle bug surfaced and got
+  fixed.
+
 ## Current state / known follow-up
 
-- All work today is committed and pushed to `origin/main` (commits `08ba629` through `cdc0a55`).
-- The Document Templates admin screen has never been exercised through the actual browser UI by
-  either the AI or a human this session — worth a real click-through once login credentials exist,
-  to catch anything a live-DB-only verification couldn't (CSS/layout, the checkbox matrix's
-  scroll/search behavior with 43 products, etc.).
-- `QUIT_CLAIM` still has no product mapping — the user can now set this themselves via the new
-  admin screen instead of asking for a dev backfill.
+- All work today is committed and pushed to `origin/main` (commits `08ba629` through `91109de`).
+- The Loan Products admin screen (Add Product/Add Version/Activate) has never been exercised
+  through the actual browser UI — same caveat as Document Templates initially had; worth a real
+  click-through, especially the dynamic Fee Rules list and the Penalty Rule toggle section.
+- Legacy attachment *files* (not just metadata) from the new SDevTech sync still need
+  `backfill-legacy-attachments.ts` (SFTP) run whenever the user wants them — explicitly deferred.
+- `QUIT_CLAIM` still has no product mapping as of this log — available for the user to set
+  themselves via the Document Templates screen whenever they decide which products it applies to.
