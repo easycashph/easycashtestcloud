@@ -59,6 +59,29 @@ export function DocumentTemplatesTab() {
     onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not update this template.'),
   });
 
+  // 2026-08-09 (user request): independent of Required/Conditional - which party(ies) must sign
+  // this template once generated, decides which e-signature batch(es) it's included in.
+  const signatureMutation = useMutation({
+    mutationFn: ({
+      templateId,
+      requiresBorrowerSignature,
+      requiresCoBorrowerSignature,
+    }: {
+      templateId: string;
+      requiresBorrowerSignature: boolean;
+      requiresCoBorrowerSignature: boolean;
+    }) =>
+      apiClient.patch<DocumentTemplateAdminResponse>(`/document-templates/${templateId}/signature-requirements`, {
+        requiresBorrowerSignature,
+        requiresCoBorrowerSignature,
+      }),
+    onSuccess: (data) => {
+      setError(null);
+      queryClient.setQueryData(['document-templates-admin'], data);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not update signature requirements.'),
+  });
+
   const openMapping = (templateId: string) => {
     setError(null);
     setProductSearch('');
@@ -116,7 +139,8 @@ export function DocumentTemplatesTab() {
             <FileText className="h-4 w-4 text-primary" /> Document Templates
           </CardTitle>
           <CardDescription>
-            Toggle a template between Required (every loan) and Conditional (only the Loan Products you pick).
+            Toggle a template between Required (every loan) and Conditional (only the Loan Products you pick), and
+            which party(ies) must sign it once generated.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -129,28 +153,63 @@ export function DocumentTemplatesTab() {
             {templates.map((template, i) => {
               const mappedCount = mappedProductIdsFor(template.id).size;
               return (
-                <div key={template.id} className={cn('flex items-center justify-between gap-3 px-4 py-3', i > 0 && 'border-t')}>
-                  <div>
-                    <p className="text-sm font-medium">{template.name}</p>
-                    <p className="text-xs text-muted-foreground">{template.code}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {template.isRequired ? (
-                      <span className="text-xs text-muted-foreground">Applies to every loan</span>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => openMapping(template.id)}>
-                        {mappedCount === 0 ? 'No products mapped' : `Edit ${mappedCount} product${mappedCount === 1 ? '' : 's'}`}
-                      </Button>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{template.isRequired ? 'Required' : 'Conditional'}</span>
-                      <Switch
-                        checked={template.isRequired}
-                        onCheckedChange={(checked) => requiredMutation.mutate({ templateId: template.id, isRequired: checked })}
-                        disabled={requiredMutation.isPending}
-                        aria-label={`${template.name} required`}
-                      />
+                <div key={template.id} className={cn('space-y-2.5 px-4 py-3', i > 0 && 'border-t')}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{template.name}</p>
+                      <p className="text-xs text-muted-foreground">{template.code}</p>
                     </div>
+                    <div className="flex items-center gap-4">
+                      {template.isRequired ? (
+                        <span className="text-xs text-muted-foreground">Applies to every loan</span>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => openMapping(template.id)}>
+                          {mappedCount === 0 ? 'No products mapped' : `Edit ${mappedCount} product${mappedCount === 1 ? '' : 's'}`}
+                        </Button>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{template.isRequired ? 'Required' : 'Conditional'}</span>
+                        <Switch
+                          checked={template.isRequired}
+                          onCheckedChange={(checked) => requiredMutation.mutate({ templateId: template.id, isRequired: checked })}
+                          disabled={requiredMutation.isPending}
+                          aria-label={`${template.name} required`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-5 border-t border-dashed pt-2.5">
+                    <span className="text-xs text-muted-foreground">Signed by:</span>
+                    <label className="flex items-center gap-2 text-xs">
+                      <Switch
+                        checked={template.requiresBorrowerSignature}
+                        onCheckedChange={(checked) =>
+                          signatureMutation.mutate({
+                            templateId: template.id,
+                            requiresBorrowerSignature: checked,
+                            requiresCoBorrowerSignature: template.requiresCoBorrowerSignature,
+                          })
+                        }
+                        disabled={signatureMutation.isPending}
+                        aria-label={`${template.name} requires borrower signature`}
+                      />
+                      Borrower
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <Switch
+                        checked={template.requiresCoBorrowerSignature}
+                        onCheckedChange={(checked) =>
+                          signatureMutation.mutate({
+                            templateId: template.id,
+                            requiresBorrowerSignature: template.requiresBorrowerSignature,
+                            requiresCoBorrowerSignature: checked,
+                          })
+                        }
+                        disabled={signatureMutation.isPending}
+                        aria-label={`${template.name} requires co-borrower signature`}
+                      />
+                      Co-Borrower
+                    </label>
                   </div>
                 </div>
               );

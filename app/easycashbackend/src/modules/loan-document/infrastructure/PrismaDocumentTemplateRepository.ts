@@ -58,7 +58,14 @@ export class PrismaDocumentTemplateRepository implements IDocumentTemplateReposi
 
   async update(template: DocumentTemplate, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
-    await client.documentTemplate.update({ where: { id: template.id }, data: { isRequired: template.isRequired } });
+    await client.documentTemplate.update({
+      where: { id: template.id },
+      data: {
+        isRequired: template.isRequired,
+        requiresBorrowerSignature: template.requiresBorrowerSignature,
+        requiresCoBorrowerSignature: template.requiresCoBorrowerSignature,
+      },
+    });
   }
 
   async findAllProductMappings(ctx?: TransactionContext): Promise<DocumentTemplateProductMapping[]> {

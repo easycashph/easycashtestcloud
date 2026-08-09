@@ -295,6 +295,7 @@ import { createDocumentTemplateAdminRouter } from '@modules/loan-document/interf
 import { ListDocumentTemplatesForAdminUseCase } from '@modules/loan-document/application/use-cases/ListDocumentTemplatesForAdminUseCase';
 import { UpdateDocumentTemplateRequiredUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateRequiredUseCase';
 import { SetDocumentTemplateProductMappingsUseCase } from '@modules/loan-document/application/use-cases/SetDocumentTemplateProductMappingsUseCase';
+import { UpdateDocumentTemplateSignatureRequirementsUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateSignatureRequirementsUseCase';
 import { PrismaDocumentTemplateRepository } from '@modules/loan-document/infrastructure/PrismaDocumentTemplateRepository';
 import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/infrastructure/PrismaGeneratedLoanDocumentRepository';
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
@@ -898,6 +899,9 @@ export function createApp(): Express {
         unitOfWork,
       }),
       setDocumentTemplateProductMappingsUseCase: new SetDocumentTemplateProductMappingsUseCase({
+        documentTemplateRepository,
+      }),
+      updateDocumentTemplateSignatureRequirementsUseCase: new UpdateDocumentTemplateSignatureRequirementsUseCase({
         documentTemplateRepository,
       }),
     },

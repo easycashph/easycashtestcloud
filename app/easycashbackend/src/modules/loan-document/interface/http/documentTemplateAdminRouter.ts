@@ -4,7 +4,11 @@ import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requirePermission } from '@shared/middleware/requirePermission';
 import { DocumentTemplateAdminController, type DocumentTemplateAdminControllerDeps } from './documentTemplateAdminController';
-import { updateDocumentTemplateRequiredSchema, setDocumentTemplateProductMappingsSchema } from './documentTemplateAdminSchemas';
+import {
+  updateDocumentTemplateRequiredSchema,
+  setDocumentTemplateProductMappingsSchema,
+  updateDocumentTemplateSignatureRequirementsSchema,
+} from './documentTemplateAdminSchemas';
 
 /**
  * 2026-08-09 (Document Templates admin config, user request): lets MIS toggle a document
@@ -33,6 +37,13 @@ export function createDocumentTemplateAdminRouter(deps: DocumentTemplateAdminCon
     requirePermission('document_template.manage'),
     validateBody(setDocumentTemplateProductMappingsSchema),
     controller.setProductMappings,
+  );
+  router.patch(
+    '/document-templates/:id/signature-requirements',
+    requireAuth,
+    requirePermission('document_template.manage'),
+    validateBody(updateDocumentTemplateSignatureRequirementsSchema),
+    controller.updateSignatureRequirements,
   );
 
   return router;

@@ -520,6 +520,8 @@ export interface DocumentTemplateAdminView {
   name: string;
   isRequired: boolean;
   sortIndex: number;
+  requiresBorrowerSignature: boolean;
+  requiresCoBorrowerSignature: boolean;
 }
 
 /** GET /document-templates/admin response — same combined shape returned by every mutation on that resource. */

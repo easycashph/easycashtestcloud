@@ -8,6 +8,8 @@ function presentDocumentTemplate(template: DocumentTemplate) {
     name: template.name,
     isRequired: template.isRequired,
     sortIndex: template.sortIndex,
+    requiresBorrowerSignature: template.requiresBorrowerSignature,
+    requiresCoBorrowerSignature: template.requiresCoBorrowerSignature,
   };
 }
 

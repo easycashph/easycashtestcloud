@@ -27,6 +27,12 @@ export class DocumentTemplate {
     this.props.isRequired = isRequired;
   }
 
+  /** 2026-08-09 (Document Templates admin config, user request): which party(ies) must sign this template once generated - independent of `isRequired`/product mapping (those control whether the doc is generated at all; this controls which e-signature batch(es) it's included in). */
+  setSignatureRequirements(requiresBorrowerSignature: boolean, requiresCoBorrowerSignature: boolean): void {
+    this.props.requiresBorrowerSignature = requiresBorrowerSignature;
+    this.props.requiresCoBorrowerSignature = requiresCoBorrowerSignature;
+  }
+
   get id(): string {
     return this.props.id;
   }
