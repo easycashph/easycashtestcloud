@@ -260,6 +260,19 @@ immediately after. Most likely explanation: the user's earlier attempt landed wh
 briefly in an invalid intermediate state during my own edit-and-verify cycle, or mid-container-
 rebuild — both should be resolved now that every change lands only after passing a render check.
 
+## Fix: Attachments preview — hide Chrome's native PDF toolbar (commit `38dbb21`)
+
+User: on Loan Account > Attachments, wanted a custom Print/Download row below the preview and the
+browser's own native PDF toolbar (Print/Download/Save to Google Drive) removed. Investigation
+found this exact fix already existed for generated **Documents** (`LoanDocumentPreviewModal.tsx`,
+from an earlier 2026-08-07 session: appends `#toolbar=0` to the blob: URL to hide Chrome's built-in
+toolbar, since its own Download button bypassed `downloadFile()`'s filename convention, plus
+explicit Print/Download buttons below the iframe) but was never carried over to the separate,
+hand-duplicated **Attachments** preview modal (`AttachmentPreviewModal.tsx`). Brought the PDF
+branch there up to parity: same `#toolbar=0` fragment, same `iframeRef.contentWindow?.print()`
+Print button, same `downloadFile()` Download button. The image-preview branch and the
+unsupported-file-type fallback were untouched (no native toolbar involved in those cases).
+
 ## Verification (this whole session)
 
 - `npx tsc --noEmit` clean on both apps after every change.
@@ -280,7 +293,7 @@ rebuild — both should be resolved now that every change lands only after passi
 
 ## Current state / known follow-up
 
-- All work today is committed and pushed to `origin/main` (commits `08ba629` through `a2d33c0`).
+- All work today is committed and pushed to `origin/main` (commits `08ba629` through `38dbb21`).
 - The Loan Products admin screen (Add Product/Add Version/Activate) has never been exercised
   through the actual browser UI — same caveat as Document Templates initially had; worth a real
   click-through, especially the dynamic Fee Rules list and the Penalty Rule toggle section.
