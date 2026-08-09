@@ -348,10 +348,15 @@ async function main() {
     });
   }
 
-  // ADR-051 §1: the 11 loan document types in scope (Statement of Account excluded — separate,
+  // ADR-051 §1: the loan document types in scope (Statement of Account excluded — separate,
   // on-demand feature). Required documents apply to every loan and have no
   // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products
   // separately (ADR-051 §9 — not yet confirmed with the user, so no mapping rows seeded here).
+  // 2026-08-08 (user request): added QUIT_CLAIM as a 12th, conditional document - same
+  // "no product mapping seeded yet" posture as the other 7 conditional templates, since which
+  // Loan Product(s) it should apply to hasn't been confirmed. Template file at
+  // `templates/QUIT_CLAIM.docx` (renamed from the user-supplied `QUIT_CLAIM_Redesigned_A4_One_
+  // Page.docx` to match this repo's "code == filename" convention for every other template).
   const documentTemplateRows = [
     { code: 'DISCLOSURE_STATEMENT', name: 'Disclosure Statement', isRequired: true, sortIndex: 1 },
     { code: 'PROMISSORY_NOTE', name: 'Promissory Note', isRequired: true, sortIndex: 2 },
@@ -364,6 +369,7 @@ async function main() {
     { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 9 },
     { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 10 },
     { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 11 },
+    { code: 'QUIT_CLAIM', name: 'Quit Claim', isRequired: false, sortIndex: 12 },
   ] as const;
   for (const row of documentTemplateRows) {
     await prisma.documentTemplate.upsert({
