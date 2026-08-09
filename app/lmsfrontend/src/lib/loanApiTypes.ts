@@ -512,6 +512,23 @@ export interface LoanDocumentListItem {
   } | null;
 }
 
+/** 2026-08-09 (Document Templates admin config) — one row per document template, for the admin
+ * config screen (Settings > System > Documents). Mirrors `DocumentTemplateAdminPresenter`'s output. */
+export interface DocumentTemplateAdminView {
+  id: string;
+  code: string;
+  name: string;
+  isRequired: boolean;
+  sortIndex: number;
+}
+
+/** GET /document-templates/admin response — same combined shape returned by every mutation on that resource. */
+export interface DocumentTemplateAdminResponse {
+  templates: DocumentTemplateAdminView[];
+  loanProducts: { id: string; code: string; name: string }[];
+  mappings: { documentTemplateId: string; loanProductId: string }[];
+}
+
 /** ADR-052 — one row per generated Statement of Account (append-only history, newest first). */
 export interface GeneratedStatementOfAccountListItem {
   id: string;

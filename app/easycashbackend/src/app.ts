@@ -291,6 +291,10 @@ import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/
 import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
 import { ListLoanDocumentsUseCase } from '@modules/loan-document/application/use-cases/ListLoanDocumentsUseCase';
 import { GetGeneratedLoanDocumentFileUseCase } from '@modules/loan-document/application/use-cases/GetGeneratedLoanDocumentFileUseCase';
+import { createDocumentTemplateAdminRouter } from '@modules/loan-document/interface/http/documentTemplateAdminRouter';
+import { ListDocumentTemplatesForAdminUseCase } from '@modules/loan-document/application/use-cases/ListDocumentTemplatesForAdminUseCase';
+import { UpdateDocumentTemplateRequiredUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateRequiredUseCase';
+import { SetDocumentTemplateProductMappingsUseCase } from '@modules/loan-document/application/use-cases/SetDocumentTemplateProductMappingsUseCase';
 import { PrismaDocumentTemplateRepository } from '@modules/loan-document/infrastructure/PrismaDocumentTemplateRepository';
 import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/infrastructure/PrismaGeneratedLoanDocumentRepository';
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
@@ -878,6 +882,28 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanDocumentRouter);
+
+  // 2026-08-09 (Document Templates admin config, user request): lets MIS configure required/
+  // conditional status and per-product mapping without a developer re-editing prisma/seed.ts.
+  // Reuses the same documentTemplateRepository/loanProductRepository/unitOfWork instances wired
+  // above.
+  const documentTemplateAdminRouter = createDocumentTemplateAdminRouter(
+    {
+      listDocumentTemplatesForAdminUseCase: new ListDocumentTemplatesForAdminUseCase({
+        documentTemplateRepository,
+        loanProductRepository,
+      }),
+      updateDocumentTemplateRequiredUseCase: new UpdateDocumentTemplateRequiredUseCase({
+        documentTemplateRepository,
+        unitOfWork,
+      }),
+      setDocumentTemplateProductMappingsUseCase: new SetDocumentTemplateProductMappingsUseCase({
+        documentTemplateRepository,
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', documentTemplateAdminRouter);
 
   // --- loan-signing module wiring (e-signature, 2026-07-22, phase 1: required documents only) ---
   // Reuses documentTemplateRepository/generatedLoanDocumentRepository/loanDocumentFileStorage/

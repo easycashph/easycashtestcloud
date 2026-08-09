@@ -30,6 +30,23 @@ export class DocumentTemplateNotApplicableError extends DomainError {
 }
 
 /**
+ * 2026-08-09 (Document Templates admin config, user request): a Required template applies to
+ * every loan and never carries `DocumentTemplateMapping` rows (see that model's own doc comment)
+ * - product mappings can only be edited for a Conditional template. Flip it to Conditional first.
+ */
+export class DocumentTemplateIsRequiredError extends DomainError {
+  constructor(documentTemplateCode: string) {
+    super(
+      'DOCUMENT_TEMPLATE_IS_REQUIRED',
+      `"${documentTemplateCode}" is Required and applies to every loan — switch it to Conditional before editing its product mapping.`,
+      undefined,
+      409,
+    );
+    this.name = 'DocumentTemplateIsRequiredError';
+  }
+}
+
+/**
  * ADR-051 §2/§9: the `.docx` file for a template hasn't been placed under
  * `app/backend/templates/` yet (the user edits these in Word, one at a time) — a configuration
  * gap, not a user input error, so the frontend should show "not available yet" rather than a

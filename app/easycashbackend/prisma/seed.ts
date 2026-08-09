@@ -79,6 +79,10 @@ async function main() {
     'penalty.reduce': 'Reduce or waive an installment penalty',
     'fees.adjust': 'Adjust an installment fee amount',
     'document.generate': 'Generate loan documents',
+    // 2026-08-09 (Document Templates admin config, user request): separate, narrower, MIS-only-
+    // by-default admin permission - configures the required/conditional rules `document.generate`
+    // itself follows, not the act of generating a document for a loan.
+    'document_template.manage': 'Manage document template required/conditional status and product mapping',
     'statement_of_account.generate': 'Generate a Statement of Account',
     'attachment.upload': 'Upload borrower/loan attachments',
     'esignature.manage': 'Send and manage e-signature requests',

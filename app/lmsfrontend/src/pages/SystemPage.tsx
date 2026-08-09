@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
+import { DocumentTemplatesTab } from '@/pages/DocumentTemplatesTab';
 
 /** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
  * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
@@ -26,8 +27,8 @@ import { ActivityLogPage } from '@/pages/ActivityLogPage';
  * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
 const REMINDER_TOGGLES_LOCKED = true;
 
-type SystemTab = 'reminders' | 'members' | 'products' | 'activity-logs';
-const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'activity-logs'];
+type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'activity-logs';
+const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'documents', 'activity-logs'];
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -346,10 +347,11 @@ export function SystemPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
           <TabsTrigger value="members">User Accounts</TabsTrigger>
           <TabsTrigger value="products">Loan Products</TabsTrigger>
+          <TabsTrigger value="documents">Document Templates</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -362,6 +364,7 @@ export function SystemPage() {
       )}
       {tab === 'members' && <MemberListPage />}
       {tab === 'products' && <LoanProductsPage />}
+      {tab === 'documents' && <DocumentTemplatesTab />}
       {tab === 'activity-logs' && <ActivityLogPage />}
     </div>
   );

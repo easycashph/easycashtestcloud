@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { DocumentTemplate, type DocumentTemplateProps } from '../domain/DocumentTemplate';
-import type { IDocumentTemplateRepository } from '../application/ports/IDocumentTemplateRepository';
+import type { DocumentTemplateProductMapping, IDocumentTemplateRepository } from '../application/ports/IDocumentTemplateRepository';
 
 type DocumentTemplateRow = Prisma.DocumentTemplateGetPayload<Record<string, never>>;
 
@@ -48,5 +48,34 @@ export class PrismaDocumentTemplateRepository implements IDocumentTemplateReposi
       orderBy: { sortIndex: 'asc' },
     });
     return rows.map(toDomain);
+  }
+
+  async findAll(ctx?: TransactionContext): Promise<DocumentTemplate[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.documentTemplate.findMany({ orderBy: { sortIndex: 'asc' } });
+    return rows.map(toDomain);
+  }
+
+  async update(template: DocumentTemplate, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.documentTemplate.update({ where: { id: template.id }, data: { isRequired: template.isRequired } });
+  }
+
+  async findAllProductMappings(ctx?: TransactionContext): Promise<DocumentTemplateProductMapping[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.documentTemplateMapping.findMany({
+      select: { documentTemplateId: true, loanProductId: true },
+    });
+    return rows;
+  }
+
+  async setProductMappings(templateId: string, loanProductIds: string[], ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.documentTemplateMapping.deleteMany({ where: { documentTemplateId: templateId } });
+    if (loanProductIds.length > 0) {
+      await client.documentTemplateMapping.createMany({
+        data: loanProductIds.map((loanProductId) => ({ documentTemplateId: templateId, loanProductId })),
+      });
+    }
   }
 }

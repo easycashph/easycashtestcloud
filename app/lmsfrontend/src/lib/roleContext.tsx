@@ -44,6 +44,7 @@ export type PermissionCode =
   | 'penalty.reduce'
   | 'fees.adjust'
   | 'document.generate'
+  | 'document_template.manage'
   | 'statement_of_account.generate'
   | 'attachment.upload'
   | 'esignature.manage'
@@ -114,6 +115,10 @@ interface RoleContextValue {
   canAdjustLoan: boolean;
   /** Create or edit a Client (Borrower) profile. */
   canManageClients: boolean;
+  /** 2026-08-09 (Document Templates admin config): configure a document template's required/
+   * conditional status and per-product mapping - narrow, MIS-only-by-default admin permission,
+   * distinct from `canGenerateDocuments` (any staff generating a document for a specific loan). */
+  canManageDocumentTemplates: boolean;
   /** True if the signed-in user's role currently has the given permission code granted - the
    * general-purpose escape hatch for a check that doesn't already have its own named `can*`
    * boolean above. */
@@ -301,6 +306,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canRestructureLoan: hasPermission('loan_account.restructure'),
     canAdjustLoan: hasPermission('loan_account.adjust'),
     canManageClients: hasPermission('borrower.write'),
+    canManageDocumentTemplates: hasPermission('document_template.manage'),
     hasPermission,
     refreshCurrentUser,
   };
