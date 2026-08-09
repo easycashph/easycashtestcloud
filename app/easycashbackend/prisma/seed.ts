@@ -350,32 +350,49 @@ async function main() {
 
   // ADR-051 §1: the loan document types in scope (Statement of Account excluded — separate,
   // on-demand feature). Required documents apply to every loan and have no
-  // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products
-  // separately (ADR-051 §9 — not yet confirmed with the user, so no mapping rows seeded here).
-  // 2026-08-08 (user request): added QUIT_CLAIM as a 12th, conditional document - same
-  // "no product mapping seeded yet" posture as the other 7 conditional templates, since which
-  // Loan Product(s) it should apply to hasn't been confirmed. Template file at
-  // `templates/QUIT_CLAIM.docx` (renamed from the user-supplied `QUIT_CLAIM_Redesigned_A4_One_
-  // Page.docx` to match this repo's "code == filename" convention for every other template).
+  // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products via
+  // that table.
+  // 2026-08-08 (user request): added QUIT_CLAIM as a conditional document - no product mapping
+  // seeded yet, since which Loan Product(s) it should apply to hasn't been confirmed. Template
+  // file at `templates/QUIT_CLAIM.docx` (renamed from the user-supplied
+  // `QUIT_CLAIM_Redesigned_A4_One_Page.docx` to match this repo's "code == filename" convention).
+  // 2026-08-09 (user request): moved ACKNOWLEDGEMENT_RECEIPT from required to conditional, mapped
+  // to every existing Loan Product below (same net effect as before - every product still gets
+  // it - but now removable per-product later without a code change).
   const documentTemplateRows = [
     { code: 'DISCLOSURE_STATEMENT', name: 'Disclosure Statement', isRequired: true, sortIndex: 1 },
     { code: 'PROMISSORY_NOTE', name: 'Promissory Note', isRequired: true, sortIndex: 2 },
-    { code: 'ACKNOWLEDGEMENT_RECEIPT', name: 'Acknowledgement Receipt', isRequired: true, sortIndex: 3 },
-    { code: 'DATA_PRIVACY_CONSENT', name: 'Data Privacy and Consent Form', isRequired: true, sortIndex: 4 },
-    { code: 'LOAN_AGREEMENT_SALARY', name: 'Loan Agreement - Salary', isRequired: false, sortIndex: 5 },
-    { code: 'LOAN_AGREEMENT_SEAFARER', name: 'Loan Agreement - Seafarer', isRequired: false, sortIndex: 6 },
-    { code: 'DEED_OF_ASSIGNMENT_BORROWER', name: 'Deed of Assignment - Borrower', isRequired: false, sortIndex: 7 },
-    { code: 'DEED_OF_ASSIGNMENT_CO_BORROWER', name: 'Deed of Assignment - Co-Borrower', isRequired: false, sortIndex: 8 },
-    { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 9 },
-    { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 10 },
-    { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 11 },
+    { code: 'DATA_PRIVACY_CONSENT', name: 'Data Privacy and Consent Form', isRequired: true, sortIndex: 3 },
+    { code: 'LOAN_AGREEMENT_SALARY', name: 'Loan Agreement - Salary', isRequired: false, sortIndex: 4 },
+    { code: 'LOAN_AGREEMENT_SEAFARER', name: 'Loan Agreement - Seafarer', isRequired: false, sortIndex: 5 },
+    { code: 'DEED_OF_ASSIGNMENT_BORROWER', name: 'Deed of Assignment - Borrower', isRequired: false, sortIndex: 6 },
+    { code: 'DEED_OF_ASSIGNMENT_CO_BORROWER', name: 'Deed of Assignment - Co-Borrower', isRequired: false, sortIndex: 7 },
+    { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 8 },
+    { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 9 },
+    { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 10 },
+    { code: 'ACKNOWLEDGEMENT_RECEIPT', name: 'Acknowledgement Receipt', isRequired: false, sortIndex: 11 },
     { code: 'QUIT_CLAIM', name: 'Quit Claim', isRequired: false, sortIndex: 12 },
   ] as const;
+  const documentTemplatesByCode = new Map<string, { id: string }>();
   for (const row of documentTemplateRows) {
-    await prisma.documentTemplate.upsert({
+    const template = await prisma.documentTemplate.upsert({
       where: { code: row.code },
       update: { name: row.name, isRequired: row.isRequired, sortIndex: row.sortIndex },
       create: row,
+    });
+    documentTemplatesByCode.set(row.code, template);
+  }
+
+  // 2026-08-09 (user request): Acknowledgement Receipt was just moved from required to
+  // conditional (above) - map it to every existing Loan Product so nothing changes in practice
+  // (every product still gets it), while making it independently removable per-product later.
+  const acknowledgementReceiptTemplate = documentTemplatesByCode.get('ACKNOWLEDGEMENT_RECEIPT')!;
+  const allLoanProducts = await prisma.loanProduct.findMany({ select: { id: true } });
+  for (const product of allLoanProducts) {
+    await prisma.documentTemplateMapping.upsert({
+      where: { loanProductId_documentTemplateId: { loanProductId: product.id, documentTemplateId: acknowledgementReceiptTemplate.id } },
+      update: {},
+      create: { loanProductId: product.id, documentTemplateId: acknowledgementReceiptTemplate.id },
     });
   }
 
