@@ -539,7 +539,6 @@ export function LoanApplicationForm({
   if (!loanCategory) missing.push('Type of loan (§2)');
   if (!(amount > 0)) missing.push('Desired loan amount (§2)');
   if (!(term > 0)) missing.push('Loan term in months (§2)');
-  if (!employer.trim()) missing.push('Name of employer (§4)');
   const canSubmit = missing.length === 0;
 
   const visibleDocumentSlots = DOCUMENT_SLOTS.filter((slot) => !slot.showWhen || slot.showWhen({ loanCategory, hasCoBorrower }));
@@ -980,7 +979,7 @@ export function LoanApplicationForm({
         description="Skip if the applicant is unemployed, self-employed, or retired (per the paper form)."
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name of employer *" tooltip="Applicant's current employer or business name.">
+          <Field label="Name of employer" tooltip="Applicant's current employer or business name.">
             <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
           </Field>
           <Field label="Occupation" tooltip="Applicant's job title or role.">
