@@ -115,6 +115,9 @@ interface RoleContextValue {
   canAdjustLoan: boolean;
   /** Create or edit a Client (Borrower) profile. */
   canManageClients: boolean;
+  /** 2026-08-09 (Loan Products admin config): create a Loan Product, create a new Loan Product
+   * Version, or activate one — Finance/Accounting-tier by default (ADR-038 §3.1), not CRM. */
+  canManageLoanProducts: boolean;
   /** 2026-08-09 (Document Templates admin config): configure a document template's required/
    * conditional status and per-product mapping - narrow, MIS-only-by-default admin permission,
    * distinct from `canGenerateDocuments` (any staff generating a document for a specific loan). */
@@ -306,6 +309,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canRestructureLoan: hasPermission('loan_account.restructure'),
     canAdjustLoan: hasPermission('loan_account.adjust'),
     canManageClients: hasPermission('borrower.write'),
+    canManageLoanProducts: hasPermission('loan_product.write'),
     canManageDocumentTemplates: hasPermission('document_template.manage'),
     hasPermission,
     refreshCurrentUser,
