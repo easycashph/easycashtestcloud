@@ -844,12 +844,16 @@ export function createApp(): Express {
     throw new Error(`STORAGE_DRIVER=${env.STORAGE_DRIVER} has no implementation yet — only "local" is supported.`);
   }
   const loanDocumentFileStorage = new SharedLocalFileStorage(env.STORAGE_LOCAL_PATH);
+  // 2026-08-09 (Quit Claim auto-fill, user request): local instance since loanApplicationRepository
+  // itself isn't declared until later in this file (loan-application module wiring) - same
+  // "dedicated local repository instance" precedent used elsewhere in this file.
   const mergeDataResolver = new LoanDocumentMergeDataResolver({
     loanAccountRepository,
     borrowerRepository,
     coBorrowerRepository,
     loanProductRepository,
     repaymentInstallmentRepository,
+    loanApplicationRepository: new PrismaLoanApplicationRepository(),
     prisma,
   });
   const documentFiller = new DocxtemplaterDocumentFiller();

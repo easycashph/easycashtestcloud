@@ -5,6 +5,7 @@ import type { IBorrowerRepository } from '@modules/borrower/application/ports/IB
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { ILoanDocumentMergeDataResolver } from '../application/ports/ILoanDocumentMergeDataResolver';
@@ -52,6 +53,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       coBorrowerRepository: ICoBorrowerRepository;
       loanProductRepository: ILoanProductRepository;
       repaymentInstallmentRepository: IRepaymentInstallmentRepository;
+      loanApplicationRepository: ILoanApplicationRepository;
       prisma: PrismaClient;
     },
   ) {}
@@ -87,6 +89,17 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
 
     const loanProduct = await this.deps.loanProductRepository.findById(loanProductVersion.loanProductId);
     if (!loanProduct) throw new NotFoundError('LoanProduct', loanProductVersion.loanProductId);
+
+    // 2026-08-09 (Quit Claim auto-fill, user request): the surrendered ATM/bank account this loan
+    // was secured with, if any - same `mitigation` source `CreateLoanSigningSessionUseCase` reads
+    // for its Deed of Assignment routing. Blank (not an error) when the loan has no source
+    // application, or the application was never underwritten with a mitigation section filled in -
+    // user-confirmed: leave the Quit Claim's Bank/Branch/Account/ATM fields blank in that case
+    // rather than refusing to generate the document.
+    const sourceApplication = loanAccount.sourceApplicationId
+      ? await this.deps.loanApplicationRepository.findById(loanAccount.sourceApplicationId)
+      : null;
+    const mitigation = sourceApplication?.reviewReport?.mitigation;
 
     const sortedInstallments = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const firstInstallment = sortedInstallments[0];
@@ -176,6 +189,15 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
         : '',
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
       BranchName: branch?.name ?? '',
+      // Quit Claim (2026-08-09, user request): {GeneratedDate} is "today", the day the document is
+      // actually printed/generated - not a stored field, computed fresh on every generation.
+      // {LoanDate} reuses ApprovalDate's own convention (see AgreementDate above).
+      GeneratedDate: formatDate(new Date()),
+      LoanDate: loanAccount.approvedAt ? formatDate(loanAccount.approvedAt) : '',
+      Bank: mitigation?.bank ?? '',
+      Branch: mitigation?.branch ?? '',
+      AccountNumber: mitigation?.accountNumber ?? '',
+      ATMCardNumber: mitigation?.atmCardNumber ?? '',
 
       PrincipalAmount: loanAccount.principalAmount.toString(),
       InterestRate: formatPercentage(loanAccount.interestRate),
