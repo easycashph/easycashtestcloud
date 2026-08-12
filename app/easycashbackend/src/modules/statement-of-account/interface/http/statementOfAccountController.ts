@@ -36,8 +36,9 @@ export class StatementOfAccountController {
       await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
         const statement = await this.deps.generateStatementOfAccountUseCase.execute({
           loanAccountId: req.params.id as string,
+          penaltyMode: body.penaltyMode,
           penaltyFromDate: body.penaltyFromDate ? new Date(`${body.penaltyFromDate}T00:00:00.000Z`) : undefined,
-          penaltyToDate: new Date(`${body.penaltyToDate}T00:00:00.000Z`),
+          penaltyToDate: body.penaltyToDate ? new Date(`${body.penaltyToDate}T00:00:00.000Z`) : undefined,
           accruedInterestAsOfDate: new Date(`${body.accruedInterestAsOfDate}T00:00:00.000Z`),
           collectionFee: Money.of(body.collectionFee),
           otherFee: Money.of(body.otherFee),

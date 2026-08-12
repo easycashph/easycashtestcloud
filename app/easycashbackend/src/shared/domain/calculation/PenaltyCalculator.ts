@@ -1,7 +1,17 @@
 import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
-import { manilaDaysBetween, manilaDaysInMonth, manilaWholeMonthsBetween } from '@shared/domain/manilaTime';
+import { manilaDaysBetween, manilaWholeMonthsBetween } from '@shared/domain/manilaTime';
+
+/**
+ * 2026-08-12 (user-confirmed): a flat 30, replacing the installment's own due-month length
+ * (28/29/30/31, the legacy Excel tool's "End of the month" column). That made the SAME 30 days of
+ * lateness cost a different amount depending on which month the due date happened to fall in —
+ * ₱3,145.08 in February against ₱2,840.72 in a 31-day month on an identical ₱29,354.10 balance, a
+ * ₱304.36 spread with no business meaning behind it. A flat 30 also brings this in line with the
+ * Statement of Account, which has always divided by 30.
+ */
+const DAYS_PER_MONTH = 30;
 
 export interface PenaltyCalculatorInput {
   /** The unpaid Principal + Interest for the installment — not principal alone (`ADR-050` §1). */
@@ -27,15 +37,15 @@ function addDays(date: Date, days: number): Date {
  * business/MIS testimony (2026-07-11), for loans originated going forward only (see `ADR-050` §5 —
  * this calculator is never applied to already-migrated loans' stored penalty figures).
  *
- * **2026-07-28 (user-confirmed, `ADR-050` §8/§9):** daily-prorated simple interest, matching the
- * user's own Excel reference tool exactly:
- * `overdueAmount × rate ÷ daysInDueMonth × daysLate`, where `daysLate` is the whole calendar-day
- * count from the original due date to `asOfDate` (no grace period — see §9: grace-period
- * forgiveness for an early payer is now a manual staff adjustment via Reduce Penalty, not an
- * automatic zero built into the formula), and `daysInDueMonth` is the actual number of days in the
- * calendar month the installment's own due date falls in (28/29/30/31), not a flat 30.
- * `gracePeriodDays` is accepted for interface parity with `calculateSimple()` but intentionally
- * unused here. Rounded once via `Money`'s half-up-to-centavo arithmetic.
+ * **2026-07-28 (user-confirmed, `ADR-050` §8/§9):** daily-prorated simple interest:
+ * `overdueAmount × rate ÷ 30 × daysLate`, where `daysLate` is the whole Manila calendar-day count
+ * from the original due date to `asOfDate` (no grace period — see §9: grace-period forgiveness for
+ * an early payer is now a manual staff adjustment via Reduce Penalty, not an automatic zero built
+ * into the formula). `gracePeriodDays` is accepted for interface parity with `calculateSimple()`
+ * but intentionally unused here. Rounded once via `Money`'s half-up-to-centavo arithmetic.
+ *
+ * **2026-08-12 (user-confirmed):** the divisor is a flat 30 — see `DAYS_PER_MONTH` above for why it
+ * is no longer the installment's own due-month length.
  */
 export class PenaltyCalculator {
   static calculate(input: PenaltyCalculatorInput): Money {
@@ -47,7 +57,7 @@ export class PenaltyCalculator {
     const amount = input.overdueAmount
       .toDecimal()
       .times(input.ratePercent.asFraction())
-      .dividedBy(manilaDaysInMonth(input.dueDate))
+      .dividedBy(DAYS_PER_MONTH)
       .times(daysLate)
       .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
     return Money.of(amount);

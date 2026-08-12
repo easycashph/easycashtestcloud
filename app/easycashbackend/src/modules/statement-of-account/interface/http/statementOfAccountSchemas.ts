@@ -6,13 +6,14 @@ const decimalString = z
 
 export const generateStatementOfAccountSchema = z.object({
   /**
-   * ISO date (YYYY-MM-DD) — manually entered by staff (2026-07-19, user request). 2026-07-28: only
-   * required for a migrated loan (no live penalty on file); the resolver validates presence and
-   * throws a clear error if a migrated loan's request omits it. Ignored entirely for a prospective
-   * loan, whose Penalty line is live-computed instead.
+   * 2026-08-12 (user-confirmed). Defaults to `RECORDED` — take each installment's penalty straight
+   * off the repayment schedule, no dates needed. `COMPUTED` keeps those recorded figures and fills
+   * in only the installments that have none, over the range below.
    */
+  penaltyMode: z.enum(['RECORDED', 'COMPUTED']).optional().default('RECORDED'),
+  /** ISO date (YYYY-MM-DD). Both required under `COMPUTED`, ignored under `RECORDED` — the resolver validates. */
   penaltyFromDate: z.string().date().optional(),
-  penaltyToDate: z.string().date(),
+  penaltyToDate: z.string().date().optional(),
   /** ISO date (YYYY-MM-DD) — independent of the Penalty range, also manually entered. */
   accruedInterestAsOfDate: z.string().date(),
   collectionFee: decimalString.optional().default('0.00'),

@@ -35,6 +35,7 @@ import type {
   Borrower as RealBorrower,
   CoBorrower,
   GeneratedStatementOfAccountListItem,
+  SoaPenaltyMode,
   InstallmentAdjustment,
   InterestRateChartEntry,
   LoanAccount,
@@ -73,7 +74,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid, manilaDaysBetween, manilaDaysInMonth } from '@/lib/utils';
+import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid, manilaDaysBetween } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -1684,10 +1685,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<{ items: GeneratedStatementOfAccountListItem[] }>(`/loan-accounts/${loanId}/statements-of-account`),
   });
   const [soaDialogOpen, setSoaDialogOpen] = React.useState(false);
-  // Penalty uses a manually-entered FROM/TO date range applied uniformly across every Past Due
-  // installment (2026-07-19, user request - NOT each installment's own due date). Accrued Interest
-  // keeps its own separate "as of" date (matches the legacy tool's own independent "To Date" field
-  // for that section).
+  // 2026-08-12 (user-confirmed): RECORDED takes each installment's penalty straight off the
+  // repayment schedule and needs no dates; COMPUTED keeps those and fills in only the installments
+  // that have none. See StatementOfAccountCalculator's doc comment for the full rules.
+  const [soaPenaltyMode, setSoaPenaltyMode] = React.useState<SoaPenaltyMode>('RECORDED');
   const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -1726,22 +1727,24 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // implementations these replaced mixed local-time and UTC field reads, so this preview could
     // disagree with the figures the backend actually put on the generated document.
     const daysBetween = manilaDaysBetween;
-    const daysInMonth = manilaDaysInMonth;
-    const penaltyDays = isProspectiveLoan ? 0 : daysBetween(penaltyFrom, penaltyTo);
 
     const previewInstallments = installmentsQuery.data?.items ?? [];
     const sorted = [...previewInstallments].sort((a, b) => a.installmentNumber - b.installmentNumber);
 
     const lastInstallment = sorted[sorted.length - 1];
     const maturityDate = lastInstallment ? new Date(lastInstallment.dueDate) : null;
-    const loanPrincipal = parseNum(loanQuery.data?.principalAmount);
-    const loanRate = loanPrincipal > 10000 ? 0.1 : 0.05; // ADR-050 tiering: whole loan's principal, not per-installment.
+
+    // Mirrors StatementOfAccountCalculator exactly: RECORDED has no penalty dates, so the whole
+    // statement is bucketed against the one date staff still enters.
+    const asOfDate = soaPenaltyMode === 'COMPUTED' ? penaltyTo : accruedTo;
+    const penaltyCutoff = maturityDate && asOfDate.getTime() > maturityDate.getTime() ? maturityDate : asOfDate;
 
     let pastDuePrincipal = 0;
     let pastDueInterest = 0;
     let pastDuePenalty = 0;
+    let filledCount = 0;
     for (const inst of sorted) {
-      if (new Date(inst.dueDate).getTime() > penaltyTo.getTime()) continue;
+      if (new Date(inst.dueDate).getTime() > asOfDate.getTime()) continue;
       const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
       const unpaidInterest = parseNum(inst.due.interest) - parseNum(inst.paid.interest);
       const unpaidBase = unpaidPrincipal + unpaidInterest;
@@ -1749,24 +1752,27 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       if (unpaidPrincipal > 0) pastDuePrincipal += unpaidPrincipal;
       if (unpaidInterest > 0) pastDueInterest += unpaidInterest;
 
-      if (isProspectiveLoan) {
-        const effectiveAsOf = maturityDate && penaltyTo.getTime() > maturityDate.getTime() ? maturityDate : penaltyTo;
-        const daysLate = daysBetween(new Date(inst.dueDate), effectiveAsOf);
-        if (daysLate > 0) {
-          pastDuePenalty += Math.round(((unpaidBase * loanRate) / daysInMonth(new Date(inst.dueDate))) * daysLate * 100) / 100;
-        }
-      } else if (penaltyDays > 0) {
-        const rate = unpaidBase > 10000 ? 0.1 : 0.05;
-        pastDuePenalty += Math.round(((unpaidBase * penaltyDays * rate) / 30) * 100) / 100;
+      // What the Repayment Schedule itself shows - the live ADR-050 figure where there is one,
+      // otherwise the migrated loan's frozen `due.penalty`. Same fallback as `resolveComputedPenalty`.
+      const recorded = parseNum(inst.currentPenaltyOwed ?? inst.due.penalty);
+      if (soaPenaltyMode === 'RECORDED' || recorded > 0) {
+        pastDuePenalty += recorded;
+        continue;
       }
+      const from = new Date(inst.dueDate).getTime() > penaltyFrom.getTime() ? new Date(inst.dueDate) : penaltyFrom;
+      const days = daysBetween(from, penaltyCutoff);
+      if (days <= 0) continue;
+      const rate = unpaidBase > 10000 ? 0.1 : 0.05;
+      pastDuePenalty += Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
+      filledCount += 1;
     }
     const totalPastDue = pastDuePrincipal + pastDueInterest + pastDuePenalty;
 
-    // Current Amortization Due = next unpaid installment due AFTER penaltyToDate.
+    // Current Amortization Due = next unpaid installment due AFTER the as-of date.
     const currentInstallment = sorted.find((inst) => {
       const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
       const unpaidInterest = parseNum(inst.due.interest) - parseNum(inst.paid.interest);
-      return new Date(inst.dueDate).getTime() > penaltyTo.getTime() && unpaidPrincipal + unpaidInterest > 0;
+      return new Date(inst.dueDate).getTime() > asOfDate.getTime() && unpaidPrincipal + unpaidInterest > 0;
     });
     const currentAmortizationDue = currentInstallment
       ? parseNum(currentInstallment.due.principal) -
@@ -1797,7 +1803,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       pastDuePrincipal,
       pastDueInterest,
       pastDuePenalty,
-      penaltyDays,
+      penaltyDays: daysBetween(penaltyFrom, penaltyCutoff),
+      filledCount,
+      penaltyCutoff,
       totalPastDue,
       currentAmortizationDue,
       pnValue,
@@ -1806,17 +1814,50 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       accruedInterest,
       totalAmountDue,
     };
-  }, [installmentsQuery.data, loanQuery.data, isProspectiveLoan, soaPenaltyFromDate, soaPenaltyToDate, soaAccruedInterestAsOfDate, soaCollectionFee, soaOtherFee]);
+  }, [
+    installmentsQuery.data,
+    loanQuery.data,
+    soaPenaltyMode,
+    soaPenaltyFromDate,
+    soaPenaltyToDate,
+    soaAccruedInterestAsOfDate,
+    soaCollectionFee,
+    soaOtherFee,
+  ]);
+
+  // 2026-08-12: sensible defaults for COMPUTED, applied when the dialog opens. "From" is the
+  // earliest past-due installment that has no penalty on record (the ones this mode fills in);
+  // "To" is min(today, maturity) - the same cap `CurrentPenaltyResolver` applies, so a loan that
+  // matured years ago doesn't silently compute zero days against a today-dated range, and one that
+  // has NOT matured yet is never charged penalty for days that have not happened.
+  React.useEffect(() => {
+    if (!soaDialogOpen) return;
+    const items = installmentsQuery.data?.items ?? [];
+    if (items.length === 0) return;
+    const num = (v: string | null | undefined) => Number.parseFloat(v ?? '') || 0;
+    const sorted = [...items].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    const maturity = new Date(sorted[sorted.length - 1]!.dueDate);
+    const now = new Date();
+    const firstBlank = sorted.find((i) => {
+      const unpaid = num(i.due.principal) - num(i.paid.principal) + (num(i.due.interest) - num(i.paid.interest));
+      return new Date(i.dueDate).getTime() <= now.getTime() && unpaid > 0 && num(i.currentPenaltyOwed ?? i.due.penalty) === 0;
+    });
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    setSoaPenaltyFromDate(iso(firstBlank ? new Date(firstBlank.dueDate) : sorted[0]!.dueDate ? new Date(sorted[0]!.dueDate) : now));
+    setSoaPenaltyToDate(iso(now.getTime() > maturity.getTime() ? maturity : now));
+  }, [soaDialogOpen, installmentsQuery.data]);
 
   const generateStatementMutation = useMutation({
     mutationFn: () =>
       apiClient.post(
         `/loan-accounts/${loanId}/statements-of-account`,
         {
-          // Only a migrated loan needs a manual From date - a prospective loan's Penalty is
-          // live-computed and ignores it entirely (ADR-052 addendum, 2026-07-28).
-          ...(isProspectiveLoan ? {} : { penaltyFromDate: soaPenaltyFromDate }),
-          penaltyToDate: soaPenaltyToDate,
+          penaltyMode: soaPenaltyMode,
+          // Dates only mean anything under COMPUTED - RECORDED takes the penalty straight off the
+          // repayment schedule and the backend rejects stray dates as unused input.
+          ...(soaPenaltyMode === 'COMPUTED'
+            ? { penaltyFromDate: soaPenaltyFromDate, penaltyToDate: soaPenaltyToDate }
+            : {}),
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
           collectionFee: soaCollectionFee,
           otherFee: soaOtherFee,
@@ -2926,7 +2967,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   // all, so a date next to it read as if some had accrued).
                   const summaryParts: string[] = [];
                   if (num(item.pastDuePenalty) > 0) {
-                    summaryParts.push(`Penalty ${formatDate(item.penaltyFromDate)} – ${formatDate(item.penaltyToDate)}`);
+                    // 2026-08-12: only a COMPUTED statement has a range to show - a RECORDED one
+                    // took the penalty straight off the schedule and stored no dates at all.
+                    summaryParts.push(
+                      item.penaltyFromDate && item.penaltyToDate
+                        ? `Penalty ${formatDate(item.penaltyFromDate)} – ${formatDate(item.penaltyToDate)}`
+                        : 'Penalty from schedule',
+                    );
                   }
                   if (num(item.accruedInterest) > 0) {
                     summaryParts.push(`Accrued Interest as of ${formatDate(item.accruedInterestAsOfDate)}`);
@@ -3045,29 +3092,46 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               </div>
             </div>
             <div className="rounded-md bg-secondary/40 p-3">
-              <div className="mb-1.5 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-medium">Penalty</p>
-                {isProspectiveLoan && <Badge variant="success">Live computed</Badge>}
+                {soaPenaltyMode === 'RECORDED' && <Badge variant="success">From schedule</Badge>}
               </div>
-              {isProspectiveLoan ? (
-                <>
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    Same figure shown on this loan's Repayment Schedule - computed as of the date below.
-                  </p>
-                  <Label htmlFor="soa-penalty-to-date">As of date</Label>
-                  <Input
-                    id="soa-penalty-to-date"
-                    type="date"
-                    value={soaPenaltyToDate}
-                    onChange={(e) => setSoaPenaltyToDate(e.target.value)}
+
+              <div className="space-y-1.5">
+                <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                  <input
+                    type="radio"
+                    name="soa-penalty-mode"
+                    className="mt-1"
+                    checked={soaPenaltyMode === 'RECORDED'}
+                    onChange={() => setSoaPenaltyMode('RECORDED')}
                   />
-                  <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
-                    <p className="text-muted-foreground">Past due penalty</p>
-                    <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
-                  </div>
-                </>
-              ) : (
-                <>
+                  <span>
+                    <span className="block text-sm">Use penalty from the repayment schedule</span>
+                    <span className="block text-xs text-muted-foreground">
+                      What the account already records. No dates needed.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                  <input
+                    type="radio"
+                    name="soa-penalty-mode"
+                    className="mt-1"
+                    checked={soaPenaltyMode === 'COMPUTED'}
+                    onChange={() => setSoaPenaltyMode('COMPUTED')}
+                  />
+                  <span>
+                    <span className="block text-sm">Compute the missing ones</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Keeps recorded figures, fills only the blanks.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              {soaPenaltyMode === 'COMPUTED' && (
+                <div className="mt-2 rounded-md bg-background/60 p-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label htmlFor="soa-penalty-from-date">From date</Label>
@@ -3088,21 +3152,35 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       />
                     </div>
                   </div>
+                  {/* 2026-08-12: penalty stops at maturity - say so out loud rather than silently
+                      clamping a later To date to zero days, which read as "no penalty owed". */}
+                  {soaPreview.maturityDate && (
+                    <p className={cn('mt-2 text-xs', soaPreview.isMatured ? 'text-warning' : 'text-muted-foreground')}>
+                      {soaPreview.isMatured
+                        ? `Penalty stops at maturity (${formatDate(soaPreview.maturityDate)}). A later To date is ignored.`
+                        : `Loan matures ${formatDate(soaPreview.maturityDate)}. Penalty counts up to today only.`}
+                    </p>
+                  )}
                   <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
                     <div>
                       <p className="text-muted-foreground">Days</p>
                       <p className="font-medium">{soaPreview.penaltyDays}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Penalty amount</p>
-                      <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+                      <p className="text-muted-foreground">Installments filled in</p>
+                      <p className="font-medium">{soaPreview.filledCount}</p>
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Migrated loan - rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.
+                    Rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.
                   </p>
-                </>
+                </div>
               )}
+
+              <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs">
+                <p className="text-muted-foreground">Past due penalty</p>
+                <p className="font-medium">{formatPeso(soaPreview.pastDuePenalty)}</p>
+              </div>
             </div>
             <div className={cn('rounded-md bg-secondary/40 p-3', !soaPreview.isMatured && 'opacity-60')}>
               <p className="mb-2 text-sm font-medium">Accrued interest</p>

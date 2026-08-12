@@ -1974,6 +1974,18 @@ model LoanSigningDocument {
 /// already-generated SOA says. Collection Fee and Other Fee are staff-entered per generation (no
 /// system field for either, confirmed against the legacy Excel/VBA tool's own `txtCollectionFee`/
 /// `txtotherfee` manual input boxes), so they're stored here rather than derived.
+/// 2026-08-12 (user-confirmed) — how a Statement of Account arrived at its Penalty figure.
+enum SoaPenaltyMode {
+  /// Default. Takes each installment's penalty straight from the repayment schedule: the frozen
+  /// SDevTech snapshot for a migrated loan, the live ADR-050 figure for one originated here. The
+  /// SOA and the schedule therefore agree by construction, and no dates are asked for.
+  RECORDED
+  /// Keeps every recorded figure and computes ONLY the installments that have none, over a
+  /// staff-entered date range (per-installment days, capped at the loan's maturity date). For the
+  /// ~2% of migrated loans where SDevTech never recorded any penalty at all.
+  COMPUTED
+}
+
 model GeneratedStatementOfAccount {
   id            String      @id @default(uuid())
   loanAccountId String
@@ -1991,14 +2003,19 @@ model GeneratedStatementOfAccount {
   /// that non-atomic read-then-use is an accepted tradeoff, same as the loan code precedent.
   soaSequenceNumber Int
 
+  /// 2026-08-12 (user-confirmed): which of the two penalty sources produced `pastDuePenalty`.
+  /// Recorded without a default so a statement can always be explained and reproduced later —
+  /// without it there is no way to tell why a given SOA showed the penalty it did.
+  penaltyMode SoaPenaltyMode
+
   /// `penaltyFromDate`/`penaltyToDate` (2026-07-19, user request, corrected from a single
-  /// `penaltyAsOfDate`): a manually-entered date RANGE applied uniformly across every Past Due
-  /// installment for the Penalty computation (`unpaid balance x Days(from,to) x rate/30`) — NOT
-  /// each installment's own due date, unlike the legacy tool. `accruedInterestAsOfDate` remains
-  /// independent (matches the legacy tool's own separate "To Date" field for that section).
-  penaltyFromDate         DateTime @db.Date
-  penaltyToDate           DateTime @db.Date
-  accruedInterestAsOfDate DateTime @db.Date
+  /// `penaltyAsOfDate`): a manually-entered date RANGE for the Penalty computation.
+  ///
+  /// 2026-08-12: nullable, because `penaltyMode = RECORDED` (the default) takes the penalty
+  /// straight off the repayment schedule and asks staff for no dates at all.
+  penaltyFromDate         DateTime? @db.Date
+  penaltyToDate           DateTime? @db.Date
+  accruedInterestAsOfDate DateTime  @db.Date
 
   currentAmortizationDue Decimal @db.Decimal(14, 2)
   pastDuePrincipal       Decimal @db.Decimal(14, 2)

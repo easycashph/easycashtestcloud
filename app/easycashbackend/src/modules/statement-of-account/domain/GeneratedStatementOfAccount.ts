@@ -2,12 +2,17 @@ import { randomUUID } from 'node:crypto';
 import type { Money } from '@shared/domain/Money';
 import { formatSoaNumber } from './formatSoaNumber';
 
+/** See schema.prisma's `SoaPenaltyMode` enum for what each mode means. */
+export type SoaPenaltyMode = 'RECORDED' | 'COMPUTED';
+
 export interface GeneratedStatementOfAccountProps {
   id: string;
   loanAccountId: string;
   soaSequenceNumber: number;
-  penaltyFromDate: Date;
-  penaltyToDate: Date;
+  penaltyMode: SoaPenaltyMode;
+  /** Null whenever `penaltyMode` is `RECORDED` — that mode asks staff for no dates. */
+  penaltyFromDate: Date | null;
+  penaltyToDate: Date | null;
   accruedInterestAsOfDate: Date;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
@@ -26,8 +31,9 @@ export interface GeneratedStatementOfAccountProps {
 export interface CreateGeneratedStatementOfAccountProps {
   loanAccountId: string;
   soaSequenceNumber: number;
-  penaltyFromDate: Date;
-  penaltyToDate: Date;
+  penaltyMode: SoaPenaltyMode;
+  penaltyFromDate: Date | null;
+  penaltyToDate: Date | null;
   accruedInterestAsOfDate: Date;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
@@ -82,11 +88,16 @@ export class GeneratedStatementOfAccount {
     return formatSoaNumber(this.props.soaSequenceNumber, this.props.generatedAt);
   }
 
-  get penaltyFromDate(): Date {
+  get penaltyMode(): SoaPenaltyMode {
+    return this.props.penaltyMode;
+  }
+
+  /** Null whenever `penaltyMode` is `RECORDED` — see that mode's own doc comment. */
+  get penaltyFromDate(): Date | null {
     return this.props.penaltyFromDate;
   }
 
-  get penaltyToDate(): Date {
+  get penaltyToDate(): Date | null {
     return this.props.penaltyToDate;
   }
 

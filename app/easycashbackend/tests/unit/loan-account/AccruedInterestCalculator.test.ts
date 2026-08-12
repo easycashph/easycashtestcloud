@@ -55,12 +55,13 @@ describe('AccruedInterestCalculator', () => {
     );
     expect(result.daysLate).toBe(23);
     // 2026-07-28: PenaltyCalculator.calculate() switched from monthly compounding to daily
-    // proration (ADR-050 §8), then to no-grace-period + due-month-divisor (ADR-050 §9) -
-    // totalPastDue's penalty component (and this derived figure) changed accordingly. Recomputed
-    // via the actual production AccruedInterestCalculator, not hand-derived.
-    // ₱44,431.37 x 4.95% / 30 x 23 = ₱1,686.17.
-    expect(result.totalPastDue.toString()).toBe('44431.37');
-    expect(result.accruedInterest.toString()).toBe('1686.17');
+    // proration (ADR-050 §8), then to no-grace-period (§9). 2026-08-12: the divisor became a flat
+    // 30 rather than the installment's own due-month length, which moved totalPastDue's penalty
+    // component (and this derived figure) by ₱94.63. Recomputed via the actual production
+    // AccruedInterestCalculator, not hand-derived.
+    // ₱44,336.74 x 4.95% / 30 x 23 = ₱1,682.58.
+    expect(result.totalPastDue.toString()).toBe('44336.74');
+    expect(result.accruedInterest.toString()).toBe('1682.58');
   });
 
   it('is zero before the maturity date has passed, even with a large unpaid balance', () => {

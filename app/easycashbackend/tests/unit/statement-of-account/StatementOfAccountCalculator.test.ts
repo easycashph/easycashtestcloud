@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
+import type { PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { StatementOfAccountCalculator } from '@modules/statement-of-account/application/services/StatementOfAccountCalculator';
+import type { SoaPenaltyMode } from '@modules/statement-of-account/domain/GeneratedStatementOfAccount';
 
 function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -16,7 +18,7 @@ function daysFromNow(days: number): Date {
 function installment(
   installmentNumber: number,
   dueDate: Date,
-  due: Partial<{ principal: string; interest: string }>,
+  due: Partial<{ principal: string; interest: string; penalty: string }>,
   paid: Partial<{ principal: string; interest: string }> = {},
 ) {
   const inst = RepaymentInstallment.create({
@@ -26,6 +28,8 @@ function installment(
     due: InstallmentAmounts.of({
       principal: Money.of(due.principal ?? '0.00'),
       interest: Money.of(due.interest ?? '0.00'),
+      // A migrated loan's real historical penalty, as carried over from SDevTech.
+      penalty: Money.of(due.penalty ?? '0.00'),
     }),
   });
   if (paid.principal || paid.interest) {
@@ -39,96 +43,82 @@ function installment(
   return inst;
 }
 
+/** A migrated loan: `resolveComputedPenalty` returns its frozen `due.penalty`, never a live figure. */
+function migratedContext(maturityDate: Date): PenaltyComputationContext {
+  return { isProspectiveLoan: false, principalAmount: Money.of('50000.00'), isSecMc3Covered: false, maturityDate };
+}
+
+/** A loan originated here: `resolveComputedPenalty` computes the live ADR-050 figure. */
+function prospectiveContext(maturityDate: Date, principalAmount = '30000.00'): PenaltyComputationContext {
+  return { isProspectiveLoan: true, principalAmount: Money.of(principalAmount), isSecMc3Covered: false, maturityDate };
+}
+
+function calc(args: {
+  installments: RepaymentInstallment[];
+  contractualRate?: Percentage | undefined;
+  penaltyMode?: SoaPenaltyMode;
+  penaltyFromDate?: Date;
+  penaltyToDate?: Date;
+  accruedInterestAsOfDate?: Date;
+  penaltyContext?: PenaltyComputationContext;
+}) {
+  const sorted = [...args.installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
+  const impliedMaturity = sorted[sorted.length - 1]?.dueDate ?? new Date();
+  return StatementOfAccountCalculator.calculate({
+    installments: args.installments,
+    contractualRate: args.contractualRate,
+    penaltyMode: args.penaltyMode ?? 'COMPUTED',
+    penaltyFromDate: args.penaltyFromDate,
+    penaltyToDate: args.penaltyToDate ?? new Date(),
+    accruedInterestAsOfDate: args.accruedInterestAsOfDate ?? new Date(),
+    penaltyContext: args.penaltyContext ?? migratedContext(impliedMaturity),
+  });
+}
+
 /**
- * Formulas sourced from the user's own legacy Excel/VBA tool (full source shared 2026-07-19), with
- * two deliberate departures confirmed the same day — see `StatementOfAccountCalculator`'s own doc
- * comment for the full citation:
- * - `penaltyFromDate`/`penaltyToDate` are ONE SHARED, manually-entered date range applied to every
- *   Past Due installment (not each installment's own due date, unlike the legacy tool).
- * - The 5%/10% rate is evaluated per-installment against that installment's own unpaid balance
- *   (not the whole loan's principal, unlike ADR-050's system-wide penalty formula).
+ * 2026-08-12 (user-confirmed) — the shared-date-range penalty formula these tests used to assert was
+ * replaced by two explicit modes. See `StatementOfAccountCalculator`'s own doc comment; the short
+ * version is that `RECORDED` (the default) takes each installment's penalty straight off the
+ * repayment schedule, and `COMPUTED` fills in ONLY the installments that have none, counting each
+ * from its own due date and never past the loan's maturity date.
  */
 describe('StatementOfAccountCalculator (ADR-052)', () => {
-  it('counts Past Due Principal/Interest for an installment due on/before penaltyToDate', () => {
-    const inst1 = installment(1, daysAgo(40), { principal: '1000.00', interest: '100.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(45), new Date(), new Date());
+  it('counts Past Due Principal/Interest for an installment due on/before the as-of date', () => {
+    const inst1 = installment(1, daysAgo(45), { principal: '1000.00', interest: '100.00' });
+    const figures = calc({ installments: [inst1], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(45) });
 
     expect(figures.pastDuePrincipal.toString()).toBe('1000.00');
     expect(figures.pastDueInterest.toString()).toBe('100.00');
   });
 
-  it('computes Penalty as unpaidBalance x Days(penaltyFromDate, penaltyToDate) x rate/30, using STANDARD (10%) rate above the ₱10,000 threshold', () => {
-    const inst1 = installment(1, daysAgo(40), { principal: '11000.00', interest: '0.00' }); // unpaid balance 11,000 > 10,000
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(30), new Date(), new Date());
-
-    // 30 days between penaltyFromDate and penaltyToDate, applied uniformly (NOT the installment's own due date)
-    // Penalty = 11000 x 30 x (10% / 30) = 1100.00
-    expect(figures.pastDuePenalty.toString()).toBe('1100.00');
-  });
-
-  it('uses the SMALL BALANCE (5%) rate when the installment\'s own unpaid balance is <= ₱10,000', () => {
-    const inst1 = installment(1, daysAgo(40), { principal: '10000.00', interest: '0.00' }); // exactly at the threshold
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(30), new Date(), new Date());
-
-    // Penalty = 10000 x 30 x (5% / 30) = 500.00
-    expect(figures.pastDuePenalty.toString()).toBe('500.00');
-  });
-
-  it('applies the SAME penaltyFromDate/penaltyToDate range to every Past Due installment, regardless of each installment\'s own due date', () => {
-    const inst1 = installment(1, daysAgo(80), { principal: '5000.00', interest: '0.00' });
-    const inst2 = installment(2, daysAgo(40), { principal: '5000.00', interest: '0.00' });
-    // Both installments use the same 20-day range, independent of their own (very different) due dates.
-    const figures = StatementOfAccountCalculator.calculate([inst1, inst2], Percentage.of('3'), daysAgo(20), new Date(), new Date());
-
-    // Each: 5000 x 20 x (5% / 30) = 166.67 (rounded) -> combined
-    expect(figures.pastDuePenalty.toString()).toBe('333.34');
-  });
-
-  it('excludes an installment due AFTER penaltyToDate from Past Due entirely', () => {
+  it('excludes an installment due AFTER the as-of date from Past Due entirely', () => {
     const inst1 = installment(1, daysFromNow(10), { principal: '1000.00', interest: '100.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(10), new Date(), new Date());
+    const figures = calc({ installments: [inst1], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(10) });
 
     expect(figures.pastDuePrincipal.toString()).toBe('0.00');
     expect(figures.pastDuePenalty.toString()).toBe('0.00');
   });
 
-  it('excludes an installment already fully settled as of penaltyToDate, even if its due date has passed', () => {
+  it('excludes an installment already fully settled as of that date, even if its due date has passed', () => {
     const inst1 = installment(1, daysAgo(10), { principal: '1000.00', interest: '100.00' }, { principal: '1000.00', interest: '100.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(5), new Date(), new Date());
+    const figures = calc({ installments: [inst1], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(5) });
 
     expect(figures.pastDuePrincipal.toString()).toBe('0.00');
     expect(figures.pastDuePenalty.toString()).toBe('0.00');
     expect(figures.remainingSchedule).toHaveLength(0);
   });
 
-  it('Current Amortization Due is the next unpaid installment due AFTER penaltyToDate', () => {
+  it('Current Amortization Due is the next unpaid installment due AFTER the as-of date', () => {
     const inst1 = installment(1, daysAgo(40), { principal: '1000.00', interest: '100.00' });
     const inst2 = installment(2, daysFromNow(10), { principal: '800.00', interest: '80.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1, inst2], Percentage.of('3'), daysAgo(40), new Date(), new Date());
+    const figures = calc({ installments: [inst1, inst2], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(40) });
 
     expect(figures.currentAmortizationDue.toString()).toBe('880.00');
   });
 
-  it('computes Accrued Interest as (Total Past Due x Contractual Rate) / 30 x Days Late (Maturity -> accruedInterestAsOfDate)', () => {
-    const inst1 = installment(1, daysAgo(15), { principal: '900.00', interest: '100.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(15), new Date(), daysFromNow(25));
-
-    // Past Due base 1000.00, 15 days at 5% (balance <= 10,000): penalty = 1000 x 15 x (5%/30) = 25.00
-    expect(figures.totalPastDue.toString()).toBe('1025.00');
-    // 1025.00 x 3% / 30 x 40 days (accrued range, independent of the penalty range) = 41.00
-    expect(figures.accruedInterest.toString()).toBe('41.00');
-  });
-
-  it('clamps Accrued Interest to 0 when accruedInterestAsOfDate has not yet reached the Maturity Date', () => {
-    const inst1 = installment(1, daysAgo(15), { principal: '900.00', interest: '100.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(15), new Date(), daysAgo(20));
-
-    expect(figures.accruedInterest.toString()).toBe('0.00');
-  });
-
   it('accounts for partial payments when computing past-due principal/interest', () => {
     const inst1 = installment(1, daysAgo(10), { principal: '1000.00', interest: '100.00' }, { principal: '400.00', interest: '50.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(10), new Date(), new Date());
+    const figures = calc({ installments: [inst1], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(10) });
 
     expect(figures.pastDuePrincipal.toString()).toBe('600.00');
     expect(figures.pastDueInterest.toString()).toBe('50.00');
@@ -137,65 +127,196 @@ describe('StatementOfAccountCalculator (ADR-052)', () => {
   it('Remaining Amortization lists every installment with a positive balance, regardless of date', () => {
     const inst1 = installment(1, daysAgo(40), { principal: '1000.00', interest: '100.00' }, { principal: '1000.00', interest: '100.00' });
     const inst2 = installment(2, daysFromNow(10), { principal: '800.00', interest: '80.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1, inst2], Percentage.of('3'), daysAgo(40), new Date(), new Date());
+    const figures = calc({ installments: [inst1, inst2], contractualRate: Percentage.of('3'), penaltyFromDate: daysAgo(40) });
 
     expect(figures.remainingSchedule).toHaveLength(1);
     expect(figures.remainingSchedule[0]?.totalDue.toString()).toBe('880.00');
   });
+
+  it('computes Accrued Interest as (Total Past Due x Contractual Rate) / 30 x Days Late (Maturity -> accruedInterestAsOfDate)', () => {
+    // Penalty deliberately left at 0 here (nothing recorded, RECORDED mode) so the assertion is
+    // about the accrued-interest formula alone.
+    const inst1 = installment(1, daysAgo(15), { principal: '900.00', interest: '100.00' });
+    const figures = calc({
+      installments: [inst1],
+      contractualRate: Percentage.of('3'),
+      penaltyMode: 'RECORDED',
+      accruedInterestAsOfDate: daysFromNow(25),
+    });
+
+    expect(figures.totalPastDue.toString()).toBe('1000.00');
+    // 1000.00 x 3% / 30 x 40 days (maturity = the only installment's due date, 15 days ago) = 40.00
+    expect(figures.accruedInterest.toString()).toBe('40.00');
+  });
+
+  it('clamps Accrued Interest to 0 when accruedInterestAsOfDate has not yet reached the Maturity Date', () => {
+    const inst1 = installment(1, daysAgo(15), { principal: '900.00', interest: '100.00' });
+    const figures = calc({
+      installments: [inst1],
+      contractualRate: Percentage.of('3'),
+      penaltyMode: 'RECORDED',
+      accruedInterestAsOfDate: daysAgo(20),
+    });
+
+    expect(figures.accruedInterest.toString()).toBe('0.00');
+  });
 });
 
-// 2026-07-28 (ADR-052 addendum, user-confirmed): a prospective loan's Penalty line reuses
-// resolveComputedPenalty (ADR-050) instead of the flat/shared-range formula above.
-describe('StatementOfAccountCalculator - livePenaltyContext (ADR-052 addendum)', () => {
-  it('uses resolveComputedPenalty per installment, matching PenaltyCalculator.calculate() exactly, when livePenaltyContext is supplied', () => {
-    const dueDate = new Date('2026-02-01T00:00:00Z');
-    const asOfDate = new Date('2026-03-01T00:00:00Z'); // exactly 28 days late (all of February 2026)
-    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' }); // 10000 overdue, > threshold -> 10%
-    const maturityDate = new Date('2026-08-01T00:00:00Z');
+describe('StatementOfAccountCalculator - RECORDED penalty mode (2026-08-12)', () => {
+  it("uses a migrated loan's frozen due.penalty, so the SOA matches its Repayment Schedule exactly", () => {
+    const inst1 = installment(1, daysAgo(60), { principal: '26916.48', interest: '2437.62', penalty: '2935.41' });
+    const inst2 = installment(2, daysAgo(30), { principal: '28108.86', interest: '1245.22' }); // nothing recorded
 
-    const figures = StatementOfAccountCalculator.calculate(
-      [inst1],
-      undefined,
-      undefined,
-      asOfDate,
-      asOfDate,
-      { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate },
-    );
+    const figures = calc({ installments: [inst1, inst2], penaltyMode: 'RECORDED' });
 
-    // 10000 x 10% / 28 (February's own day count) x 28 days = 1000.00 exactly.
-    expect(figures.pastDuePenalty.toString()).toBe('1000.00');
+    // Exactly what the schedule shows: the one recorded figure, and nothing invented for the other.
+    expect(figures.pastDuePenalty.toString()).toBe('2935.41');
   });
 
-  it('ignores penaltyFromDate entirely when livePenaltyContext is supplied', () => {
+  it('needs no dates at all — passing a range changes nothing', () => {
+    const inst1 = installment(1, daysAgo(60), { principal: '11000.00', interest: '0.00', penalty: '500.00' });
+
+    const withRange = calc({ installments: [inst1], penaltyMode: 'RECORDED', penaltyFromDate: daysAgo(9999) });
+    const withoutRange = calc({ installments: [inst1], penaltyMode: 'RECORDED' });
+
+    expect(withRange.pastDuePenalty.toString()).toBe('500.00');
+    expect(withoutRange.pastDuePenalty.toString()).toBe('500.00');
+  });
+
+  it("uses a prospective loan's live ADR-050 figure, matching PenaltyCalculator exactly", () => {
     const dueDate = new Date('2026-02-01T00:00:00Z');
-    const asOfDate = new Date('2026-03-01T00:00:00Z');
+    const asOf = new Date('2026-03-01T00:00:00Z'); // 28 days late
+    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' }); // 10,000 overdue -> 10%
+
+    const figures = calc({
+      installments: [inst1],
+      penaltyMode: 'RECORDED',
+      accruedInterestAsOfDate: asOf,
+      penaltyContext: prospectiveContext(new Date('2026-08-01T00:00:00Z')),
+    });
+
+    // 10,000 x 10% / 30 x 28 days = 933.33 (flat 30 divisor as of 2026-08-12).
+    expect(figures.pastDuePenalty.toString()).toBe('933.33');
+  });
+
+  it('caps a prospective loan at the maturity date rather than accruing forever', () => {
+    const dueDate = new Date('2026-02-01T00:00:00Z');
+    const maturityDate = new Date('2026-03-01T00:00:00Z');
     const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' });
-    const maturityDate = new Date('2026-08-01T00:00:00Z');
-    const context = { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate };
+    const context = prospectiveContext(maturityDate);
 
-    const withFromDate = StatementOfAccountCalculator.calculate([inst1], undefined, daysAgo(9999), asOfDate, asOfDate, context);
-    const withoutFromDate = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, asOfDate, asOfDate, context);
+    const farPastMaturity = calc({
+      installments: [inst1],
+      penaltyMode: 'RECORDED',
+      accruedInterestAsOfDate: daysFromNow(9999),
+      penaltyContext: context,
+    });
+    const atMaturity = calc({
+      installments: [inst1],
+      penaltyMode: 'RECORDED',
+      accruedInterestAsOfDate: maturityDate,
+      penaltyContext: context,
+    });
 
-    expect(withFromDate.pastDuePenalty.toString()).toBe(withoutFromDate.pastDuePenalty.toString());
+    expect(farPastMaturity.pastDuePenalty.toString()).toBe(atMaturity.pastDuePenalty.toString());
+  });
+});
+
+describe('StatementOfAccountCalculator - COMPUTED penalty mode (2026-08-12)', () => {
+  const FAR_MATURITY = daysFromNow(365);
+
+  it('leaves an installment that already has a recorded penalty untouched', () => {
+    const inst1 = installment(1, daysAgo(60), { principal: '11000.00', interest: '0.00', penalty: '777.77' });
+
+    const figures = calc({
+      installments: [inst1],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(60),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
+
+    expect(figures.pastDuePenalty.toString()).toBe('777.77');
   });
 
-  it('caps the live penalty at the maturity date, same as the live Repayment Schedule', () => {
-    const dueDate = new Date('2026-02-01T00:00:00Z');
-    const maturityDate = new Date('2026-03-01T00:00:00Z'); // matures right after this installment's due date
-    const inst1 = installment(1, dueDate, { principal: '9000.00', interest: '1000.00' });
-    const context = { isProspectiveLoan: true, principalAmount: Money.of('30000.00'), isSecMc3Covered: false, maturityDate };
+  it('fills in only the installments that have none, keeping the recorded ones as they are', () => {
+    const recorded = installment(1, daysAgo(60), { principal: '11000.00', interest: '0.00', penalty: '500.00' });
+    const blank = installment(2, daysAgo(30), { principal: '11000.00', interest: '0.00' });
 
-    // Ask for a figure far past maturity - should freeze at the maturity-date figure, not keep growing.
-    const cappedFigures = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, daysFromNow(9999), daysFromNow(9999), context);
-    const atMaturityFigures = StatementOfAccountCalculator.calculate([inst1], undefined, undefined, maturityDate, maturityDate, context);
+    const figures = calc({
+      installments: [recorded, blank],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(90),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
 
-    expect(cappedFigures.pastDuePenalty.toString()).toBe(atMaturityFigures.pastDuePenalty.toString());
+    // 500.00 kept + blank computed from its OWN due date: 11,000 x 30 x (10%/30) = 1,100.00
+    expect(figures.pastDuePenalty.toString()).toBe('1600.00');
   });
 
-  it('falls back to the flat/shared-range formula when livePenaltyContext is omitted (migrated loan path unchanged)', () => {
-    const inst1 = installment(1, daysAgo(40), { principal: '11000.00', interest: '0.00' });
-    const figures = StatementOfAccountCalculator.calculate([inst1], Percentage.of('3'), daysAgo(30), new Date(), new Date());
+  it("counts each installment from its OWN due date, not one shared span", () => {
+    const older = installment(1, daysAgo(60), { principal: '5000.00', interest: '0.00' });
+    const newer = installment(2, daysAgo(30), { principal: '5000.00', interest: '0.00' });
 
-    expect(figures.pastDuePenalty.toString()).toBe('1100.00');
+    const figures = calc({
+      installments: [older, newer],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(90),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
+
+    // 5,000 x 60 x (5%/30) = 500.00, plus 5,000 x 30 x (5%/30) = 250.00. A single shared 90-day
+    // span would have charged both 750.00 each.
+    expect(figures.pastDuePenalty.toString()).toBe('750.00');
+  });
+
+  it('starts from penaltyFromDate when that is LATER than the due date (negotiated grace period)', () => {
+    const inst1 = installment(1, daysAgo(60), { principal: '5000.00', interest: '0.00' });
+
+    const figures = calc({
+      installments: [inst1],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(30),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
+
+    // Only the 30 days since the staff-chosen start: 5,000 x 30 x (5%/30) = 250.00
+    expect(figures.pastDuePenalty.toString()).toBe('250.00');
+  });
+
+  it('charges nothing for an installment sitting ON the maturity date — penalty stops there', () => {
+    const earlier = installment(1, daysAgo(60), { principal: '5000.00', interest: '0.00' });
+    const atMaturity = installment(2, daysAgo(30), { principal: '5000.00', interest: '0.00' });
+
+    // Maturity IS the second installment's due date, the real-world shape of every loan's last row.
+    const figures = calc({
+      installments: [earlier, atMaturity],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(90),
+      penaltyContext: migratedContext(atMaturity.dueDate),
+    });
+
+    // Only the first installment accrues, and only up to maturity: 5,000 x 30 x (5%/30) = 250.00.
+    expect(figures.pastDuePenalty.toString()).toBe('250.00');
+  });
+
+  it('uses the SMALL BALANCE (5%) rate at or below the ₱10,000 per-installment threshold, 10% above it', () => {
+    const small = installment(1, daysAgo(30), { principal: '10000.00', interest: '0.00' }); // exactly at the threshold
+    const large = installment(1, daysAgo(30), { principal: '11000.00', interest: '0.00' });
+
+    const smallFigures = calc({
+      installments: [small],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(60),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
+    const largeFigures = calc({
+      installments: [large],
+      penaltyMode: 'COMPUTED',
+      penaltyFromDate: daysAgo(60),
+      penaltyContext: migratedContext(FAR_MATURITY),
+    });
+
+    expect(smallFigures.pastDuePenalty.toString()).toBe('500.00'); // 10,000 x 30 x (5%/30)
+    expect(largeFigures.pastDuePenalty.toString()).toBe('1100.00'); // 11,000 x 30 x (10%/30)
   });
 });

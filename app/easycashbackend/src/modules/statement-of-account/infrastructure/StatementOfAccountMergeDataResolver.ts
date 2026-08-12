@@ -8,6 +8,7 @@ import { resolveSecMc3Coverage } from '@modules/loan-account/application/service
 import type { PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import { Money } from '@shared/domain/Money';
 import { StatementOfAccountCalculator } from '../application/services/StatementOfAccountCalculator';
+import type { SoaPenaltyMode } from '../domain/GeneratedStatementOfAccount';
 import type {
   IStatementOfAccountMergeDataResolver,
   StatementOfAccountResolveResult,
@@ -61,8 +62,9 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     loanAccountId: string,
     soaNumber: string,
     statementDate: Date,
+    penaltyMode: SoaPenaltyMode,
     penaltyFromDate: Date | undefined,
-    penaltyToDate: Date,
+    penaltyToDate: Date | undefined,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
@@ -90,41 +92,37 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const sortedInstallments = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sortedInstallments[sortedInstallments.length - 1];
 
-    // 2026-07-28 (ADR-052 addendum, user-confirmed): a prospective loan's Penalty line reuses
-    // `resolveComputedPenalty` (the exact same ADR-050 function the live Repayment Schedule uses)
-    // instead of the flat/shared-range formula below — see `StatementOfAccountCalculator`'s own doc
-    // comment. A migrated loan has no live figure to reuse, so it keeps the original manual
-    // date-range path and REQUIRES `penaltyFromDate` to be supplied by the caller.
+    // 2026-08-12 (user-confirmed): built for BOTH loan types now, not just prospective ones —
+    // `resolveComputedPenalty` reads `isProspectiveLoan` to choose between the live ADR-050 figure
+    // and the migrated loan's frozen `due.penalty`, so one context serves both and `RECORDED` mode
+    // works uniformly. (Previously only prospective loans got a context, which is why migrated
+    // loans had no way to reach their own recorded penalty from here.)
     const isProspectiveLoan = !loanAccount.legacyId;
-    let livePenaltyContext: PenaltyComputationContext | undefined;
-    if (isProspectiveLoan) {
-      livePenaltyContext = {
-        isProspectiveLoan: true,
-        principalAmount: loanAccount.principalAmount,
-        isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
-        maturityDate: lastInstallment?.dueDate ?? statementDate,
-      };
-    } else if (!penaltyFromDate) {
-      throw new ValidationError('penaltyFromDate is required for a migrated loan (no live penalty on file).');
+    const penaltyContext: PenaltyComputationContext = {
+      isProspectiveLoan,
+      principalAmount: loanAccount.principalAmount,
+      isSecMc3Covered: isProspectiveLoan ? await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository) : false,
+      maturityDate: lastInstallment?.dueDate ?? statementDate,
+    };
+
+    if (penaltyMode === 'COMPUTED' && (!penaltyFromDate || !penaltyToDate)) {
+      throw new ValidationError('penaltyFromDate and penaltyToDate are required when the penalty mode is COMPUTED.');
     }
 
-    const figures = StatementOfAccountCalculator.calculate(
-      sortedInstallments,
-      loanAccount.contractualInterestRate,
+    const figures = StatementOfAccountCalculator.calculate({
+      installments: sortedInstallments,
+      contractualRate: loanAccount.contractualInterestRate,
+      penaltyMode,
       penaltyFromDate,
       penaltyToDate,
       accruedInterestAsOfDate,
-      livePenaltyContext,
-    );
+      penaltyContext,
+    });
 
-    // Display-only for a prospective loan (not fed back into the computation) - the earliest
-    // qualifying Past Due installment's own due date, so the printed "{PenaltyFromDate} /
-    // {PenaltyToDate}" range still reads sensibly even though staff no longer enters a "from" date.
-    const effectivePenaltyFromDate =
-      penaltyFromDate ??
-      sortedInstallments.find((i) => i.dueDate.getTime() <= penaltyToDate.getTime())?.dueDate ??
-      sortedInstallments[0]?.dueDate ??
-      statementDate;
+    // Printed range. `RECORDED` has no range to print at all (staff entered none); `COMPUTED`
+    // prints exactly what they entered.
+    const effectivePenaltyFromDate = penaltyMode === 'COMPUTED' ? penaltyFromDate ?? null : null;
+    const effectivePenaltyToDate = penaltyMode === 'COMPUTED' ? penaltyToDate ?? null : null;
 
     // PN Amount (`btnCreateSOA_Click`'s `totalObligation`) = Principal + Interest summed across the
     // ENTIRE original schedule (not just unpaid amounts, and excluding fees) — the loan's total
@@ -151,14 +149,14 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const showRemainingSchedule = !lastInstallment || lastInstallment.dueDate.getTime() >= statementDate.getTime();
 
     const mergeData: Record<string, unknown> = {
-      // 2026-08-06 (user-confirmed): a prospective loan's penalty "From date" is a display-only
-      // derived value (see `effectivePenaltyFromDate` above), not something staff actually entered
-      // - printing it next to "To date" read as a real range the user chose, when they only ever
-      // set one date (the "As of date" field on this loan's Penalty form). A migrated loan's From
-      // AND To dates are both genuinely staff-entered (no live figure to derive from), so that one
-      // keeps the real range. The template picks between "Penalty {ToDate}" and
-      // "Penalty {FromDate} / {ToDate}" via this flag.
-      IsProspectiveLoan: isProspectiveLoan,
+      // 2026-08-12: the template picks between printing a bare "Penalty" heading and
+      // "Penalty {FromDate} / {ToDate}" via this flag. It is now keyed on the penalty MODE rather
+      // than on whether the loan is prospective: only `COMPUTED` has a staff-entered range worth
+      // printing, and that is true for a migrated and a prospective loan alike. (Superseded the
+      // 2026-08-06 `IsProspectiveLoan` flag, which encoded the same intent back when loan type and
+      // "did staff enter a range" happened to coincide.) Kept under the old name so the existing
+      // .docx template keeps working unchanged.
+      IsProspectiveLoan: penaltyMode === 'RECORDED',
       StatementDate: formatDate(statementDate),
       BorrowerName: borrower.name.fullName(),
       BorrowerAddress: formatAddress(borrower.addresses[0]?.toProps()),
@@ -181,8 +179,9 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       // 2026-08-06 (user-reported): a printed date range next to a ₱0.00 penalty read as if a
       // penalty accrued over that period - blank instead, same as every other empty/zero merge
       // field in this template (e.g. CoBorrowerName above already blanks out when absent).
-      PenaltyFromDate: figures.pastDuePenalty.isZero() ? '' : formatDate(effectivePenaltyFromDate),
-      PenaltyToDate: figures.pastDuePenalty.isZero() ? '' : formatDate(penaltyToDate),
+      PenaltyFromDate:
+        figures.pastDuePenalty.isZero() || !effectivePenaltyFromDate ? '' : formatDate(effectivePenaltyFromDate),
+      PenaltyToDate: figures.pastDuePenalty.isZero() || !effectivePenaltyToDate ? '' : formatDate(effectivePenaltyToDate),
       TotalPastDue: formatMoney(figures.totalPastDue),
       AccruedInterest: formatMoney(figures.accruedInterest),
       // 2026-08-06 (user-confirmed): same rule as PenaltyFromDate/PenaltyToDate above - a date next
@@ -201,6 +200,6 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       })),
     };
 
-    return { mergeData, figures, effectivePenaltyFromDate };
+    return { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate };
   }
 }

@@ -1,5 +1,6 @@
 import type { Money } from '@shared/domain/Money';
 import type { StatementOfAccountFigures } from '../services/StatementOfAccountCalculator';
+import type { SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 
 export interface StatementOfAccountResolveResult {
   /** Flat placeholder map for `IDocumentFiller.fill('SOA', ...)` — see `docs/Architecture/ADR-052-statement-of-account-generation.md` §Placeholders for the full list. */
@@ -7,14 +8,12 @@ export interface StatementOfAccountResolveResult {
   /** The computed figures, unrounded/untouched by display formatting — persisted verbatim onto `GeneratedStatementOfAccount` (the immutable snapshot). */
   figures: StatementOfAccountFigures;
   /**
-   * 2026-07-28 (ADR-052 addendum): the actual `penaltyFromDate` used for this generation, echoed
-   * back for persistence. For a prospective loan (live-computed penalty), staff no longer enters
-   * this — it's auto-derived here as the earliest qualifying Past Due installment's own due date
-   * (display/record purposes only, not fed into the live computation itself, which derives each
-   * installment's due date automatically). For a migrated loan, this is simply the caller-supplied
-   * `penaltyFromDate` echoed back unchanged.
+   * 2026-08-12: the penalty range actually used, echoed back for persistence — both `null` under
+   * `RECORDED` (that mode takes the penalty straight off the repayment schedule and asks staff for
+   * no dates), and the caller's own dates under `COMPUTED`.
    */
-  effectivePenaltyFromDate: Date;
+  effectivePenaltyFromDate: Date | null;
+  effectivePenaltyToDate: Date | null;
 }
 
 export interface IStatementOfAccountMergeDataResolver {
@@ -22,9 +21,10 @@ export interface IStatementOfAccountMergeDataResolver {
     loanAccountId: string,
     soaNumber: string,
     statementDate: Date,
-    /** Required for a migrated loan (no live penalty on file); ignored for a prospective loan. */
+    penaltyMode: SoaPenaltyMode,
+    /** Both required under `COMPUTED`; ignored entirely under `RECORDED`. */
     penaltyFromDate: Date | undefined,
-    penaltyToDate: Date,
+    penaltyToDate: Date | undefined,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
