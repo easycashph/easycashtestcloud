@@ -198,6 +198,7 @@ import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
+import { SetMitigationDetailsUseCase } from '@modules/loan-application/application/use-cases/SetMitigationDetailsUseCase';
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
@@ -1202,6 +1203,7 @@ export function createApp(): Express {
       }),
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
       setMitigationAccountOwnerUseCase: new SetMitigationAccountOwnerUseCase({ loanApplicationRepository, auditLogger }),
+      setMitigationDetailsUseCase: new SetMitigationDetailsUseCase({ loanApplicationRepository, auditLogger }),
       generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,

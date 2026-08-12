@@ -10,6 +10,7 @@ import {
   decideLoanApplicationSchema,
   reviewReportSchema,
   setMitigationAccountOwnerSchema,
+  setMitigationDetailsSchema,
   updateLoanApplicationSchema,
 } from './loanApplicationSchemas';
 
@@ -66,6 +67,15 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     requireApplicationAccess,
     validateBody(setMitigationAccountOwnerSchema),
     controller.setMitigationAccountOwner,
+  );
+  // 2026-08-10: generalizes the endpoint above to every mitigation field - see
+  // SetMitigationDetailsUseCase's doc comment. Same status-unrestricted access gate.
+  router.patch(
+    '/loan-applications/:id/mitigation-details',
+    requireAuth,
+    requireApplicationAccess,
+    validateBody(setMitigationDetailsSchema),
+    controller.setMitigationDetails,
   );
   // 2026-07-22: mocked "Assist" panel above the Credit Evaluation Report - see
   // AiDocumentReviewResult's doc comment. Same access gate as the review report it feeds.

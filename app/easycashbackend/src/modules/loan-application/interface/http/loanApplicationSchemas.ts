@@ -155,6 +155,13 @@ export const setMitigationAccountOwnerSchema = z.object({
 
 export type SetMitigationAccountOwnerRequestBody = z.infer<typeof setMitigationAccountOwnerSchema>;
 
+/** 2026-08-10 - see `SetMitigationDetailsUseCase`'s doc comment: generalizes the account-owner-only
+ * endpoint above to every mitigation field, same status-unrestricted rationale. PATCH semantics -
+ * only the provided fields are touched. */
+export const setMitigationDetailsSchema = mitigationDetailsSchema;
+
+export type SetMitigationDetailsRequestBody = z.infer<typeof setMitigationDetailsSchema>;
+
 /** Risk-input fields, editable post-creation on the Detail page's AI Risk Management Summary —
  * moved off the Create form's intake fields (see loanApplicationSchemas' create schema above) now
  * that they're treated as inputs to a future risk-scoring feature rather than officer-encoded
