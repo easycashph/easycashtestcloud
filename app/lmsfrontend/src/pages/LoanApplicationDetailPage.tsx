@@ -22,6 +22,7 @@ import {
   Lock,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   RotateCcw,
   ShieldCheck,
@@ -1897,6 +1898,14 @@ export function LoanApplicationDetailPage() {
           </div>
           {canAccessLoanApplications && (
             <div className="flex flex-col items-end gap-2">
+              {/* 2026-08-12 (user request/bug fix): full intake-field edit, mirrors the backend's
+                  updateStaffIntake() guard (PREAPPROVED/PREDECLINED/UNDER_REVIEW only) - see
+                  UpdateLoanApplicationIntakeUseCase's doc comment. */}
+              {(isPreApprovalStage || isUnderReview) && (
+                <Button size="sm" variant="outline" onClick={() => navigate(`/applications/${application.id}/edit`)}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Application
+                </Button>
+              )}
               {!application.createdBorrowerId && (
                 <Button
                   size="sm"

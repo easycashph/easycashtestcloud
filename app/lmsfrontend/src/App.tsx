@@ -45,6 +45,7 @@ const LoanDetailPage = lazyNamed(() => import('@/pages/LoanDetailPage'), 'LoanDe
 const LoanApplicationsPage = lazyNamed(() => import('@/pages/LoanApplicationsPage'), 'LoanApplicationsPage');
 const LoanApplicationDetailPage = lazyNamed(() => import('@/pages/LoanApplicationDetailPage'), 'LoanApplicationDetailPage');
 const LoanApplicationCreatePage = lazyNamed(() => import('@/pages/LoanApplicationCreatePage'), 'LoanApplicationCreatePage');
+const LoanApplicationEditPage = lazyNamed(() => import('@/pages/LoanApplicationCreatePage'), 'LoanApplicationEditPage');
 const PaymentRemindersPage = lazyNamed(() => import('@/pages/PaymentRemindersPage'), 'PaymentRemindersPage');
 const ReminderLogsPage = lazyNamed(() => import('@/pages/ReminderLogsPage'), 'ReminderLogsPage');
 const EsignatureLogsPage = lazyNamed(() => import('@/pages/EsignatureLogsPage'), 'EsignatureLogsPage');
@@ -103,6 +104,7 @@ export default function App() {
           <Route path="loans/:loanId" element={<LoanDetailPage />} />
           <Route path="applications" element={<LoanApplicationsPage />} />
           <Route path="applications/new" element={<LoanApplicationCreatePage />} />
+          <Route path="applications/:applicationId/edit" element={<LoanApplicationEditPage />} />
           <Route path="applications/:applicationId" element={<LoanApplicationDetailPage />} />
           <Route path="reminders" element={<PaymentRemindersPage />} />
           <Route path="loans/:loanId/soa" element={<StatementOfAccountPage />} />

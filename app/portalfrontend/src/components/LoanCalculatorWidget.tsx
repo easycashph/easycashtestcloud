@@ -70,7 +70,7 @@ export function LoanCalculatorWidget() {
           >
             {LOAN_PRODUCTS.map((product) => (
               <option key={product.category} value={product.category}>
-                {product.category}
+                {product.displayLabel}
               </option>
             ))}
           </select>

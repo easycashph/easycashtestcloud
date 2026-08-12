@@ -112,8 +112,7 @@ function Navbar() {
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2.5">
-          <img src="./logo-easycash.png" alt="Easycash" className="h-9 w-9 rounded-lg object-contain" />
-          <span className="text-base font-bold tracking-tight">Easycash</span>
+          <img src="./logo-easycash.png" alt="Easycash" className="h-12 w-12 rounded-lg object-contain" />
         </Link>
 
         <div className="hidden items-center gap-4 md:flex">
@@ -350,7 +349,7 @@ export function LandingPage() {
                 <div className="relative h-44 w-full overflow-hidden">
                   <ImageWithFallback
                     src={product.image}
-                    alt={product.category}
+                    alt={product.displayLabel}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     fallbackIcon={<product.icon className="h-12 w-12" />}
                   />
@@ -359,7 +358,7 @@ export function LandingPage() {
                   </div>
                 </div>
                 <div className="p-6">
-                  <h3 className="text-base font-semibold">{product.category}</h3>
+                  <h3 className="text-base font-semibold">{product.displayLabel}</h3>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <Link

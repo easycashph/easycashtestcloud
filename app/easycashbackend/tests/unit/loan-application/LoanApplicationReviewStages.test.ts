@@ -25,9 +25,13 @@ describe('LoanApplication - Under Review / Pre Approval stages', () => {
     expect(props.reviewStartedAt).toBeInstanceOf(Date);
   });
 
-  it('startReview() throws from PREDECLINED', () => {
+  it('startReview() moves PREDECLINED to UNDER_REVIEW too (2026-08-12: PREDECLINED is an advisory system verdict, not a block on human review)', () => {
     const application = buildApplication('PREDECLINED');
-    expect(() => application.startReview('user-1')).toThrow(InvalidLoanApplicationTransitionError);
+    application.startReview('user-1');
+
+    const props = application.toProps();
+    expect(props.status).toBe('UNDER_REVIEW');
+    expect(props.reviewStartedByUserId).toBe('user-1');
   });
 
   it('startReview() throws once already UNDER_REVIEW', () => {

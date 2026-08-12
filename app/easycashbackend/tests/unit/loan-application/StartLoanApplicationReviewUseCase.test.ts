@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { LoanApplication } from '@modules/loan-application/domain/LoanApplication';
 import { NotFoundError } from '@shared/errors/DomainError';
-import { InvalidLoanApplicationTransitionError } from '@modules/loan-application/domain/errors/LoanApplicationDomainErrors';
 
 function buildApplication(status: 'PREAPPROVED' | 'PREDECLINED' = 'PREAPPROVED') {
   return LoanApplication.create({
@@ -24,15 +23,17 @@ describe('StartLoanApplicationReviewUseCase', () => {
     await expect(useCase.execute('missing', 'user-1')).rejects.toThrow(NotFoundError);
   });
 
-  it('throws InvalidLoanApplicationTransitionError from PREDECLINED, without saving or auditing', async () => {
+  it('starts the review, saves, and audit-logs from PREDECLINED too (2026-08-12: PREDECLINED is an advisory system verdict, not a block on human review)', async () => {
     const application = buildApplication('PREDECLINED');
     const loanApplicationRepository = { findById: vi.fn().mockResolvedValue(application), findMany: vi.fn(), save: vi.fn() };
     const auditLogger = { log: vi.fn() };
     const useCase = new StartLoanApplicationReviewUseCase({ loanApplicationRepository, auditLogger });
 
-    await expect(useCase.execute(application.id, 'user-1')).rejects.toThrow(InvalidLoanApplicationTransitionError);
-    expect(loanApplicationRepository.save).not.toHaveBeenCalled();
-    expect(auditLogger.log).not.toHaveBeenCalled();
+    const result = await useCase.execute(application.id, 'user-1');
+
+    expect(result.status).toBe('UNDER_REVIEW');
+    expect(loanApplicationRepository.save).toHaveBeenCalledWith(application);
+    expect(auditLogger.log).toHaveBeenCalled();
   });
 
   it('starts the review, saves, and audit-logs from PREAPPROVED', async () => {

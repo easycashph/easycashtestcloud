@@ -166,3 +166,14 @@ export const updateLoanApplicationSchema = z.object({
 });
 
 export type UpdateLoanApplicationRequestBody = z.infer<typeof updateLoanApplicationSchema>;
+
+/** 2026-08-12 (user request/bug fix) - full intake-field PATCH for LMS staff, mirroring
+ * createLoanApplicationSchema minus the fields LoanApplication.updateStaffIntake()'s patch type
+ * deliberately excludes (branchId/borrowerId/propertiesOwned/creditScore/submittedDocuments -
+ * those aren't part of the shared "self-service-shaped" intake patch, see updateSelfServiceIntake's
+ * doc comment). Every field optional - PATCH semantics, send only what changed. */
+export const updateLoanApplicationIntakeSchema = createLoanApplicationSchema
+  .omit({ branchId: true, borrowerId: true, propertiesOwned: true, creditScore: true, submittedDocuments: true })
+  .partial();
+
+export type UpdateLoanApplicationIntakeRequestBody = z.infer<typeof updateLoanApplicationIntakeSchema>;

@@ -55,7 +55,7 @@ export function RequirementsPage() {
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <product.icon className="h-4 w-4" />
                     </div>
-                    <h3 className="text-sm font-semibold">{product.category}</h3>
+                    <h3 className="text-sm font-semibold">{product.displayLabel}</h3>
                   </div>
                   <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
                     {product.details}

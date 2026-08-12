@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, FilePlus2, Lock, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -257,6 +257,64 @@ export function LoanApplicationCreatePage() {
   );
 }
 
+/** 2026-08-12 (user request/bug fix) - lets LMS staff correct the full intake field set on an
+ * application they encoded, via PATCH /loan-applications/:id/intake. See LoanApplicationForm's
+ * `editApplicationId` doc comment for what changes in edit mode. */
+export function LoanApplicationEditPage() {
+  const navigate = useNavigate();
+  const { applicationId } = useParams<{ applicationId: string }>();
+  const applicationQuery = useQuery({
+    queryKey: ['loan-application', applicationId],
+    queryFn: () => apiClient.get<LoanApplication>(`/loan-applications/${applicationId}`),
+    enabled: Boolean(applicationId),
+  });
+
+  if (applicationQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <p className="text-sm text-muted-foreground">Loading application…</p>
+      </div>
+    );
+  }
+
+  if (applicationQuery.isError || !applicationQuery.data) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-destructive">Could not load this application.</CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const application = applicationQuery.data;
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      <div>
+        <Button variant="ghost" size="sm" className="-ml-2 mb-1" onClick={() => navigate(`/applications/${application.id}`)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        <div className="flex items-center gap-2">
+          <FilePlus2 className="h-5 w-5 text-primary" />
+          <h2 className="text-2xl font-semibold tracking-tight">Edit Loan Application</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Correcting {application.applicantName}&apos;s encoded application details. Saving re-runs the pre-approved/pre-declined
+          classification against the updated values.
+        </p>
+      </div>
+      <LoanApplicationForm
+        prefillFrom={application}
+        editApplicationId={application.id}
+        showChrome={false}
+        onCreated={(updated) => navigate(`/applications/${updated.id}`, { replace: true })}
+        onCancel={() => navigate(`/applications/${application.id}`)}
+      />
+    </div>
+  );
+}
+
 /**
  * The actual form - extracted from `LoanApplicationCreatePage` (2026-07-14) so it can be reused
  * inside a "Create Loan Application" dialog on the Client Profile page (a renewal application for
@@ -270,12 +328,19 @@ export function LoanApplicationForm({
   prefillFrom,
   lockedBorrowerId,
   showChrome = true,
+  editApplicationId,
   onCreated,
   onCancel,
 }: {
   prefillFrom?: LoanApplication;
   lockedBorrowerId?: string;
   showChrome?: boolean;
+  /** 2026-08-12 (user request/bug fix): when set, this is LMS staff correcting an application
+   * THEY already encoded (via PATCH /loan-applications/:id/intake) instead of creating a new one.
+   * `prefillFrom` must be the same application in this mode - it already seeds every field, this
+   * flag just swaps the submit action and hides the document-upload section (documents are
+   * managed separately, from the Detail page's own Attachments panel, not re-uploaded here). */
+  editApplicationId?: string;
   onCreated: (application: LoanApplication, failedDocumentLabels?: string[]) => void;
   onCancel: () => void;
 }) {
@@ -574,10 +639,8 @@ export function LoanApplicationForm({
   ];
 
   const createMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post<LoanApplication>('/loan-applications', {
-        branchId: currentAccount.branchId,
-        borrowerId: lockedBorrowerId,
+    mutationFn: () => {
+      const intakeFields = {
         applicantName,
         age: age ?? undefined,
         gender: gender || undefined,
@@ -637,9 +700,27 @@ export function LoanApplicationForm({
         referralSource: referralDetail.trim() ? `${referralSource} - ${referralDetail.trim()}` : referralSource,
         accountType,
         loanPurpose: loanPurpose.trim() || undefined,
+      };
+
+      if (editApplicationId) {
+        return apiClient.patch<LoanApplication>(`/loan-applications/${editApplicationId}/intake`, intakeFields);
+      }
+      return apiClient.post<LoanApplication>('/loan-applications', {
+        branchId: currentAccount.branchId,
+        borrowerId: lockedBorrowerId,
+        ...intakeFields,
         submittedDocuments: submittedDocumentLabels.length > 0 ? submittedDocumentLabels : undefined,
-      } satisfies CreateLoanApplicationRequest),
+      } satisfies CreateLoanApplicationRequest);
+    },
     onSuccess: async (application) => {
+      // 2026-08-12: editing an already-encoded application never touches documents - those are
+      // managed separately from the Detail page's own Attachments panel - so there's nothing to
+      // upload here, unlike the fresh-creation path below.
+      if (editApplicationId) {
+        onCreated(application);
+        return;
+      }
+
       // Best-effort: auto-save the AI Auto-fill upload and every Applicant Document slot as real
       // attachments now that a real ownerId exists. Deliberately not allowed to affect
       // createMutation's own success/error state - the application has already been created and
@@ -1147,60 +1228,62 @@ export function LoanApplicationForm({
         </Field>
       </SectionCard>
 
-      <SectionCard
-        number="11"
-        title="Applicant Documents"
-        description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
-      >
-        <div className="grid gap-2 sm:grid-cols-2">
-          {visibleDocumentSlots.map(({ category }) => (
-            <DocumentUploadSlot
-              key={category}
-              label={DOCUMENT_CATEGORY_LABELS[category]}
-              file={documentFiles[category] ?? null}
-              error={documentFileErrors[category]}
-              onSelect={(file) => handleDocumentFileSelected(category, file)}
-              onRemove={() => handleRemoveDocumentFile(category)}
+      {!editApplicationId && (
+        <SectionCard
+          number="11"
+          title="Applicant Documents"
+          description="Upload the applicant's actual supporting documents - PDF, JPEG, or PNG, up to 10 MB each. Saved as attachments on this application once it's created; slots shown depend on the selected loan type and whether there's a co-borrower."
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            {visibleDocumentSlots.map(({ category }) => (
+              <DocumentUploadSlot
+                key={category}
+                label={DOCUMENT_CATEGORY_LABELS[category]}
+                file={documentFiles[category] ?? null}
+                error={documentFileErrors[category]}
+                onSelect={(file) => handleDocumentFileSelected(category, file)}
+                onRemove={() => handleRemoveDocumentFile(category)}
+              />
+            ))}
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="space-y-2">
+            <Label>Other Supporting Documents (optional)</Label>
+            <p className="text-xs text-muted-foreground">
+              Anything that doesn't fit a slot above - select multiple files at once.
+            </p>
+            <input
+              ref={otherDocumentsInputRef}
+              type="file"
+              accept={ATTACHMENT_ACCEPTED_TYPES}
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) handleOtherDocumentFilesSelected(e.target.files);
+                e.target.value = '';
+              }}
             />
-          ))}
-        </div>
-
-        <Separator className="my-4" />
-
-        <div className="space-y-2">
-          <Label>Other Supporting Documents (optional)</Label>
-          <p className="text-xs text-muted-foreground">
-            Anything that doesn't fit a slot above - select multiple files at once.
-          </p>
-          <input
-            ref={otherDocumentsInputRef}
-            type="file"
-            accept={ATTACHMENT_ACCEPTED_TYPES}
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) handleOtherDocumentFilesSelected(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <Button type="button" variant="outline" size="sm" onClick={() => otherDocumentsInputRef.current?.click()}>
-            <Upload className="mr-1.5 h-3.5 w-3.5" /> Select Files
-          </Button>
-          {otherDocumentFileError && <p className="text-[11px] text-destructive">{otherDocumentFileError}</p>}
-          {otherDocumentFiles.length > 0 && (
-            <ul className="space-y-1.5">
-              {otherDocumentFiles.map((file, i) => (
-                <li key={`${file.name}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
-                  <span className="min-w-0 truncate">{file.name}</span>
-                  <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={() => handleRemoveOtherDocumentFile(i)}>
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </SectionCard>
+            <Button type="button" variant="outline" size="sm" onClick={() => otherDocumentsInputRef.current?.click()}>
+              <Upload className="mr-1.5 h-3.5 w-3.5" /> Select Files
+            </Button>
+            {otherDocumentFileError && <p className="text-[11px] text-destructive">{otherDocumentFileError}</p>}
+            {otherDocumentFiles.length > 0 && (
+              <ul className="space-y-1.5">
+                {otherDocumentFiles.map((file, i) => (
+                  <li key={`${file.name}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
+                    <span className="min-w-0 truncate">{file.name}</span>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={() => handleRemoveOtherDocumentFile(i)}>
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SectionCard>
+      )}
 
       <Card>
         <CardContent className="space-y-3 pt-6">
@@ -1215,19 +1298,19 @@ export function LoanApplicationForm({
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Monthly income, credit score, and properties owned are recorded after creation, on the application's Risk Management
-            Summary. Spouse details are captured on the paper form itself and not yet stored by this preview. The applicant signs
-            the Undertaking on the printed form - no signature is captured here.
+            {editApplicationId
+              ? 'Credit score and properties owned are edited from the application\'s Risk Management Summary, not here. Documents are managed from the Attachments panel.'
+              : "Monthly income, credit score, and properties owned are recorded after creation, on the application's Risk Management Summary. Spouse details are captured on the paper form itself and not yet stored by this preview. The applicant signs the Undertaking on the printed form - no signature is captured here."}
           </p>
           {createMutation.isError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {createMutation.error instanceof Error ? createMutation.error.message : 'Could not create the application.'}
+              {createMutation.error instanceof Error ? createMutation.error.message : 'Could not save the application.'}
             </div>
           )}
           <div className="flex items-center gap-2">
             <Button disabled={!canSubmit || createMutation.isPending} onClick={() => setConfirmOpen(true)}>
-              <FilePlus2 className="mr-2 h-4 w-4" /> Confirm
+              <FilePlus2 className="mr-2 h-4 w-4" /> {editApplicationId ? 'Save Changes' : 'Confirm'}
             </Button>
             <Button variant="outline" onClick={onCancel}>
               Cancel
@@ -1239,11 +1322,21 @@ export function LoanApplicationForm({
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create this loan application?</DialogTitle>
+            <DialogTitle>{editApplicationId ? 'Save these changes?' : 'Create this loan application?'}</DialogTitle>
             <DialogDescription>
-              {applicantName || 'Applicant'} - {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
-              {term > 0 ? `${term} months` : 'no term'}. The system will automatically classify this application as pre-approved or
-              pre-declined based on age, income, and address once created, encoded by {currentAccount.name}.
+              {editApplicationId ? (
+                <>
+                  {applicantName || 'Applicant'} - {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
+                  {term > 0 ? `${term} months` : 'no term'}. Re-runs the pre-approved/pre-declined classification with the updated
+                  details.
+                </>
+              ) : (
+                <>
+                  {applicantName || 'Applicant'} - {loanCategory || 'no category'} · {amount > 0 ? formatPeso(amount) : '₱0.00'} ·{' '}
+                  {term > 0 ? `${term} months` : 'no term'}. The system will automatically classify this application as pre-approved or
+                  pre-declined based on age, income, and address once created, encoded by {currentAccount.name}.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1256,7 +1349,7 @@ export function LoanApplicationForm({
                 submit();
               }}
             >
-              Create Loan Applicant Profile
+              {editApplicationId ? 'Save Changes' : 'Create Loan Applicant Profile'}
             </Button>
           </DialogFooter>
         </DialogContent>

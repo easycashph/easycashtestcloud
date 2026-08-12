@@ -11,6 +11,7 @@ import {
   reviewReportSchema,
   setMitigationAccountOwnerSchema,
   updateLoanApplicationSchema,
+  updateLoanApplicationIntakeSchema,
 } from './loanApplicationSchemas';
 
 /** Mirrors the mock UI's `canAccessLoanApplications` — MIS, Loan Operation Manager, and CRM only. */
@@ -34,6 +35,16 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     requireApplicationAccess,
     validateBody(updateLoanApplicationSchema),
     controller.update,
+  );
+  // 2026-08-12 (user request/bug fix): full intake-field edit for staff-encoded applications, up
+  // through UNDER_REVIEW - separate from the narrow 3-field `update` above. See
+  // UpdateLoanApplicationIntakeUseCase's doc comment.
+  router.patch(
+    '/loan-applications/:id/intake',
+    requireAuth,
+    requireApplicationAccess,
+    validateBody(updateLoanApplicationIntakeSchema),
+    controller.updateIntake,
   );
   router.get('/loan-applications', requireAuth, requireApplicationAccess, controller.list);
   router.post(

@@ -835,9 +835,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                 <Field label="Type of loan *">
                   <Select id="requestedCategory" required value={form.requestedCategory} onChange={(e) => update('requestedCategory', e.target.value)}>
                     <option value="">Select</option>
-                    {LOAN_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                    {LOAN_PRODUCTS.map((product) => (
+                      <option key={product.category} value={product.category}>
+                        {product.displayLabel}
                       </option>
                     ))}
                   </Select>

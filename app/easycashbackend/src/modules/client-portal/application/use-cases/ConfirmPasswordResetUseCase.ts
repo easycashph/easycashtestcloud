@@ -37,6 +37,15 @@ export class ConfirmPasswordResetUseCase {
     }
 
     const passwordHash = await passwordHasher.hash(input.newPassword);
-    await portalAccountRepository.update(challenge.portalAccountId, { passwordHash });
+    const account = await portalAccountRepository.findById(challenge.portalAccountId);
+    // 2026-08-12: a successful password-reset OTP confirmation proves email ownership just as much
+    // as the signup-verification OTP does, so accounts stuck at PENDING_VERIFICATION (never
+    // verified, or their original code expired) are promoted to ACTIVE here too - this is what
+    // actually unblocks a locked-out client, not just the password change itself.
+    const shouldActivate = account?.status === 'PENDING_VERIFICATION';
+    await portalAccountRepository.update(challenge.portalAccountId, {
+      passwordHash,
+      ...(shouldActivate ? { status: 'ACTIVE', emailVerifiedAt: new Date() } : {}),
+    });
   }
 }

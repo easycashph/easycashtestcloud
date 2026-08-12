@@ -16,6 +16,7 @@ import type { SetMitigationAccountOwnerUseCase } from '../../application/use-cas
 import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
+import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
@@ -26,6 +27,7 @@ import type {
   ReviewReportRequestBody,
   SetMitigationAccountOwnerRequestBody,
   UpdateLoanApplicationRequestBody,
+  UpdateLoanApplicationIntakeRequestBody,
 } from './loanApplicationSchemas';
 import { presentLoanApplication, type LoanApplicationLinkage } from './presenters/LoanApplicationPresenter';
 
@@ -43,6 +45,7 @@ export interface LoanApplicationControllerDeps {
   generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
+  updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
@@ -291,6 +294,22 @@ export class LoanApplicationController {
       const body = req.body as UpdateLoanApplicationRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.updateLoanApplicationUseCase.execute(req.params.id as string, body, currentUser.sub);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-12 (user request/bug fix) - full intake-field PATCH for LMS staff (MIS/Loan Operation
+   * Manager/CRM), covering everything `update` above deliberately doesn't (see
+   * UpdateLoanApplicationIntakeUseCase's doc comment). */
+  updateIntake = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanApplicationUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const body = req.body as UpdateLoanApplicationIntakeRequestBody;
+      const application = await this.deps.updateLoanApplicationIntakeUseCase.execute(req.params.id as string, body);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);

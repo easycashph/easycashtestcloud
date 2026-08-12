@@ -510,6 +510,25 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-08-12 (user request/bug fix) — lets LMS staff (MIS/Loan Operation Manager/CRM) correct the
+   * full intake field set on an application THEY encoded, mirroring updateSelfServiceIntake's patch
+   * shape exactly but with a wider status guard: PREAPPROVED/PREDECLINED/UNDER_REVIEW, not just the
+   * pre-review pair. Widened specifically because staff-encoded applications are the ones most often
+   * needing a correction discovered mid-review (a mistyped address, a missed reference number), and
+   * locking edits the moment Start Review is clicked left no way to fix them without a revert. Still
+   * closed once PRE_APPROVAL/APPROVED/DECLINED — by then the Review Report is the record of what was
+   * evaluated, so further intake edits would silently invalidate a already-made decision context. */
+  updateStaffIntake(patch: Parameters<LoanApplication['updateSelfServiceIntake']>[0]): void {
+    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED' && this.props.status !== 'UNDER_REVIEW') {
+      throw new InvalidLoanApplicationTransitionError(this.props.status, 'edit');
+    }
+    for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
+      const value = patch[key];
+      if (value !== undefined) (this.props as unknown as Record<string, unknown>)[key] = value;
+    }
+    this.props.updatedAt = new Date();
+  }
+
   /** Re-applies a freshly computed system verdict — only valid while no human decision exists yet
    * (i.e. `status` is still PREAPPROVED/PREDECLINED). No-ops silently once APPROVED/DECLINED, so
    * callers don't need their own guard for "has this already been decided?" before calling it. */
@@ -557,11 +576,15 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
-  /** CRM/MIS/Loan Operation Manager clicks "Start Review": PREAPPROVED -> UNDER_REVIEW.
-   * PREDECLINED deliberately isn't a valid starting point - declining a PREDECLINED application
-   * still goes straight through decline(), not review. */
+  /** CRM/MIS/Loan Operation Manager clicks "Start Review": PREAPPROVED/PREDECLINED -> UNDER_REVIEW.
+   * 2026-08-12 (user request/bug fix): PREDECLINED is the system's own advisory pre-screening
+   * verdict (see applySystemClassification above), not a human decision - it exists to help sort/
+   * filter the application list, not to block a loan officer from giving it a final human verdict.
+   * Previously only PREAPPROVED could start review, which meant any system-flagged application was
+   * stuck and unreviewable. Declining a PREDECLINED application straight away (without opening
+   * review) is still independently supported via decline(). */
   startReview(startedByUserId: string): void {
-    if (this.props.status !== 'PREAPPROVED') {
+    if (this.props.status !== 'PREAPPROVED' && this.props.status !== 'PREDECLINED') {
       throw new InvalidLoanApplicationTransitionError(this.props.status, 'start review');
     }
     this.props.status = 'UNDER_REVIEW';

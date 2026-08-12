@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
 import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary, PortalLoanApplicationTimelineEntry } from '@/lib/portalApiTypes';
+import { getLoanProductDisplayLabel } from '@/lib/loanProducts';
 
 const STATUS_LABELS: Record<PortalLoanApplicationSummary['status'], string> = {
   PREAPPROVED: 'Pre-approved',
@@ -227,7 +228,7 @@ export function DashboardPage() {
                 >
                   <div>
                     <p className="text-sm font-medium">
-                      {application.requestedCategory} - ₱{application.requestedAmount.toLocaleString()}
+                      {getLoanProductDisplayLabel(application.requestedCategory)} - ₱{application.requestedAmount.toLocaleString()}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Submitted {new Date(application.createdAt).toLocaleDateString()} - {application.requestedTermMonths} months

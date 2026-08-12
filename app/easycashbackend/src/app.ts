@@ -184,6 +184,7 @@ import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/appl
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
+import { UpdateLoanApplicationIntakeUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import { UpdateLoanApplicationSelfServiceUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationSelfServiceUseCase';
 import { PrismaLoanApplicationRepository } from '@modules/loan-application/infrastructure/PrismaLoanApplicationRepository';
 import { PrismaBranchRepository } from '@modules/loan-application/infrastructure/PrismaBranchRepository';
@@ -1095,6 +1096,7 @@ export function createApp(): Express {
         notificationService,
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
+      updateLoanApplicationIntakeUseCase: new UpdateLoanApplicationIntakeUseCase({ loanApplicationRepository, preQualificationService }),
       preQualificationService,
       borrowerRepository,
       loanAccountRepository,

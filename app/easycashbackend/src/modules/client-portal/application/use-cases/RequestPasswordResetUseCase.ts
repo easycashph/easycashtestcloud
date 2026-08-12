@@ -17,6 +17,12 @@ export interface RequestPasswordResetUseCaseDeps {
  * sent" by inspecting the response shape (only a real account's code is ever actually sent/usable -
  * the fake id returned for a non-existent account will simply never match a real challenge in
  * ConfirmPasswordResetUseCase, failing exactly like a wrong code would).
+ *
+ * 2026-08-12 (user request/bug fix): PENDING_VERIFICATION accounts are now allowed to request a
+ * reset too, not just ACTIVE - clients who got stuck at signup (never verified, or whose original
+ * verification code expired) had no way back into their account since password reset was the one
+ * flow that could prove email ownership and recover them. ConfirmPasswordResetUseCase promotes the
+ * account to ACTIVE on successful confirmation for exactly this reason.
  */
 export class RequestPasswordResetUseCase {
   constructor(private readonly deps: RequestPasswordResetUseCaseDeps) {}
@@ -25,7 +31,7 @@ export class RequestPasswordResetUseCase {
     const { portalAccountRepository, portalAccountChallengeRepository, otpSender } = this.deps;
 
     const account = await portalAccountRepository.findByEmail(input.email);
-    if (!account || account.status !== 'ACTIVE') {
+    if (!account || (account.status !== 'ACTIVE' && account.status !== 'PENDING_VERIFICATION')) {
       return { challengeId: randomUUID() };
     }
 

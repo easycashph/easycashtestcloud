@@ -44,7 +44,7 @@ export function LoanProductsPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <product.icon className="h-5 w-5" />
               </div>
-              <h2 className="mt-4 text-base font-semibold">{product.category}</h2>
+              <h2 className="mt-4 text-base font-semibold">{product.displayLabel}</h2>
               <p className="mt-1.5 text-sm text-muted-foreground">{product.blurb}</p>
               <p className="mt-2 text-xs text-muted-foreground">{product.details}</p>
               <div className="mt-5 flex items-center gap-3">

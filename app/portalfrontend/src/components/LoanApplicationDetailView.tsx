@@ -1,4 +1,5 @@
 import type { PortalLoanApplicationDetail } from '@/lib/portalApiTypes';
+import { getLoanProductDisplayLabel } from '@/lib/loanProducts';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === '') return null;
@@ -48,7 +49,7 @@ export function LoanApplicationDetailView({ detail }: { detail: PortalLoanApplic
   return (
     <div className="space-y-5">
       <Section title="Loan Details">
-        <Field label="Category" value={detail.requestedCategory} />
+        <Field label="Category" value={getLoanProductDisplayLabel(detail.requestedCategory)} />
         <Field label="Requested Amount" value={`₱${detail.requestedAmount.toLocaleString()}`} />
         <Field label="Term" value={`${detail.requestedTermMonths} months`} />
         <Field label="Account Type" value={detail.accountType} />
