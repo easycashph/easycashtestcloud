@@ -37,8 +37,9 @@ function toDomain(row: LoanTransactionRow): LoanTransaction {
 
 /**
  * TXN-1: this class implements `ILoanTransactionRepository`, whose type
- * signature has no `update()`/`delete()` method — there is nothing here
- * that could accidentally mutate a posted transaction.
+ * signature has no `update()` method — there is nothing here that could
+ * accidentally mutate a posted transaction. `deleteAllByLoanAccountId` is a
+ * narrow, deliberate exception — see the port's own doc comment.
  */
 export class PrismaLoanTransactionRepository implements ILoanTransactionRepository {
   async findById(id: string, ctx?: TransactionContext): Promise<LoanTransaction | null> {
@@ -65,6 +66,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     // within a day, while entryDate still governs cross-day ordering (a backdated transaction
     // still sits near its stated date, not at the top of the list).
     const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
+    const typeClause = options.type ? Prisma.sql`AND lt."type" = ${options.type}` : Prisma.empty;
     const cursorClause = options.cursor
       ? Prisma.sql`AND (DATE(lt."entryDate"), lt."createdAt", lt.id) < (
           SELECT DATE(c."entryDate"), c."createdAt", c.id FROM loan_transactions c WHERE c.id = ${options.cursor}
@@ -76,6 +78,7 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
       FROM loan_transactions lt
       WHERE lt."loanAccountId" = ${loanAccountId}
       ${branchClause}
+      ${typeClause}
       ${cursorClause}
       ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
       LIMIT ${options.limit}
@@ -119,5 +122,10 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
         createdAt: transaction.createdAt,
       },
     });
+  }
+
+  async deleteAllByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.loanTransaction.deleteMany({ where: { loanAccountId } });
   }
 }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { LoanApplicationController, type LoanApplicationControllerDeps } from './loanApplicationController';
 import {
   assignLoanApplicationProductSchema,
@@ -10,22 +10,25 @@ import {
   decideLoanApplicationSchema,
   reviewReportSchema,
   setMitigationAccountOwnerSchema,
+  setMitigationDetailsSchema,
   updateLoanApplicationSchema,
   updateLoanApplicationIntakeSchema,
 } from './loanApplicationSchemas';
 
-/** Mirrors the mock UI's `canAccessLoanApplications` — MIS, Loan Operation Manager, and CRM only. */
-const APPLICATION_ACCESS_ROLES = ['MIS', 'Loan Operation Manager', 'CRM'];
-/** 2026-07-17 (Milestone C, Under Review / Pre Approval stages): the FINAL Approve is Manager-level
- * only, excluding CRM - CRM's role in the pipeline stops at Start Review / Review Report / Tag Pre
- * Approval. Mirrors the existing `/revert` route's narrower `requireRole(...)` pattern below. */
-const FINAL_APPROVAL_ROLES = ['MIS', 'Loan Operation Manager'];
+/**
+ * 2026-08-06: moved from hard-coded `requireRole(...)` allow-lists to DB-backed
+ * `requirePermission` checks (Roles & Permissions feature). Default grants:
+ * `loan_application.manage` mirrors the mock UI's `canAccessLoanApplications` — MIS, Loan
+ * Operation Manager, and CRM. `loan_application.final_approve` (2026-07-17, Milestone C): the
+ * FINAL Approve is Manager-level only, excluding CRM - CRM's role in the pipeline stops at Start
+ * Review / Review Report / Tag Pre Approval.
+ */
 
 export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new LoanApplicationController(deps);
   const requireAuth = createRequireAuth(tokenService);
-  const requireApplicationAccess = requireRole(...APPLICATION_ACCESS_ROLES);
+  const requireApplicationAccess = requirePermission('loan_application.manage');
 
   router.post('/loan-applications', requireAuth, requireApplicationAccess, validateBody(createLoanApplicationSchema), controller.create);
   router.get('/loan-applications/:id', requireAuth, requireApplicationAccess, controller.get);
@@ -76,13 +79,22 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     validateBody(setMitigationAccountOwnerSchema),
     controller.setMitigationAccountOwner,
   );
+  // 2026-08-10: generalizes the endpoint above to every mitigation field - see
+  // SetMitigationDetailsUseCase's doc comment. Same status-unrestricted access gate.
+  router.patch(
+    '/loan-applications/:id/mitigation-details',
+    requireAuth,
+    requireApplicationAccess,
+    validateBody(setMitigationDetailsSchema),
+    controller.setMitigationDetails,
+  );
   // 2026-07-22: mocked "Assist" panel above the Credit Evaluation Report - see
   // AiDocumentReviewResult's doc comment. Same access gate as the review report it feeds.
   router.post('/loan-applications/:id/ai-document-review', requireAuth, requireApplicationAccess, controller.aiDocumentReview);
   router.post(
     '/loan-applications/:id/approve',
     requireAuth,
-    requireRole(...FINAL_APPROVAL_ROLES),
+    requirePermission('loan_application.final_approve'),
     validateBody(decideLoanApplicationSchema),
     controller.approve,
   );
@@ -93,8 +105,8 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
     validateBody(decideLoanApplicationSchema),
     controller.decline,
   );
-  // Mirrors the mock UI's canRevertLoanApplicationDecision — MIS only, a narrower gate than the rest of this router.
-  router.post('/loan-applications/:id/revert', requireAuth, requireRole('MIS'), controller.revert);
+  // Mirrors the mock UI's canRevertLoanApplicationDecision — MIS only by default, a narrower gate than the rest of this router.
+  router.post('/loan-applications/:id/revert', requireAuth, requirePermission('loan_application.revert'), controller.revert);
 
   return router;
 }

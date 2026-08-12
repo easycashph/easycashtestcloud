@@ -160,6 +160,12 @@ enum LoanAccountStatus {
   /// the LoanAdjustment model). Distinct from CLOSED_RESTRUCTURED - no balance/principal change at
   /// all here, purely a due-date correction.
   CLOSED_ADJUSTED
+  /// 2026-08-07..08 (Undo Restructure / Undo Adjustment feature): DEPRECATED, unused going forward
+  /// - kept only because Postgres cannot drop an enum value without recreating the type. The
+  /// original "retire, don't delete" undo design that produced this status was revised the same
+  /// day (user-confirmed): undo now deletes the NEW loan account outright instead. Never written
+  /// by application code anymore; no LoanAccount row should carry this value after 2026-08-08.
+  CLOSED_UNDONE
 }
 
 /// TXN-1..2: append-only ledger entry types. Note: "DISBURSEMENT" is
@@ -194,10 +200,8 @@ enum RepaymentInstallmentStatus {
 // role baseline)
 // ----------------------------------------------------------------------------
 
-/// ADR-005 (Critical/Blocking, resolved provisionally): no legacy branch
-/// list exists. Seeded with one placeholder "Head Office" branch. The
-/// schema will never need to change when the real branch list is supplied —
-/// only seed/admin data does.
+/// ADR-005 (Critical/Blocking, resolved 2026-08-04): Easycash operates a single branch
+/// ("Head Office") - user-confirmed, no further branch list to come.
 model Branch {
   id        String   @id @default(uuid())
   code      String   @unique
@@ -262,40 +266,41 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  roles                         UserRole[]
-  refreshTokens                 RefreshToken[]
-  twoFactorChallenges           TwoFactorChallenge[]
-  trustedDevices                TrustedDevice[]
-  auditLogs                     AuditLog[]
-  profileActivityLogs           ProfileActivityLog[]          @relation("ProfileActivityLogUser")
-  borrowersAsLoanOfficer        Borrower[]                    @relation("BorrowerLoanOfficer")
-  loanAccountsAsOfficer         LoanAccount[]                 @relation("LoanAccountOfficer")
-  loanAccountsApproved          LoanAccount[]                 @relation("LoanAccountApprovedBy")
-  transactionsPosted            LoanTransaction[]             @relation("LoanTransactionPostedBy")
-  attachmentsUploaded           Attachment[]                  @relation("AttachmentUploadedBy")
-  profileNotesAuthored          ProfileNote[]                 @relation("ProfileNoteAuthor")
-  idempotencyKeys               IdempotencyKey[]
-  loanApplicationsEncoded       LoanApplication[]             @relation("LoanApplicationEncodedBy")
-  loanApplicationsReviewed      LoanApplication[]             @relation("LoanApplicationReviewedBy")
-  loanApplicationReviewsStarted LoanApplication[]             @relation("LoanApplicationReviewStartedBy")
-  loanApplicationsPreApproved   LoanApplication[]             @relation("LoanApplicationPreApprovedBy")
-  loanNotesAuthored             LoanNote[]
-  loanDocumentsGenerated        GeneratedLoanDocument[]       @relation("LoanDocumentGeneratedBy")
-  loanSigningSessionsCreated    LoanSigningSession[]          @relation("LoanSigningSessionCreatedBy")
-  statementsOfAccountGenerated  GeneratedStatementOfAccount[] @relation("StatementOfAccountGeneratedBy")
-  penaltyOverridesSet           RepaymentSchedule[]           @relation("PenaltyOverrideBy")
-  penaltyReductionsMade         PenaltyReduction[]
-  feesOverridesSet              RepaymentSchedule[]           @relation("FeesOverrideBy")
-  feeAdjustmentsMade            FeeAdjustment[]
-  loanRestructuresMade          LoanRestructure[]
-  loanAdjustmentsMade           LoanAdjustment[]
-  notificationsReceived         Notification[]
-  reminderSettingsUpdated       ReminderSettings[]
-  chatConversationsClaimed         ChatConversation[] @relation("ChatConversationClaimedBy")
-  chatConversationsOriginallyClaimed ChatConversation[] @relation("ChatConversationOriginallyClaimedBy")
-  chatConversationsPendingTransferTo ChatConversation[] @relation("ChatConversationPendingTransferTo")
-  chatConversationsPendingTransferFrom ChatConversation[] @relation("ChatConversationPendingTransferFrom")
-  chatMessagesSent              ChatMessage[]
+  roles                                UserRole[]
+  refreshTokens                        RefreshToken[]
+  twoFactorChallenges                  TwoFactorChallenge[]
+  trustedDevices                       TrustedDevice[]
+  auditLogs                            AuditLog[]
+  profileActivityLogs                  ProfileActivityLog[]          @relation("ProfileActivityLogUser")
+  borrowersAsLoanOfficer               Borrower[]                    @relation("BorrowerLoanOfficer")
+  loanAccountsAsOfficer                LoanAccount[]                 @relation("LoanAccountOfficer")
+  loanAccountsApproved                 LoanAccount[]                 @relation("LoanAccountApprovedBy")
+  transactionsPosted                   LoanTransaction[]             @relation("LoanTransactionPostedBy")
+  attachmentsUploaded                  Attachment[]                  @relation("AttachmentUploadedBy")
+  profileNotesAuthored                 ProfileNote[]                 @relation("ProfileNoteAuthor")
+  idempotencyKeys                      IdempotencyKey[]
+  loanApplicationsEncoded              LoanApplication[]             @relation("LoanApplicationEncodedBy")
+  loanApplicationsReviewed             LoanApplication[]             @relation("LoanApplicationReviewedBy")
+  loanApplicationReviewsStarted        LoanApplication[]             @relation("LoanApplicationReviewStartedBy")
+  loanApplicationsPreApproved          LoanApplication[]             @relation("LoanApplicationPreApprovedBy")
+  loanNotesAuthored                    LoanNote[]
+  loanDocumentsGenerated               GeneratedLoanDocument[]       @relation("LoanDocumentGeneratedBy")
+  loanSigningSessionsCreated           LoanSigningSession[]          @relation("LoanSigningSessionCreatedBy")
+  statementsOfAccountGenerated         GeneratedStatementOfAccount[] @relation("StatementOfAccountGeneratedBy")
+  penaltyOverridesSet                  RepaymentSchedule[]           @relation("PenaltyOverrideBy")
+  penaltyReductionsMade                PenaltyReduction[]
+  feesOverridesSet                     RepaymentSchedule[]           @relation("FeesOverrideBy")
+  feeAdjustmentsMade                   FeeAdjustment[]
+  loanRestructuresMade                 LoanRestructure[]             @relation("LoanRestructureBy")
+  loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
+  notificationsReceived                Notification[]
+  reminderSettingsUpdated              ReminderSettings[]
+  chatConversationsClaimed             ChatConversation[]            @relation("ChatConversationClaimedBy")
+  chatConversationsOriginallyClaimed   ChatConversation[]            @relation("ChatConversationOriginallyClaimedBy")
+  chatConversationsPendingTransferTo   ChatConversation[]            @relation("ChatConversationPendingTransferTo")
+  chatConversationsPendingTransferFrom ChatConversation[]            @relation("ChatConversationPendingTransferFrom")
+  chatMessagesSent                     ChatMessage[]
+  chatConversationParticipations       ChatConversationParticipant[]
 
   @@map("users")
 }
@@ -454,6 +459,13 @@ enum PortalAccountStatus {
   /// Just signed up - email not yet verified via PortalAccountChallenge, cannot log in yet.
   PENDING_VERIFICATION
   ACTIVE
+  /// 2026-08-06 (Delete My Portal Account, user request) - self-service deletion of the LOGIN
+  /// ONLY, never the linked Borrower/loan data (disclosed to the client at request time) - blocked
+  /// entirely while any linked LoanAccount is ACTIVE/ACTIVE_IN_ARREARS (RequestPortalAccountDeletionUseCase).
+  /// A soft status flip, not a real row delete - matches this codebase's only existing
+  /// deactivation convention (`User.status`), and avoids the FK-restrict failure a real DELETE
+  /// would hit on any `LoanApplication.portalAccountId` still pointing at this row.
+  DELETED
 }
 
 model PortalAccount {
@@ -463,6 +475,14 @@ model PortalAccount {
   contactNumber   String?
   status          PortalAccountStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?
+
+  /// 2026-08-06 (Bind existing Client data to Portal, user request) - true when this account's
+  /// current password is a staff-issued shared temporary password (see
+  /// CreatePortalAccountForBorrowerUseCase), until the client sets their own. The portal frontend
+  /// must block access to every other page until this clears - the shared temp password is not a
+  /// secret (any staff member can issue it, and it's the same string for every client), so this
+  /// flag is the only thing standing between "knows a client's email" and "is logged in as them."
+  mustChangePassword Boolean @default(false)
 
   /// Portal login 2FA (2026-07-30 user request) - unlike the internal LMS's opt-in-default-off
   /// 2FA, this defaults ON: `twoFactorChannel` is populated automatically from whichever channel
@@ -486,46 +506,46 @@ model PortalAccount {
   /// become dormant - the Borrower record is authoritative from then on and these are never synced
   /// back into it (a fresh signup vs. an existing client's history are different sources of truth;
   /// reconciling them isn't this feature's job).
-  firstName     String?
-  middleName    String?
-  lastName      String?
-  suffix        String?
-  gender        String?
-  birthDate     DateTime?
-  placeOfBirth  String?
-  nationality   String?
-  civilStatus   String?
-  homeOwnership String?
-  mobilePhone1  String?
-  mobilePhone2  String?
-  occupation    String?
-  employer      String?
-  monthlyIncome Decimal? @db.Decimal(14, 2)
+  firstName        String?
+  middleName       String?
+  lastName         String?
+  suffix           String?
+  gender           String?
+  birthDate        DateTime?
+  placeOfBirth     String?
+  nationality      String?
+  civilStatus      String?
+  homeOwnership    String?
+  mobilePhone1     String?
+  mobilePhone2     String?
+  occupation       String?
+  employer         String?
+  monthlyIncome    Decimal?  @db.Decimal(14, 2)
   /// 2026-07-31 (user request) - "Office address" on the Employment section, same concept as
   /// Borrower's incomeDetail.employerAddress once linked.
-  officeAddress String?
-  tinNumber     String?
-  sssNumber     String?
+  officeAddress    String?
+  tinNumber        String?
+  sssNumber        String?
   /// {name, age, relationship}[] - same shape as Borrower.dependants/LoanApplication.dependants.
-  dependants        Json?
-  reference1Name    String?
-  reference1Mobile  String?
-  reference2Name    String?
-  reference2Mobile  String?
-  houseUnitNumber   String?
-  street            String?
-  barangay          String?
-  cityMunicipality  String?
-  province          String?
-  zipCode           String?
+  dependants       Json?
+  reference1Name   String?
+  reference1Mobile String?
+  reference2Name   String?
+  reference2Mobile String?
+  houseUnitNumber  String?
+  street           String?
+  barangay         String?
+  cityMunicipality String?
+  province         String?
+  zipCode          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  challenges       PortalAccountChallenge[]
-  loanApplications LoanApplication[]
-  notifications    PortalNotification[]
-  trustedDevices   PortalTrustedDevice[]
+  challenges        PortalAccountChallenge[]
+  loanApplications  LoanApplication[]
+  notifications     PortalNotification[]
+  trustedDevices    PortalTrustedDevice[]
   chatConversations ChatConversation[]
 
   @@map("portal_accounts")
@@ -580,32 +600,33 @@ enum ChatConversationStatus {
 /// click, NOT a cryptographic secret - see pendingTransferPin's own doc comment for why it's
 /// stored plaintext).
 model ChatConversation {
-  id              String                 @id @default(uuid())
-  portalAccountId String
-  portalAccount   PortalAccount          @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
-  status          ChatConversationStatus @default(WAITING)
-  claimedByUserId String?
-  claimedByUser   User?                  @relation("ChatConversationClaimedBy", fields: [claimedByUserId], references: [id])
-  claimedAt       DateTime?
+  id                        String                        @id @default(uuid())
+  portalAccountId           String
+  portalAccount             PortalAccount                 @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
+  status                    ChatConversationStatus        @default(WAITING)
+  claimedByUserId           String?
+  claimedByUser             User?                         @relation("ChatConversationClaimedBy", fields: [claimedByUserId], references: [id])
+  claimedAt                 DateTime?
   /// Set once, the first time this conversation is claimed from WAITING - never changed again,
   /// even across further transfers. Lets the very first responder still see (read-only) the
   /// whole conversation history after handing it off, instead of losing all trace of it.
-  originalClaimedByUserId String?
-  originalClaimedByUser   User?   @relation("ChatConversationOriginallyClaimedBy", fields: [originalClaimedByUserId], references: [id])
+  originalClaimedByUserId   String?
+  originalClaimedByUser     User?                         @relation("ChatConversationOriginallyClaimedBy", fields: [originalClaimedByUserId], references: [id])
   pendingTransferToUserId   String?
-  pendingTransferToUser     User?   @relation("ChatConversationPendingTransferTo", fields: [pendingTransferToUserId], references: [id])
+  pendingTransferToUser     User?                         @relation("ChatConversationPendingTransferTo", fields: [pendingTransferToUserId], references: [id])
   pendingTransferFromUserId String?
-  pendingTransferFromUser   User?   @relation("ChatConversationPendingTransferFrom", fields: [pendingTransferFromUserId], references: [id])
+  pendingTransferFromUser   User?                         @relation("ChatConversationPendingTransferFrom", fields: [pendingTransferFromUserId], references: [id])
   /// Deliberately plaintext, 4 digits - the intended recipient already sees this same value in
   /// their own "Incoming Transfers" list (it's not hidden from them), so hashing it would only
   /// prevent displaying it back, not add real access control. This is a confirmation gesture
   /// (proves the receiving officer actually opened the specific handoff meant for them) more
   /// than a secret - the real access control is `pendingTransferToUserId` itself.
-  pendingTransferPin String?
-  closedAt        DateTime?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  messages        ChatMessage[]
+  pendingTransferPin        String?
+  closedAt                  DateTime?
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+  messages                  ChatMessage[]
+  participants              ChatConversationParticipant[]
 
   @@index([status, createdAt])
   @@index([claimedByUserId])
@@ -613,6 +634,28 @@ model ChatConversation {
   @@index([pendingTransferToUserId])
   @@index([portalAccountId, status])
   @@map("chat_conversations")
+}
+
+/// 2026-08-03 (user request: "gusto ko maging trackable talaga ang chat logs") - one row per
+/// hand-off, every staff member who has EVER been the claimant, not just the first and current
+/// one (which `originalClaimedByUserId`/`claimedByUserId` alone can't reconstruct across more than
+/// one transfer). Written alongside claim/transfer/close, never edited afterward - append-only
+/// audit trail, same posture as AuditLog.
+model ChatConversationParticipant {
+  id             String           @id @default(uuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  joinedAt       DateTime         @default(now())
+  /// Null while this is the CURRENT claimant's still-open span.
+  leftAt         DateTime?
+  /// 'TRANSFERRED' | 'CLOSED' - null while still open.
+  leftReason     String?
+
+  @@index([conversationId, joinedAt])
+  @@index([userId])
+  @@map("chat_conversation_participants")
 }
 
 enum ChatMessageSenderType {
@@ -1506,6 +1549,10 @@ model PenaltyReduction {
 model LoanRestructure {
   id String @id @default(uuid())
 
+  /// 2026-08-08 (Undo Restructure feature, user-confirmed revision): `@unique` again - a reverted
+  /// restructure now deletes this row outright (see UndoRestructureLoanUseCase), so at most one
+  /// row can ever exist per old loan account at a time; a fresh restructure after an undo simply
+  /// creates a new row once the old one is gone.
   oldLoanAccountId String      @unique
   oldLoanAccount   LoanAccount @relation("OldLoanRestructure", fields: [oldLoanAccountId], references: [id])
   newLoanAccountId String      @unique
@@ -1525,7 +1572,7 @@ model LoanRestructure {
   reason String?
 
   restructuredByUserId String
-  restructuredBy       User     @relation(fields: [restructuredByUserId], references: [id])
+  restructuredBy       User     @relation("LoanRestructureBy", fields: [restructuredByUserId], references: [id])
   createdAt            DateTime @default(now())
 
   @@map("loan_restructures")
@@ -1539,6 +1586,8 @@ model LoanRestructure {
 model LoanAdjustment {
   id String @id @default(uuid())
 
+  /// 2026-08-08 (Undo Adjustment feature, user-confirmed revision): same "@unique again, row
+  /// deleted outright on undo" change as LoanRestructure.oldLoanAccountId, for the same reason.
   oldLoanAccountId String      @unique
   oldLoanAccount   LoanAccount @relation("OldLoanAdjustment", fields: [oldLoanAccountId], references: [id])
   newLoanAccountId String      @unique
@@ -1550,7 +1599,7 @@ model LoanAdjustment {
   reason String?
 
   adjustedByUserId String
-  adjustedBy       User     @relation(fields: [adjustedByUserId], references: [id])
+  adjustedBy       User     @relation("LoanAdjustmentBy", fields: [adjustedByUserId], references: [id])
   createdAt        DateTime @default(now())
 
   @@map("loan_adjustments")
@@ -2440,4 +2489,38 @@ model ReminderSettings {
   updatedBy           User?    @relation(fields: [updatedByUserId], references: [id])
 
   @@map("reminder_settings")
+}
+
+/// Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+/// curated LINKS to real external articles (headline + short excerpt + link back to the source),
+/// never republished full article content (copyright). Fetched on a daily cron
+/// (`financeNewsScheduler.ts`) from a small, env-configured allowlist of RSS feeds, filtered by
+/// keyword relevance, and published with NO human review step before appearing live - an explicit
+/// user decision (accepted after being warned this trades away a moderation safety net) - so the
+/// keyword filter and the hard-truncated `excerpt` length are the only automated guardrails.
+enum ExternalNewsCategory {
+  /// PH lending/banking/finance news - shown on the public News page.
+  FINANCE
+  /// Road/weather advisories around Metro Manila - relevant to clients/prospective clients and to
+  /// onsite loan officers who need to report to the Easycash main office. Surfaced both in the
+  /// homepage "News Flash" ticker and the News page.
+  ADVISORY
+}
+
+model ExternalNewsLink {
+  id          String               @id @default(uuid())
+  category    ExternalNewsCategory
+  title       String
+  sourceName  String
+  /// Dedupe key - the fetch job skips a URL it has already stored, so re-running the cron (or a
+  /// feed re-listing the same item) never creates duplicates.
+  sourceUrl   String               @unique
+  /// Hard-truncated to ~200 chars server-side (see FetchExternalFinanceNewsUseCase) - a short
+  /// pointer to the source, never the full article body.
+  excerpt     String
+  publishedAt DateTime
+  fetchedAt   DateTime             @default(now())
+
+  @@index([category, publishedAt])
+  @@map("external_news_links")
 }

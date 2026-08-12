@@ -9,6 +9,10 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
+import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
+import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
+import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
+import { PortalTwoFactorNudgeCard } from '@/components/PortalTwoFactorNudgeCard';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
@@ -165,6 +169,12 @@ export function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
         </motion.div>
 
+        <PortalTwoFactorNudgeCard />
+
+        <PortalNextPaymentDueCard />
+
+        <PortalLoanOfficerCard />
+
         <motion.div initial="hidden" animate="show" variants={stagger} className="mt-8 grid gap-5 sm:grid-cols-2">
           <motion.div variants={fadeUp}>
           <Card className="p-6">
@@ -201,6 +211,8 @@ export function DashboardPage() {
         </motion.div>
 
         <PortalLoanAccountsSection />
+
+        <PortalRecentPaymentsSection />
 
         <motion.div initial="hidden" animate="show" variants={fadeUp}>
         <Card className="mt-5 p-6">

@@ -1,15 +1,21 @@
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import type { IChatRepository, ChatConversationRecord, ChatMessageRecord } from '../ports/IChatRepository';
 import { ChatConversationNotFoundError, ChatNotEligibleError } from '../../domain/errors/ChatErrors';
+import { buildChatClientInfo, type ChatClientInfo } from '../ChatClientInfo';
 
 export interface GetChatConversationForMisUseCaseDeps {
   userRepository: IUserRepository;
   chatRepository: IChatRepository;
+  portalAccountRepository: IPortalAccountRepository;
+  loanApplicationRepository: ILoanApplicationRepository;
 }
 
 export interface MisChatView {
   conversation: ChatConversationRecord;
   messages: ChatMessageRecord[];
+  client: ChatClientInfo;
 }
 
 /** MIS-only, read-only - full message history of ANY conversation, no claimant/eligibility
@@ -27,6 +33,7 @@ export class GetChatConversationForMisUseCase {
     // Same redaction as GetChatConversationForStaffUseCase - the PIN is only ever shown to the
     // two people actually party to that specific handoff, not to MIS reviewing after the fact.
     const messages = await this.deps.chatRepository.listMessages(conversationId);
-    return { conversation: { ...conversation, pendingTransferPin: null }, messages };
+    const client = await buildChatClientInfo(this.deps, conversation.portalAccountId);
+    return { conversation: { ...conversation, pendingTransferPin: null }, messages, client };
   }
 }

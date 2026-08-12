@@ -5,6 +5,7 @@ import type { IAuditLogger } from '../ports/IAuditLogger';
 import type { ITwoFactorChallengeRepository } from '../ports/ITwoFactorChallengeRepository';
 import type { ITrustedDeviceRepository } from '../ports/ITrustedDeviceRepository';
 import type { LoginOutput, VerifyLoginOtpInput } from '../dtos/AuthDtos';
+import type { IPermissionCodesRepository } from '../ports/IPermissionCodesRepository';
 import { InvalidOtpError, TooManyOtpAttemptsError, UserInactiveError } from '../errors/AuthErrors';
 import { issueTokenPair } from '../authTokenIssuance';
 
@@ -20,6 +21,7 @@ export interface VerifyLoginOtpUseCaseDeps {
   auditLogger: IAuditLogger;
   twoFactorChallengeRepository: ITwoFactorChallengeRepository;
   trustedDeviceRepository: ITrustedDeviceRepository;
+  permissionCodesRepository: IPermissionCodesRepository;
   refreshTokenTtlMs?: number;
 }
 
@@ -33,8 +35,15 @@ export class VerifyLoginOtpUseCase {
   constructor(private readonly deps: VerifyLoginOtpUseCaseDeps) {}
 
   async execute(input: VerifyLoginOtpInput): Promise<LoginOutput> {
-    const { userRepository, tokenService, refreshTokenRepository, auditLogger, twoFactorChallengeRepository, trustedDeviceRepository } =
-      this.deps;
+    const {
+      userRepository,
+      tokenService,
+      refreshTokenRepository,
+      auditLogger,
+      twoFactorChallengeRepository,
+      trustedDeviceRepository,
+      permissionCodesRepository,
+    } = this.deps;
 
     const challenge = await twoFactorChallengeRepository.findById(input.challengeId);
     // Same InvalidOtpError for "doesn't exist," "wrong purpose," "already consumed," and
@@ -85,6 +94,8 @@ export class VerifyLoginOtpUseCase {
       ? (await trustedDeviceRepository.issue({ userId: user.id, expiresAt: new Date(Date.now() + TRUSTED_DEVICE_TTL_MS) })).rawToken
       : undefined;
 
+    const permissionCodes = await permissionCodesRepository.getGrantedPermissionCodes(user.roles);
+
     return {
       ...tokens,
       ...(deviceToken ? { deviceToken } : {}),
@@ -101,6 +112,7 @@ export class VerifyLoginOtpUseCase {
         birthday: user.birthday ? user.birthday.toISOString() : null,
         twoFactorEnabled: user.twoFactorEnabled,
         twoFactorChannel: user.twoFactorChannel,
+        permissionCodes,
       },
     };
   }

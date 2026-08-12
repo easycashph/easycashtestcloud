@@ -54,7 +54,7 @@ export class AuthController {
         return;
       }
 
-      setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenExpiresAt);
+      setRefreshTokenCookie(req, res, result.refreshToken, result.refreshTokenExpiresAt);
       res.status(200).json({
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
@@ -78,7 +78,7 @@ export class AuthController {
         userAgent: req.header('user-agent'),
       });
 
-      setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenExpiresAt);
+      setRefreshTokenCookie(req, res, result.refreshToken, result.refreshTokenExpiresAt);
       res.status(200).json({
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
@@ -127,7 +127,7 @@ export class AuthController {
         userAgent: req.header('user-agent'),
       });
 
-      setRefreshTokenCookie(res, result.refreshToken, result.refreshTokenExpiresAt);
+      setRefreshTokenCookie(req, res, result.refreshToken, result.refreshTokenExpiresAt);
       res.status(200).json({
         accessToken: result.accessToken,
         accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
@@ -136,7 +136,7 @@ export class AuthController {
       // A reused/expired/invalid refresh token always clears the cookie
       // client-side too, so the browser stops presenting a dead token.
       if (error instanceof TokenNotFoundError || error instanceof TokenExpiredError) {
-        clearRefreshTokenCookie(res);
+        clearRefreshTokenCookie(req, res);
       }
       next(error);
     }
@@ -146,7 +146,7 @@ export class AuthController {
     try {
       const rawRefreshToken = readRefreshTokenCookie(req);
       await this.deps.logoutUseCase.execute({ rawRefreshToken });
-      clearRefreshTokenCookie(res);
+      clearRefreshTokenCookie(req, res);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -157,7 +157,7 @@ export class AuthController {
     try {
       const currentUser = getCurrentUser(req);
       const result = await this.deps.logoutAllUseCase.execute({ userId: currentUser.sub });
-      clearRefreshTokenCookie(res);
+      clearRefreshTokenCookie(req, res);
       res.status(200).json({ revokedCount: result.revokedCount });
     } catch (error) {
       next(error);

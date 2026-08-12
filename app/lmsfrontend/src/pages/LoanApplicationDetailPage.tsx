@@ -608,8 +608,8 @@ type LoanTypeOption = (typeof LOAN_TYPE_OPTIONS)[number];
 // down to whatever's actually present, so a hidden section leaves no dangling empty slot.
 const DEFAULT_CARD_ORDER = [
   'applicantDetails',
-  'coBorrowerDetails',
   'requestedLoan',
+  'coBorrowerDetails',
   'personalHousehold',
   'attachments',
   'recentActivity',
@@ -618,7 +618,11 @@ const DEFAULT_CARD_ORDER = [
   'notes',
   'activityTimeline',
 ];
-const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder';
+// 2026-08-07 (user request): ".v2" forces every officer onto the new default order below
+// (Requested Loan moved up next to Applicant Details, ahead of Co-Borrower Details) - same
+// key-version-bump technique ClientProfilePage.tsx used for its own default-order change, so it
+// applies even to an officer who already has a saved custom order under the old key.
+const CARD_ORDER_KEY_PREFIX = 'lms.loanApplicationDetailCardOrder.v2';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
 }
@@ -1088,6 +1092,24 @@ const UnderwritingCard = React.forwardRef<
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
   });
 
+  // 2026-08-10 (user request) - separate, status-unrestricted endpoint for the rest of the
+  // mitigation fields (bank/branch/accountName/accountNumber/atmCardNumber/allotmentAmount), same
+  // pattern as setAccountOwnerMutation above - see SetMitigationDetailsUseCase's doc comment. Own
+  // "Save" button (unlike accountOwner's immediate-on-click) since it's several free-text fields,
+  // not a single toggle.
+  const setMitigationDetailsMutation = useMutation({
+    mutationFn: () =>
+      apiClient.patch<LoanApplication>(`/loan-applications/${application.id}/mitigation-details`, {
+        bank: mitigation.bank,
+        branch: mitigation.branch,
+        accountName: mitigation.accountName,
+        accountNumber: mitigation.accountNumber,
+        atmCardNumber: mitigation.atmCardNumber,
+        allotmentAmount: mitigation.allotmentAmount,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['loan-application', application.id] }),
+  });
+
   const breakdown = application.preQualificationBreakdown;
   const dtiPercent =
     breakdown && application.monthlyIncome ? (breakdown.estimatedMonthlyAmortization / application.monthlyIncome) * 100 : null;
@@ -1265,7 +1287,7 @@ const UnderwritingCard = React.forwardRef<
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground">Only if the borrower is surrendering an ATM/allotment as security.</p>
-          {(canEditReview || hasMitigationData) && (
+          {(canEditAccountOwner || hasMitigationData) && (
             <button
               type="button"
               onClick={() => setMitigationOpen((v) => !v)}
@@ -1280,7 +1302,7 @@ const UnderwritingCard = React.forwardRef<
               {MITIGATION_FIELDS.map((f) => (
                 <div key={f.key} className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{f.label}</Label>
-                  {canEditReview ? (
+                  {canEditAccountOwner ? (
                     <Input
                       value={mitigation[f.key] ?? ''}
                       onChange={(e) => setMitigation((prev) => ({ ...prev, [f.key]: e.target.value }))}
@@ -1290,6 +1312,20 @@ const UnderwritingCard = React.forwardRef<
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {/* 2026-08-10 (user request): bank/branch/account fields are now editable regardless of
+              review status (see setMitigationDetailsMutation above), unlike the rest of the Review
+              Report which saves via the single "Save Underwriting Details" button below - so this
+              section needs its own explicit Save action. */}
+          {mitigationOpen && canEditAccountOwner && (
+            <div className="flex items-center gap-2 pt-1">
+              <Button size="sm" variant="outline" disabled={setMitigationDetailsMutation.isPending} onClick={() => setMitigationDetailsMutation.mutate()}>
+                {setMitigationDetailsMutation.isPending ? 'Saving…' : 'Save bank / ATM details'}
+              </Button>
+              {setMitigationDetailsMutation.isSuccess && !setMitigationDetailsMutation.isPending && (
+                <span className="text-xs text-muted-foreground">Saved.</span>
+              )}
             </div>
           )}
           {mitigationOpen && application.coBorrowerName && (

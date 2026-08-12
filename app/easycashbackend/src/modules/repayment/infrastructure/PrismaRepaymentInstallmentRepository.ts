@@ -84,7 +84,12 @@ function toUpsertData(installment: RepaymentInstallment) {
     feesPaid: installment.paid.fees.toDecimal(),
     penaltyPaid: installment.paid.penalty.toDecimal(),
     status: installment.status,
-    lastPaidAt: installment.lastPaidAt,
+    // 2026-08-12 (user-reported): `undefined` here (the domain's "no longer paid" value after a
+    // full reversal, see RepaymentInstallment.recordPayment()'s 2026-08-07 fix) is silently
+    // dropped by Prisma's update `data` object rather than clearing the column - the stale Paid
+    // Date kept showing even though every Amount Paid column read "—". Same `?? null` pattern
+    // already used below for the override fields.
+    lastPaidAt: installment.lastPaidAt ?? null,
     penaltyOverrideAmount: installment.penaltyOverride?.amount.toDecimal() ?? null,
     penaltyOverrideReason: installment.penaltyOverride?.reason ?? null,
     penaltyOverrideByUserId: installment.penaltyOverride?.byUserId ?? null,

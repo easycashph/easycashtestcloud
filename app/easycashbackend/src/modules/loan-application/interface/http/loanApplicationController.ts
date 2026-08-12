@@ -13,6 +13,7 @@ import type { RevertLoanApplicationDecisionUseCase } from '../../application/use
 import type { StartLoanApplicationReviewUseCase } from '../../application/use-cases/StartLoanApplicationReviewUseCase';
 import type { SubmitLoanApplicationReviewReportUseCase } from '../../application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import type { SetMitigationAccountOwnerUseCase } from '../../application/use-cases/SetMitigationAccountOwnerUseCase';
+import type { SetMitigationDetailsUseCase } from '../../application/use-cases/SetMitigationDetailsUseCase';
 import type { GenerateAiDocumentReviewUseCase } from '../../application/use-cases/GenerateAiDocumentReviewUseCase';
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
@@ -26,6 +27,7 @@ import type {
   DecideLoanApplicationRequestBody,
   ReviewReportRequestBody,
   SetMitigationAccountOwnerRequestBody,
+  SetMitigationDetailsRequestBody,
   UpdateLoanApplicationRequestBody,
   UpdateLoanApplicationIntakeRequestBody,
 } from './loanApplicationSchemas';
@@ -42,6 +44,7 @@ export interface LoanApplicationControllerDeps {
   startLoanApplicationReviewUseCase: StartLoanApplicationReviewUseCase;
   submitLoanApplicationReviewReportUseCase: SubmitLoanApplicationReviewReportUseCase;
   setMitigationAccountOwnerUseCase: SetMitigationAccountOwnerUseCase;
+  setMitigationDetailsUseCase: SetMitigationDetailsUseCase;
   generateAiDocumentReviewUseCase: GenerateAiDocumentReviewUseCase;
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
@@ -249,6 +252,19 @@ export class LoanApplicationController {
       const { accountOwner } = req.body as SetMitigationAccountOwnerRequestBody;
       const currentUser = getCurrentUser(req);
       const application = await this.deps.setMitigationAccountOwnerUseCase.execute(req.params.id as string, currentUser.sub, accountOwner);
+      res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-10 - see `SetMitigationDetailsUseCase`'s doc comment: generalizes
+   * `setMitigationAccountOwner` above to every mitigation field, same status-unrestricted rule. */
+  setMitigationDetails = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as SetMitigationDetailsRequestBody;
+      const currentUser = getCurrentUser(req);
+      const application = await this.deps.setMitigationDetailsUseCase.execute(req.params.id as string, currentUser.sub, body);
       res.status(200).json(await this.present(application));
     } catch (error) {
       next(error);

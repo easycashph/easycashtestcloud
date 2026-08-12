@@ -23,3 +23,21 @@ export class DuplicateClientProfileError extends DomainError {
     this.name = 'DuplicateClientProfileError';
   }
 }
+
+/** 2026-08-06 (Bind existing Client data to Portal) - a Borrower has no email on file, so a Portal
+ * account can't be created/matched for them until staff adds one via the existing Edit flow. */
+export class BorrowerMissingEmailError extends DomainError {
+  constructor(borrowerId: string) {
+    super('BORROWER_MISSING_EMAIL', `This client has no email address on file (${borrowerId}). Add one before creating a Portal account.`, undefined, 400);
+    this.name = 'BorrowerMissingEmailError';
+  }
+}
+
+/** 2026-08-06 (Bind existing Client data to Portal) - `PortalAccount.borrowerId` is `@unique`; a
+ * Borrower can only ever have one linked Portal account at a time. */
+export class BorrowerPortalAccountAlreadyLinkedError extends DomainError {
+  constructor(borrowerId: string) {
+    super('BORROWER_PORTAL_ACCOUNT_ALREADY_LINKED', `This client (${borrowerId}) already has a linked Portal account.`, undefined, 409);
+    this.name = 'BorrowerPortalAccountAlreadyLinkedError';
+  }
+}

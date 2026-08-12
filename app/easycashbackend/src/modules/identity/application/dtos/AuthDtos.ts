@@ -23,6 +23,13 @@ export interface AuthenticatedUserView {
   /** Settings > Security > Two-Factor Authentication (2026-07-22). */
   twoFactorEnabled: boolean;
   twoFactorChannel: 'EMAIL' | 'SMS' | null;
+  /** 2026-08-06 (Roles & Permissions feature): the union of every `Permission.code` granted to
+   * any of `roles` above, right now — lets the frontend hide (not just have the backend reject)
+   * an action the signed-in user's role doesn't currently have. Always re-computed from the DB on
+   * every `/auth/me` call (same "never trust the JWT for this" reasoning as `roles` itself, see
+   * this use case's own doc comment), so an MIS change on the Roles & Permissions screen is
+   * reflected the next time the frontend re-fetches `/auth/me` - no re-login required. */
+  permissionCodes: string[];
 }
 
 export interface TokenPairOutput {

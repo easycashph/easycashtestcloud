@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { Newspaper } from 'lucide-react';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
+import { ExternalNewsLinksSection } from '@/components/ExternalNewsLinksSection';
 import {
   NEWS_CATEGORIES,
   formatPostDate,
@@ -33,10 +34,17 @@ export function NewsPage() {
 
   return (
     <PublicPageLayout title={t.news.title} intro={t.news.intro}>
+      <div className="space-y-10">
+        <ExternalNewsLinksSection category="ADVISORY" title="Road & Weather Advisories (Metro Manila)" />
+        <ExternalNewsLinksSection category="FINANCE" title="PH Lending & Finance News" />
+      </div>
+
       {posts.length === 0 ? (
-        <EmptyState />
+        <div className="mt-10">
+          <EmptyState />
+        </div>
       ) : (
-        <div className="space-y-6">
+        <div className="mt-10 space-y-6">
           {/* Only render the filter when there is something to filter by. */}
           {usedCategories.length > 1 && (
             <div className="flex flex-wrap gap-2">

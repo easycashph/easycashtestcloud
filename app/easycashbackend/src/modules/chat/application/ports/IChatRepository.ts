@@ -1,9 +1,23 @@
 export type ChatConversationStatus = 'WAITING' | 'CLAIMED' | 'PENDING_TRANSFER' | 'CLOSED';
 export type ChatMessageSenderType = 'PORTAL_ACCOUNT' | 'STAFF' | 'SYSTEM';
 
+/** 2026-08-03 (user request: "gusto ko maging trackable talaga ang chat logs") - one span per
+ * staff member who has ever handled this conversation, in order. `leftAt`/`leftReason` are null
+ * for the current claimant's still-open span. */
+export interface ChatParticipantRecord {
+  userId: string;
+  userName: string;
+  joinedAt: Date;
+  leftAt: Date | null;
+  leftReason: 'TRANSFERRED' | 'CLOSED' | null;
+}
+
 export interface ChatConversationRecord {
   id: string;
   portalAccountId: string;
+  /** 2026-08-03 (user request) - lets "My Chats" group conversations by client instead of a flat
+   * list, so backtracking through chat history for a specific person isn't confusing. */
+  portalAccountEmail: string | null;
   status: ChatConversationStatus;
   claimedByUserId: string | null;
   claimedByUserName: string | null;
@@ -17,6 +31,9 @@ export interface ChatConversationRecord {
    * in a response to the two people who are supposed to see it (the initiating officer, and the
    * intended recipient) - use cases are responsible for that filtering, not this record shape. */
   pendingTransferPin: string | null;
+  /** Full hand-off chain, oldest first - the real fix for "only first+current claimant are
+   * trackable" once a conversation has been transferred more than once. */
+  participants: ChatParticipantRecord[];
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
@@ -67,14 +84,16 @@ export interface IChatRepository {
   cancelTransfer(id: string, fromUserId: string): Promise<boolean>;
   closeConversation(id: string): Promise<void>;
   listWaitingConversations(): Promise<ChatConversationRecord[]>;
-  /** "My Chats" - conversations currently claimed by this user (actionable) OR that they were
-   * ever the original/first claimant on (read-only history once transferred away) - excludes
-   * WAITING (never claimed). */
+  /** "My Chats" - every conversation this user has EVER been a participant on (see
+   * ChatConversationParticipant), current claim (actionable) or a past hand-off (read-only
+   * history) - covers every hop of a multi-transfer chain, not just first+current claimant. */
   listConversationsForUserHistory(userId: string): Promise<ChatConversationRecord[]>;
   /** Conversations pending a transfer TO this user, awaiting their PIN confirmation. */
   listIncomingTransfersForUser(userId: string): Promise<ChatConversationRecord[]>;
-  /** MIS oversight (2026-07-31 user request) - every conversation this user has EVER claimed
-   * (current OR original claimant), any status (including CLOSED). */
+  /** MIS oversight (2026-07-31 user request) - every conversation this user has ever been a
+   * participant on, any status (including CLOSED). Same underlying query as
+   * listConversationsForUserHistory - kept as a separate method since callers differ (self vs.
+   * MIS-about-someone-else) even though the data access is identical. */
   listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]>;
   /** Attachments are looked up separately (Attachment.ownerType='CHAT_MESSAGE', ownerId=message.id)
    * by whichever use case handles the file upload - `addMessage` never receives one directly. */

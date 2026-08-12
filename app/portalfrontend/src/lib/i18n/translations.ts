@@ -55,6 +55,7 @@ export const en = {
       'Easycash is a lending company registered with the Securities and Exchange Commission of the Philippines. Loan approval and final terms are subject to credit evaluation.',
     contactHeading: 'Contact',
     contactPageLink: 'Contact page',
+    viewOnMap: 'View on map',
     quickLinksHeading: 'Quick Links',
     requirements: 'Loan Requirements',
     news: 'News & Announcements',
@@ -95,6 +96,12 @@ export const en = {
       { title: 'Flexible terms', body: 'Payment schedules that work with how you actually get paid.' },
       { title: 'Safe & secure', body: 'Your information is protected - we take confidentiality seriously.' },
     ],
+    waysToPayTitle: 'Ways to pay',
+    waysToPaySubtitle: 'Settle your installments through either of these channels.',
+    waysToPay: [
+      { title: 'Bank Transfer', body: 'Pay directly from your bank account.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Set up post-dated checks matched to your payment schedule.' },
+    ],
     testimonialsTitle: 'People say the nicest things',
     testimonialsSubtitle:
       "Here's the compelling reason why thousands of businesses and individuals have opted for our expertise to drive their financial growth.",
@@ -120,6 +127,11 @@ export const en = {
       {
         question: 'Do I need collateral to apply?',
         answer: 'No. Easycash loans are unsecured and do not require collateral.',
+      },
+      {
+        question: 'I already have a loan with Easycash - can I apply again?',
+        answer:
+          "Yes. Once your current loan is fully settled and closed, you can submit a new (renewal) application right from your Easycash Portal account - no need to start over as a new applicant.",
       },
     ],
     ctaTitle: 'Ready to get started?',
@@ -252,6 +264,7 @@ export const en = {
     emailHeading: 'Email',
     emailNote: 'For data privacy matters and formal written concerns.',
     officeHeading: 'Registered office',
+    hoursHeading: 'Business hours',
     impostorsHeading: 'Beware of impostors',
     impostorsBody: 'If someone contacts you from a number or account not listed on this page claiming to be Easycash, treat it as a scam. Read our {securityLink}.',
     impostorsLinkText: 'Security & Anti-Scam guide',
@@ -309,6 +322,7 @@ export const fil: Translations = {
       'Ang Easycash ay isang lending company na rehistrado sa Securities and Exchange Commission ng Pilipinas. Ang pag-apruba ng loan at pangwakas na mga termino ay sasailalim sa credit evaluation.',
     contactHeading: 'Contact',
     contactPageLink: 'Contact page',
+    viewOnMap: 'Tingnan sa mapa',
     quickLinksHeading: 'Mga Mabilisang Link',
     requirements: 'Mga Kailangan sa Pag-apply',
     news: 'Balita at mga Anunsyo',
@@ -349,6 +363,12 @@ export const fil: Translations = {
       { title: 'Flexible na mga termino', body: 'Mga iskedyul ng bayad na akma sa paraan ng iyong pagkita.' },
       { title: 'Ligtas at secure', body: 'Ang iyong impormasyon ay protektado - seryoso kami sa pagiging kumpidensyal.' },
     ],
+    waysToPayTitle: 'Mga paraan ng pagbabayad',
+    waysToPaySubtitle: 'Bayaran ang iyong mga hulog gamit ang alinman sa mga channel na ito.',
+    waysToPay: [
+      { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account.' },
+      { title: 'Post-Dated Check (PDC)', body: 'Mag-set up ng post-dated checks na naka-tugma sa iskedyul ng iyong bayad.' },
+    ],
     testimonialsTitle: 'Ang sinasabi ng aming mga kliyente',
     testimonialsSubtitle:
       'Ito ang dahilan kung bakit libo-libong negosyo at indibidwal ang pumili sa aming serbisyo para sa kanilang paglago sa pananalapi.',
@@ -370,6 +390,11 @@ export const fil: Translations = {
       {
         question: 'Sino ang karapat-dapat mag-apply ng loan?',
         answer: 'Dapat ay hindi bababa sa 18 taong gulang ang aplikante, mamamayan o residente ng Pilipinas, may wastong government-issued ID, at may matatag na kinikita.',
+      },
+      {
+        question: 'Meron na akong loan sa Easycash - puwede pa ba akong mag-apply ulit?',
+        answer:
+          'Oo. Kapag nabayaran na nang buo at nasarahan na ang iyong kasalukuyang loan, puwede ka nang mag-submit ng bagong (renewal) application diretso sa iyong Easycash Portal account - hindi mo na kailangang magsimula bilang bagong aplikante.',
       },
       {
         question: 'Kailangan ba ng collateral para mag-apply?',
@@ -503,6 +528,7 @@ export const fil: Translations = {
     emailHeading: 'Email',
     emailNote: 'Para sa mga usaping data privacy at pormal na nakasulat na alalahanin.',
     officeHeading: 'Rehistradong opisina',
+    hoursHeading: 'Oras ng negosyo',
     impostorsHeading: 'Mag-ingat sa mga nagpapanggap',
     impostorsBody: 'Kung may nakipag-ugnayan sa iyo gamit ang numero o account na hindi nakalista sa pahinang ito habang nagpapanggap na Easycash, ituring itong scam. Basahin ang aming {securityLink}.',
     impostorsLinkText: 'gabay sa Seguridad at Anti-Scam',

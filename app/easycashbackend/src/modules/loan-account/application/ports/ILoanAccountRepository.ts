@@ -64,4 +64,13 @@ export interface ILoanAccountRepository {
    * definition. Batched (one query for N ids) to avoid N+1 on the loan-accounts list endpoint.
    */
   findMaturedLoanAccountIds(loanAccountIds: string[], ctx?: TransactionContext): Promise<Set<string>>;
+  /**
+   * 2026-08-08 (Undo Restructure / Undo Adjustment feature, user-confirmed): deletes a LoanAccount
+   * row outright. Narrowly scoped to `UndoRestructureLoanUseCase`/`UndoAdjustLoanUseCase` deleting
+   * the NEW loan a restructure/adjustment created, only once confirmed to have no repayment/
+   * penalty/fee activity - callers must delete its `RepaymentInstallment`/`LoanTransaction` rows
+   * (and the `LoanRestructure`/`LoanAdjustment` row that references it) first, in the same
+   * transaction.
+   */
+  delete(id: string, ctx?: TransactionContext): Promise<void>;
 }

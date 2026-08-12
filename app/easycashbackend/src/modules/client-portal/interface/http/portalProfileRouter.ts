@@ -15,6 +15,9 @@ export function createPortalProfileRouter(deps: PortalProfileControllerDeps, por
 
   router.get('/profile', requirePortalAuth, controller.get);
   router.patch('/profile', requirePortalAuth, validateBody(updatePortalProfileSchema), controller.update);
+  // "Chat with your loan officer" dashboard card (2026-08-06) - first name only, see the use
+  // case's own doc comment.
+  router.get('/loan-officer', requirePortalAuth, controller.loanOfficer);
 
   return router;
 }

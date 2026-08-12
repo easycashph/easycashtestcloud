@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, ChevronLeft, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, Lock, Search } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
+import { useRole } from '@/lib/roleContext';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { ACTIVE_PAYMENT_METHODS } from '@/lib/staticConfig';
@@ -148,8 +149,30 @@ interface PaymentSuccessInfo {
   orNumber?: string;
 }
 
+/**
+ * 2026-08-06 (user-reported): the sidebar link to this page is already hidden for a role without
+ * `payment.record` (AppLayout.tsx's NAV_VISIBILITY) - this guard covers direct navigation to
+ * `/payments` by URL, same "restricted" placeholder shape as every other MIS/permission-gated
+ * page in this app (see e.g. `ReminderSettingsCard`).
+ */
 export function PaymentRecordingPage() {
   const [searchParams] = useSearchParams();
+  const { canRecordPayment, currentAccount } = useRole();
+
+  if (!canRecordPayment) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">Restricted</p>
+          <p className="text-sm text-muted-foreground">
+            Your role ({currentAccount.role}) does not have permission to record payments.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return <PaymentRecordingForm preselectedLoanId={searchParams.get('loanId') ?? undefined} />;
 }
 

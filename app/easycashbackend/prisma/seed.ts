@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 /**
- * Seeds only stable reference data: one provisional Branch (ADR-005), the
+ * Seeds only stable reference data: the single Branch (ADR-005), the
  * minimum Role baseline (AUDIT-4), and a starter Permission set (AUDIT-3).
  *
  * Deliberately does NOT create a default admin user with a known password —
@@ -11,10 +11,8 @@ const prisma = new PrismaClient();
  * guarded interactive bootstrap step in Milestone 6 (Authentication).
  */
 async function main() {
-  // ADR-005 (Critical/Blocking, resolved provisionally): no legacy branch
-  // list exists. This seed creates exactly one placeholder branch. Adding
-  // the real branch list later is a data change only — the schema does not
-  // need to change.
+  // ADR-005 (Critical/Blocking, resolved 2026-08-04 - user-confirmed Easycash operates a single
+  // branch, no further branch list to come): this seed creates exactly that one branch.
   // Address confirmed 2026-07-11 for the loan-application pre-qualification distance rule
   // (LoanApplicationPreQualificationService) — latitude/longitude are left null here and geocoded
   // lazily on first use, so seeding never makes a network call.
@@ -24,7 +22,7 @@ async function main() {
     update: { address: headOfficeAddress },
     create: {
       code: 'HQ',
-      name: 'Head Office (provisional — pending ADR-005)',
+      name: 'Head Office',
       isActive: true,
       address: headOfficeAddress,
     },
@@ -52,56 +50,142 @@ async function main() {
     });
   }
 
-  // AUDIT-3: permissions are configurable, DB-driven records — never
-  // hard-coded role-name checks in application code. This starter set
-  // covers the modules built so far and is extended as new modules land;
-  // it is not a claim of completeness for the eventual full RBAC design
-  // (ADR-038, deferred).
-  const permissionCodes = [
-    'borrower:read',
-    'borrower:write',
-    'loan_product:read',
-    'loan_product:write',
-    'loan_account:read',
-    'loan_account:approve',
-    'loan_account:disburse',
-    'loan_account:close',
-    'repayment:post',
-    'repayment:read',
-    'user:manage',
-    'audit_log:read',
-  ];
+  // AUDIT-3 / ADR-038 (2026-08-06, user-confirmed): permissions are configurable, DB-driven
+  // records, checked at request time by `requirePermission` — replacing the interim
+  // `requireRole` hard-coded allow-lists ADR-043 accepted for Milestone 8. Every code below and
+  // its default per-role grants are a deliberate 1:1 mirror of the allow-lists each route already
+  // enforced (see each router's own `_ROLES` constant, e.g. `PAYMENT_RECORDING_ROLES` in
+  // `loanAccountRouter.ts`) — this migration changes NOTHING about who can do what on day one; it
+  // only makes it configurable going forward via the new Roles & Permissions screen (MIS only).
+  // The `document.generate`/`esignature.manage`/`collection.*`/`report.view` codes are new gates
+  // on routes that previously had no role restriction at all (`requireAuth` only) — defaulted to
+  // every role granted, matching that prior unrestricted reality, so MIS can now selectively
+  // narrow them (the original ask: e.g. turning `document.generate` off for Collection Officer).
+  const permissionDescriptions: Record<string, string> = {
+    'loan_application.manage': 'Create, review, and pre-approve loan applications',
+    'loan_application.final_approve': 'Give final approval or decline on a loan application',
+    'loan_application.revert': 'Revert a loan application to an earlier stage',
+    'loan_account.originate': 'Create a new loan account from an approved application',
+    'loan_account.approve': 'Approve a loan account for disbursement',
+    'loan_account.undo_approve': 'Undo a loan account approval',
+    'loan_account.activate': 'Activate (disburse) an approved loan account',
+    'loan_account.undo_activate': 'Undo a loan account activation',
+    'loan_account.restructure': 'Restructure a loan account',
+    'loan_account.undo_restructure': 'Undo a loan account restructure',
+    'loan_account.adjust': 'Write off or adjust a loan account',
+    'loan_account.undo_adjust': 'Undo a loan account adjustment',
+    'payment.record': 'Record a borrower payment',
+    'payment.reverse': 'Reverse a recorded payment',
+    'penalty.reduce': 'Reduce or waive an installment penalty',
+    'fees.adjust': 'Adjust an installment fee amount',
+    'document.generate': 'Generate loan documents',
+    // 2026-08-09 (Document Templates admin config, user request): separate, narrower, MIS-only-
+    // by-default admin permission - configures the required/conditional rules `document.generate`
+    // itself follows, not the act of generating a document for a loan.
+    'document_template.manage': 'Manage document template required/conditional status and product mapping',
+    'statement_of_account.generate': 'Generate a Statement of Account',
+    'attachment.upload': 'Upload borrower/loan attachments',
+    'esignature.manage': 'Send and manage e-signature requests',
+    'borrower.write': 'Create or edit borrower profiles',
+    'loan_product.write': 'Create or edit loan products',
+    'ai_extraction.use': 'Use AI document extraction',
+    'collection.view_past_due': 'View past due / overdue accounts',
+    'collection.note.write': 'Add collection notes to a borrower or loan profile',
+    'report.view': 'View and download reports',
+    'user.manage': 'Manage staff user accounts and roles',
+    'audit_log.read': 'View the audit log',
+    'reminder_settings.manage': 'Manage SMS/email reminder settings',
+    'profile_activity_log.manage': 'View and manage profile activity logs',
+  };
+  const permissionCodes = Object.keys(permissionDescriptions);
 
   const permissions: Record<string, { id: string }> = {};
   for (const code of permissionCodes) {
     permissions[code] = await prisma.permission.upsert({
       where: { code },
-      update: {},
-      create: { code },
+      update: { description: permissionDescriptions[code] },
+      create: { code, description: permissionDescriptions[code] },
     });
   }
 
-  // MIS (the confirmed super-user role, ADR-038 §1/§3.2) gets every seeded
-  // permission by default — a standard, uncontroversial bootstrap
-  // convention, not a business-rule assumption. Every other role's
-  // permission set is a genuine policy decision — see ADR-038 §3 for the
-  // confirmed per-endpoint mapping; these `RolePermission` rows remain
-  // unused by application code either way (ADR-038 §2).
-  const misRole = roles['MIS'];
-  for (const code of permissionCodes) {
-    await prisma.rolePermission.upsert({
-      where: {
-        roleId_permissionId: {
-          roleId: misRole.id,
-          permissionId: permissions[code].id,
-        },
-      },
-      update: {},
-      create: {
-        roleId: misRole.id,
-        permissionId: permissions[code].id,
-      },
-    });
+  // Default grants per role, mirroring each route's pre-existing `_ROLES` allow-list exactly (see
+  // this block's own doc comment above for the full rationale).
+  const defaultRolePermissions: Record<string, string[]> = {
+    MIS: permissionCodes, // super-user role (ADR-038 §1/§3.2) - every permission.
+    'Loan Operation Manager': [
+      'loan_application.manage',
+      'loan_application.final_approve',
+      'loan_account.originate',
+      'loan_account.approve',
+      'loan_account.activate',
+      'payment.record',
+      'document.generate',
+      'statement_of_account.generate',
+      'attachment.upload',
+      'esignature.manage',
+      'borrower.write',
+      'loan_product.write',
+      'ai_extraction.use',
+      'collection.view_past_due',
+      'collection.note.write',
+      'report.view',
+    ],
+    CRM: [
+      'loan_application.manage',
+      'loan_account.originate',
+      'document.generate',
+      'statement_of_account.generate',
+      'attachment.upload',
+      'esignature.manage',
+      'borrower.write',
+      'ai_extraction.use',
+      'collection.view_past_due',
+      'collection.note.write',
+      'report.view',
+    ],
+    Finance: [
+      'loan_product.write',
+      'document.generate',
+      'statement_of_account.generate',
+      'esignature.manage',
+      'collection.view_past_due',
+      'collection.note.write',
+      'report.view',
+    ],
+    Accounting: [
+      'loan_account.activate',
+      'loan_account.restructure',
+      'loan_account.adjust',
+      'payment.record',
+      'penalty.reduce',
+      'fees.adjust',
+      'loan_product.write',
+      'document.generate',
+      'statement_of_account.generate',
+      'esignature.manage',
+      'collection.view_past_due',
+      'collection.note.write',
+      'report.view',
+    ],
+    'Collection Officer': [
+      'payment.record',
+      'document.generate',
+      'statement_of_account.generate',
+      'esignature.manage',
+      'collection.view_past_due',
+      'collection.note.write',
+      'report.view',
+    ],
+  };
+  for (const [roleName, codes] of Object.entries(defaultRolePermissions)) {
+    const role = roles[roleName];
+    for (const code of codes) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: permissions[code].id } },
+        update: {},
+        create: { roleId: role.id, permissionId: permissions[code].id },
+      });
+    }
   }
 
   // 2026-07-11 (Create Loan Account, Contractual Rate auto-fill): sourced directly from MIS
@@ -268,28 +352,51 @@ async function main() {
     });
   }
 
-  // ADR-051 §1: the 11 loan document types in scope (Statement of Account excluded — separate,
+  // ADR-051 §1: the loan document types in scope (Statement of Account excluded — separate,
   // on-demand feature). Required documents apply to every loan and have no
-  // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products
-  // separately (ADR-051 §9 — not yet confirmed with the user, so no mapping rows seeded here).
+  // DocumentTemplateMapping row; conditional documents are linked to specific Loan Products via
+  // that table.
+  // 2026-08-08 (user request): added QUIT_CLAIM as a conditional document - no product mapping
+  // seeded yet, since which Loan Product(s) it should apply to hasn't been confirmed. Template
+  // file at `templates/QUIT_CLAIM.docx` (renamed from the user-supplied
+  // `QUIT_CLAIM_Redesigned_A4_One_Page.docx` to match this repo's "code == filename" convention).
+  // 2026-08-09 (user request): moved ACKNOWLEDGEMENT_RECEIPT from required to conditional, mapped
+  // to every existing Loan Product below (same net effect as before - every product still gets
+  // it - but now removable per-product later without a code change).
   const documentTemplateRows = [
     { code: 'DISCLOSURE_STATEMENT', name: 'Disclosure Statement', isRequired: true, sortIndex: 1 },
     { code: 'PROMISSORY_NOTE', name: 'Promissory Note', isRequired: true, sortIndex: 2 },
-    { code: 'ACKNOWLEDGEMENT_RECEIPT', name: 'Acknowledgement Receipt', isRequired: true, sortIndex: 3 },
-    { code: 'DATA_PRIVACY_CONSENT', name: 'Data Privacy and Consent Form', isRequired: true, sortIndex: 4 },
-    { code: 'LOAN_AGREEMENT_SALARY', name: 'Loan Agreement - Salary', isRequired: false, sortIndex: 5 },
-    { code: 'LOAN_AGREEMENT_SEAFARER', name: 'Loan Agreement - Seafarer', isRequired: false, sortIndex: 6 },
-    { code: 'DEED_OF_ASSIGNMENT_BORROWER', name: 'Deed of Assignment - Borrower', isRequired: false, sortIndex: 7 },
-    { code: 'DEED_OF_ASSIGNMENT_CO_BORROWER', name: 'Deed of Assignment - Co-Borrower', isRequired: false, sortIndex: 8 },
-    { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 9 },
-    { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 10 },
-    { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 11 },
+    { code: 'DATA_PRIVACY_CONSENT', name: 'Data Privacy and Consent Form', isRequired: true, sortIndex: 3 },
+    { code: 'LOAN_AGREEMENT_SALARY', name: 'Loan Agreement - Salary', isRequired: false, sortIndex: 4 },
+    { code: 'LOAN_AGREEMENT_SEAFARER', name: 'Loan Agreement - Seafarer', isRequired: false, sortIndex: 5 },
+    { code: 'DEED_OF_ASSIGNMENT_BORROWER', name: 'Deed of Assignment - Borrower', isRequired: false, sortIndex: 6 },
+    { code: 'DEED_OF_ASSIGNMENT_CO_BORROWER', name: 'Deed of Assignment - Co-Borrower', isRequired: false, sortIndex: 7 },
+    { code: 'DEED_OF_ASSIGNMENT_SALARY', name: 'Deed of Assignment - Salary', isRequired: false, sortIndex: 8 },
+    { code: 'SPECIAL_POWER_OF_ATTORNEY', name: 'Special Power of Attorney', isRequired: false, sortIndex: 9 },
+    { code: 'MANULIFE', name: 'Manulife', isRequired: false, sortIndex: 10 },
+    { code: 'ACKNOWLEDGEMENT_RECEIPT', name: 'Acknowledgement Receipt', isRequired: false, sortIndex: 11 },
+    { code: 'QUIT_CLAIM', name: 'Quit Claim', isRequired: false, sortIndex: 12 },
   ] as const;
+  const documentTemplatesByCode = new Map<string, { id: string }>();
   for (const row of documentTemplateRows) {
-    await prisma.documentTemplate.upsert({
+    const template = await prisma.documentTemplate.upsert({
       where: { code: row.code },
       update: { name: row.name, isRequired: row.isRequired, sortIndex: row.sortIndex },
       create: row,
+    });
+    documentTemplatesByCode.set(row.code, template);
+  }
+
+  // 2026-08-09 (user request): Acknowledgement Receipt was just moved from required to
+  // conditional (above) - map it to every existing Loan Product so nothing changes in practice
+  // (every product still gets it), while making it independently removable per-product later.
+  const acknowledgementReceiptTemplate = documentTemplatesByCode.get('ACKNOWLEDGEMENT_RECEIPT')!;
+  const allLoanProducts = await prisma.loanProduct.findMany({ select: { id: true } });
+  for (const product of allLoanProducts) {
+    await prisma.documentTemplateMapping.upsert({
+      where: { loanProductId_documentTemplateId: { loanProductId: product.id, documentTemplateId: acknowledgementReceiptTemplate.id } },
+      update: {},
+      create: { loanProductId: product.id, documentTemplateId: acknowledgementReceiptTemplate.id },
     });
   }
 

@@ -144,6 +144,27 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
     return rows.map((row) => toBorrower(row, addressesByOwnerId.get(row.id) ?? []));
   }
 
+  async findManyByEmail(email: string, ctx?: TransactionContext): Promise<Borrower[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.borrower.findMany({
+      where: { email: { equals: email.trim(), mode: 'insensitive' } },
+      include: BORROWER_INCLUDE,
+    });
+    if (rows.length === 0) {
+      return [];
+    }
+    const addressRows = await client.address.findMany({
+      where: { ownerType: 'BORROWER', ownerId: { in: rows.map((row) => row.id) } },
+    });
+    const addressesByOwnerId = new Map<string, Address[]>();
+    for (const addressRow of addressRows) {
+      const list = addressesByOwnerId.get(addressRow.ownerId) ?? [];
+      list.push(toAddress(addressRow));
+      addressesByOwnerId.set(addressRow.ownerId, list);
+    }
+    return rows.map((row) => toBorrower(row, addressesByOwnerId.get(row.id) ?? []));
+  }
+
   /**
    * Milestone 8 / D-4: cursor pagination only, no search/filter/sort.
    * Batches the address lookup for the whole page in one query (`ownerId

@@ -12,7 +12,17 @@ export function createPortalLoanAccountRouter(deps: PortalLoanAccountControllerD
   const requirePortalAuth = createRequirePortalAuth(portalTokenService);
 
   router.get('/loan-accounts', requirePortalAuth, controller.list);
+  // Registered before the ':id/...' route below - Express matches routes in registration order,
+  // and 'next-payment-due' would otherwise be captured as an :id param by the more general route.
+  router.get('/loan-accounts/next-payment-due', requirePortalAuth, controller.nextPaymentDue);
+  router.get('/loan-accounts/recent-payments', requirePortalAuth, controller.recentPayments);
   router.get('/loan-accounts/:id/installments', requirePortalAuth, controller.listInstallments);
+  router.get('/loan-accounts/:id/statements-of-account', requirePortalAuth, controller.listStatementsOfAccount);
+  router.get(
+    '/loan-accounts/:id/statements-of-account/:generatedStatementId/download',
+    requirePortalAuth,
+    controller.downloadStatementOfAccount,
+  );
 
   return router;
 }

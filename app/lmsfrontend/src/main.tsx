@@ -17,6 +17,15 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      // 2026-08-07 (user request): staleTime defaulted to 0, so every query refetched on every
+      // remount/navigation even when nothing changed - the single biggest easy win for perceived
+      // load speed. 2 minutes is short enough that anyone actively working a record still sees
+      // fresh data, but long enough to skip a wasted refetch on quick back-and-forth navigation.
+      // Doesn't weaken "fresh after I just changed it" - every mutation in this app already calls
+      // queryClient.invalidateQueries() on success, which refetches immediately regardless of
+      // staleTime; this only prevents the automatic background refetch that would otherwise fire
+      // just from remounting a page whose data hasn't actually changed.
+      staleTime: 2 * 60 * 1000,
     },
   },
 });

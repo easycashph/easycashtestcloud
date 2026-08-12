@@ -40,6 +40,9 @@ export const COMPANY = {
     mobileGlobe: '0927 784 7091',
     /** Data Protection Officer, as required by RA 10173 (Data Privacy Act of 2012). */
     dpoEmail: 'dataprivacyofficer@easycash.ph',
+    /** Confirmed by the business owner 2026-08-06 - see ContactPage.tsx's own doc comment on why
+     * this was previously deliberately omitted (unconfirmed data). */
+    businessHours: 'Monday to Friday, 8:00 AM to 5:00 PM',
   },
 } as const;
 

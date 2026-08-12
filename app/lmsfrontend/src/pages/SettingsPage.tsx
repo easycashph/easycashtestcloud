@@ -16,7 +16,7 @@ import { ComingSoonButton } from '@/components/ComingSoonButton';
 import { computeAge } from '@/lib/computeAge';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
-import { ACCENT_OPTIONS, FONT_SIZE_OPTIONS, useTheme, type Accent } from '@/components/theme-provider';
+import { ACCENT_OPTIONS, FONT_SIZE_OPTIONS, THEME_STYLE_OPTIONS, useTheme, type Accent, type ThemeStyle } from '@/components/theme-provider';
 import { DASHBOARD_CARD_LABELS, useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
 import { LANDING_PAGE_OPTIONS, readLandingPage, writeLandingPage } from '@/lib/landingPagePreference';
 import { NOTIFICATION_TYPE_OPTIONS, readMutedTypes, writeMutedTypes } from '@/lib/notificationPreference';
@@ -689,8 +689,20 @@ function LoginActivityCard() {
 }
 
 function AppearanceTab() {
-  const { theme, toggleTheme, accent, setAccent, customColor, setCustomColor, fontSize, setFontSize, dragReorderEnabled, setDragReorderEnabled } =
-    useTheme();
+  const {
+    theme,
+    toggleTheme,
+    accent,
+    setAccent,
+    customColor,
+    setCustomColor,
+    fontSize,
+    setFontSize,
+    dragReorderEnabled,
+    setDragReorderEnabled,
+    themeStyle,
+    setThemeStyle,
+  } = useTheme();
   const { currentAccount } = useRole();
   const [landingPage, setLandingPageState] = React.useState(() => readLandingPage(currentAccount.id));
 
@@ -706,6 +718,11 @@ function AppearanceTab() {
   const applyAccent = (next: Accent) => {
     if (next === accent) return;
     setAccent(next);
+  };
+
+  const applyThemeStyle = (next: ThemeStyle) => {
+    if (next === themeStyle) return;
+    setThemeStyle(next);
   };
 
   return (
@@ -726,6 +743,66 @@ function AppearanceTab() {
             </div>
           </div>
           <Switch checked={theme === 'dark'} onCheckedChange={handleToggle} aria-label="Toggle dark mode" />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <LayoutGrid className="h-4 w-4 text-primary" />
+          <div>
+            <CardTitle>Theme Style</CardTitle>
+            <CardDescription>
+              How cards, the sidebar, and dashboard surfaces look. Premium follows your Dark Mode setting above, same as Classic.
+              Applies only to your account.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {THEME_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => applyThemeStyle(option.value)}
+                className={cn(
+                  'rounded-md border p-3 text-left transition-colors hover:border-primary/60 focus:outline-none focus:ring-2 focus:ring-ring',
+                  themeStyle === option.value && 'border-primary ring-1 ring-primary',
+                )}
+                aria-pressed={themeStyle === option.value}
+              >
+                <div className="flex h-[70px] overflow-hidden rounded-md border">
+                  {option.value === 'premium' ? (
+                    <>
+                      <div className="w-[22%]" style={{ background: '#14213d' }} />
+                      <div className="flex flex-1 flex-col gap-1 p-1.5" style={{ background: '#f3f1ea' }}>
+                        <div className="h-2 w-3/5 rounded-sm" style={{ background: '#c9a24b' }} />
+                        <div className="flex flex-1 gap-1">
+                          <div className="flex-1 rounded-sm border" style={{ background: '#fdfbf5', borderColor: '#e9e2cd' }} />
+                          <div className="flex-1 rounded-sm border" style={{ background: '#fdfbf5', borderColor: '#e9e2cd' }} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-[22%]" style={{ background: '#1a2138' }} />
+                      <div className="flex flex-1 flex-col gap-1 p-1.5" style={{ background: '#f4f3ef' }}>
+                        <div className="h-2 w-3/5 rounded-sm" style={{ background: '#dcdad2' }} />
+                        <div className="flex flex-1 gap-1">
+                          <div className="flex-1 rounded-sm bg-white" />
+                          <div className="flex-1 rounded-sm bg-white" />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-xs font-medium">{option.label}</span>
+                  {themeStyle === option.value && <Check className="h-4 w-4 text-primary" />}
+                </div>
+                <span className="text-[11px] text-muted-foreground">{option.description}</span>
+              </button>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

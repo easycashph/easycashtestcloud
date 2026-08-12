@@ -5,7 +5,7 @@ import type { IPasswordHasher } from '@modules/identity/application/ports/IPassw
 import type { IOtpSender } from '@modules/identity/application/ports/IOtpSender';
 import type { IPortalTokenService } from '../ports/IPortalTokenService';
 import type { PortalLoginInput, PortalLoginResult } from '../dtos/PortalAuthDtos';
-import { PortalInvalidCredentialsError, PortalAccountNotVerifiedError } from '../../domain/errors/PortalAuthErrors';
+import { PortalInvalidCredentialsError, PortalAccountNotVerifiedError, PortalAccountDeletedError } from '../../domain/errors/PortalAuthErrors';
 import { sendPortalOtp } from '../services/sendPortalOtp';
 
 export const PORTAL_LOGIN_OTP_TTL_MS = 5 * 60 * 1000;
@@ -47,6 +47,11 @@ export class PortalLoginUseCase {
     if (!account || !passwordMatches) {
       throw new PortalInvalidCredentialsError();
     }
+    // 2026-08-06 (Delete My Portal Account) - a distinct, clearer error than the generic
+    // "not verified" one below for an account the client deleted themselves.
+    if (account.status === 'DELETED') {
+      throw new PortalAccountDeletedError();
+    }
     if (account.status !== 'ACTIVE') {
       throw new PortalAccountNotVerifiedError();
     }
@@ -78,6 +83,7 @@ export class PortalLoginUseCase {
         borrowerId: account.borrowerId,
         twoFactorEnabled: account.twoFactorEnabled,
         twoFactorChannel: account.twoFactorChannel as PortalChallengeChannel | null,
+        mustChangePassword: account.mustChangePassword,
       },
     };
   }

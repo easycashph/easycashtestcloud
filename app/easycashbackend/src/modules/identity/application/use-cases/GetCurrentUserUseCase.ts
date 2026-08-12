@@ -1,9 +1,11 @@
 import type { IUserRepository } from '../ports/IUserRepository';
+import type { IPermissionCodesRepository } from '../ports/IPermissionCodesRepository';
 import type { AuthenticatedUserView, GetCurrentUserInput } from '../dtos/AuthDtos';
 import { UserNotFoundError, UserInactiveError } from '../errors/AuthErrors';
 
 export interface GetCurrentUserUseCaseDeps {
   userRepository: IUserRepository;
+  permissionCodesRepository: IPermissionCodesRepository;
 }
 
 /**
@@ -23,6 +25,9 @@ export class GetCurrentUserUseCase {
     if (user.status !== 'ACTIVE') {
       throw new UserInactiveError();
     }
+
+    const permissionCodes = await this.deps.permissionCodesRepository.getGrantedPermissionCodes(user.roles);
+
     return {
       id: user.id,
       email: user.email,
@@ -36,6 +41,7 @@ export class GetCurrentUserUseCase {
       birthday: user.birthday ? user.birthday.toISOString() : null,
       twoFactorEnabled: user.twoFactorEnabled,
       twoFactorChannel: user.twoFactorChannel,
+      permissionCodes,
     };
   }
 }

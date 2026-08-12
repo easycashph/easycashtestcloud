@@ -40,7 +40,7 @@ export class PrismaLoanRestructureRepository implements ILoanRestructureReposito
 
   async findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null> {
     const client = resolveClient(ctx);
-    const row = await client.loanRestructure.findUnique({ where: { oldLoanAccountId: loanAccountId } });
+    const row = await client.loanRestructure.findFirst({ where: { oldLoanAccountId: loanAccountId } });
     return row ? toDomain(row) : null;
   }
 
@@ -50,10 +50,17 @@ export class PrismaLoanRestructureRepository implements ILoanRestructureReposito
     return row ? toDomain(row) : null;
   }
 
+  /** 2026-08-08 (Undo Restructure feature, user-confirmed revision): deletes the row outright - see `ILoanRestructureRepository.delete()`. */
+  async delete(loanRestructureId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.loanRestructure.delete({ where: { id: loanRestructureId } });
+  }
+
   async findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructureView | null> {
     const client = resolveClient(ctx);
     const row = await client.loanRestructure.findFirst({
       where: { OR: [{ oldLoanAccountId: loanAccountId }, { newLoanAccountId: loanAccountId }] },
+      orderBy: { createdAt: 'desc' },
       include: {
         oldLoanAccount: { select: { loanCode: true } },
         newLoanAccount: { select: { loanCode: true } },

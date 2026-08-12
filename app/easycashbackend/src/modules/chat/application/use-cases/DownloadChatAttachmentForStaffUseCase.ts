@@ -25,11 +25,11 @@ export class DownloadChatAttachmentForStaffUseCase {
     if (!conversation) throw new ChatConversationNotFoundError();
 
     const isClaimant = conversation.claimedByUserId === userId;
-    const isOriginalClaimant = conversation.originalClaimedByUserId === userId;
+    const wasEverParticipant = conversation.participants.some((p) => p.userId === userId);
     const isPendingTransferParty = conversation.pendingTransferFromUserId === userId || conversation.pendingTransferToUserId === userId;
     // MIS oversight (2026-07-31 user request) - can download from any conversation, not just
     // ones they've claimed or that are still WAITING.
-    if (!isClaimant && !isOriginalClaimant && !isPendingTransferParty && !user.roles.includes('MIS')) {
+    if (!isClaimant && !wasEverParticipant && !isPendingTransferParty && !user.roles.includes('MIS')) {
       if (conversation.status !== 'WAITING' || !canClaimNewConversations({ roles: user.roles, roleClassName: user.roleClassName })) {
         throw new ChatNotEligibleError();
       }

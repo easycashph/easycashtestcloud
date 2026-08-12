@@ -11,7 +11,7 @@
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { Router } from 'express';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import type { ProfileActivityLogController } from './ProfileActivityLogController';
 
 export function createProfileActivityLogRouter(
@@ -62,12 +62,12 @@ export function createProfileActivityLogRouter(
 
   /**
    * DELETE /profile-activity/:activityId
-   * Soft-delete a profile activity record (MIS only)
+   * Soft-delete a profile activity record (gated by `profile_activity_log.manage`, MIS-only by default)
    */
   router.delete(
     '/profile-activity/:activityId',
     requireAuth,
-    requireRole('MIS'),
+    requirePermission('profile_activity_log.manage'),
     async (req, res) => {
       await controller.deleteProfileActivity(req, res);
     },

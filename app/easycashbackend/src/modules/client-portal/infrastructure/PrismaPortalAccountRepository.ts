@@ -18,6 +18,7 @@ function toRecord(row: PrismaPortalAccountRow): PortalAccountRecord {
     borrowerId: row.borrowerId,
     twoFactorEnabled: row.twoFactorEnabled,
     twoFactorChannel: row.twoFactorChannel,
+    mustChangePassword: row.mustChangePassword,
     firstName: row.firstName,
     middleName: row.middleName,
     lastName: row.lastName,
@@ -59,6 +60,9 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         email: input.email.toLowerCase().trim(),
         passwordHash: input.passwordHash,
         contactNumber: input.contactNumber,
+        status: input.status,
+        borrowerId: input.borrowerId,
+        mustChangePassword: input.mustChangePassword,
       },
     });
     return toRecord(created);
@@ -74,6 +78,11 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
     return row ? toRecord(row) : null;
   }
 
+  async findByBorrowerId(borrowerId: string): Promise<PortalAccountRecord | null> {
+    const row = await prisma.portalAccount.findUnique({ where: { borrowerId } });
+    return row ? toRecord(row) : null;
+  }
+
   async update(id: string, patch: UpdatePortalAccountInput): Promise<PortalAccountRecord> {
     const updated = await prisma.portalAccount.update({
       where: { id },
@@ -85,6 +94,7 @@ export class PrismaPortalAccountRepository implements IPortalAccountRepository {
         email: patch.email?.toLowerCase().trim(),
         twoFactorEnabled: patch.twoFactorEnabled,
         twoFactorChannel: patch.twoFactorChannel,
+        mustChangePassword: patch.mustChangePassword,
         firstName: patch.firstName,
         middleName: patch.middleName,
         lastName: patch.lastName,

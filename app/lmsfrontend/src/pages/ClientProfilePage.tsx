@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Briefcase, FilePlus2, Home, Landmark, Mail, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Briefcase, Copy, FilePlus2, Home, KeyRound, Landmark, Link2, Mail, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -566,19 +566,31 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
           <p className="text-sm text-muted-foreground">Could not load the risk summary.</p>
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-y-1.5 text-xs sm:grid-cols-4">
-              <dt className="text-muted-foreground">Active loans</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.activeLoanCount}</dd>
-              <dt className="text-muted-foreground">Total exposure</dt>
-              <dd className="text-right font-medium sm:text-left">{formatPeso(Number(summary.totalExposure))}</dd>
-              <dt className="text-muted-foreground">Worst days past due</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.worstDaysPastDue}</dd>
-              <dt className="text-muted-foreground">Late payments (lifetime)</dt>
-              <dd className="text-right font-medium sm:text-left">{summary.lifetimeLateInstallmentCount}</dd>
-              <dt className="text-muted-foreground">On-time payment rate</dt>
-              <dd className="text-right font-medium sm:text-left">
-                {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
-              </dd>
+            {/* 2026-08-06 (user request): one row per field, full width, instead of the
+                2/4-column grid a half-width card forced - matches the approved mockup. */}
+            <dl className="divide-y divide-border border-t text-xs">
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Active loans</dt>
+                <dd className="font-medium">{summary.activeLoanCount}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Total exposure</dt>
+                <dd className="font-medium">{formatPeso(Number(summary.totalExposure))}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Worst days past due</dt>
+                <dd className="font-medium">{summary.worstDaysPastDue}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Late payments (lifetime)</dt>
+                <dd className="font-medium">{summary.lifetimeLateInstallmentCount}</dd>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">On-time payment rate</dt>
+                <dd className="font-medium">
+                  {summary.onTimePaymentRate === null ? 'No payment history yet' : `${Math.round(summary.onTimePaymentRate * 100)}%`}
+                </dd>
+              </div>
             </dl>
             <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
             <p className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-medium text-primary">
@@ -654,6 +666,11 @@ function formatCoBorrowerAddress(cb: CoBorrower): string {
  * an unrelated second one. "Add" only appears while none exists yet - for older applications
  * that never captured a co-borrower, or clients created without one. */
 function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
+  // 2026-08-06 (user-reported gap): Add/Edit Co-Borrower posts through the same `borrower.write`
+  // permission the backend already gates (POST/PATCH /co-borrowers - see borrowerRouter.ts), but
+  // this button itself was never wired to it, so every role saw it regardless of their Roles &
+  // Permissions setting.
+  const { canManageClients } = useRole();
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<CoBorrowerDraft>({ ...EMPTY_CO_BORROWER_DRAFT });
@@ -707,17 +724,19 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
           <Users className="h-4 w-4 text-muted-foreground" />
           <CardTitle className="text-sm">Co-Borrower</CardTitle>
         </div>
-        <Button size="sm" onClick={openDialog}>
-          {existing ? (
-            <>
-              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
-            </>
-          ) : (
-            <>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
-            </>
-          )}
-        </Button>
+        {canManageClients && (
+          <Button size="sm" onClick={openDialog}>
+            {existing ? (
+              <>
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+              </>
+            ) : (
+              <>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Co-Borrower
+              </>
+            )}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {query.isLoading ? (
@@ -820,16 +839,166 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 // client info header is drag-to-reorder - each staff member's own arrangement, saved per-user in
 // localStorage (same key style as the sidebar-collapse preference in AppLayout.tsx), so one
 // officer's preferred layout doesn't affect anyone else logged into the same shared machine.
-const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'riskSummary', 'loanHistory', 'activityTimeline', 'recentActivity'];
-const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder';
+// 2026-08-06 (user request): default order updated to match MIS Nomer's own current arrangement
+// (Loan Applications, Co-Borrower, Loan History, Risk & Payment Summary, Activity Timeline,
+// Recent Activity). 2026-08-06 follow-up (user-confirmed): applied to EVERY user, not just those
+// without a saved preference - the localStorage key itself was bumped (v2) so any
+// already-saved order under the old key is orphaned/ignored, and every user reads this new
+// default on next load. A user who then personally re-drags again still only affects their own
+// saved order going forward, same as before.
+const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'loanHistory', 'riskSummary', 'activityTimeline', 'recentActivity'];
+const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder.v2';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
+}
+
+/** Mirrors app/easycashbackend's GetBorrowerPortalAccountStatusUseCase response shape (2026-08-06,
+ * Bind existing Client data to Portal) - hand-maintained, same reasoning as this codebase's other
+ * apiClient DTO mirrors (see apiClient.ts's own doc comment). */
+interface PortalAccountSummary {
+  id: string;
+  email: string;
+  status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'DELETED';
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+interface BorrowerPortalAccountStatus {
+  linked: PortalAccountSummary | null;
+  unlinkedMatchByEmail: PortalAccountSummary | null;
+}
+
+/**
+ * "Portal Account" panel (2026-08-06 user request, MIS-only) - lets staff create a Portal account
+ * for an existing client (issuing the shared temp password, `easycashportal123`, forced to change
+ * on first login) or bind an already-existing-but-unlinked Portal account to this client, so their
+ * real loan data appears once they access the portal. Read-only status once linked.
+ */
+function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasEmail: boolean }) {
+  const queryClient = useQueryClient();
+  const [issuedPassword, setIssuedPassword] = React.useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+
+  const statusQuery = useQuery({
+    queryKey: ['borrower-portal-account', borrowerId],
+    queryFn: () => apiClient.get<BorrowerPortalAccountStatus>(`/borrowers/${borrowerId}/portal-account`),
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['borrower-portal-account', borrowerId] });
+
+  const createMutation = useMutation({
+    mutationFn: () => apiClient.post<{ email: string; temporaryPassword: string }>(`/borrowers/${borrowerId}/portal-account`),
+    onSuccess: (result) => {
+      setActionError(null);
+      setIssuedPassword({ email: result.email, password: result.temporaryPassword });
+      invalidate();
+    },
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not create the Portal account.'),
+  });
+
+  const bindMutation = useMutation({
+    mutationFn: () => apiClient.post(`/borrowers/${borrowerId}/portal-account/bind`),
+    onSuccess: () => {
+      setActionError(null);
+      invalidate();
+    },
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not bind the Portal account.'),
+  });
+
+  const handleCopy = (password: string) => {
+    void navigator.clipboard.writeText(password);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  const status = statusQuery.data;
+
+  return (
+    <Card>
+      <CardHeader className="p-4">
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          <Link2 className="h-3.5 w-3.5" /> Portal Account
+        </CardTitle>
+        <CardDescription className="text-xs">Client Easycash Portal access, linked to this client's real loan data.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0 text-xs">
+        {actionError && <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">{actionError}</p>}
+
+        {issuedPassword && (
+          <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-primary">
+            <p>
+              Portal account created for <span className="font-medium">{issuedPassword.email}</span>. Share this temporary password with the
+              client - they must change it on first login.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="rounded bg-background px-2 py-1 font-mono text-[13px]">{issuedPassword.password}</code>
+              <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => handleCopy(issuedPassword.password)}>
+                <Copy className="h-3 w-3" /> {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {statusQuery.isLoading && <p className="text-muted-foreground">Loading…</p>}
+
+        {!statusQuery.isLoading && status?.linked && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <div className="col-span-2 flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {status.linked.email}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Status: </span>
+              <Badge variant="outline" className="text-[11px]">
+                {status.linked.status === 'ACTIVE' ? 'Active' : status.linked.status === 'DELETED' ? 'Deleted by client' : 'Pending Verification'}
+              </Badge>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Linked: </span>
+              {formatDate(status.linked.createdAt)}
+            </div>
+            {status.linked.status === 'DELETED' && (
+              <div className="col-span-2 text-muted-foreground">
+                This Portal login was deleted (self-service, Security tab) - client/loan data here is unaffected.
+              </div>
+            )}
+            {status.linked.mustChangePassword && status.linked.status !== 'DELETED' && (
+              <div className="col-span-2 text-warning">Client has not yet changed their temporary password.</div>
+            )}
+          </dl>
+        )}
+
+        {!statusQuery.isLoading && !status?.linked && !hasEmail && (
+          <p className="text-muted-foreground">This client has no email address on file - add one (Edit) before creating a Portal account.</p>
+        )}
+
+        {!statusQuery.isLoading && !status?.linked && hasEmail && status?.unlinkedMatchByEmail && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              An existing, unlinked Portal account was found for <span className="font-medium">{status.unlinkedMatchByEmail.email}</span>.
+            </p>
+            <Button type="button" size="sm" disabled={bindMutation.isPending} onClick={() => bindMutation.mutate()}>
+              <Link2 className="mr-1.5 h-3.5 w-3.5" /> {bindMutation.isPending ? 'Binding…' : 'Bind Existing Portal Account'}
+            </Button>
+          </div>
+        )}
+
+        {!statusQuery.isLoading && !status?.linked && hasEmail && !status?.unlinkedMatchByEmail && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">No Portal account yet for this client.</p>
+            <Button type="button" size="sm" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+              <KeyRound className="mr-1.5 h-3.5 w-3.5" /> {createMutation.isPending ? 'Creating…' : 'Create Portal Account'}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canAccessLoanApplications, currentAccount } = useRole();
+  const { canAccessLoanApplications, canManageMembers, currentAccount } = useRole();
   const [editOpen, setEditOpen] = React.useState(false);
   const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
   const [createLoanAccountOpen, setCreateLoanAccountOpen] = React.useState(false);
@@ -1003,6 +1172,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           </dl>
         </CardContent>
       </Card>
+
+      {canManageMembers && <PortalAccountPanel borrowerId={borrower.id} hasEmail={!!borrower.email} />}
 
       {(() => {
         // 2026-07-25: everything from here to Recent Activity is drag-to-reorder (see cardOrder
@@ -1209,7 +1380,9 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                   // 2026-07-26 (user request): Loan History's 8-column balance table was cramped
                   // into a half-width column, forcing horizontal scroll - full-width gives it room
                   // to breathe, same reasoning as Activity Timeline/Recent Activity below.
-                  fullWidth={id === 'loanHistory' || id === 'activityTimeline' || id === 'recentActivity'}
+                  // 2026-08-06 (user request): Risk & Payment Summary made full-width too, one row
+                  // per field instead of the cramped 2/4-column grid a half-width card forced.
+                  fullWidth={id === 'loanHistory' || id === 'activityTimeline' || id === 'recentActivity' || id === 'riskSummary'}
                 >
                   {cardsById[id]}
                 </SortableSection>

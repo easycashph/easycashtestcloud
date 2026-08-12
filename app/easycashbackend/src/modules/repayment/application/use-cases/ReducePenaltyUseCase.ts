@@ -25,9 +25,11 @@ export interface ReducePenaltyUseCaseDeps {
  * business rules," every rule here was asked, not assumed):
  * - Only Accounting/MIS may call this (enforced by the HTTP layer's `requireRole`, not here —
  *   same division of concerns as every other role-gated use case in this codebase).
- * - 2026-07-23 (Adjust Penalty, user-confirmed): may raise OR lower the penalty, never below ₱0 and
- *   never above the live ADR-050/SEC-MC3 ceiling (`RepaymentInstallment.reducePenalty()`'s own
- *   validation) — previously reduce-only, now bidirectional like `AdjustFeesUseCase`.
+ * - 2026-07-23 (Adjust Penalty, user-confirmed): may raise OR lower the penalty, never below ₱0 —
+ *   previously reduce-only, now bidirectional like `AdjustFeesUseCase`.
+ * - 2026-08-05 (user-confirmed): the upper ceiling (couldn't exceed the live ADR-050/SEC-MC3-
+ *   computed figure) is removed — staff can set any non-negative amount, including one that
+ *   exceeds what the formula would produce today, for a real out-of-band approval.
  * - A reduction FREEZES the penalty; it does not resume growing per ADR-050's daily formula.
  * - Cannot reduce an installment whose penalty has already been paid — approval happens outside
  *   this system; an already-collected amount is a refund/credit decision, explicitly out of scope.
@@ -68,9 +70,9 @@ export class ReducePenaltyUseCase {
 
     const previousBalanceTrackedPenalty = resolveEffectivePenaltyDue(installment);
 
-    // Validation (negative / exceeds current / already-paid penalty) lives on the entity itself —
-    // see RepaymentInstallment.reducePenalty()'s own doc comment.
-    installment.reducePenalty(newAmount, currentPenalty, reason, reducedByUserId);
+    // Validation (negative / already-paid penalty) lives on the entity itself — see
+    // RepaymentInstallment.reducePenalty()'s own doc comment.
+    installment.reducePenalty(newAmount, reason, reducedByUserId);
     loanAccount.adjustPenaltyBalance(previousBalanceTrackedPenalty.subtract(newAmount));
 
     const reduction = PenaltyReduction.create({

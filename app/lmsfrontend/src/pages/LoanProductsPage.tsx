@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronRight, Pencil, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import { formatPeso } from '@/lib/utils';
 import { classifyProductType, groupByProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type { ProductTypeLabel } from '@/lib/productTypeLabelApiTypes';
+import { AddLoanProductDialog, AddLoanProductVersionDialog } from '@/pages/LoanProductForms';
 
 interface ProductRow {
   id: string;
@@ -26,6 +27,8 @@ interface ProductRow {
   productType: string;
   activeVersion: LoanProductVersion | null;
   latestVersion: LoanProductVersion | null;
+  /** 2026-08-09 (Loan Products admin config): sorted newest-first — the full history, not just active/latest, so the expanded row can list every version and offer Activate on the non-active ones. */
+  versions: LoanProductVersion[];
 }
 
 function getProductSortValue(p: ProductRow, key: string): string | number | Date | null | undefined {
@@ -181,14 +184,34 @@ function ProductTypesTab() {
  */
 export function LoanProductsPage() {
   useLogPageView('Loan Products');
+  const { canManageLoanProducts } = useRole();
+  const queryClient = useQueryClient();
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [pageTab, setPageTab] = React.useState<'catalog' | 'product-types'>('catalog');
+  const [addProductOpen, setAddProductOpen] = React.useState(false);
+  const [addVersionForProduct, setAddVersionForProduct] = React.useState<{ id: string; name: string; nextVersionNumber: number } | null>(
+    null,
+  );
+  const [activateError, setActivateError] = React.useState<string | null>(null);
 
   const productsQuery = useQuery({
     queryKey: ['loan-products', 'all'],
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
   });
   const productTypeLabelsQuery = useProductTypeLabels();
+
+  // 2026-08-09 (Loan Products admin config): a LoanProductVersion can never be edited once
+  // created (LPV-1/LPV-2/LPV-3) - the only way to change which rules a product uses is to
+  // activate a different (possibly brand-new) version.
+  const activateVersionMutation = useMutation({
+    mutationFn: ({ productId, versionId }: { productId: string; versionId: string }) =>
+      apiClient.post<LoanProduct>(`/loan-products/${productId}/versions/${versionId}/activate`, {}),
+    onSuccess: () => {
+      setActivateError(null);
+      queryClient.invalidateQueries({ queryKey: ['loan-products', 'all'] });
+    },
+    onError: (err) => setActivateError(err instanceof ApiError ? err.message : 'Could not activate this version.'),
+  });
 
   const rows: ProductRow[] = React.useMemo(
     () =>
@@ -201,6 +224,7 @@ export function LoanProductsPage() {
           productType: classifyProductType(p.name),
           activeVersion: sortedVersions.find((v) => v.isActive) ?? null,
           latestVersion: sortedVersions[0] ?? null,
+          versions: sortedVersions,
         };
       }),
     [productsQuery.data],
@@ -291,6 +315,54 @@ export function LoanProductsPage() {
                   )}
                 </div>
               </div>
+
+              <div className="mt-4 border-t pt-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Version History ({p.versions.length})
+                  </p>
+                  {canManageLoanProducts && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAddVersionForProduct({ id: p.id, name: p.name, nextVersionNumber: (p.versions[0]?.versionNumber ?? 0) + 1 });
+                      }}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add Version
+                    </Button>
+                  )}
+                </div>
+                <ul className="space-y-1.5">
+                  {p.versions.map((version) => (
+                    <li key={version.id} className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">v{version.versionNumber}</span>
+                        <span className="text-xs text-muted-foreground">
+                          effective {new Date(version.effectiveFrom).toLocaleDateString()}
+                          {version.effectiveTo ? ` – ${new Date(version.effectiveTo).toLocaleDateString()}` : ''}
+                        </span>
+                        {version.isActive && <Badge variant="success">Active</Badge>}
+                      </div>
+                      {!version.isActive && canManageLoanProducts && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            activateVersionMutation.mutate({ productId: p.id, versionId: version.id });
+                          }}
+                          disabled={activateVersionMutation.isPending}
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" /> Activate
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {activateError && <p className="mt-2 text-xs text-destructive">{activateError}</p>}
+              </div>
             </TableCell>
           </TableRow>
         )}
@@ -367,7 +439,7 @@ export function LoanProductsPage() {
         <p className="text-sm text-muted-foreground">
           {isLoading
             ? 'Loading…'
-            : `${activeProducts.length} active, ${discontinuedProducts.length} discontinued (real product catalog, migrated legacy data - read-only, click a row to expand fee/penalty rules).`}
+            : `${activeProducts.length} active, ${discontinuedProducts.length} discontinued - click a row to expand fee/penalty rules and version history.`}
         </p>
       </div>
 
@@ -389,15 +461,19 @@ export function LoanProductsPage() {
           )}
 
           <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
-            Real product catalog, migrated from legacy data (CP12) - read-only. Loan product versions are
-            immutable by design (editing a product must never affect historical loans), so adding or
-            customizing a product here would need a proper create-version + activate workflow - not yet
-            built. Document templates are not yet wired to real data.
+            Real product catalog, migrated from legacy data (CP12). A Loan Product Version is immutable once
+            created — to change a product's rates, fees, or amounts, add a new Version and activate it; the old
+            version stays on record so existing loans keep the rules that applied when they were made.
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle className="text-base">Product Catalog</CardTitle>
+              {canManageLoanProducts && (
+                <Button size="sm" onClick={() => setAddProductOpen(true)}>
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Add Product
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -424,6 +500,17 @@ export function LoanProductsPage() {
 
           <RecentActivityPanel label="Loan Products" />
         </>
+      )}
+
+      <AddLoanProductDialog open={addProductOpen} onOpenChange={setAddProductOpen} />
+      {addVersionForProduct && (
+        <AddLoanProductVersionDialog
+          open
+          onOpenChange={(open) => !open && setAddVersionForProduct(null)}
+          loanProductId={addVersionForProduct.id}
+          loanProductName={addVersionForProduct.name}
+          nextVersionNumber={addVersionForProduct.nextVersionNumber}
+        />
       )}
     </div>
   );

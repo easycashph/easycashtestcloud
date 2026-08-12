@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, Download, ExternalLink, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, ExternalLink, Loader2, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { downloadFile, fetchFileBlob } from '@/lib/apiClient';
@@ -34,6 +34,7 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
   const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
     if (!attachment) return;
@@ -93,7 +94,32 @@ export function AttachmentPreviewModal({ attachment, onClose }: { attachment: At
         {!loading && !error && objectUrl && attachment && (
           <>
             {previewKind === 'pdf' ? (
-              <iframe src={objectUrl} className="h-[85vh] w-full rounded-md border" title={attachment.fileName} />
+              <>
+                {/* 2026-08-09 (user request): same fix as LoanDocumentPreviewModal's own
+                    2026-08-07 one - Chrome's built-in PDF viewer renders its OWN toolbar inside
+                    this iframe (Print/Download/Save to Google Drive/etc.), whose Download button
+                    bypasses downloadFile()'s naming convention entirely. #toolbar=0 hides that
+                    built-in toolbar; the buttons below are the only way to print/download and
+                    always behave correctly. */}
+                <iframe
+                  ref={iframeRef}
+                  src={`${objectUrl}#toolbar=0`}
+                  className="h-[85vh] w-full rounded-md border"
+                  title={attachment.fileName}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => iframeRef.current?.contentWindow?.print()}>
+                    <Printer className="mr-2 h-3.5 w-3.5" /> Print
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void downloadFile(`/attachments/${attachment.id}/download`, attachment.fileName)}
+                  >
+                    <Download className="mr-2 h-3.5 w-3.5" /> Download
+                  </Button>
+                </div>
+              </>
             ) : previewKind === 'image' ? (
               <img src={objectUrl} alt={attachment.fileName} className="mx-auto max-h-[85vh] w-auto rounded-md object-contain" />
             ) : (

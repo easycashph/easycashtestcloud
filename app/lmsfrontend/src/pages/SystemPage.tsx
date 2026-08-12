@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
+import { DocumentTemplatesTab } from '@/pages/DocumentTemplatesTab';
 
 /** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
  * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
@@ -26,8 +27,8 @@ import { ActivityLogPage } from '@/pages/ActivityLogPage';
  * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
 const REMINDER_TOGGLES_LOCKED = true;
 
-type SystemTab = 'reminders' | 'members' | 'products' | 'activity-logs';
-const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'activity-logs'];
+type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'activity-logs';
+const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'documents', 'activity-logs'];
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -303,20 +304,40 @@ function ReminderSettingsCard() {
  * and Activity Logs - as tabs alongside the Payment reminders switches (moved here earlier the same
  * day from Configuration > Settings). Each embedded page keeps its own internal access gate exactly
  * as before (`MemberListPage`/`LoanProductsPage` stay viewable by every role, only editing is
- * MIS-only; `ActivityLogPage` is MIS-only end to end) - this page itself is not gated as a whole, so
- * that visibility doesn't regress for non-MIS roles who could already see Members/Loan Products.
+ * MIS-only; `ActivityLogPage` is MIS-only end to end).
  * `?tab=` supports deep-linking (e.g. `RecentActivityPanel`'s "See all" link into Activity Logs).
  * Product Types (rename the Loan Products catalog's category labels) lived here briefly
  * (2026-07-20) and was moved into the Loan Products tab itself as its own sub-tab, per user
  * request - it's specifically about Loan Products, not a platform-wide System setting.
+ *
+ * 2026-08-06 (user request, supersedes the "not gated as a whole" note above): the whole page is
+ * now MIS-only - the sidebar link is already hidden for every other role
+ * (`AppLayout.tsx`'s `NAV_VISIBILITY`), and this guard covers direct navigation by URL. This IS a
+ * visibility regression for the "Members/Loan Products stay viewable by every role" case the
+ * original design deliberately preserved - accepted per this explicit, later request.
  */
 export function SystemPage() {
   useLogPageView('System');
   const [searchParams] = useSearchParams();
+  const { currentAccount } = useRole();
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = React.useState<SystemTab>(
     initialTab && (SYSTEM_TABS as string[]).includes(initialTab) ? (initialTab as SystemTab) : 'reminders',
   );
+
+  if (!currentAccount.roles.includes('MIS')) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">Restricted to MIS accounts</p>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -326,10 +347,11 @@ export function SystemPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
           <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
           <TabsTrigger value="members">User Accounts</TabsTrigger>
           <TabsTrigger value="products">Loan Products</TabsTrigger>
+          <TabsTrigger value="documents">Document Templates</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -342,6 +364,7 @@ export function SystemPage() {
       )}
       {tab === 'members' && <MemberListPage />}
       {tab === 'products' && <LoanProductsPage />}
+      {tab === 'documents' && <DocumentTemplatesTab />}
       {tab === 'activity-logs' && <ActivityLogPage />}
     </div>
   );

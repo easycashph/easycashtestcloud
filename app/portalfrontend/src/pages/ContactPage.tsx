@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Building2, Mail, MapPin, Phone, ShieldAlert } from 'lucide-react';
+import { Building2, Clock, Mail, MapPin, Phone, ShieldAlert } from 'lucide-react';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { COMPANY, FORMATTED_ADDRESS, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
@@ -7,9 +7,10 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
 /**
  * Contact page.
  *
- * Only values confirmed from `@/lib/companyInfo` appear here. Deliberately absent: office hours,
- * a contact form, branch addresses, and social media links — none are confirmed, and inventing a
- * phone-answering schedule or an unmonitored inbox is worse than omitting it. See
+ * Only values confirmed from `@/lib/companyInfo` appear here. Business hours were confirmed by the
+ * business owner 2026-08-06 (`COMPANY.contact.businessHours`) - previously deliberately omitted
+ * along with a contact form, branch addresses, and social media links, none of which are confirmed
+ * yet; inventing a phone-answering schedule or an unmonitored inbox is worse than omitting it. See
  * `docs/PORTAL_WEBSITE_STRATEGY.md` §7 questions 6, 8, and 10.
  *
  * 2026-07-29: wired to the i18n system - translations.ts already had a full `contact` namespace,
@@ -58,10 +59,16 @@ export function ContactPage() {
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t.contact.emailNote}</p>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5 sm:col-span-2">
+          <div className="rounded-2xl border border-border bg-card p-5">
             <MapPin className="h-5 w-5 text-primary" />
             <h2 className="mt-3 text-sm font-semibold">{t.contact.officeHeading}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{FORMATTED_ADDRESS}</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-5">
+            <Clock className="h-5 w-5 text-primary" />
+            <h2 className="mt-3 text-sm font-semibold">{t.contact.hoursHeading}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{COMPANY.contact.businessHours}</p>
           </div>
         </section>
 

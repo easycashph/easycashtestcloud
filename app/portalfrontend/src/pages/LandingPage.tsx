@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { motion, type Variants } from 'framer-motion';
 import {
+  Banknote,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -21,6 +23,7 @@ import { EligibilityCheckWidget } from '@/components/EligibilityCheckWidget';
 import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
+import { NewsFlashTicker } from '@/components/NewsFlashTicker';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -28,9 +31,16 @@ import { useAuth } from '@/lib/authContext';
 import { COMPANY, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
+import { getDocumentsForProduct } from '@/lib/loanRequirements';
 
 const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
 const FEATURE_ICONS = [Smartphone, CheckCircle2, ShieldCheck];
+/** 2026-08-06 (user request, competitor site review): only the two channels confirmed as real
+ * client-facing payment methods (see ACTIVE_PAYMENT_METHODS in app/lmsfrontend's staticConfig.ts) -
+ * most of that list is internal accounting/ledger categories (Suspense Account, Adjustment,
+ * Unearned Income, etc.), never something a client actually pays through, so this is deliberately
+ * a curated subset, not the full list. */
+const WAYS_TO_PAY_ICONS = [Banknote, CalendarClock];
 
 /** Client stories inherited from the legacy Easycash website. The numeric star ratings that
  * previously accompanied these were removed on 2026-07-28: they implied a verified review system
@@ -220,6 +230,7 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <NewsFlashTicker />
       <MobileApplyBar sentinelRef={heroEndRef} />
 
       {/* Hero */}
@@ -292,6 +303,7 @@ export function LandingPage() {
               alt="Easycash client"
               className="aspect-[4/3] w-full rounded-3xl object-cover shadow-lg"
               fallbackIcon={<ShieldCheck className="h-16 w-16" />}
+              priority
             />
             <div className="absolute -bottom-6 left-1/2 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl border border-border bg-card p-5 shadow-xl sm:p-6">
               <div className="grid grid-cols-3 gap-3">
@@ -360,6 +372,20 @@ export function LandingPage() {
                 <div className="p-6">
                   <h3 className="text-base font-semibold">{product.displayLabel}</h3>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
+                  {/* 2026-08-06 (user request, "mas informative, mas descriptive" - competitor
+                      review): what this product specifically asks for, on top of the documents
+                      every applicant provides - real data from loanRequirements.ts (single source
+                      of truth shared with the actual application form and the /requirements
+                      page), never invented copy. */}
+                  {getDocumentsForProduct(product.category).productSpecific.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {getDocumentsForProduct(product.category).productSpecific.map((doc) => (
+                        <span key={doc} className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+                          {doc}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <Link
                       to="/signup"
@@ -455,6 +481,42 @@ export function LandingPage() {
             );
           })}
         </motion.div>
+      </section>
+
+      {/* Ways to Pay (2026-08-06 user request, competitor site review) */}
+      <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
+        <div className="container">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.waysToPayTitle}</h2>
+            <p className="mt-3 text-muted-foreground">{t.landing.waysToPaySubtitle}</p>
+          </Reveal>
+          <motion.div
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: '-80px' }}
+            variants={stagger}
+            className="mx-auto mt-10 grid max-w-2xl gap-6 sm:grid-cols-2"
+          >
+            {t.landing.waysToPay.map((way, index) => {
+              const Icon = WAYS_TO_PAY_ICONS[index];
+              return (
+                <motion.div
+                  key={way.title}
+                  variants={fadeUp}
+                  className="flex items-start gap-3 rounded-2xl border border-border bg-card p-6 shadow-sm"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold">{way.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{way.body}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </div>
       </section>
 
       {/* Testimonials */}

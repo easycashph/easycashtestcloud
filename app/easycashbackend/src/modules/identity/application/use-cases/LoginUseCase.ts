@@ -7,6 +7,7 @@ import type { ITwoFactorChallengeRepository } from '../ports/ITwoFactorChallenge
 import type { ITrustedDeviceRepository } from '../ports/ITrustedDeviceRepository';
 import type { IOtpSender } from '../ports/IOtpSender';
 import type { LoginInput, LoginResult } from '../dtos/AuthDtos';
+import type { IPermissionCodesRepository } from '../ports/IPermissionCodesRepository';
 import { InvalidCredentialsError, AccountInactiveError } from '../errors/AuthErrors';
 import { issueTokenPair } from '../authTokenIssuance';
 
@@ -29,6 +30,7 @@ export interface LoginUseCaseDeps {
   twoFactorChallengeRepository: ITwoFactorChallengeRepository;
   trustedDeviceRepository: ITrustedDeviceRepository;
   otpSender: IOtpSender;
+  permissionCodesRepository: IPermissionCodesRepository;
   refreshTokenTtlMs?: number;
 }
 
@@ -57,6 +59,7 @@ export class LoginUseCase {
       twoFactorChallengeRepository,
       trustedDeviceRepository,
       otpSender,
+      permissionCodesRepository,
     } = this.deps;
 
     const user = await userRepository.findByEmail(input.email);
@@ -126,6 +129,8 @@ export class LoginUseCase {
       userAgent: input.userAgent,
     });
 
+    const permissionCodes = await permissionCodesRepository.getGrantedPermissionCodes(user.roles);
+
     return {
       ...tokens,
       user: {
@@ -141,6 +146,7 @@ export class LoginUseCase {
         birthday: user.birthday ? user.birthday.toISOString() : null,
         twoFactorEnabled: user.twoFactorEnabled,
         twoFactorChannel: user.twoFactorChannel,
+        permissionCodes,
       },
     };
   }

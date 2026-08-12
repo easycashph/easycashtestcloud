@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { Copy, Paperclip, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,9 +7,36 @@ import { Input } from '@/components/ui/input';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
 
+/** Standardized display labels for the real, short role names stored in the database
+ * (2026-08-03 user request) - shown everywhere a role type appears in the chat feature. The
+ * underlying stored role names (MIS, CRM, Collection Officer, ...) are unchanged - this is
+ * display-only, scoped to this page. */
+const ROLE_TYPE_LABELS: Record<string, string> = {
+  Accounting: 'Accounting',
+  'Collection Officer': 'Collection',
+  CRM: 'Customer Relation Management',
+  Finance: 'Finance',
+  'Loan Operation Manager': 'Loan Operation Management',
+  MIS: 'Management Information System',
+};
+
+function roleTypeLabel(name: string): string {
+  return ROLE_TYPE_LABELS[name] ?? name;
+}
+
+interface ChatParticipant {
+  userId: string;
+  userName: string;
+  joinedAt: string;
+  leftAt: string | null;
+  leftReason: 'TRANSFERRED' | 'CLOSED' | null;
+}
+
 interface ChatConversation {
   id: string;
   portalAccountId: string;
+  /** 2026-08-03 (user request) - groups "My Chats" per client instead of a flat list. */
+  portalAccountEmail: string | null;
   status: 'WAITING' | 'CLAIMED' | 'PENDING_TRANSFER' | 'CLOSED';
   claimedByUserId: string | null;
   claimedByUserName: string | null;
@@ -19,6 +47,8 @@ interface ChatConversation {
   pendingTransferFromUserId: string | null;
   pendingTransferFromUserName: string | null;
   pendingTransferPin: string | null;
+  /** Full hand-off chain, oldest first (2026-08-03 user request, "trackable chat logs"). */
+  participants: ChatParticipant[];
   createdAt: string;
   claimedAt: string | null;
   closedAt: string | null;
@@ -35,10 +65,23 @@ interface ChatMessage {
   createdAt: string;
 }
 
+interface ChatClientLoanApplication {
+  id: string;
+  applicantName: string;
+  requestedCategory: string;
+  status: string;
+}
+
+interface ChatClientInfo {
+  portalAccountEmail: string | null;
+  loanApplications: ChatClientLoanApplication[];
+}
+
 interface StaffChatView {
   conversation: ChatConversation;
   messages: ChatMessage[];
   isReadOnly: boolean;
+  client: ChatClientInfo;
 }
 
 interface ChatOversightStaffSummary {
@@ -346,27 +389,54 @@ export function ChatPage() {
           <CardHeader>
             <CardTitle className="text-sm">My Chats ({mine?.length ?? '…'})</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-4">
             {mine?.length === 0 && <p className="text-xs text-muted-foreground">Nothing here yet.</p>}
-            {mine?.map((conversation) => {
-              const isActive = conversation.status === 'CLAIMED';
-              return (
-                <button
-                  key={conversation.id}
-                  type="button"
-                  onClick={() => {
-                    setOversightMode(false);
-                    setActiveConversationId(conversation.id);
-                  }}
-                  className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${!isActive ? 'opacity-60 grayscale' : ''} ${!oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
-                >
-                  <p className="font-medium">
-                    {conversation.status === 'CLOSED' ? 'Closed conversation' : conversation.status === 'PENDING_TRANSFER' ? 'Transfer pending' : isActive ? 'Active conversation' : 'Transferred away (read-only)'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Started {new Date(conversation.createdAt).toLocaleTimeString()}</p>
-                </button>
-              );
-            })}
+            {/* 2026-08-03 (user request): grouped per client instead of a flat list, so
+                backtracking through a specific person's chat history isn't confusing. */}
+            {mine && mine.length > 0 && (
+              <>
+                {Object.entries(
+                  mine.reduce<Record<string, ChatConversation[]>>((groups, conversation) => {
+                    const key = conversation.portalAccountEmail ?? conversation.portalAccountId;
+                    (groups[key] ??= []).push(conversation);
+                    return groups;
+                  }, {}),
+                ).map(([clientKey, conversations]) => (
+                  <div key={clientKey} className="space-y-1.5">
+                    <p className="truncate text-xs font-semibold text-muted-foreground">{clientKey}</p>
+                    <div className="space-y-1.5">
+                      {conversations.map((conversation) => {
+                        const isActive = conversation.status === 'CLAIMED';
+                        return (
+                          <button
+                            key={conversation.id}
+                            type="button"
+                            onClick={() => {
+                              setOversightMode(false);
+                              setActiveConversationId(conversation.id);
+                            }}
+                            className={`w-full rounded-md border p-2 text-left text-sm hover:bg-accent ${!isActive ? 'opacity-60 grayscale' : ''} ${!oversightMode && activeConversationId === conversation.id ? 'border-primary bg-accent' : ''}`}
+                          >
+                            <p className="font-medium">
+                              {conversation.status === 'CLOSED'
+                                ? 'Closed conversation'
+                                : conversation.status === 'PENDING_TRANSFER'
+                                  ? 'Transfer pending'
+                                  : isActive
+                                    ? 'Active conversation'
+                                    : 'Transferred away (read-only)'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Started {new Date(conversation.createdAt).toLocaleString()}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -385,7 +455,7 @@ export function ChatPage() {
                 <option value="">Select a staff member…</option>
                 {oversightStaff?.map((staff) => (
                   <option key={staff.id} value={staff.id}>
-                    {staff.name} ({staff.roles.join(', ')})
+                    {staff.name} ({staff.roles.map(roleTypeLabel).join(', ')})
                   </option>
                 ))}
               </select>
@@ -431,6 +501,31 @@ export function ChatPage() {
                           ? 'Transfer pending confirmation'
                           : 'Client conversation'}
                 </CardTitle>
+                {view.client.portalAccountEmail && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">Chatting with: {view.client.portalAccountEmail}</p>
+                )}
+                {view.client.loanApplications.length > 0 && (
+                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs">
+                    {view.client.loanApplications.map((application) => (
+                      <Link
+                        key={application.id}
+                        to={`/applications/${application.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {application.requestedCategory} - {application.applicantName} ({application.status})
+                      </Link>
+                    ))}
+                  </p>
+                )}
+                {view.conversation.participants.length > 0 && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {view.conversation.participants
+                      .map((p) => `${p.userName}${p.leftAt ? ` (${p.leftReason === 'TRANSFERRED' ? 'transferred' : 'closed'})` : ''}`)
+                      .join(' → ')}
+                  </p>
+                )}
                 {actionError && <p className="text-xs text-destructive">{actionError}</p>}
               </div>
               {!oversightMode && !view.isReadOnly && view.conversation.status === 'CLAIMED' && (
@@ -468,7 +563,7 @@ export function ChatPage() {
                     <option value="">Select role type…</option>
                     {roleTypes.map((role) => (
                       <option key={role.id} value={role.name}>
-                        {role.name}
+                        {roleTypeLabel(role.name)}
                       </option>
                     ))}
                   </select>
@@ -534,7 +629,10 @@ export function ChatPage() {
                   className={message.senderType === 'SYSTEM' ? 'text-center' : message.senderType === 'STAFF' ? 'flex justify-end' : 'flex justify-start'}
                 >
                   {message.senderType === 'SYSTEM' ? (
-                    <p className="text-xs italic text-muted-foreground">{message.body}</p>
+                    <p className="text-xs italic text-muted-foreground">
+                      {message.body}{' '}
+                      <span className="opacity-70">({new Date(message.createdAt).toLocaleString()})</span>
+                    </p>
                   ) : (
                     <div
                       className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
@@ -554,6 +652,7 @@ export function ChatPage() {
                           <Paperclip className="h-3 w-3" /> {message.attachment.fileName}
                         </button>
                       )}
+                      <p className="mt-1 text-[10px] opacity-70">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                   )}
                 </div>

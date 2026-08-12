@@ -228,7 +228,7 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
   describe('penaltyOverride', () => {
     it('overrides the live-computed amount and reports isLivePenalty=false', () => {
       const installment = buildOverdueInstallment(new Date('2020-01-01T00:00:00Z'));
-      installment.reducePenalty(Money.of('123.45'), Money.of('99999.00'), 'memo #1', 'user-1');
+      installment.reducePenalty(Money.of('123.45'), 'memo #1', 'user-1');
 
       const result = presentRepaymentInstallment(installment, { isProspectiveLoan: true, principalAmount: Money.of('50000.00'), maturityDate: FAR_FUTURE_MATURITY });
 
@@ -245,7 +245,7 @@ describe('presentRepaymentInstallment — currentPenaltyOwed (ADR-050 / CALC-SPE
 
     it('also overrides for a migrated (non-prospective) loan — currentPenaltyOwed becomes non-null', () => {
       const installment = buildOverdueInstallment(new Date('2020-01-01T00:00:00Z'));
-      installment.reducePenalty(Money.of('0.00'), Money.of('500.00'), 'waived', 'user-1');
+      installment.reducePenalty(Money.of('0.00'), 'waived', 'user-1');
 
       const result = presentRepaymentInstallment(installment, { isProspectiveLoan: false, principalAmount: Money.of('50000.00'), maturityDate: FAR_FUTURE_MATURITY });
 

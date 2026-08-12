@@ -5,6 +5,7 @@ import type { IBorrowerRepository } from '@modules/borrower/application/ports/IB
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
+import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { ILoanDocumentMergeDataResolver } from '../application/ports/ILoanDocumentMergeDataResolver';
@@ -17,6 +18,15 @@ const MONTH_NAMES = [
 
 function formatDate(date: Date): string {
   return `${MONTH_NAMES[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`;
+}
+
+/** 2026-08-12 (user request, "same as SOA"): mirrors `StatementOfAccountMergeDataResolver.ts`'s
+ * `formatMoney` - printed documents (Disclosure Statement, Promissory Note, etc.) should show
+ * comma-grouped figures, not raw `Money.toString()`. Deliberately NOT a change to `Money.toString()`
+ * itself (used elsewhere for persistence/API payloads that must stay machine-parseable) -
+ * comma-grouping is print-display-only, scoped to this resolver's own merge data. */
+function formatMoney(money: Money): string {
+  return Number(money.toString()).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /**
@@ -52,6 +62,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       coBorrowerRepository: ICoBorrowerRepository;
       loanProductRepository: ILoanProductRepository;
       repaymentInstallmentRepository: IRepaymentInstallmentRepository;
+      loanApplicationRepository: ILoanApplicationRepository;
       prisma: PrismaClient;
     },
   ) {}
@@ -88,6 +99,17 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
     const loanProduct = await this.deps.loanProductRepository.findById(loanProductVersion.loanProductId);
     if (!loanProduct) throw new NotFoundError('LoanProduct', loanProductVersion.loanProductId);
 
+    // 2026-08-09 (Quit Claim auto-fill, user request): the surrendered ATM/bank account this loan
+    // was secured with, if any - same `mitigation` source `CreateLoanSigningSessionUseCase` reads
+    // for its Deed of Assignment routing. Blank (not an error) when the loan has no source
+    // application, or the application was never underwritten with a mitigation section filled in -
+    // user-confirmed: leave the Quit Claim's Bank/Branch/Account/ATM fields blank in that case
+    // rather than refusing to generate the document.
+    const sourceApplication = loanAccount.sourceApplicationId
+      ? await this.deps.loanApplicationRepository.findById(loanAccount.sourceApplicationId)
+      : null;
+    const mitigation = sourceApplication?.reviewReport?.mitigation;
+
     const sortedInstallments = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const firstInstallment = sortedInstallments[0];
     const lastInstallment = sortedInstallments[sortedInstallments.length - 1];
@@ -108,7 +130,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
     const schedule = sortedInstallments.map((installment, index) => ({
       Number: String(index + 1),
       Date: formatDate(installment.dueDate),
-      PaymentDue: installmentPaymentsDue[index]!.toString(),
+      PaymentDue: formatMoney(installmentPaymentsDue[index]!),
     }));
     const totalPaymentDue = installmentPaymentsDue.reduce((sum, due) => sum.add(due), Money.ZERO);
 
@@ -123,7 +145,7 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       Interest: '',
       Fees: '',
       PaymentDue: '',
-      Balance: loanAccount.principalAmount.toString(),
+      Balance: formatMoney(loanAccount.principalAmount),
     };
     let runningBalance = loanAccount.principalAmount;
     const amortizationSchedule = [
@@ -133,11 +155,11 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
         return {
           Number: String(index + 1),
           Date: formatDate(installment.dueDate),
-          Principal: installment.due.principal.toString(),
-          Interest: installment.due.interest.toString(),
-          Fees: installment.due.fees.toString(),
-          PaymentDue: installmentPaymentsDue[index]!.toString(),
-          Balance: runningBalance.toString(),
+          Principal: formatMoney(installment.due.principal),
+          Interest: formatMoney(installment.due.interest),
+          Fees: formatMoney(installment.due.fees),
+          PaymentDue: formatMoney(installmentPaymentsDue[index]!),
+          Balance: formatMoney(runningBalance),
         };
       }),
     ];
@@ -176,19 +198,28 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
         : '',
       MaturityDate: lastInstallment ? formatDate(lastInstallment.dueDate) : '',
       BranchName: branch?.name ?? '',
+      // Quit Claim (2026-08-09, user request): {GeneratedDate} is "today", the day the document is
+      // actually printed/generated - not a stored field, computed fresh on every generation.
+      // {LoanDate} reuses ApprovalDate's own convention (see AgreementDate above).
+      GeneratedDate: formatDate(new Date()),
+      LoanDate: loanAccount.approvedAt ? formatDate(loanAccount.approvedAt) : '',
+      Bank: mitigation?.bank ?? '',
+      Branch: mitigation?.branch ?? '',
+      AccountNumber: mitigation?.accountNumber ?? '',
+      ATMCardNumber: mitigation?.atmCardNumber ?? '',
 
-      PrincipalAmount: loanAccount.principalAmount.toString(),
+      PrincipalAmount: formatMoney(loanAccount.principalAmount),
       InterestRate: formatPercentage(loanAccount.interestRate),
       ContractualRate: loanAccount.contractualInterestRate ? formatPercentage(loanAccount.contractualInterestRate) : '',
       AddOnRate: loanAccount.addOnInterestRate ? formatPercentage(loanAccount.addOnInterestRate) : '',
-      ProcessingFee: originationFees.processingFee.toString(),
-      AdvanceInterest: originationFees.advanceInterestFee.toString(),
-      AccountManagementFee: originationFees.accountManagementFee.toString(),
-      DocStamp: originationFees.docStampFee.toString(),
-      OutstandingBalance: originationFees.outstandingBalancePayoff.toString(),
-      Others: originationFees.otherFees.toString(),
-      MiscellaneousFee: miscellaneousFee.toString(),
-      NetProceeds: loanAccount.netProceeds.toString(),
+      ProcessingFee: formatMoney(originationFees.processingFee),
+      AdvanceInterest: formatMoney(originationFees.advanceInterestFee),
+      AccountManagementFee: formatMoney(originationFees.accountManagementFee),
+      DocStamp: formatMoney(originationFees.docStampFee),
+      OutstandingBalance: formatMoney(originationFees.outstandingBalancePayoff),
+      Others: formatMoney(originationFees.otherFees),
+      MiscellaneousFee: formatMoney(miscellaneousFee),
+      NetProceeds: formatMoney(loanAccount.netProceeds),
       // Disclosure Statement line-item gates (2026-07-14, user request): docxtemplater renders a
       // `{#HasX}...{/HasX}`-wrapped section only when the value is truthy, so wrapping a whole
       // table row in one of these hides that row entirely when the amount is zero, rather than
@@ -207,18 +238,18 @@ export class LoanDocumentMergeDataResolver implements ILoanDocumentMergeDataReso
       LitigationFee: 'Actual Cost',
 
       PNNumber: loanAccount.loanCode,
-      LoanAmountFigures: loanAccount.principalAmount.toString(),
+      LoanAmountFigures: formatMoney(loanAccount.principalAmount),
       LoanAmountWords: moneyToWords(loanAccount.principalAmount.toDecimal()),
-      InstallmentAmount: firstInstallmentTotal ? firstInstallmentTotal.toString() : '',
+      InstallmentAmount: firstInstallmentTotal ? formatMoney(firstInstallmentTotal) : '',
       NumberOfInstallments: String(loanAccount.installmentCount),
       FirstDueDate: formatDate(loanAccount.firstRepaymentDate),
       Schedule: schedule,
-      TotalPaymentDue: totalPaymentDue.toString(),
+      TotalPaymentDue: formatMoney(totalPaymentDue),
       TotalPaymentDueWords: moneyToWords(totalPaymentDue.toDecimal()),
       AmortizationSchedule: amortizationSchedule,
-      TotalPrincipal: totalPrincipal.toString(),
-      TotalInterest: totalInterest.toString(),
-      TotalFees: totalFees.toString(),
+      TotalPrincipal: formatMoney(totalPrincipal),
+      TotalInterest: formatMoney(totalInterest),
+      TotalFees: formatMoney(totalFees),
     };
   }
 }

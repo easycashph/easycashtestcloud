@@ -8,11 +8,14 @@ type Theme = 'light' | 'dark';
  * arbitrary (a user-picked hex). See `applyCustomAccent()` below. */
 export type Accent = 'emerald' | 'easycash-blue' | 'custom';
 
-/** The platform's default theme color - business-confirmed as Easycash Emerald (not the legacy brand blue). */
-export const DEFAULT_ACCENT: Accent = 'emerald';
+/** 2026-08-07 (user request): default is now the officer's own picked custom color (see
+ * DEFAULT_CUSTOM_COLOR) rather than the Easycash Emerald preset - applies to anyone who hasn't
+ * chosen their own Theme Color yet, never touches an already-stored choice. */
+export const DEFAULT_ACCENT: Accent = 'custom';
 
-/** Fallback shown for the "Custom" swatch before the officer has picked their own color. */
-export const DEFAULT_CUSTOM_COLOR = '#0f766e';
+/** 2026-08-07 (user request): the officer's own picked color (#dc5d18), now the platform default -
+ * also shown as the "Custom" swatch's fallback before anyone repicks. */
+export const DEFAULT_CUSTOM_COLOR = '#dc5d18';
 
 export const ACCENT_OPTIONS: { value: Exclude<Accent, 'custom'>; label: string; swatch: string }[] = [
   { value: 'emerald', label: 'Easycash Emerald (default)', swatch: 'hsl(158 64% 32%)' },
@@ -96,6 +99,25 @@ const FONT_SIZE_VALUES = FONT_SIZE_OPTIONS.map((o) => o.value);
  * saved card order, just stops further rearranging until switched back on. */
 export const DEFAULT_DRAG_REORDER_ENABLED = false;
 
+/** Settings > Appearance > Theme Style (2026-08-07 user request, mocked up first) - a personal,
+ * per-user choice between the platform's default surfaces and "Premium," a full alternate
+ * navy/gold/ivory look (both light and dark variants), driven by `[data-theme-style='premium']`
+ * in index.css. */
+export type ThemeStyle = 'classic' | 'premium';
+
+/** 2026-08-07 (user request): Premium, not Classic, is the platform default for anyone who hasn't
+ * picked a style yet - mirrors DEFAULT_THEME's own "changes what a never-configured user sees,
+ * never touches an already-stored choice" scope. Combined with DEFAULT_THEME (now 'light'), a
+ * never-configured user lands on Premium + Light, matching the officer's own account at the time. */
+export const DEFAULT_THEME_STYLE: ThemeStyle = 'premium';
+
+export const THEME_STYLE_OPTIONS: { value: ThemeStyle; label: string; description: string }[] = [
+  { value: 'classic', label: 'Classic', description: 'Current default look' },
+  { value: 'premium', label: 'Premium', description: 'Navy and gold, ivory cards, soft shadows' },
+];
+
+const THEME_STYLE_VALUES = THEME_STYLE_OPTIONS.map((o) => o.value);
+
 interface ThemeContextValue {
   theme: Theme;
   toggleTheme: () => void;
@@ -108,6 +130,8 @@ interface ThemeContextValue {
   setFontSize: (fontSize: FontSize) => void;
   dragReorderEnabled: boolean;
   setDragReorderEnabled: (enabled: boolean) => void;
+  themeStyle: ThemeStyle;
+  setThemeStyle: (themeStyle: ThemeStyle) => void;
   /**
    * Switches whose saved preference is active. Called by `roleContext.tsx` on bootstrap, login,
    * and logout - `userId: null` means "no signed-in user," which loads the system-preference/
@@ -124,6 +148,7 @@ const ACCENT_KEY_PREFIX = 'easycash-preview-accent';
 const CUSTOM_COLOR_KEY_PREFIX = 'easycash-preview-custom-color';
 const FONT_SIZE_KEY_PREFIX = 'easycash-preview-font-size';
 const DRAG_REORDER_KEY_PREFIX = 'easycash-preview-drag-reorder-enabled';
+const THEME_STYLE_KEY_PREFIX = 'easycash-preview-theme-style';
 const ANON_SCOPE = 'anon';
 
 function themeStorageKey(userId: string | null): string {
@@ -141,11 +166,21 @@ function fontSizeStorageKey(userId: string | null): string {
 function dragReorderStorageKey(userId: string | null): string {
   return `${DRAG_REORDER_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
 }
+function themeStyleStorageKey(userId: string | null): string {
+  return `${THEME_STYLE_KEY_PREFIX}:${userId ?? ANON_SCOPE}`;
+}
+
+/** 2026-08-05 (user request): was 'dark' by default. 2026-08-07 (user request, own current setup
+ * made the platform default): flipped to 'light', matching the officer's own account at the time -
+ * still just the default for anyone who hasn't picked a theme yet (a new officer's first login, or
+ * the Login page itself before anyone's signed in); anyone who has already chosen light or dark
+ * (`stored` below) keeps that choice untouched. */
+export const DEFAULT_THEME: Theme = 'light';
 
 function readTheme(userId: string | null): Theme {
   const stored = window.localStorage.getItem(themeStorageKey(userId));
   if (stored === 'light' || stored === 'dark') return stored;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return DEFAULT_THEME;
 }
 
 function readAccent(userId: string | null): Accent {
@@ -170,11 +205,26 @@ function readDragReorderEnabled(userId: string | null): boolean {
   return DEFAULT_DRAG_REORDER_ENABLED;
 }
 
+function readThemeStyle(userId: string | null): ThemeStyle {
+  const stored = window.localStorage.getItem(themeStyleStorageKey(userId));
+  return THEME_STYLE_VALUES.includes(stored as ThemeStyle) ? (stored as ThemeStyle) : DEFAULT_THEME_STYLE;
+}
+
+/** 2026-08-07: Premium originally had no dark variant, so this forced 'light' whenever it was the
+ * resolved style. Now that index.css ships a `.dark[data-theme-style='premium']` block too, Premium
+ * follows the officer's own dark-mode preference like Classic always has - kept as a thin wrapper
+ * (rather than inlining `readTheme` at each call site) in case a style-specific override is needed
+ * again later. */
+function readEffectiveTheme(userId: string | null, _themeStyle: ThemeStyle): Theme {
+  return readTheme(userId);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Ref, not state: mutated synchronously by loadPreferenceFor() and read by the persistence
   // effects below at their next run, without itself needing to trigger a re-render.
   const currentUserIdRef = React.useRef<string | null>(null);
-  const [theme, setTheme] = React.useState<Theme>(() => readTheme(null));
+  const [themeStyle, setThemeStyleState] = React.useState<ThemeStyle>(() => readThemeStyle(null));
+  const [theme, setTheme] = React.useState<Theme>(() => readEffectiveTheme(null, readThemeStyle(null)));
   const [accent, setAccent] = React.useState<Accent>(() => readAccent(null));
   const [customColor, setCustomColor] = React.useState<string>(() => readCustomColor(null));
   const [fontSize, setFontSize] = React.useState<FontSize>(() => readFontSize(null));
@@ -184,6 +234,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     window.localStorage.setItem(themeStorageKey(currentUserIdRef.current), theme);
   }, [theme]);
+
+  React.useEffect(() => {
+    document.documentElement.dataset.themeStyle = themeStyle;
+    window.localStorage.setItem(themeStyleStorageKey(currentUserIdRef.current), themeStyle);
+  }, [themeStyle]);
 
   React.useEffect(() => {
     document.documentElement.dataset.accent = accent;
@@ -214,9 +269,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }, []);
 
+  const setThemeStyle = React.useCallback((next: ThemeStyle) => {
+    setThemeStyleState(next);
+  }, []);
+
   const loadPreferenceFor = React.useCallback((userId: string | null) => {
     currentUserIdRef.current = userId;
-    setTheme(readTheme(userId));
+    const style = readThemeStyle(userId);
+    setThemeStyleState(style);
+    setTheme(readEffectiveTheme(userId, style));
     setAccent(readAccent(userId));
     setCustomColor(readCustomColor(userId));
     setFontSize(readFontSize(userId));
@@ -236,6 +297,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setFontSize,
         dragReorderEnabled,
         setDragReorderEnabled,
+        themeStyle,
+        setThemeStyle,
         loadPreferenceFor,
       }}
     >

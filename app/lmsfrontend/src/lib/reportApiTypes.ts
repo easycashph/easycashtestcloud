@@ -41,4 +41,10 @@ export interface TransactionReportRow {
   components: { principal: string; interest: string; fees: string; penalty: string };
   entryDate: string;
   comment: string | null;
+  productId: string;
+  totalBalance: string;
+  expectedMaturityDate: string | null;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
 }

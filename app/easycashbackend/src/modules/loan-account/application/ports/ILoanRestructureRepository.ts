@@ -22,12 +22,18 @@ export interface LoanRestructureView {
 }
 
 export interface ILoanRestructureRepository {
-  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated. */
+  /** Immutable rows (see `LoanRestructure`'s own doc comment) — never updated, only created or deleted (via `delete()`). */
   create(restructure: LoanRestructure, ctx?: TransactionContext): Promise<void>;
-  /** Non-null only when `loanAccountId` was the OLD side of a restructure (enforces the one-time-only rule). */
+  /** Non-null only when `loanAccountId` was the OLD side of a restructure that hasn't since been undone. */
   findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
   /** Non-null only when `loanAccountId` was the NEW side of a restructure. */
   findByNewLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructure | null>;
+  /**
+   * 2026-08-08 (Undo Restructure feature, user-confirmed revision): a reverted restructure is
+   * deleted outright, not marked - see `LoanRestructure`'s own doc comment for why. Must run in
+   * the same transaction as deleting the new `LoanAccount` it points to (the FK requires it).
+   */
+  delete(loanRestructureId: string, ctx?: TransactionContext): Promise<void>;
   /** Display-ready view for either side of a restructure, whichever `loanAccountId` participated in — used by the Loan Detail page. */
   findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanRestructureView | null>;
 }

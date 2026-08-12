@@ -26,6 +26,10 @@ export interface CreateLoanAdjustmentProps {
  * `LoanRestructure`, there is no principal/balance change to record here at all - the ONLY thing
  * that changes is the schedule's due dates (same principal, rate, term, product copied verbatim),
  * so this entity just links old<->new loan account ids and captures the date change itself.
+ *
+ * 2026-08-08 (Undo Adjustment, user-confirmed revision): undo now DELETES this row (and the new
+ * LoanAccount it points to) outright rather than marking it "undone" — the user decided a
+ * reverted adjustment should leave no trace, not a retired record. See `UndoAdjustLoanUseCase`.
  */
 export class LoanAdjustment {
   private constructor(private readonly props: LoanAdjustmentProps) {}

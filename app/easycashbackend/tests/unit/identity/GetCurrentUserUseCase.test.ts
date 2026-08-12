@@ -24,7 +24,8 @@ function buildDeps(user: UserRecord | null) {
     create: vi.fn(),
     hasAnyUserWithRole: vi.fn(),
   };
-  return { userRepository };
+  const permissionCodesRepository = { getGrantedPermissionCodes: vi.fn().mockResolvedValue([]) };
+  return { userRepository, permissionCodesRepository };
 }
 
 describe('GetCurrentUserUseCase (production-readiness review: gap fill — previously zero coverage)', () => {
@@ -43,6 +44,7 @@ describe('GetCurrentUserUseCase (production-readiness review: gap fill — previ
       contactNumber: null,
       address: null,
       birthday: null,
+      permissionCodes: [],
     });
     expect(result).not.toHaveProperty('passwordHash');
   });

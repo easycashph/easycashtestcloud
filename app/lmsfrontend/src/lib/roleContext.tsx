@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { apiClient, ApiError, setAccessToken, setOnSessionExpired, getStoredDeviceToken, setStoredDeviceToken } from './apiClient';
+import { apiClient, ApiError, applyAuthTokens, clearAuthTokens, setOnSessionExpired, getStoredDeviceToken, setStoredDeviceToken } from './apiClient';
 import type { AuthenticatedUserView, LoginResponse, LoginSuccessResponse, RefreshResponse } from './authTypes';
 import { useTheme } from '@/components/theme-provider';
 import { useDashboardLayout } from '@/components/dashboard-layout-provider';
@@ -16,6 +16,48 @@ export interface AuthenticatedAccount {
   email: string;
   branchId: string;
 }
+
+/**
+ * 2026-08-06 (Roles & Permissions feature): the exact `Permission.code` strings seeded in
+ * `prisma/seed.ts` - kept as a union here so every `hasPermission(...)` call site is checked
+ * against a real, known code (a typo fails to compile instead of silently always returning
+ * false). Every `can*` boolean below is now DERIVED from this, not from a hard-coded role-name
+ * check - before this, `canCreateLoanAccount` etc. were a second, frontend-only copy of the
+ * backend's old `requireRole` allow-lists, completely blind to whatever MIS configures on the new
+ * Roles & Permissions screen. Add a new code here whenever the backend seed gains one.
+ */
+export type PermissionCode =
+  | 'loan_application.manage'
+  | 'loan_application.final_approve'
+  | 'loan_application.revert'
+  | 'loan_account.originate'
+  | 'loan_account.approve'
+  | 'loan_account.undo_approve'
+  | 'loan_account.activate'
+  | 'loan_account.undo_activate'
+  | 'loan_account.restructure'
+  | 'loan_account.undo_restructure'
+  | 'loan_account.adjust'
+  | 'loan_account.undo_adjust'
+  | 'payment.record'
+  | 'payment.reverse'
+  | 'penalty.reduce'
+  | 'fees.adjust'
+  | 'document.generate'
+  | 'document_template.manage'
+  | 'statement_of_account.generate'
+  | 'attachment.upload'
+  | 'esignature.manage'
+  | 'borrower.write'
+  | 'loan_product.write'
+  | 'ai_extraction.use'
+  | 'collection.view_past_due'
+  | 'collection.note.write'
+  | 'report.view'
+  | 'user.manage'
+  | 'audit_log.read'
+  | 'reminder_settings.manage'
+  | 'profile_activity_log.manage';
 
 interface RoleContextValue {
   currentAccount: AuthenticatedAccount;
@@ -49,6 +91,41 @@ interface RoleContextValue {
   canApproveLoanApplication: boolean;
   /** MIS-only (2026-07-18 user request) - the Settings page's SMS/Email reminder master switches. */
   canManageReminderSettings: boolean;
+  /** Generate a loan document (e.g. Loan Agreement, Disclosure Statement) - previously unrestricted
+   * beyond authentication (ADR-051 §5), configurable per role since 2026-08-06. */
+  canGenerateDocuments: boolean;
+  /** Generate a Statement of Account - previously unrestricted beyond authentication (ADR-052,
+   * mirrors ADR-051 §5), same gap `canGenerateDocuments` had, configurable per role since
+   * 2026-08-06. */
+  canGenerateStatementOfAccount: boolean;
+  /** Send/manage an e-signature session - previously unrestricted beyond authentication, same
+   * class of action as `canGenerateDocuments`, configurable per role since 2026-08-06. */
+  canManageESignature: boolean;
+  /** Record a borrower payment. */
+  canRecordPayment: boolean;
+  /** Reverse a recorded payment - MIS-only by default, an accidental-click safety net. */
+  canReversePayment: boolean;
+  /** Reduce/waive an installment penalty. */
+  canReducePenalty: boolean;
+  /** Adjust an installment fee amount. */
+  canAdjustFees: boolean;
+  /** Restructure a loan account. */
+  canRestructureLoan: boolean;
+  /** Write off/adjust a loan account. */
+  canAdjustLoan: boolean;
+  /** Create or edit a Client (Borrower) profile. */
+  canManageClients: boolean;
+  /** 2026-08-09 (Loan Products admin config): create a Loan Product, create a new Loan Product
+   * Version, or activate one — Finance/Accounting-tier by default (ADR-038 §3.1), not CRM. */
+  canManageLoanProducts: boolean;
+  /** 2026-08-09 (Document Templates admin config): configure a document template's required/
+   * conditional status and per-product mapping - narrow, MIS-only-by-default admin permission,
+   * distinct from `canGenerateDocuments` (any staff generating a document for a specific loan). */
+  canManageDocumentTemplates: boolean;
+  /** True if the signed-in user's role currently has the given permission code granted - the
+   * general-purpose escape hatch for a check that doesn't already have its own named `can*`
+   * boolean above. */
+  hasPermission: (code: PermissionCode) => boolean;
   /** Re-fetches `GET /auth/me` and updates `currentAccount` - call after a self-service profile
    * update so the sidebar/header name updates without requiring a full reload. */
   refreshCurrentUser: () => Promise<void>;
@@ -101,7 +178,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const refreshed = await apiClient.post<RefreshResponse>('/auth/refresh');
-        setAccessToken(refreshed.accessToken);
+        applyAuthTokens(refreshed.accessToken, refreshed.accessTokenExpiresAt);
         const me = await apiClient.get<AuthenticatedUserView>('/auth/me');
         if (cancelled || loggedInRef.current) return;
         setUser(me);
@@ -110,7 +187,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setStatus('authenticated');
       } catch {
         if (cancelled || loggedInRef.current) return;
-        setAccessToken(null);
+        clearAuthTokens();
         loadPreferenceFor(null);
         loadDashboardLayoutFor(null);
         setStatus('unauthenticated');
@@ -127,7 +204,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     (result: LoginSuccessResponse) => {
       if (result.deviceToken) setStoredDeviceToken(result.deviceToken);
       loggedInRef.current = true;
-      setAccessToken(result.accessToken);
+      applyAuthTokens(result.accessToken, result.accessTokenExpiresAt);
       setUser(result.user);
       loadPreferenceFor(result.user.id);
       loadDashboardLayoutFor(result.user.id);
@@ -171,7 +248,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       // Best-effort - even if the network call fails, clear local session state below so the
       // user isn't stuck "logged in" against a UI that can no longer reach the backend.
     }
-    setAccessToken(null);
+    clearAuthTokens();
     setUser(null);
     loadPreferenceFor(null);
     loadDashboardLayoutFor(null);
@@ -184,7 +261,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   // once per failed background refresh, and this bounces the user back to the Login page instead.
   React.useEffect(() => {
     setOnSessionExpired(() => {
-      setAccessToken(null);
+      clearAuthTokens();
       setUser(null);
       loadPreferenceFor(null);
       loadDashboardLayoutFor(null);
@@ -206,20 +283,35 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   }
 
   const currentAccount = toAccount(user);
+  const grantedCodes = new Set(user.permissionCodes);
+  const hasPermission = (code: PermissionCode) => grantedCodes.has(code);
   const value: RoleContextValue = {
     currentAccount,
     role: currentAccount.role,
     logout,
-    canManageMembers: currentAccount.roles.includes('MIS'),
-    canAccessLoanApplications: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
-    canRevertLoanApplicationDecision: currentAccount.roles.includes('MIS'),
-    canViewActivityLogs: currentAccount.roles.includes('MIS'),
-    canCreateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
-    canApproveLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
-    canActivateLoanAccount: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'Accounting'),
-    canReviewLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager' || r === 'CRM'),
-    canApproveLoanApplication: currentAccount.roles.some((r) => r === 'MIS' || r === 'Loan Operation Manager'),
-    canManageReminderSettings: currentAccount.roles.includes('MIS'),
+    canManageMembers: hasPermission('user.manage'),
+    canAccessLoanApplications: hasPermission('loan_application.manage'),
+    canRevertLoanApplicationDecision: hasPermission('loan_application.revert'),
+    canViewActivityLogs: hasPermission('audit_log.read'),
+    canCreateLoanAccount: hasPermission('loan_account.originate'),
+    canApproveLoanAccount: hasPermission('loan_account.approve'),
+    canActivateLoanAccount: hasPermission('loan_account.activate'),
+    canReviewLoanApplication: hasPermission('loan_application.manage'),
+    canApproveLoanApplication: hasPermission('loan_application.final_approve'),
+    canManageReminderSettings: hasPermission('reminder_settings.manage'),
+    canGenerateDocuments: hasPermission('document.generate'),
+    canGenerateStatementOfAccount: hasPermission('statement_of_account.generate'),
+    canManageESignature: hasPermission('esignature.manage'),
+    canRecordPayment: hasPermission('payment.record'),
+    canReversePayment: hasPermission('payment.reverse'),
+    canReducePenalty: hasPermission('penalty.reduce'),
+    canAdjustFees: hasPermission('fees.adjust'),
+    canRestructureLoan: hasPermission('loan_account.restructure'),
+    canAdjustLoan: hasPermission('loan_account.adjust'),
+    canManageClients: hasPermission('borrower.write'),
+    canManageLoanProducts: hasPermission('loan_product.write'),
+    canManageDocumentTemplates: hasPermission('document_template.manage'),
+    hasPermission,
     refreshCurrentUser,
   };
 

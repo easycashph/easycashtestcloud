@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Coins,
   Download,
   Eye,
   FileCheck2,
@@ -21,6 +22,7 @@ import {
   MessageSquareText,
   Lock,
   MoreHorizontal,
+  Percent,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -211,14 +213,40 @@ function RiskAssessmentCard({ loanId }: { loanId: string }) {
   );
 }
 
-/** Compact stat tile - replaces `RealLoanDetailView`'s old three separate bordered Cards (Collections
- * Balance / Loan Terms / Accounting Balance) with one dense grid, per this session's "make it
- * compact" request. */
-function MiniStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
+/** 2026-08-04 (user-confirmed, mocked up first): icon-led tile for the balance breakdown row -
+ * `accentClassName` is a `border-l-*` color, distinguishing Principal/Interest/Penalty/Fees at a
+ * glance without a full legend. */
+function BalanceBreakdownItem({
+  icon: Icon,
+  label,
+  value,
+  accentClassName,
+  valueClassName,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  accentClassName: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className={cn('border-l-2 bg-card px-4 py-3', accentClassName)}>
+      <div className="mb-1 flex items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      </div>
+      <p className={cn('text-base font-medium tabular-nums', valueClassName)}>{value}</p>
+    </div>
+  );
+}
+
+/** Quiet footer stat for loan terms (Principal Amount/Interest Rate/Installments/First Repayment)
+ * - demoted below the balance breakdown, which is what staff actually need at a glance. */
+function LoanTermStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn('tabular-nums', emphasize ? 'text-xl font-semibold' : 'text-sm text-muted-foreground')}>{value}</p>
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-sm tabular-nums text-muted-foreground">{value}</p>
     </div>
   );
 }
@@ -449,8 +477,10 @@ function LoanSigningPanel({
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = React.useState(defaultPhoneNumber ?? '');
   const [coBorrowerPhoneNumber, setCoBorrowerPhoneNumber] = React.useState(defaultCoBorrowerPhoneNumber ?? '');
-  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('SMS');
-  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('SMS');
+  // 2026-08-05 (user request): Email is the default signing channel for both parties - SMS remains
+  // available but must be picked explicitly.
+  const [borrowerChannel, setBorrowerChannel] = React.useState<SigningChannel>('EMAIL');
+  const [coBorrowerChannel, setCoBorrowerChannel] = React.useState<SigningChannel>('EMAIL');
 
   // The borrower profile (and its phone number) is fetched by a query on the parent page and may
   // resolve after this component's first render, same "slower-loading query" gap as the
@@ -870,7 +900,7 @@ function RealRemindersPanel({
   const num = (v: string) => Number.parseFloat(v) || 0;
   const amountDue = num(nextDue.due.principal) + num(nextDue.due.interest) + num(nextDue.due.fees) - num(nextDue.paid.principal) - num(nextDue.paid.interest) - num(nextDue.paid.fees);
   const dateTriggers = computeReminderTriggers(new Date(nextDue.dueDate), false); // only the 4 date-anchored ones - PAST_DUE_WEEKLY handled separately below, from real logs
-  const borrowerName = borrower ? `${borrower.firstName} ${borrower.lastName}` : 'the borrower';
+  const borrowerName = borrower ? borrower.fullName : 'the borrower';
 
   const pastDueLogs = logs.filter((l) => l.triggerType === 'PAST_DUE_WEEKLY').sort((a, b) => a.triggerDate.localeCompare(b.triggerDate));
 
@@ -1002,7 +1032,22 @@ function RealRemindersPanel({
 function RealLoanDetailView({ loanId }: { loanId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { currentAccount, canCreateLoanAccount, canApproveLoanAccount, canActivateLoanAccount } = useRole();
+  const {
+    currentAccount,
+    canCreateLoanAccount,
+    canApproveLoanAccount,
+    canActivateLoanAccount,
+    canRecordPayment: canRecordPaymentPermission,
+    canReversePayment: canReversePaymentPermission,
+    canReducePenalty: canReducePenaltyPermission,
+    canAdjustFees: canAdjustFeesPermission,
+    canRestructureLoan: canRestructureLoanPermission,
+    canAdjustLoan: canAdjustLoanPermission,
+    canGenerateDocuments: canGenerateDocumentsPermission,
+    canGenerateStatementOfAccount: canGenerateStatementOfAccountPermission,
+    canManageESignature: canManageESignaturePermission,
+    hasPermission,
+  } = useRole();
 
   // 2026-07-22 (user request): the lower sections of this page (Reminders through Recent Activity)
   // are drag-to-reorder - each staff member's own arrangement, saved per-user like the sidebar
@@ -1036,7 +1081,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     });
   };
 
-  const [confirmAction, setConfirmAction] = React.useState<'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | null>(null);
+  const [confirmAction, setConfirmAction] = React.useState<
+    'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | 'UNDO_RESTRUCTURE' | 'UNDO_ADJUST' | null
+  >(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
   const restructureIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -1329,8 +1376,33 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onSuccess: onActionSuccess,
     onError: onActionError,
   });
+  // 2026-08-07 (Undo Restructure / Undo Adjustment, user-confirmed): same safety-net shape as
+  // Undo Approve/Undo Activate above, gated by their own independently-grantable permissions
+  // ('loan_account.undo_restructure'/'loan_account.undo_adjust') rather than reusing the
+  // restructure/adjust permission - who can perform one isn't necessarily who can undo one.
+  const undoRestructureMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-restructure`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['loan-restructure', loanId] });
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+  const undoAdjustMutation = useMutation({
+    mutationFn: () => apiClient.post<LoanAccount>(`/loan-accounts/${loanId}/undo-adjust`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['loan-adjustment', loanId] });
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
   const actionPending =
-    approveMutation.isPending || activateMutation.isPending || undoApproveMutation.isPending || undoActivateMutation.isPending;
+    approveMutation.isPending ||
+    activateMutation.isPending ||
+    undoApproveMutation.isPending ||
+    undoActivateMutation.isPending ||
+    undoRestructureMutation.isPending ||
+    undoAdjustMutation.isPending;
 
   const reverseMutation = useMutation({
     mutationFn: () =>
@@ -1430,7 +1502,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
-  const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE') => {
+  const openConfirm = (action: 'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | 'UNDO_RESTRUCTURE' | 'UNDO_ADJUST') => {
     setActionError(null);
     setConfirmAction(action);
   };
@@ -1477,6 +1549,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     else if (confirmAction === 'ACTIVATE') activateMutation.mutate();
     else if (confirmAction === 'UNDO_APPROVE') undoApproveMutation.mutate();
     else if (confirmAction === 'UNDO_ACTIVATE') undoActivateMutation.mutate();
+    else if (confirmAction === 'UNDO_RESTRUCTURE') undoRestructureMutation.mutate();
+    else if (confirmAction === 'UNDO_ADJUST') undoAdjustMutation.mutate();
   };
 
   const borrowerQuery = useQuery({
@@ -1620,6 +1694,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
   const [soaError, setSoaError] = React.useState<string | null>(null);
+  // 2026-08-07 (user request, mocked up first): this dialog's content can run taller than the
+  // viewport - a "Scroll more" hint (hidden once scrolled to the bottom) so it's clear there's more
+  // to review before Generate/Cancel, same fade-hint pattern as the Transaction Report table.
+  const soaDialogScrollRef = React.useRef<HTMLDivElement>(null);
+  const [soaDialogHasMoreBelow, setSoaDialogHasMoreBelow] = React.useState(false);
+  const updateSoaDialogScrollHint = React.useCallback(() => {
+    const el = soaDialogScrollRef.current;
+    if (!el) return;
+    setSoaDialogHasMoreBelow(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+  }, []);
 
   // Client-side preview only (mirrors StatementOfAccountCalculator's formula) - lets staff check
   // the Penalty/Accrued Interest figures live as they adjust dates, before generating. The backend
@@ -1827,19 +1911,28 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // is genuinely 0 before Activation - not because there's no obligation, but because
   // ActivateLoanUseCase is what actually generates the amortization schedule those columns track.
   const notYetActivated = loan.status === 'PENDING_APPROVAL' || loan.status === 'APPROVED';
-  const canRecordPayment = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
-  const canReversePayment = currentAccount.roles.includes('MIS');
+  // 2026-08-06 (Roles & Permissions feature): every `can*` below now ANDs the loan-status
+  // eligibility (unchanged) with the signed-in user's actual granted permission
+  // (`canRecordPaymentPermission` etc., from `useRole()`) - previously several of these were a
+  // second, page-local hard-coded role check (`currentAccount.roles.includes('MIS')` etc.),
+  // completely blind to whatever MIS configures on the new Roles & Permissions screen.
+  const canRecordPayment = (loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS') && canRecordPaymentPermission;
+  const canReversePayment = canReversePaymentPermission;
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
-  // officer" - matches the backend's REDUCE_PENALTY_ROLES/ADJUST_FEES_ROLES gates (identical).
+  // officer" - matches the backend's `penalty.reduce`/`fees.adjust` default grants (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
-  const canManageInstallments = currentAccount.roles.includes('MIS') || currentAccount.roles.includes('Accounting');
+  const canManageInstallments = canReducePenaltyPermission || canAdjustFeesPermission;
   // 2026-07-24 (Loan Restructure feature, user-confirmed): "Ino offer lang ito sa mga past due at
   // matured account" - any installment currently `LATE` (RepaymentInstallment.status's own live
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
   // account" - once this loan is the OLD side of a restructure, never offered again.
   const isPastDueOrMatured = (installmentsQuery.data?.items ?? []).some((i) => i.status === 'LATE');
+  // 2026-08-08 (Undo Restructure, user-confirmed): an undo deletes the restructure record outright
+  // (UndoRestructureLoanUseCase), so `restructureQuery.data` naturally goes back to null once
+  // undone - "pwede pang mag-restructure ulit pagkatapos" falls out of this for free.
   const alreadyRestructured = restructureQuery.data?.oldLoanAccountId === loan.id;
-  const canRestructure = canManageInstallments && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
+  const canRestructure =
+    canManageInstallments && canRestructureLoanPermission && canRecordPayment && isPastDueOrMatured && !alreadyRestructured;
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): "ina apply sa mga wala pang bayad na
   // account... kailangan before ng 1st due date lang pwede i Loan Adjust ang account" - ACTIVE
   // only, zero payments recorded on any installment, and still before the first installment's own
@@ -1852,10 +1945,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     null,
   );
   const isBeforeFirstDueDate = firstInstallmentDueDate === null || new Date() < firstInstallmentDueDate;
+  // 2026-08-08 (Undo Adjustment, user-confirmed): same "delete on undo, query goes back to null"
+  // posture as restructure above.
   const alreadyAdjusted = adjustmentQuery.data?.oldLoanAccountId === loan.id;
-  const canAdjust = canManageInstallments && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
+  const canAdjust =
+    canManageInstallments && canAdjustLoanPermission && loan.status === 'ACTIVE' && !hasAnyPayment && isBeforeFirstDueDate && !alreadyAdjusted;
   // ADR-051 §2: matches GenerateLoanDocumentUseCase's own GENERATABLE_STATUSES gate.
-  const canGenerateDocuments = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const documentsEligibleStatus = loan.status === 'APPROVED' || loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+  const canGenerateDocuments = documentsEligibleStatus && canGenerateDocumentsPermission;
+  // Separate from `canGenerateDocuments` above - e-signature is gated by its own
+  // `esignature.manage` permission, not `document.generate` (a role can have one without the
+  // other since 2026-08-06).
+  const canSendForSigning = documentsEligibleStatus && canManageESignaturePermission;
+  // Separate from `canGenerateDocuments` above - Statement of Account is gated by its own
+  // `statement_of_account.generate` permission, not `document.generate`.
+  const canGenerateStatementOfAccount = documentsEligibleStatus && canGenerateStatementOfAccountPermission;
   const documents = documentsQuery.data?.items ?? [];
   const requiredDocuments = documents.filter((d) => d.isRequired);
   const conditionalDocuments = documents.filter((d) => !d.isRequired);
@@ -1978,7 +2082,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <p className="text-sm text-muted-foreground">
             {borrower ? (
               <Link to={`/clients/${loan.borrowerId}`} className="text-primary underline-offset-2 hover:underline">
-                {borrower.firstName} {borrower.lastName}
+                {borrower.fullName}
               </Link>
             ) : (
               'Loading borrower…'
@@ -2012,10 +2116,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             // 2026-07-16/24 (Undo Approve / Undo Activate, user request): MIS-only, matching the
             // backend's requireRole('MIS') gate — a narrower tier than canCreateLoanAccount
             // (ORIGINATION_ROLES), same reasoning as Reverse Payment below.
-            const canUndoApprove = currentAccount.roles.includes('MIS') && loan.status === 'APPROVED';
-            const canUndoActivate = currentAccount.roles.includes('MIS') && loan.status === 'ACTIVE';
+            const canUndoApprove = hasPermission('loan_account.undo_approve') && loan.status === 'APPROVED';
+            const canUndoActivate = hasPermission('loan_account.undo_activate') && loan.status === 'ACTIVE';
+            // 2026-08-07 (Undo Restructure / Undo Adjustment, user-confirmed): separate,
+            // independently-grantable permissions from restructure/adjust themselves - gated the
+            // same way as undo_approve/undo_activate above, keyed off the OLD loan's closed status.
+            const canUndoRestructure = hasPermission('loan_account.undo_restructure') && loan.status === 'CLOSED_RESTRUCTURED';
+            const canUndoAdjust = hasPermission('loan_account.undo_adjust') && loan.status === 'CLOSED_ADJUSTED';
             const canEdit = canCreateLoanAccount && loan.status === 'PENDING_APPROVAL';
-            const hasAnySecondaryAction = canUndoApprove || canUndoActivate || canRestructure || canAdjust || canEdit;
+            const hasAnySecondaryAction =
+              canUndoApprove || canUndoActivate || canUndoRestructure || canUndoAdjust || canRestructure || canAdjust || canEdit;
             if (!hasAnySecondaryAction) return null;
             return (
               <DropdownMenu>
@@ -2036,6 +2146,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       Undo Disburse
                     </DropdownMenuItem>
                   )}
+                  {canUndoRestructure && (
+                    <DropdownMenuItem onSelect={() => openConfirm('UNDO_RESTRUCTURE')}>Undo Restructure</DropdownMenuItem>
+                  )}
+                  {canUndoAdjust && <DropdownMenuItem onSelect={() => openConfirm('UNDO_ADJUST')}>Undo Loan Adjustment</DropdownMenuItem>}
                   {canRestructure && <DropdownMenuItem onSelect={openRestructureConfirm}>Restructure</DropdownMenuItem>}
                   {canAdjust && <DropdownMenuItem onSelect={openAdjustConfirm}>Loan Adjustment</DropdownMenuItem>}
                 </DropdownMenuContent>
@@ -2151,21 +2265,50 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       <RiskAssessmentCard loanId={loan.id} />
 
       <Card>
-        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3 pt-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
+        <CardContent className="pt-6">
           {/* Not yet Activated - every balance column is genuinely 0 only because the amortization
               schedule hasn't been generated yet, not because there's no obligation. Showing "—"
               here avoids that reading as "nothing owed"/"fully paid" for a loan that hasn't
               started. */}
-          <MiniStat label="Collections Balance" value={notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))} emphasize />
-          <MiniStat label="Accounting Balance" value={notYetActivated ? '—' : formatPeso(num(loan.accountingBalance))} emphasize />
-          <MiniStat label="Principal" value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))} />
-          <MiniStat label="Interest" value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))} />
-          <MiniStat label="Penalty" value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))} />
-          <MiniStat label="Fees" value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))} />
-          <MiniStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
-          <MiniStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
-          <MiniStat label="Installments" value={String(loan.installmentCount)} />
-          <MiniStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Collections Balance</p>
+          <p className="mb-5 text-3xl font-semibold tracking-tight tabular-nums">
+            {notYetActivated ? '—' : formatPeso(num(loan.collectionsBalance))}
+          </p>
+
+          <div className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-border sm:grid-cols-4">
+            <BalanceBreakdownItem
+              icon={Coins}
+              label="Principal"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.principalBalance))}
+              accentClassName="border-l-blue-500"
+            />
+            <BalanceBreakdownItem
+              icon={Percent}
+              label="Interest"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.interestBalance))}
+              accentClassName="border-l-teal-500"
+            />
+            <BalanceBreakdownItem
+              icon={AlertTriangle}
+              label="Penalty"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.penaltyBalance))}
+              accentClassName="border-l-destructive"
+              valueClassName={!notYetActivated && num(loan.balances.penaltyBalance) > 0 ? 'text-destructive' : undefined}
+            />
+            <BalanceBreakdownItem
+              icon={Receipt}
+              label="Fees"
+              value={notYetActivated ? '—' : formatPeso(num(loan.balances.feesBalance))}
+              accentClassName="border-l-border"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-x-8 gap-y-2 border-t pt-3">
+            <LoanTermStat label="Principal Amount" value={formatPeso(num(loan.principalAmount))} />
+            <LoanTermStat label="Interest Rate" value={formatPercentage(loan.interestRate)} />
+            <LoanTermStat label="Installments" value={String(loan.installmentCount)} />
+            <LoanTermStat label="First Repayment" value={formatDate(loan.firstRepaymentDate)} />
+          </div>
         </CardContent>
       </Card>
 
@@ -2220,41 +2363,51 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               ) : installments.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No repayment schedule found.</p>
               ) : (
-                <Table>
+                <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
                   <TableHeader>
+                    <TableRow>
+                      <TableCell colSpan={2} />
+                      <TableCell colSpan={5} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Expected
+                      </TableCell>
+                      <TableCell colSpan={6} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Paid
+                      </TableCell>
+                      <TableCell colSpan={5} className="border-l text-center font-medium text-muted-foreground">
+                        Amount Due
+                      </TableCell>
+                      <TableCell rowSpan={2} className="align-bottom font-medium text-muted-foreground">
+                        Status
+                      </TableCell>
+                      {canManageInstallments && (
+                        <TableCell rowSpan={2} className="border-l text-center align-bottom font-medium text-muted-foreground">
+                          Actions
+                        </TableCell>
+                      )}
+                    </TableRow>
                     <TableRow>
                       <TableCell className="font-medium text-muted-foreground">#</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Principal Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Interest Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Fees Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Penalty Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Total Due</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Paid</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Remaining</TableCell>
-                      <TableCell className="font-medium text-muted-foreground">Status</TableCell>
-                      <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
-                      {canManageInstallments && <TableCell className="text-center font-medium text-muted-foreground">Actions</TableCell>}
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Paid Date</TableCell>
+                      <TableCell className="border-l text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Fees</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Penalty</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Total</TableCell>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(() => {
-                      // "Balance" (last column) - the SCHEDULED remaining obligation after this
-                      // installment: total obligation across the whole schedule minus every
-                      // installment's DUE amount through this row (not what's actually been paid).
-                      // Deliberately due-based, not paid-based (2026-07-16 bug report comparing
-                      // this against the Activation preview's own Balance column): a paid-based
-                      // running total stays pinned at the full totalObligation on every single row
-                      // until a payment is actually recorded, instead of declining installment by
-                      // installment the way an amortization schedule always should - due amounts
-                      // are fixed at schedule-generation time and don't depend on payment status,
-                      // so this now declines smoothly regardless of what's been paid so far,
-                      // matching the preview's own (also due-based) endingPrincipal column.
-                      const totalObligation = installments.reduce((sum, i) => {
-                        const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
-                        return sum + num(i.due.principal) + num(i.due.interest) + num(i.currentFeesDue) + penalty;
-                      }, 0);
-                      let cumulativeDue = 0;
                       return installments.map((i) => {
                         const late = wasInstallmentLate(i);
                         // ADR-050 / CALCULATION_ENGINE_SPEC.md §12: currentPenaltyOwed is a live "as
@@ -2267,68 +2420,86 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         // concept for fees the way penalty has, so no separate isLiveFees flag needed).
                         const feesDisplay = num(i.currentFeesDue);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
-                        const rowDue = num(i.due.principal) + num(i.due.interest) + num(i.due.fees) + penaltyDisplay;
-                        cumulativeDue += rowDue;
-                        const balance = Math.max(0, totalObligation - cumulativeDue);
                         const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
                         const canAdjustFeesThisRow = i.status !== 'PAID' && num(i.paid.fees) === 0;
+                        // 2026-08-04 (user request): "Amount Expected/Paid/Due" grouped layout, per
+                        // component - matches the legacy SDevTech schedule view's own convention
+                        // (same source of truth, same figures, just broken out instead of summed).
+                        const expectedTotal = num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay;
+                        const rowRemaining = Math.max(0, expectedTotal - rowPaid);
+                        const dueP = Math.max(0, num(i.due.principal) - num(i.paid.principal));
+                        const dueI = Math.max(0, num(i.due.interest) - num(i.paid.interest));
+                        const dueF = Math.max(0, feesDisplay - num(i.paid.fees));
+                        const duePen = Math.max(0, penaltyDisplay - num(i.paid.penalty));
                         return (
                           <TableRow key={i.id} className={late ? 'bg-destructive/5' : undefined}>
                             <TableCell>{i.installmentNumber}</TableCell>
                             <TableCell>{formatDate(i.dueDate)}</TableCell>
-                            <TableCell className="text-right">{formatPeso(num(i.due.principal))}</TableCell>
-                            <TableCell className="text-right">{formatPeso(num(i.due.interest))}</TableCell>
+                            <TableCell className="border-l text-right">
+                              {num(i.due.principal) > 0 ? formatPeso(num(i.due.principal)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right">{num(i.due.interest) > 0 ? formatPeso(num(i.due.interest)) : '—'}</TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.feesOverride ? (
                                 <div className="flex flex-col items-end">
-                                  <span>{formatPeso(feesDisplay)}</span>
+                                  <span>{feesDisplay > 0 ? formatPeso(feesDisplay) : '—'}</span>
                                   <span className="text-[10px] text-primary" title={i.feesOverride.reason}>
                                     Adjusted by {i.feesOverride.byName ?? 'Accounting'}
                                   </span>
                                 </div>
-                              ) : (
+                              ) : feesDisplay > 0 ? (
                                 formatPeso(feesDisplay)
+                              ) : (
+                                '—'
                               )}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">
                               {i.penaltyOverride ? (
                                 <div className="flex flex-col items-end">
-                                  <span>{formatPeso(penaltyDisplay)}</span>
+                                  <span>{penaltyDisplay > 0 ? formatPeso(penaltyDisplay) : '—'}</span>
                                   <span className="text-[10px] text-primary" title={i.penaltyOverride.reason}>
                                     Reduced by {i.penaltyOverride.byName ?? 'Accounting'}
                                   </span>
                                 </div>
-                              ) : (
+                              ) : penaltyDisplay > 0 ? (
                                 <>
                                   {formatPeso(penaltyDisplay)}
-                                  {i.isLivePenalty && penaltyDisplay > 0 && (
+                                  {i.isLivePenalty && (
                                     <span className="ml-1 text-[10px] text-muted-foreground/70" title="Live penalty, computed as of today (ADR-050)">
                                       (as of today)
                                     </span>
                                   )}
                                 </>
+                              ) : (
+                                '—'
                               )}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatPeso(num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay)}
+                              {expectedTotal > 0 ? formatPeso(expectedTotal) : '—'}
                             </TableCell>
-                            <TableCell className="text-right">{formatPeso(rowPaid)}</TableCell>
-                            {(() => {
-                              const rowRemaining = Math.max(
-                                0,
-                                num(i.due.principal) + num(i.due.interest) + feesDisplay + penaltyDisplay - rowPaid,
-                              );
-                              return (
-                                <TableCell
-                                  className={cn(
-                                    'text-right',
-                                    rowRemaining > 0 ? 'font-medium text-warning' : 'text-muted-foreground',
-                                  )}
-                                >
-                                  {formatPeso(rowRemaining)}
-                                </TableCell>
-                              );
-                            })()}
+                            <TableCell className="border-l text-right text-muted-foreground">
+                              {num(i.paid.principal) > 0 ? formatPeso(num(i.paid.principal)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.interest) > 0 ? formatPeso(num(i.paid.interest)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.fees) > 0 ? formatPeso(num(i.paid.fees)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {num(i.paid.penalty) > 0 ? formatPeso(num(i.paid.penalty)) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">{rowPaid > 0 ? formatPeso(rowPaid) : '—'}</TableCell>
+                            <TableCell className="text-muted-foreground">{i.lastPaidAt ? formatDate(i.lastPaidAt) : '—'}</TableCell>
+                            <TableCell className="border-l text-right">{dueP > 0 ? formatPeso(dueP) : '—'}</TableCell>
+                            <TableCell className="text-right">{dueI > 0 ? formatPeso(dueI) : '—'}</TableCell>
+                            <TableCell className="text-right">{dueF > 0 ? formatPeso(dueF) : '—'}</TableCell>
+                            <TableCell className="text-right">{duePen > 0 ? formatPeso(duePen) : '—'}</TableCell>
+                            <TableCell
+                              className={cn('text-right font-medium', rowRemaining > 0 ? 'text-warning' : 'text-muted-foreground')}
+                            >
+                              {rowRemaining > 0 ? formatPeso(rowRemaining) : '—'}
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1.5">
                                 <InstallmentStatusBadge status={i.status} />
@@ -2339,9 +2510,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-right font-medium">{formatPeso(balance)}</TableCell>
                             {canManageInstallments && (
-                              <TableCell className="text-center">
+                              <TableCell className="border-l text-center">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
@@ -2373,7 +2543,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     })()}
                     <TableRow className="border-t-2 font-semibold">
                       <TableCell colSpan={2}>Total</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="border-l text-right">
                         {formatPeso(installments.reduce((sum, i) => sum + num(i.due.principal), 0))}
                       </TableCell>
                       <TableCell className="text-right">
@@ -2398,12 +2568,42 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           }, 0),
                         )}
                       </TableCell>
+                      <TableCell className="border-l text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.principal), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.interest), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.fees), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + num(i.paid.penalty), 0))}
+                      </TableCell>
                       <TableCell className="text-right">
                         {formatPeso(
                           installments.reduce(
                             (sum, i) => sum + num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty),
                             0,
                           ),
+                        )}
+                      </TableCell>
+                      <TableCell />
+                      <TableCell className="border-l text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.due.principal) - num(i.paid.principal)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.due.interest) - num(i.paid.interest)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(installments.reduce((sum, i) => sum + Math.max(0, num(i.currentFeesDue) - num(i.paid.fees)), 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(
+                          installments.reduce((sum, i) => {
+                            const penalty = i.currentPenaltyOwed !== null ? num(i.currentPenaltyOwed) : num(i.due.penalty);
+                            return sum + Math.max(0, penalty - num(i.paid.penalty));
+                          }, 0),
                         )}
                       </TableCell>
                       <TableCell className="text-right">
@@ -2416,7 +2616,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           }, 0),
                         )}
                       </TableCell>
-                      <TableCell />
                       <TableCell />
                       {canManageInstallments && <TableCell />}
                     </TableRow>
@@ -2434,7 +2633,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               ) : paymentHistoryRows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">No transactions recorded yet.</p>
               ) : (
-                <Table>
+                <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
                   <TableHeader>
                     <TableRow>
                       <TableCell className="w-8" />
@@ -2579,7 +2778,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           // ADR-051 (2026-07-12): loan document generation — Disclosure Statement, Promissory
           // Note, and other legal documents applicable to this loan's product, available once
           // APPROVED.
-          documents: (
+          // 2026-08-06 (user-reported): the whole card is now hidden, not just its inner content,
+          // when the signed-in role lacks `document.generate` outright - previously it stayed
+          // visible showing "Available once this loan is approved," which was misleading (and
+          // still showed the section to a role that will never be allowed to use it) when the
+          // real reason was the permission, not the loan's status. A role that DOES have the
+          // permission but is viewing a not-yet-approved loan still sees that placeholder, since
+          // that case is genuinely "not yet, but will be."
+          documents: !canGenerateDocumentsPermission ? null : (
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -2677,26 +2883,28 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               coBorrowerName={coBorrower?.fullName}
               borrowerEmail={borrower?.email ?? undefined}
               coBorrowerEmail={coBorrower?.emailAddress ?? undefined}
-              canSend={canGenerateDocuments}
+              canSend={canSendForSigning}
             />
           ),
           // ADR-052 (2026-07-19): Statement of Account — a separate, on-demand collection
           // document, distinct from the required/conditional Documents above (ADR-051 §1).
-          soa: (
+          // 2026-08-06 (user-reported, same fix as Documents above): hidden entirely, not just
+          // its inner content, when the signed-in role lacks `statement_of_account.generate`.
+          soa: !canGenerateStatementOfAccountPermission ? null : (
       <Card>
         <CardHeader className="flex-row items-start justify-between space-y-0">
           <div>
             <CardTitle>Statement of Account</CardTitle>
             <CardDescription>Generate a Statement of Account PDF for this loan, as of a chosen date.</CardDescription>
           </div>
-          {canGenerateDocuments && (
+          {canGenerateStatementOfAccount && (
             <Button size="sm" onClick={() => setSoaDialogOpen(true)}>
               <Receipt className="mr-2 h-4 w-4" /> Create SOA
             </Button>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
-          {!canGenerateDocuments ? (
+          {!documentsEligibleStatus ? (
             <p className="py-4 text-center text-sm text-muted-foreground">Available once this loan is approved.</p>
           ) : statementsQuery.isLoading ? (
             <p className="py-4 text-center text-sm text-muted-foreground">Loading…</p>
@@ -2709,15 +2917,27 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 </div>
               )}
               <ul className="space-y-2">
-                {(statementsQuery.data?.items ?? []).map((item) => (
+                {(statementsQuery.data?.items ?? []).map((item) => {
+                  // 2026-08-06 (user-reported): "Penalty {range}" / "Accrued Interest as of {date}"
+                  // only make sense when that component is actually non-zero - same reasoning as
+                  // the printed .docx's date fields (a non-matured loan has no accrued interest at
+                  // all, so a date next to it read as if some had accrued).
+                  const summaryParts: string[] = [];
+                  if (num(item.pastDuePenalty) > 0) {
+                    summaryParts.push(`Penalty ${formatDate(item.penaltyFromDate)} – ${formatDate(item.penaltyToDate)}`);
+                  }
+                  if (num(item.accruedInterest) > 0) {
+                    summaryParts.push(`Accrued Interest as of ${formatDate(item.accruedInterestAsOfDate)}`);
+                  }
+                  return (
                   <li key={item.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
                     <div>
                       <p className="text-sm font-medium">{item.soaNumber} · {formatPeso(num(item.totalAmountDue))}</p>
+                      {summaryParts.length > 0 && (
+                        <p className="text-xs text-muted-foreground">{summaryParts.join(' · ')}</p>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Penalty {formatDate(item.penaltyFromDate)} – {formatDate(item.penaltyToDate)} · Accrued Interest as of {formatDate(item.accruedInterestAsOfDate)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Generated by {item.generatedByName} · {formatDate(item.generatedAt)}
+                        Generated by {item.generatedByName} · {formatDateTime(item.generatedAt)}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -2745,7 +2965,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       </Button>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
                 {(statementsQuery.data?.items ?? []).length === 0 && (
                   <p className="py-4 text-center text-sm text-muted-foreground">No Statement of Account generated yet for this loan.</p>
                 )}
@@ -2761,8 +2982,15 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         // so it doesn't need to live inside the reorderable cardsById map above - it's tied to the
         // "soa" card's own state/button regardless of where "soa" lands in the current order.
         const soaDialog = (
-      <Dialog open={soaDialogOpen} onOpenChange={(open) => { setSoaDialogOpen(open); if (!open) setSoaError(null); }}>
-        <DialogContent>
+      <Dialog
+        open={soaDialogOpen}
+        onOpenChange={(open) => {
+          setSoaDialogOpen(open);
+          if (!open) setSoaError(null);
+          else requestAnimationFrame(updateSoaDialogScrollHint);
+        }}
+      >
+        <DialogContent ref={soaDialogScrollRef} onScroll={updateSoaDialogScrollHint}>
           <DialogHeader>
             <DialogTitle>Create Statement of Account</DialogTitle>
             <DialogDescription>Account details are filled in automatically. Review the figures below before generating.</DialogDescription>
@@ -2933,6 +3161,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               <p className="text-lg font-medium text-primary">{formatPeso(soaPreview.totalAmountDue)}</p>
             </div>
           </div>
+          {soaDialogHasMoreBelow && (
+            <div className="pointer-events-none sticky bottom-0 -mx-6 -mt-4 flex h-10 items-end justify-center bg-gradient-to-b from-transparent to-background">
+              <span className="mb-1.5 flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                <ChevronDown className="h-3 w-3" /> Scroll more
+              </span>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSoaDialogOpen(false)}>
               Cancel
@@ -3186,7 +3421,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   ? 'disbursement'
                   : confirmAction === 'UNDO_APPROVE'
                     ? 'undo approve'
-                    : 'undo disburse'}
+                    : confirmAction === 'UNDO_ACTIVATE'
+                      ? 'undo disburse'
+                      : confirmAction === 'UNDO_RESTRUCTURE'
+                        ? 'undo restructure'
+                        : 'undo loan adjustment'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === 'APPROVE' &&
@@ -3197,6 +3436,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 `This will move ${loan.loanCode} back from Approved to Pending Approval, so its term/amount can be corrected before approving again.`}
               {confirmAction === 'UNDO_ACTIVATE' &&
                 `This will move ${loan.loanCode} back from Active to Approved — its repayment schedule will be deleted and balances reset to zero. Only allowed while no payment or penalty/fee adjustment has been recorded yet. The original disbursement stays in Payment History as a record of what happened.`}
+              {confirmAction === 'UNDO_RESTRUCTURE' &&
+                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was restructured into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this restructure record will be gone for good.`}
+              {confirmAction === 'UNDO_ADJUST' &&
+                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was adjusted into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this adjustment record will be gone for good.`}
             </DialogDescription>
           </DialogHeader>
           {confirmAction === 'ACTIVATE' && (
@@ -3295,7 +3538,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <DialogTitle>Adjust penalty</DialogTitle>
             <DialogDescription>
               {reduceTarget &&
-                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Can't go above what the penalty formula would produce today. Approved outside this system; the reason below records that reference.`}
+                `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Approved outside this system; the reason below records that reference.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -3677,7 +3920,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <DialogHeader>
             <DialogTitle>Record Payment</DialogTitle>
             <DialogDescription>
-              {loan.loanCode} - {borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Loading borrower…'}
+              {loan.loanCode} - {borrower ? borrower.fullName : 'Loading borrower…'}
             </DialogDescription>
           </DialogHeader>
           {recordPaymentOpen && borrower && (

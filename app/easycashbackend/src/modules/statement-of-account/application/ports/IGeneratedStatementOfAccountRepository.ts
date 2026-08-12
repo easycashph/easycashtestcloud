@@ -9,6 +9,11 @@ export interface GeneratedStatementOfAccountView {
   penaltyFromDate: Date;
   penaltyToDate: Date;
   accruedInterestAsOfDate: Date;
+  /** 2026-08-06 (user-reported): lets the frontend hide "Penalty {range}" / "Accrued Interest as
+   * of {date}" whenever the respective amount is genuinely zero (e.g. a non-matured loan has no
+   * accrued interest) - same treatment already applied to the printed .docx's date fields. */
+  pastDuePenalty: string;
+  accruedInterest: string;
   totalAmountDue: string;
   generatedByUserId: string;
   generatedByName: string;

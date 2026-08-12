@@ -1,16 +1,18 @@
 import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { AuditLogController, type AuditLogControllerDeps } from './auditLogController';
 
-/** Mirrors the mock UI's `canViewActivityLogs` — MIS only. No branch dimension exists on AuditLog, so this is a single global gate, not per-branch scoping. */
+/** Mirrors the mock UI's `canViewActivityLogs` — gated by `audit_log.read` (Roles & Permissions
+ * feature), MIS-only by default. No branch dimension exists on AuditLog, so this is a single
+ * global gate, not per-branch scoping. */
 export function createAuditLogRouter(deps: AuditLogControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new AuditLogController(deps);
   const requireAuth = createRequireAuth(tokenService);
 
-  router.get('/audit-logs', requireAuth, requireRole('MIS'), controller.list);
+  router.get('/audit-logs', requireAuth, requirePermission('audit_log.read'), controller.list);
 
   /**
    * Any authenticated user may see a stripped-down "who did what" feed (Dashboard's Recent System

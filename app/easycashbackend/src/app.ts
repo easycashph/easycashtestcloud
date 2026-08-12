@@ -1,5 +1,6 @@
 import express, { type Express } from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
@@ -14,6 +15,7 @@ import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/Ref
 import { LogoutUseCase } from '@modules/identity/application/use-cases/LogoutUseCase';
 import { LogoutAllUseCase } from '@modules/identity/application/use-cases/LogoutAllUseCase';
 import { GetCurrentUserUseCase } from '@modules/identity/application/use-cases/GetCurrentUserUseCase';
+import { PrismaPermissionCodesRepository } from '@modules/identity/infrastructure/PrismaPermissionCodesRepository';
 import { ListSessionsUseCase } from '@modules/identity/application/use-cases/ListSessionsUseCase';
 import { RevokeSessionUseCase } from '@modules/identity/application/use-cases/RevokeSessionUseCase';
 import { VerifyLoginOtpUseCase } from '@modules/identity/application/use-cases/VerifyLoginOtpUseCase';
@@ -56,6 +58,7 @@ import { ListPortalLoanAccountsUseCase } from '@modules/client-portal/applicatio
 import { ListPortalLoanAccountInstallmentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
 import { PrismaChatRepository } from '@modules/chat/infrastructure/PrismaChatRepository';
 import { StartOrResumePortalChatUseCase } from '@modules/chat/application/use-cases/StartOrResumePortalChatUseCase';
+import { GetActivePortalChatUseCase } from '@modules/chat/application/use-cases/GetActivePortalChatUseCase';
 import { GetPortalChatUseCase } from '@modules/chat/application/use-cases/GetPortalChatUseCase';
 import { SendPortalChatMessageUseCase } from '@modules/chat/application/use-cases/SendPortalChatMessageUseCase';
 import { createPortalChatRouter } from '@modules/chat/interface/http/portalChatRouter';
@@ -90,6 +93,9 @@ import { createPortalSecurityRouter } from '@modules/client-portal/interface/htt
 import { ChangePortalPasswordUseCase } from '@modules/client-portal/application/use-cases/ChangePortalPasswordUseCase';
 import { ChangePortalEmailUseCase } from '@modules/client-portal/application/use-cases/ChangePortalEmailUseCase';
 import { createPortalPsgcRouter } from '@modules/client-portal/interface/http/portalPsgcRouter';
+import { createExternalNewsLinkRouter } from '@modules/finance-news/interface/http/externalNewsLinkRouter';
+import { ListExternalNewsLinksUseCase } from '@modules/finance-news/application/use-cases/ListExternalNewsLinksUseCase';
+import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastructure/PrismaExternalNewsLinkRepository';
 import { PortalOtpSender } from '@modules/client-portal/infrastructure/PortalOtpSender';
 import { PrismaPortalAccountRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountRepository';
 import { PrismaPortalAccountChallengeRepository } from '@modules/client-portal/infrastructure/PrismaPortalAccountChallengeRepository';
@@ -102,6 +108,15 @@ import { MarkAllPortalNotificationsReadUseCase } from '@modules/client-portal/ap
 import { JwtPortalTokenService } from '@modules/client-portal/infrastructure/JwtPortalTokenService';
 import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerRouter';
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
+import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
+import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
+import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
+import { RequestPortalAccountDeletionUseCase } from '@modules/client-portal/application/use-cases/RequestPortalAccountDeletionUseCase';
+import { GetPortalNextPaymentDueUseCase } from '@modules/client-portal/application/use-cases/GetPortalNextPaymentDueUseCase';
+import { ListPortalRecentPaymentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalRecentPaymentsUseCase';
+import { ListPortalStatementsOfAccountUseCase } from '@modules/client-portal/application/use-cases/ListPortalStatementsOfAccountUseCase';
+import { DownloadPortalStatementOfAccountUseCase } from '@modules/client-portal/application/use-cases/DownloadPortalStatementOfAccountUseCase';
+import { GetPortalAssignedLoanOfficerUseCase } from '@modules/client-portal/application/use-cases/GetPortalAssignedLoanOfficerUseCase';
 import { GetBorrowerUseCase } from '@modules/borrower/application/use-cases/GetBorrowerUseCase';
 import { ListBorrowersUseCase } from '@modules/borrower/application/use-cases/ListBorrowersUseCase';
 import { UpdateBorrowerUseCase } from '@modules/borrower/application/use-cases/UpdateBorrowerUseCase';
@@ -138,6 +153,8 @@ import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cas
 import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
+import { UndoRestructureLoanUseCase } from '@modules/loan-account/application/use-cases/UndoRestructureLoanUseCase';
+import { UndoAdjustLoanUseCase } from '@modules/loan-account/application/use-cases/UndoAdjustLoanUseCase';
 import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
 import { AdjustLoanUseCase } from '@modules/loan-account/application/use-cases/AdjustLoanUseCase';
 import { GetLoanAdjustmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanAdjustmentUseCase';
@@ -181,6 +198,7 @@ import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
+import { SetMitigationDetailsUseCase } from '@modules/loan-application/application/use-cases/SetMitigationDetailsUseCase';
 import { GenerateAiDocumentReviewUseCase } from '@modules/loan-application/application/use-cases/GenerateAiDocumentReviewUseCase';
 import { TagLoanApplicationPreApprovalUseCase } from '@modules/loan-application/application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import { UpdateLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/UpdateLoanApplicationUseCase';
@@ -214,6 +232,11 @@ import { ListRoleClassesUseCase } from '@modules/role-class/application/use-case
 import { CreateRoleClassUseCase } from '@modules/role-class/application/use-cases/CreateRoleClassUseCase';
 import { UpdateRoleClassUseCase } from '@modules/role-class/application/use-cases/UpdateRoleClassUseCase';
 import { DeleteRoleClassUseCase } from '@modules/role-class/application/use-cases/DeleteRoleClassUseCase';
+import { createAccessControlRouter } from '@modules/access-control/interface/http/AccessControlRouter';
+import { AccessControlController } from '@modules/access-control/interface/http/AccessControlController';
+import { PrismaAccessControlRepository } from '@modules/access-control/infrastructure/PrismaAccessControlRepository';
+import { ListRolesAndPermissionsUseCase } from '@modules/access-control/application/use-cases/ListRolesAndPermissionsUseCase';
+import { UpdateRolePermissionsUseCase } from '@modules/access-control/application/use-cases/UpdateRolePermissionsUseCase';
 import { createProductTypeLabelRouter } from '@modules/product-type-label/interface/http/ProductTypeLabelRouter';
 import { ProductTypeLabelController } from '@modules/product-type-label/interface/http/ProductTypeLabelController';
 import { ListProductTypeLabelsUseCase } from '@modules/product-type-label/application/use-cases/ListProductTypeLabelsUseCase';
@@ -270,6 +293,11 @@ import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/
 import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
 import { ListLoanDocumentsUseCase } from '@modules/loan-document/application/use-cases/ListLoanDocumentsUseCase';
 import { GetGeneratedLoanDocumentFileUseCase } from '@modules/loan-document/application/use-cases/GetGeneratedLoanDocumentFileUseCase';
+import { createDocumentTemplateAdminRouter } from '@modules/loan-document/interface/http/documentTemplateAdminRouter';
+import { ListDocumentTemplatesForAdminUseCase } from '@modules/loan-document/application/use-cases/ListDocumentTemplatesForAdminUseCase';
+import { UpdateDocumentTemplateRequiredUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateRequiredUseCase';
+import { SetDocumentTemplateProductMappingsUseCase } from '@modules/loan-document/application/use-cases/SetDocumentTemplateProductMappingsUseCase';
+import { UpdateDocumentTemplateSignatureRequirementsUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateSignatureRequirementsUseCase';
 import { PrismaDocumentTemplateRepository } from '@modules/loan-document/infrastructure/PrismaDocumentTemplateRepository';
 import { PrismaGeneratedLoanDocumentRepository } from '@modules/loan-document/infrastructure/PrismaGeneratedLoanDocumentRepository';
 import { LoanDocumentMergeDataResolver } from '@modules/loan-document/infrastructure/LoanDocumentMergeDataResolver';
@@ -320,6 +348,12 @@ export function createApp(): Express {
 
   // Secure-by-default baseline (CLAUDE.md §Security).
   app.use(helmet());
+  // Performance (2026-08-06 user request): gzip/brotli-negotiated response compression at the
+  // origin - previously left entirely to whatever sits in front (Cloudflare Tunnel), so a direct
+  // hit (local dev, internal testing, or if the tunnel is ever bypassed) shipped every JSON/HTML
+  // response uncompressed. `compression()`'s default threshold (1kb) already skips tiny responses
+  // where the gzip framing overhead isn't worth it.
+  app.use(compression());
   // CORS_ORIGIN may be a comma-separated list (e.g. multiple local dev ports
   // running side by side) — split rather than assume a single origin.
   const corsOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
@@ -412,6 +446,7 @@ export function createApp(): Express {
   // Audit finding H-01: env.JWT_REFRESH_TTL_MS (pre-parsed, fail-fast in
   // env.ts) is now actually threaded through, instead of the use cases'
   // internal hardcoded fallback constants silently taking over.
+  const permissionCodesRepository = new PrismaPermissionCodesRepository();
   const authRouter = createAuthRouter(
     {
       loginUseCase: new LoginUseCase({
@@ -423,6 +458,7 @@ export function createApp(): Express {
         twoFactorChallengeRepository,
         trustedDeviceRepository,
         otpSender,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       refreshTokenUseCase: new RefreshTokenUseCase({
@@ -433,7 +469,7 @@ export function createApp(): Express {
       }),
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
-      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository }),
+      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository, permissionCodesRepository }),
       listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
       revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
       verifyLoginOtpUseCase: new VerifyLoginOtpUseCase({
@@ -443,6 +479,7 @@ export function createApp(): Express {
         auditLogger,
         twoFactorChallengeRepository,
         trustedDeviceRepository,
+        permissionCodesRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({
@@ -481,6 +518,10 @@ export function createApp(): Express {
   // separate auth realm from the staff identity module above (own JwtPortalTokenService/
   // PORTAL_JWT_SECRET, own PortalAccount/PortalAccountChallenge tables) - only passwordHasher and
   // otpSender are shared, since both are already generic, stateless infrastructure. ---
+  // Hoisted above this section's own wiring (2026-08-06, Bind existing Client data to Portal) -
+  // VerifySignUpUseCase below needs it for signup auto-bind-by-email, ahead of the borrower
+  // module's own wiring section (its canonical home) further down this file.
+  const borrowerRepository = new PrismaBorrowerRepository();
   const portalAccountRepository = new PrismaPortalAccountRepository();
   const portalAccountChallengeRepository = new PrismaPortalAccountChallengeRepository();
   const portalTokenService = new JwtPortalTokenService();
@@ -513,7 +554,7 @@ export function createApp(): Express {
   const portalAuthRouter = createPortalAuthRouter(
     {
       signUpUseCase: new SignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, passwordHasher, otpSender: portalOtpSender }),
-      verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository }),
+      verifySignUpUseCase: new VerifySignUpUseCase({ portalAccountRepository, portalAccountChallengeRepository, borrowerRepository, auditLogger }),
       resendSignUpOtpUseCase: new ResendSignUpOtpUseCase({ portalAccountRepository, portalAccountChallengeRepository, otpSender: portalOtpSender }),
       portalLoginUseCase: new PortalLoginUseCase({
         portalAccountRepository,
@@ -549,6 +590,15 @@ export function createApp(): Express {
   const roleClassRouter = createRoleClassRouter(roleClassController, tokenService);
   app.use('/api/v1', roleClassRouter);
 
+  // --- access-control module wiring: Roles & Permissions screen (Administration > System, MIS-only) ---
+  const accessControlRepository = new PrismaAccessControlRepository();
+  const accessControlController = new AccessControlController({
+    listRolesAndPermissionsUseCase: new ListRolesAndPermissionsUseCase({ accessControlRepository }),
+    updateRolePermissionsUseCase: new UpdateRolePermissionsUseCase({ accessControlRepository, auditLogger }),
+  });
+  const accessControlRouter = createAccessControlRouter(accessControlController, tokenService);
+  app.use('/api/v1', accessControlRouter);
+
   // --- product-type-label module wiring: renamable display labels for the Loan Products catalog's Product Type groupings ---
   const productTypeLabelRepository = new PrismaProductTypeLabelRepository();
   const productTypeLabelController = new ProductTypeLabelController({
@@ -564,7 +614,8 @@ export function createApp(): Express {
   const profileActivityLogService = new ProfileActivityLogService(profileActivityLogRepository);
 
   // --- borrower module wiring (Milestone 8: HTTP API layer) ---
-  const borrowerRepository = new PrismaBorrowerRepository();
+  // borrowerRepository is hoisted above the Easycash Portal wiring section - see that section's own
+  // comment for why.
   const coBorrowerRepository = new PrismaCoBorrowerRepository();
   // Hoisted above the loan-account module's own wiring section below (their canonical home) since
   // the borrower risk-summary use case, wired here, needs them too — same instances, not duplicated.
@@ -597,6 +648,16 @@ export function createApp(): Express {
         repaymentInstallmentRepository: repaymentInstallmentRepositoryForBorrowerRisk,
         riskSummaryService: borrowerRiskSummaryService,
       }),
+      // Bind existing Client data to Portal (2026-08-06) - reuses the same portalAccountRepository/
+      // passwordHasher instances as the Easycash Portal module above.
+      getBorrowerPortalAccountStatusUseCase: new GetBorrowerPortalAccountStatusUseCase({ borrowerRepository, portalAccountRepository }),
+      createPortalAccountForBorrowerUseCase: new CreatePortalAccountForBorrowerUseCase({
+        borrowerRepository,
+        portalAccountRepository,
+        passwordHasher,
+        profileActivityLogService,
+      }),
+      bindPortalAccountToBorrowerUseCase: new BindPortalAccountToBorrowerUseCase({ borrowerRepository, portalAccountRepository, profileActivityLogService }),
     },
     tokenService,
   );
@@ -719,6 +780,19 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
+      // 2026-08-07 (Undo Restructure feature, user-confirmed): same local-repository-instance
+      // precedent as undoActivateLoanUseCase above.
+      undoRestructureLoanUseCase: new UndoRestructureLoanUseCase({
+        loanAccountRepository,
+        loanRestructureRepository,
+        loanTransactionRepository,
+        repaymentInstallmentRepository,
+        penaltyReductionRepository: new PrismaPenaltyReductionRepository(),
+        feeAdjustmentRepository: new PrismaFeeAdjustmentRepository(),
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
       // 2026-07-24 (Loan Adjustment feature, user-confirmed): same local-repository-instance
       // precedent as restructureLoanUseCase above.
       adjustLoanUseCase: new AdjustLoanUseCase({
@@ -732,6 +806,19 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getLoanAdjustmentUseCase: new GetLoanAdjustmentUseCase({ loanAdjustmentRepository }),
+      // 2026-08-07 (Undo Adjustment feature, user-confirmed): same local-repository-instance
+      // precedent as undoRestructureLoanUseCase above.
+      undoAdjustLoanUseCase: new UndoAdjustLoanUseCase({
+        loanAccountRepository,
+        loanAdjustmentRepository,
+        loanTransactionRepository,
+        repaymentInstallmentRepository,
+        penaltyReductionRepository: new PrismaPenaltyReductionRepository(),
+        feeAdjustmentRepository: new PrismaFeeAdjustmentRepository(),
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
       getAccruedInterestUseCase: new GetAccruedInterestUseCase({ loanAccountRepository, repaymentInstallmentRepository, loanProductRepository }),
       idempotencyKeyStore,
     },
@@ -759,12 +846,16 @@ export function createApp(): Express {
     throw new Error(`STORAGE_DRIVER=${env.STORAGE_DRIVER} has no implementation yet — only "local" is supported.`);
   }
   const loanDocumentFileStorage = new SharedLocalFileStorage(env.STORAGE_LOCAL_PATH);
+  // 2026-08-09 (Quit Claim auto-fill, user request): local instance since loanApplicationRepository
+  // itself isn't declared until later in this file (loan-application module wiring) - same
+  // "dedicated local repository instance" precedent used elsewhere in this file.
   const mergeDataResolver = new LoanDocumentMergeDataResolver({
     loanAccountRepository,
     borrowerRepository,
     coBorrowerRepository,
     loanProductRepository,
     repaymentInstallmentRepository,
+    loanApplicationRepository: new PrismaLoanApplicationRepository(),
     prisma,
   });
   const documentFiller = new DocxtemplaterDocumentFiller();
@@ -798,6 +889,31 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', loanDocumentRouter);
+
+  // 2026-08-09 (Document Templates admin config, user request): lets MIS configure required/
+  // conditional status and per-product mapping without a developer re-editing prisma/seed.ts.
+  // Reuses the same documentTemplateRepository/loanProductRepository/unitOfWork instances wired
+  // above.
+  const documentTemplateAdminRouter = createDocumentTemplateAdminRouter(
+    {
+      listDocumentTemplatesForAdminUseCase: new ListDocumentTemplatesForAdminUseCase({
+        documentTemplateRepository,
+        loanProductRepository,
+      }),
+      updateDocumentTemplateRequiredUseCase: new UpdateDocumentTemplateRequiredUseCase({
+        documentTemplateRepository,
+        unitOfWork,
+      }),
+      setDocumentTemplateProductMappingsUseCase: new SetDocumentTemplateProductMappingsUseCase({
+        documentTemplateRepository,
+      }),
+      updateDocumentTemplateSignatureRequirementsUseCase: new UpdateDocumentTemplateSignatureRequirementsUseCase({
+        documentTemplateRepository,
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', documentTemplateAdminRouter);
 
   // --- loan-signing module wiring (e-signature, 2026-07-22, phase 1: required documents only) ---
   // Reuses documentTemplateRepository/generatedLoanDocumentRepository/loanDocumentFileStorage/
@@ -1088,6 +1204,7 @@ export function createApp(): Express {
       }),
       submitLoanApplicationReviewReportUseCase: new SubmitLoanApplicationReviewReportUseCase({ loanApplicationRepository, auditLogger }),
       setMitigationAccountOwnerUseCase: new SetMitigationAccountOwnerUseCase({ loanApplicationRepository, auditLogger }),
+      setMitigationDetailsUseCase: new SetMitigationDetailsUseCase({ loanApplicationRepository, auditLogger }),
       generateAiDocumentReviewUseCase: new GenerateAiDocumentReviewUseCase({ loanApplicationRepository }),
       tagLoanApplicationPreApprovalUseCase: new TagLoanApplicationPreApprovalUseCase({
         loanApplicationRepository,
@@ -1252,6 +1369,34 @@ export function createApp(): Express {
         loanAccountRepository,
         repaymentInstallmentRepository,
       }),
+      // "Next Payment Due" / "Recent Payments" dashboard widgets (2026-08-06 user request) - reuse
+      // the same loanAccountRepository/repaymentInstallmentRepository/loanTransactionRepository
+      // instances the staff-facing modules already wire above.
+      getPortalNextPaymentDueUseCase: new GetPortalNextPaymentDueUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+      }),
+      listPortalRecentPaymentsUseCase: new ListPortalRecentPaymentsUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        loanTransactionRepository,
+      }),
+      // "My Statement of Account" (2026-08-06 user request) - view/download only, reusing the
+      // same generatedStatementOfAccountRepository/loanDocumentFileStorage instances the
+      // statement-of-account module wires above. No generate capability here - see the use case's
+      // own doc comment for why.
+      listPortalStatementsOfAccountUseCase: new ListPortalStatementsOfAccountUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        generatedStatementOfAccountRepository,
+      }),
+      downloadPortalStatementOfAccountUseCase: new DownloadPortalStatementOfAccountUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        generatedStatementOfAccountRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
     },
     portalTokenService,
   );
@@ -1264,6 +1409,7 @@ export function createApp(): Express {
   const portalChatRouter = createPortalChatRouter(
     {
       startOrResumePortalChatUseCase: new StartOrResumePortalChatUseCase({ chatRepository }),
+      getActivePortalChatUseCase: new GetActivePortalChatUseCase({ chatRepository }),
       getPortalChatUseCase: new GetPortalChatUseCase({ chatRepository }),
       sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
       downloadPortalChatAttachmentUseCase: new DownloadPortalChatAttachmentUseCase({ chatRepository, attachmentRepository, fileStorage }),
@@ -1276,7 +1422,7 @@ export function createApp(): Express {
     {
       listChatQueueUseCase: new ListChatQueueUseCase({ userRepository, chatRepository }),
       listMyClaimedChatConversationsUseCase: new ListMyClaimedChatConversationsUseCase({ chatRepository }),
-      getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository }),
+      getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository }),
       claimChatConversationUseCase: new ClaimChatConversationUseCase({ userRepository, chatRepository }),
       initiateChatTransferUseCase: new InitiateChatTransferUseCase({ userRepository, chatRepository }),
       completeChatTransferUseCase: new CompleteChatTransferUseCase({ userRepository, chatRepository }),
@@ -1288,7 +1434,7 @@ export function createApp(): Express {
       downloadChatAttachmentForStaffUseCase: new DownloadChatAttachmentForStaffUseCase({ userRepository, chatRepository, attachmentRepository, fileStorage }),
       listChatOversightStaffUseCase: new ListChatOversightStaffUseCase({ userRepository }),
       listChatConversationsForStaffUseCase: new ListChatConversationsForStaffUseCase({ userRepository, chatRepository }),
-      getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository }),
+      getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository }),
     },
     tokenService,
   );
@@ -1320,6 +1466,8 @@ export function createApp(): Express {
         updateBorrowerUseCase: new UpdateBorrowerUseCase({ borrowerRepository, profileActivityLogService }),
         getPortalProfileUseCase,
       }),
+      // "Chat with your loan officer" dashboard card (2026-08-06 user request).
+      getPortalAssignedLoanOfficerUseCase: new GetPortalAssignedLoanOfficerUseCase({ portalAccountRepository, borrowerRepository, userRepository }),
     },
     portalTokenService,
   );
@@ -1341,6 +1489,14 @@ export function createApp(): Express {
       disablePortalTwoFactorUseCase: new DisablePortalTwoFactorUseCase({ portalAccountRepository, passwordHasher }),
       listPortalTrustedDevicesUseCase: new ListPortalTrustedDevicesUseCase({ portalTrustedDeviceRepository }),
       revokePortalTrustedDeviceUseCase: new RevokePortalTrustedDeviceUseCase({ portalTrustedDeviceRepository }),
+      // Delete My Portal Account (2026-08-06) - reuses the same loanAccountRepository instance as
+      // the loan-account module's own wiring above.
+      requestPortalAccountDeletionUseCase: new RequestPortalAccountDeletionUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        passwordHasher,
+        auditLogger,
+      }),
     },
     portalTokenService,
   );
@@ -1354,6 +1510,15 @@ export function createApp(): Express {
     portalTokenService,
   );
   app.use('/api/v1/portal', portalPsgcRouter);
+
+  // Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
+  // public, unauthenticated - see externalNewsLinkRouter.ts's own doc comment.
+  const externalNewsLinkRouter = createExternalNewsLinkRouter({
+    listExternalNewsLinksUseCase: new ListExternalNewsLinksUseCase({
+      externalNewsLinkRepository: new PrismaExternalNewsLinkRepository(),
+    }),
+  });
+  app.use('/api/v1/portal', externalNewsLinkRouter);
 
   // --- profile-note module wiring: free-text notes on Borrower/LoanAccount/LoanApplication, same
   // polymorphic ownerType/ownerId shape as the document module above. Renamed from "note"

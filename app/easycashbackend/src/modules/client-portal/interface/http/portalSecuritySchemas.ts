@@ -27,3 +27,9 @@ export const disablePortalTwoFactorSchema = z.object({
   currentPassword: z.string().min(1),
 });
 export type DisablePortalTwoFactorRequestBody = z.infer<typeof disablePortalTwoFactorSchema>;
+
+/** Delete My Portal Account (2026-08-06). */
+export const deletePortalAccountSchema = z.object({
+  currentPassword: z.string().min(1),
+});
+export type DeletePortalAccountRequestBody = z.infer<typeof deletePortalAccountSchema>;

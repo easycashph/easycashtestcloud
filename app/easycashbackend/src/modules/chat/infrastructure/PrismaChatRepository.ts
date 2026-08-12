@@ -3,6 +3,7 @@ import type {
   IChatRepository,
   ChatConversationRecord,
   ChatMessageRecord,
+  ChatParticipantRecord,
   CreateChatMessageInput,
 } from '../application/ports/IChatRepository';
 
@@ -12,9 +13,26 @@ function fullName(user: UserNameRow): string | null {
   return user ? `${user.firstName} ${user.lastName}` : null;
 }
 
+function mapParticipant(row: {
+  userId: string;
+  user: { firstName: string; lastName: string };
+  joinedAt: Date;
+  leftAt: Date | null;
+  leftReason: string | null;
+}): ChatParticipantRecord {
+  return {
+    userId: row.userId,
+    userName: `${row.user.firstName} ${row.user.lastName}`,
+    joinedAt: row.joinedAt,
+    leftAt: row.leftAt,
+    leftReason: row.leftReason as ChatParticipantRecord['leftReason'],
+  };
+}
+
 function mapConversation(row: {
   id: string;
   portalAccountId: string;
+  portalAccount: { email: string } | null;
   status: string;
   claimedByUserId: string | null;
   claimedByUser: UserNameRow;
@@ -25,6 +43,7 @@ function mapConversation(row: {
   pendingTransferFromUserId: string | null;
   pendingTransferFromUser: UserNameRow;
   pendingTransferPin: string | null;
+  participants: Parameters<typeof mapParticipant>[0][];
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
@@ -32,6 +51,7 @@ function mapConversation(row: {
   return {
     id: row.id,
     portalAccountId: row.portalAccountId,
+    portalAccountEmail: row.portalAccount?.email ?? null,
     status: row.status as ChatConversationRecord['status'],
     claimedByUserId: row.claimedByUserId,
     claimedByUserName: fullName(row.claimedByUser),
@@ -42,6 +62,7 @@ function mapConversation(row: {
     pendingTransferFromUserId: row.pendingTransferFromUserId,
     pendingTransferFromUserName: fullName(row.pendingTransferFromUser),
     pendingTransferPin: row.pendingTransferPin,
+    participants: row.participants.map(mapParticipant),
     createdAt: row.createdAt,
     claimedAt: row.claimedAt,
     closedAt: row.closedAt,
@@ -49,10 +70,15 @@ function mapConversation(row: {
 }
 
 const CONVERSATION_INCLUDE = {
+  portalAccount: { select: { email: true } },
   claimedByUser: { select: { firstName: true, lastName: true } },
   originalClaimedByUser: { select: { firstName: true, lastName: true } },
   pendingTransferToUser: { select: { firstName: true, lastName: true } },
   pendingTransferFromUser: { select: { firstName: true, lastName: true } },
+  participants: {
+    orderBy: { joinedAt: 'asc' as const },
+    include: { user: { select: { firstName: true, lastName: true } } },
+  },
 } as const;
 
 async function mapMessage(row: {
@@ -107,12 +133,17 @@ export class PrismaChatRepository implements IChatRepository {
 
   /** The real "first click wins" guarantee: a conditional UPDATE that only affects a row still
    * WAITING/unclaimed. `updateMany`'s count tells the caller whether THIS call won the race, not
-   * a separate read-then-write that two simultaneous claims could both pass. */
+   * a separate read-then-write that two simultaneous claims could both pass. Opens this user's
+   * participant span (2026-08-03 user request, full trackability) right after - not part of the
+   * same atomic guard since it's an audit trail, not a correctness-critical field. */
   async claimConversation(id: string, userId: string): Promise<boolean> {
     const result = await prisma.chatConversation.updateMany({
       where: { id, status: 'WAITING', claimedByUserId: null },
       data: { status: 'CLAIMED', claimedByUserId: userId, originalClaimedByUserId: userId, claimedAt: new Date() },
     });
+    if (result.count === 1) {
+      await prisma.chatConversationParticipant.create({ data: { conversationId: id, userId } });
+    }
     return result.count === 1;
   }
 
@@ -129,6 +160,9 @@ export class PrismaChatRepository implements IChatRepository {
     return result.count === 1;
   }
 
+  /** Closes the outgoing claimant's participant span and opens a new one for the incoming
+   * claimant (2026-08-03 user request) - this is what makes every hop of a multi-transfer chain
+   * individually trackable, not just the first and current claimant. */
   async completeTransfer(id: string, toUserId: string, pin: string): Promise<boolean> {
     const result = await prisma.chatConversation.updateMany({
       where: { id, status: 'PENDING_TRANSFER', pendingTransferToUserId: toUserId, pendingTransferPin: pin },
@@ -141,6 +175,13 @@ export class PrismaChatRepository implements IChatRepository {
         pendingTransferPin: null,
       },
     });
+    if (result.count === 1) {
+      await prisma.chatConversationParticipant.updateMany({
+        where: { conversationId: id, leftAt: null, userId: { not: toUserId } },
+        data: { leftAt: new Date(), leftReason: 'TRANSFERRED' },
+      });
+      await prisma.chatConversationParticipant.create({ data: { conversationId: id, userId: toUserId } });
+    }
     return result.count === 1;
   }
 
@@ -159,6 +200,10 @@ export class PrismaChatRepository implements IChatRepository {
 
   async closeConversation(id: string): Promise<void> {
     await prisma.chatConversation.update({ where: { id }, data: { status: 'CLOSED', closedAt: new Date() } });
+    await prisma.chatConversationParticipant.updateMany({
+      where: { conversationId: id, leftAt: null },
+      data: { leftAt: new Date(), leftReason: 'CLOSED' },
+    });
   }
 
   async listWaitingConversations(): Promise<ChatConversationRecord[]> {
@@ -172,9 +217,7 @@ export class PrismaChatRepository implements IChatRepository {
 
   async listConversationsForUserHistory(userId: string): Promise<ChatConversationRecord[]> {
     const rows = await prisma.chatConversation.findMany({
-      where: {
-        OR: [{ claimedByUserId: userId }, { originalClaimedByUserId: userId }],
-      },
+      where: { participants: { some: { userId } } },
       orderBy: { updatedAt: 'desc' },
       include: CONVERSATION_INCLUDE,
     });
@@ -192,7 +235,7 @@ export class PrismaChatRepository implements IChatRepository {
 
   async listConversationsEverClaimedByUser(userId: string): Promise<ChatConversationRecord[]> {
     const rows = await prisma.chatConversation.findMany({
-      where: { OR: [{ claimedByUserId: userId }, { originalClaimedByUserId: userId }] },
+      where: { participants: { some: { userId } } },
       orderBy: { createdAt: 'desc' },
       include: CONVERSATION_INCLUDE,
     });

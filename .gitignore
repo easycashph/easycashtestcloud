@@ -104,6 +104,9 @@ app/docker/tailscale-certs/
 backup-mongodb.bat
 backup-mongodb.command
 
+# Google Drive desktop app's own runtime upload-staging folder — machine-local, never real content.
+.tmp.driveupload/
+
 # Build
 dist/
 build/

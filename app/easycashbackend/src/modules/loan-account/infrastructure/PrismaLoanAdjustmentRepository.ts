@@ -39,7 +39,7 @@ export class PrismaLoanAdjustmentRepository implements ILoanAdjustmentRepository
 
   async findByOldLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustment | null> {
     const client = resolveClient(ctx);
-    const row = await client.loanAdjustment.findUnique({ where: { oldLoanAccountId: loanAccountId } });
+    const row = await client.loanAdjustment.findFirst({ where: { oldLoanAccountId: loanAccountId } });
     return row ? toDomain(row) : null;
   }
 
@@ -49,10 +49,17 @@ export class PrismaLoanAdjustmentRepository implements ILoanAdjustmentRepository
     return row ? toDomain(row) : null;
   }
 
+  /** 2026-08-08 (Undo Adjustment feature, user-confirmed revision): deletes the row outright - see `ILoanAdjustmentRepository.delete()`. */
+  async delete(loanAdjustmentId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    await client.loanAdjustment.delete({ where: { id: loanAdjustmentId } });
+  }
+
   async findViewByLoanAccountId(loanAccountId: string, ctx?: TransactionContext): Promise<LoanAdjustmentView | null> {
     const client = resolveClient(ctx);
     const row = await client.loanAdjustment.findFirst({
       where: { OR: [{ oldLoanAccountId: loanAccountId }, { newLoanAccountId: loanAccountId }] },
+      orderBy: { createdAt: 'desc' },
       include: {
         oldLoanAccount: { select: { loanCode: true } },
         newLoanAccount: { select: { loanCode: true } },

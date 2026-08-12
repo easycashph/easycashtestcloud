@@ -6,6 +6,7 @@ import type { ConfirmEnablePortalTwoFactorUseCase } from '../../application/use-
 import type { DisablePortalTwoFactorUseCase } from '../../application/use-cases/DisablePortalTwoFactorUseCase';
 import type { ListPortalTrustedDevicesUseCase } from '../../application/use-cases/ListPortalTrustedDevicesUseCase';
 import type { RevokePortalTrustedDeviceUseCase } from '../../application/use-cases/RevokePortalTrustedDeviceUseCase';
+import type { RequestPortalAccountDeletionUseCase } from '../../application/use-cases/RequestPortalAccountDeletionUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type {
   ChangePortalPasswordRequestBody,
@@ -13,6 +14,7 @@ import type {
   RequestEnablePortalTwoFactorRequestBody,
   ConfirmEnablePortalTwoFactorRequestBody,
   DisablePortalTwoFactorRequestBody,
+  DeletePortalAccountRequestBody,
 } from './portalSecuritySchemas';
 
 export interface PortalSecurityControllerDeps {
@@ -23,6 +25,7 @@ export interface PortalSecurityControllerDeps {
   disablePortalTwoFactorUseCase: DisablePortalTwoFactorUseCase;
   listPortalTrustedDevicesUseCase: ListPortalTrustedDevicesUseCase;
   revokePortalTrustedDeviceUseCase: RevokePortalTrustedDeviceUseCase;
+  requestPortalAccountDeletionUseCase: RequestPortalAccountDeletionUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other portal controller's shape. */
@@ -102,6 +105,17 @@ export class PortalSecurityController {
     try {
       const account = getCurrentPortalAccount(req);
       await this.deps.revokePortalTrustedDeviceUseCase.execute(req.params.id as string, account.sub);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const body = req.body as DeletePortalAccountRequestBody;
+      await this.deps.requestPortalAccountDeletionUseCase.execute(account.sub, body.currentPassword);
       res.status(204).send();
     } catch (error) {
       next(error);

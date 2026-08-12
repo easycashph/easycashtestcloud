@@ -620,6 +620,17 @@ export class LoanApplication {
     this.props.updatedAt = new Date();
   }
 
+  /** 2026-08-10 (user request) - generalizes `setMitigationAccountOwner` above to every mitigation
+   * field (bank/branch/accountName/accountNumber/atmCardNumber/allotmentAmount/accountOwner), same
+   * "NOT gated by UNDER_REVIEW" reasoning: MIS/CRM need to correct a surrendered ATM/allotment
+   * account's details even after the loan is already ACTIVE (e.g. a typo caught after approval),
+   * not just the accountOwner sub-field. Same merge-not-replace semantics. */
+  setMitigationDetails(patch: Partial<MitigationDetails>): void {
+    const current = this.props.reviewReport ?? { checkedDocuments: [] };
+    this.props.reviewReport = { ...current, mitigation: { ...current.mitigation, ...patch } };
+    this.props.updatedAt = new Date();
+  }
+
   /** CRM/MIS/Loan Operation Manager "Tags as Pre Approval" once the Review Report is complete:
    * UNDER_REVIEW -> PRE_APPROVAL. The report itself becomes implicitly locked from here on, since
    * updateReviewReport() only accepts UNDER_REVIEW. */

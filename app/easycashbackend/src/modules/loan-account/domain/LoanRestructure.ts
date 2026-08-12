@@ -26,6 +26,11 @@ export interface CreateLoanRestructureProps {
  * action — same "historical record, never edited" posture as `PenaltyReduction`/`FeeAdjustment`.
  * Links the OLD (now `CLOSED_RESTRUCTURED`) `LoanAccount` to the brand new one created from its
  * remaining Collections Balance.
+ *
+ * 2026-08-08 (Undo Restructure, user-confirmed revision): undo now DELETES this row (and the new
+ * LoanAccount it points to) outright rather than marking it "undone" — the user decided a
+ * reverted restructure should leave no trace, not a retired record. See
+ * `UndoRestructureLoanUseCase`.
  */
 export class LoanRestructure {
   private constructor(private readonly props: LoanRestructureProps) {}

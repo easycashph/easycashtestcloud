@@ -12,7 +12,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
 import type { OriginationReportRow, ReportGranularity } from '@/lib/reportApiTypes';
-import { formatDate, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { formatDate, formatPeso, isoDate, pesoTooltipFormatter } from '@/lib/utils';
 
 function getSortValue(row: OriginationReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -26,8 +26,6 @@ function getSortValue(row: OriginationReportRow, key: string): string | number |
       return undefined;
   }
 }
-
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 function useOriginationReport(granularity: ReportGranularity, from?: string, to?: string) {
   return useQuery({
@@ -52,7 +50,7 @@ function ErrorBanner({ message }: { message: string }) {
 function DailyLoanReport() {
   const [range, setRange] = React.useState<DateRange>(() => {
     const to = new Date();
-    const from = new Date(to.getTime() - 13 * 86_400_000);
+    const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
 

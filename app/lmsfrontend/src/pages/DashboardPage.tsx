@@ -24,21 +24,17 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
-  Filter,
   GripVertical,
   Landmark,
-  RotateCcw,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
   TrendingUp,
 } from 'lucide-react';
 import type { BadgeProps } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
+import type { DateRange } from '@/components/DateRangeFilter';
 import { RecentSystemActivityPanel } from '@/components/RecentSystemActivityPanel';
 import { LoanPortfolioVennDiagram, type PortfolioHealthSegment } from '@/components/LoanPortfolioVennDiagram';
 import { LoanDrillDownDialog, type LoanDrillDown } from '@/components/LoanDrillDownDialog';
@@ -46,12 +42,14 @@ import { TermTip } from '@/components/TermTip';
 import { FINANCIAL_GLOSSARY } from '@/lib/financialGlossary';
 import { useLogPageView } from '@/lib/activityLog';
 import { useLanguage } from '@/lib/languageContext';
+import { useRole } from '@/lib/roleContext';
+import { COMPANY_INFO } from '@/lib/staticConfig';
 import { useDashboardLayout, type DashboardCardId } from '@/components/dashboard-layout-provider';
 import { apiClient, fetchAllPages } from '@/lib/apiClient';
 import type { CollectionReportRow, OriginationReportRow } from '@/lib/reportApiTypes';
 import type { DashboardSummary } from '@/lib/dashboardApiTypes';
 import type { Borrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
-import { cn, formatPeso, pesoTooltipFormatter } from '@/lib/utils';
+import { cn, formatPeso, isoDate, pesoTooltipFormatter } from '@/lib/utils';
 
 /** Loan row shape every portfolio widget below reads - assembled once from the real `GET
  * /loan-accounts` + `/borrowers` + `/loan-products` responses (see `useDashboardPortfolio`). */
@@ -81,9 +79,6 @@ interface PortfolioLoanRow {
  * loan whose full term is over but still unpaid — `buildRealPortfolioHealth` below) is derived
  * from `/dashboard/summary`'s live `maturedLoanAccountIds`, not from status. */
 const REAL_ACTIVE_STATUSES: LoanAccountStatus[] = ['ACTIVE', 'ACTIVE_IN_ARREARS'];
-
-/** Stable empty-Set reference for call sites that don't need the good/arrears/matured split. */
-const EMPTY_ID_SET: ReadonlySet<string> = new Set();
 
 /** Same product-family grouping already approved for the mock dashboard (see the historical
  * `getDashboardLoanCategory` in `mockData.ts`) - every SML-* product is a Seafarer Loan sub-class,
@@ -210,6 +205,35 @@ function buildRealDisbursementTrend(loans: PortfolioLoanRow[], monthsBack = 6) {
     buckets.push({ month: MONTH_SHORT_NAMES[target.getMonth()]!, year: target.getFullYear(), monthIndex: target.getMonth(), disbursed: Math.round(disbursed * 100) / 100 });
   }
   return buckets;
+}
+
+/**
+ * 2026-08-05 (user-reported bug fix): Portfolio Growth used to compare the CURRENT month's
+ * disbursement bucket (partial - only however many days have elapsed so far, e.g. just Aug 1-5)
+ * directly against the FULL previous month - always reading a huge, misleading negative number
+ * early in any month regardless of actual disbursement pace. Mirrors the backend's own
+ * `sameElapsedPointLastMonth` convention (`PrismaDashboardRepository.ts`, already used correctly
+ * for Collections This Month's trend) - compares "this month so far" against "the same number of
+ * days into last month" instead.
+ */
+function buildElapsedMatchedDisbursementComparison(loans: PortfolioLoanRow[]) {
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const previousMonthElapsedEnd = new Date(previousMonthStart.getTime() + (now.getTime() - currentMonthStart.getTime()));
+
+  let current = 0;
+  let previous = 0;
+  for (const loan of loans) {
+    if (!loan.activatedAt) continue;
+    const activated = new Date(loan.activatedAt);
+    if (activated >= currentMonthStart && activated <= now) {
+      current += loan.principalAmount;
+    } else if (activated >= previousMonthStart && activated < previousMonthElapsedEnd) {
+      previous += loan.principalAmount;
+    }
+  }
+  return { current: Math.round(current * 100) / 100, previous: Math.round(previous * 100) / 100 };
 }
 
 // Recharts' <Tooltip> defaults to a plain white box, which stays white in dark mode too - reads
@@ -506,7 +530,14 @@ function SummaryCard({
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-2">
-          <div className={cn(compact ? 'text-xl font-bold' : 'text-2xl font-bold', highlight && 'text-primary')}>{value}</div>
+          <div
+            className={cn(
+              compact ? 'text-xl font-bold' : 'text-2xl font-bold',
+              tone === 'destructive' ? 'text-destructive' : highlight && 'text-primary',
+            )}
+          >
+            {value}
+          </div>
           {trend && trend.changePercent !== null && (
             <span
               className={cn(
@@ -558,16 +589,42 @@ function ReportPreviewCard({
   );
 }
 
+/**
+ * 2026-08-05 (user request): Delinquency Rate/PAR used to render in the same teal "this is
+ * clickable" color as every other metric here, including Average Loan Size and Write-off - no
+ * visual distinction between "this number is bad news" and "this is just a neutral figure." These
+ * thresholds are a general risk-coloring convention for portfolio-quality percentages (the higher,
+ * the worse), not a sourced company policy - purely a visual affordance, not a business rule.
+ */
+type MetricSeverity = 'default' | 'warning' | 'destructive';
+
+const SEVERITY_TEXT_CLASS: Record<MetricSeverity, string> = {
+  default: 'text-primary',
+  warning: 'text-warning',
+  destructive: 'text-destructive',
+};
+
+/** Below 10% is a healthy figure for either metric; 10-30% is worth watching; above 30% is a
+ * clear red flag - a coarse, generic risk-coloring convention (not sourced from a specific
+ * company policy), applied identically to Delinquency Rate and Portfolio at Risk. */
+function riskPercentSeverity(percent: number): MetricSeverity {
+  if (percent >= 30) return 'destructive';
+  if (percent >= 10) return 'warning';
+  return 'default';
+}
+
 function MetricItem({
   term,
   definition,
   value,
   onClick,
+  severity = 'default',
 }: {
   term: string;
   definition: string;
   value: string;
   onClick?: () => void;
+  severity?: MetricSeverity;
 }) {
   return (
     <div className="rounded-md border p-3">
@@ -579,13 +636,16 @@ function MetricItem({
         <button
           type="button"
           onClick={onClick}
-          className="mt-1 text-xl font-bold text-primary underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+          className={cn(
+            'mt-1 text-xl font-bold underline-offset-4 hover:underline focus:outline-none focus:ring-2 focus:ring-ring',
+            SEVERITY_TEXT_CLASS[severity],
+          )}
           title="View the loan accounts behind this figure"
         >
           {value}
         </button>
       ) : (
-        <p className="mt-1 text-xl font-bold">{value}</p>
+        <p className={cn('mt-1 text-xl font-bold', severity !== 'default' && SEVERITY_TEXT_CLASS[severity])}>{value}</p>
       )}
     </div>
   );
@@ -605,6 +665,22 @@ export function DashboardPage() {
     reorderCards(String(active.id) as DashboardCardId, String(over.id) as DashboardCardId);
   };
   const [drillDown, setDrillDown] = React.useState<LoanDrillDown | null>(null);
+  const { currentAccount } = useRole();
+
+  // 2026-08-06 (user request, mocked up first): "Good morning/afternoon/evening, {first name}" +
+  // today's date + branch, above the Overview section. Computed once per page load (not live-
+  // ticking) - a greeting that flips mid-glance would be more distracting than useful.
+  const firstName = currentAccount.name.split(' ')[0] || currentAccount.name;
+  const greeting = React.useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+  const todayLabel = React.useMemo(
+    () => new Intl.DateTimeFormat('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date()),
+    [],
+  );
 
   // Live portfolio-wide totals from the real backend (GET /dashboard/summary) - backs the three
   // Overview cards while the Portfolio Filter is at its default (ALL_CATEGORIES, no date range).
@@ -619,7 +695,7 @@ export function DashboardPage() {
   const reportsPreviewFrom = React.useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
   }, []);
   const loanReleasesPreviewQuery = useQuery({
     queryKey: ['reports', 'loan-origination', 'DAILY', reportsPreviewFrom, 'preview'],
@@ -641,7 +717,7 @@ export function DashboardPage() {
     const d = new Date();
     d.setMonth(d.getMonth() - 9);
     d.setDate(1);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
   }, []);
   const monthlyCollectionsHistoryQuery = useQuery({
     queryKey: ['reports', 'collections', 'MONTHLY', targetHistoryFrom, 'dashboard-target-history'],
@@ -682,7 +758,7 @@ export function DashboardPage() {
       return {
         id: l.id,
         loanCode: l.loanCode,
-        borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : l.borrowerId,
+        borrowerName: borrower ? borrower.fullName : l.borrowerId,
         productType: productName,
         category: categorizeProductName(productName),
         status: l.status,
@@ -700,28 +776,14 @@ export function DashboardPage() {
     });
   }, [loanAccountsQuery.data, borrowersQuery.data, productsQuery.data]);
 
-  // Just enumerating category names for the filter dropdown - the active/pastDue/matured split
-  // (which needs overdueLoanIds/maturedLoanIds) is irrelevant here, so pass empty sets.
-  const loanCategoryOptions = React.useMemo(
-    () => [...new Set(buildRealPortfolioByCategory(allPortfolioLoans, EMPTY_ID_SET, EMPTY_ID_SET).map((s) => s.category))].sort(),
-    [allPortfolioLoans],
-  );
-
-  // Portfolio Filter - the master filter for the whole Dashboard (loan category + origination
-  // date range). Every portfolio card below (Overview summary cards, Quality Metrics, Loan
-  // Disbursement Trend, Collections vs. Target, Portfolio Breakdown, Loan Portfolio Health) reacts
-  // to it. Two cards are deliberately exempt, by design, not oversight: Collections Forecast
-  // (a bottom-up projection from each active loan's own fixed repayment schedule - filtering it
-  // by category/date would just be a different, narrower forecast, not a clearer one, and the
-  // point of a portfolio-wide cash-flow forecast is to answer "how much is coming in overall") and
-  // Recommendation (portfolio-wide strategic guidance, not a report figure).
-  const [categoryFilter, setCategoryFilter] = React.useState<string>(ALL_CATEGORIES);
-  const [dateRange, setDateRange] = React.useState<DateRange>(EMPTY_DATE_RANGE);
-  const isFiltered = categoryFilter !== ALL_CATEGORIES || dateRange.from !== '' || dateRange.to !== '';
-  const resetFilters = () => {
-    setCategoryFilter(ALL_CATEGORIES);
-    setDateRange(EMPTY_DATE_RANGE);
-  };
+  // 2026-08-06 (user request): the Portfolio Filter UI is gone - every portfolio card below always
+  // reflects the whole portfolio now, same as this filter's own "no filter selected" default
+  // already behaved. Kept as constants (not state) rather than threading a "remove isFiltered
+  // entirely" change through every card description below, since every one of them already reads
+  // correctly with isFiltered permanently false.
+  const categoryFilter = ALL_CATEGORIES;
+  const dateRange = EMPTY_DATE_RANGE;
+  const isFiltered = false;
 
   const portfolioFilteredLoans = React.useMemo(() => {
     const fromTime = dateRange.from ? new Date(dateRange.from).getTime() : null;
@@ -757,15 +819,18 @@ export function DashboardPage() {
     [portfolioFilteredLoans],
   );
   /** 2026-07-23: real month-over-month disbursement growth (replaces the old hardcoded "+4.8%
-   * sample data"). Reuses the same buildRealDisbursementTrend helper the Disbursement Trend chart
-   * below already calls, on the full portfolio-wide loan set (not scoped to the Portfolio Filter
-   * above) - same "portfolio-wide by design" treatment as Collections This Month. `null` when
-   * there's no prior-month disbursement to compare against (division by zero), matching the
-   * backend's own collectionsThisMonth.trend.changePercent null convention. */
+   * sample data"), on the full portfolio-wide loan set (not scoped to the Portfolio Filter above) -
+   * same "portfolio-wide by design" treatment as Collections This Month. `null` when there's no
+   * prior-month disbursement to compare against (division by zero), matching the backend's own
+   * collectionsThisMonth.trend.changePercent null convention.
+   *
+   * 2026-08-05 (user-reported bug fix): now uses `buildElapsedMatchedDisbursementComparison`
+   * (elapsed-day-matched, e.g. Aug 1-5 vs Jul 1-5) instead of the old full-calendar-month compare -
+   * see that function's own doc comment for why the old version was misleading. */
   const portfolioGrowthPercent = React.useMemo(() => {
-    const [previous, current] = buildRealDisbursementTrend(allPortfolioLoans, 2);
-    if (!previous || !current || previous.disbursed === 0) return null;
-    return Math.round(((current.disbursed - previous.disbursed) / previous.disbursed) * 10000) / 100;
+    const { current, previous } = buildElapsedMatchedDisbursementComparison(allPortfolioLoans);
+    if (!previous) return null;
+    return Math.round(((current - previous) / previous) * 10000) / 100;
   }, [allPortfolioLoans]);
   const liveSummary = !isFiltered ? summaryQuery.data : undefined;
   const filteredActiveCount =
@@ -776,18 +841,35 @@ export function DashboardPage() {
       filteredPortfolioHealth.activeInArrears.collectionsBalance +
       filteredPortfolioHealth.matured.collectionsBalance;
 
+  // 2026-08-05 (user-reported bug fix): `PortfolioLoanRow.status` is the raw, legacy-migrated
+  // LoanAccountStatus field - it doesn't reliably track the live good/arrears bucket a loan is
+  // actually in right now (see `openVennSegment`'s identical `displayStatusOverride` and its own
+  // doc comment for the full explanation - the live overdueLoanIds/maturedLoanIds computation is
+  // what decided which bucket each loan is already in here). Without this override,
+  // LoanDrillDownDialog's status badge falls back to that stale raw field, so a loan the Loan
+  // Portfolio Health Venn correctly buckets as "Active in Arrears" could still show a green
+  // "Active" badge in these drill-down lists - found via a real case where 25 of 32 live-in-arrears
+  // loans still carried a stale `ACTIVE` status. "Matured" loans are left as-is - LoanStatusBadge
+  // already shows "Matured" whenever `isMatured` is true, regardless of `status`.
+  const overrideStatus = <T extends { status: LoanAccountStatus }>(loans: T[], status: LoanAccountStatus): T[] =>
+    loans.map((loan) => ({ ...loan, status }));
+
   // Every active loan under the current filter (performing, in arrears, and past-maturity-but-
   // unpaid) - the denominator/drill-down set behind the filtered Total Active Loans and Average
   // Loan Size figures.
   const filteredActivePortfolioLoans = React.useMemo(
-    () => [...filteredPortfolioHealth.good.loans, ...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    () => [
+      ...overrideStatus(filteredPortfolioHealth.good.loans, 'ACTIVE'),
+      ...overrideStatus(filteredPortfolioHealth.activeInArrears.loans, 'ACTIVE_IN_ARREARS'),
+      ...filteredPortfolioHealth.matured.loans,
+    ],
     [filteredPortfolioHealth],
   );
 
   // Delinquent = overdue but still active: in arrears (overdue within term) + matured (past the
   // full term, still unpaid). This is the numerator behind the Delinquency Rate and PAR metrics.
   const filteredDelinquentLoans = React.useMemo(
-    () => [...filteredPortfolioHealth.activeInArrears.loans, ...filteredPortfolioHealth.matured.loans],
+    () => [...overrideStatus(filteredPortfolioHealth.activeInArrears.loans, 'ACTIVE_IN_ARREARS'), ...filteredPortfolioHealth.matured.loans],
     [filteredPortfolioHealth],
   );
 
@@ -877,55 +959,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="space-y-4">
-          <div className="flex items-start gap-2">
-            <Filter className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <div>
-              <CardTitle className="text-base">{t('dashboard.portfolioFilter.title')}</CardTitle>
-              <CardDescription>
-                Drives every portfolio card below - Overview, Quality Metrics, Loan Disbursement Trend, Collections vs. Target,
-                Portfolio Breakdown, and Loan Portfolio Health all recompute live. Collections Forecast and Recommendation are
-                portfolio-wide by design and stay unaffected.
-              </CardDescription>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="dashboard-category-filter" className="text-xs">
-                Loan Category
-              </Label>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger id="dashboard-category-filter" className="w-full sm:w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_CATEGORIES}>All Categories</SelectItem>
-                  {loanCategoryOptions.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DateRangeFilter value={dateRange} onChange={setDateRange} />
-            {isFiltered && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                <RotateCcw className="mr-2 h-3.5 w-3.5" /> Reset
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{filteredActiveCount}</span> active loan account
-            {filteredActiveCount === 1 ? '' : 's'} · <span className="font-medium text-foreground">{formatPeso(filteredOutstandingTotal)}</span>{' '}
-            total outstanding principal
-            {isFiltered ? ' matching the selected filter' : ' across the whole portfolio'}.
-          </p>
-        </CardContent>
-      </Card>
+      <div>
+        <h1 className="font-serif text-2xl text-foreground">
+          {greeting}, {firstName}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {todayLabel} · {COMPANY_INFO.branchName} branch
+        </p>
+      </div>
 
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">{t('dashboard.overview.title')}</h2>
@@ -1002,24 +1043,35 @@ export function DashboardPage() {
           overdueAccounts: (
             <SummaryCard
               title={t('dashboard.stat.overdueAccounts')}
-              value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredPortfolioHealth.activeInArrears.count.toString()}
+              value={liveSummary ? liveSummary.overdueAccounts.count.toString() : filteredDelinquentLoans.length.toString()}
               hint={
                 liveSummary
                   ? `${formatPeso(Number(liveSummary.overdueAccounts.atRiskCollectionsBalance))} at risk (collections balance)`
-                  : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance)} at risk (collections balance)`
+                  : `${formatPeso(filteredPortfolioHealth.activeInArrears.collectionsBalance + filteredPortfolioHealth.matured.collectionsBalance)} at risk (collections balance)`
               }
               icon={AlertOctagon}
               tone="destructive"
               compact={compact}
-              onClick={() => openVennSegment('activeInArrears')}
+              // 2026-08-05 (user-reported bug fix): was openVennSegment('activeInArrears') - only
+              // showed the "in arrears within term" subset, silently dropping matured loans from
+              // the drill-down even though the headline count (liveSummary.overdueAccounts.count)
+              // already includes both (matured is a subset of the live overdueIds set - see
+              // findOverdueLoanAccounts in PrismaDashboardRepository.ts). openDelinquentAccounts is
+              // the existing handler that already combines both correctly.
+              onClick={openDelinquentAccounts}
             />
           ),
           portfolioGrowth: (
             <SummaryCard
               title={t('dashboard.stat.portfolioGrowth')}
               value={portfolioGrowthPercent === null ? '—' : `${portfolioGrowthPercent >= 0 ? '+' : ''}${portfolioGrowthPercent.toFixed(1)}%`}
-              hint={portfolioGrowthPercent === null ? 'Not enough disbursement history yet' : 'Month-over-month disbursement, portfolio-wide'}
-              icon={TrendingUp}
+              hint={
+                portfolioGrowthPercent === null
+                  ? 'Not enough disbursement history yet'
+                  : 'Month-over-month disbursement, portfolio-wide, same elapsed days'
+              }
+              icon={portfolioGrowthPercent !== null && portfolioGrowthPercent < 0 ? TrendingDown : TrendingUp}
+              tone={portfolioGrowthPercent !== null && portfolioGrowthPercent < 0 ? 'destructive' : 'default'}
               compact={compact}
               highlight
             />
@@ -1055,12 +1107,14 @@ export function DashboardPage() {
             term={FINANCIAL_GLOSSARY.delinquencyRate.term}
             definition={FINANCIAL_GLOSSARY.delinquencyRate.definition}
             value={`${filteredQualityMetrics.delinquencyRatePercent.toFixed(1)}%`}
+            severity={riskPercentSeverity(filteredQualityMetrics.delinquencyRatePercent)}
             onClick={openDelinquentAccounts}
           />
           <MetricItem
             term={FINANCIAL_GLOSSARY.portfolioAtRisk.term}
             definition={FINANCIAL_GLOSSARY.portfolioAtRisk.definition}
             value={`${filteredQualityMetrics.portfolioAtRiskPercent.toFixed(1)}%`}
+            severity={riskPercentSeverity(filteredQualityMetrics.portfolioAtRiskPercent)}
             onClick={openDelinquentAccounts}
           />
           <MetricItem

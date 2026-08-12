@@ -30,7 +30,8 @@ export type LoanAccountStatus =
   | 'CLOSED_WRITTEN_OFF'
   | 'CLOSED_REJECTED'
   | 'CLOSED_RESTRUCTURED'
-  | 'CLOSED_ADJUSTED';
+  | 'CLOSED_ADJUSTED'
+  | 'CLOSED_UNDONE';
 
 /** 2026-07-24 (Loan Restructure feature) - mirrors `LoanRestructurePresenter`'s output. Fetched via
  * `GET /loan-accounts/:id/restructure`, null unless this loan account was either side of one. */
@@ -511,6 +512,25 @@ export interface LoanDocumentListItem {
   } | null;
 }
 
+/** 2026-08-09 (Document Templates admin config) — one row per document template, for the admin
+ * config screen (Settings > System > Documents). Mirrors `DocumentTemplateAdminPresenter`'s output. */
+export interface DocumentTemplateAdminView {
+  id: string;
+  code: string;
+  name: string;
+  isRequired: boolean;
+  sortIndex: number;
+  requiresBorrowerSignature: boolean;
+  requiresCoBorrowerSignature: boolean;
+}
+
+/** GET /document-templates/admin response — same combined shape returned by every mutation on that resource. */
+export interface DocumentTemplateAdminResponse {
+  templates: DocumentTemplateAdminView[];
+  loanProducts: { id: string; code: string; name: string }[];
+  mappings: { documentTemplateId: string; loanProductId: string }[];
+}
+
 /** ADR-052 — one row per generated Statement of Account (append-only history, newest first). */
 export interface GeneratedStatementOfAccountListItem {
   id: string;
@@ -519,6 +539,8 @@ export interface GeneratedStatementOfAccountListItem {
   penaltyFromDate: string;
   penaltyToDate: string;
   accruedInterestAsOfDate: string;
+  pastDuePenalty: string;
+  accruedInterest: string;
   totalAmountDue: string;
   generatedByUserId: string;
   generatedByName: string;

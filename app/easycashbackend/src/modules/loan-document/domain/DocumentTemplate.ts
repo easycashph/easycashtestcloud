@@ -9,15 +9,28 @@ export interface DocumentTemplateProps {
 }
 
 /**
- * ADR-051 §1/§3: one of the 11 loan document types in scope. Reference data only — rows are
- * seeded (`prisma/seed.ts`), never created through a use case, so this class has no `create()`,
- * only `reconstitute()`.
+ * ADR-051 §1/§3: one of the loan document types in scope. Reference data — rows are seeded
+ * (`prisma/seed.ts`), never created through a use case (still no `create()`; a genuinely new
+ * template needs a new `.docx` file on disk, a developer-only step). 2026-08-09 (Document
+ * Templates admin config, user request): `setRequired()` added so MIS can toggle an existing
+ * template between Required/Conditional without a code change.
  */
 export class DocumentTemplate {
   private constructor(private readonly props: DocumentTemplateProps) {}
 
   static reconstitute(props: DocumentTemplateProps): DocumentTemplate {
     return new DocumentTemplate(props);
+  }
+
+  /** 2026-08-09 (Document Templates admin config): Required applies to every loan and never has a `DocumentTemplateMapping` row - callers must clear this template's mappings in the same transaction when flipping to `true` (see `UpdateDocumentTemplateRequiredUseCase`). */
+  setRequired(isRequired: boolean): void {
+    this.props.isRequired = isRequired;
+  }
+
+  /** 2026-08-09 (Document Templates admin config, user request): which party(ies) must sign this template once generated - independent of `isRequired`/product mapping (those control whether the doc is generated at all; this controls which e-signature batch(es) it's included in). */
+  setSignatureRequirements(requiresBorrowerSignature: boolean, requiresCoBorrowerSignature: boolean): void {
+    this.props.requiresBorrowerSignature = requiresBorrowerSignature;
+    this.props.requiresCoBorrowerSignature = requiresCoBorrowerSignature;
   }
 
   get id(): string {

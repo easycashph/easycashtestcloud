@@ -1,4 +1,5 @@
 import { prisma } from '@shared/database/prismaClient';
+import { manilaCalendarDay, manilaDayRange } from '@shared/domain/manilaTime';
 import type {
   EmailReminderCandidate,
   EmailReminderLogRow,
@@ -9,19 +10,6 @@ import type {
 } from '../application/ports/IEmailReminderRepository';
 
 const ACTIVE_LOAN_STATUSES = ['ACTIVE', 'ACTIVE_IN_ARREARS'] as const;
-const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-/** See PrismaSmsReminderRepository's identical helper for the full reasoning (Manila is fixed UTC+8, no DST). */
-function manilaDayRange(targetDate: Date): { start: Date; end: Date } {
-  const manilaWallClock = new Date(targetDate.getTime() + MANILA_OFFSET_MS);
-  const manilaMidnightUtcMs =
-    Date.UTC(manilaWallClock.getUTCFullYear(), manilaWallClock.getUTCMonth(), manilaWallClock.getUTCDate(), 0, 0, 0) - MANILA_OFFSET_MS;
-  return { start: new Date(manilaMidnightUtcMs), end: new Date(manilaMidnightUtcMs + 24 * 60 * 60 * 1000) };
-}
-
-function manilaCalendarDay(targetDate: Date): Date {
-  return manilaDayRange(targetDate).start;
-}
 
 /** Mirrors PrismaSmsReminderRepository exactly - same live "next-due installment"/"overdue sum"
  * queries, keyed on `borrower.email` instead of `mobilePhone1`; skips a candidate with no email on file. */

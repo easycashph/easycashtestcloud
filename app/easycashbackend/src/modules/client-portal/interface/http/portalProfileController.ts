@@ -1,12 +1,14 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { GetPortalProfileUseCase } from '../../application/use-cases/GetPortalProfileUseCase';
 import type { UpdatePortalProfileUseCase } from '../../application/use-cases/UpdatePortalProfileUseCase';
+import type { GetPortalAssignedLoanOfficerUseCase } from '../../application/use-cases/GetPortalAssignedLoanOfficerUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 import type { UpdatePortalProfileRequestBody } from './portalProfileSchemas';
 
 export interface PortalProfileControllerDeps {
   getPortalProfileUseCase: GetPortalProfileUseCase;
   updatePortalProfileUseCase: UpdatePortalProfileUseCase;
+  getPortalAssignedLoanOfficerUseCase: GetPortalAssignedLoanOfficerUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other
@@ -32,6 +34,16 @@ export class PortalProfileController {
       const body = req.body as UpdatePortalProfileRequestBody;
       const profile = await this.deps.updatePortalProfileUseCase.execute(account.sub, body);
       res.status(200).json(profile);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  loanOfficer = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const loanOfficer = await this.deps.getPortalAssignedLoanOfficerUseCase.execute(account.sub);
+      res.status(200).json(loanOfficer);
     } catch (error) {
       next(error);
     }

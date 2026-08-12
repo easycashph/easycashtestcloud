@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Landmark,
@@ -102,8 +102,22 @@ const NAV_GROUPS = [
   },
 ];
 
+/** 2026-08-06 (user-reported): a nav link to a page the signed-in role can't actually use (e.g.
+ * Record Payment for a role without `payment.record`) shouldn't appear at all - same "hide, don't
+ * just block after the click" fix already applied to the in-page actions this leads to. Keyed by
+ * route path; a route with no entry here is visible to every role (unchanged default). */
+const NAV_VISIBILITY: Partial<Record<string, (permissions: ReturnType<typeof useRole>) => boolean>> = {
+  '/payments': (permissions) => permissions.canRecordPayment,
+  // 2026-08-06 (user request): Administration > System is MIS-only, full stop - unlike every
+  // other nav-visibility entry above, not tied to one configurable permission code, since the
+  // whole System hub (Messaging & Alerts, User Accounts, Loan Products, Activity Logs) is itself
+  // the screen MIS uses to configure everyone else's access.
+  '/admin/system': (permissions) => permissions.currentAccount.roles.includes('MIS'),
+};
+
 function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
   const chatQueueCount = useChatQueueCount();
+  const permissions = useRole();
   return (
     <div
       className={cn(
@@ -129,11 +143,14 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
-          {NAV_GROUPS.map((group) => (
+          {NAV_GROUPS.map((group) => {
+            const visibleItems = group.items.filter((item) => (NAV_VISIBILITY[item.to] ?? (() => true))(permissions));
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={group.label}>
               <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{group.label}</p>
               <div className="flex flex-col gap-1">
-                {group.items.map((item) => (
+                {visibleItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -158,7 +175,8 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
     </div>
@@ -175,6 +193,10 @@ function Topbar({
   collapsed: boolean;
   onCollapseToggle: () => void;
 }) {
+  // 2026-08-05 (user request): the global search box only makes sense on the Dashboard - every
+  // other page removed it from the topbar entirely rather than just hiding it visually.
+  const isDashboard = useLocation().pathname === '/';
+
   return (
     <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-card px-4">
       <div className="flex items-center gap-3">
@@ -195,7 +217,7 @@ function Topbar({
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <GlobalSearch />
+        {isDashboard && <GlobalSearch />}
         <HelpButton />
         <NotificationBell />
         <AccountMenu />
@@ -229,6 +251,17 @@ export function AppLayout() {
     window.localStorage.setItem(sidebarCollapsedKey(currentAccount.id), collapsed ? '1' : '0');
   }, [collapsed, currentAccount.id]);
 
+  // 2026-08-07 (user-reported): switching sidebar menus landed on whatever scroll position the
+  // PREVIOUS page was left at, not the top of the new one. Root cause - <main> below (not
+  // window/document) is the actual scroll container per this layout's own "sidebar and main
+  // content scroll independently" design above, and React Router has no built-in scroll reset for
+  // a custom scroll container (only for window scroll, which this app deliberately doesn't use).
+  const mainRef = React.useRef<HTMLElement>(null);
+  const location = useLocation();
+  React.useEffect(() => {
+    mainRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
+
   return (
     // 2026-07-19 (user request): sidebar and main content must scroll independently of each other
     // - scrolling over the side menu should only move the side menu, scrolling over the center
@@ -255,7 +288,7 @@ export function AppLayout() {
             collapsed={collapsed}
             onCollapseToggle={() => setCollapsed((c) => !c)}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
+          <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto p-4 pb-8 sm:p-6 sm:pb-10">
             <Outlet />
             <PreviewFooterNote />
           </main>

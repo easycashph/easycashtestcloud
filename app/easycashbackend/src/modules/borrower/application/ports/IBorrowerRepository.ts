@@ -30,5 +30,10 @@ export interface IBorrowerRepository {
   findBySourceApplicationId(applicationId: string, ctx?: TransactionContext): Promise<Borrower | null>;
   /** Batched form of `findBySourceApplicationId` for list views - one query for N applications. */
   findManyBySourceApplicationIds(applicationIds: string[], ctx?: TransactionContext): Promise<Borrower[]>;
+  /** Case-insensitive exact match on `Borrower.email` (2026-08-06, Bind existing Client data to
+   * Portal). `email` has no uniqueness constraint - callers must handle 0/1/2+ results themselves
+   * (see `matchBorrowerByEmail` in `application/services/MatchBorrowerByEmail.ts`), never assume a
+   * single match. */
+  findManyByEmail(email: string, ctx?: TransactionContext): Promise<Borrower[]>;
   save(borrower: Borrower, ctx?: TransactionContext): Promise<void>;
 }
