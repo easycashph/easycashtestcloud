@@ -310,6 +310,12 @@ export class ProcessPaymentUseCase {
     // can transition to CLOSED; see ALLOWED_TRANSITIONS in LoanAccount.ts).
     if ((loanAccount.status === 'ACTIVE' || loanAccount.status === 'ACTIVE_IN_ARREARS') && loanAccount.isFullyPaid) {
       loanAccount.close();
+    } else if (loanAccount.status === 'ACTIVE_IN_ARREARS' && !allInstallments.some((i) => i.status === 'LATE')) {
+      // 2026-08-13 (user-reported): this payment may have caught the loan up without fully
+      // settling it - same "recompute after applying this payment" moment as the close check
+      // above, just the other allowed ACTIVE_IN_ARREARS transition (see
+      // LoanAccount.markCurrent()'s doc comment for why nothing did this before).
+      loanAccount.markCurrent();
     }
 
     const appliedAmount = paymentAmount.subtract(remainder);
