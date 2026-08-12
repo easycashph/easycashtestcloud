@@ -143,3 +143,46 @@ steps, done by hand since the user asked me to run it):
   recomputes) live only in this machine's local Postgres — not part of git, not part of the Google
   Drive backup (which only covers the working folder's files, not the Docker Postgres volume). A
   `pg_dump`/restore would be needed to carry the data itself to another device.
+
+## 6. Duplicate payment discovery — 15 real double-counted payments found and reversed
+
+While the user was about to record a payment on `SML-PDC_00035` (₱7,000, RAFAEL ALARCON BAGUIO,
+OR#2495/AR#20783) through the Payment Recording page, they asked why that confirmation dialog
+looked the way it did. Checked the database directly — that exact transaction (same loan, amount,
+OR#, AR#, date) already existed, migrated from SDevTech just earlier this session. User did not
+submit it; asked instead to check the whole database for the same pattern.
+
+- Wrote a scan comparing every native (non-legacy, `legacyId: null`) REPAYMENT transaction against
+  legacy-migrated REPAYMENT transactions on the *same loan account*, same amount, within a 3-day
+  window (legacy entries carry a UTC-midnight date, native entries a local-midnight date — a
+  1-day offset is the same real calendar day, not a coincidence-breaker).
+- Result: **15 of 19** native transactions matched a legacy one — same loan, same amount, same
+  OR#/AR# where present. This is staff having recorded the same real-world payment twice: once
+  directly into SDevTech (now migrated here), and again by hand into the LMS's own Payment
+  Recording page. `SML-REG_00370` (Armando Abes) had it happen twice over for two different
+  payments — 3 of the 15 duplicates belong to that one loan alone.
+- Total double-counted exposure: **₱214,719.90** across 14 loans, 15 transactions - every affected
+  client's balance was understated by the duplicated amount until reversed.
+- User decision: keep the migrated/legacy copy as the source of truth, reverse the native
+  duplicates.
+- Reversed all 15 via the existing `ReversePaymentUseCase` (never a raw delete - TXN-1 append-only:
+  each reversal is its own `REVERSAL` transaction, linked via `reversesTransactionId`, with a
+  recorded reason "Duplicate entry - already recorded via SDevTech migration..."). Attributed to
+  the real MIS user account this session operates under (a fabricated `postedByUserId` would have
+  violated the real FK to `User`). All 15 succeeded; loan balances and statuses recalculated
+  correctly (e.g. `SL-CORP_00114` - one of the 3 arrears accounts from §4 - now shows the correct
+  higher outstanding balance with the duplicate backed out).
+- Re-ran `check-legacy-balance-integrity.ts` after the reversals: still clean, 0 issues.
+- Full backend `vitest run` after the reversals: same baseline (5 failed files/135 passed),
+  unaffected.
+- Purely a live-data correction, not a code change - nothing to commit for this section.
+
+## Current state / known follow-up (updated)
+
+- The duplicate-detection pattern (same loan + amount + OR/AR within a few days, one native one
+  legacy) is a one-off scan script, not a permanent feature - worth considering whether a
+  standing "possible duplicate" warning belongs in the Payment Recording flow itself (the
+  triggering moment for this whole investigation was the user almost re-entering `SML-PDC_00035`'s
+  payment a second time), rather than relying on someone noticing and asking.
+- Not yet checked: whether any of the 4 native transactions that did *not* match a legacy one are
+  themselves legitimate (no reason to suspect otherwise, just not specifically re-verified).
