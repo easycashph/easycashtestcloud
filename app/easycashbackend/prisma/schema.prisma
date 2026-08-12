@@ -1759,9 +1759,17 @@ model ProfileNote {
   ownerType    ProfileNoteOwnerType
   ownerId      String
   text         String
-  authorUserId String
-  author       User                 @relation("ProfileNoteAuthor", fields: [authorUserId], references: [id])
+  /// 2026-08-13 (SDevTech "comments" collection backfill, user request): nullable to allow migrated
+  /// legacy notes with no corresponding User record (this codebase never migrated legacy staff
+  /// accounts into `User`) — every note created through the app itself still always supplies a real
+  /// author. `PrismaProfileNoteRepository`'s existing `row.author ? ... : null` already handled a
+  /// null author gracefully before this change (defensive code that had no way to trigger until now).
+  authorUserId String?
+  author       User?                @relation("ProfileNoteAuthor", fields: [authorUserId], references: [id])
   createdAt    DateTime             @default(now())
+  /// Same idempotent-upsert convention as every other migrated table (`legacyId @unique`) — lets
+  /// `migrate-legacy-data.ts` re-run against a newer SDevTech snapshot without duplicating notes.
+  legacyId     String?              @unique
 
   @@index([ownerType, ownerId])
   @@map("profile_notes")

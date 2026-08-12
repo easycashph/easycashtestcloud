@@ -12,7 +12,9 @@ export interface ProfileNoteRecord {
   ownerType: ProfileNoteOwnerType;
   ownerId: string;
   text: string;
-  authorUserId: string;
+  /** Nullable only for legacy-migrated notes (SDevTech "comments" collection, no corresponding
+   * User record) - always set for a note created through the app itself. */
+  authorUserId: string | null;
   authorName: string | null;
   createdAt: Date;
 }

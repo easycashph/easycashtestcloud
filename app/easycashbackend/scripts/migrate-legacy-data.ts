@@ -837,6 +837,85 @@ async function migrateAttachments(loanAccountIdByLegacyKey: Map<string, string>,
 }
 
 // ----------------------------------------------------------------------------
+// Phase 6: ProfileNote (SDevTech "comments" collection, 21,031 rows — collections/field-visit
+// notes, never touched by any phase above until now.
+//
+// 2026-08-13 (user request, "makukuha ba natin ang mga nakalagay sa NOTE from sdev database
+// legacy?"): no legacy staff/user accounts were ever migrated into this system's `User` table, so
+// there's no real id to attribute authorship to — `authorUserId` is left null (the schema's
+// `ProfileNote.authorUserId` was made nullable specifically for this case) rather than fabricating
+// one. The note's own text almost always already names the staff member who wrote it (e.g. "field
+// visit by Jardie Lalantacon"), so that context isn't lost, just not structured.
+// ----------------------------------------------------------------------------
+
+/** SDevTech stored some comments as rich-text HTML (`<p>`, `<span style="...">`, `&nbsp;`, etc.) —
+ * `ProfileNotesPanel.tsx` renders `note.text` as plain text (no dangerouslySetInnerHTML), so raw
+ * HTML would show up as garbled literal tags. Decodes only the handful of entities actually
+ * observed in the dump, not a full HTML-entity table. */
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function migrateProfileNotes(
+  loanAccountIdByLegacyKey: Map<string, string>,
+  borrowerIdByLegacyKey: Map<string, string>,
+): Promise<Reconciliation> {
+  const rec = newReconciliation('comments', 0);
+
+  for (const c of iterDocs<any>('comments')) {
+    rec.sourceCount++;
+    const text = stripHtml(String(c.text ?? '').trim());
+    if (!text) {
+      recordSkip(rec, 'empty text (before or after stripping HTML)');
+      continue;
+    }
+    const createdAt = toDate(c.creation_date) ?? toDate(c.last_modified_date);
+    if (!createdAt) {
+      recordSkip(rec, 'missing creation date');
+      continue;
+    }
+
+    // Same "loan account first, then borrower" precedence `migrateAttachments` uses above -
+    // `parent_key` here is either a `loan_accounts.uid` or a `client_accounts.uid`, and the two
+    // key spaces never collide (both are Mambu-style opaque hex/ObjectId strings from different
+    // collections), so checking loan accounts first is just an ordering choice, not a real
+    // ambiguity resolution.
+    const parentKey = String(c.parent_key);
+    const loanAccountId = loanAccountIdByLegacyKey.get(parentKey);
+    const borrowerId = !loanAccountId ? borrowerIdByLegacyKey.get(parentKey) : undefined;
+    if (!loanAccountId && !borrowerId) {
+      recordSkip(rec, 'unresolved owner (not a migrated loan account or borrower)');
+      continue;
+    }
+
+    if (APPLY) {
+      await prisma.profileNote.upsert({
+        where: { legacyId: String(c.uid ?? c._id) },
+        update: {},
+        create: {
+          ownerType: loanAccountId ? 'LOAN_ACCOUNT' : 'BORROWER',
+          ownerId: (loanAccountId ?? borrowerId)!,
+          text,
+          authorUserId: null,
+          createdAt,
+          legacyId: String(c.uid ?? c._id),
+        },
+      });
+    }
+    rec.migrated++;
+  }
+
+  return rec;
+}
+
+// ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
 
@@ -854,15 +933,15 @@ async function main(): Promise<void> {
 
   const recs: Reconciliation[] = [];
 
-  console.log('\nPhase 1/5: Loan Products...');
+  console.log('\nPhase 1/6: Loan Products...');
   const { rec: productsRec, productVersionIdByLegacyKey } = await migrateLoanProducts();
   recs.push(productsRec);
 
-  console.log('Phase 2/5: Borrowers...');
+  console.log('Phase 2/6: Borrowers...');
   const { rec: borrowersRec, borrowerIdByLegacyKey } = await migrateBorrowers(branch.id);
   recs.push(borrowersRec);
 
-  console.log('Phase 3/5: Loan Accounts + Co-Borrowers...');
+  console.log('Phase 3/6: Loan Accounts + Co-Borrowers...');
   const { rec: loansRec, loanAccountIdByLegacyKey } = await migrateLoanAccounts(
     branch.id,
     productVersionIdByLegacyKey,
@@ -870,13 +949,17 @@ async function main(): Promise<void> {
   );
   recs.push(loansRec);
 
-  console.log('Phase 4/5: Loan Transactions (this is the big one — 524k+ rows)...');
+  console.log('Phase 4/6: Loan Transactions (this is the big one — 524k+ rows)...');
   const transactionsRec = await migrateLoanTransactions(branch.id, loanAccountIdByLegacyKey);
   recs.push(transactionsRec);
 
-  console.log('Phase 5/5: Attachment metadata...');
+  console.log('Phase 5/6: Attachment metadata...');
   const attachmentsRec = await migrateAttachments(loanAccountIdByLegacyKey, borrowerIdByLegacyKey);
   recs.push(attachmentsRec);
+
+  console.log('Phase 6/6: Profile Notes (collections/field-visit notes)...');
+  const profileNotesRec = await migrateProfileNotes(loanAccountIdByLegacyKey, borrowerIdByLegacyKey);
+  recs.push(profileNotesRec);
 
   printReconciliation(recs);
 
