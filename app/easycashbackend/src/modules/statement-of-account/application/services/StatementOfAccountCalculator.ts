@@ -3,6 +3,7 @@ import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
+import { manilaDaysBetween } from '@shared/domain/manilaTime';
 
 /** Same ₱10,000 threshold as ADR-050, but applied per-installment here (2026-07-19, user request) rather than against the whole loan's principal. */
 const SMALL_BALANCE_THRESHOLD = Money.of('10000.00');
@@ -27,13 +28,6 @@ export interface StatementOfAccountFigures {
   accruedInterest: Money;
   /** Every installment with a positive remaining balance, oldest first — the "Remaining Amortization" table (date-independent). */
   remainingSchedule: RemainingScheduleRow[];
-}
-
-/** Whole days from `from` to `to` (>= 0) — calendar-day difference, not a 24h-multiple wall-clock diff. */
-function daysBetween(from: Date, to: Date): number {
-  const fromUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const toUtc = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-  return Math.max(0, Math.round((toUtc - fromUtc) / (1000 * 60 * 60 * 24)));
 }
 
 /**
@@ -106,7 +100,7 @@ export class StatementOfAccountCalculator {
     const outstandingInterest = (i: RepaymentInstallment) => i.due.interest.subtract(i.paid.interest);
     const outstandingBase = (i: RepaymentInstallment) => outstandingPrincipal(i).add(outstandingInterest(i));
 
-    const penaltyDays = livePenaltyContext || !penaltyFromDate ? 0 : daysBetween(penaltyFromDate, penaltyToDate);
+    const penaltyDays = livePenaltyContext || !penaltyFromDate ? 0 : manilaDaysBetween(penaltyFromDate, penaltyToDate);
 
     let pastDuePrincipal = Money.ZERO;
     let pastDueInterest = Money.ZERO;
@@ -142,7 +136,7 @@ export class StatementOfAccountCalculator {
 
     let accruedInterest = Money.ZERO;
     if (lastInstallment && contractualRate && !contractualRate.isZero() && totalPastDue.isPositive()) {
-      const daysLate = daysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
+      const daysLate = manilaDaysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
       if (daysLate > 0) {
         const dailyBase = totalPastDue.toDecimal().times(contractualRate.asFraction()).dividedBy(30);
         accruedInterest = Money.of(dailyBase.times(daysLate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP));

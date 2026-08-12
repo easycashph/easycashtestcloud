@@ -73,7 +73,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid } from '@/lib/utils';
+import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid, manilaDaysBetween, manilaDaysInMonth } from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -1722,9 +1722,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     const penaltyFrom = toDate(soaPenaltyFromDate);
     const penaltyTo = toDate(soaPenaltyToDate);
     const accruedTo = toDate(soaAccruedInterestAsOfDate);
-    const daysBetween = (from: Date, to: Date) =>
-      Math.max(0, Math.round((Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) - Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())) / 86_400_000));
-    const daysInMonth = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    // 2026-08-12: Manila calendar days, matching the backend's `manilaTime.ts` exactly - the local
+    // implementations these replaced mixed local-time and UTC field reads, so this preview could
+    // disagree with the figures the backend actually put on the generated document.
+    const daysBetween = manilaDaysBetween;
+    const daysInMonth = manilaDaysInMonth;
     const penaltyDays = isProspectiveLoan ? 0 : daysBetween(penaltyFrom, penaltyTo);
 
     const previewInstallments = installmentsQuery.data?.items ?? [];

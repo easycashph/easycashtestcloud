@@ -1,6 +1,7 @@
 import { Decimal } from 'decimal.js';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
+import { manilaDaysBetween, manilaDaysInMonth, manilaWholeMonthsBetween } from '@shared/domain/manilaTime';
 
 export interface PenaltyCalculatorInput {
   /** The unpaid Principal + Interest for the installment — not principal alone (`ADR-050` §1). */
@@ -20,35 +21,6 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
-/** Whole calendar-day difference from `from` to `to` (never negative). */
-function daysBetween(from: Date, to: Date): number {
-  const fromUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const toUtc = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-  return Math.max(0, Math.round((toUtc - fromUtc) / (1000 * 60 * 60 * 24)));
-}
-
-/**
- * Number of calendar days in the month `date` falls in (28/29/30/31) — `ADR-050` §9: the
- * divisor for daily proration is the installment's OWN due-month length, not a flat 30, matching
- * the user's own Excel reference tool exactly (its "End of the month" column).
- */
-function daysInMonth(date: Date): number {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-}
-
-/**
- * Whole calendar months elapsed from `start` to `end` (`end` assumed >= `start`) — the same
- * "hasn't had its birthday yet this year" arithmetic used for age-in-years, applied to months.
- * Only `calculateSimple()` (ADR-053, SEC MC3) uses this now — `calculate()` switched to daily
- * proration on 2026-07-28 (see below) and no longer needs whole-month counting.
- */
-function wholeCalendarMonthsBetween(start: Date, end: Date): number {
-  let months = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
-  if (end.getUTCDate() < start.getUTCDate()) {
-    months -= 1;
-  }
-  return Math.max(0, months);
-}
 
 /**
  * `docs/Architecture/CALCULATION_ENGINE_SPEC.md` §12 / `ADR-050` — `STATUS: CONFIRMED` via direct
@@ -67,7 +39,7 @@ function wholeCalendarMonthsBetween(start: Date, end: Date): number {
  */
 export class PenaltyCalculator {
   static calculate(input: PenaltyCalculatorInput): Money {
-    const daysLate = daysBetween(input.dueDate, input.asOfDate);
+    const daysLate = manilaDaysBetween(input.dueDate, input.asOfDate);
     if (daysLate <= 0) {
       return Money.ZERO;
     }
@@ -75,7 +47,7 @@ export class PenaltyCalculator {
     const amount = input.overdueAmount
       .toDecimal()
       .times(input.ratePercent.asFraction())
-      .dividedBy(daysInMonth(input.dueDate))
+      .dividedBy(manilaDaysInMonth(input.dueDate))
       .times(daysLate)
       .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
     return Money.of(amount);
@@ -95,7 +67,7 @@ export class PenaltyCalculator {
       return Money.ZERO;
     }
 
-    const monthsLate = wholeCalendarMonthsBetween(input.dueDate, input.asOfDate);
+    const monthsLate = manilaWholeMonthsBetween(input.dueDate, input.asOfDate);
     if (monthsLate <= 0) {
       return Money.ZERO;
     }
