@@ -66,6 +66,14 @@ export interface StatementOfAccountFigures {
  *   stops accruing at maturity, after which it is INTEREST that continues (see Accrued Interest
  *   below), never more penalty.
  *
+ * - `MANUAL`: staff type the Past Due Penalty themselves and a reason is required. For the
+ *   long-defaulted migrated accounts whose recorded penalty includes years of post-maturity
+ *   accrual the business no longer charges (681 loans carry ~₱19.3M of it on their final
+ *   installment alone, and ~₱43.2M more sits partly-post-maturity on earlier installments). Those
+ *   are settled case by case; SDevTech's own accrual formula could not be derived from the dump,
+ *   so an automatic figure would be a guess dressed up as a calculation. The statement records
+ *   both the amount and the reason so it can be explained against the schedule it disagrees with.
+ *
  * `rate` is 5%/month if THAT installment's own unpaid Principal + Interest <= ₱10,000, else
  * 10%/month (same ₱10,000 threshold as ADR-050, but evaluated per-installment here, not against the
  * whole loan's principal) — flat, non-compounding, no grace period, matching the legacy tool's own
@@ -101,9 +109,11 @@ export interface StatementOfAccountCalculatorInput {
   installments: RepaymentInstallment[];
   contractualRate: Percentage | undefined;
   penaltyMode: SoaPenaltyMode;
-  /** `COMPUTED` only — ignored entirely under `RECORDED`. */
+  /** `COMPUTED` only — ignored entirely under `RECORDED` and `MANUAL`. */
   penaltyFromDate?: Date | undefined;
   penaltyToDate?: Date | undefined;
+  /** `MANUAL` only — the figure staff typed, used verbatim as the whole Past Due Penalty. */
+  manualPenaltyAmount?: Money | undefined;
   accruedInterestAsOfDate: Date;
   /** Required for BOTH loan types now: `resolveComputedPenalty` uses `isProspectiveLoan` to decide
    * between the live ADR-050 figure and the migrated loan's frozen `due.penalty` snapshot. */
@@ -112,8 +122,16 @@ export interface StatementOfAccountCalculatorInput {
 
 export class StatementOfAccountCalculator {
   static calculate(input: StatementOfAccountCalculatorInput): StatementOfAccountFigures {
-    const { installments, contractualRate, penaltyMode, penaltyFromDate, penaltyToDate, accruedInterestAsOfDate, penaltyContext } =
-      input;
+    const {
+      installments,
+      contractualRate,
+      penaltyMode,
+      penaltyFromDate,
+      penaltyToDate,
+      manualPenaltyAmount,
+      accruedInterestAsOfDate,
+      penaltyContext,
+    } = input;
     const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sorted[sorted.length - 1];
 
@@ -149,6 +167,10 @@ export class StatementOfAccountCalculator {
       if (unpaidPrincipal.isPositive()) pastDuePrincipal = pastDuePrincipal.add(unpaidPrincipal);
       if (unpaidInterest.isPositive()) pastDueInterest = pastDueInterest.add(unpaidInterest);
 
+      // MANUAL replaces the whole Past Due Penalty with the staff-typed figure (added after the
+      // loop), so no per-installment penalty is accumulated here at all.
+      if (penaltyMode === 'MANUAL') continue;
+
       // What the Repayment Schedule itself shows for this installment: the frozen SDevTech snapshot
       // for a migrated loan, the live ADR-050 figure for one originated here.
       const recorded = resolveComputedPenalty(installment, penaltyContext, penaltyCutoff);
@@ -168,6 +190,10 @@ export class StatementOfAccountCalculator {
       pastDuePenalty = pastDuePenalty.add(
         Money.of(unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)),
       );
+    }
+
+    if (penaltyMode === 'MANUAL') {
+      pastDuePenalty = manualPenaltyAmount ?? Money.ZERO;
     }
 
     const totalPastDue = pastDuePrincipal.add(pastDueInterest).add(pastDuePenalty);

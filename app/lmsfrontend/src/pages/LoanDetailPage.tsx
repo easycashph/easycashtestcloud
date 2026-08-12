@@ -1689,6 +1689,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // repayment schedule and needs no dates; COMPUTED keeps those and fills in only the installments
   // that have none. See StatementOfAccountCalculator's doc comment for the full rules.
   const [soaPenaltyMode, setSoaPenaltyMode] = React.useState<SoaPenaltyMode>('RECORDED');
+  const [soaManualPenalty, setSoaManualPenalty] = React.useState('');
+  const [soaManualReason, setSoaManualReason] = React.useState('');
   const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
@@ -1743,6 +1745,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     let pastDueInterest = 0;
     let pastDuePenalty = 0;
     let filledCount = 0;
+    // Reference figures shown under MANUAL: what the schedule records, and what it would be if
+    // penalty stopped at maturity. Both are display-only - neither drives the generated statement.
+    let recordedPenaltyTotal = 0;
+    let cappedPenaltyTotal = 0;
     for (const inst of sorted) {
       if (new Date(inst.dueDate).getTime() > asOfDate.getTime()) continue;
       const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
@@ -1755,6 +1761,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       // What the Repayment Schedule itself shows - the live ADR-050 figure where there is one,
       // otherwise the migrated loan's frozen `due.penalty`. Same fallback as `resolveComputedPenalty`.
       const recorded = parseNum(inst.currentPenaltyOwed ?? inst.due.penalty);
+      recordedPenaltyTotal += recorded;
+      // What this installment would have accrued by maturity and no further - the reference figure
+      // offered under MANUAL. `min` so it can never exceed what is actually on record.
+      if (maturityDate) {
+        const toMaturity = daysBetween(new Date(inst.dueDate), maturityDate);
+        const rate = unpaidBase > 10000 ? 0.1 : 0.05;
+        cappedPenaltyTotal += Math.min(recorded, Math.round(((unpaidBase * toMaturity * rate) / 30) * 100) / 100);
+      }
+
+        if (soaPenaltyMode === 'MANUAL') continue; // staff supply the whole figure instead
       if (soaPenaltyMode === 'RECORDED' || recorded > 0) {
         pastDuePenalty += recorded;
         continue;
@@ -1766,6 +1782,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       pastDuePenalty += Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
       filledCount += 1;
     }
+    if (soaPenaltyMode === 'MANUAL') pastDuePenalty = Number.parseFloat(soaManualPenalty) || 0;
+
     const totalPastDue = pastDuePrincipal + pastDueInterest + pastDuePenalty;
 
     // Current Amortization Due = next unpaid installment due AFTER the as-of date.
@@ -1806,6 +1824,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       penaltyDays: daysBetween(penaltyFrom, penaltyCutoff),
       filledCount,
       penaltyCutoff,
+      recordedPenaltyTotal,
+      cappedPenaltyTotal,
       totalPastDue,
       currentAmortizationDue,
       pnValue,
@@ -1820,6 +1840,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     soaPenaltyMode,
     soaPenaltyFromDate,
     soaPenaltyToDate,
+    soaManualPenalty,
     soaAccruedInterestAsOfDate,
     soaCollectionFee,
     soaOtherFee,
@@ -1858,6 +1879,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           ...(soaPenaltyMode === 'COMPUTED'
             ? { penaltyFromDate: soaPenaltyFromDate, penaltyToDate: soaPenaltyToDate }
             : {}),
+          ...(soaPenaltyMode === 'MANUAL'
+            ? { manualPenaltyAmount: soaManualPenalty, penaltyManualReason: soaManualReason.trim() }
+            : {}),
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
           collectionFee: soaCollectionFee,
           otherFee: soaOtherFee,
@@ -1869,6 +1893,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       setSoaDialogOpen(false);
       setSoaCollectionFee('0.00');
       setSoaOtherFee('0.00');
+      setSoaManualPenalty('');
+      setSoaManualReason('');
     },
     onError: (error) => {
       setSoaError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
@@ -2970,9 +2996,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     // 2026-08-12: only a COMPUTED statement has a range to show - a RECORDED one
                     // took the penalty straight off the schedule and stored no dates at all.
                     summaryParts.push(
-                      item.penaltyFromDate && item.penaltyToDate
-                        ? `Penalty ${formatDate(item.penaltyFromDate)} – ${formatDate(item.penaltyToDate)}`
-                        : 'Penalty from schedule',
+                      item.penaltyManualReason
+                        ? `Penalty set by hand — ${item.penaltyManualReason}`
+                        : item.penaltyFromDate && item.penaltyToDate
+                          ? `Penalty ${formatDate(item.penaltyFromDate)} – ${formatDate(item.penaltyToDate)}`
+                          : 'Penalty from schedule',
                     );
                   }
                   if (num(item.accruedInterest) > 0) {
@@ -3128,7 +3156,78 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     </span>
                   </span>
                 </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                  <input
+                    type="radio"
+                    name="soa-penalty-mode"
+                    className="mt-1"
+                    checked={soaPenaltyMode === 'MANUAL'}
+                    onChange={() => setSoaPenaltyMode('MANUAL')}
+                  />
+                  <span>
+                    <span className="block text-sm">Set the amount myself</span>
+                    <span className="block text-xs text-muted-foreground">For an amount agreed with the borrower.</span>
+                  </span>
+                </label>
               </div>
+
+              {/* 2026-08-12 (user-confirmed): for the long-defaulted migrated accounts whose recorded
+                  penalty includes years of post-maturity accrual the business no longer charges.
+                  Both reference figures are shown so staff decide from the two ends rather than from
+                  a blank field - but neither is applied automatically, since a silent 99% reduction
+                  is exactly the kind of change nobody would notice. */}
+              {soaPenaltyMode === 'MANUAL' && (
+                <div className="mt-2 rounded-md bg-background/60 p-2">
+                  <div className="flex items-center justify-between py-1 text-xs">
+                    <span className="text-muted-foreground">Recorded on the schedule</span>
+                    <span className="tabular-nums">{formatPeso(soaPreview.recordedPenaltyTotal)}</span>
+                  </div>
+                  <div className="mb-2 flex items-center justify-between border-b pb-1.5 text-xs">
+                    <span className="text-muted-foreground">Stops at maturity</span>
+                    <span className="flex items-center gap-2">
+                      <span className="tabular-nums">{formatPeso(soaPreview.cappedPenaltyTotal)}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setSoaManualPenalty(soaPreview.cappedPenaltyTotal.toFixed(2))}
+                      >
+                        use this
+                      </Button>
+                    </span>
+                  </div>
+                  <Label htmlFor="soa-manual-penalty">Penalty amount</Label>
+                  <Input
+                    id="soa-manual-penalty"
+                    inputMode="decimal"
+                    value={soaManualPenalty}
+                    onChange={(e) => setSoaManualPenalty(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <Label htmlFor="soa-manual-reason" className="mt-2 block">
+                    Reason
+                  </Label>
+                  <Input
+                    id="soa-manual-reason"
+                    value={soaManualReason}
+                    onChange={(e) => setSoaManualReason(e.target.value)}
+                    placeholder="Agreed with borrower, 8 Aug 2026 - see collection file"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    Recorded on the statement so this figure can be explained later.
+                  </p>
+                </div>
+              )}
+
+              {/* Guards against reaching for the default on a long-defaulted account without
+                  realising what it includes. */}
+              {soaPenaltyMode === 'RECORDED' && soaPreview.recordedPenaltyTotal > soaPreview.cappedPenaltyTotal && (
+                <p className="mt-2 text-xs text-warning">
+                  Includes {formatPeso(soaPreview.recordedPenaltyTotal - soaPreview.cappedPenaltyTotal)} that accrued
+                  after maturity.
+                </p>
+              )}
 
               {soaPenaltyMode === 'COMPUTED' && (
                 <div className="mt-2 rounded-md bg-background/60 p-2">
@@ -3252,7 +3351,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <Button variant="outline" onClick={() => setSoaDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => generateStatementMutation.mutate()} disabled={generateStatementMutation.isPending}>
+            <Button
+              onClick={() => generateStatementMutation.mutate()}
+              disabled={
+                generateStatementMutation.isPending ||
+                (soaPenaltyMode === 'MANUAL' && (soaManualPenalty.trim() === '' || soaManualReason.trim() === ''))
+              }
+            >
               {generateStatementMutation.isPending ? 'Generating…' : 'Generate'}
             </Button>
           </DialogFooter>

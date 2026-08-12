@@ -22,9 +22,11 @@ export interface IStatementOfAccountMergeDataResolver {
     soaNumber: string,
     statementDate: Date,
     penaltyMode: SoaPenaltyMode,
-    /** Both required under `COMPUTED`; ignored entirely under `RECORDED`. */
+    /** Both required under `COMPUTED`; ignored under `RECORDED` and `MANUAL`. */
     penaltyFromDate: Date | undefined,
     penaltyToDate: Date | undefined,
+    /** Required under `MANUAL`; ignored otherwise. */
+    manualPenaltyAmount: Money | undefined,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,

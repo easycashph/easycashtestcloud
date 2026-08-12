@@ -37,9 +37,13 @@ export interface GenerateStatementOfAccountInput {
    * `StatementOfAccountCalculator`'s doc comment for the full rules.
    */
   penaltyMode: SoaPenaltyMode;
-  /** Both required under `COMPUTED`, ignored under `RECORDED` — the resolver validates and throws. */
+  /** Both required under `COMPUTED`, ignored otherwise — the resolver validates and throws. */
   penaltyFromDate?: Date;
   penaltyToDate?: Date;
+  /** Both required under `MANUAL`, ignored otherwise. The reason is what makes a hand-set figure
+   * explainable later against the schedule it disagrees with. */
+  manualPenaltyAmount?: Money;
+  penaltyManualReason?: string;
   /** Manually-entered "as of" date for the Accrued Interest figure — independent of the Penalty range. */
   accruedInterestAsOfDate: Date;
   collectionFee: Money;
@@ -73,6 +77,7 @@ export class GenerateStatementOfAccountUseCase {
       input.penaltyMode,
       input.penaltyFromDate,
       input.penaltyToDate,
+      input.manualPenaltyAmount,
       input.accruedInterestAsOfDate,
       input.collectionFee,
       input.otherFee,
@@ -95,6 +100,7 @@ export class GenerateStatementOfAccountUseCase {
       penaltyMode: input.penaltyMode,
       penaltyFromDate: effectivePenaltyFromDate,
       penaltyToDate: effectivePenaltyToDate,
+      penaltyManualReason: input.penaltyMode === 'MANUAL' ? input.penaltyManualReason?.trim() ?? null : null,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
       currentAmortizationDue: figures.currentAmortizationDue,
       pastDuePrincipal: figures.pastDuePrincipal,

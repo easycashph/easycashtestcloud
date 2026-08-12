@@ -534,7 +534,7 @@ export interface DocumentTemplateAdminResponse {
 /** 2026-08-12 — how a statement arrived at its Penalty figure. `RECORDED` takes it straight off the
  * repayment schedule (no dates asked); `COMPUTED` fills in only the installments that have none,
  * over a staff-entered range. */
-export type SoaPenaltyMode = 'RECORDED' | 'COMPUTED';
+export type SoaPenaltyMode = 'RECORDED' | 'COMPUTED' | 'MANUAL';
 
 /** ADR-052 — one row per generated Statement of Account (append-only history, newest first). */
 export interface GeneratedStatementOfAccountListItem {
@@ -542,9 +542,11 @@ export interface GeneratedStatementOfAccountListItem {
   loanAccountId: string;
   soaNumber: string;
   penaltyMode: SoaPenaltyMode;
-  /** Both null under `RECORDED`. */
+  /** Both null unless the mode is `COMPUTED`. */
   penaltyFromDate: string | null;
   penaltyToDate: string | null;
+  /** Set only under `MANUAL` — why the figure differs from the repayment schedule. */
+  penaltyManualReason: string | null;
   accruedInterestAsOfDate: string;
   pastDuePenalty: string;
   accruedInterest: string;

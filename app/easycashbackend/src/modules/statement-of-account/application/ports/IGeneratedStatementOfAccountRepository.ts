@@ -10,6 +10,8 @@ export interface GeneratedStatementOfAccountView {
   /** Both null under `RECORDED` — that mode asks staff for no penalty dates. */
   penaltyFromDate: Date | null;
   penaltyToDate: Date | null;
+  /** Set only under `MANUAL` — why the figure differs from the schedule. */
+  penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
   /** 2026-08-06 (user-reported): lets the frontend hide "Penalty {range}" / "Accrued Interest as
    * of {date}" whenever the respective amount is genuinely zero (e.g. a non-matured loan has no

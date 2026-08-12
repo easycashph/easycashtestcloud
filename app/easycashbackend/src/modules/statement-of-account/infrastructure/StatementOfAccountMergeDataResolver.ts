@@ -65,6 +65,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     penaltyMode: SoaPenaltyMode,
     penaltyFromDate: Date | undefined,
     penaltyToDate: Date | undefined,
+    manualPenaltyAmount: Money | undefined,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
@@ -108,6 +109,9 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     if (penaltyMode === 'COMPUTED' && (!penaltyFromDate || !penaltyToDate)) {
       throw new ValidationError('penaltyFromDate and penaltyToDate are required when the penalty mode is COMPUTED.');
     }
+    if (penaltyMode === 'MANUAL' && !manualPenaltyAmount) {
+      throw new ValidationError('A penalty amount is required when the penalty mode is MANUAL.');
+    }
 
     const figures = StatementOfAccountCalculator.calculate({
       installments: sortedInstallments,
@@ -115,6 +119,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       penaltyMode,
       penaltyFromDate,
       penaltyToDate,
+      manualPenaltyAmount,
       accruedInterestAsOfDate,
       penaltyContext,
     });

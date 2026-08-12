@@ -59,6 +59,7 @@ function calc(args: {
   penaltyMode?: SoaPenaltyMode;
   penaltyFromDate?: Date;
   penaltyToDate?: Date;
+  manualPenaltyAmount?: Money;
   accruedInterestAsOfDate?: Date;
   penaltyContext?: PenaltyComputationContext;
 }) {
@@ -70,6 +71,7 @@ function calc(args: {
     penaltyMode: args.penaltyMode ?? 'COMPUTED',
     penaltyFromDate: args.penaltyFromDate,
     penaltyToDate: args.penaltyToDate ?? new Date(),
+    manualPenaltyAmount: args.manualPenaltyAmount,
     accruedInterestAsOfDate: args.accruedInterestAsOfDate ?? new Date(),
     penaltyContext: args.penaltyContext ?? migratedContext(impliedMaturity),
   });
@@ -318,5 +320,62 @@ describe('StatementOfAccountCalculator - COMPUTED penalty mode (2026-08-12)', ()
 
     expect(smallFigures.pastDuePenalty.toString()).toBe('500.00'); // 10,000 x 30 x (5%/30)
     expect(largeFigures.pastDuePenalty.toString()).toBe('1100.00'); // 11,000 x 30 x (10%/30)
+  });
+});
+
+describe('StatementOfAccountCalculator - MANUAL penalty mode (2026-08-12)', () => {
+  it('uses the staff-typed figure verbatim, ignoring what the schedule records', () => {
+    // A long-defaulted migrated account: six years of post-maturity accrual on record.
+    const inst1 = installment(1, daysAgo(2000), { principal: '52753.85', interest: '0.00', penalty: '381938.96' });
+
+    const figures = calc({
+      installments: [inst1],
+      penaltyMode: 'MANUAL',
+      manualPenaltyAmount: Money.of('5451.23'),
+    });
+
+    expect(figures.pastDuePenalty.toString()).toBe('5451.23');
+    // Principal/interest are untouched - only the penalty line is hand-set.
+    expect(figures.pastDuePrincipal.toString()).toBe('52753.85');
+    expect(figures.totalPastDue.toString()).toBe('58205.08');
+  });
+
+  it('accepts zero, for an account where no penalty is being charged at all', () => {
+    const inst1 = installment(1, daysAgo(2000), { principal: '14484.93', interest: '0.00', penalty: '94451.30' });
+
+    const figures = calc({ installments: [inst1], penaltyMode: 'MANUAL', manualPenaltyAmount: Money.of('0.00') });
+
+    expect(figures.pastDuePenalty.toString()).toBe('0.00');
+    expect(figures.totalPastDue.toString()).toBe('14484.93');
+  });
+
+  it('ignores the penalty date range entirely', () => {
+    const inst1 = installment(1, daysAgo(60), { principal: '11000.00', interest: '0.00' });
+
+    const withRange = calc({
+      installments: [inst1],
+      penaltyMode: 'MANUAL',
+      manualPenaltyAmount: Money.of('250.00'),
+      penaltyFromDate: daysAgo(9999),
+    });
+
+    expect(withRange.pastDuePenalty.toString()).toBe('250.00');
+  });
+
+  it('feeds the hand-set penalty into Accrued Interest, same as any other penalty figure', () => {
+    const inst1 = installment(1, daysAgo(30), { principal: '1000.00', interest: '0.00', penalty: '900000.00' });
+
+    const figures = calc({
+      installments: [inst1],
+      contractualRate: Percentage.of('3'),
+      penaltyMode: 'MANUAL',
+      manualPenaltyAmount: Money.of('500.00'),
+      accruedInterestAsOfDate: new Date(Date.now() + 0),
+    });
+
+    // Total Past Due uses the 500.00, not the 900,000.00 on record.
+    expect(figures.totalPastDue.toString()).toBe('1500.00');
+    // 1500.00 x 3% / 30 x 30 days late = 45.00
+    expect(figures.accruedInterest.toString()).toBe('45.00');
   });
 });
