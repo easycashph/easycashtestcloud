@@ -1,5 +1,6 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IAuditLogger } from '@modules/identity/application/ports/IAuditLogger';
+import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
@@ -12,6 +13,9 @@ export interface DeclineLoanApplicationUseCaseDeps {
   profileActivityLogService?: ProfileActivityLogService;
   notificationService?: NotificationService;
   portalNotificationService?: PortalNotificationService;
+  /** 2026-08-14 (detailed portal notifications, user request) - see
+   * ApproveLoanApplicationUseCase's identical dep for the reasoning. */
+  userRepository?: IUserRepository;
 }
 
 export class DeclineLoanApplicationUseCase {
@@ -59,12 +63,15 @@ export class DeclineLoanApplicationUseCase {
 
     // Easycash Portal Notification Center (2026-07-24): tell the portal applicant themself
     // (Approved/Declined only, per user's confirmed scope) via bell + email/SMS.
+    // 2026-08-14 (user request): detailed title, same reasoning as ApproveLoanApplicationUseCase.
     if (this.deps.portalNotificationService && application.portalAccountId) {
+      const reviewer = this.deps.userRepository ? await this.deps.userRepository.findById(reviewedByUserId) : null;
+      const reviewerName = reviewer ? `${reviewer.firstName} ${reviewer.lastName}` : 'an Easycash loan officer';
       await this.deps.portalNotificationService.notify({
         portalAccountId: application.portalAccountId,
         type: 'APPLICATION_DECLINED',
-        title: `Declined: ${application.applicantName}`,
-        body: decisionNote,
+        title: `LOAN APPLICATION DECLINED: ${application.applicantName}'s application has been declined by ${reviewerName}`,
+        body: decisionNote ?? "This application wasn't approved this time. You're welcome to apply again.",
         entityType: 'LoanApplication',
         entityId: application.id,
       });

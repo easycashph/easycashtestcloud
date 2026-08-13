@@ -350,4 +350,25 @@ describe('ActivateLoanUseCase', () => {
       expect(deps.loanTransactionRepository.create).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('notifies the linked Portal account with a detailed title (2026-08-14 user request)', async () => {
+    const deps = buildDeps();
+    const loan = buildApprovedLoan();
+    deps.loanAccountRepository.findById.mockResolvedValue(loan);
+    deps.loanProductRepository.findVersionById.mockResolvedValue(buildLoanProductVersion());
+    const portalAccountRepository = { findByBorrowerId: vi.fn().mockResolvedValue({ id: 'portal-account-1' }) };
+    const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+    const userRepository = { findById: vi.fn().mockResolvedValue({ firstName: 'Maria', lastName: 'Santos' }) };
+
+    const useCase = new ActivateLoanUseCase({ ...deps, portalAccountRepository, portalNotificationService, userRepository });
+    await useCase.execute(loan.id, 'officer-1');
+
+    expect(portalNotificationService.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portalAccountId: 'portal-account-1',
+        type: 'LOAN_ACCOUNT_DISBURSED',
+        title: 'LOAN ACCOUNT DISBURSED: LN-0001 has been disbursed by Maria Santos',
+      }),
+    );
+  });
 });

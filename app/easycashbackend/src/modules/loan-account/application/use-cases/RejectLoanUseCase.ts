@@ -2,6 +2,9 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
 
 export interface RejectLoanUseCaseDeps {
@@ -9,6 +12,10 @@ export interface RejectLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  /** 2026-08-14 (user request) - see ApproveLoanUseCase's identical deps for the reasoning. */
+  portalAccountRepository?: IPortalAccountRepository;
+  portalNotificationService?: PortalNotificationService;
+  userRepository?: IUserRepository;
 }
 
 /**
@@ -51,6 +58,24 @@ export class RejectLoanUseCase {
         userId: rejectedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated('PENDING_APPROVAL', 'CLOSED_REJECTED', reason),
       });
+    }
+
+    // Easycash Portal Notification Center (2026-08-14 user request) - same convention as
+    // ApproveLoanUseCase's notification.
+    if (this.deps.portalAccountRepository && this.deps.portalNotificationService) {
+      const portalAccount = await this.deps.portalAccountRepository.findByBorrowerId(loanAccount.borrowerId);
+      if (portalAccount) {
+        const rejecter = this.deps.userRepository ? await this.deps.userRepository.findById(rejectedByUserId) : null;
+        const rejecterName = rejecter ? `${rejecter.firstName} ${rejecter.lastName}` : 'an Easycash loan officer';
+        await this.deps.portalNotificationService.notify({
+          portalAccountId: portalAccount.id,
+          type: 'LOAN_ACCOUNT_REJECTED',
+          title: `LOAN ACCOUNT REJECTED: ${loanAccount.loanCode} has been rejected by ${rejecterName}`,
+          body: reason ?? "This loan account wasn't approved this time.",
+          entityType: 'LoanAccount',
+          entityId: loanAccount.id,
+        });
+      }
     }
   }
 }

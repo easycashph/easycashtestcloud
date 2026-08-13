@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { Landmark } from 'lucide-react';
+import { Landmark, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { apiClient, downloadFile } from '@/lib/apiClient';
+import { previewLoanSchedule, type SchedulePreviewResult } from '@/lib/loanSchedulePreview';
 import type { PortalInstallmentEntry, PortalLoanAccountSummary, PortalStatementOfAccountEntry } from '@/lib/portalApiTypes';
 
 function peso(value: string): string {
@@ -69,12 +70,23 @@ function LoanAccountStatusBadge({ status }: { status: string }) {
  * assumption explicit rather than silently relying on it. */
 const OPEN_LOAN_ACCOUNT_STATUSES = new Set(['ACTIVE', 'ACTIVE_IN_ARREARS']);
 
+/** 2026-08-14 (user request) - before Activation/Disbursement there is no real balance or
+ * generated schedule yet (the real AmortizationScheduleGenerator only runs at Activate time, same
+ * as the LMS's own `notYetActivated` convention on LoanDetailPage) - so Statement of Account and
+ * Payoff Amount, which both read post-disbursement balances, are disabled until then. */
+const NOT_YET_DISBURSED_STATUSES = new Set(['PENDING_APPROVAL', 'APPROVED']);
+
 function totalOutstanding(loanAccounts: PortalLoanAccountSummary[]): number {
   return loanAccounts
     .filter((loanAccount) => OPEN_LOAN_ACCOUNT_STATUSES.has(loanAccount.status))
     .reduce((sum, loanAccount) => sum + Number(loanAccount.outstandingBalance), 0);
 }
 
+/** 2026-08-14 (user request) - mirrors the LMS's own `showSchedulePreview`/`previewLoanSchedule`
+ * convention on LoanDetailPage: before Activation there are no persisted RepaymentInstallment
+ * rows, so a not-yet-disbursed loan gets a clearly-labeled, client-side computed preview instead
+ * of "No installment schedule found for this loan." (which reads like a data error, not the
+ * expected pre-disbursement state). */
 function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
   const [installments, setInstallments] = React.useState<PortalInstallmentEntry[] | null>(null);
 
@@ -87,14 +99,62 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
       .catch(() => setInstallments([]));
   }, [loanAccount]);
 
+  const showPreview = loanAccount !== null && installments !== null && installments.length === 0 && NOT_YET_DISBURSED_STATUSES.has(loanAccount.status);
+  const preview: SchedulePreviewResult | null = showPreview
+    ? previewLoanSchedule(
+        Number.parseFloat(loanAccount!.principalAmount) || 0,
+        Number.parseFloat(loanAccount!.contractualInterestRate ?? '0') || 0,
+        loanAccount!.installmentCount,
+        new Date(loanAccount!.firstRepaymentDate),
+      )
+    : null;
+
+  const title = loanAccount ? `${showPreview ? 'Repayment Schedule Preview' : 'Payment Schedule'} - ${loanAccount.loanCode}` : 'Payment Schedule';
+
   return (
-    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? `Payment Schedule - ${loanAccount.loanCode}` : 'Payment Schedule'}>
+    <Dialog open={loanAccount !== null} onClose={onClose} title={title}>
       {installments === null ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-10 w-full" />
           ))}
         </div>
+      ) : showPreview ? (
+        preview ? (
+          <>
+            <div className="mb-3 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              Preview only - this loan hasn&apos;t been disbursed yet, so this schedule hasn&apos;t been generated. It&apos;s computed
+              from the current Principal, Interest Rate, and Term, and may still change before disbursement.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">#</th>
+                    <th className="py-2 pr-3 font-medium">Due Date</th>
+                    <th className="py-2 pr-3 font-medium">Principal</th>
+                    <th className="py-2 pr-3 font-medium">Interest</th>
+                    <th className="py-2 font-medium">Payment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.schedule.map((entry) => (
+                    <tr key={entry.installmentNumber} className="border-b border-border/60 last:border-0">
+                      <td className="py-2 pr-3">{entry.installmentNumber}</td>
+                      <td className="py-2 pr-3">{entry.dueDate.toLocaleDateString()}</td>
+                      <td className="py-2 pr-3">{peso(entry.principalPortion.toString())}</td>
+                      <td className="py-2 pr-3">{peso(entry.interestPortion.toString())}</td>
+                      <td className="py-2">{peso(entry.payment.toString())}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">A schedule preview isn&apos;t available for this loan yet.</p>
+        )
       ) : installments.length === 0 ? (
         <p className="text-sm text-muted-foreground">No installment schedule found for this loan.</p>
       ) : (
@@ -312,10 +372,24 @@ export function PortalLoanAccountsSection() {
                   <Button type="button" variant="outline" size="sm" onClick={() => setViewingLoanAccount(loanAccount)}>
                     View Payment Schedule
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setViewingStatementsFor(loanAccount)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status)}
+                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? 'Available once this loan has been disbursed' : undefined}
+                    onClick={() => setViewingStatementsFor(loanAccount)}
+                  >
                     Statement of Account
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setViewingPayoffFor(loanAccount)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status)}
+                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? 'Available once this loan has been disbursed' : undefined}
+                    onClick={() => setViewingPayoffFor(loanAccount)}
+                  >
                     Payoff Amount
                   </Button>
                 </div>

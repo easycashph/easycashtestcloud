@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
 
-/** Only the 2 client-facing loan application decision milestones today (user's explicit choice,
- * 2026-07-24) - not every intermediate staff review stage. */
-export type PortalNotificationType = 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED';
+/** Client-facing milestones only - not every intermediate staff review stage. Started with the 2
+ * loan application decision types (user's explicit choice, 2026-07-24); the 3 LOAN_ACCOUNT_* types
+ * added 2026-08-14 (user request) for the separate LoanAccount lifecycle (booking/disbursing/
+ * rejecting a LoanAccount from an approved application - see ApproveLoanUseCase/
+ * ActivateLoanUseCase/RejectLoanUseCase), which previously had no portal notification at all. */
+export type PortalNotificationType =
+  | 'APPLICATION_APPROVED'
+  | 'APPLICATION_DECLINED'
+  | 'LOAN_ACCOUNT_APPROVED'
+  | 'LOAN_ACCOUNT_DISBURSED'
+  | 'LOAN_ACCOUNT_REJECTED';
 
 export interface PortalNotificationProps {
   id: string;

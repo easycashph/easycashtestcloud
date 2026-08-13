@@ -79,4 +79,24 @@ describe('RejectLoanUseCase (2026-07-08: wraps save + audit log in one IUnitOfWo
     await expect(useCase.execute('missing', 'officer-1')).rejects.toThrow(NotFoundError);
     expect(unitOfWork.run).not.toHaveBeenCalled();
   });
+
+  it('notifies the linked Portal account with a detailed title (2026-08-14 user request)', async () => {
+    const loan = buildLoan();
+    const deps = buildDeps(loan);
+    const portalAccountRepository = { findByBorrowerId: vi.fn().mockResolvedValue({ id: 'portal-account-1' }) };
+    const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+    const userRepository = { findById: vi.fn().mockResolvedValue({ firstName: 'Maria', lastName: 'Santos' }) };
+    const useCase = new RejectLoanUseCase({ ...deps, portalAccountRepository, portalNotificationService, userRepository });
+
+    await useCase.execute(loan.id, 'officer-1', 'Insufficient documents');
+
+    expect(portalNotificationService.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portalAccountId: 'portal-account-1',
+        type: 'LOAN_ACCOUNT_REJECTED',
+        title: 'LOAN ACCOUNT REJECTED: LN-0001 has been rejected by Maria Santos',
+        body: 'Insufficient documents',
+      }),
+    );
+  });
 });

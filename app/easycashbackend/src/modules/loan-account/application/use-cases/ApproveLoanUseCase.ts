@@ -2,6 +2,9 @@ import { NotFoundError } from '@shared/errors/DomainError';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
 
 export interface ApproveLoanUseCaseDeps {
@@ -9,6 +12,13 @@ export interface ApproveLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  /** 2026-08-14 (user request) - previously this milestone had no Portal notification at all
+   * (only the loan APPLICATION's Approve/Decline did). All three are optional so this use case
+   * still works in tests/contexts that don't wire them; the notification is silently skipped
+   * (not an error) whenever the borrower has no linked Portal account. */
+  portalAccountRepository?: IPortalAccountRepository;
+  portalNotificationService?: PortalNotificationService;
+  userRepository?: IUserRepository;
 }
 
 /**
@@ -61,6 +71,25 @@ export class ApproveLoanUseCase {
         userId: approvedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated('PENDING_APPROVAL', 'APPROVED'),
       });
+    }
+
+    // Easycash Portal Notification Center (2026-08-14 user request) - tell the client their loan
+    // account itself (not just their application) is now approved, via bell + email/SMS. Same
+    // "detailed title" convention as the loan application decisions.
+    if (this.deps.portalAccountRepository && this.deps.portalNotificationService) {
+      const portalAccount = await this.deps.portalAccountRepository.findByBorrowerId(loanAccount.borrowerId);
+      if (portalAccount) {
+        const approver = this.deps.userRepository ? await this.deps.userRepository.findById(approvedByUserId) : null;
+        const approverName = approver ? `${approver.firstName} ${approver.lastName}` : 'an Easycash loan officer';
+        await this.deps.portalNotificationService.notify({
+          portalAccountId: portalAccount.id,
+          type: 'LOAN_ACCOUNT_APPROVED',
+          title: `LOAN ACCOUNT APPROVED: ${loanAccount.loanCode} has been approved by ${approverName}`,
+          body: 'Your loan account is now approved. Our team will proceed with disbursement.',
+          entityType: 'LoanAccount',
+          entityId: loanAccount.id,
+        });
+      }
     }
   }
 }

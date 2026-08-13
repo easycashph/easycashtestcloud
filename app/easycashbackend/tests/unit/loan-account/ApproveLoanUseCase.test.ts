@@ -80,4 +80,62 @@ describe('ApproveLoanUseCase (2026-07-08: wraps save + audit log in one IUnitOfW
     await expect(useCase.execute('missing', 'officer-1')).rejects.toThrow(NotFoundError);
     expect(unitOfWork.run).not.toHaveBeenCalled();
   });
+
+  describe('Portal notification (2026-08-14 user request)', () => {
+    it('notifies the linked Portal account with a detailed title including the loan code and approver name', async () => {
+      const loan = buildLoan();
+      const deps = buildDeps(loan);
+      const portalAccountRepository = { findByBorrowerId: vi.fn().mockResolvedValue({ id: 'portal-account-1' }) };
+      const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+      const userRepository = { findById: vi.fn().mockResolvedValue({ firstName: 'Maria', lastName: 'Santos' }) };
+      const useCase = new ApproveLoanUseCase({ ...deps, portalAccountRepository, portalNotificationService, userRepository });
+
+      await useCase.execute(loan.id, 'officer-1');
+
+      expect(portalAccountRepository.findByBorrowerId).toHaveBeenCalledWith('borrower-1');
+      expect(portalNotificationService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          portalAccountId: 'portal-account-1',
+          type: 'LOAN_ACCOUNT_APPROVED',
+          title: 'LOAN ACCOUNT APPROVED: LN-0001 has been approved by Maria Santos',
+          entityType: 'LoanAccount',
+          entityId: loan.id,
+        }),
+      );
+    });
+
+    it('falls back to a generic phrase when the approver cannot be resolved', async () => {
+      const loan = buildLoan();
+      const deps = buildDeps(loan);
+      const portalAccountRepository = { findByBorrowerId: vi.fn().mockResolvedValue({ id: 'portal-account-1' }) };
+      const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+      const useCase = new ApproveLoanUseCase({ ...deps, portalAccountRepository, portalNotificationService });
+
+      await useCase.execute(loan.id, 'officer-1');
+
+      expect(portalNotificationService.notify).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'LOAN ACCOUNT APPROVED: LN-0001 has been approved by an Easycash loan officer' }),
+      );
+    });
+
+    it('does not notify when the borrower has no linked Portal account', async () => {
+      const loan = buildLoan();
+      const deps = buildDeps(loan);
+      const portalAccountRepository = { findByBorrowerId: vi.fn().mockResolvedValue(null) };
+      const portalNotificationService = { notify: vi.fn().mockResolvedValue(undefined) };
+      const useCase = new ApproveLoanUseCase({ ...deps, portalAccountRepository, portalNotificationService });
+
+      await useCase.execute(loan.id, 'officer-1');
+
+      expect(portalNotificationService.notify).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when portalAccountRepository/portalNotificationService are not wired', async () => {
+      const loan = buildLoan();
+      const deps = buildDeps(loan);
+      const useCase = new ApproveLoanUseCase(deps);
+
+      await expect(useCase.execute(loan.id, 'officer-1')).resolves.toBeUndefined();
+    });
+  });
 });

@@ -4,6 +4,9 @@ import { AmortizationScheduleGenerator } from '@shared/domain/calculation/Amorti
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -22,6 +25,10 @@ export interface ActivateLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  /** 2026-08-14 (user request) - see ApproveLoanUseCase's identical deps for the reasoning. */
+  portalAccountRepository?: IPortalAccountRepository;
+  portalNotificationService?: PortalNotificationService;
+  userRepository?: IUserRepository;
 }
 
 /**
@@ -174,6 +181,24 @@ export class ActivateLoanUseCase {
         userId: activatedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated('APPROVED', 'ACTIVE'),
       });
+    }
+
+    // Easycash Portal Notification Center (2026-08-14 user request) - same convention as
+    // ApproveLoanUseCase's notification.
+    if (this.deps.portalAccountRepository && this.deps.portalNotificationService) {
+      const portalAccount = await this.deps.portalAccountRepository.findByBorrowerId(loanAccount.borrowerId);
+      if (portalAccount) {
+        const activator = this.deps.userRepository ? await this.deps.userRepository.findById(activatedByUserId) : null;
+        const activatorName = activator ? `${activator.firstName} ${activator.lastName}` : 'an Easycash loan officer';
+        await this.deps.portalNotificationService.notify({
+          portalAccountId: portalAccount.id,
+          type: 'LOAN_ACCOUNT_DISBURSED',
+          title: `LOAN ACCOUNT DISBURSED: ${loanAccount.loanCode} has been disbursed by ${activatorName}`,
+          body: 'Your loan has been disbursed. Your first repayment schedule is now available on your Dashboard.',
+          entityType: 'LoanAccount',
+          entityId: loanAccount.id,
+        });
+      }
     }
 
     return loanAccount;
