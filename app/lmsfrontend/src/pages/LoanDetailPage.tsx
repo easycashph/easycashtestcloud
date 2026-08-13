@@ -2162,7 +2162,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
           {/* 2026-07-24 (UI polish, user-confirmed): at most one solid/primary button per view -
               whichever action is THE next expected step for this status (Record Payment while
-              ACTIVE, Disburse Loan while APPROVED, Approve Loan while PENDING_APPROVAL). Every
+              ACTIVE, Disburse Loan while APPROVED, Approve Loan Account while PENDING_APPROVAL). Every
               other action (Undo Approve/Undo Disburse/Restructure/Loan Adjustment/Edit) is a
               secondary, less-frequent action and lives in the "More actions" menu below instead
               of competing for the same visual weight. */}
@@ -2178,7 +2178,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           )}
           {canApproveLoanAccount && loan.status === 'PENDING_APPROVAL' && (
             <Button size="sm" onClick={() => openConfirm('APPROVE')}>
-              Approve Loan
+              Approve Loan Account
             </Button>
           )}
           {(() => {
