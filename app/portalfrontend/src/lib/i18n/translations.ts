@@ -102,6 +102,8 @@ export const en = {
       { title: 'Bank Transfer', body: 'Pay directly from your bank account.' },
       { title: 'Post-Dated Check (PDC)', body: 'Set up post-dated checks matched to your payment schedule.' },
     ],
+    officialBankAccountHeading: 'Payment to Official Bank Account',
+    officialBankAccountProofNote: 'Please send proof of payment to',
     testimonialsTitle: 'People say the nicest things',
     testimonialsSubtitle:
       "Here's the compelling reason why thousands of businesses and individuals have opted for our expertise to drive their financial growth.",
@@ -369,6 +371,8 @@ export const fil: Translations = {
       { title: 'Bank Transfer', body: 'Magbayad direkta mula sa iyong bank account.' },
       { title: 'Post-Dated Check (PDC)', body: 'Mag-set up ng post-dated checks na naka-tugma sa iskedyul ng iyong bayad.' },
     ],
+    officialBankAccountHeading: 'Bayad sa Opisyal na Bank Account',
+    officialBankAccountProofNote: 'Ipadala ang proof of payment sa',
     testimonialsTitle: 'Ang sinasabi ng aming mga kliyente',
     testimonialsSubtitle:
       'Ito ang dahilan kung bakit libo-libong negosyo at indibidwal ang pumili sa aming serbisyo para sa kanilang paglago sa pananalapi.',

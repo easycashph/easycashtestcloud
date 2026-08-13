@@ -28,7 +28,7 @@ import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
-import { COMPANY, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
+import { COMPANY, OFFICIAL_BANK_ACCOUNT, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { LOAN_PRODUCTS } from '@/lib/loanProducts';
 import { getDocumentsForProduct } from '@/lib/loanRequirements';
@@ -516,6 +516,44 @@ export function LandingPage() {
               );
             })}
           </motion.div>
+
+          <Reveal className="mx-auto mt-6 max-w-2xl">
+            <div className="overflow-hidden rounded-2xl border-2 border-primary/30 bg-card shadow-sm">
+              <div className="h-1.5 bg-primary" />
+              <div className="p-6 sm:p-7">
+                <div className="flex items-center gap-2">
+                  <img src="./logo-easycash.png" alt="" className="h-6 w-6 rounded object-contain" />
+                  <span className="text-sm font-bold tracking-tight">easycash</span>
+                </div>
+                <h3 className="mt-4 text-sm font-semibold">{t.landing.officialBankAccountHeading}</h3>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                    <dt className="text-muted-foreground">Account Name</dt>
+                    <dd className="font-medium">{OFFICIAL_BANK_ACCOUNT.accountName}</dd>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                    <dt className="text-muted-foreground">Bank Name</dt>
+                    <dd className="font-medium">{OFFICIAL_BANK_ACCOUNT.bankName}</dd>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                    <dt className="text-muted-foreground">Branch</dt>
+                    <dd className="font-medium">{OFFICIAL_BANK_ACCOUNT.branch}</dd>
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-x-4 gap-y-0.5">
+                    <dt className="text-muted-foreground">Account No.</dt>
+                    <dd className="font-mono font-semibold text-primary">{OFFICIAL_BANK_ACCOUNT.accountNo}</dd>
+                  </div>
+                </dl>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  {t.landing.officialBankAccountProofNote}{' '}
+                  <a href={`mailto:${OFFICIAL_BANK_ACCOUNT.proofOfPaymentEmail}`} className="font-medium text-primary hover:underline">
+                    {OFFICIAL_BANK_ACCOUNT.proofOfPaymentEmail}
+                  </a>
+                  .
+                </p>
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 

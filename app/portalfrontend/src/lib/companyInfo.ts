@@ -46,6 +46,23 @@ export const COMPANY = {
   },
 } as const;
 
+/**
+ * Official bank account for client loan payments (Bank Transfer channel).
+ *
+ * Provenance: supplied directly by the business owner via the "Easycash-Official-Bank-Account"
+ * Google Doc, confirmed 2026-08-14. Do not edit without written confirmation from management -
+ * a wrong digit here sends a client's payment to the wrong account, and this is also the
+ * reference value clients are told to check against when verifying a payment request is
+ * genuinely from Easycash (anti-scam use, mirrors OFFICIAL_CHANNELS below).
+ */
+export const OFFICIAL_BANK_ACCOUNT = {
+  accountName: 'Easycash Lending Company, Inc.',
+  bankName: 'BDO',
+  branch: 'Times Plaza',
+  accountNo: '003940-5805-45',
+  proofOfPaymentEmail: 'collections@easycash.ph',
+} as const;
+
 /** Single-line registered address, for compact footers and meta tags. */
 export const FORMATTED_ADDRESS = [
   COMPANY.address.line1,
