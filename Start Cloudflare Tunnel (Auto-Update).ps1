@@ -91,25 +91,30 @@ try {
 
 # --- Step 2: start the tunnel, capture its output ---
 Write-Step '[2/4] Starting cloudflared tunnel...'
-$logPath = Join-Path $env:TEMP "cloudflared-tunnel-$([guid]::NewGuid()).log"
+$runId = [guid]::NewGuid()
+$stdoutPath = Join-Path $env:TEMP "cloudflared-tunnel-$runId.out.log"
+$stderrPath = Join-Path $env:TEMP "cloudflared-tunnel-$runId.err.log"
 $proc = Start-Process -FilePath $CloudflaredExe -ArgumentList 'tunnel', '--url', 'http://localhost:4000' `
-    -RedirectStandardError $logPath -RedirectStandardOutput $logPath -PassThru -WindowStyle Hidden
+    -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru -WindowStyle Hidden
 
 $tunnelUrl = $null
 $deadline = (Get-Date).AddSeconds(30)
 while ((Get-Date) -lt $deadline -and -not $tunnelUrl) {
     Start-Sleep -Milliseconds 500
-    if (Test-Path $logPath) {
-        $content = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
-        if ($content -match 'https://[a-zA-Z0-9-]+\.trycloudflare\.com') {
-            $tunnelUrl = $Matches[0]
+    foreach ($logPath in @($stderrPath, $stdoutPath)) {
+        if (-not $tunnelUrl -and (Test-Path $logPath)) {
+            $content = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
+            if ($content -match 'https://[a-zA-Z0-9-]+\.trycloudflare\.com') {
+                $tunnelUrl = $Matches[0]
+            }
         }
     }
 }
 
 if (-not $tunnelUrl) {
-    Write-Err2 '      Timed out waiting for the tunnel URL. Check the log:'
-    Write-Err2 "      $logPath"
+    Write-Err2 '      Timed out waiting for the tunnel URL. Check the logs:'
+    Write-Err2 "      $stdoutPath"
+    Write-Err2 "      $stderrPath"
     Read-Host 'Press Enter to exit'
     exit 1
 }
