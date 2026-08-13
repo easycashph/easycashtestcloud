@@ -646,7 +646,7 @@ function MitigationDetailsCard({ borrowerId }: { borrowerId: string }) {
         </div>
         {result && (
           <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
-            <Link to={`/loan-applications/${result.sourceApplicationId}`}>Edit on Loan Application</Link>
+            <Link to={`/loan-applications/${result.sourceApplicationId}?section=mitigation`}>Edit on Loan Application</Link>
           </Button>
         )}
       </CardHeader>

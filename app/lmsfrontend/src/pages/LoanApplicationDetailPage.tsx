@@ -1047,6 +1047,18 @@ const UnderwritingCard = React.forwardRef<
   const mitigationOwnerMissing = mitigationOwnerRequired && !mitigation.accountOwner;
   const hasAgencyData = AGENCY_VERIFICATION_FIELDS.some((f) => agencyVerification[f.key]?.trim());
   const [mitigationOpen, setMitigationOpen] = React.useState(hasMitigationData);
+  // 2026-08-13 (user request): Client Profile's read-only mitigation card links back here to edit -
+  // deep-links via `?section=mitigation` so staff land straight on the section instead of having to
+  // find it themselves on a long page.
+  const location = useLocation();
+  const mitigationSectionRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (new URLSearchParams(location.search).get('section') !== 'mitigation') return;
+    setMitigationOpen(true);
+    const id = window.setTimeout(() => mitigationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
   const [agencyOpen, setAgencyOpen] = React.useState(hasAgencyData || isSeafarerLoan);
   /** 2026-07-23: per-group collapse state for AGENCY_FIELD_GROUPS - each group starts open only if
    * it already has data on file (e.g. loaded from an existing review report), collapsed otherwise. */
@@ -1279,7 +1291,7 @@ const UnderwritingCard = React.forwardRef<
           </div>
         </div>
 
-        <div className="space-y-2 rounded-md border p-3">
+        <div ref={mitigationSectionRef} className="space-y-2 rounded-md border p-3">
           <div className="flex items-center gap-2">
             <Label className="text-xs">Mode of payment and mitigation</Label>
             <Badge variant="outline" className="text-[10px]">
