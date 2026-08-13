@@ -50,7 +50,7 @@ export function PortalNextPaymentDueCard() {
         : `Due in ${days} days`;
 
   return (
-    <Card className={`mt-5 flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between ${isOverdue ? 'border-destructive/40 bg-destructive/5' : 'border-primary/30 bg-primary/5'}`}>
+    <Card className={`flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between ${isOverdue ? 'border-destructive/40 bg-destructive/5' : 'border-primary/30 bg-primary/5'}`}>
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${isOverdue ? 'bg-destructive/15 text-destructive' : 'bg-primary/15 text-primary'}`}>
           <CalendarClock className="h-5 w-5" />

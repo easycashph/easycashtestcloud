@@ -29,7 +29,7 @@ export function PortalLoanOfficerCard() {
   if (loanOfficer === undefined) return null;
 
   return (
-    <Card className="mt-5 flex items-center gap-3 p-6">
+    <Card className="flex items-center gap-3 p-6">
       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <MessageCircle className="h-5 w-5" />
       </div>

@@ -172,41 +172,45 @@ export function DashboardPage() {
           <p className="mt-1 text-sm text-muted-foreground">Here's your Easycash account.</p>
         </motion.div>
 
-        <PortalTwoFactorNudgeCard />
+        {/* 2026-08-14 (user request): compact 2-per-row grid for the short "fact" cards - each
+            manages its own conditional rendering (returns null when it has nothing to show), and
+            CSS grid simply reflows around whichever ones are actually present. The two list/table
+            widgets below (My Loans, Recent Payments) stay full-width - they hold multi-column rows
+            and per-row action buttons that would cramp badly at half width. */}
+        <div className="mt-8 grid gap-5 sm:grid-cols-2">
+          <PortalTwoFactorNudgeCard />
+          <PortalNextPaymentDueCard />
+          <PortalOfficialBankAccountCard />
+          <PortalPaymentProofCard />
+          <PortalLoanOfficerCard />
 
-        <PortalNextPaymentDueCard />
+          <motion.div initial="hidden" animate="show" variants={fadeUp}>
+            <Card className="p-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <FileText className="h-5 w-5" />
+              </div>
+              <h2 className="mt-4 text-base font-semibold">Loan Application</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                {hasPendingApplication
+                  ? 'You already have an application in progress - see it below. You can apply again once it\'s declined.'
+                  : 'Apply for a new loan, or check the status of one you already submitted.'}
+              </p>
+              <Button className="mt-4" onClick={() => navigate('/apply')} disabled={hasPendingApplication} title={hasPendingApplication ? 'You already have an application in progress' : undefined}>
+                Create Loan Application
+              </Button>
+              {/* 2026-08-14 (user request, anti-scam) - same disclosure as the public landing page:
+                  a client should know approved loans are only ever released via DISBURSEMENT_METHOD. */}
+              <p className="mt-3 text-xs text-muted-foreground">
+                Approved loans are released via {DISBURSEMENT_METHOD} only - Easycash never disburses in cash, GCash, or bank transfer.
+              </p>
+            </Card>
+          </motion.div>
+        </div>
 
-        <PortalOfficialBankAccountCard />
-
-        <PortalPaymentProofCard />
-
-        <PortalLoanAccountsSection />
-
-        <PortalLoanOfficerCard />
-
-        <motion.div initial="hidden" animate="show" variants={fadeUp}>
-        <Card className="mt-5 p-6">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <FileText className="h-5 w-5" />
-          </div>
-          <h2 className="mt-4 text-base font-semibold">Loan Application</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {hasPendingApplication
-              ? 'You already have an application in progress - see it below. You can apply again once it\'s declined.'
-              : 'Apply for a new loan, or check the status of one you already submitted.'}
-          </p>
-          <Button className="mt-4" onClick={() => navigate('/apply')} disabled={hasPendingApplication} title={hasPendingApplication ? 'You already have an application in progress' : undefined}>
-            Create Loan Application
-          </Button>
-          {/* 2026-08-14 (user request, anti-scam) - same disclosure as the public landing page: a
-              client should know approved loans are only ever released via DISBURSEMENT_METHOD. */}
-          <p className="mt-3 text-xs text-muted-foreground">
-            Approved loans are released via {DISBURSEMENT_METHOD} only - Easycash never disburses in cash, GCash, or bank transfer.
-          </p>
-        </Card>
-        </motion.div>
-
-        <PortalRecentPaymentsSection />
+        <div className="mt-5 space-y-5">
+          <PortalLoanAccountsSection />
+          <PortalRecentPaymentsSection />
+        </div>
 
         <motion.div initial="hidden" animate="show" variants={fadeUp}>
         <Card className="mt-5 p-6">

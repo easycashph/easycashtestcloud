@@ -29,7 +29,7 @@ export function PortalRecentPaymentsSection() {
   if (payments !== null && payments.length === 0) return null;
 
   return (
-    <Card className="mt-5 p-6">
+    <Card className="p-6">
       <h2 className="text-base font-semibold">Recent Payments</h2>
       {payments === null ? (
         <div className="mt-4 space-y-2">

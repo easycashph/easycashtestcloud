@@ -14,7 +14,7 @@ import { OFFICIAL_BANK_ACCOUNT } from '@/lib/companyInfo';
  */
 export function PortalOfficialBankAccountCard() {
   return (
-    <Card className="mt-5 overflow-hidden p-0">
+    <Card className="overflow-hidden p-0">
       <div className="h-1.5 bg-primary" />
       <div className="p-6">
         <div className="flex items-start gap-3">

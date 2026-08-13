@@ -55,7 +55,7 @@ export function PortalPaymentProofCard() {
   };
 
   return (
-    <Card className="mt-5 p-6">
+    <Card className="p-6">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <Receipt className="h-5 w-5" />

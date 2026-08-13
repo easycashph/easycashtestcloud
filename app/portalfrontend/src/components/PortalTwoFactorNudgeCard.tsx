@@ -18,7 +18,7 @@ export function PortalTwoFactorNudgeCard() {
   if (!account || account.twoFactorEnabled) return null;
 
   return (
-    <Card className="mt-5 flex flex-col gap-3 border-warning/40 bg-warning/5 p-6 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="flex flex-col gap-3 border-warning/40 bg-warning/5 p-6 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-warning/15 text-warning">
           <ShieldAlert className="h-5 w-5" />

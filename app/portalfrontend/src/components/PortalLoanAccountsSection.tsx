@@ -337,7 +337,7 @@ export function PortalLoanAccountsSection() {
 
   return (
     <>
-      <Card className="mt-5 p-6">
+      <Card className="p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 className="text-base font-semibold">My Loans</h2>
           {loanAccounts !== null && loanAccounts.some((l) => OPEN_LOAN_ACCOUNT_STATUSES.has(l.status)) && (
