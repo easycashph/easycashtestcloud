@@ -262,6 +262,14 @@ import { createEmailReminderLogRouter } from '@modules/email-reminder/interface/
 import { ListEmailReminderLogsUseCase } from '@modules/email-reminder/application/use-cases/ListEmailReminderLogsUseCase';
 import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
 import { createReminderSettingsRouter } from '@modules/reminder-settings/interface/http/reminderSettingsRouter';
+import { createSystemAnnouncementRouter } from '@modules/system-announcement/interface/http/systemAnnouncementRouter';
+import { createPublicAnnouncementRouter } from '@modules/system-announcement/interface/http/publicAnnouncementRouter';
+import { CreateSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/CreateSystemAnnouncementUseCase';
+import { ListSystemAnnouncementsUseCase } from '@modules/system-announcement/application/use-cases/ListSystemAnnouncementsUseCase';
+import { UpdateSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/UpdateSystemAnnouncementUseCase';
+import { DeleteSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/DeleteSystemAnnouncementUseCase';
+import { GetActiveSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/GetActiveSystemAnnouncementUseCase';
+import { PrismaSystemAnnouncementRepository } from '@modules/system-announcement/infrastructure/PrismaSystemAnnouncementRepository';
 import { GetReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/GetReminderSettingsUseCase';
 import { UpdateReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/UpdateReminderSettingsUseCase';
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
@@ -1311,6 +1319,26 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', reminderSettingsRouter);
+
+  // --- system-announcement module wiring (2026-08-14 user request): MIS-authored maintenance/news
+  // popups shown to LMS staff and/or Portal clients. One repository instance shared by the
+  // MIS-only admin router (mounted at /api/v1) and the public "what's active right now" router
+  // (mounted at /api/v1/portal, no auth - see publicAnnouncementRouter's own doc comment). ---
+  const systemAnnouncementRepository = new PrismaSystemAnnouncementRepository();
+  const getActiveSystemAnnouncementUseCase = new GetActiveSystemAnnouncementUseCase({ systemAnnouncementRepository });
+  const systemAnnouncementRouter = createSystemAnnouncementRouter(
+    {
+      createSystemAnnouncementUseCase: new CreateSystemAnnouncementUseCase({ systemAnnouncementRepository }),
+      listSystemAnnouncementsUseCase: new ListSystemAnnouncementsUseCase({ systemAnnouncementRepository }),
+      updateSystemAnnouncementUseCase: new UpdateSystemAnnouncementUseCase({ systemAnnouncementRepository }),
+      deleteSystemAnnouncementUseCase: new DeleteSystemAnnouncementUseCase({ systemAnnouncementRepository }),
+      getActiveSystemAnnouncementUseCase,
+    },
+    tokenService,
+  );
+  app.use('/api/v1', systemAnnouncementRouter);
+  const publicAnnouncementRouter = createPublicAnnouncementRouter({ getActiveSystemAnnouncementUseCase });
+  app.use('/api/v1/portal', publicAnnouncementRouter);
 
   // --- interest-rate-chart module wiring: Add-On Rate + Term -> Contractual Rate lookup (Create Loan Account) ---
   const interestRateChartRouter = createInterestRateChartRouter(

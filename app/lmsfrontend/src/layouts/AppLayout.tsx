@@ -20,6 +20,7 @@ import { AccountMenu } from '@/components/AccountMenu';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { HelpButton } from '@/components/HelpButton';
 import { NotificationBell } from '@/components/NotificationBell';
+import { SystemAnnouncementPopup } from '@/components/SystemAnnouncementPopup';
 import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/apiClient';
@@ -294,6 +295,7 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      <SystemAnnouncementPopup />
     </div>
   );
 }

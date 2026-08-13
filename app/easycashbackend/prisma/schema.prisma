@@ -299,6 +299,7 @@ model User {
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
   notificationsReceived                Notification[]
   reminderSettingsUpdated              ReminderSettings[]
+  systemAnnouncementsCreated            SystemAnnouncement[]
   chatConversationsClaimed             ChatConversation[]            @relation("ChatConversationClaimedBy")
   chatConversationsOriginallyClaimed   ChatConversation[]            @relation("ChatConversationOriginallyClaimedBy")
   chatConversationsPendingTransferTo   ChatConversation[]            @relation("ChatConversationPendingTransferTo")
@@ -2562,4 +2563,45 @@ model ExternalNewsLink {
 
   @@index([category, publishedAt])
   @@map("external_news_links")
+}
+
+/// System-wide announcement popup (2026-08-14 user request) - lets MIS give LMS staff and/or
+/// Portal clients advance notice of scheduled/emergency maintenance or other system-wide news,
+/// so users aren't caught off guard by unexpected downtime. MIS-authored content only (never
+/// auto-generated) - distinct from ExternalNewsLink above, which is fetched from external RSS
+/// feeds. Only the single most recent ACTIVE, non-expired, audience-matching row is ever shown to
+/// a given app (GetActiveSystemAnnouncementUseCase) - this table also keeps every past
+/// announcement (active=false rows) as a lightweight history for MIS's admin list.
+enum SystemAnnouncementType {
+  /// Scheduled or emergency maintenance / downtime - shown with warning styling.
+  MAINTENANCE
+  /// General news/update - shown with neutral/informational styling.
+  NEWS
+  /// Anything not covered by the above - shown with neutral styling, same as NEWS.
+  GENERAL
+}
+
+model SystemAnnouncement {
+  id     String                 @id @default(uuid())
+  title  String
+  body   String
+  type   SystemAnnouncementType @default(GENERAL)
+  /// Per-announcement audience targeting (2026-08-14 user-confirmed) - independent flags rather
+  /// than a single enum, so MIS can target LMS only, Portal only, or both from the same form.
+  showOnLms    Boolean @default(true)
+  showOnPortal Boolean @default(true)
+  /// MIS can turn an announcement off without deleting it (keeps the admin history intact).
+  active Boolean @default(true)
+  /// Optional auto-expiry (2026-08-14 user-confirmed) - once past, the announcement stops
+  /// appearing without MIS needing to come back and manually deactivate it. Null = shown
+  /// indefinitely until MIS deactivates it by hand.
+  expiresAt DateTime?
+
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([active, expiresAt])
+  @@map("system_announcements")
 }
