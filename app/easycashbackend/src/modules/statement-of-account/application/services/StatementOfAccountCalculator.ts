@@ -3,6 +3,8 @@ import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
+import { manilaDaysBetween } from '@shared/domain/manilaTime';
+import type { SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 
 /** Same ₱10,000 threshold as ADR-050, but applied per-installment here (2026-07-19, user request) rather than against the whole loan's principal. */
 const SMALL_BALANCE_THRESHOLD = Money.of('10000.00');
@@ -29,13 +31,6 @@ export interface StatementOfAccountFigures {
   remainingSchedule: RemainingScheduleRow[];
 }
 
-/** Whole days from `from` to `to` (>= 0) — calendar-day difference, not a 24h-multiple wall-clock diff. */
-function daysBetween(from: Date, to: Date): number {
-  const fromUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const toUtc = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-  return Math.max(0, Math.round((toUtc - fromUtc) / (1000 * 60 * 60 * 24)));
-}
-
 /**
  * Statement of Account figures — sourced from the user's own legacy Excel/VBA tool
  * (`legacy/Excel LMS Files/BETA 1.5.83 LMSv3.xlsm`'s `vbaProject.bin`, full source shared 2026-07-19),
@@ -49,16 +44,36 @@ function daysBetween(from: Date, to: Date): number {
  * `RepaymentInstallment.status === 'LATE'` (always relative to the real clock) — the whole point of
  * a manual "as of" date is that Past Due must be evaluated against IT, not against right-now.
  *
- * **Penalty** (2026-07-19, user request — departs from the legacy tool's own per-installment
- * `DateDiff(dueDate, cutoffDate)` day count):
+ * **Penalty** — 2026-08-12 (user-confirmed) replaced the previous shared-date-range formula with
+ * two explicit modes, recorded on the statement as `penaltyMode` so any past SOA can be explained
+ * and reproduced:
  *
- *   Penalty (per qualifying installment) = (unpaid Principal + Interest) x Days(penaltyFromDate,
- *   penaltyToDate) x (rate / 30)
+ * - `RECORDED` (the default): each installment's penalty is whatever the Repayment Schedule itself
+ *   shows — `resolveComputedPenalty`, i.e. the frozen SDevTech snapshot for a migrated loan and the
+ *   live ADR-050 figure for one originated here. Schedule and SOA therefore agree by construction
+ *   for BOTH loan types (the long-standing goal noted in the 2026-07-28 addendum below, previously
+ *   only true for prospective loans), and staff enter no penalty dates at all.
  *
- * `penaltyFromDate` and `penaltyToDate` are BOTH manually entered by staff and apply as ONE SHARED
- * date range across every Past Due installment (not each installment's own due date as "from") —
- * lets staff preview "what if penalty only accrued from this date" (e.g. a negotiated grace period
- * or collection-intervention date) rather than being locked to each installment's own due date.
+ * - `COMPUTED`: keeps every recorded figure untouched and fills in ONLY the installments that have
+ *   none, over a staff-entered range — for the ~2% of migrated loans where SDevTech never recorded
+ *   any penalty. Per qualifying installment:
+ *
+ *     (unpaid Principal + Interest) x Days(max(dueDate, penaltyFromDate), penaltyCutoff) x (rate / 30)
+ *
+ *   Days are counted from the installment's OWN due date (or the staff "from" date, whichever is
+ *   later) rather than one shared count, so an installment that was not yet overdue can never be
+ *   charged a full period. `penaltyCutoff` is min(as-of date, the loan's maturity date) — penalty
+ *   stops accruing at maturity, after which it is INTEREST that continues (see Accrued Interest
+ *   below), never more penalty.
+ *
+ * - `MANUAL`: staff type the Past Due Penalty themselves and a reason is required. For the
+ *   long-defaulted migrated accounts whose recorded penalty includes years of post-maturity
+ *   accrual the business no longer charges (681 loans carry ~₱19.3M of it on their final
+ *   installment alone, and ~₱43.2M more sits partly-post-maturity on earlier installments). Those
+ *   are settled case by case; SDevTech's own accrual formula could not be derived from the dump,
+ *   so an automatic figure would be a guess dressed up as a calculation. The statement records
+ *   both the amount and the reason so it can be explained against the schedule it disagrees with.
+ *
  * `rate` is 5%/month if THAT installment's own unpaid Principal + Interest <= ₱10,000, else
  * 10%/month (same ₱10,000 threshold as ADR-050, but evaluated per-installment here, not against the
  * whole loan's principal) — flat, non-compounding, no grace period, matching the legacy tool's own
@@ -90,15 +105,33 @@ function daysBetween(from: Date, to: Date): number {
  * automatically). Migrated loans (no `livePenaltyContext`) keep the flat/shared-range formula
  * exactly as before — `resolveComputedPenalty` has no live figure for them anyway.
  */
+export interface StatementOfAccountCalculatorInput {
+  installments: RepaymentInstallment[];
+  contractualRate: Percentage | undefined;
+  penaltyMode: SoaPenaltyMode;
+  /** `COMPUTED` only — ignored entirely under `RECORDED` and `MANUAL`. */
+  penaltyFromDate?: Date | undefined;
+  penaltyToDate?: Date | undefined;
+  /** `MANUAL` only — the figure staff typed, used verbatim as the whole Past Due Penalty. */
+  manualPenaltyAmount?: Money | undefined;
+  accruedInterestAsOfDate: Date;
+  /** Required for BOTH loan types now: `resolveComputedPenalty` uses `isProspectiveLoan` to decide
+   * between the live ADR-050 figure and the migrated loan's frozen `due.penalty` snapshot. */
+  penaltyContext: PenaltyComputationContext;
+}
+
 export class StatementOfAccountCalculator {
-  static calculate(
-    installments: RepaymentInstallment[],
-    contractualRate: Percentage | undefined,
-    penaltyFromDate: Date | undefined,
-    penaltyToDate: Date,
-    accruedInterestAsOfDate: Date,
-    livePenaltyContext?: PenaltyComputationContext,
-  ): StatementOfAccountFigures {
+  static calculate(input: StatementOfAccountCalculatorInput): StatementOfAccountFigures {
+    const {
+      installments,
+      contractualRate,
+      penaltyMode,
+      penaltyFromDate,
+      penaltyToDate,
+      manualPenaltyAmount,
+      accruedInterestAsOfDate,
+      penaltyContext,
+    } = input;
     const sorted = [...installments].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const lastInstallment = sorted[sorted.length - 1];
 
@@ -106,14 +139,26 @@ export class StatementOfAccountCalculator {
     const outstandingInterest = (i: RepaymentInstallment) => i.due.interest.subtract(i.paid.interest);
     const outstandingBase = (i: RepaymentInstallment) => outstandingPrincipal(i).add(outstandingInterest(i));
 
-    const penaltyDays = livePenaltyContext || !penaltyFromDate ? 0 : daysBetween(penaltyFromDate, penaltyToDate);
+    // The date every bucket is evaluated against. `COMPUTED` keeps using the staff-entered penalty
+    // "to" date (unchanged behaviour); `RECORDED` asks for no penalty dates at all, so it falls
+    // back to the one date staff still enters — keeping a single coherent "as of" for the whole
+    // statement rather than silently switching to real-now.
+    const asOfDate = (penaltyMode === 'COMPUTED' ? penaltyToDate : undefined) ?? accruedInterestAsOfDate;
+
+    // 2026-08-12 (user-confirmed): penalty never accrues past the loan's own maturity date — past
+    // it, what continues to accrue is INTEREST (the Accrued Interest section below), not penalty.
+    // Same cap `CurrentPenaltyResolver` already applies to the live figure; the manual date-range
+    // path never honoured it, which is what let an installment sitting ON its maturity date be
+    // charged a full period of penalty.
+    const penaltyCutoff =
+      asOfDate.getTime() > penaltyContext.maturityDate.getTime() ? penaltyContext.maturityDate : asOfDate;
 
     let pastDuePrincipal = Money.ZERO;
     let pastDueInterest = Money.ZERO;
     let pastDuePenalty = Money.ZERO;
 
     for (const installment of sorted) {
-      if (installment.dueDate.getTime() > penaltyToDate.getTime()) continue; // not yet due as of the chosen date
+      if (installment.dueDate.getTime() > asOfDate.getTime()) continue; // not yet due as of the chosen date
       const unpaidPrincipal = outstandingPrincipal(installment);
       const unpaidInterest = outstandingInterest(installment);
       const unpaidBase = unpaidPrincipal.add(unpaidInterest);
@@ -122,27 +167,45 @@ export class StatementOfAccountCalculator {
       if (unpaidPrincipal.isPositive()) pastDuePrincipal = pastDuePrincipal.add(unpaidPrincipal);
       if (unpaidInterest.isPositive()) pastDueInterest = pastDueInterest.add(unpaidInterest);
 
-      if (livePenaltyContext) {
-        pastDuePenalty = pastDuePenalty.add(resolveComputedPenalty(installment, livePenaltyContext, penaltyToDate));
-      } else if (penaltyDays > 0) {
-        const rate = unpaidBase.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
-        const rowPenalty = Money.of(
-          unpaidBase.toDecimal().times(penaltyDays).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-        );
-        pastDuePenalty = pastDuePenalty.add(rowPenalty);
+      // MANUAL replaces the whole Past Due Penalty with the staff-typed figure (added after the
+      // loop), so no per-installment penalty is accumulated here at all.
+      if (penaltyMode === 'MANUAL') continue;
+
+      // What the Repayment Schedule itself shows for this installment: the frozen SDevTech snapshot
+      // for a migrated loan, the live ADR-050 figure for one originated here.
+      const recorded = resolveComputedPenalty(installment, penaltyContext, penaltyCutoff);
+
+      if (penaltyMode === 'RECORDED' || recorded.isPositive() || !penaltyFromDate) {
+        pastDuePenalty = pastDuePenalty.add(recorded);
+        continue;
       }
+
+      // COMPUTED, and this installment has no penalty on record — fill just this one in. Counted
+      // from its OWN due date (or the staff "from" date, whichever is later) up to the cutoff, so
+      // an installment that was not yet overdue can never be charged a full period.
+      const from = installment.dueDate.getTime() > penaltyFromDate.getTime() ? installment.dueDate : penaltyFromDate;
+      const days = manilaDaysBetween(from, penaltyCutoff);
+      if (days <= 0) continue;
+      const rate = unpaidBase.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
+      pastDuePenalty = pastDuePenalty.add(
+        Money.of(unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)),
+      );
+    }
+
+    if (penaltyMode === 'MANUAL') {
+      pastDuePenalty = manualPenaltyAmount ?? Money.ZERO;
     }
 
     const totalPastDue = pastDuePrincipal.add(pastDueInterest).add(pastDuePenalty);
 
     const currentInstallment = sorted.find(
-      (i) => i.dueDate.getTime() > penaltyToDate.getTime() && outstandingBase(i).isPositive(),
+      (i) => i.dueDate.getTime() > asOfDate.getTime() && outstandingBase(i).isPositive(),
     );
     const currentAmortizationDue = currentInstallment ? outstandingBase(currentInstallment) : Money.ZERO;
 
     let accruedInterest = Money.ZERO;
     if (lastInstallment && contractualRate && !contractualRate.isZero() && totalPastDue.isPositive()) {
-      const daysLate = daysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
+      const daysLate = manilaDaysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
       if (daysLate > 0) {
         const dailyBase = totalPastDue.toDecimal().times(contractualRate.asFraction()).dividedBy(30);
         accruedInterest = Money.of(dailyBase.times(daysLate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP));

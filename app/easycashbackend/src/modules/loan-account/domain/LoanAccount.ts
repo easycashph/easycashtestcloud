@@ -747,6 +747,20 @@ export class LoanAccount {
   }
 
   /**
+   * 2026-08-13 (user-reported): a loan stuck `ACTIVE_IN_ARREARS` after the borrower catches up
+   * stayed that way forever - `ALLOWED_TRANSITIONS` has always permitted `ACTIVE_IN_ARREARS ->
+   * ACTIVE`, but until now nothing in the codebase actually called it (the 2026-07-12 dashboard fix
+   * papered over this for Loan Portfolio Health by computing arrears live instead of trusting this
+   * column - see `PrismaDashboardRepository.findOverdueLoanAccounts`'s doc comment - but every
+   * other screen, e.g. the Loan Detail page's status badge, still reads this stored column
+   * directly). Mechanical transition only, mirroring `close()` - the caller (`ProcessPaymentUseCase`)
+   * decides *when* to call this, by checking whether any installment is still LATE after the
+   * payment is applied, same `RepaymentInstallment.status` definition the dashboard fix uses. */
+  markCurrent(): void {
+    this.transitionTo('ACTIVE');
+  }
+
+  /**
    * 2026-07-16 (Edit Loan Account, user request) — see `LoanAccountNotEditableError`'s own doc
    * comment for why this is refused once the loan is past `PENDING_APPROVAL`. Every field is
    * optional (partial update — only what the caller actually supplied changes); `netProceeds` is

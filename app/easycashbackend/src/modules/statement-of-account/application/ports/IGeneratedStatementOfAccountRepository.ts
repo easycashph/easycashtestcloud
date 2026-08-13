@@ -1,13 +1,17 @@
 import type { TransactionContext } from '@shared/application/TransactionContext';
-import type { GeneratedStatementOfAccount } from '../../domain/GeneratedStatementOfAccount';
+import type { GeneratedStatementOfAccount, SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 
 /** Read-model for the SOA history list — resolves the generating user's display name via a join, avoiding an N+1 lookup from the frontend. */
 export interface GeneratedStatementOfAccountView {
   id: string;
   loanAccountId: string;
   soaNumber: string;
-  penaltyFromDate: Date;
-  penaltyToDate: Date;
+  penaltyMode: SoaPenaltyMode;
+  /** Both null under `RECORDED` — that mode asks staff for no penalty dates. */
+  penaltyFromDate: Date | null;
+  penaltyToDate: Date | null;
+  /** Set only under `MANUAL` — why the figure differs from the schedule. */
+  penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
   /** 2026-08-06 (user-reported): lets the frontend hide "Penalty {range}" / "Accrued Interest as
    * of {date}" whenever the respective amount is genuinely zero (e.g. a non-matured loan has no

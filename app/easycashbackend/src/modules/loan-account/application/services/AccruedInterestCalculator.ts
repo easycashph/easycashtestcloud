@@ -3,6 +3,7 @@ import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
+import { manilaDaysBetween } from '@shared/domain/manilaTime';
 
 export interface AccruedInterestBreakdownRow {
   installmentNumber: number;
@@ -37,13 +38,6 @@ export interface AccruedInterestFigures {
    * loan, not just past-due) from every other field on this interface.
    */
   restructureNewPrincipal: Money;
-}
-
-/** Whole calendar days from `from` to `to` (>= 0). */
-function daysBetween(from: Date, to: Date): number {
-  const fromUtc = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate());
-  const toUtc = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
-  return Math.max(0, Math.round((toUtc - fromUtc) / (1000 * 60 * 60 * 24)));
 }
 
 /**
@@ -95,7 +89,7 @@ export class AccruedInterestCalculator {
     }
 
     const totalPastDue = totalPastDuePrincipal.add(totalPastDueInterest).add(totalPastDuePenalty);
-    const daysLate = daysBetween(maturityDate, asOfDate);
+    const daysLate = manilaDaysBetween(maturityDate, asOfDate);
 
     let accruedInterest = Money.ZERO;
     if (contractualRate && !contractualRate.isZero() && totalPastDue.isPositive() && daysLate > 0) {

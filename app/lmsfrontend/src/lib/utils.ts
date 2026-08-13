@@ -65,10 +65,44 @@ function isValidDate(date: Date): boolean {
   return !Number.isNaN(date.getTime());
 }
 
+/**
+ * 2026-08-12: pinned to Asia/Manila rather than the viewer's machine timezone. Every date this
+ * system deals with is a Philippine business date, and much of the CP12-migrated data stores
+ * Manila midnight as `T16:00:00Z` — so on a machine set to anything west of UTC+8 those dates
+ * silently render a day early. It happened to look right until now only because every workstation
+ * is set to PHT; that is a property of the office, not of the code. The backend counts the same
+ * calendar days via `manilaTime.ts` (`manilaDaysBetween`), so both sides now agree by construction.
+ */
+const MANILA_TIME_ZONE = 'Asia/Manila';
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** Mirrors the backend's `manilaTime.ts` — see that module for the full rationale. Asia/Manila is
+ * fixed UTC+8 year-round (no DST), so shifting the instant before reading UTC fields yields Manila
+ * wall-clock values. Kept in sync deliberately: the SOA preview on the Loan Detail page must show
+ * exactly what the backend will compute when the document is actually generated. */
+export function manilaDaysBetween(from: Date, to: Date): number {
+  const f = new Date(from.getTime() + MANILA_OFFSET_MS);
+  const t = new Date(to.getTime() + MANILA_OFFSET_MS);
+  const fUtc = Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate());
+  const tUtc = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+  return Math.max(0, Math.round((tUtc - fUtc) / 86_400_000));
+}
+
+/** Days (28/29/30/31) in the Asia/Manila calendar month `date` falls in — the ADR-050 penalty divisor. */
+export function manilaDaysInMonth(date: Date): number {
+  const d = new Date(date.getTime() + MANILA_OFFSET_MS);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
 export function formatDate(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   if (!isValidDate(date)) return '—';
-  return new Intl.DateTimeFormat('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat('en-PH', {
+    timeZone: MANILA_TIME_ZONE,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
 /** Date AND time - used where the exact moment matters, e.g. Activity Logs (every entry must be timestamped, not just dated). */
@@ -76,6 +110,7 @@ export function formatDateTime(value: string | Date): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   if (!isValidDate(date)) return '—';
   return new Intl.DateTimeFormat('en-PH', {
+    timeZone: MANILA_TIME_ZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',

@@ -656,9 +656,65 @@ const TRANSACTION_TYPE_MAP: Record<string, string> = {
 
 const BATCH_SIZE = 2000;
 
+// 2026-08-13 (user request, "may naka-save na OR/AR/Channel ba sa SDev?" investigation): these
+// three fields exist in the legacy dump but not on `loan_transactions` itself — they live in
+// separate collections and were never read by this migration before today. Resolved by joining:
+//
+//   Channel:   loan_transactions.details_encoded_oid -> transaction_details.uid
+//              -> transaction_details.transaction_channel_key -> transaction_channels.uid -> .name
+//   OR Number: custom_field_values where parent_key == loan_transactions.uid
+//              AND custom_field_key == OR_NUMBER_CUSTOM_FIELD_KEY
+//   AR Number: same, but AR_NUMBER_CUSTOM_FIELD_KEY
+//
+// The two custom_field_key hashes below have no field-name dictionary anywhere in the dump (Mambu
+// stores field *definitions* outside this Mongo mirror) - identified empirically by cross-
+// referencing the user's own SDevTech-native "Daily Collection Report (July 2026).xlsx" export
+// against these same two transactions in the dump: SML-PDC_X9X6S's 2026-07-01 ₱5,000 Repayment
+// (report: OR 2379 / AR 20649) and SML-MAX_O3M8V's 2026-07-01 ₱1,000 Repayment (report: OR 2380 /
+// AR 20650) - both matched exactly, confirming the mapping below.
+const OR_NUMBER_CUSTOM_FIELD_KEY = '8a8e8f8f815c2b190181602dc7345763';
+const AR_NUMBER_CUSTOM_FIELD_KEY = '8a8e8efa81ead99e0181efde2b034e5e';
+
+interface TransactionEnrichment {
+  channelNameByDetailsUid: Map<string, string>;
+  orNumberByTxUid: Map<string, string>;
+  arNumberByTxUid: Map<string, string>;
+}
+
+/** Preloads the three supporting collections needed for Channel/OR Number/AR Number, resolved
+ * down to a single per-transaction-uid (and per-details-uid) lookup so the main transaction loop
+ * below stays a simple Map.get() per row instead of re-scanning these collections 524k times. */
+function loadTransactionEnrichment(): TransactionEnrichment {
+  const channelNameByKey = new Map<string, string>();
+  for (const ch of iterDocs<any>('transaction_channels')) {
+    channelNameByKey.set(String(ch.uid ?? ch._id), String(ch.name));
+  }
+
+  const channelNameByDetailsUid = new Map<string, string>();
+  for (const detail of iterDocs<any>('transaction_details')) {
+    const channelKey = detail.transaction_channel_key;
+    if (!channelKey) continue;
+    const name = channelNameByKey.get(String(channelKey));
+    if (name) channelNameByDetailsUid.set(String(detail.uid ?? detail._id), name);
+  }
+
+  const orNumberByTxUid = new Map<string, string>();
+  const arNumberByTxUid = new Map<string, string>();
+  for (const cfv of iterDocs<any>('custom_field_values')) {
+    const key = String(cfv.custom_field_key);
+    if (key !== OR_NUMBER_CUSTOM_FIELD_KEY && key !== AR_NUMBER_CUSTOM_FIELD_KEY) continue;
+    if (cfv.value === null || cfv.value === undefined || String(cfv.value).trim() === '') continue;
+    const target = key === OR_NUMBER_CUSTOM_FIELD_KEY ? orNumberByTxUid : arNumberByTxUid;
+    target.set(String(cfv.parent_key), String(cfv.value));
+  }
+
+  return { channelNameByDetailsUid, orNumberByTxUid, arNumberByTxUid };
+}
+
 async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacyKey: Map<string, string>): Promise<Reconciliation> {
   const file = path.join(DUMP_DIR, 'loan_transactions.bson');
   const rec = newReconciliation('loan_transactions', 0);
+  const enrichment = loadTransactionEnrichment();
   let batch: any[] = [];
 
   async function flush(): Promise<void> {
@@ -668,7 +724,14 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
         batch.map((row) =>
           prisma.loanTransaction.upsert({
             where: { legacyId: row.legacyId },
-            update: {},
+            // Only these three enrichment fields are touched on an already-migrated row (re-running
+            // this migration against a newer snapshot should still be able to backfill them) -
+            // every other column keeps its original "never re-touch on re-run" behavior. Prisma
+            // silently skips `undefined` values in an update payload rather than clearing the
+            // column (see PrismaRepaymentInstallmentRepository's 2026-08-12 lastPaidAt bug fix for
+            // the failure mode this exact behavior can otherwise cause) - here that's exactly what
+            // we want: "not found this run" must never clobber a value written by an earlier run.
+            update: { orNumber: row.orNumber, arNumber: row.arNumber, paymentMethod: row.paymentMethod },
             create: row,
           }),
         ),
@@ -701,6 +764,11 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
       continue;
     }
 
+    const txUid = String(tx.uid ?? tx._id);
+    const channel = tx.details_encoded_oid
+      ? enrichment.channelNameByDetailsUid.get(String(tx.details_encoded_oid))
+      : undefined;
+
     batch.push({
       loanAccountId,
       type: mappedType,
@@ -713,7 +781,10 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
       branchId: hqBranchId,
       entryDate,
       comment: tx.comment || null,
-      legacyId: String(tx.uid ?? tx._id),
+      legacyId: txUid,
+      orNumber: enrichment.orNumberByTxUid.get(txUid),
+      arNumber: enrichment.arNumberByTxUid.get(txUid),
+      paymentMethod: channel,
     });
 
     if (batch.length >= BATCH_SIZE) {
@@ -766,6 +837,85 @@ async function migrateAttachments(loanAccountIdByLegacyKey: Map<string, string>,
 }
 
 // ----------------------------------------------------------------------------
+// Phase 6: ProfileNote (SDevTech "comments" collection, 21,031 rows — collections/field-visit
+// notes, never touched by any phase above until now.
+//
+// 2026-08-13 (user request, "makukuha ba natin ang mga nakalagay sa NOTE from sdev database
+// legacy?"): no legacy staff/user accounts were ever migrated into this system's `User` table, so
+// there's no real id to attribute authorship to — `authorUserId` is left null (the schema's
+// `ProfileNote.authorUserId` was made nullable specifically for this case) rather than fabricating
+// one. The note's own text almost always already names the staff member who wrote it (e.g. "field
+// visit by Jardie Lalantacon"), so that context isn't lost, just not structured.
+// ----------------------------------------------------------------------------
+
+/** SDevTech stored some comments as rich-text HTML (`<p>`, `<span style="...">`, `&nbsp;`, etc.) —
+ * `ProfileNotesPanel.tsx` renders `note.text` as plain text (no dangerouslySetInnerHTML), so raw
+ * HTML would show up as garbled literal tags. Decodes only the handful of entities actually
+ * observed in the dump, not a full HTML-entity table. */
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function migrateProfileNotes(
+  loanAccountIdByLegacyKey: Map<string, string>,
+  borrowerIdByLegacyKey: Map<string, string>,
+): Promise<Reconciliation> {
+  const rec = newReconciliation('comments', 0);
+
+  for (const c of iterDocs<any>('comments')) {
+    rec.sourceCount++;
+    const text = stripHtml(String(c.text ?? '').trim());
+    if (!text) {
+      recordSkip(rec, 'empty text (before or after stripping HTML)');
+      continue;
+    }
+    const createdAt = toDate(c.creation_date) ?? toDate(c.last_modified_date);
+    if (!createdAt) {
+      recordSkip(rec, 'missing creation date');
+      continue;
+    }
+
+    // Same "loan account first, then borrower" precedence `migrateAttachments` uses above -
+    // `parent_key` here is either a `loan_accounts.uid` or a `client_accounts.uid`, and the two
+    // key spaces never collide (both are Mambu-style opaque hex/ObjectId strings from different
+    // collections), so checking loan accounts first is just an ordering choice, not a real
+    // ambiguity resolution.
+    const parentKey = String(c.parent_key);
+    const loanAccountId = loanAccountIdByLegacyKey.get(parentKey);
+    const borrowerId = !loanAccountId ? borrowerIdByLegacyKey.get(parentKey) : undefined;
+    if (!loanAccountId && !borrowerId) {
+      recordSkip(rec, 'unresolved owner (not a migrated loan account or borrower)');
+      continue;
+    }
+
+    if (APPLY) {
+      await prisma.profileNote.upsert({
+        where: { legacyId: String(c.uid ?? c._id) },
+        update: {},
+        create: {
+          ownerType: loanAccountId ? 'LOAN_ACCOUNT' : 'BORROWER',
+          ownerId: (loanAccountId ?? borrowerId)!,
+          text,
+          authorUserId: null,
+          createdAt,
+          legacyId: String(c.uid ?? c._id),
+        },
+      });
+    }
+    rec.migrated++;
+  }
+
+  return rec;
+}
+
+// ----------------------------------------------------------------------------
 // Main
 // ----------------------------------------------------------------------------
 
@@ -783,15 +933,15 @@ async function main(): Promise<void> {
 
   const recs: Reconciliation[] = [];
 
-  console.log('\nPhase 1/5: Loan Products...');
+  console.log('\nPhase 1/6: Loan Products...');
   const { rec: productsRec, productVersionIdByLegacyKey } = await migrateLoanProducts();
   recs.push(productsRec);
 
-  console.log('Phase 2/5: Borrowers...');
+  console.log('Phase 2/6: Borrowers...');
   const { rec: borrowersRec, borrowerIdByLegacyKey } = await migrateBorrowers(branch.id);
   recs.push(borrowersRec);
 
-  console.log('Phase 3/5: Loan Accounts + Co-Borrowers...');
+  console.log('Phase 3/6: Loan Accounts + Co-Borrowers...');
   const { rec: loansRec, loanAccountIdByLegacyKey } = await migrateLoanAccounts(
     branch.id,
     productVersionIdByLegacyKey,
@@ -799,13 +949,17 @@ async function main(): Promise<void> {
   );
   recs.push(loansRec);
 
-  console.log('Phase 4/5: Loan Transactions (this is the big one — 524k+ rows)...');
+  console.log('Phase 4/6: Loan Transactions (this is the big one — 524k+ rows)...');
   const transactionsRec = await migrateLoanTransactions(branch.id, loanAccountIdByLegacyKey);
   recs.push(transactionsRec);
 
-  console.log('Phase 5/5: Attachment metadata...');
+  console.log('Phase 5/6: Attachment metadata...');
   const attachmentsRec = await migrateAttachments(loanAccountIdByLegacyKey, borrowerIdByLegacyKey);
   recs.push(attachmentsRec);
+
+  console.log('Phase 6/6: Profile Notes (collections/field-visit notes)...');
+  const profileNotesRec = await migrateProfileNotes(loanAccountIdByLegacyKey, borrowerIdByLegacyKey);
+  recs.push(profileNotesRec);
 
   printReconciliation(recs);
 

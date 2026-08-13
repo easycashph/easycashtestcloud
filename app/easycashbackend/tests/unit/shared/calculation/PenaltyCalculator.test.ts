@@ -4,11 +4,15 @@ import { Percentage } from '@shared/domain/Percentage';
 import { PenaltyCalculator } from '@shared/domain/calculation/PenaltyCalculator';
 
 // ADR-050 / CALCULATION_ENGINE_SPEC.md §12 — STATUS: CONFIRMED via direct business/MIS testimony
-// (2026-07-11), formula reversed to daily-prorated on 2026-07-28 (ADR-050 §8), then aligned to the
-// user's own Excel reference tool on 2026-07-28 (ADR-050 §9): no grace period, divisor is the
-// installment's own due-month day count (not a flat 30).
-describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated + Excel-aligned as of 2026-07-28)', () => {
-  it('prorates linearly at 10% using July\'s own 31-day divisor (92 days late, due 2026-07-01, as-of 2026-10-01)', () => {
+// (2026-07-11), formula reversed to daily-prorated on 2026-07-28 (ADR-050 §8).
+//
+// 2026-08-12 (user-confirmed): the divisor is now a FLAT 30, replacing the installment's own
+// due-month day count. Under the old rule the same 30 days of lateness cost a different amount
+// depending on which month the due date happened to land in — see `DAYS_PER_MONTH`'s doc comment in
+// PenaltyCalculator for the worked figures. It also brings this in line with the Statement of
+// Account, which has always divided by 30.
+describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated, flat 30-day divisor as of 2026-08-12)', () => {
+  it('prorates linearly at 10% (92 days late, due 2026-07-01, as-of 2026-10-01)', () => {
     const result = PenaltyCalculator.calculate({
       overdueAmount: Money.of('10000.00'),
       dueDate: new Date('2026-07-01T00:00:00Z'),
@@ -16,19 +20,19 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated + Excel-al
       ratePercent: Percentage.of('10'),
       gracePeriodDays: 3,
     });
-    // 10000 x 10% / 31 x 92 days = 2967.741935... -> 2967.74
-    expect(result.toString()).toBe('2967.74');
+    // 10000 x 10% / 30 x 92 days = 3066.666... -> 3066.67
+    expect(result.toString()).toBe('3066.67');
   });
 
-  it('prorates linearly at 5% for the small-unsecured-loan tier (62 days late, July\'s 31-day divisor)', () => {
+  it('prorates linearly at 5% for the small-unsecured-loan tier (60 days late = exactly two months)', () => {
     const result = PenaltyCalculator.calculate({
       overdueAmount: Money.of('10000.00'),
       dueDate: new Date('2026-07-01T00:00:00Z'),
-      asOfDate: new Date('2026-09-01T00:00:00Z'),
+      asOfDate: new Date('2026-08-30T00:00:00Z'),
       ratePercent: Percentage.of('5'),
       gracePeriodDays: 3,
     });
-    // 10000 x 5% / 31 x 62 days = 1000.00 (62 = exactly 2 x 31)
+    // 10000 x 5% / 30 x 60 days = 1000.00
     expect(result.toString()).toBe('1000.00');
   });
 
@@ -40,20 +44,25 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated + Excel-al
       ratePercent: Percentage.of('10'),
       gracePeriodDays: 3,
     });
-    // 10000 x 10% / 31 x 1 day = 32.26
-    expect(result.toString()).toBe('32.26');
+    // 10000 x 10% / 30 x 1 day = 33.33
+    expect(result.toString()).toBe('33.33');
   });
 
-  it('uses the divisor of the installment\'s own due month, not a flat 30 (February 2026 has 28 days)', () => {
-    const result = PenaltyCalculator.calculate({
-      overdueAmount: Money.of('10000.00'),
-      dueDate: new Date('2026-02-01T00:00:00Z'),
-      asOfDate: new Date('2026-03-01T00:00:00Z'), // exactly 28 days late - all of February
-      ratePercent: Percentage.of('10'),
-      gracePeriodDays: 3,
-    });
-    // 10000 x 10% / 28 x 28 days = 1000.00 exactly (one full due-month's worth)
-    expect(result.toString()).toBe('1000.00');
+  it('charges the same for the same lateness regardless of which month the due date falls in', () => {
+    const forDueDate = (dueDate: string, asOfDate: string) =>
+      PenaltyCalculator.calculate({
+        overdueAmount: Money.of('10000.00'),
+        dueDate: new Date(dueDate),
+        asOfDate: new Date(asOfDate),
+        ratePercent: Percentage.of('10'),
+        gracePeriodDays: 3,
+      }).toString();
+
+    // 30 days late in each case. Under the old due-month divisor these were 1071.43 (Feb, /28),
+    // 1000.00 (Apr, /30) and 967.74 (Jul, /31) - a ₱103.69 spread with no business meaning.
+    expect(forDueDate('2026-02-01T00:00:00Z', '2026-03-03T00:00:00Z')).toBe('1000.00');
+    expect(forDueDate('2026-04-01T00:00:00Z', '2026-05-01T00:00:00Z')).toBe('1000.00');
+    expect(forDueDate('2026-07-01T00:00:00Z', '2026-07-31T00:00:00Z')).toBe('1000.00');
   });
 
   it('accrues proportionally more the longer an installment stays overdue (no whole-month gating)', () => {
@@ -64,8 +73,8 @@ describe('PenaltyCalculator (ADR-050 / CALC-SPEC §12, daily-prorated + Excel-al
       ratePercent: Percentage.of('10'),
       gracePeriodDays: 3,
     });
-    // 10000 x 10% / 31 x 24 days = 774.19
-    expect(result.toString()).toBe('774.19');
+    // 10000 x 10% / 30 x 24 days = 800.00
+    expect(result.toString()).toBe('800.00');
   });
 
   it('returns zero when asOfDate equals the due date (not yet late at all)', () => {

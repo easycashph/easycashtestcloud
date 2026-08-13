@@ -33,6 +33,7 @@ import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
 import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
+import type { MitigationDetails } from '@/lib/loanApplicationApiTypes';
 import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
 
 interface RealEditDraft {
@@ -604,6 +605,77 @@ function RiskPaymentSummaryCard({ borrowerId }: { borrowerId: string }) {
   );
 }
 
+interface BorrowerMitigationDetailsResult {
+  mitigation: MitigationDetails;
+  sourceApplicationId: string;
+  sourceApplicationUpdatedAt: string;
+}
+
+const MITIGATION_FIELD_LABELS: Array<[keyof MitigationDetails, string]> = [
+  ['bank', 'Bank'],
+  ['branch', 'Branch'],
+  ['accountName', 'Account Name'],
+  ['accountNumber', 'Account Number'],
+  ['atmCardNumber', 'ATM Card Number'],
+  ['allotmentAmount', 'Allotment Amount'],
+];
+
+const MITIGATION_ACCOUNT_OWNER_LABEL: Record<'BORROWER' | 'CO_BORROWER', string> = {
+  BORROWER: 'Borrower',
+  CO_BORROWER: 'Co-Borrower',
+};
+
+/** 2026-08-13 (user request): read-only view of the ATM/bank mitigation details captured on
+ * whichever of this client's loan applications has them on file. Editing stays exclusively on the
+ * Loan Application page (`SetMitigationDetailsUseCase`) - this card only links there. */
+function MitigationDetailsCard({ borrowerId }: { borrowerId: string }) {
+  const query = useQuery({
+    queryKey: ['borrower-mitigation', borrowerId],
+    queryFn: () => apiClient.get<BorrowerMitigationDetailsResult | null>(`/borrowers/${borrowerId}/mitigation`),
+  });
+  const result = query.data;
+
+  if (!query.isLoading && !result) return null;
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4">
+        <div className="flex items-center gap-2">
+          <Landmark className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm">Bank / ATM Details</CardTitle>
+        </div>
+        {result && (
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" asChild>
+            <Link to={`/loan-applications/${result.sourceApplicationId}`}>Edit on Loan Application</Link>
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="flex-1 space-y-2 p-4 pt-0">
+        {query.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading bank/ATM details…</p>
+        ) : (
+          result && (
+            <dl className="divide-y divide-border border-t text-xs">
+              {MITIGATION_FIELD_LABELS.map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between py-2">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="font-medium">{result.mitigation[key] || '-'}</dd>
+                </div>
+              ))}
+              <div className="flex items-center justify-between py-2">
+                <dt className="text-muted-foreground">Account Owner</dt>
+                <dd className="font-medium">
+                  {result.mitigation.accountOwner ? MITIGATION_ACCOUNT_OWNER_LABEL[result.mitigation.accountOwner] : '-'}
+                </dd>
+              </div>
+            </dl>
+          )
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface CoBorrowerDraft {
   firstName: string;
   middleName: string;
@@ -846,7 +918,7 @@ const ACTIVE_LOAN_STATUSES: ReadonlySet<LoanAccountStatus> = new Set(['PENDING_A
 // already-saved order under the old key is orphaned/ignored, and every user reads this new
 // default on next load. A user who then personally re-drags again still only affects their own
 // saved order going forward, same as before.
-const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'loanHistory', 'riskSummary', 'activityTimeline', 'recentActivity'];
+const DEFAULT_CARD_ORDER = ['loanApplications', 'coBorrower', 'mitigation', 'loanHistory', 'riskSummary', 'activityTimeline', 'recentActivity'];
 const CARD_ORDER_KEY_PREFIX = 'lms.clientProfileCardOrder.v2';
 function cardOrderKey(userId: string): string {
   return `${CARD_ORDER_KEY_PREFIX}:${userId}`;
@@ -1290,6 +1362,8 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
         cardsById.coBorrower = <CoBorrowersCard borrowerId={borrowerId} />;
 
         cardsById.riskSummary = <RiskPaymentSummaryCard borrowerId={borrowerId} />;
+
+        cardsById.mitigation = <MitigationDetailsCard borrowerId={borrowerId} />;
 
         cardsById.loanHistory = (
       <Card>

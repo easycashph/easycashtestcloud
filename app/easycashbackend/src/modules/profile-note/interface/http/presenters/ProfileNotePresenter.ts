@@ -5,7 +5,7 @@ export interface ProfileNoteResponse {
   ownerType: string;
   ownerId: string;
   text: string;
-  authorUserId: string;
+  authorUserId: string | null;
   authorName: string | null;
   createdAt: string;
 }

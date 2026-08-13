@@ -34,7 +34,7 @@ export class PrismaProfileNoteRepository implements IProfileNoteRepository {
     ownerType: string;
     ownerId: string;
     text: string;
-    authorUserId: string;
+    authorUserId: string | null;
     author: { firstName: string; lastName: string } | null;
     createdAt: Date;
   }): ProfileNoteRecord {

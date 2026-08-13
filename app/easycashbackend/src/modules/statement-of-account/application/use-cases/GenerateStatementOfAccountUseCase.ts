@@ -4,7 +4,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import type { LoanAccountStatus } from '@modules/loan-account/domain/LoanAccount';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import type { Money } from '@shared/domain/Money';
-import { GeneratedStatementOfAccount } from '../../domain/GeneratedStatementOfAccount';
+import { GeneratedStatementOfAccount, type SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 import { formatSoaNumber } from '../../domain/formatSoaNumber';
 import { LoanNotYetApprovedError } from '@modules/loan-document/domain/errors/LoanDocumentDomainErrors';
 import type { IGeneratedStatementOfAccountRepository } from '../ports/IGeneratedStatementOfAccountRepository';
@@ -31,14 +31,19 @@ export interface GenerateStatementOfAccountUseCaseDeps {
 export interface GenerateStatementOfAccountInput {
   loanAccountId: string;
   /**
-   * Manually-entered date range applied uniformly across every Past Due installment for the
-   * Penalty computation (2026-07-19, user request — see `StatementOfAccountCalculator`'s own doc
-   * comment). 2026-07-28: only required for a migrated loan now — a prospective loan's Penalty
-   * line is live-computed (`ADR-050` via `resolveComputedPenalty`) and ignores this entirely; the
-   * resolver validates presence for a migrated loan and throws if omitted.
+   * 2026-08-12 (user-confirmed). `RECORDED` (the default staff choice) takes each installment's
+   * penalty straight off the repayment schedule and needs no dates at all; `COMPUTED` keeps those
+   * recorded figures and fills in only the installments that have none, over the range below. See
+   * `StatementOfAccountCalculator`'s doc comment for the full rules.
    */
+  penaltyMode: SoaPenaltyMode;
+  /** Both required under `COMPUTED`, ignored otherwise — the resolver validates and throws. */
   penaltyFromDate?: Date;
-  penaltyToDate: Date;
+  penaltyToDate?: Date;
+  /** Both required under `MANUAL`, ignored otherwise. The reason is what makes a hand-set figure
+   * explainable later against the schedule it disagrees with. */
+  manualPenaltyAmount?: Money;
+  penaltyManualReason?: string;
   /** Manually-entered "as of" date for the Accrued Interest figure — independent of the Penalty range. */
   accruedInterestAsOfDate: Date;
   collectionFee: Money;
@@ -65,12 +70,14 @@ export class GenerateStatementOfAccountUseCase {
     const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber(input.loanAccountId)) + 1;
     const statementDate = new Date();
     const soaNumber = formatSoaNumber(soaSequenceNumber, statementDate);
-    const { mergeData, figures, effectivePenaltyFromDate } = await this.deps.mergeDataResolver.resolve(
+    const { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate } = await this.deps.mergeDataResolver.resolve(
       input.loanAccountId,
       soaNumber,
       statementDate,
+      input.penaltyMode,
       input.penaltyFromDate,
       input.penaltyToDate,
+      input.manualPenaltyAmount,
       input.accruedInterestAsOfDate,
       input.collectionFee,
       input.otherFee,
@@ -90,8 +97,10 @@ export class GenerateStatementOfAccountUseCase {
     const statement = GeneratedStatementOfAccount.create({
       loanAccountId: input.loanAccountId,
       soaSequenceNumber,
+      penaltyMode: input.penaltyMode,
       penaltyFromDate: effectivePenaltyFromDate,
-      penaltyToDate: input.penaltyToDate,
+      penaltyToDate: effectivePenaltyToDate,
+      penaltyManualReason: input.penaltyMode === 'MANUAL' ? input.penaltyManualReason?.trim() ?? null : null,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
       currentAmortizationDue: figures.currentAmortizationDue,
       pastDuePrincipal: figures.pastDuePrincipal,
