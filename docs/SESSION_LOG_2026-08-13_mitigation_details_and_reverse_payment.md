@@ -120,6 +120,62 @@ conflicts — this laptop's own two commits (`0083711`, `4fb57e4`) were already 
 earlier push. **Confirms two machines are now both pushing to the same `origin/main`** — worth
 remembering to `git pull` before starting new work here, not just before pushing.
 
+## 7. Built: Cloudflare Tunnel auto-update script (`a23ad66`..`3ef860b`)
+
+Following §4's diagnosis, asked for an opinion on the office-server-PC-as-live-deployment setup.
+Flagged real risks honestly rather than just validating it: `trycloudflare.com` quick tunnels
+aren't meant for production (URL changes every restart, no SLA), single point of failure with no
+confirmed backup schedule on that PC, and unclear physical/network security posture. Recommended a
+Cloudflare **Named Tunnel** as the low-effort fix (permanent URL) with self-hosted VPS/cloud as the
+real long-term answer per this project's own CLAUDE.md deployment philosophy.
+
+User wants the Named Tunnel eventually but has **no domain yet** — a Named Tunnel needs one (DNS
+CNAME under a zone Cloudflare manages), so there's no way around that requirement. Chose the
+stopgap instead: keep the quick tunnel, but automate the "copy URL into Pages dashboard, retry
+deployment" steps that `Start Cloudflare Tunnel.bat` currently requires by hand.
+
+Built `Start Cloudflare Tunnel (Auto-Update).ps1` (+ a `.bat` double-click wrapper, added on
+request so the office doesn't need to open PowerShell manually each time): starts `cloudflared`,
+parses the new URL from its own output, then calls the Cloudflare API to PATCH the Pages project's
+`VITE_API_BASE_URL` env var and retry the latest deployment (a full rebuild is required — Vite
+bakes `VITE_*` vars in at build time, so just re-pointing DNS/redeploying the old artifact wouldn't
+pick up the change). The API token is least-privilege (Account → Cloudflare Pages → Edit only,
+scoped to one account — walked the user through trimming Cloudflare's much broader default
+template) and lives only in `local/tunnel-autoupdate.env` (gitignored, auto-templated on first
+run), never committed.
+
+**Live-tested and debugged interactively with the user on the office server PC** (three real bugs
+found this way, not caught by local syntax checks since I have no way to hit the real Cloudflare
+API from this laptop):
+1. `Start-Process` rejected passing the same path to `-RedirectStandardOutput` and
+   `-RedirectStandardError` — split into two separate log files (`c18a196`).
+2. **The user's first-generated API token got exposed in a screenshot shared in chat.** Verified it
+   directly against `https://api.cloudflare.com/client/v4/user/tokens/verify` (returned "Invalid API
+   Token" — it appears the copy was incomplete, so this specific token was never actually live) and
+   had the user revoke it and generate a replacement, this time copying via Cloudflare's own Copy
+   button and not sharing the value in chat again.
+3. Round-tripping the full `deployment_configs.production` object from a GET back into the PATCH
+   body pulled in read-only/computed fields Cloudflare rejected with a generic 400 — narrowed the
+   PATCH body to just `env_vars` (merging existing vars in client-side, since PATCH replaces
+   `env_vars` wholesale rather than per-key) and added proper Cloudflare error-body surfacing so any
+   future failure is diagnosable without another round of guessing (`54616e9`).
+
+**Confirmed working end-to-end**: ran clean on the office server PC, and verified independently
+from this laptop (no login needed) that the new tunnel URL (`achievements-constitute-
+consolidation-disks.trycloudflare.com`) was baked into the freshly-deployed Pages bundle.
+
+Also clarified for the user afterward: this removes the *manual dashboard editing* step, not the
+need to *re-run the script* — it doesn't watch for tunnel restarts in the background, and won't
+survive a PC reboot on its own unless a Scheduled Task is added later (offered, not yet built).
+
+## 8. Synced again mid-task with 3 more office-server commits
+
+While committing the script fixes, `git push` was rejected a second time (non-fast-forward) —
+`94d37c2`/`ffced06` (System Announcement popups for LMS/Portal, a Personal Loan eligibility note)
+plus their merge commit had landed on `origin/main` from the office server in the meantime. Merged
+cleanly (`git pull --no-edit`), no conflicts, then pushed. Reinforces §6's note from earlier this
+session: pull before every push now that two machines write to the same `main`.
+
 ## Verification
 
 - `npx tsc --noEmit` clean on both apps.
@@ -128,8 +184,12 @@ remembering to `git pull` before starting new work here, not just before pushing
   linkage.
 - Docker images rebuilt and containers confirmed healthy post-deploy (on this laptop; office server
   rebuild was separately confirmed working by the user, §4).
-- Live-site diagnosis (§4) done entirely via unauthenticated `curl`/bundle inspection — no
-  credentials needed, no risk of touching live data.
+- Live-site diagnosis (§4) and the auto-update script's end-to-end verification (§7) both done via
+  unauthenticated `curl`/bundle inspection from this laptop — no live credentials needed on this
+  end, no risk of touching live data.
+- The `.ps1`/`.bat` scripts were syntax-checked locally (`PSParser::Tokenize`) before each push, but
+  their actual Cloudflare API behavior could only be verified live, on the office server PC, with
+  the user relaying output — three real bugs only surfaced that way (§7).
 
 ## Open — no action taken yet
 
@@ -137,5 +197,11 @@ remembering to `git pull` before starting new work here, not just before pushing
   on the Manual Adjustment tool before any design/mockup work starts.
 - Carried over from the previous log, still untouched: the ₱19.3M post-maturity-penalty correction
   (user is thinking it over), and accrued interest on long-defaulted accounts (not yet examined).
+- **A Named Tunnel is still the right long-term fix** (§7) — blocked purely on the office acquiring
+  a domain. The auto-update script is a stopgap, not a replacement for that.
+- The exposed-then-revoked API token (§7) — worth double-checking later that it's actually gone
+  from the Cloudflare dashboard's token list, not just replaced.
+- Auto-starting the tunnel on the office server PC's boot (Scheduled Task) was mentioned as a
+  follow-up but not requested yet.
 - `.env` files were not transferred anywhere (§3) — still an open question if/when the user wants
   to move config to another machine.
