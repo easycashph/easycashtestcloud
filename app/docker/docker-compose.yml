@@ -70,5 +70,20 @@ services:
     depends_on:
       - easycashbackend
 
+  # 2026-08-13 (user request) - the Easycash Portal (client-facing) was previously only ever run
+  # via `npm run dev` on the host (ephemeral - dies whenever that shell/session ends) or deployed
+  # separately to Cloudflare Pages. Containerized here too, mirroring lmsfrontend exactly, so it
+  # survives host restarts (`restart: unless-stopped`) as part of making this machine an "official"
+  # always-on local server rather than something that needs a person to keep a dev server alive.
+  portalfrontend:
+    build:
+      context: ../portalfrontend
+      dockerfile: ../docker/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - '5199:80'
+    depends_on:
+      - easycashbackend
+
 volumes:
   postgres_data:

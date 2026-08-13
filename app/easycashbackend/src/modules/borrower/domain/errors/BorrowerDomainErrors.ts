@@ -41,3 +41,13 @@ export class BorrowerPortalAccountAlreadyLinkedError extends DomainError {
     this.name = 'BorrowerPortalAccountAlreadyLinkedError';
   }
 }
+
+/** 2026-08-13 (user request) - staff "Reset Portal Password" action needs an existing linked
+ * Portal account to reset; nothing to reset if this client was never given/never made one (use
+ * "Create Portal Account" instead). */
+export class BorrowerPortalAccountNotLinkedError extends DomainError {
+  constructor(borrowerId: string) {
+    super('BORROWER_PORTAL_ACCOUNT_NOT_LINKED', `This client (${borrowerId}) has no linked Portal account to reset.`, undefined, 404);
+    this.name = 'BorrowerPortalAccountNotLinkedError';
+  }
+}

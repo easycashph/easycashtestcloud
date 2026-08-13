@@ -875,7 +875,7 @@ interface BorrowerPortalAccountStatus {
  */
 function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasEmail: boolean }) {
   const queryClient = useQueryClient();
-  const [issuedPassword, setIssuedPassword] = React.useState<{ email: string; password: string } | null>(null);
+  const [issuedPassword, setIssuedPassword] = React.useState<{ email: string; password: string; mode: 'created' | 'reset' } | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [actionError, setActionError] = React.useState<string | null>(null);
 
@@ -890,10 +890,24 @@ function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasE
     mutationFn: () => apiClient.post<{ email: string; temporaryPassword: string }>(`/borrowers/${borrowerId}/portal-account`),
     onSuccess: (result) => {
       setActionError(null);
-      setIssuedPassword({ email: result.email, password: result.temporaryPassword });
+      setIssuedPassword({ email: result.email, password: result.temporaryPassword, mode: 'created' });
       invalidate();
     },
     onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not create the Portal account.'),
+  });
+
+  // 2026-08-13 (user request) - lets MIS unlock a client who's locked out of/can't complete
+  // self-service Portal password recovery, mirroring createMutation's shape but issuing a fresh
+  // random one-time password (never the shared STAFF_ISSUED_TEMP_PASSWORD) - see
+  // ResetPortalAccountPasswordUseCase's doc comment.
+  const resetMutation = useMutation({
+    mutationFn: () => apiClient.post<{ email: string; temporaryPassword: string }>(`/borrowers/${borrowerId}/portal-account/reset-password`),
+    onSuccess: (result) => {
+      setActionError(null);
+      setIssuedPassword({ email: result.email, password: result.temporaryPassword, mode: 'reset' });
+      invalidate();
+    },
+    onError: (err) => setActionError(err instanceof ApiError ? err.message : 'Could not reset the Portal password.'),
   });
 
   const bindMutation = useMutation({
@@ -927,8 +941,9 @@ function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasE
         {issuedPassword && (
           <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-primary">
             <p>
-              Portal account created for <span className="font-medium">{issuedPassword.email}</span>. Share this temporary password with the
-              client - they must change it on first login.
+              {issuedPassword.mode === 'created' ? 'Portal account created' : 'Portal password reset'} for{' '}
+              <span className="font-medium">{issuedPassword.email}</span>. Share this temporary password with the client - they must
+              change it on first login.
             </p>
             <div className="flex items-center gap-2">
               <code className="rounded bg-background px-2 py-1 font-mono text-[13px]">{issuedPassword.password}</code>
@@ -963,6 +978,20 @@ function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasE
             )}
             {status.linked.mustChangePassword && status.linked.status !== 'DELETED' && (
               <div className="col-span-2 text-warning">Client has not yet changed their temporary password.</div>
+            )}
+            {status.linked.status !== 'DELETED' && (
+              <div className="col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  disabled={resetMutation.isPending}
+                  onClick={() => resetMutation.mutate()}
+                >
+                  <KeyRound className="h-3 w-3" /> {resetMutation.isPending ? 'Resetting…' : 'Reset Password'}
+                </Button>
+              </div>
             )}
           </dl>
         )}

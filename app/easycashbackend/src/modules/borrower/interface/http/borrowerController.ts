@@ -13,6 +13,7 @@ import type { UpdateCoBorrowerUseCase } from '../../application/use-cases/Update
 import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
 import type { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
 import type { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
+import type { ResetPortalAccountPasswordUseCase } from '@modules/client-portal/application/use-cases/ResetPortalAccountPasswordUseCase';
 import type { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import type {
   CreateBorrowerRequestBody,
@@ -35,6 +36,8 @@ export interface BorrowerControllerDeps {
   /** Bind existing Client data to Portal (2026-08-06, MIS-only, Client Profile page). */
   getBorrowerPortalAccountStatusUseCase: GetBorrowerPortalAccountStatusUseCase;
   createPortalAccountForBorrowerUseCase: CreatePortalAccountForBorrowerUseCase;
+  /** Staff "Reset Password" action (2026-08-13, Client Profile page, MIS-only). */
+  resetPortalAccountPasswordUseCase: ResetPortalAccountPasswordUseCase;
   bindPortalAccountToBorrowerUseCase: BindPortalAccountToBorrowerUseCase;
 }
 
@@ -175,6 +178,19 @@ export class BorrowerController {
       const currentUser = getCurrentUser(req);
       const result = await this.deps.createPortalAccountForBorrowerUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetPortalAccountPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const currentUser = getCurrentUser(req);
+      const result = await this.deps.resetPortalAccountPasswordUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

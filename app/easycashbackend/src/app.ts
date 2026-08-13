@@ -110,6 +110,7 @@ import { createBorrowerRouter } from '@modules/borrower/interface/http/borrowerR
 import { CreateBorrowerUseCase } from '@modules/borrower/application/use-cases/CreateBorrowerUseCase';
 import { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
 import { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
+import { ResetPortalAccountPasswordUseCase } from '@modules/client-portal/application/use-cases/ResetPortalAccountPasswordUseCase';
 import { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
 import { RequestPortalAccountDeletionUseCase } from '@modules/client-portal/application/use-cases/RequestPortalAccountDeletionUseCase';
 import { GetPortalNextPaymentDueUseCase } from '@modules/client-portal/application/use-cases/GetPortalNextPaymentDueUseCase';
@@ -652,6 +653,12 @@ export function createApp(): Express {
       // passwordHasher instances as the Easycash Portal module above.
       getBorrowerPortalAccountStatusUseCase: new GetBorrowerPortalAccountStatusUseCase({ borrowerRepository, portalAccountRepository }),
       createPortalAccountForBorrowerUseCase: new CreatePortalAccountForBorrowerUseCase({
+        borrowerRepository,
+        portalAccountRepository,
+        passwordHasher,
+        profileActivityLogService,
+      }),
+      resetPortalAccountPasswordUseCase: new ResetPortalAccountPasswordUseCase({
         borrowerRepository,
         portalAccountRepository,
         passwordHasher,

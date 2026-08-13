@@ -13,6 +13,10 @@ npm-debug.log
 .env.*
 !.env.example
 !**/.env.example
+# 2026-08-13: MIS Nomer's real production .env, dropped at legacy/env (no leading dot, so the
+# patterns above miss it) - contains live SMTP/M360 SMS gateway credentials, must never be
+# committed.
+legacy/env
 
 # Logs
 logs/

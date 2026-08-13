@@ -124,7 +124,14 @@ async function main(): Promise<void> {
 
       for (const attachment of attachments) {
         const expectedName = `${attachment.fileName}${attachment.fileType}`;
-        const match = remoteFiles.find((f) => f.name === expectedName);
+        // 2026-08-13 (bug fix, confirmed via a live SFTP listing): the legacy SFTP server returns
+        // filenames as UTF-8 bytes that have been mis-decoded as Latin-1 (mojibake) - e.g. "Reaño"
+        // (correct, as stored in our migrated Attachment rows) comes back as "ReaÃ±o". Re-decoding
+        // each remote name (Latin-1 bytes -> UTF-8) recovers the original for comparison; this is a
+        // no-op for any name with no non-ASCII bytes, so plain-ASCII filenames are unaffected.
+        // `match.name` (the RAW, still-mojibake name) is what's actually used for the download
+        // below, since that's the literal name the server expects on its own filesystem.
+        const match = remoteFiles.find((f) => f.name === expectedName || Buffer.from(f.name, 'latin1').toString('utf8') === expectedName);
         if (!match) {
           console.log(`  [${loanAccount.loanCode}] MISSING on SFTP: "${expectedName}"`);
           recordSkip(rec, 'file not found in remote folder');
