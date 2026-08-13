@@ -1,10 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
+import { ValidationError } from '@shared/errors/DomainError';
 import type { ListPortalLoanAccountsUseCase } from '../../application/use-cases/ListPortalLoanAccountsUseCase';
 import type { ListPortalLoanAccountInstallmentsUseCase } from '../../application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
 import type { GetPortalNextPaymentDueUseCase } from '../../application/use-cases/GetPortalNextPaymentDueUseCase';
 import type { ListPortalRecentPaymentsUseCase } from '../../application/use-cases/ListPortalRecentPaymentsUseCase';
 import type { ListPortalStatementsOfAccountUseCase } from '../../application/use-cases/ListPortalStatementsOfAccountUseCase';
 import type { DownloadPortalStatementOfAccountUseCase } from '../../application/use-cases/DownloadPortalStatementOfAccountUseCase';
+import type { UploadPortalPaymentProofUseCase } from '../../application/use-cases/UploadPortalPaymentProofUseCase';
 import { getCurrentPortalAccount } from './requirePortalAuth';
 
 export interface PortalLoanAccountControllerDeps {
@@ -14,6 +16,7 @@ export interface PortalLoanAccountControllerDeps {
   listPortalRecentPaymentsUseCase: ListPortalRecentPaymentsUseCase;
   listPortalStatementsOfAccountUseCase: ListPortalStatementsOfAccountUseCase;
   downloadPortalStatementOfAccountUseCase: DownloadPortalStatementOfAccountUseCase;
+  uploadPortalPaymentProofUseCase: UploadPortalPaymentProofUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture), mirrors every other portal controller's shape. */
@@ -81,6 +84,24 @@ export class PortalLoanAccountController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
       res.status(200).send(file.buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  uploadPaymentProof = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.file) {
+        throw new ValidationError('No file was uploaded (expected multipart field "file").');
+      }
+      const account = getCurrentPortalAccount(req);
+      const attachment = await this.deps.uploadPortalPaymentProofUseCase.execute({
+        portalAccountId: account.sub,
+        fileName: req.file.originalname,
+        fileType: req.file.mimetype,
+        data: req.file.buffer,
+      });
+      res.status(201).json({ id: attachment.id, fileName: attachment.fileName, uploadedAt: attachment.uploadedAt });
     } catch (error) {
       next(error);
     }

@@ -10,7 +10,8 @@ export type AttachmentDocumentCategory =
   | 'CORPORATE_PAYSLIP'
   | 'SEAMANS_BOOK'
   | 'OVERSEAS_EMPLOYMENT_CERTIFICATE'
-  | 'OTHER_SUPPORTING_DOCUMENT';
+  | 'OTHER_SUPPORTING_DOCUMENT'
+  | 'PAYMENT_PROOF';
 
 export interface AttachmentRecord {
   id: string;

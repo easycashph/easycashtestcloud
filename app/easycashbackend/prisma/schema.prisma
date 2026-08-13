@@ -81,6 +81,10 @@ enum AttachmentDocumentCategory {
   /// Portal application form (Business/Salary/Seafarer each get one) - always optional/
   /// supplementary, never counted toward the "documents complete" check.
   OTHER_SUPPORTING_DOCUMENT
+  /// 2026-08-14 (user request): a client-submitted receipt/screenshot for a Bank Transfer payment
+  /// to Easycash's official bank account, uploaded from the Portal Dashboard against their (sole)
+  /// active LoanAccount - so staff can reconcile it without relying on the collections@ inbox.
+  PAYMENT_PROOF
 }
 
 /// LP-1: a Loan Product Version has exactly one interest calculation method.
@@ -560,9 +564,9 @@ model PortalNotification {
   id              String        @id @default(uuid())
   portalAccountId String
   portalAccount   PortalAccount @relation(fields: [portalAccountId], references: [id], onDelete: Cascade)
-  /// 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED' - the only two triggers today (user's
-  /// explicit choice, 2026-07-24: not every intermediate review stage, just the client-facing
-  /// milestones).
+  /// 'APPLICATION_APPROVED' | 'APPLICATION_DECLINED' | 'LOAN_ACCOUNT_APPROVED' |
+  /// 'LOAN_ACCOUNT_DISBURSED' | 'LOAN_ACCOUNT_REJECTED' - client-facing milestones only (user's
+  /// explicit choice, 2026-07-24 + 2026-08-14), not every intermediate review stage.
   type            String
   title           String
   body            String?

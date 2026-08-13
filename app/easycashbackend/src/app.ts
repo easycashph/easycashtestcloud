@@ -55,6 +55,7 @@ import { GetPortalLoanApplicationUseCase } from '@modules/client-portal/applicat
 import { GetPortalLoanApplicationStatusTimelineUseCase } from '@modules/client-portal/application/use-cases/GetPortalLoanApplicationStatusTimelineUseCase';
 import { createPortalLoanAccountRouter } from '@modules/client-portal/interface/http/portalLoanAccountRouter';
 import { ListPortalLoanAccountsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountsUseCase';
+import { UploadPortalPaymentProofUseCase } from '@modules/client-portal/application/use-cases/UploadPortalPaymentProofUseCase';
 import { ListPortalLoanAccountInstallmentsUseCase } from '@modules/client-portal/application/use-cases/ListPortalLoanAccountInstallmentsUseCase';
 import { PrismaChatRepository } from '@modules/chat/infrastructure/PrismaChatRepository';
 import { StartOrResumePortalChatUseCase } from '@modules/chat/application/use-cases/StartOrResumePortalChatUseCase';
@@ -527,6 +528,31 @@ export function createApp(): Express {
   const portalAccountRepository = new PrismaPortalAccountRepository();
   const portalAccountChallengeRepository = new PrismaPortalAccountChallengeRepository();
   const portalTokenService = new JwtPortalTokenService();
+  // Easycash Portal Notification Center (2026-07-24, Phase C) - reuses portalAccountRepository
+  // above; own smsGateway/emailGateway instances (same pattern as portalOtpSender below) so portal
+  // notification delivery never shares a gateway instance with staff-facing notifications. Hoisted
+  // up to this earlier section (2026-08-14) so ApproveLoanUseCase's wiring further down (loan
+  // account module, "Approve Loan Account" milestone) can use it too - originally lived right
+  // before loanApplicationRouter, which is still where its own portal notification usage is wired.
+  const portalNotificationRepository = new PrismaPortalNotificationRepository();
+  const portalNotificationService = new PortalNotificationService({
+    portalNotificationRepository,
+    portalAccountRepository,
+    reminderSettingsRepository: new PrismaReminderSettingsRepository(),
+    smsGateway: new M360SmsGateway({
+      apiUrl: env.M360_API_URL,
+      username: env.M360_USERNAME ?? '',
+      password: env.M360_PASSWORD ?? '',
+      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
+    }),
+    emailGateway: new NodemailerEmailGateway({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      username: env.SMTP_USERNAME ?? '',
+      password: env.SMTP_PASSWORD ?? '',
+      fromAddress: env.SMTP_FROM_ADDRESS,
+    }),
+  });
   // Portal signup/password-reset OTP uses its OWN sender (portalOtpSender), NOT the shared
   // `otpSender` above - gated by the MIS-toggleable portalEmailEnabled/portalSmsEnabled switches
   // (Settings > System > Reminders) instead of the static SMS_ENABLED/EMAIL_ENABLED env vars, so
@@ -731,9 +757,25 @@ export function createApp(): Express {
       getLoanAccountUseCase,
       listLoanAccountsUseCase: new ListLoanAccountsUseCase({ loanAccountRepository }),
       listMaturedLoanAccountIdsUseCase: new ListMaturedLoanAccountIdsUseCase({ loanAccountRepository }),
-      approveLoanUseCase: new ApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
+      approveLoanUseCase: new ApproveLoanUseCase({
+        loanAccountRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+        portalAccountRepository,
+        portalNotificationService,
+        userRepository,
+      }),
       undoApproveLoanUseCase: new UndoApproveLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
-      rejectLoanUseCase: new RejectLoanUseCase({ loanAccountRepository, financialAuditLogger, unitOfWork, profileActivityLogService }),
+      rejectLoanUseCase: new RejectLoanUseCase({
+        loanAccountRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+        portalAccountRepository,
+        portalNotificationService,
+        userRepository,
+      }),
       // Milestone 9.1/9.2 CP13: first real HTTP callers of CP8/CP9's use
       // cases (previously built with zero routes, per the D-2 precedent —
       // see ActivateLoanUseCase's/ProcessPaymentUseCase's own doc comments).
@@ -745,6 +787,9 @@ export function createApp(): Express {
         financialAuditLogger,
         unitOfWork,
         profileActivityLogService,
+        portalAccountRepository,
+        portalNotificationService,
+        userRepository,
       }),
       // 2026-07-16 (Undo Activate, user request, MIS-only): local repository instances here
       // (rather than reusing the module-scoped ones defined later in this file for the repayment
@@ -1157,29 +1202,6 @@ export function createApp(): Express {
   const geocodingService = new NominatimGeocodingService();
   const preQualificationService = new LoanApplicationPreQualificationService({ branchRepository, geocodingService });
 
-  // Easycash Portal Notification Center (2026-07-24, Phase C): reuses portalAccountRepository from
-  // the Phase 1 wiring above; own smsGateway/emailGateway instances (same pattern as portalOtpSender)
-  // so portal notification delivery never shares a gateway instance with staff-facing notifications.
-  const portalNotificationRepository = new PrismaPortalNotificationRepository();
-  const portalNotificationService = new PortalNotificationService({
-    portalNotificationRepository,
-    portalAccountRepository,
-    reminderSettingsRepository: new PrismaReminderSettingsRepository(),
-    smsGateway: new M360SmsGateway({
-      apiUrl: env.M360_API_URL,
-      username: env.M360_USERNAME ?? '',
-      password: env.M360_PASSWORD ?? '',
-      shortcodeMask: env.M360_SHORTCODE_MASK ?? '',
-    }),
-    emailGateway: new NodemailerEmailGateway({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      username: env.SMTP_USERNAME ?? '',
-      password: env.SMTP_PASSWORD ?? '',
-      fromAddress: env.SMTP_FROM_ADDRESS,
-    }),
-  });
-
   const loanApplicationRouter = createLoanApplicationRouter(
     {
       createLoanApplicationUseCase: new CreateLoanApplicationUseCase({
@@ -1198,6 +1220,7 @@ export function createApp(): Express {
         profileActivityLogService,
         notificationService,
         portalNotificationService,
+        userRepository,
       }),
       declineLoanApplicationUseCase: new DeclineLoanApplicationUseCase({
         loanApplicationRepository,
@@ -1205,6 +1228,7 @@ export function createApp(): Express {
         profileActivityLogService,
         notificationService,
         portalNotificationService,
+        userRepository,
       }),
       revertLoanApplicationDecisionUseCase: new RevertLoanApplicationDecisionUseCase({
         loanApplicationRepository,
@@ -1411,6 +1435,13 @@ export function createApp(): Express {
         loanAccountRepository,
         generatedStatementOfAccountRepository,
         fileStorage: loanDocumentFileStorage,
+      }),
+      // "Upload Proof of Payment" (2026-08-14 user request) - reuses the same
+      // portalUploadAttachmentUseCase instance the loan-application document upload above uses.
+      uploadPortalPaymentProofUseCase: new UploadPortalPaymentProofUseCase({
+        portalAccountRepository,
+        loanAccountRepository,
+        uploadAttachmentUseCase: portalUploadAttachmentUseCase,
       }),
     },
     portalTokenService,

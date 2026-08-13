@@ -10,6 +10,7 @@ import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
+import { PortalPaymentProofCard } from '@/components/PortalPaymentProofCard';
 import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
 import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
 import { PortalTwoFactorNudgeCard } from '@/components/PortalTwoFactorNudgeCard';
@@ -172,6 +173,8 @@ export function DashboardPage() {
         <PortalTwoFactorNudgeCard />
 
         <PortalNextPaymentDueCard />
+
+        <PortalPaymentProofCard />
 
         <PortalLoanOfficerCard />
 

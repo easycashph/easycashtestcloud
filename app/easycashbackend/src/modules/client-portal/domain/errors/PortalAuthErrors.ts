@@ -113,3 +113,17 @@ export class PortalAccountAlreadyLinkedError extends DomainError {
   }
 }
 
+/** 2026-08-14 (Upload Proof of Payment) - raised when a client tries to submit a payment proof but
+ * has no linked Borrower, or no open (ACTIVE/ACTIVE_IN_ARREARS) LoanAccount to attach it to. */
+export class PortalNoActiveLoanAccountError extends DomainError {
+  constructor() {
+    super(
+      'PORTAL_NO_ACTIVE_LOAN_ACCOUNT',
+      'You do not have an active loan account to attach a payment proof to.',
+      undefined,
+      404,
+    );
+    this.name = 'PortalNoActiveLoanAccountError';
+  }
+}
+
