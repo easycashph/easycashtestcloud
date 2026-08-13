@@ -55,6 +55,15 @@ export const COMPANY = {
  * reference value clients are told to check against when verifying a payment request is
  * genuinely from Easycash (anti-scam use, mirrors OFFICIAL_CHANNELS below).
  */
+/**
+ * How Easycash releases approved loan proceeds to a client - confirmed by the business owner
+ * 2026-08-14: bank cheque only, no other disbursement channel is offered today. Surfaced on the
+ * public landing page and the client Dashboard so a client never mistakes a message claiming
+ * cash/GCash/bank-transfer disbursement as genuinely from Easycash (anti-scam use, same reasoning
+ * as OFFICIAL_CHANNELS/OFFICIAL_BANK_ACCOUNT above).
+ */
+export const DISBURSEMENT_METHOD = 'Bank Cheque' as const;
+
 export const OFFICIAL_BANK_ACCOUNT = {
   accountName: 'Easycash Lending Company, Inc.',
   bankName: 'BDO',

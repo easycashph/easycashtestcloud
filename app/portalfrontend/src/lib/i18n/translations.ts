@@ -78,6 +78,7 @@ export const en = {
     trustSecRegistered: 'SEC Registered Lending Company',
     trustNoAdvanceFee: 'Never asks for a fee before releasing your loan',
     trustDataProtected: 'Your data is protected',
+    disbursementNotice: 'Approved loans are released via Bank Cheque only - Easycash never disburses in cash, GCash, or bank transfer.',
     missionTitle: 'Dream Big, Fear Less',
     missionBody:
       "We understand the fears - debt traps, loan rejections, and financial uncertainties. Your dreams are worth pursuing, and we're here to minimize your fears. Our commitment is to provide not just fast loans but pathways to a brighter future. Your dreams, your financial security - it's what we live for.",
@@ -347,6 +348,7 @@ export const fil: Translations = {
     trustSecRegistered: 'Rehistradong Lending Company sa SEC',
     trustNoAdvanceFee: 'Hindi kailanman humihingi ng bayad bago ilabas ang loan',
     trustDataProtected: 'Protektado ang iyong datos',
+    disbursementNotice: 'Ang mga inaprubahang loan ay ibinibigay sa pamamagitan ng Bank Cheque lamang - hindi kailanman nagbibigay ang Easycash sa cash, GCash, o bank transfer.',
     missionTitle: 'Mangarap nang Malaki, Bawasan ang Takot',
     missionBody:
       'Naiintindihan namin ang mga takot - ang bitag ng utang, pagtanggi sa loan, at kawalan ng katiyakan sa pananalapi. Karapat-dapat na tugisin ang iyong mga pangarap, at narito kami para bawasan ang iyong mga takot. Ang aming pangako ay magbigay hindi lamang ng mabilis na loan kundi ng daan tungo sa mas maliwanag na kinabukasan. Ang iyong mga pangarap, ang iyong seguridad sa pananalapi - ito ang dahilan kung bakit kami nandito.',

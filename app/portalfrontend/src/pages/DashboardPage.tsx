@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { motion, type Variants } from 'framer-motion';
-import { FileText, User } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -10,6 +10,7 @@ import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
+import { PortalOfficialBankAccountCard } from '@/components/PortalOfficialBankAccountCard';
 import { PortalPaymentProofCard } from '@/components/PortalPaymentProofCard';
 import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
 import { PortalLoanOfficerCard } from '@/components/PortalLoanOfficerCard';
@@ -17,6 +18,7 @@ import { PortalTwoFactorNudgeCard } from '@/components/PortalTwoFactorNudgeCard'
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
 import { apiClient } from '@/lib/apiClient';
+import { DISBURSEMENT_METHOD } from '@/lib/companyInfo';
 import type { PortalLoanApplicationDetail, PortalLoanApplicationSummary, PortalLoanApplicationTimelineEntry } from '@/lib/portalApiTypes';
 import { getLoanProductDisplayLabel } from '@/lib/loanProducts';
 
@@ -126,7 +128,7 @@ function StatusTimeline({ entries }: { entries: PortalLoanApplicationTimelineEnt
 export function DashboardPage() {
   const { account } = useAuth();
   const navigate = useNavigate();
-  const { openProfileDialog, openApplicationDialog } = usePortalDialogs();
+  const { openApplicationDialog } = usePortalDialogs();
   const [applications, setApplications] = React.useState<PortalLoanApplicationSummary[] | null>(null);
   const [viewingApplicationId, setViewingApplicationId] = React.useState<string | null>(null);
   const [viewingDetail, setViewingDetail] = React.useState<PortalLoanApplicationDetail | null>(null);
@@ -174,46 +176,35 @@ export function DashboardPage() {
 
         <PortalNextPaymentDueCard />
 
+        <PortalOfficialBankAccountCard />
+
         <PortalPaymentProofCard />
+
+        <PortalLoanAccountsSection />
 
         <PortalLoanOfficerCard />
 
-        <motion.div initial="hidden" animate="show" variants={stagger} className="mt-8 grid gap-5 sm:grid-cols-2">
-          <motion.div variants={fadeUp}>
-          <Card className="p-6">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <FileText className="h-5 w-5" />
-            </div>
-            <h2 className="mt-4 text-base font-semibold">Loan Application</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              {hasPendingApplication
-                ? 'You already have an application in progress - see it below. You can apply again once it\'s declined.'
-                : 'Apply for a new loan, or check the status of one you already submitted.'}
-            </p>
-            <Button className="mt-4" onClick={() => navigate('/apply')} disabled={hasPendingApplication} title={hasPendingApplication ? 'You already have an application in progress' : undefined}>
-              Create Loan Application
-            </Button>
-          </Card>
-          </motion.div>
-
-          <motion.div variants={fadeUp}>
-          <Card className="p-6">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <User className="h-5 w-5" />
-            </div>
-            <h2 className="mt-4 text-base font-semibold">My Profile</h2>
-            <p className="mt-1.5 text-sm text-muted-foreground">Email: {account?.email}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {account?.borrowerId ? 'Linked to an existing client profile.' : 'Not yet linked to a client profile.'}
-            </p>
-            <Button variant="outline" className="mt-4" onClick={openProfileDialog}>
-              View Profile
-            </Button>
-          </Card>
-          </motion.div>
+        <motion.div initial="hidden" animate="show" variants={fadeUp}>
+        <Card className="mt-5 p-6">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <FileText className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-base font-semibold">Loan Application</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {hasPendingApplication
+              ? 'You already have an application in progress - see it below. You can apply again once it\'s declined.'
+              : 'Apply for a new loan, or check the status of one you already submitted.'}
+          </p>
+          <Button className="mt-4" onClick={() => navigate('/apply')} disabled={hasPendingApplication} title={hasPendingApplication ? 'You already have an application in progress' : undefined}>
+            Create Loan Application
+          </Button>
+          {/* 2026-08-14 (user request, anti-scam) - same disclosure as the public landing page: a
+              client should know approved loans are only ever released via DISBURSEMENT_METHOD. */}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Approved loans are released via {DISBURSEMENT_METHOD} only - Easycash never disburses in cash, GCash, or bank transfer.
+          </p>
+        </Card>
         </motion.div>
-
-        <PortalLoanAccountsSection />
 
         <PortalRecentPaymentsSection />
 

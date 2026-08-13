@@ -290,6 +290,14 @@ export function LandingPage() {
             <motion.p variants={fadeUp} className="mt-2 text-[11px] text-muted-foreground/80">
               {REGULATORY_DISCLOSURE}
             </motion.p>
+            {/* 2026-08-14 (user request): disbursement-method disclosure, same anti-scam reasoning
+                as the trust strip above - a client should know Easycash only ever releases loan
+                proceeds via Bank Cheque (companyInfo.ts's DISBURSEMENT_METHOD - not interpolated
+                here since this string is translated; keep the two in sync if that value changes),
+                never cash/GCash/bank transfer, so they can spot a scam claiming otherwise. */}
+            <motion.p variants={fadeUp} className="mt-1 text-[11px] text-muted-foreground/80">
+              {t.landing.disbursementNotice}
+            </motion.p>
           </motion.div>
 
           <motion.div
