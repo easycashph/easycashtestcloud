@@ -394,6 +394,12 @@ export function LandingPage() {
                       ))}
                     </div>
                   )}
+                  {/* 2026-08-14 (business owner confirmed): Salary/Personal Loan is private-sector
+                      employees only - shown here too, not just the Requirements page, so a
+                      government employee doesn't waste time starting an application. */}
+                  {'eligibilityNote' in product && product.eligibilityNote && (
+                    <p className="mt-3 text-[11px] font-medium text-warning">{product.eligibilityNote}</p>
+                  )}
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <Link
                       to="/signup"

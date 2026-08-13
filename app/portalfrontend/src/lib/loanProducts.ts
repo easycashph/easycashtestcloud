@@ -33,6 +33,9 @@ export const LOAN_PRODUCTS = [
     blurb: 'A quick cash advance against your salary, approved fast.',
     details: 'A short-term cash advance for employees, repaid against your regular paycheck.',
     image: './images/product-salary.jpg',
+    /** 2026-08-14 (business owner confirmed): private-sector employees only - Easycash does not
+     * currently accept government employees for this product. */
+    eligibilityNote: 'For private-sector employees only. Easycash does not currently accept government employees for this product.',
   },
   {
     icon: Anchor,

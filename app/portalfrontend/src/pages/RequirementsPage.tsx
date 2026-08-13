@@ -60,6 +60,9 @@ export function RequirementsPage() {
                   <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
                     {product.details}
                   </p>
+                  {'eligibilityNote' in product && product.eligibilityNote && (
+                    <p className="mt-2.5 rounded-lg bg-warning/10 p-2.5 text-xs font-medium text-warning">{product.eligibilityNote}</p>
+                  )}
 
                   <ul className="mt-4 space-y-2">
                     {[...always, ...productSpecific].map((document) => (

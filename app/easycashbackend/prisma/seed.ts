@@ -96,6 +96,7 @@ async function main() {
     'audit_log.read': 'View the audit log',
     'reminder_settings.manage': 'Manage SMS/email reminder settings',
     'profile_activity_log.manage': 'View and manage profile activity logs',
+    'system_announcement.manage': 'Post and manage system-wide announcements (maintenance/news popups)',
   };
   const permissionCodes = Object.keys(permissionDescriptions);
 

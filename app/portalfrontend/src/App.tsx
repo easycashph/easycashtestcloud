@@ -7,6 +7,7 @@ import { PortalDialogProvider } from '@/lib/portalDialogContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { PortalDialogHost } from '@/components/PortalDialogHost';
+import { PortalAnnouncementPopup } from '@/components/PortalAnnouncementPopup';
 import { PortalChatWidget } from '@/components/PortalChatWidget';
 import { LandingPage } from '@/pages/LandingPage';
 
@@ -204,6 +205,7 @@ export default function App() {
                   <PortalDialogHost />
                 </React.Suspense>
                 <AuthenticatedChatWidget />
+                <PortalAnnouncementPopup />
               </PortalDialogProvider>
             </AuthProvider>
           </LanguageProvider>
