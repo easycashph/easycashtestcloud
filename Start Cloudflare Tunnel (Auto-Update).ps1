@@ -126,31 +126,41 @@ Write-Step '[3/4] Updating VITE_API_BASE_URL on Cloudflare Pages...'
 $apiBase = "https://api.cloudflare.com/client/v4/accounts/$AccountId/pages/projects/$ProjectName"
 $headers = @{ Authorization = "Bearer $ApiToken"; 'Content-Type' = 'application/json' }
 
+function Get-CloudflareErrorDetail($errRecord) {
+    if ($errRecord.ErrorDetails -and $errRecord.ErrorDetails.Message) {
+        return $errRecord.ErrorDetails.Message
+    }
+    return $errRecord.Exception.Message
+}
+
 try {
     $project = Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Get
 } catch {
     Write-Err2 "      Could not read the Pages project. Check CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT in local/tunnel-autoupdate.env."
-    Write-Err2 "      $($_.Exception.Message)"
+    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
     Read-Host 'Press Enter to exit'
     exit 1
 }
 
-# Deep-merge, not replace - PATCH on this endpoint expects the full deployment_configs.production
-# object, so we preserve everything already there and only touch this one env var.
-$prodConfig = $project.result.deployment_configs.production
-if (-not $prodConfig) { $prodConfig = [PSCustomObject]@{} }
-$envVars = $prodConfig.env_vars
-if (-not $envVars) { $envVars = [PSCustomObject]@{} }
-$envVars | Add-Member -Force -NotePropertyName 'VITE_API_BASE_URL' -NotePropertyValue @{ value = "$tunnelUrl/api/v1"; type = 'plain_text' }
-$prodConfig | Add-Member -Force -NotePropertyName 'env_vars' -NotePropertyValue $envVars
+# Minimal body - only env_vars, not the full deployment_configs.production object from GET
+# (that round-trip pulled in read-only/computed fields that Cloudflare's PATCH rejected with a
+# generic 400). PATCH replaces env_vars wholesale, not per-key, so existing vars are merged in
+# here on the client side rather than relying on the API to merge them.
+$existingEnvVars = $project.result.deployment_configs.production.env_vars
+$envVarsHash = @{}
+if ($existingEnvVars) {
+    $existingEnvVars.PSObject.Properties | ForEach-Object { $envVarsHash[$_.Name] = $_.Value }
+}
+$envVarsHash['VITE_API_BASE_URL'] = @{ value = "$tunnelUrl/api/v1" }
 
-$patchBody = @{ deployment_configs = @{ production = $prodConfig } } | ConvertTo-Json -Depth 10
+$patchBody = @{ deployment_configs = @{ production = @{ env_vars = $envVarsHash } } } | ConvertTo-Json -Depth 10
 
 try {
     Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Patch -Body $patchBody | Out-Null
     Write-Host '      OK.'
 } catch {
-    Write-Err2 "      Failed to update the env var: $($_.Exception.Message)"
+    Write-Err2 "      Failed to update the env var:"
+    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
     Read-Host 'Press Enter to exit'
     exit 1
 }
@@ -168,7 +178,8 @@ try {
     Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry" -Headers $headers -Method Post | Out-Null
     Write-Host '      OK - a new build has started. It usually takes 1-2 minutes.'
 } catch {
-    Write-Err2 "      Failed to trigger the deployment: $($_.Exception.Message)"
+    Write-Err2 "      Failed to trigger the deployment:"
+    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
     Write-Err2 '      The env var was updated, but you will need to click "Retry deployment" manually in the Pages dashboard.'
     Read-Host 'Press Enter to exit'
     exit 1
