@@ -11,6 +11,7 @@ import type { GetCoBorrowerUseCase } from '../../application/use-cases/GetCoBorr
 import type { ListCoBorrowersUseCase } from '../../application/use-cases/ListCoBorrowersUseCase';
 import type { UpdateCoBorrowerUseCase } from '../../application/use-cases/UpdateCoBorrowerUseCase';
 import type { GetBorrowerRiskSummaryUseCase } from '../../application/use-cases/GetBorrowerRiskSummaryUseCase';
+import type { GetBorrowerMitigationDetailsUseCase } from '../../application/use-cases/GetBorrowerMitigationDetailsUseCase';
 import type { GetBorrowerPortalAccountStatusUseCase } from '@modules/client-portal/application/use-cases/GetBorrowerPortalAccountStatusUseCase';
 import type { CreatePortalAccountForBorrowerUseCase } from '@modules/client-portal/application/use-cases/CreatePortalAccountForBorrowerUseCase';
 import type { BindPortalAccountToBorrowerUseCase } from '@modules/client-portal/application/use-cases/BindPortalAccountToBorrowerUseCase';
@@ -32,6 +33,7 @@ export interface BorrowerControllerDeps {
   listCoBorrowersUseCase: ListCoBorrowersUseCase;
   updateCoBorrowerUseCase: UpdateCoBorrowerUseCase;
   getBorrowerRiskSummaryUseCase: GetBorrowerRiskSummaryUseCase;
+  getBorrowerMitigationDetailsUseCase: GetBorrowerMitigationDetailsUseCase;
   /** Bind existing Client data to Portal (2026-08-06, MIS-only, Client Profile page). */
   getBorrowerPortalAccountStatusUseCase: GetBorrowerPortalAccountStatusUseCase;
   createPortalAccountForBorrowerUseCase: CreatePortalAccountForBorrowerUseCase;
@@ -150,6 +152,20 @@ export class BorrowerController {
       assertBranchAccess(scope, existing.branchId);
       const summary = await this.deps.getBorrowerRiskSummaryUseCase.execute(req.params.id as string);
       res.status(200).json(summary);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-13 (user request) — read-only. Editing stays on the Loan Application page; see
+   * `GetBorrowerMitigationDetailsUseCase`'s own doc comment for why. */
+  mitigation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getBorrowerUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const result = await this.deps.getBorrowerMitigationDetailsUseCase.execute(req.params.id as string);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

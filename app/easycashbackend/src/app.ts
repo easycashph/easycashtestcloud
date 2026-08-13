@@ -128,6 +128,7 @@ import { UpdateCoBorrowerUseCase } from '@modules/borrower/application/use-cases
 import { GetCoBorrowerUseCase } from '@modules/borrower/application/use-cases/GetCoBorrowerUseCase';
 import { ListCoBorrowersUseCase } from '@modules/borrower/application/use-cases/ListCoBorrowersUseCase';
 import { GetBorrowerRiskSummaryUseCase } from '@modules/borrower/application/use-cases/GetBorrowerRiskSummaryUseCase';
+import { GetBorrowerMitigationDetailsUseCase } from '@modules/borrower/application/use-cases/GetBorrowerMitigationDetailsUseCase';
 import { BorrowerRiskSummaryService } from '@modules/borrower/application/services/BorrowerRiskSummaryService';
 import { PrismaBorrowerRepository } from '@modules/borrower/infrastructure/PrismaBorrowerRepository';
 import { PrismaCoBorrowerRepository } from '@modules/borrower/infrastructure/PrismaCoBorrowerRepository';
@@ -647,6 +648,13 @@ export function createApp(): Express {
         loanAccountRepository: loanAccountRepositoryForBorrowerRisk,
         repaymentInstallmentRepository: repaymentInstallmentRepositoryForBorrowerRisk,
         riskSummaryService: borrowerRiskSummaryService,
+      }),
+      // Client Profile "Bank / ATM details" view (2026-08-13) - loanApplicationRepository fresh
+      // instance for the same reason as CreateBorrowerUseCase's own above (not declared yet at this
+      // point in the file).
+      getBorrowerMitigationDetailsUseCase: new GetBorrowerMitigationDetailsUseCase({
+        borrowerRepository,
+        loanApplicationRepository: new PrismaLoanApplicationRepository(),
       }),
       // Bind existing Client data to Portal (2026-08-06) - reuses the same portalAccountRepository/
       // passwordHasher instances as the Easycash Portal module above.

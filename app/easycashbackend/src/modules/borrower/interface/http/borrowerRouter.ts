@@ -22,6 +22,7 @@ export function createBorrowerRouter(deps: BorrowerControllerDeps, tokenService:
   router.post('/borrowers', requireAuth, requirePermission('borrower.write'), validateBody(createBorrowerSchema), controller.create);
   router.get('/borrowers/:id', requireAuth, controller.get);
   router.get('/borrowers/:id/risk-summary', requireAuth, controller.riskSummary);
+  router.get('/borrowers/:id/mitigation', requireAuth, controller.mitigation);
   router.get('/borrowers/:id/co-borrowers', requireAuth, controller.listCoBorrowers);
   // Bind existing Client data to Portal (2026-08-06) - MIS-only, mirrors "Only MIS may
   // add/edit LMS member accounts" (canManageMembers on the frontend): creating/linking a client's
