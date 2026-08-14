@@ -295,11 +295,12 @@ model User {
   penaltyReductionsMade                PenaltyReduction[]
   feesOverridesSet                     RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade                   FeeAdjustment[]
+  paymentAdjustmentsMade               PaymentAdjustment[]
   loanRestructuresMade                 LoanRestructure[]             @relation("LoanRestructureBy")
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
   notificationsReceived                Notification[]
   reminderSettingsUpdated              ReminderSettings[]
-  systemAnnouncementsCreated            SystemAnnouncement[]
+  systemAnnouncementsCreated           SystemAnnouncement[]
   chatConversationsClaimed             ChatConversation[]            @relation("ChatConversationClaimedBy")
   chatConversationsOriginallyClaimed   ChatConversation[]            @relation("ChatConversationOriginallyClaimedBy")
   chatConversationsPendingTransferTo   ChatConversation[]            @relation("ChatConversationPendingTransferTo")
@@ -1399,6 +1400,11 @@ model LoanTransaction {
   /// why this exists. Present on REPAYMENT (and, going forward, REVERSAL)
   /// transactions; empty for every other type.
   paymentAllocations PaymentAllocation[]
+  /// 2026-08-14 (Manual Payment Adjustment feature) — see `PaymentAdjustment`'s own doc comment.
+  /// Only ever present on a legacy REPAYMENT transaction (one with no `PaymentAllocation` rows,
+  /// i.e. one `ReversePaymentUseCase` refuses to touch) that was corrected through this tool
+  /// instead.
+  paymentAdjustments PaymentAdjustment[]
 
   /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
   /// volume table (legacy equivalent: 524k rows) — date-range and
@@ -1503,6 +1509,7 @@ model RepaymentSchedule {
   version Int @default(0)
 
   paymentAllocations PaymentAllocation[]
+  paymentAdjustments PaymentAdjustment[]
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
   smsReminderLogs    SmsReminderLog[]
@@ -1672,6 +1679,50 @@ model PaymentAllocation {
   @@index([loanTransactionId])
   @@index([repaymentInstallmentId])
   @@map("payment_allocations")
+}
+
+/// 2026-08-14 (Manual Payment Adjustment feature) — the "manual adjustment" the
+/// `NoReversibleAllocationDataError` message points to, which didn't exist until now. Covers
+/// exactly the gap `PaymentAllocation` above describes: a legacy REPAYMENT transaction recorded
+/// before that feature existed has no per-installment breakdown, so `ReversePaymentUseCase` can't
+/// safely undo it automatically. This tool instead lets MIS staff pick a specific installment and
+/// manually reduce its recorded paid amounts by an explicit, reasoned delta — one row per
+/// (transaction, installment) touched, same "immutable historical record" posture as
+/// `PenaltyReduction`/`FeeAdjustment`. `loanTransactionId` links back to the original payment being
+/// corrected purely for traceability (so the transaction's own history shows it was later
+/// corrected); the actual balance/installment mutation happens the same way
+/// `ReversePaymentUseCase` does it (negated `RepaymentInstallment.recordPayment()` /
+/// `LoanAccount.applyPayment()`), just with staff-specified amounts instead of amounts read back
+/// from `PaymentAllocation` rows that don't exist for this transaction.
+model PaymentAdjustment {
+  id                     String            @id @default(uuid())
+  loanTransactionId      String
+  loanTransaction        LoanTransaction   @relation(fields: [loanTransactionId], references: [id])
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+
+  /// The installment's own `principal/interest/fees/penaltyPaid` immediately before this action.
+  previousPrincipalPaid Decimal @db.Decimal(14, 2)
+  previousInterestPaid  Decimal @db.Decimal(14, 2)
+  previousFeesPaid      Decimal @db.Decimal(14, 2)
+  previousPenaltyPaid   Decimal @db.Decimal(14, 2)
+
+  newPrincipalPaid Decimal @db.Decimal(14, 2)
+  newInterestPaid  Decimal @db.Decimal(14, 2)
+  newFeesPaid      Decimal @db.Decimal(14, 2)
+  newPenaltyPaid   Decimal @db.Decimal(14, 2)
+
+  /// Required — same convention as `PenaltyReduction.reason`/`FeeAdjustment.reason`: captures why
+  /// this correction was made (e.g. "duplicate encoding, verified against OR #12345").
+  reason String
+
+  adjustedByUserId String
+  adjustedBy       User     @relation(fields: [adjustedByUserId], references: [id])
+  createdAt        DateTime @default(now())
+
+  @@index([loanTransactionId])
+  @@index([repaymentInstallmentId])
+  @@map("payment_adjustments")
 }
 
 /// 2026-07-11 (user request, Collections use case): a free-text note tied to a loan account —
@@ -2582,20 +2633,20 @@ enum SystemAnnouncementType {
 }
 
 model SystemAnnouncement {
-  id     String                 @id @default(uuid())
-  title  String
-  body   String
-  type   SystemAnnouncementType @default(GENERAL)
+  id           String                 @id @default(uuid())
+  title        String
+  body         String
+  type         SystemAnnouncementType @default(GENERAL)
   /// Per-announcement audience targeting (2026-08-14 user-confirmed) - independent flags rather
   /// than a single enum, so MIS can target LMS only, Portal only, or both from the same form.
-  showOnLms    Boolean @default(true)
-  showOnPortal Boolean @default(true)
+  showOnLms    Boolean                @default(true)
+  showOnPortal Boolean                @default(true)
   /// MIS can turn an announcement off without deleting it (keeps the admin history intact).
-  active Boolean @default(true)
+  active       Boolean                @default(true)
   /// Optional auto-expiry (2026-08-14 user-confirmed) - once past, the announcement stops
   /// appearing without MIS needing to come back and manually deactivate it. Null = shown
   /// indefinitely until MIS deactivates it by hand.
-  expiresAt DateTime?
+  expiresAt    DateTime?
 
   createdByUserId String
   createdBy       User     @relation(fields: [createdByUserId], references: [id])

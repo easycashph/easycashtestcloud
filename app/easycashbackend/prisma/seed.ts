@@ -76,6 +76,7 @@ async function main() {
     'loan_account.undo_adjust': 'Undo a loan account adjustment',
     'payment.record': 'Record a borrower payment',
     'payment.reverse': 'Reverse a recorded payment',
+    'payment.manual_adjust': 'Manually correct paid amounts on a legacy payment transaction with no per-installment breakdown',
     'penalty.reduce': 'Reduce or waive an installment penalty',
     'fees.adjust': 'Adjust an installment fee amount',
     'document.generate': 'Generate loan documents',

@@ -63,3 +63,48 @@ export class NoReversibleAllocationDataError extends DomainError {
     this.name = 'NoReversibleAllocationDataError';
   }
 }
+
+/**
+ * 2026-08-14 (Manual Payment Adjustment feature): the mirror-image guard of
+ * `NoReversibleAllocationDataError` above — this tool exists specifically for transactions Reverse
+ * Payment refuses to touch. A transaction that DOES have `PaymentAllocation` rows should go through
+ * the precise, automatic Reverse Payment flow instead; allowing both paths on the same transaction
+ * would let staff bypass Reverse Payment's exact per-installment undo with a manually-typed guess.
+ */
+export class TransactionHasAllocationDataError extends DomainError {
+  constructor(transactionId: string) {
+    super(
+      'TRANSACTION_HAS_ALLOCATION_DATA',
+      `Transaction ${transactionId} has a recorded per-installment breakdown — use Reverse Payment instead, which can undo it precisely.`,
+      undefined,
+      409,
+    );
+    this.name = 'TransactionHasAllocationDataError';
+  }
+}
+
+/**
+ * 2026-08-14 (Manual Payment Adjustment feature): a staff-entered reduction can't take an
+ * installment's recorded `paid` amount for a component below zero — unlike Reverse Payment (which
+ * only ever replays exact previously-applied amounts, so this can never happen there), a manual
+ * adjustment is a human-typed guess and needs its own guard.
+ */
+export class PaymentAdjustmentExceedsPaidAmountError extends DomainError {
+  constructor(installmentId: string, component: string) {
+    super(
+      'PAYMENT_ADJUSTMENT_EXCEEDS_PAID_AMOUNT',
+      `Cannot reduce ${component} on installment ${installmentId} by more than what is currently recorded as paid.`,
+      undefined,
+      400,
+    );
+    this.name = 'PaymentAdjustmentExceedsPaidAmountError';
+  }
+}
+
+/** A manual adjustment must actually change something — at least one non-zero component delta across all installments. */
+export class EmptyPaymentAdjustmentError extends DomainError {
+  constructor() {
+    super('EMPTY_PAYMENT_ADJUSTMENT', 'At least one non-zero amount must be adjusted.', undefined, 400);
+    this.name = 'EmptyPaymentAdjustmentError';
+  }
+}

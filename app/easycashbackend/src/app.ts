@@ -154,6 +154,7 @@ import { RejectLoanUseCase } from '@modules/loan-account/application/use-cases/R
 import { ActivateLoanUseCase } from '@modules/loan-account/application/use-cases/ActivateLoanUseCase';
 import { ProcessPaymentUseCase } from '@modules/loan-account/application/use-cases/ProcessPaymentUseCase';
 import { ReversePaymentUseCase } from '@modules/loan-account/application/use-cases/ReversePaymentUseCase';
+import { ManualPaymentAdjustmentUseCase } from '@modules/loan-account/application/use-cases/ManualPaymentAdjustmentUseCase';
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
 import { UndoRestructureLoanUseCase } from '@modules/loan-account/application/use-cases/UndoRestructureLoanUseCase';
@@ -172,6 +173,7 @@ import { GetLoanTransactionUseCase } from '@modules/ledger/application/use-cases
 import { ListPaymentAllocationsForTransactionUseCase } from '@modules/ledger/application/use-cases/ListPaymentAllocationsForTransactionUseCase';
 import { PrismaLoanTransactionRepository } from '@modules/ledger/infrastructure/PrismaLoanTransactionRepository';
 import { PrismaPaymentAllocationRepository } from '@modules/ledger/infrastructure/PrismaPaymentAllocationRepository';
+import { PrismaPaymentAdjustmentRepository } from '@modules/ledger/infrastructure/PrismaPaymentAdjustmentRepository';
 import { createNotificationRouter } from '@modules/notification/interface/http/notificationRouter';
 import { NotificationService } from '@modules/notification/application/NotificationService';
 import { ListNotificationsUseCase } from '@modules/notification/application/use-cases/ListNotificationsUseCase';
@@ -753,6 +755,9 @@ export function createApp(): Express {
   // 2026-07-11 (Reverse Payment feature): shared by ProcessPaymentUseCase (writes the breakdown)
   // and ReversePaymentUseCase (reads it back) below — see PaymentAllocation's own doc comment.
   const paymentAllocationRepository = new PrismaPaymentAllocationRepository();
+  // 2026-08-14 (Manual Payment Adjustment feature): shared by ManualPaymentAdjustmentUseCase below,
+  // same "declared once, alongside its sibling" reasoning as paymentAllocationRepository above.
+  const paymentAdjustmentRepository = new PrismaPaymentAdjustmentRepository();
   const loanRiskAssessmentService = new LoanRiskAssessmentService();
   // 2026-07-24 (Loan Restructure feature)
   const loanRestructureRepository = new PrismaLoanRestructureRepository();
@@ -826,6 +831,15 @@ export function createApp(): Express {
         repaymentInstallmentRepository,
         loanTransactionRepository,
         paymentAllocationRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      manualPaymentAdjustmentUseCase: new ManualPaymentAdjustmentUseCase({
+        loanAccountRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        paymentAllocationRepository,
+        paymentAdjustmentRepository,
         financialAuditLogger,
         unitOfWork,
       }),

@@ -18,6 +18,7 @@ import type { ActivateLoanUseCase } from '../../application/use-cases/ActivateLo
 import type { UndoActivateLoanUseCase } from '../../application/use-cases/UndoActivateLoanUseCase';
 import type { ProcessPaymentUseCase } from '../../application/use-cases/ProcessPaymentUseCase';
 import type { ReversePaymentUseCase } from '../../application/use-cases/ReversePaymentUseCase';
+import type { ManualPaymentAdjustmentUseCase } from '../../application/use-cases/ManualPaymentAdjustmentUseCase';
 import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/GetLoanRiskAssessmentUseCase';
 import type { RestructureLoanUseCase } from '../../application/use-cases/RestructureLoanUseCase';
 import type { GetLoanRestructureUseCase } from '../../application/use-cases/GetLoanRestructureUseCase';
@@ -30,6 +31,7 @@ import { presentAccruedInterest } from './presenters/AccruedInterestPresenter';
 import type {
   AdjustLoanRequestBody,
   CreateLoanAccountRequestBody,
+  ManualPaymentAdjustmentRequestBody,
   ProcessPaymentRequestBody,
   RejectLoanRequestBody,
   RestructureLoanRequestBody,
@@ -53,6 +55,7 @@ export interface LoanAccountControllerDeps {
   undoActivateLoanUseCase: UndoActivateLoanUseCase;
   processPaymentUseCase: ProcessPaymentUseCase;
   reversePaymentUseCase: ReversePaymentUseCase;
+  manualPaymentAdjustmentUseCase: ManualPaymentAdjustmentUseCase;
   getLoanRiskAssessmentUseCase: GetLoanRiskAssessmentUseCase;
   restructureLoanUseCase: RestructureLoanUseCase;
   getLoanRestructureUseCase: GetLoanRestructureUseCase;
@@ -314,6 +317,41 @@ export class LoanAccountController {
           req.params.transactionId as string,
           currentUser.sub,
           body.reason,
+        );
+        return { statusCode: 200, body: presentLoanAccount(loanAccount) };
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * 2026-08-14 (Manual Payment Adjustment feature): same idempotency-guarded shape as
+   * reversePayment() above — a financially consequential action, and the frontend sends a key
+   * derived from the transaction id for the same "prevent a double-click double-adjusting" reason.
+   */
+  manualPaymentAdjustment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/:id/transactions/:transactionId/manual-adjust';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as ManualPaymentAdjustmentRequestBody;
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const loanAccount = await this.deps.manualPaymentAdjustmentUseCase.execute(
+          req.params.id as string,
+          req.params.transactionId as string,
+          body.lines.map((line) => ({
+            installmentId: line.installmentId,
+            principalReduction: Money.of(line.principalReduction ?? '0'),
+            interestReduction: Money.of(line.interestReduction ?? '0'),
+            feesReduction: Money.of(line.feesReduction ?? '0'),
+            penaltyReduction: Money.of(line.penaltyReduction ?? '0'),
+          })),
+          body.reason,
+          currentUser.sub,
         );
         return { statusCode: 200, body: presentLoanAccount(loanAccount) };
       });

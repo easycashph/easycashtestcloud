@@ -7,6 +7,7 @@ import { LoanAccountController, type LoanAccountControllerDeps } from './loanAcc
 import {
   adjustLoanSchema,
   createLoanAccountSchema,
+  manualPaymentAdjustmentSchema,
   processPaymentSchema,
   rejectLoanSchema,
   restructureLoanSchema,
@@ -96,6 +97,18 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
     requirePermission('payment.reverse'),
     validateBody(reversePaymentSchema),
     controller.reversePayment,
+  );
+
+  // 2026-08-14 (Manual Payment Adjustment feature, user-confirmed): the "manual adjustment" that
+  // Reverse Payment's own NO_REVERSIBLE_ALLOCATION_DATA error message points to, for the legacy
+  // transactions Reverse Payment refuses to touch — same MIS-only-by-default safety-net posture as
+  // payment.reverse above (not added to any other role's default grant in prisma/seed.ts).
+  router.post(
+    '/loan-accounts/:id/transactions/:transactionId/manual-adjust',
+    requireAuth,
+    requirePermission('payment.manual_adjust'),
+    validateBody(manualPaymentAdjustmentSchema),
+    controller.manualPaymentAdjustment,
   );
 
   // 2026-07-24 (Loan Restructure feature, user-confirmed): offered only for a past-due/matured

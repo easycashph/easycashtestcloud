@@ -126,6 +126,31 @@ export const reversePaymentSchema = z.object({
 export type ReversePaymentRequestBody = z.infer<typeof reversePaymentSchema>;
 
 /**
+ * 2026-08-14 (Manual Payment Adjustment feature): POST
+ * /loan-accounts/:id/transactions/:transactionId/manual-adjust request body. `reason` is required,
+ * same convention as `reversePaymentSchema.reason` above. Each line's four reduction amounts
+ * default to "0" (a line only touching e.g. principal doesn't need to spell out
+ * interest/fees/penalty as "0" explicitly), but `ManualPaymentAdjustmentUseCase` still rejects the
+ * request if every line ends up entirely zero (`EmptyPaymentAdjustmentError`).
+ */
+export const manualPaymentAdjustmentSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        installmentId: z.string().min(1),
+        principalReduction: decimalStringSchema.optional(),
+        interestReduction: decimalStringSchema.optional(),
+        feesReduction: decimalStringSchema.optional(),
+        penaltyReduction: decimalStringSchema.optional(),
+      }),
+    )
+    .min(1),
+  reason: z.string().min(1),
+});
+
+export type ManualPaymentAdjustmentRequestBody = z.infer<typeof manualPaymentAdjustmentSchema>;
+
+/**
  * 2026-07-24 (Loan Restructure feature, user-confirmed): POST /loan-accounts/:id/restructure
  * request body. `installmentCount`/`firstRepaymentDate` are staff-entered (product/interest rate
  * are copied from the old loan automatically, not part of this body) — same ADR-045 "explicit

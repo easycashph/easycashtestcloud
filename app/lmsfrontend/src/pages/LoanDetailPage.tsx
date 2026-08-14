@@ -1040,6 +1040,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     canActivateLoanAccount,
     canRecordPayment: canRecordPaymentPermission,
     canReversePayment: canReversePaymentPermission,
+    canManualAdjustPayment: canManualAdjustPaymentPermission,
     canReducePenalty: canReducePenaltyPermission,
     canAdjustFees: canAdjustFeesPermission,
     canRestructureLoan: canRestructureLoanPermission,
@@ -1086,12 +1087,22 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     'APPROVE' | 'ACTIVATE' | 'UNDO_APPROVE' | 'UNDO_ACTIVATE' | 'UNDO_RESTRUCTURE' | 'UNDO_ADJUST' | null
   >(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const [reversalBlockedNeedsManualAdjust, setReversalBlockedNeedsManualAdjust] = React.useState(false);
   const activateIdempotencyKeyRef = React.useRef<string | null>(null);
   const restructureIdempotencyKeyRef = React.useRef<string | null>(null);
   // 2026-07-11 (Reverse Payment feature, user request): correcting a wrongly-entered payment.
   // MIS-only (matches the backend's requireRole('MIS') gate) — see reverseMutation below.
   const [reverseTarget, setReverseTarget] = React.useState<LoanTransaction | null>(null);
   const [reverseReason, setReverseReason] = React.useState('');
+  // 2026-08-14 (Manual Payment Adjustment feature, user-confirmed): the fallback for a migrated
+  // payment Reverse Payment refuses (NO_REVERSIBLE_ALLOCATION_DATA) — staff pick the installment(s)
+  // and amounts by hand instead of the system deriving them from a PaymentAllocation breakdown that
+  // was never recorded. Opened from the reverse dialog itself once that rejection is surfaced.
+  const [manualAdjustTarget, setManualAdjustTarget] = React.useState<LoanTransaction | null>(null);
+  const [manualAdjustReason, setManualAdjustReason] = React.useState('');
+  const [manualAdjustLines, setManualAdjustLines] = React.useState<
+    { installmentId: string; principal: string; interest: string; fees: string; penalty: string }[]
+  >([]);
   const [expandedTransactionId, setExpandedTransactionId] = React.useState<string | null>(null);
   // 2026-07-15 (Reduce Penalty feature, user-confirmed): Accounting/MIS only (matches the backend's
   // requireRole('MIS', 'Accounting') gate).
@@ -1179,6 +1190,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     'NO_REVERSIBLE_ALLOCATION_DATA',
   ]);
   const onActionError = (error: unknown) => {
+    // 2026-08-14: this one rejection has a real next step (the Manual Adjustment tool), unlike the
+    // other two permanent ones - tracked separately so the reverse dialog can offer it inline.
+    setReversalBlockedNeedsManualAdjust(error instanceof ApiError && error.code === 'NO_REVERSIBLE_ALLOCATION_DATA');
     if (error instanceof ApiError) {
       if (PERMANENT_REVERSAL_REJECTION_CODES.has(error.code)) {
         setActionError(error.message);
@@ -1421,6 +1435,38 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onSuccess: () => {
       setReverseTarget(null);
       setReverseReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
+  const closeManualAdjust = () => {
+    setManualAdjustTarget(null);
+    setManualAdjustReason('');
+    setManualAdjustLines([]);
+  };
+
+  const manualAdjustMutation = useMutation({
+    mutationFn: () =>
+      // Same transaction-derived Idempotency-Key reasoning as reverseMutation above.
+      apiClient.post<LoanAccount>(
+        `/loan-accounts/${loanId}/transactions/${manualAdjustTarget!.id}/manual-adjust`,
+        {
+          lines: manualAdjustLines
+            .filter((l) => l.installmentId)
+            .map((l) => ({
+              installmentId: l.installmentId,
+              principalReduction: l.principal.trim() || '0',
+              interestReduction: l.interest.trim() || '0',
+              feesReduction: l.fees.trim() || '0',
+              penaltyReduction: l.penalty.trim() || '0',
+            })),
+          reason: manualAdjustReason.trim(),
+        },
+        { 'Idempotency-Key': `manual-adjust-${manualAdjustTarget!.id}` },
+      ),
+    onSuccess: () => {
+      closeManualAdjust();
       onActionSuccess();
     },
     onError: onActionError,
@@ -1987,6 +2033,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // completely blind to whatever MIS configures on the new Roles & Permissions screen.
   const canRecordPayment = (loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS') && canRecordPaymentPermission;
   const canReversePayment = canReversePaymentPermission;
+  const canManualAdjustPayment = canManualAdjustPaymentPermission;
+  // Mirrors ManualPaymentAdjustmentUseCase's own guards (EmptyPaymentAdjustmentError, and the
+  // per-component "can't reduce more than what's paid" floor) so the button is disabled rather than
+  // letting staff submit something the backend will reject anyway.
+  const manualAdjustIsValid =
+    manualAdjustReason.trim().length > 0 &&
+    manualAdjustLines.some((l) => l.installmentId && ['principal', 'interest', 'fees', 'penalty'].some((c) => num(l[c as 'principal']) > 0)) &&
+    manualAdjustLines.every((l) => {
+      if (!l.installmentId) return true;
+      const inst = installments.find((i) => i.id === l.installmentId);
+      if (!inst) return false;
+      return (['principal', 'interest', 'fees', 'penalty'] as const).every(
+        (c) => num(l[c]) >= 0 && num(l[c]) <= num(inst.paid[c]),
+      );
+    });
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
   // officer" - matches the backend's `penalty.reduce`/`fees.adjust` default grants (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
@@ -3687,9 +3748,30 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             />
           </div>
           {actionError && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{actionError}</span>
+            <div className="flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+              {/* 2026-08-14: the NO_REVERSIBLE_ALLOCATION_DATA message tells staff to "use a manual
+                  adjustment instead" - this turns that sentence into the actual way to get there,
+                  rather than leaving them at a dead end with nothing to click. */}
+              {reversalBlockedNeedsManualAdjust && canManualAdjustPayment && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
+                  onClick={() => {
+                    setManualAdjustTarget(reverseTarget);
+                    setManualAdjustLines([{ installmentId: '', principal: '', interest: '', fees: '', penalty: '' }]);
+                    setReverseTarget(null);
+                    setReverseReason('');
+                    setActionError(null);
+                  }}
+                >
+                  Use Manual Adjustment instead
+                </Button>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -3709,6 +3791,132 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={reverseMutation.isPending || reverseReason.trim().length === 0}
             >
               {reverseMutation.isPending ? 'Reversing…' : 'Yes, reverse this payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2026-08-14 (Manual Payment Adjustment feature): for migrated payments Reverse Payment
+          can't undo automatically — see ManualPaymentAdjustmentUseCase's own doc comment. */}
+      <Dialog
+        open={manualAdjustTarget !== null}
+        onOpenChange={(open) => !open && !manualAdjustMutation.isPending && closeManualAdjust()}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" /> Manual payment adjustment
+            </DialogTitle>
+            <DialogDescription>
+              {manualAdjustTarget &&
+                `This payment of ${formatPeso(num(manualAdjustTarget.amount))} from ${formatDate(manualAdjustTarget.entryDate)} was migrated from the old system with no per-installment breakdown, so it can't be reversed automatically. Enter how much to subtract from each installment's recorded paid amounts. The original entry is never edited or deleted — a new ADJUSTMENT transaction records the correction.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-72 space-y-3 overflow-y-auto">
+            {manualAdjustLines.map((line, i) => (
+              <div key={i} className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 space-y-1.5">
+                    <Label>Installment</Label>
+                    <select
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={line.installmentId}
+                      disabled={manualAdjustMutation.isPending}
+                      onChange={(e) =>
+                        setManualAdjustLines((prev) => prev.map((l, j) => (j === i ? { ...l, installmentId: e.target.value } : l)))
+                      }
+                    >
+                      <option value="">Select an installment…</option>
+                      {installments.map((inst) => (
+                        <option key={inst.id} value={inst.id}>
+                          #{inst.installmentNumber} — due {formatDate(inst.dueDate)} — paid{' '}
+                          {formatPeso(
+                            num(inst.paid.principal) + num(inst.paid.interest) + num(inst.paid.fees) + num(inst.paid.penalty),
+                          )}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {manualAdjustLines.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-6"
+                      disabled={manualAdjustMutation.isPending}
+                      onClick={() => setManualAdjustLines((prev) => prev.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(['principal', 'interest', 'fees', 'penalty'] as const).map((component) => {
+                    const selected = installments.find((inst) => inst.id === line.installmentId);
+                    const currentlyPaid = selected ? num(selected.paid[component]) : null;
+                    return (
+                      <div key={component} className="space-y-1.5">
+                        <Label className="capitalize">{component}</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={line[component]}
+                          disabled={manualAdjustMutation.isPending}
+                          onChange={(e) =>
+                            setManualAdjustLines((prev) => prev.map((l, j) => (j === i ? { ...l, [component]: e.target.value } : l)))
+                          }
+                        />
+                        {currentlyPaid !== null && (
+                          <p className="text-[11px] text-muted-foreground">Paid: {formatPeso(currentlyPaid)}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={manualAdjustMutation.isPending}
+              onClick={() =>
+                setManualAdjustLines((prev) => [...prev, { installmentId: '', principal: '', interest: '', fees: '', penalty: '' }])
+              }
+            >
+              Add another installment
+            </Button>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="manual-adjust-reason">Reason</Label>
+            <Textarea
+              id="manual-adjust-reason"
+              placeholder="e.g. Duplicate encoding, verified against OR #12345"
+              value={manualAdjustReason}
+              onChange={(e) => setManualAdjustReason(e.target.value)}
+              disabled={manualAdjustMutation.isPending}
+            />
+          </div>
+
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeManualAdjust} disabled={manualAdjustMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => manualAdjustMutation.mutate()}
+              disabled={manualAdjustMutation.isPending || !manualAdjustIsValid}
+            >
+              {manualAdjustMutation.isPending ? 'Adjusting…' : 'Apply adjustment'}
             </Button>
           </DialogFooter>
         </DialogContent>

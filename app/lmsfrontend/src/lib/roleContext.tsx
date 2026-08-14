@@ -41,6 +41,7 @@ export type PermissionCode =
   | 'loan_account.undo_adjust'
   | 'payment.record'
   | 'payment.reverse'
+  | 'payment.manual_adjust'
   | 'penalty.reduce'
   | 'fees.adjust'
   | 'document.generate'
@@ -105,6 +106,8 @@ interface RoleContextValue {
   canRecordPayment: boolean;
   /** Reverse a recorded payment - MIS-only by default, an accidental-click safety net. */
   canReversePayment: boolean;
+  /** Manually correct a legacy payment Reverse Payment can't touch - MIS-only by default, same posture as canReversePayment. */
+  canManualAdjustPayment: boolean;
   /** Reduce/waive an installment penalty. */
   canReducePenalty: boolean;
   /** Adjust an installment fee amount. */
@@ -304,6 +307,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManageESignature: hasPermission('esignature.manage'),
     canRecordPayment: hasPermission('payment.record'),
     canReversePayment: hasPermission('payment.reverse'),
+    canManualAdjustPayment: hasPermission('payment.manual_adjust'),
     canReducePenalty: hasPermission('penalty.reduce'),
     canAdjustFees: hasPermission('fees.adjust'),
     canRestructureLoan: hasPermission('loan_account.restructure'),
