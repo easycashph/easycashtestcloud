@@ -857,13 +857,13 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
             <SectionCard number="3" title="Personal Information">
               <div className="grid gap-4 sm:grid-cols-3">
                 <Field label="First name *">
-                  <Input id="firstName" required value={form.firstName} onChange={(e) => update('firstName', e.target.value)} />
+                  <Input id="firstName" required value={form.firstName} onChange={(e) => update('firstName', e.target.value.toUpperCase())} />
                 </Field>
                 <Field label="Middle name">
-                  <Input id="middleName" value={form.middleName} onChange={(e) => update('middleName', e.target.value)} />
+                  <Input id="middleName" value={form.middleName} onChange={(e) => update('middleName', e.target.value.toUpperCase())} />
                 </Field>
                 <Field label="Last name *">
-                  <Input id="lastName" required value={form.lastName} onChange={(e) => update('lastName', e.target.value)} />
+                  <Input id="lastName" required value={form.lastName} onChange={(e) => update('lastName', e.target.value.toUpperCase())} />
                 </Field>
                 <Field label="Gender">
                   <Select value={form.gender} onChange={(e) => update('gender', e.target.value)}>
@@ -970,7 +970,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                       <Label>Name</Label>
                       <Input
                         value={row.name}
-                        onChange={(e) => update('dependants', form.dependants.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
+                        onChange={(e) => update('dependants', form.dependants.map((r, j) => (j === i ? { ...r, name: e.target.value.toUpperCase() } : r)))}
                       />
                     </div>
                     <div className="w-20 space-y-1.5">
@@ -1025,7 +1025,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
               {form.hasCoBorrower && (
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Field label="Co-borrower full name">
-                    <Input value={form.coBorrowerName} onChange={(e) => update('coBorrowerName', e.target.value)} />
+                    <Input value={form.coBorrowerName} onChange={(e) => update('coBorrowerName', e.target.value.toUpperCase())} />
                   </Field>
                   <Field label="Relationship to applicant">
                     <Input placeholder="e.g. Spouse" value={form.coBorrowerRelationship} onChange={(e) => update('coBorrowerRelationship', e.target.value)} />
@@ -1049,13 +1049,13 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
             <SectionCard number="8" title="Character References">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="1st reference - full name">
-                  <Input value={form.reference1Name} onChange={(e) => update('reference1Name', e.target.value)} />
+                  <Input value={form.reference1Name} onChange={(e) => update('reference1Name', e.target.value.toUpperCase())} />
                 </Field>
                 <Field label="1st reference - contact number">
                   <PhoneInput value={form.reference1Mobile} onChange={(e) => update('reference1Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
                 <Field label="2nd reference - full name">
-                  <Input value={form.reference2Name} onChange={(e) => update('reference2Name', e.target.value)} />
+                  <Input value={form.reference2Name} onChange={(e) => update('reference2Name', e.target.value.toUpperCase())} />
                 </Field>
                 <Field label="2nd reference - contact number">
                   <PhoneInput value={form.reference2Mobile} onChange={(e) => update('reference2Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
