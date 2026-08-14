@@ -446,7 +446,9 @@ function CreateClientProfileDialog({
               <div key={i} className="grid grid-cols-3 gap-2">
                 <Input
                   value={dep.name}
-                  onChange={(e) => setDependants((prev) => (prev ?? []).map((d, j) => (j === i ? { ...d, name: e.target.value } : d)))}
+                  onChange={(e) =>
+                    setDependants((prev) => (prev ?? []).map((d, j) => (j === i ? { ...d, name: e.target.value.toUpperCase() } : d)))
+                  }
                   placeholder="Name"
                 />
                 <Input
@@ -471,7 +473,7 @@ function CreateClientProfileDialog({
             <p className="sm:col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Character References</p>
             <div className="space-y-1.5">
               <Label>1st Reference Name</Label>
-              <Input value={reference1Name} onChange={(e) => setReference1Name(e.target.value)} />
+              <Input value={reference1Name} onChange={(e) => setReference1Name(e.target.value.toUpperCase())} />
             </div>
             <div className="space-y-1.5">
               <Label>1st Reference Contact Number</Label>
@@ -479,7 +481,7 @@ function CreateClientProfileDialog({
             </div>
             <div className="space-y-1.5">
               <Label>2nd Reference Name</Label>
-              <Input value={reference2Name} onChange={(e) => setReference2Name(e.target.value)} />
+              <Input value={reference2Name} onChange={(e) => setReference2Name(e.target.value.toUpperCase())} />
             </div>
             <div className="space-y-1.5">
               <Label>2nd Reference Contact Number</Label>
@@ -505,17 +507,17 @@ function CreateClientProfileDialog({
                   <Label>
                     Co-Borrower First Name<span className="text-destructive"> *</span>
                   </Label>
-                  <Input value={coBorrowerFirstName} onChange={(e) => setCoBorrowerFirstName(e.target.value)} />
+                  <Input value={coBorrowerFirstName} onChange={(e) => setCoBorrowerFirstName(e.target.value.toUpperCase())} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>
                     Co-Borrower Last Name<span className="text-destructive"> *</span>
                   </Label>
-                  <Input value={coBorrowerLastName} onChange={(e) => setCoBorrowerLastName(e.target.value)} />
+                  <Input value={coBorrowerLastName} onChange={(e) => setCoBorrowerLastName(e.target.value.toUpperCase())} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Co-Borrower Middle Name</Label>
-                  <Input value={coBorrowerMiddleName} onChange={(e) => setCoBorrowerMiddleName(e.target.value)} />
+                  <Input value={coBorrowerMiddleName} onChange={(e) => setCoBorrowerMiddleName(e.target.value.toUpperCase())} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Co-Borrower Phone Number</Label>

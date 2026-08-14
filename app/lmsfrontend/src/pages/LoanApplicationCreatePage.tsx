@@ -1091,7 +1091,9 @@ export function LoanApplicationForm({
                 <Field label="Name" tooltip="Dependant's full name.">
                   <Input
                     value={row.name}
-                    onChange={(e) => setDependants((prev) => prev.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))}
+                    onChange={(e) =>
+                      setDependants((prev) => prev.map((r, j) => (j === i ? { ...r, name: e.target.value.toUpperCase() } : r)))
+                    }
                   />
                 </Field>
               </div>
@@ -1207,13 +1209,13 @@ export function LoanApplicationForm({
       <SectionCard number="9" title="Character References">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="1st reference - full name" tooltip="A character reference the branch can contact - not a co-borrower.">
-            <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value }))} />
+            <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value.toUpperCase() }))} />
           </Field>
           <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
             <PhoneInput value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
           </Field>
           <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
-            <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value }))} />
+            <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value.toUpperCase() }))} />
           </Field>
           <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
             <PhoneInput value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
