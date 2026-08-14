@@ -13,17 +13,16 @@ echo   Easycash LMS - Update Database from SDevTech
 echo ============================================
 echo.
 echo Ito ay kukuha ng pinaka-bagong .zip na inilagay mo sa
-echo "%MONGO_DIR%", i-eextract ito, tapos DAGDAGAN lang ang
-echo local Postgres database mo ng mga BAGONG record mula doon.
+echo "%MONGO_DIR%", i-eextract ito, tapos i-sync ang local Postgres
+echo database mo mula doon.
 echo.
-echo LIGTAS ITO: hindi nito babaguhin o bubura-hin ang kahit anong
-echo existing na data - kasama na yung mga ginawa mo dito sa LMS
-echo mismo (bagong loans, e-signature, atbp.). Magdadagdag lang ito
-echo ng mga rekord na wala pa dito (bagong clients/loans/transactions
-echo mula sa SDevTech).
+echo LIGTAS ITO: hindi nito bubura-hin ang kahit anong existing na
+echo data. Ang mga loan na may sariling transaction na naitala DITO
+echo sa LMS mismo (hindi galing SDevTech) ay awtomatikong nilalaktawan
+echo - protektado sila, hindi na sila ino-overwrite ng SDevTech.
 echo.
 
-echo [1/7] Hinahanap ang pinaka-bagong .zip sa "%MONGO_DIR%"...
+echo [1/8] Hinahanap ang pinaka-bagong .zip sa "%MONGO_DIR%"...
 set "LATEST_ZIP="
 for /f "delims=" %%F in ('dir /b /o-d "%MONGO_DIR%\*.zip" 2^>nul') do (
   if not defined LATEST_ZIP set "LATEST_ZIP=%%F"
@@ -43,9 +42,9 @@ set "ZIP_BASENAME=!LATEST_ZIP:.zip=!"
 set "TARGET_DIR=%EXTRACTED_DIR%\!ZIP_BASENAME!"
 
 if exist "%TARGET_DIR%\db-easycash" (
-  echo [2/7] Na-extract na dati ang backup na ito - lalaktawan ang extraction.
+  echo [2/8] Na-extract na dati ang backup na ito - lalaktawan ang extraction.
 ) else (
-  echo [2/7] Ina-extract ang "!LATEST_ZIP!" ^(maaaring tumagal ng ilang minuto^)...
+  echo [2/8] Ina-extract ang "!LATEST_ZIP!" ^(maaaring tumagal ng ilang minuto^)...
   powershell -NoProfile -Command "Expand-Archive -Path '%MONGO_DIR%\!LATEST_ZIP!' -DestinationPath '%TARGET_DIR%' -Force"
   if errorlevel 1 (
     echo       FAILED ang extraction. Suriin ang error sa itaas.
@@ -56,7 +55,7 @@ if exist "%TARGET_DIR%\db-easycash" (
 )
 echo.
 
-echo [3/7] Chinicheck kung tumatakbo ang Postgres...
+echo [3/8] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
 if errorlevel 1 (
   echo       Hindi tumatakbo ang Postgres. Sinisimulan ang docker compose stack...
@@ -67,7 +66,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [4/7] Dry run muna - tinitignan kung ano ang mga BAGONG record...
+echo [4/8] Dry run muna - tinitignan kung ano ang mga BAGONG record...
 echo       ^(walang isusulat pa sa database sa hakbang na ito^)
 echo.
 pushd "%BACKEND_DIR%"
@@ -84,7 +83,7 @@ if /I not "%CONFIRM%"=="Y" (
 )
 
 echo.
-echo [5/7] Ina-apply ang mga bagong record sa database...
+echo [5/8] Ina-apply ang mga bagong record sa database...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\migrate-legacy-data.ts --apply
 if errorlevel 1 (
@@ -98,7 +97,32 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [6/7] Kinukumpleto ang balance ng bagong loans na walang
+echo [6/8] Ina-update ang repayment schedules (kung magkano na ang
+echo       nabayaran kada installment) mula sa SDevTech...
+REM 2026-08-14 (bug fix): this step was MISSING from this .bat entirely, even though
+REM "legacy/Run Full Legacy Migration.command" has always had it as its step [7/18], BETWEEN the
+REM core migration and the balance recompute below. Without it, every run of this file imported
+REM new SDevTech payments as `loan_transactions` rows but never updated the matching
+REM `repayment_schedules` paid amounts - so a loan could show a real payment in its transaction
+REM history while its installments still read unpaid. Found 2026-08-14 on SML-PDC_00035 (Rafael
+REM Alarcon Baguio): a real 7,000.00 payment (5,309.86 principal + 1,690.14 interest) existed as a
+REM transaction but installment #4 still showed 0.00 principal paid. Worse, step [7/8] below
+REM recomputes loan balances FROM this schedule - so a stale schedule quietly propagated the error
+REM into the account-level balances too. Order matters: this must run BEFORE that recompute.
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\migrate-repayment-schedules.ts
+if errorlevel 1 (
+  echo.
+  echo       May error sa repayment schedules - suriin ang error sa itaas bago ulitin.
+  popd
+  echo.
+  pause
+  exit /b 1
+)
+popd
+
+echo.
+echo [7/8] Kinukumpleto ang balance ng bagong loans na walang
 echo       account-level snapshot mula sa SDevTech (kinukuha mula sa
 echo       kanya-kanyang repayment schedule)...
 pushd "%BACKEND_DIR%"
@@ -106,7 +130,7 @@ call npx tsx scripts\recompute-active-loan-balances-from-schedule.ts
 popd
 
 echo.
-echo [7/7] Huling spot-check - tinitignan kung may loan na
+echo [8/8] Huling spot-check - tinitignan kung may loan na
 echo       kailangan pa ng manual na atensyon...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\check-legacy-balance-integrity.ts
