@@ -15,6 +15,18 @@
 # The token lives ONLY in `local/tunnel-autoupdate.env` on this machine - that whole folder is
 # gitignored (see local/README.md), so it never reaches git/GitHub.
 
+param(
+    # Passed by the scheduled task (see local/README.md) so unattended runs never block on a
+    # Read-Host prompt that nobody is there to answer - errors just get logged and the script exits.
+    [switch]$Unattended
+)
+
+function Wait-Or-Exit($msg) {
+    Write-Err2 $msg
+    if (-not $Unattended) { Read-Host 'Press Enter to exit' }
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -50,7 +62,7 @@ CLOUDFLARE_PAGES_PROJECT=easycash-lms
     Write-Warn2 "First run - created a blank config at:"
     Write-Warn2 "  $ConfigPath"
     Write-Warn2 "Fill in CLOUDFLARE_API_TOKEN (and double-check the other two values), then run this script again."
-    Read-Host 'Press Enter to exit'
+    if (-not $Unattended) { Read-Host 'Press Enter to exit' }
     exit 1
 }
 
@@ -72,22 +84,29 @@ if ([string]::IsNullOrWhiteSpace($ApiToken) -or [string]::IsNullOrWhiteSpace($Ac
 }
 
 if (-not (Test-Path $CloudflaredExe)) {
-    Write-Err2 "cloudflared.exe not found at: $CloudflaredExe"
-    Write-Err2 "Install it first: winget install --id Cloudflare.cloudflared -e"
-    Read-Host 'Press Enter to exit'
-    exit 1
+    Wait-Or-Exit "cloudflared.exe not found at: $CloudflaredExe`nInstall it first: winget install --id Cloudflare.cloudflared -e"
 }
 
 # --- Step 1: backend health check ---
+# Retries for up to 5 minutes so a boot-time run (Task Scheduler "At log on") doesn't fail just
+# because Docker Desktop/the containers are still starting up - unattended runs have nobody around
+# to notice a one-shot failure and re-run it by hand.
 Write-Step '[1/4] Checking backend on localhost:4000...'
-try {
-    Invoke-WebRequest -Uri 'http://localhost:4000/health' -UseBasicParsing -TimeoutSec 5 | Out-Null
-    Write-Host '      OK.'
-} catch {
-    Write-Err2 '      Backend is not responding on port 4000. Start the Docker backend container first (docker compose up).'
-    Read-Host 'Press Enter to exit'
-    exit 1
+$backendDeadline = (Get-Date).AddMinutes(5)
+$backendUp = $false
+while ((Get-Date) -lt $backendDeadline -and -not $backendUp) {
+    try {
+        Invoke-WebRequest -Uri 'http://localhost:4000/health' -UseBasicParsing -TimeoutSec 5 | Out-Null
+        $backendUp = $true
+    } catch {
+        Write-Host '      Not up yet, retrying...'
+        Start-Sleep -Seconds 10
+    }
 }
+if (-not $backendUp) {
+    Wait-Or-Exit '      Backend never came up on port 4000 after 5 minutes. Start the Docker backend container first (docker compose up).'
+}
+Write-Host '      OK.'
 
 # --- Step 2: start the tunnel, capture its output ---
 Write-Step '[2/4] Starting cloudflared tunnel...'
@@ -112,11 +131,7 @@ while ((Get-Date) -lt $deadline -and -not $tunnelUrl) {
 }
 
 if (-not $tunnelUrl) {
-    Write-Err2 '      Timed out waiting for the tunnel URL. Check the logs:'
-    Write-Err2 "      $stdoutPath"
-    Write-Err2 "      $stderrPath"
-    Read-Host 'Press Enter to exit'
-    exit 1
+    Wait-Or-Exit "      Timed out waiting for the tunnel URL. Check the logs:`n      $stdoutPath`n      $stderrPath"
 }
 Write-Host "      Tunnel URL: $tunnelUrl"
 Write-Host "      (cloudflared is running in the background, PID $($proc.Id) - do not close this window, it stops the tunnel.)"
@@ -136,10 +151,7 @@ function Get-CloudflareErrorDetail($errRecord) {
 try {
     $project = Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Get
 } catch {
-    Write-Err2 "      Could not read the Pages project. Check CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT in local/tunnel-autoupdate.env."
-    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
-    Read-Host 'Press Enter to exit'
-    exit 1
+    Wait-Or-Exit "      Could not read the Pages project. Check CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT in local/tunnel-autoupdate.env.`n      $(Get-CloudflareErrorDetail $_)"
 }
 
 # Minimal body - only env_vars, not the full deployment_configs.production object from GET
@@ -159,10 +171,7 @@ try {
     Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Patch -Body $patchBody | Out-Null
     Write-Host '      OK.'
 } catch {
-    Write-Err2 "      Failed to update the env var:"
-    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
-    Read-Host 'Press Enter to exit'
-    exit 1
+    Wait-Or-Exit "      Failed to update the env var:`n      $(Get-CloudflareErrorDetail $_)"
 }
 
 # --- Step 4: trigger a new build so the new env var is actually baked in ---
@@ -171,18 +180,12 @@ try {
     $deployments = Invoke-RestMethod -Uri "$apiBase/deployments" -Headers $headers -Method Get
     $latest = $deployments.result | Select-Object -First 1
     if (-not $latest) {
-        Write-Err2 '      No existing deployment found to retry from. Trigger one manually from the Pages dashboard once, then re-run this script.'
-        Read-Host 'Press Enter to exit'
-        exit 1
+        Wait-Or-Exit '      No existing deployment found to retry from. Trigger one manually from the Pages dashboard once, then re-run this script.'
     }
     Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry" -Headers $headers -Method Post | Out-Null
     Write-Host '      OK - a new build has started. It usually takes 1-2 minutes.'
 } catch {
-    Write-Err2 "      Failed to trigger the deployment:"
-    Write-Err2 "      $(Get-CloudflareErrorDetail $_)"
-    Write-Err2 '      The env var was updated, but you will need to click "Retry deployment" manually in the Pages dashboard.'
-    Read-Host 'Press Enter to exit'
-    exit 1
+    Wait-Or-Exit "      Failed to trigger the deployment:`n      $(Get-CloudflareErrorDetail $_)`n      The env var was updated, but you will need to click ""Retry deployment"" manually in the Pages dashboard."
 }
 
 Write-Host ''

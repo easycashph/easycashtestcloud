@@ -108,6 +108,11 @@ app/docker/tailscale-certs/
 backup-mongodb.bat
 backup-mongodb.command
 
+# LAN-only remote Postgres backup script (2026-08-14) — same reasoning as backup-mongodb.bat:
+# has the Postgres username/password in plain text (structurally required for pg_dump to
+# connect from another device over the network). Never committed.
+backup-lms-database-remote.bat
+
 # Google Drive desktop app's own runtime upload-staging folder — machine-local, never real content.
 .tmp.driveupload/
 
