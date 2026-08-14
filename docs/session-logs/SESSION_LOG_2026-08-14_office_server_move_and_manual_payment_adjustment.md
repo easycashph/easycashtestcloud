@@ -208,3 +208,48 @@ don't map obviously to that ₱7,000 (1–3 are fully paid at much larger amount
 interest + ₱936 fees; #5 is untouched) — **deciding which installment(s) that payment actually landed
 on is a business judgment, not something to infer**, which is precisely why the tool asks staff
 rather than guessing. Awaiting the user's decision on the specific figures.
+
+## 8. Backfilled `PaymentAllocation` for migrated payments — Reverse Payment now works on 28% of them
+
+Follow-up question: *can the allocation details be filled in for migrated payments at all?* The
+2026-08-13 investigation had concluded no, on the basis that `LoanTransaction`'s aggregate
+components were the only per-payment detail the export carried. That turned out to be incomplete.
+
+**Found**: `loan_transactions` in the dump has a `parent_repayment_key` field — SDevTech's own
+recorded link from a transaction to the exact `repayments` row it paid. Verified against real data
+before relying on it: transaction `67340b103d54b136ae280008` (₱47,754.68 = ₱39,740.12 principal +
+₱8,014.56 interest) points at an installment whose `principal_paid`/`interest_paid` are exactly
+those two figures.
+
+Ruled out as sources first: `transaction_details` (43,417 docs) holds only payment-channel data
+(`transaction_channel_key`, `internal_transfer`), not allocations; `repayments` has no reference
+back to a transaction; `payment_schedules.bson` is empty (0 bytes).
+
+**New script** `scripts/backfill-payment-allocations.ts` (dry-run by default, `--apply` to write).
+Purely additive — writes `PaymentAllocation` rows only, touching no balance, installment,
+transaction, or loan account, so it cannot change any figure the LMS displays. Idempotent: skips any
+transaction that already has an allocation. Requires a hop the field itself doesn't make obvious:
+`parent_repayment_key` is a `repayments` **uid**, while `RepaymentSchedule.legacyId` is keyed off
+that row's **`_id`**.
+
+**Applied**: 2,697 allocations created across 512 loans. Migrated REPAYMENTs that are now reversible
+through the normal precise flow: **2,697 of 9,496 (28.4%)**. Skipped 642 dangling keys and 23
+transactions not present here. Post-check: the only allocations whose amounts don't equal their
+transaction's components are 6 rows on 3 *native* transactions — correct behavior, those are real
+LMS payments legitimately split across two installments each.
+
+**Coverage is partial on purpose.** Roughly 91.5% of the dump's non-reversed legacy REPAYMENTs have
+no `parent_repayment_key` (the field looks to have been added late in SDevTech's life). Deriving
+those by replaying an allocation waterfall was considered and rejected again, for the same reason as
+on 2026-08-13: guessing wrong silently reverses the wrong installment — the `SL-CORP_00114` class of
+bug. Those stay on Manual Payment Adjustment, where a human picks the installment explicitly.
+
+**Data-integrity finding**: the script's cross-loan safety check refused 9 transactions whose
+`parent_repayment_key` pointed at an installment belonging to a *different* loan account —
+`6758fb51db9f45777e6d06b0`, `67594c01db9f45777e6d10c5`, `67d0e14872fc294519988123`,
+`67d0e2e672fc294519988154`, `69b90975bb9a9c2eebd76fd9`, `69e58c217004f4ba94895399`,
+`6a0d2718a12cb7c31e39fd52`, `6a348d0cab1043df9efc1a79`, `6a6aedad0a657be341d23858`. These are
+inconsistencies in SDevTech's own export, not something this migration introduced. Writing them
+would have let a future Reverse Payment undo a payment against the wrong borrower's loan. Not
+investigated further this session — worth a look alongside the 200 loans (§7 analysis) whose
+transaction principal totals disagree with their schedule's principal-paid totals.
