@@ -86,7 +86,7 @@ export function TransactionReportPage() {
     const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
-  const [type, setType] = React.useState<LoanTransactionType | 'ALL'>('ALL');
+  const [type, setType] = React.useState<LoanTransactionType | 'ALL'>('REPAYMENT');
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
