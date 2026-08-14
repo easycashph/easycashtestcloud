@@ -190,6 +190,73 @@ session: pull before every push now that two machines write to the same `main`.
 - The `.ps1`/`.bat` scripts were syntax-checked locally (`PSParser::Tokenize`) before each push, but
   their actual Cloudflare API behavior could only be verified live, on the office server PC, with
   the user relaying output — three real bugs only surfaced that way (§7).
+- The route-path fix (§9) was checked against `App.tsx`'s actual route table before pushing, not
+  re-guessed a second time. The Docker Desktop daemon was found not running on this laptop mid-task
+  (rebuild failed with a clear connection error rather than something misleading) — started it,
+  confirmed via `docker version`, then rebuilt cleanly.
+- `npx tsc --noEmit` re-run clean after both the deep-link fix (§9) and the auto-uppercase fixes
+  (§11); both rebuilt and confirmed running on this laptop's Docker before pushing.
+
+## 9. Live-verified the mitigation feature end-to-end with the user, found and fixed a real routing bug
+
+User re-tested the feature live several more times, each producing a fresh useful data point rather
+than a repeat of the same question — worked through in order:
+
+- **Live bundle re-diagnosis, twice more**: the tunnel URL baked into the deployed bundle kept
+  changing between checks (office restarted the tunnel independently, unprompted, at least twice)
+  — each time re-confirmed frontend chunk + tunnel health + backend route via the same
+  unauthenticated `curl`/bundle-inspection method as §4, no regressions found.
+- **A dead end that turned out not to be one**: the specific test borrower (`TEST6NOMER TEST6NOMER
+  TEST6NOMER`, created earlier this session on this laptop) didn't show on the live site at all —
+  neither the Client Profile card nor the Loan Application page itself. Correctly diagnosed as the
+  office server's DB copy simply predating this laptop's test data (confirmed by walking the user
+  through checking the Loan Application page directly, then asking whether the client record itself
+  appeared) — **not a feature bug**. Verified instead against a real client
+  (`SML-REG_00381`/co-borrower `TEST6COB`) already present in both databases and confirmed the card
+  renders correctly with real data on the live site.
+- **A real bug, found from the user's own screenshot**: clicking "Edit on Loan Application" from the
+  Client Profile card redirected to the dashboard instead. Root cause — the link used
+  `/loan-applications/:id`, a route that doesn't exist (`App.tsx`'s actual route is
+  `/applications/:applicationId`); the mismatch fell through to the app's catch-all
+  `path="*" -> Navigate to="/"`. Fixed in `23f150f`, confirmed against `App.tsx`'s route table
+  before pushing (not just re-guessing another path).
+- **Design follow-up, addressed same session**: user asked why mitigation isn't directly editable
+  from Client Profile at all, instead of always bouncing to the Loan Application page. Gave an
+  honest recommendation rather than just implementing what was asked: mitigation is tied to a
+  *specific* application's review/signed documents (Deed of Assignment routing keys off
+  `accountOwner`), so editing it from Client Profile is ambiguous when a borrower has more than one
+  application — recommended keeping edit on the Loan Application page but removing the friction of
+  finding the section manually. User agreed. Implemented `?section=mitigation` deep-linking
+  (`6a504dc`): the Loan Application page now auto-opens the (often-collapsed) mitigation section and
+  scrolls to it via a new `useEffect` keyed on `location.search`, instead of the user always having
+  to add it themselves as a design ask.
+
+## 10. Unrelated: troubleshot a Claude Desktop MSIX install failure on the office server PC
+
+Not LMS work — the user hit `AddPackage failed with HRESULT 0x80073CF6` reinstalling Claude Desktop
+on the office server PC (uninstalled a working prior install, reinstall then failed). Read the
+actual `ClaudeSetup.log` rather than guessing from the HRESULT alone — download/signature
+verification succeeded; failure was specifically at the `AddPackage (current-user)` step. Ruled out
+two plausible causes by checking rather than assuming: no leftover `Get-AppxPackage`/
+`Get-AppxProvisionedPackage` registration in any scope. Root cause: a stale
+`%LocalAppData%\Packages\Claude_pzs8sxrjxfjjc` folder left behind by the earlier uninstall,
+conflicting with re-provisioning — confirmed via `Test-Path`, then removed (after an
+access-denied first attempt, resolved by a reboot to release the lock). Reinstall succeeded after.
+
+## 11. Fixed: auto-uppercase missing on three name fields (`75710e2`)
+
+User asked for Dependants Name, Co-Borrower first/middle/last name, and Character References full
+names to auto-uppercase while typing, matching the existing convention already applied to the
+applicant's own name fields (`e.target.value.toUpperCase()` on `onChange`, no dedicated component).
+Audited every occurrence rather than fixing the first match found — several were already correct
+(Co-Borrower name in `LoanApplicationCreatePage.tsx`, and in `ClientProfilePage.tsx`'s own
+Co-Borrower dialog), which narrowed the real gaps to:
+- Dependants Name — both `LoanApplicationCreatePage.tsx` (Section 5, covers create and edit mode
+  since that page doubles as the edit form) and a second, separate copy on
+  `LoanApplicationDetailPage.tsx`'s Approve Loan dialog.
+- Character References 1st/2nd full name — same two files.
+- Co-Borrower first/middle/last name — only missing on `LoanApplicationDetailPage.tsx`'s Approve
+  Loan dialog (a third, independent set of form state from the other two already-correct spots).
 
 ## Open — no action taken yet
 
