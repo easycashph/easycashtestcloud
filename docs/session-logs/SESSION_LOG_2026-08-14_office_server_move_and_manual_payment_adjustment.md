@@ -384,3 +384,35 @@ ones are already migrated and therefore excluded from the "genuinely new" check)
 
 Full backend suite after both guards: 949 passed (+2 from the new tests), same 11 pre-existing
 failures, no new ones.
+
+## 12. Live-data correction: OR/AR mix-up between two borrowers
+
+Cross-checking a full-August-range LMS-vs-SDevTech Daily Collection Report comparison (with §10's
+report fix and §11's row-splitting both already live) surfaced one remaining real error: two
+different borrowers' native payments shared the same OR/AR number.
+
+| | Amount | Wrong (in LMS) | Correct (per SDevTech) |
+| --- | --- | --- | --- |
+| Mary Jane Dula Gorpido (`SL-REG_00103`) | 3,483.07 | OR 2501 / AR 20788 | OR 2499 / AR 20787 |
+| Marlon Granados Guzman (`SML-REG_00355`) | 27,249.43 | OR 2501 / AR 20788 | OR 2500 / AR 20788 |
+
+Investigated first whether this was the "already migrated, staff re-entered it" scenario §11's
+guards protect against — it wasn't: both rows are native (`legacyId` null), same
+`postedByUserId`, entered a full day apart (Mary Jane 08-13 06:56 UTC, Marlon 08-14 06:34 UTC).
+Two genuinely different real payments, just typed with the same receipt number — most likely a
+copy-paste of the previous entry's OR/AR instead of the correct one.
+
+Corrected via a direct, precisely-scoped `UPDATE ... WHERE id = '<transaction-id>'` (two
+statements, one per row) — metadata-only (`orNumber`/`arNumber`), no amount/type/balance/
+installment touched, so no domain method or use case applies here (same class of fix as the
+OR/AR/Channel backfill documented in the 2026-08-12 session log). Verified via a follow-up SELECT
+matching the corrected values exactly.
+
+**Broader gap explained, not a new bug**: after this fix and §11's row-splitting, the remaining
+LMS-vs-SDevTech peso difference over Aug 1-14 is fully accounted for by non-bug causes: (a) a small
+number of native payments entered into the LMS a day after the actual SDevTech-recorded collection
+date (staff defaulting the Record Payment date field to "today" instead of backdating — an
+operational note, not a code fix), and (b) 4 `SL-CORP_*` "Loan Deduct"-channel transactions that
+are genuinely migrated (real SDevTech data, `legacyId` set) but don't appear in SDevTech's own
+Daily Collection Report export — likely that report excludes the Loan Deduct channel on SDevTech's
+side, not an LMS defect.
