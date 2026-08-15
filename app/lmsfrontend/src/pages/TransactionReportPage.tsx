@@ -121,14 +121,19 @@ export function TransactionReportPage() {
    * Empty array = no filter (every channel). Unlike type, there's no smart default here — a
    * migrated payment's channel is whatever SDevTech recorded (e.g. "Loan Deduct"), not a bug to
    * default around.
+   *
+   * Tracked by LABEL, not raw stored value — a native code (e.g. "BANK_TRANSFER") and its migrated
+   * counterpart ("Bank Transfer") can both resolve to one label/checkbox (`ChannelOption.values`
+   * holds every raw value that maps to it), so a single selection has to expand into possibly
+   * several `channel` query params. See the backend's `PAYMENT_METHOD_LABEL` doc comment.
    */
-  const [channels, setChannels] = React.useState<string[]>([]);
+  const [channelLabels, setChannelLabels] = React.useState<string[]>([]);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
   const channelsQuery = useQuery({
     queryKey: ['reports', 'transaction-channels'],
-    queryFn: () => apiClient.get<{ items: { value: string; label: string }[] }>('/reports/transactions/channels'),
+    queryFn: () => apiClient.get<{ items: { label: string; values: string[] }[] }>('/reports/transactions/channels'),
   });
   const channelOptions = channelsQuery.data?.items ?? [];
 
@@ -138,15 +143,18 @@ export function TransactionReportPage() {
     if (range.from) params.set('from', range.from);
     if (range.to) params.set('to', range.to);
     for (const t of types) params.append('type', t);
-    for (const c of channels) params.append('channel', c);
+    for (const label of channelLabels) {
+      const option = channelOptions.find((c) => c.label === label);
+      for (const value of option?.values ?? [label]) params.append('channel', value);
+    }
     return params;
-  }, [range.from, range.to, types, channels]);
+  }, [range.from, range.to, types, channelLabels, channelOptions]);
 
   const toggleType = (t: LoanTransactionType) => {
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   };
-  const toggleChannel = (value: string) => {
-    setChannels((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
+  const toggleChannel = (label: string) => {
+    setChannelLabels((prev) => (prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]));
   };
 
   const typeFilterLabel =
@@ -156,14 +164,14 @@ export function TransactionReportPage() {
         ? (types[0] as string).replaceAll('_', ' ')
         : `${types.length} types selected`;
   const channelFilterLabel =
-    channels.length === 0
+    channelLabels.length === 0
       ? 'All channels'
-      : channels.length === 1
-        ? (channelOptions.find((c) => c.value === channels[0])?.label ?? channels[0])
-        : `${channels.length} channels selected`;
+      : channelLabels.length === 1
+        ? channelLabels[0]!
+        : `${channelLabels.length} channels selected`;
 
   const transactionsQuery = useQuery({
-    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(','), [...channels].sort().join(',')],
+    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(','), [...channelLabels].sort().join(',')],
     queryFn: () => {
       const query = buildParams().toString();
       return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
@@ -264,13 +272,13 @@ export function TransactionReportPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
-                <DropdownMenuItem onSelect={() => setChannels([])}>All channels</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setChannelLabels([])}>All channels</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {channelOptions.map((c) => (
                   <DropdownMenuCheckboxItem
-                    key={c.value}
-                    checked={channels.includes(c.value)}
-                    onCheckedChange={() => toggleChannel(c.value)}
+                    key={c.label}
+                    checked={channelLabels.includes(c.label)}
+                    onCheckedChange={() => toggleChannel(c.label)}
                     onSelect={(e) => e.preventDefault()}
                   >
                     {c.label}

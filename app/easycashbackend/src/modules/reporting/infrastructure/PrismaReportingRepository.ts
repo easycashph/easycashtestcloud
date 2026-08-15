@@ -120,14 +120,45 @@ const INSTALLMENT_STATUS_LABEL: Record<string, string> = {
   LATE: 'Late',
 };
 
-/** Mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS` labels - small intentional
- * duplication (display-label mapping only) rather than a cross-package import. */
+/**
+ * Mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS`/`DISCONTINUED_PAYMENT_METHODS`
+ * codes - small intentional duplication (display-label mapping only) rather than a cross-package
+ * import.
+ *
+ * 2026-08-15 (found comparing LMS/SDevTech Daily Collection Reports): `ProcessPaymentUseCase`
+ * stores a native payment's channel as the raw uppercase CODE (e.g. "BANK_TRANSFER"), while
+ * migrated SDevTech transactions store their own already-readable channel name (e.g.
+ * "Bank Transfer") verbatim. Left unmapped, a code fell through this lookup's `?? value` fallback
+ * unresolved, so the same real-world channel showed as two different strings depending on which
+ * system recorded it - both in the `channel` report column and, worse, as two separate-looking
+ * checkboxes in the channel filter dropdown once that existed. Every code below is mapped to
+ * exactly the label its migrated counterpart already uses in the database (verified via a live
+ * query, not guessed), so both forms resolve to one canonical label and `listDistinctChannels()`
+ * can merge them into a single filter option. Codes with no current migrated counterpart (e.g.
+ * GCASH, the discontinued ones) just get their own natural label.
+ */
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   GCASH: 'GCash',
   CASH: 'Cash',
   BANK_TRANSFER: 'Bank Transfer',
-  PDC: 'Post-Dated Check (PDC)',
+  PDC: 'Post Dated Checks',
+  RESTRUCTURE: 'Restructured',
+  SUSPENSE_ACCOUNT: 'Suspense Account',
+  ADA: 'ADA',
+  UNEARNED_INCOME: 'Unearned Income',
+  ADJUSTMENT: 'Adjustment',
+  BANK: 'Bank',
+  RECEIPT: 'Receipt',
+  CHECK: 'Check',
+  LOAN_DEDUCT: 'Loan Deduct',
+  ATM: 'ATM',
   AUTO_DEBIT: 'Auto Debit',
+  DRAGONPAY: 'Dragonpay',
+  ECPAY: 'ECPay',
+  BAYAD_CENTER: 'Bayad Center',
+  LBC: 'LBC',
+  WESTERN_UNION: 'Western Union',
+  PALAWAN_PAWNSHOP: 'Palawan Pawnshop',
 };
 
 const TRANSACTION_TYPE_LABEL: Record<string, string> = {
@@ -347,12 +378,21 @@ export class PrismaReportingRepository implements IReportingRepository {
       where: { paymentMethod: { not: null } },
       distinct: ['paymentMethod'],
       select: { paymentMethod: true },
-      orderBy: { paymentMethod: 'asc' },
     });
-    return rows
-      .map((r) => r.paymentMethod!)
-      .map((value) => ({ value, label: PAYMENT_METHOD_LABEL[value] ?? value }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+
+    // Grouped by resolved label, not returned one-per-raw-value - a native code (e.g.
+    // "BANK_TRANSFER") and its migrated counterpart ("Bank Transfer") both resolve to the same
+    // label via PAYMENT_METHOD_LABEL and must appear as ONE filter checkbox, not two identical-
+    // looking ones (see that map's own doc comment for the full story).
+    const valuesByLabel = new Map<string, string[]>();
+    for (const row of rows) {
+      const value = row.paymentMethod!;
+      const label = PAYMENT_METHOD_LABEL[value] ?? value;
+      if (!valuesByLabel.has(label)) valuesByLabel.set(label, []);
+      valuesByLabel.get(label)!.push(value);
+    }
+
+    return [...valuesByLabel.entries()].map(([label, values]) => ({ label, values })).sort((a, b) => a.label.localeCompare(b.label));
   }
 
   async getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]> {

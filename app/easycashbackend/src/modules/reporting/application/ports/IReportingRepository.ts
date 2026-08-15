@@ -62,10 +62,16 @@ export interface ListReportTransactionsOptions extends DateRangeFilter {
 }
 
 export interface ChannelOption {
-  /** Raw stored `paymentMethod` value — what a filter's `channels` entry must match exactly. */
-  value: string;
-  /** Display label, same resolution `channel` report columns already use (falls back to `value` itself for a migrated free-text channel name not in the small native-code label map). */
+  /** Display label, same resolution `channel` report columns already use. */
   label: string;
+  /**
+   * Every raw stored `paymentMethod` value that resolves to this label — usually one, but two when
+   * a native code (e.g. "BANK_TRANSFER") and its migrated free-text counterpart (e.g.
+   * "Bank Transfer") both exist and share a label (see `PAYMENT_METHOD_LABEL`'s own doc comment).
+   * A filter's `channels` entries must match one of these exactly; selecting this option should
+   * pass ALL of them, not just the first.
+   */
+  values: string[];
 }
 
 /**
