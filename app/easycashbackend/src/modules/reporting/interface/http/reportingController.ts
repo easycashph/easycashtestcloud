@@ -15,6 +15,7 @@ import type { GetExpectedCollectionReportUseCase } from '../../application/use-c
 import type { GetFirstAmortizationReportUseCase } from '../../application/use-cases/GetFirstAmortizationReportUseCase';
 import type { GetDailyCollectionReportUseCase } from '../../application/use-cases/GetDailyCollectionReportUseCase';
 import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
+import type { ListDistinctChannelsUseCase } from '../../application/use-cases/ListDistinctChannelsUseCase';
 import type { ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
 import {
@@ -43,6 +44,7 @@ export interface ReportingControllerDeps {
   getFirstAmortizationReportUseCase: GetFirstAmortizationReportUseCase;
   getDailyCollectionReportUseCase: GetDailyCollectionReportUseCase;
   getFullyPaidAccountsReportUseCase: GetFullyPaidAccountsReportUseCase;
+  listDistinctChannelsUseCase: ListDistinctChannelsUseCase;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -84,10 +86,12 @@ function parseDate(value: unknown, paramName: string, boundary: 'start' | 'end')
  * Returns undefined (no filter at all, i.e. every type) when nothing usable was supplied — an empty
  * array would otherwise read as "match none" downstream.
  */
-function parseTypeFilter(value: unknown): string[] | undefined {
+/** 2026-08-15: generic - also used for the `channel` multi-select filter below, same "single value
+ * or repeated" normalization either query param needs. */
+function parseMultiValueFilter(value: unknown): string[] | undefined {
   const raw = Array.isArray(value) ? value : [value];
-  const types = raw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-  return types.length > 0 ? types : undefined;
+  const values = raw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  return values.length > 0 ? values : undefined;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -131,10 +135,22 @@ export class ReportingController {
         cursor,
         from,
         to,
-        types: parseTypeFilter(req.query.type),
+        types: parseMultiValueFilter(req.query.type),
+        channels: parseMultiValueFilter(req.query.channel),
         branchId: resolveBranchFilter(scope),
       });
       res.status(200).json(toPaginatedResponse(rows.map(presentTransactionReportRow), limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-15: powers the Transaction Report's channel filter dropdown - the distinct set of
+   * `paymentMethod` values actually in use, each with its display label. */
+  channels = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const channels = await this.deps.listDistinctChannelsUseCase.execute();
+      res.status(200).json({ items: channels });
     } catch (error) {
       next(error);
     }
@@ -250,7 +266,8 @@ export class ReportingController {
       const rows = await this.deps.getDailyCollectionReportUseCase.execute({
         from,
         to,
-        types: parseTypeFilter(req.query.type),
+        types: parseMultiValueFilter(req.query.type),
+        channels: parseMultiValueFilter(req.query.channel),
         branchId: resolveBranchFilter(scope),
       });
       const buffer = await writeDailyCollectionReportXlsx(rows);

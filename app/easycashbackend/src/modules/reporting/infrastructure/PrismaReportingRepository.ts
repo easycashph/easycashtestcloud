@@ -8,6 +8,7 @@ import { isSecMc3Covered } from '@shared/domain/compliance/SecMc3Coverage';
 import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,
+  ChannelOption,
   CollectionHistoryReportRow,
   CollectionReportRow,
   DailyCollectionReportRow,
@@ -246,6 +247,10 @@ export class PrismaReportingRepository implements IReportingRepository {
       options.types && options.types.length > 0
         ? Prisma.sql`AND lt."type" = ANY(${options.types}::"LoanTransactionType"[])`
         : Prisma.empty;
+    // 2026-08-15 (multi-select channel filter): matches the raw stored paymentMethod value exactly
+    // - see ListReportTransactionsOptions.channels' own doc comment.
+    const channelClause =
+      options.channels && options.channels.length > 0 ? Prisma.sql`AND lt."paymentMethod" = ANY(${options.channels}::text[])` : Prisma.empty;
     const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
     const fromClause = range?.gte ? Prisma.sql`AND lt."entryDate" >= ${range.gte}` : Prisma.empty;
     const toClause = range?.lte ? Prisma.sql`AND lt."entryDate" <= ${range.lte}` : Prisma.empty;
@@ -273,6 +278,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       FROM loan_transactions lt
       WHERE 1=1
       ${typeClause}
+      ${channelClause}
       ${branchClause}
       ${fromClause}
       ${toClause}
@@ -327,6 +333,26 @@ export class PrismaReportingRepository implements IReportingRepository {
       arNumber: row.arNumber ?? '',
       channel: row.paymentMethod ? (PAYMENT_METHOD_LABEL[row.paymentMethod] ?? row.paymentMethod) : '',
     }));
+  }
+
+  /**
+   * 2026-08-15 (multi-select channel filter, user request): the stored `paymentMethod` column
+   * mixes migrated free-text channel names (e.g. "Loan Deduct", "Dragonpay") with native
+   * ACTIVE_PAYMENT_METHODS codes (e.g. "BANK_TRANSFER") — there's no fixed enum to offer a filter
+   * dropdown from, so this queries whatever values are actually in use right now and resolves each
+   * one's display label the same way `channel` report columns already do.
+   */
+  async listDistinctChannels(): Promise<ChannelOption[]> {
+    const rows = await prisma.loanTransaction.findMany({
+      where: { paymentMethod: { not: null } },
+      distinct: ['paymentMethod'],
+      select: { paymentMethod: true },
+      orderBy: { paymentMethod: 'asc' },
+    });
+    return rows
+      .map((r) => r.paymentMethod!)
+      .map((value) => ({ value, label: PAYMENT_METHOD_LABEL[value] ?? value }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   async getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]> {
@@ -794,7 +820,9 @@ export class PrismaReportingRepository implements IReportingRepository {
    * only export what the on-screen type dropdown is currently filtered to, not everything.
    * 2026-08-15: widened from a single `type` to a list, matching the page's multi-select filter.
    */
-  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[] }): Promise<DailyCollectionReportRow[]> {
+  async getDailyCollectionReport(
+    filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] },
+  ): Promise<DailyCollectionReportRow[]> {
     // 2026-08-15 (user-confirmed): this report mirrors SDevTech's own row structure, where a single
     // borrower payment is emitted as SEPARATE rows - principal+interest together as `Repayment`,
     // then fees as `Fee Repayment`, then penalty as `Penalty Repayment`. That layout is a business
@@ -822,6 +850,10 @@ export class PrismaReportingRepository implements IReportingRepository {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
         ...(queryTypes ? { type: { in: [...queryTypes] as never[] } } : {}),
+        // 2026-08-15 (multi-select channel filter): channel is 1:1 per stored transaction (unlike
+        // type, it's never split across the emitted rows above), so a plain `in` on the raw stored
+        // value is sufficient here - no post-split re-filtering needed.
+        ...(filter.channels && filter.channels.length > 0 ? { paymentMethod: { in: filter.channels } } : {}),
         // 2026-08-15: same fix and rationale as listTransactions' notReversedClause above - a
         // reversed transaction no longer represents real collected money and must not be
         // double-counted here just because its offsetting REVERSAL isn't in the selected types.

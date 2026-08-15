@@ -18,7 +18,7 @@ import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
 import type { LoanTransactionType, TransactionReportRow } from '@/lib/reportApiTypes';
 import { formatDate, formatPeso, isoDate } from '@/lib/utils';
 
@@ -116,20 +116,37 @@ export function TransactionReportPage() {
    * reason. Empty array = no filter (every type), matching the backend's own `types` semantics.
    */
   const [types, setTypes] = React.useState<LoanTransactionType[]>(PAYMENT_TYPES);
+  /**
+   * 2026-08-15 (user request): multi-select channel filter, same pattern as the type filter above.
+   * Empty array = no filter (every channel). Unlike type, there's no smart default here — a
+   * migrated payment's channel is whatever SDevTech recorded (e.g. "Loan Deduct"), not a bug to
+   * default around.
+   */
+  const [channels, setChannels] = React.useState<string[]>([]);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
-  /** Repeated `type` params — the backend normalises one or many into a single list. */
+  const channelsQuery = useQuery({
+    queryKey: ['reports', 'transaction-channels'],
+    queryFn: () => apiClient.get<{ items: { value: string; label: string }[] }>('/reports/transactions/channels'),
+  });
+  const channelOptions = channelsQuery.data?.items ?? [];
+
+  /** Repeated `type`/`channel` params — the backend normalises one or many into a single list. */
   const buildParams = React.useCallback(() => {
     const params = new URLSearchParams();
     if (range.from) params.set('from', range.from);
     if (range.to) params.set('to', range.to);
     for (const t of types) params.append('type', t);
+    for (const c of channels) params.append('channel', c);
     return params;
-  }, [range.from, range.to, types]);
+  }, [range.from, range.to, types, channels]);
 
   const toggleType = (t: LoanTransactionType) => {
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  };
+  const toggleChannel = (value: string) => {
+    setChannels((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]));
   };
 
   const typeFilterLabel =
@@ -138,9 +155,15 @@ export function TransactionReportPage() {
       : types.length === 1
         ? (types[0] as string).replaceAll('_', ' ')
         : `${types.length} types selected`;
+  const channelFilterLabel =
+    channels.length === 0
+      ? 'All channels'
+      : channels.length === 1
+        ? (channelOptions.find((c) => c.value === channels[0])?.label ?? channels[0])
+        : `${channels.length} channels selected`;
 
   const transactionsQuery = useQuery({
-    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(',')],
+    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(','), [...channels].sort().join(',')],
     queryFn: () => {
       const query = buildParams().toString();
       return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
@@ -229,6 +252,28 @@ export function TransactionReportPage() {
                     onSelect={(e) => e.preventDefault()}
                   >
                     {t.replaceAll('_', ' ')}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-56 justify-between font-normal">
+                  <span className="truncate">{channelFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setChannels([])}>All channels</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {channelOptions.map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c.value}
+                    checked={channels.includes(c.value)}
+                    onCheckedChange={() => toggleChannel(c.value)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {c.label}
                   </DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>

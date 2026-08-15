@@ -3,7 +3,7 @@ import type { DailyCollectionReportRow, DateRangeFilter, IReportingRepository } 
 export class GetDailyCollectionReportUseCase {
   constructor(private readonly deps: { reportingRepository: IReportingRepository }) {}
 
-  async execute(filter: DateRangeFilter & { branchId?: string; types?: string[] }): Promise<DailyCollectionReportRow[]> {
+  async execute(filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] }): Promise<DailyCollectionReportRow[]> {
     return this.deps.reportingRepository.getDailyCollectionReport(filter);
   }
 }
