@@ -39,6 +39,29 @@ const TRANSACTION_TYPES: LoanTransactionType[] = [
 ];
 
 /**
+ * 2026-08-15 (user request): the channel filter's default selection - every real collection
+ * channel, deliberately excluding `Adjustment` (not a real payment channel), `Loan Deduct` (its
+ * own payroll-deduction workflow, and the one channel that turned out to be missing entirely from
+ * SDevTech's own Daily Collection Report export - see the session log), and `Suspense Account`
+ * (not a settled collection). A channel not in this list still appears in the dropdown and can be
+ * ticked manually - it's just unchecked on first load.
+ */
+const DEFAULT_CHANNEL_LABELS = [
+  'GCash',
+  'Cash',
+  'Bank Transfer',
+  'ATM',
+  'Check',
+  'Post Dated Checks',
+  'ADA',
+  'Bank',
+  'Receipt',
+  'Unearned Income',
+  'Dragonpay',
+  'Lazada Wallet',
+];
+
+/**
  * The three types that represent money actually collected from a borrower — the page's default
  * filter, and what the "Payments only" shortcut selects. `FEE_REPAYMENT`/`PENALTY_REPAYMENT` only
  * ever appear on migrated SDevTech rows (this system records one REPAYMENT with fee/penalty
@@ -127,7 +150,7 @@ export function TransactionReportPage() {
    * holds every raw value that maps to it), so a single selection has to expand into possibly
    * several `channel` query params. See the backend's `PAYMENT_METHOD_LABEL` doc comment.
    */
-  const [channelLabels, setChannelLabels] = React.useState<string[]>([]);
+  const [channelLabels, setChannelLabels] = React.useState<string[]>(DEFAULT_CHANNEL_LABELS);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
@@ -272,6 +295,7 @@ export function TransactionReportPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setChannelLabels(DEFAULT_CHANNEL_LABELS)}>Default channels</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setChannelLabels([])}>All channels</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {channelOptions.map((c) => (

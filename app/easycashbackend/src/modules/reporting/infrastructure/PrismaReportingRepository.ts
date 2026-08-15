@@ -161,6 +161,33 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   PALAWAN_PAWNSHOP: 'Palawan Pawnshop',
 };
 
+/**
+ * 2026-08-15 (user request): mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS` codes -
+ * the channels currently offered on Record Payment, whether or not any transaction has used them
+ * yet (e.g. GCash: offered, zero transactions so far). `listDistinctChannels()` unions these into
+ * its result so the filter dropdown shows every real option, not just ones with history - a
+ * channel with no transactions still appears, just with an empty `values` array (nothing to
+ * actually filter by yet, but visible and selectable). Deliberately excludes
+ * `DISCONTINUED_PAYMENT_METHODS` - those aren't offered going forward, so they only appear here at
+ * all if a migrated/native transaction already used one (e.g. "Dragonpay").
+ */
+const ACTIVE_PAYMENT_METHOD_CODES = [
+  'GCASH',
+  'CASH',
+  'BANK_TRANSFER',
+  'PDC',
+  'RESTRUCTURE',
+  'SUSPENSE_ACCOUNT',
+  'ADA',
+  'UNEARNED_INCOME',
+  'ADJUSTMENT',
+  'BANK',
+  'RECEIPT',
+  'CHECK',
+  'LOAN_DEDUCT',
+  'ATM',
+];
+
 const TRANSACTION_TYPE_LABEL: Record<string, string> = {
   DISBURSEMENT: 'Disbursement',
   REPAYMENT: 'Repayment',
@@ -390,6 +417,14 @@ export class PrismaReportingRepository implements IReportingRepository {
       const label = PAYMENT_METHOD_LABEL[value] ?? value;
       if (!valuesByLabel.has(label)) valuesByLabel.set(label, []);
       valuesByLabel.get(label)!.push(value);
+    }
+    // 2026-08-15 (user request): union in every currently-offered channel even with zero
+    // transactions so far (e.g. GCash) - see ACTIVE_PAYMENT_METHOD_CODES' own doc comment. A code
+    // whose label already has DB-observed values (e.g. CASH -> "Cash") is a no-op here; only a
+    // genuinely unused one gets an empty-`values` entry.
+    for (const code of ACTIVE_PAYMENT_METHOD_CODES) {
+      const label = PAYMENT_METHOD_LABEL[code] ?? code;
+      if (!valuesByLabel.has(label)) valuesByLabel.set(label, []);
     }
 
     return [...valuesByLabel.entries()].map(([label, values]) => ({ label, values })).sort((a, b) => a.label.localeCompare(b.label));
