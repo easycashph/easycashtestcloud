@@ -526,3 +526,32 @@ a different shape (no native side at all).
 User asked to always rebuild affected Docker containers automatically after a backend/frontend
 change, without being asked each time. Added a short "Docker Rebuild" note under Development
 Workflow in `CLAUDE.md` so this persists across sessions, not just this one.
+
+## 18. Channel filter: show unused-but-offered channels (GCash), set a default selection
+
+User asked why GCash was absent from the channel filter dropdown. Root cause: `listDistinctChannels()`
+only returned channels with at least one real `loan_transactions` row, and GCash had zero — confirmed
+via a direct query (`WHERE "paymentMethod" ILIKE '%gcash%'` → 0 rows). Not a bug, but not what the user
+wanted either.
+
+Fixed by unioning the DB-observed channels with a new backend-side `ACTIVE_PAYMENT_METHOD_CODES`
+constant (mirroring the frontend's `staticConfig.ts` `ACTIVE_PAYMENT_METHODS` list — every channel
+currently offered on Record Payment, whether used yet or not). A code with no transactions still
+appears as an option with an empty `values` array — visible, selectable, just nothing to match.
+Deliberately excludes `DISCONTINUED_PAYMENT_METHODS` codes (not offered going forward) unless one
+already has real transaction history (e.g. "Dragonpay" still appears from migrated data). Result: 14
+options → 16, adding GCash and Restructured (both currently unused).
+
+Also set the filter's **default selection**, per the user's explicit list: GCash, Cash, Bank Transfer,
+ATM, Check, Post Dated Checks, ADA, Bank, Receipt, Unearned Income, Dragonpay, Lazada Wallet — every
+real collection channel except Adjustment, Loan Deduct (the channel §15 found missing entirely from
+SDevTech's own Daily Collection Report export), and Suspense Account. Added a "Default channels" menu
+item alongside the existing "All channels" reset, so the default is one click to return to after
+exploring other combinations.
+
+Full backend suite after: unchanged baseline (949 passed, same 11 pre-existing failures).
+
+## 19. `CLAUDE.md`: auto-rebuild rule now actually being followed
+
+Confirmed in practice this session (§18's rebuild ran and was verified — HTTP 200 on both
+`easycashbackend` and `lmsfrontend` — without being asked) per the rule added in §17.
