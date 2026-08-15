@@ -555,3 +555,63 @@ Full backend suite after: unchanged baseline (949 passed, same 11 pre-existing f
 
 Confirmed in practice this session (§18's rebuild ran and was verified — HTTP 200 on both
 `easycashbackend` and `lmsfrontend` — without being asked) per the rule added in §17.
+
+## 20. New feature: Add Fee — charging a NEW fee, distinct from Adjust Fees
+
+Design driver: §12–§16's Adjust Fees flow exists for *correcting* an installment's fees to some
+externally-approved value; it never touches the ledger. The user wanted a separate flow to *charge*
+a genuinely new fee (e.g. a late fee) on an installment — one that increases what's owed on top of
+whatever is already due, works even if the current fees are already fully paid, and produces a real
+`LoanTransaction` (so it shows up on statements/reports), unlike Adjust Fees.
+
+Requirements confirmed via clarifying questions before implementation: fixed amount, manual entry
+(no fee catalog or percentage calculation); scope is per-installment; permission gated to MIS +
+Accounting only.
+
+**Report-balancing concern the user raised and worked through explicitly**: if a charged fee uses
+`FEE_CHARGED` as its transaction type, would the Daily Collection Report's default "Payments only"
+type filter (built in §13/§15) go out of balance against SDevTech's own report? Confirmed: no —
+`FEE_CHARGED` is an *assessment* (increases the amount owed), so it correctly stays OUT of the
+default payment-type filter, same as it would in SDevTech. When that charged fee is later paid, the
+resulting transaction is a normal `REPAYMENT` with a fees component, which §13's row-splitting logic
+already breaks out into a "Fee Repayment" row — so the two reports stay in balance both before and
+after the fee is paid, with no special-casing needed. User confirmed this understanding twice before
+implementation began.
+
+**Design — two parallel mechanisms on `RepaymentInstallment.feesOverride`**:
+- `adjustFees()` (existing) — *sets* the override to an absolute new value; blocked if fees are
+  already paid; no ledger transaction.
+- `chargeFee()` (new) — *adds* to `effectiveFeesDue` (whatever it currently resolves to, override or
+  snapshot) and writes the result as the new override; **never blocked by already-paid fees**; the
+  use case around it also writes a real `FEE_CHARGED` `LoanTransaction` and syncs
+  `LoanAccount.adjustFeesBalance()`.
+
+**What was built**:
+- Schema: `FeeCharge` audit model (migration `20260815152137_add_fee_charge`) linking a
+  `RepaymentSchedule` installment to the `LoanTransaction` it produced, recording
+  previous/new fees amount, reason, and who charged it.
+- Domain: `RepaymentInstallment.chargeFee(amount, reason, byUserId, at)` (rejects zero/negative via
+  new `InvalidFeeChargeAmountError`); new `FeeCharge` entity.
+- Application: `AddFeeUseCase` — loads installment + loan account, captures `previousFeesDue`, calls
+  `chargeFee()`, syncs the loan's fees balance, creates the `FEE_CHARGED` transaction and the
+  `FeeCharge` audit row, all inside one `unitOfWork.run()`, with a financial audit log entry.
+- Infrastructure: `PrismaFeeChargeRepository`.
+- Interface: `POST /repayment-installments/:id/add-fee` (new `fee.charge` permission, granted by
+  default to MIS — via its full-permission superset — and Accounting; seed re-run and verified).
+- Frontend: `roleContext.tsx` gained `canChargeFee`; `LoanDetailPage.tsx` got a new "Add fee" row
+  action (separate from "Adjust fees") and its own dialog.
+
+**Bug caught and fixed before commit**: the first attempt to insert the new "Add Fee" dialog's JSX
+next to the existing "Adjust fees" dialog via a targeted `Edit` call went wrong — the replacement
+text accidentally duplicated the *entire* Adjust Fees dialog markup a second time instead of being
+distinct Add Fee markup, leaving two dialogs both titled "Adjust fees" with mismatched button
+handlers. Caught by grepping for `Dialog`/`Adjust fees`/`Add fee` right after the edit, before any
+test run; fixed by reading the exact broken range and replacing it with one correctly-titled "Add
+fee" dialog (bound to `addFeeTarget`/`addFeeAmount`/`addFeeReason`/`addFeeMutation`) followed by the
+original, untouched "Adjust fees" dialog.
+
+**Verification**: `RepaymentInstallment.test.ts` (+5 tests for `chargeFee`) and new
+`AddFeeUseCase.test.ts` (6 tests) — 39/39 passing. Frontend `tsc --noEmit` clean. Full backend suite
+after: 960 passed, same 11 pre-existing failures as the established baseline (the 11 count didn't
+change; the passed count rose only because of the 11 new Add Fee tests). Both containers rebuilt
+per the §17 auto-rebuild rule and verified healthy (`docker ps` + `/health` 200) before commit.

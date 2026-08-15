@@ -9,11 +9,12 @@ import type { ListRepaymentInstallmentsForLoanUseCase } from '../../application/
 import type { GetRepaymentInstallmentUseCase } from '../../application/use-cases/GetRepaymentInstallmentUseCase';
 import type { ReducePenaltyUseCase } from '../../application/use-cases/ReducePenaltyUseCase';
 import type { AdjustFeesUseCase } from '../../application/use-cases/AdjustFeesUseCase';
+import type { AddFeeUseCase } from '../../application/use-cases/AddFeeUseCase';
 import type { ListInstallmentAdjustmentsForLoanUseCase } from '../../application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
 import type { RepaymentInstallment } from '../../domain/RepaymentInstallment';
 import { presentRepaymentInstallment } from './presenters/RepaymentInstallmentPresenter';
 import { presentInstallmentAdjustment } from './presenters/InstallmentAdjustmentPresenter';
-import type { AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
+import type { AddFeeRequestBody, AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
 
 /** 2026-07-24 (user-confirmed): the loan's maturity date - the latest `dueDate` across its whole
  * schedule - same definition as the "Matured" badge/dashboard overlay elsewhere in this codebase.
@@ -27,6 +28,7 @@ export interface RepaymentControllerDeps {
   getRepaymentInstallmentUseCase: GetRepaymentInstallmentUseCase;
   reducePenaltyUseCase: ReducePenaltyUseCase;
   adjustFeesUseCase: AdjustFeesUseCase;
+  addFeeUseCase: AddFeeUseCase;
   listInstallmentAdjustmentsForLoanUseCase: ListInstallmentAdjustmentsForLoanUseCase;
   /**
    * Milestone 8.1 / H-1: RepaymentInstallment has no `branchId` field of
@@ -111,6 +113,31 @@ export class RepaymentController {
       const body = req.body as ReducePenaltyRequestBody;
       const currentUser = getCurrentUser(req);
       await this.deps.reducePenaltyUseCase.execute(installmentId, Money.of(body.newAmount), body.reason, currentUser.sub);
+
+      const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const penaltyContext = {
+        isProspectiveLoan: !loanAccount.legacyId,
+        principalAmount: loanAccount.principalAmount,
+        isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
+      };
+      res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addFee = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const installmentId = req.params.id as string;
+      const installment = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(installment.loanAccountId);
+      assertBranchAccess(scope, loanAccount.branchId); // H-1: same pattern as get()/listForLoan() above.
+
+      const body = req.body as AddFeeRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.addFeeUseCase.execute(installmentId, Money.of(body.amount), body.reason, currentUser.sub);
 
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = {

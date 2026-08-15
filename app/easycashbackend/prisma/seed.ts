@@ -79,6 +79,7 @@ async function main() {
     'payment.manual_adjust': 'Manually correct paid amounts on a legacy payment transaction with no per-installment breakdown',
     'penalty.reduce': 'Reduce or waive an installment penalty',
     'fees.adjust': 'Adjust an installment fee amount',
+    'fee.charge': 'Charge a new fee on an installment',
     'document.generate': 'Generate loan documents',
     // 2026-08-09 (Document Templates admin config, user request): separate, narrower, MIS-only-
     // by-default admin permission - configures the required/conditional rules `document.generate`
@@ -161,6 +162,7 @@ async function main() {
       'payment.record',
       'penalty.reduce',
       'fees.adjust',
+      'fee.charge',
       'loan_product.write',
       'document.generate',
       'statement_of_account.generate',

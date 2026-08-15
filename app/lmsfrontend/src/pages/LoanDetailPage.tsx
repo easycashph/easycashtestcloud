@@ -1047,6 +1047,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     canManualAdjustPayment: canManualAdjustPaymentPermission,
     canReducePenalty: canReducePenaltyPermission,
     canAdjustFees: canAdjustFeesPermission,
+    canChargeFee: canChargeFeePermission,
     canRestructureLoan: canRestructureLoanPermission,
     canAdjustLoan: canAdjustLoanPermission,
     canGenerateDocuments: canGenerateDocumentsPermission,
@@ -1118,6 +1119,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [adjustFeesTarget, setAdjustFeesTarget] = React.useState<RepaymentInstallment | null>(null);
   const [adjustFeesAmount, setAdjustFeesAmount] = React.useState('');
   const [adjustFeesReason, setAdjustFeesReason] = React.useState('');
+  // 2026-08-15 (Add Fee feature, user-confirmed): a genuinely NEW fee charge, distinct from Adjust
+  // Fees above — see AddFeeUseCase's own doc comment. Unlike Adjust Fees, never blocked by an
+  // already-paid fees component, so this is offered on every installment, not just unpaid ones.
+  const [addFeeTarget, setAddFeeTarget] = React.useState<RepaymentInstallment | null>(null);
+  const [addFeeAmount, setAddFeeAmount] = React.useState('');
+  const [addFeeReason, setAddFeeReason] = React.useState('');
   // 2026-07-24 (Loan Restructure feature, user-confirmed): same MIS/Accounting-only gate as Adjust
   // Penalty/Adjust Fees. Term is staff-entered (product/interest rate are copied from this loan
   // automatically, not part of this form) - firstRepaymentDate pre-fills to one month from today
@@ -1506,6 +1513,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const addFeeMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<RepaymentInstallment>(`/repayment-installments/${addFeeTarget!.id}/add-fee`, {
+        amount: addFeeAmount,
+        reason: addFeeReason.trim(),
+      }),
+    onSuccess: () => {
+      setAddFeeTarget(null);
+      setAddFeeAmount('');
+      setAddFeeReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
   const restructureMutation = useMutation({
     mutationFn: () => {
       if (!restructureIdempotencyKeyRef.current) restructureIdempotencyKeyRef.current = generateUuid();
@@ -1573,6 +1595,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setAdjustFeesAmount(currentFees.toFixed(2));
     setAdjustFeesReason('');
     setAdjustFeesTarget(installment);
+  };
+  const openAddFeeConfirm = (installment: RepaymentInstallment) => {
+    setActionError(null);
+    setAddFeeAmount('');
+    setAddFeeReason('');
+    setAddFeeTarget(installment);
   };
   const openRestructureConfirm = () => {
     setActionError(null);
@@ -2055,7 +2083,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
   // officer" - matches the backend's `penalty.reduce`/`fees.adjust` default grants (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
-  const canManageInstallments = canReducePenaltyPermission || canAdjustFeesPermission;
+  const canManageInstallments = canReducePenaltyPermission || canAdjustFeesPermission || canChargeFeePermission;
   // 2026-07-24 (Loan Restructure feature, user-confirmed): "Ino offer lang ito sa mga past due at
   // matured account" - any installment currently `LATE` (RepaymentInstallment.status's own live
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
@@ -2651,7 +2679,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      disabled={!canReduceThisRow && !canAdjustFeesThisRow}
+                                      disabled={!canReduceThisRow && !canAdjustFeesThisRow && !canChargeFeePermission}
                                       className="h-7 px-2"
                                     >
                                       <MoreHorizontal className="h-3.5 w-3.5" />
@@ -2666,6 +2694,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                       onSelect={() => openAdjustFeesConfirm(i, feesDisplay)}
                                     >
                                       Adjust fees
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem disabled={!canChargeFeePermission} onSelect={() => openAddFeeConfirm(i)}>
+                                      Add fee
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -3988,6 +4019,70 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={reduceMutation.isPending || reduceReason.trim().length === 0 || reduceAmount.trim().length === 0}
             >
               {reduceMutation.isPending ? 'Adjusting…' : 'Adjust penalty'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={addFeeTarget !== null}
+        onOpenChange={(open) =>
+          !open && !addFeeMutation.isPending && (setAddFeeTarget(null), setAddFeeAmount(''), setAddFeeReason(''))
+        }
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add fee</DialogTitle>
+            <DialogDescription>
+              {addFeeTarget &&
+                `Installment #${addFeeTarget.installmentNumber} · ${formatDate(addFeeTarget.dueDate)}. Charges a new fee on top of this installment's current fees due (e.g. a late fee) — never reduces it, even if fees are already paid. Distinct from Adjust Fees, which corrects an existing amount.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-fee-amount">Fee amount</Label>
+            <Input
+              id="add-fee-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={addFeeAmount}
+              onChange={(e) => setAddFeeAmount(e.target.value)}
+              disabled={addFeeMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-fee-reason">Reason</Label>
+            <Textarea
+              id="add-fee-reason"
+              placeholder="e.g. Late fee for installment #3, memo #2026-0815"
+              value={addFeeReason}
+              onChange={(e) => setAddFeeReason(e.target.value)}
+              disabled={addFeeMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddFeeTarget(null);
+                setAddFeeAmount('');
+                setAddFeeReason('');
+              }}
+              disabled={addFeeMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => addFeeMutation.mutate()}
+              disabled={addFeeMutation.isPending || addFeeReason.trim().length === 0 || addFeeAmount.trim().length === 0}
+            >
+              {addFeeMutation.isPending ? 'Charging…' : 'Add fee'}
             </Button>
           </DialogFooter>
         </DialogContent>

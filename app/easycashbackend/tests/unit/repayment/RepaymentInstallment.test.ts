@@ -4,6 +4,7 @@ import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/Insta
 import { Money } from '@shared/domain/Money';
 import {
   FeesAlreadyPaidError,
+  InvalidFeeChargeAmountError,
   InvalidFeesAdjustmentAmountError,
   InvalidPenaltyAdjustmentAmountError,
   PenaltyAlreadyPaidError,
@@ -280,6 +281,43 @@ describe('RepaymentInstallment (ADR-042 §7: independent aggregate)', () => {
       const installment = createInstallmentWithFees(new Date(), '100.00');
       installment.adjustFees(Money.of('250.00'), 'reason', 'user-1');
       expect(installment.effectiveFeesDue.equals(Money.of('250.00'))).toBe(true);
+    });
+  });
+
+  describe('chargeFee (2026-08-15, Add Fee feature)', () => {
+    it('adds to the current effective fees due, not replaces it', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      installment.chargeFee(Money.of('50.00'), 'Late payment fee', 'user-1');
+
+      expect(installment.effectiveFeesDue.equals(Money.of('150.00'))).toBe(true);
+      expect(installment.feesOverride?.reason).toBe('Late payment fee');
+      expect(installment.feesOverride?.byUserId).toBe('user-1');
+    });
+
+    it('stacks correctly across multiple charges over time', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      installment.chargeFee(Money.of('50.00'), 'first late fee', 'user-1');
+      installment.chargeFee(Money.of('25.00'), 'second late fee', 'user-2');
+
+      expect(installment.effectiveFeesDue.equals(Money.of('175.00'))).toBe(true);
+      expect(installment.feesOverride?.reason).toBe('second late fee');
+    });
+
+    it('rejects a zero amount', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      expect(() => installment.chargeFee(Money.ZERO, 'reason', 'user-1')).toThrow(InvalidFeeChargeAmountError);
+    });
+
+    it('rejects a negative amount', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      expect(() => installment.chargeFee(Money.of('-1.00'), 'reason', 'user-1')).toThrow(InvalidFeeChargeAmountError);
+    });
+
+    it('unlike adjustFees, is NOT blocked by an already-paid fees component', () => {
+      const installment = createInstallmentWithFees(new Date(), '100.00');
+      installment.recordPayment(InstallmentAmounts.of({ fees: Money.of('100.00') }));
+      expect(() => installment.chargeFee(Money.of('50.00'), 'new late fee', 'user-1')).not.toThrow();
+      expect(installment.effectiveFeesDue.equals(Money.of('150.00'))).toBe(true);
     });
   });
 });

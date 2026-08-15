@@ -43,3 +43,13 @@ export class FeesAlreadyPaidError extends DomainError {
     this.name = 'FeesAlreadyPaidError';
   }
 }
+
+/** 2026-08-15 (Add Fee feature, user-confirmed): a charge is strictly additive — must be a positive
+ * amount. Zero or negative doesn't make sense as a NEW charge (a reduction goes through Adjust
+ * Fees instead, which corrects the existing amount rather than adding to it). */
+export class InvalidFeeChargeAmountError extends DomainError {
+  constructor(amount: string) {
+    super('INVALID_FEE_CHARGE_AMOUNT', `Fee charge amount ${amount} must be greater than zero.`, undefined, 400);
+    this.name = 'InvalidFeeChargeAmountError';
+  }
+}
