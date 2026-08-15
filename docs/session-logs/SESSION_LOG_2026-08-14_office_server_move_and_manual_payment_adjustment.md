@@ -312,3 +312,75 @@ guessed at.
 portal, and one date-drifted `ReversePaymentUseCase` assertion expecting `PENDING` where the
 installment now computes `LATE`). Confirmed pre-existing by stashing this session's work and
 re-running: identical 11 failures. None are caused by anything in this log.
+
+## 10. Comparing LMS vs SDevTech Daily Collection Reports — found a report bug, not new duplicates
+
+User exported both systems' Daily Collection Reports and asked why the totals didn't match
+(LMS 1,072,269.04 vs SDevTech 756,488.71 for overlapping dates). Investigated with a throwaway
+exceljs comparison script (deleted after use).
+
+Three causes, only one of them a real bug:
+1. **Date range mismatch** — the two exports covered slightly different windows (LMS through
+   08-14, SDevTech through 08-13). Not a bug.
+2. **Fee/Penalty Repayment row-splitting** — SDevTech records one payment as two rows (fee +
+   repayment); this system records one row with fee/penalty components. Already correctly handled
+   by §9 above. Not a bug.
+3. **Report double-counting already-reversed transactions** — the real bug. Initially misread as
+   "34 new duplicate groups, ₱488,848.39" — turned out every one of the 15 recent "native +
+   migrated" groups already had a `REVERSAL` transaction against it (the 2026-08-12 fix, ₱214,719.90,
+   was already correctly done). The actual defect: `getDailyCollectionReport`/`listTransactions`
+   never excluded a transaction that has since been reversed. Since `REVERSAL` isn't one of the
+   default "Payments only" types, an already-reversed `REPAYMENT` kept showing as if still
+   collected, with no offsetting row visible under the default filter — silently overstating every
+   report that used it, permanently, for every reversal ever done.
+
+**Fixed**: both `listTransactions` (raw SQL, `AND NOT EXISTS (... WHERE r."reversesTransactionId" =
+lt.id)`) and `getDailyCollectionReport` (Prisma `reversedByTransaction: null`) now exclude any
+transaction with an existing reversal, unconditionally (not tied to the type filter — a `REVERSAL`
+can never itself be reversed, so this only ever removes the reversed original, never a correction
+row). Verified against real data: SL-CORP_00100's August total dropped from 2 rows/16,548.12 to the
+correct 1 row/8,274.06; the full August "Payments only" report went from 82 rows/1,072,269.04 to
+65 rows/850,248.06.
+
+**Separately found, NOT part of this fix**: 21 duplicate-looking groups (23 extra rows,
+~₱274,128.49) where BOTH copies are migrated (no native side) — all dated 2023-2024, all created in
+the original 2026-07-23 migration batch. Different shape from the native+migrated pattern (could be
+genuine SDevTech-side duplicates, or a coincidence needing per-case verification) — flagged for
+separate review, not touched this session.
+
+Full backend suite after the report fix: unchanged baseline (11 failures, same files/tests as
+before).
+
+## 11. Two automated duplicate-prevention guards (user-confirmed: both hard block / automated)
+
+Root cause behind §10's 15 reversed duplicates: the same real payment gets recorded twice during
+the SDevTech/LMS transition — once natively by staff in the LMS, once in SDevTech (then pulled in
+by the next `Update Database From SDevTech.bat` run). The 2026-08-12 log already flagged this as an
+open follow-up ("worth considering whether a standing 'possible duplicate' warning belongs in the
+Payment Recording flow itself"). Built both directions now:
+
+**A. Payment Recording hard block** (`ProcessPaymentUseCase`, new
+`PossibleDuplicatePaymentError`/`findPossibleMigratedDuplicate`): before any allocation/mutation
+work, checks whether a migrated (`legacyId` set) `REPAYMENT` already exists on this loan for the
+*exact* same amount on the *exact* same Asia/Manila calendar day. Match is deliberately narrow —
+loan + amount + day, nothing fuzzier — so a recurring installment's repeating amortization amount
+on a *different* day is never falsely blocked. User-confirmed: hard block, no override in this
+flow; a genuine same-day/same-amount collision (rare) needs a developer/DB-level look, not a UI
+bypass. Frontend: the 409 `POSSIBLE_DUPLICATE_PAYMENT` code is now special-cased in
+`PaymentRecordingPage.tsx` ahead of the existing generic-409 handler (which would otherwise have
+masked this specific message behind "this loan was just updated by another action"). Two new tests
+cover the block and the two ways it must NOT fire (different amount, different day).
+
+**B. Migration-time automated skip** (`migrate-legacy-data.ts`): preloads every native
+(`legacyId IS NULL`) `REPAYMENT`'s (loanAccount, amount, Manila day) signature once before the
+transaction loop — same exact-match rule as (A) — and skips inserting a newly-seen legacy
+transaction (one whose `legacyId` isn't already in the database) that matches one, recording it via
+the existing `recordSkip`/reconciliation-summary mechanism (`possible duplicate of a native
+REPAYMENT ... legacy _id ...`) rather than silently creating it. Already-migrated rows (re-run
+refreshing OR/AR/channel) are unaffected — the check only applies to genuinely new legacyIds. Dry
+run against the current dump: 525,032 read, 280,142 migrated, same reconciliation shape as before
+this change (no regression; no new collisions in the current snapshot, expected since the 15 known
+ones are already migrated and therefore excluded from the "genuinely new" check).
+
+Full backend suite after both guards: 949 passed (+2 from the new tests), same 11 pre-existing
+failures, no new ones.

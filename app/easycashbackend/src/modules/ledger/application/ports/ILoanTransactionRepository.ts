@@ -1,4 +1,5 @@
 import type { TransactionContext } from '@shared/application/TransactionContext';
+import type { Money } from '@shared/domain/Money';
 import type { LoanTransaction, LoanTransactionType } from '../../domain/LoanTransaction';
 
 export interface FindByLoanAccountIdOptions {
@@ -23,6 +24,23 @@ export interface ILoanTransactionRepository {
   ): Promise<LoanTransaction[]>;
   /** 2026-07-11 (Reverse Payment feature): looks up the (at most one, per the schema's `@unique` constraint) REVERSAL transaction that already reverses `transactionId`, if any — how `ReversePaymentUseCase` rejects a double-reversal. */
   findByReversesTransactionId(transactionId: string, ctx?: TransactionContext): Promise<LoanTransaction | null>;
+  /**
+   * 2026-08-15 (Payment Recording duplicate guard, user-confirmed hard block): a migrated
+   * (`legacyId` set) REPAYMENT already on this loan, same amount, same Asia/Manila calendar day as
+   * `entryDayStart`/`entryDayEnd` — the exact real-world collision `ProcessPaymentUseCase` guards
+   * against (staff about to re-key today's payment when it was already pulled in from SDevTech).
+   * Not amount-only or unbounded-in-time: a recurring installment's amortization amount legitimately
+   * repeats every period, so only a same-day match is a meaningful signal. `entryDayStart`/
+   * `entryDayEnd` are the caller's already-computed `manilaDayRange` bounds (not recomputed here) so
+   * this port stays free of the Manila-time concern itself.
+   */
+  findPossibleMigratedDuplicate(
+    loanAccountId: string,
+    amount: Money,
+    entryDayStart: Date,
+    entryDayEnd: Date,
+    ctx?: TransactionContext,
+  ): Promise<LoanTransaction | null>;
   /**
    * TXN-1: append-only. Deliberately no `update()` method on this port at
    * all — the type signature itself makes editing a posted transaction

@@ -29,6 +29,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
+import { manilaDayRange } from '../src/shared/domain/manilaTime';
 import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
 const APPLY = process.argv.includes('--apply');
@@ -719,10 +720,38 @@ function loadTransactionEnrichment(): TransactionEnrichment {
   return { channelNameByDetailsUid, orNumberByTxUid, arNumberByTxUid };
 }
 
+/**
+ * 2026-08-15 (automated duplicate guard, user-confirmed): closes the same real-world gap
+ * `PossibleDuplicatePaymentError` guards on the Payment Recording side — a payment recorded
+ * natively in the LMS, then pulled in again by a later `Update Database From SDevTech.bat` run,
+ * because staff (necessarily) still also record it in SDevTech during the changeover. Found via a
+ * scan on 2026-08-15: 15 such collisions already live, ₱214,719.90 total (since reversed), all
+ * created within minutes-to-a-day of each other around a migration run.
+ *
+ * Preloaded once (not per-row) into a lookup keyed by loan account + amount + Asia/Manila calendar
+ * day - the same exact-match signature `ProcessPaymentUseCase.findPossibleMigratedDuplicate` uses,
+ * so a genuinely different payment (different amount, or the same amount on a different day - e.g.
+ * a recurring installment amortization) is never held back.
+ */
+async function loadNativeRepaymentSignatures(): Promise<Set<string>> {
+  const natives = await prisma.loanTransaction.findMany({
+    where: { type: 'REPAYMENT', legacyId: null },
+    select: { loanAccountId: true, amount: true, entryDate: true },
+  });
+  const signatures = new Set<string>();
+  for (const n of natives) {
+    const { start } = manilaDayRange(n.entryDate);
+    signatures.add(`${n.loanAccountId}|${n.amount.toString()}|${start.toISOString()}`);
+  }
+  return signatures;
+}
+
 async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacyKey: Map<string, string>): Promise<Reconciliation> {
   const file = path.join(DUMP_DIR, 'loan_transactions.bson');
   const rec = newReconciliation('loan_transactions', 0);
   const enrichment = loadTransactionEnrichment();
+  const nativeRepaymentSignatures = await loadNativeRepaymentSignatures();
+  const existingLegacyIds = new Set((await prisma.loanTransaction.findMany({ where: { legacyId: { not: null } }, select: { legacyId: true } })).map((r) => r.legacyId!));
   let batch: any[] = [];
 
   async function flush(): Promise<void> {
@@ -776,11 +805,26 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
     const channel = tx.details_encoded_oid
       ? enrichment.channelNameByDetailsUid.get(String(tx.details_encoded_oid))
       : undefined;
+    const amount = toDecimalString(tx.amount ?? 0);
+
+    // 2026-08-15 (automated duplicate guard): only checked for a transaction genuinely new to this
+    // database (not already migrated in a prior run - re-running against a newer snapshot must
+    // still be able to backfill an existing row's OR/AR/channel below, same as before this guard),
+    // and only for the type this system's own Payment Recording flow can natively produce
+    // (REPAYMENT) - FEE_CHARGED/PENALTY_APPLIED/etc. never collide with a staff-entered payment.
+    if (mappedType === 'REPAYMENT' && !existingLegacyIds.has(txUid)) {
+      const { start } = manilaDayRange(entryDate);
+      const signature = `${loanAccountId}|${amount}|${start.toISOString()}`;
+      if (nativeRepaymentSignatures.has(signature)) {
+        recordSkip(rec, `possible duplicate of a native REPAYMENT (same loan, amount ${amount}, same Manila day) — legacy _id ${txUid}`);
+        continue;
+      }
+    }
 
     batch.push({
       loanAccountId,
       type: mappedType,
-      amount: toDecimalString(tx.amount ?? 0),
+      amount,
       principalComponent: toDecimalString(tx.principal_amount ?? 0),
       interestComponent: toDecimalString(tx.interest_amount ?? 0),
       feesComponent: toDecimalString(tx.fees_amount ?? 0),
