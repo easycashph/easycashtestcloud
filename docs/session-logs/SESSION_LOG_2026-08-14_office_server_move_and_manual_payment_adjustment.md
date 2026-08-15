@@ -416,3 +416,64 @@ operational note, not a code fix), and (b) 4 `SL-CORP_*` "Loan Deduct"-channel t
 are genuinely migrated (real SDevTech data, `legacyId` set) but don't appear in SDevTech's own
 Daily Collection Report export — likely that report excludes the Loan Deduct channel on SDevTech's
 side, not an LMS defect.
+
+## 13. Row-splitting for the Daily Collection Report, matching SDevTech's exact shape
+
+User clarified the reason a Repayment/Fee Repayment/Penalty Repayment split matters:
+SDevTech's own Daily Collection Report always puts principal+interest on one row and
+fees/penalty on their own separate rows, because that report is consumed downstream for other
+purposes — the row shape itself is a real requirement, not cosmetic.
+
+`getDailyCollectionReport` now splits a native REPAYMENT transaction (which carries all four
+components on one stored row, per TXN-1) into up to three OUTPUT rows: `Repayment`
+(principal+interest), `Fee Repayment`, `Penalty Repayment` — each skipped when its amount is
+zero. Storage is unchanged; only this report's presentation splits. Already-separate migrated
+FEE_REPAYMENT/PENALTY_REPAYMENT rows pass through unchanged (never split again). The type filter
+now applies to the split output rows, not the stored transaction type — otherwise selecting "Fee
+Repayment" alone would miss every native payment's fee portion.
+
+Verified: Marlon Granados Guzman's ₱27,249.43 payment now shows as ₱24,963.90 Repayment +
+₱2,285.53 Fee Repayment, matching SDevTech exactly.
+
+## 14. Live-data correction: 8 native transactions' entryDate lagged SDevTech by one day
+
+Comparing a fresh SDevTech Aug 1-14 export against live LMS data (post §10/§11/§12/§13 fixes)
+surfaced 8 remaining native (non-migrated) REPAYMENT transactions where the LMS `entryDate` was
+one calendar day later than the real collection date recorded in SDevTech — e.g. Alex Galay
+Enero's ₱2,000 payment: SDevTech shows Aug 13, LMS showed Aug 14.
+
+Root cause: staff record a payment in SDevTech on the actual collection day, then batch-enter it
+into the LMS a day (or more) later, and the Record Payment form's date field defaults to "today"
+rather than being backdated to the true collection date. Confirmed via `createdAt` timestamps —
+e.g. Alex Galay Enero's transaction was `createdAt` 2026-08-14 06:45 (2:45pm Manila) with
+`entryDate` also 2026-08-14, while SDevTech's own record of the same collection is dated Aug 13.
+Not a code bug — an operational data-entry timing gap.
+
+Corrected per user's explicit request ("sundin ang entries sa SDEV"), scoped narrowly to these 8
+already-identified transactions: `LoanTransaction.entryDate` shifted back one day to match
+SDevTech, AND the paired `RepaymentSchedule.lastPaidAt` (found via `PaymentAllocation`) shifted
+identically — guarded so an installment's `lastPaidAt` was only touched if it exactly equaled the
+transaction's OLD (wrong) date first, so a later, unrelated payment on the same installment could
+never be clobbered. All 8 corrections applied cleanly, no skips.
+
+Affected: `BL-REG_00061` (Edgardo De Vera Flores, ₱87,839.07, Aug 13→12), and seven Aug 14→13
+corrections: `SL-REG_00070` (Ramil Rosas Torres), `SL-REG_00071` (Alfredo Desabille Ogana),
+`SL-REG_00100` (Rosan Cruz Cinco), `SL-REG_00101` (Liezel Juban Pentecostes), `SL-REG_00104`
+(Joseph Dela Cruz De Galicia), `SL-REG_00114` (Nomer Dela Cruz Perez), `SML-MAX_Y8Y4J` (Alex
+Galay Enero).
+
+**Deliberately not touched**, per user's own clarification that LMS is in a parallel-test period
+with SDevTech still the authoritative system of record: the 21 "both-migrated" duplicate-looking
+groups from §7/investigated further this session. Checked and ruled out one hypothesis (that
+these are SDevTech's own principal+interest/fee/penalty row-split, matching §13's design) — all
+44 rows across the 21 groups are plain `REPAYMENT` type on both sides, not REPAYMENT+FEE_REPAYMENT
+pairs, so that theory doesn't hold. 18 of the 21 groups show a clear "bulk historical backfill"
+signature (different real entry_date months, same creation session) and are almost certainly
+distinct real payments that reused a stale OR/AR number during backfill — none are from Aug 2026,
+all are 2023-2024 data migrated in the original 2026-07-23 batch. The remaining 3 groups
+(`SL-CORP_E1V9O`, `SL-CORP_A7G0T`, both 2023-10-06; `SML-REG_00370`, 2026-08-05, the only recent
+one) show a suspicious same-amount/same-entry_date/created-within-under-a-minute signature closer
+to an accidental double-submission in SDevTech itself — flagged for the user to verify against
+SDevTech/paper records before any action, not resolved this session. Recommended a permanent,
+reusable LMS-vs-SDevTech comparison script (not yet built) for ongoing verification instead of
+one-off analysis each time.
