@@ -255,6 +255,19 @@ export class PrismaReportingRepository implements IReportingRepository {
         )`
       : Prisma.empty;
 
+    // 2026-08-15: a transaction that has already been reversed (TXN-1: the original row is never
+    // edited or deleted, a REVERSAL row is created alongside it — see ReversePaymentUseCase) no
+    // longer represents real activity: its net effect on the loan is zero. Left in, it silently
+    // double-counted every reversed payment in "Payments only" report views, since REVERSAL is
+    // deliberately not one of the default payment types (found comparing the LMS's and SDevTech's
+    // Daily Collection Reports — every one of the 15 duplicate payments reversed on 2026-08-12 was
+    // still showing up here as if collected). Unconditional, not tied to the type filter: a
+    // REVERSAL transaction is never itself reversed (nothing points a `reversesTransactionId` at
+    // it), so this only ever excludes the reversed original, and the REVERSAL row itself stays
+    // visible when its own type is selected — the correction is still fully auditable, just not
+    // double-counted as revenue.
+    const notReversedClause = Prisma.sql`AND NOT EXISTS (SELECT 1 FROM loan_transactions r WHERE r."reversesTransactionId" = lt.id)`;
+
     const orderedIds = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
       SELECT lt.id
       FROM loan_transactions lt
@@ -264,6 +277,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       ${fromClause}
       ${toClause}
       ${cursorClause}
+      ${notReversedClause}
       ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
       LIMIT ${options.limit}
     `);
@@ -786,6 +800,10 @@ export class PrismaReportingRepository implements IReportingRepository {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
         ...(filter.types && filter.types.length > 0 ? { type: { in: filter.types as never[] } } : {}),
+        // 2026-08-15: same fix and rationale as listTransactions' notReversedClause above - a
+        // reversed transaction no longer represents real collected money and must not be
+        // double-counted here just because its offsetting REVERSAL isn't in the selected types.
+        reversedByTransaction: null,
       },
       include: { loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } } },
       orderBy: { entryDate: 'desc' },
