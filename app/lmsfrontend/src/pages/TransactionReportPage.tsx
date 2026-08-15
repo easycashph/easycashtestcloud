@@ -4,7 +4,14 @@ import { AlertCircle, ChevronDown, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
@@ -30,6 +37,15 @@ const TRANSACTION_TYPES: LoanTransactionType[] = [
   'FEE_REPAYMENT',
   'PENALTY_REPAYMENT',
 ];
+
+/**
+ * The three types that represent money actually collected from a borrower — the page's default
+ * filter, and what the "Payments only" shortcut selects. `FEE_REPAYMENT`/`PENALTY_REPAYMENT` only
+ * ever appear on migrated SDevTech rows (this system records one REPAYMENT with fee/penalty
+ * components instead), but they are real collections and must not be left out of a collection
+ * report — leaving them out is exactly the bug this default fixes.
+ */
+const PAYMENT_TYPES: LoanTransactionType[] = ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT'];
 
 function getSortValue(txn: TransactionReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -92,18 +108,41 @@ export function TransactionReportPage() {
     const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
-  const [type, setType] = React.useState<LoanTransactionType | 'ALL'>('REPAYMENT');
+  /**
+   * 2026-08-15 (user request): multi-select. This was a single-value dropdown defaulting to
+   * REPAYMENT, which silently hid real collections — a migrated SDevTech payment that settled a fee
+   * or penalty is its own type (FEE_REPAYMENT/PENALTY_REPAYMENT), so filtering to "REPAYMENT" alone
+   * left those out of the report entirely. Defaults to all three payment types together for that
+   * reason. Empty array = no filter (every type), matching the backend's own `types` semantics.
+   */
+  const [types, setTypes] = React.useState<LoanTransactionType[]>(PAYMENT_TYPES);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
+  /** Repeated `type` params — the backend normalises one or many into a single list. */
+  const buildParams = React.useCallback(() => {
+    const params = new URLSearchParams();
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    for (const t of types) params.append('type', t);
+    return params;
+  }, [range.from, range.to, types]);
+
+  const toggleType = (t: LoanTransactionType) => {
+    setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  };
+
+  const typeFilterLabel =
+    types.length === 0
+      ? 'All types'
+      : types.length === 1
+        ? (types[0] as string).replaceAll('_', ' ')
+        : `${types.length} types selected`;
+
   const transactionsQuery = useQuery({
-    queryKey: ['reports', 'transactions', range.from, range.to, type],
+    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(',')],
     queryFn: () => {
-      const params = new URLSearchParams();
-      if (range.from) params.set('from', range.from);
-      if (range.to) params.set('to', range.to);
-      if (type !== 'ALL') params.set('type', type);
-      const query = params.toString();
+      const query = buildParams().toString();
       return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
     },
   });
@@ -134,11 +173,7 @@ export function TransactionReportPage() {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const params = new URLSearchParams();
-      if (range.from) params.set('from', range.from);
-      if (range.to) params.set('to', range.to);
-      if (type !== 'ALL') params.set('type', type);
-      const query = params.toString();
+      const query = buildParams().toString();
       await downloadFile(`/reports/daily-collection.xlsx${query ? `?${query}` : ''}`, 'Daily Collection Report.xlsx');
     } catch (err) {
       setDownloadError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection and try again.');
@@ -173,19 +208,31 @@ export function TransactionReportPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <DateRangeFilter value={range} onChange={setRange} />
-            <Select value={type} onValueChange={(v) => setType(v as LoanTransactionType | 'ALL')}>
-              <SelectTrigger className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All types</SelectItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-56 justify-between font-normal">
+                  <span className="truncate">{typeFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Checkbox items keep the menu open on select (Radix closes on DropdownMenuItem but
+                  not on CheckboxItem), so several types can be ticked in one go. */}
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setTypes(PAYMENT_TYPES)}>Payments only</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setTypes([])}>All types</DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {TRANSACTION_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
+                  <DropdownMenuCheckboxItem
+                    key={t}
+                    checked={types.includes(t)}
+                    onCheckedChange={() => toggleType(t)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
                     {t.replaceAll('_', ' ')}
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={handleDownload} disabled={isDownloading}>
               <Download className="mr-2 h-4 w-4" />
               {isDownloading ? 'Preparing…' : 'Download report'}

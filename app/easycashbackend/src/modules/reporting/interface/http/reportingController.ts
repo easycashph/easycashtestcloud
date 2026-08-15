@@ -75,6 +75,21 @@ function parseDate(value: unknown, paramName: string, boundary: 'start' | 'end')
   return boundary === 'start' ? range.start : new Date(range.end.getTime() - 1);
 }
 
+/**
+ * 2026-08-15: the Transaction Report's type filter became multi-select, so `?type=` may now repeat
+ * (`?type=REPAYMENT&type=FEE_REPAYMENT`). Express hands a single occurrence back as a string and a
+ * repeated one as an array — both shapes are normalised here to one array. A single `?type=X` still
+ * works exactly as before, so any bookmarked URL or external caller keeps working.
+ *
+ * Returns undefined (no filter at all, i.e. every type) when nothing usable was supplied — an empty
+ * array would otherwise read as "match none" downstream.
+ */
+function parseTypeFilter(value: unknown): string[] | undefined {
+  const raw = Array.isArray(value) ? value : [value];
+  const types = raw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  return types.length > 0 ? types : undefined;
+}
+
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
 export class ReportingController {
   constructor(private readonly deps: ReportingControllerDeps) {}
@@ -111,13 +126,12 @@ export class ReportingController {
       const { limit, cursor } = parsePaginationParams(req.query);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
       const rows = await this.deps.listReportTransactionsUseCase.execute({
         limit,
         cursor,
         from,
         to,
-        type,
+        types: parseTypeFilter(req.query.type),
         branchId: resolveBranchFilter(scope),
       });
       res.status(200).json(toPaginatedResponse(rows.map(presentTransactionReportRow), limit, (item) => item.id));
@@ -233,8 +247,12 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
-      const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, type, branchId: resolveBranchFilter(scope) });
+      const rows = await this.deps.getDailyCollectionReportUseCase.execute({
+        from,
+        to,
+        types: parseTypeFilter(req.query.type),
+        branchId: resolveBranchFilter(scope),
+      });
       const buffer = await writeDailyCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Daily Collection Report.xlsx"');

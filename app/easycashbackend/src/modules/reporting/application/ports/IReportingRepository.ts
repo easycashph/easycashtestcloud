@@ -45,7 +45,11 @@ export interface TransactionReportRow {
 
 export interface ListReportTransactionsOptions extends DateRangeFilter {
   branchId?: string;
-  type?: string;
+  /** 2026-08-15: was a single `type`. Staff need several at once — e.g. REPAYMENT alongside
+   * FEE_REPAYMENT/PENALTY_REPAYMENT, which are separate types on migrated SDevTech rows, so a
+   * single-type filter on "REPAYMENT" silently hid real collections. Undefined/empty means no type
+   * filter at all (every type). */
+  types?: string[];
   limit: number;
   cursor?: string;
 }
@@ -250,6 +254,6 @@ export interface IReportingRepository {
   getCollectionHistoryReport(filter: DateRangeFilter & { branchId?: string }): Promise<CollectionHistoryReportRow[]>;
   getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
-  getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; type?: string }): Promise<DailyCollectionReportRow[]>;
+  getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[] }): Promise<DailyCollectionReportRow[]>;
   getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
 }

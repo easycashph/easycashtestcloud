@@ -239,7 +239,13 @@ export class PrismaReportingRepository implements IReportingRepository {
     // method's own doc comment) — REVERSAL/DISBURSEMENT's real time-of-day entryDate otherwise
     // always outranks a same-day REPAYMENT's date-only (midnight) entryDate.
     const range = entryDateFilter(options);
-    const typeClause = options.type ? Prisma.sql`AND lt."type" = ${options.type}::"LoanTransactionType"` : Prisma.empty;
+    // 2026-08-15: `= ANY(...)` rather than a single `=` — the filter is multi-select now (see
+    // ListReportTransactionsOptions.types). Cast the whole array, not each element, so this stays a
+    // single bound parameter regardless of how many types are selected.
+    const typeClause =
+      options.types && options.types.length > 0
+        ? Prisma.sql`AND lt."type" = ANY(${options.types}::"LoanTransactionType"[])`
+        : Prisma.empty;
     const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
     const fromClause = range?.gte ? Prisma.sql`AND lt."entryDate" >= ${range.gte}` : Prisma.empty;
     const toClause = range?.lte ? Prisma.sql`AND lt."entryDate" <= ${range.lte}` : Prisma.empty;
@@ -769,16 +775,17 @@ export class PrismaReportingRepository implements IReportingRepository {
   /** One row per `LoanTransaction` in range (every type, not just REPAYMENT - the legacy sample has
    * a "Type" column). Channel = the newly-persisted `paymentMethod` (§0 of this feature).
    *
-   * 2026-08-05 (user-confirmed): `type` narrows to a single `LoanTransactionType` when given -
+   * 2026-08-05 (user-confirmed): `types` narrows to the selected `LoanTransactionType`s when given -
    * the Transaction Report page's "Download report" button reuses this same endpoint, and must
-   * only export what the on-screen "All types" dropdown is currently filtered to, not everything.
+   * only export what the on-screen type dropdown is currently filtered to, not everything.
+   * 2026-08-15: widened from a single `type` to a list, matching the page's multi-select filter.
    */
-  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; type?: string }): Promise<DailyCollectionReportRow[]> {
+  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[] }): Promise<DailyCollectionReportRow[]> {
     const transactions = await prisma.loanTransaction.findMany({
       where: {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
-        ...(filter.type ? { type: filter.type as never } : {}),
+        ...(filter.types && filter.types.length > 0 ? { type: { in: filter.types as never[] } } : {}),
       },
       include: { loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } } },
       orderBy: { entryDate: 'desc' },
