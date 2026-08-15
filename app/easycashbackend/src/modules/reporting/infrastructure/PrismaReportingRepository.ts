@@ -795,11 +795,33 @@ export class PrismaReportingRepository implements IReportingRepository {
    * 2026-08-15: widened from a single `type` to a list, matching the page's multi-select filter.
    */
   async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[] }): Promise<DailyCollectionReportRow[]> {
+    // 2026-08-15 (user-confirmed): this report mirrors SDevTech's own row structure, where a single
+    // borrower payment is emitted as SEPARATE rows - principal+interest together as `Repayment`,
+    // then fees as `Fee Repayment`, then penalty as `Penalty Repayment`. That layout is a business
+    // requirement, not a cosmetic one: the report is consumed downstream for other purposes, which
+    // is why the components can't be collapsed into one line.
+    //
+    // Storage is unchanged (TXN-1: one payment is still one `LoanTransaction` carrying all four
+    // components) - only this report's presentation splits. Migrated FEE_REPAYMENT/PENALTY_REPAYMENT
+    // rows already ARE separate transactions in SDevTech's own shape, so they pass through as-is and
+    // are never split again.
+    //
+    // Because a native REPAYMENT can produce all three OUTPUT row types, the type filter has to be
+    // applied to the emitted rows rather than to the stored transaction type - otherwise selecting
+    // "Fee Repayment" would miss the fee portion of every natively-recorded payment. So the DB query
+    // widens to include REPAYMENT whenever any payment type is selected, and the requested types are
+    // re-applied after splitting.
+    const requestedTypes = filter.types && filter.types.length > 0 ? new Set(filter.types) : null;
+    const queryTypes = requestedTypes ? new Set(requestedTypes) : null;
+    if (queryTypes && (queryTypes.has('FEE_REPAYMENT') || queryTypes.has('PENALTY_REPAYMENT'))) {
+      queryTypes.add('REPAYMENT');
+    }
+
     const transactions = await prisma.loanTransaction.findMany({
       where: {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
-        ...(filter.types && filter.types.length > 0 ? { type: { in: filter.types as never[] } } : {}),
+        ...(queryTypes ? { type: { in: [...queryTypes] as never[] } } : {}),
         // 2026-08-15: same fix and rationale as listTransactions' notReversedClause above - a
         // reversed transaction no longer represents real collected money and must not be
         // double-counted here just because its offsetting REVERSAL isn't in the selected types.
@@ -817,23 +839,84 @@ export class PrismaReportingRepository implements IReportingRepository {
       if (!maturityByLoanId.has(installment.loanAccountId)) maturityByLoanId.set(installment.loanAccountId, installment.dueDate);
     }
 
-    return transactions.map((transaction) => ({
-      fullName: formatFullName(transaction.loanAccount.borrower),
-      productId: transaction.loanAccount.loanProductVersion.loanProduct.code,
-      accountId: transaction.loanAccount.loanCode,
-      totalBalance: transaction.balanceAfter.toString(),
-      amount: transaction.amount.toString(),
-      principalAmount: transaction.principalComponent.toString(),
-      interestAmount: transaction.interestComponent.toString(),
-      feesAmount: transaction.feesComponent.toString(),
-      penaltyAmount: transaction.penaltyComponent.toString(),
-      expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(transaction.loanAccountId)),
-      valueDate: transaction.entryDate,
-      orNumber: transaction.orNumber ?? '',
-      arNumber: transaction.arNumber ?? '',
-      channel: transaction.paymentMethod ? (PAYMENT_METHOD_LABEL[transaction.paymentMethod] ?? transaction.paymentMethod) : '',
-      type: TRANSACTION_TYPE_LABEL[transaction.type] ?? transaction.type,
-    }));
+    const rows: DailyCollectionReportRow[] = [];
+    for (const transaction of transactions) {
+      // Everything every emitted row shares - only the four amount columns and `type` differ.
+      const base = {
+        fullName: formatFullName(transaction.loanAccount.borrower),
+        productId: transaction.loanAccount.loanProductVersion.loanProduct.code,
+        accountId: transaction.loanAccount.loanCode,
+        // One stored transaction has exactly one `balanceAfter`; SDevTech's genuinely-separate
+        // transactions each carry their own running balance. Repeating it across a split payment's
+        // rows is the honest option here - the intermediate balances were never recorded and would
+        // have to be invented to fill in per-row.
+        totalBalance: transaction.balanceAfter.toString(),
+        expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(transaction.loanAccountId)),
+        valueDate: transaction.entryDate,
+        orNumber: transaction.orNumber ?? '',
+        arNumber: transaction.arNumber ?? '',
+        channel: transaction.paymentMethod ? (PAYMENT_METHOD_LABEL[transaction.paymentMethod] ?? transaction.paymentMethod) : '',
+      };
+      const ZERO = '0';
+
+      // Only a natively-recorded REPAYMENT carries several components on one row and therefore
+      // needs splitting. Every other type (including already-split migrated FEE_REPAYMENT/
+      // PENALTY_REPAYMENT, and non-payment types like DISBURSEMENT) passes through unchanged.
+      if (transaction.type === 'REPAYMENT') {
+        const principalPlusInterest = transaction.principalComponent.add(transaction.interestComponent);
+        // Skipped when zero so a fees-only or penalty-only payment doesn't emit an empty ₱0 row.
+        if (!principalPlusInterest.isZero()) {
+          rows.push({
+            ...base,
+            amount: principalPlusInterest.toString(),
+            principalAmount: transaction.principalComponent.toString(),
+            interestAmount: transaction.interestComponent.toString(),
+            feesAmount: ZERO,
+            penaltyAmount: ZERO,
+            type: TRANSACTION_TYPE_LABEL.REPAYMENT!,
+          });
+        }
+        if (!transaction.feesComponent.isZero()) {
+          rows.push({
+            ...base,
+            amount: transaction.feesComponent.toString(),
+            principalAmount: ZERO,
+            interestAmount: ZERO,
+            feesAmount: transaction.feesComponent.toString(),
+            penaltyAmount: ZERO,
+            type: TRANSACTION_TYPE_LABEL.FEE_REPAYMENT!,
+          });
+        }
+        if (!transaction.penaltyComponent.isZero()) {
+          rows.push({
+            ...base,
+            amount: transaction.penaltyComponent.toString(),
+            principalAmount: ZERO,
+            interestAmount: ZERO,
+            feesAmount: ZERO,
+            penaltyAmount: transaction.penaltyComponent.toString(),
+            type: TRANSACTION_TYPE_LABEL.PENALTY_REPAYMENT!,
+          });
+        }
+      } else {
+        rows.push({
+          ...base,
+          amount: transaction.amount.toString(),
+          principalAmount: transaction.principalComponent.toString(),
+          interestAmount: transaction.interestComponent.toString(),
+          feesAmount: transaction.feesComponent.toString(),
+          penaltyAmount: transaction.penaltyComponent.toString(),
+          type: TRANSACTION_TYPE_LABEL[transaction.type] ?? transaction.type,
+        });
+      }
+    }
+
+    // Re-apply the caller's type filter to the EMITTED rows (see this method's opening comment):
+    // the DB query above was deliberately widened to include REPAYMENT so a native payment's fee/
+    // penalty portions could be produced at all.
+    if (!requestedTypes) return rows;
+    const requestedLabels = new Set([...requestedTypes].map((t) => TRANSACTION_TYPE_LABEL[t] ?? t));
+    return rows.filter((row) => requestedLabels.has(row.type));
   }
 
   /** As-of-today snapshot: every loan the system considers fully paid (CLOSED - excludes
