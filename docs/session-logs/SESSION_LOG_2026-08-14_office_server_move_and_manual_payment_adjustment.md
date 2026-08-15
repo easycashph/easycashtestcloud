@@ -253,3 +253,62 @@ inconsistencies in SDevTech's own export, not something this migration introduce
 would have let a future Reverse Payment undo a payment against the wrong borrower's loan. Not
 investigated further this session — worth a look alongside the 200 loans (§7 analysis) whose
 transaction principal totals disagree with their schedule's principal-paid totals.
+
+## 9. `FEE_REPAYMENT` / `PENALTY_REPAYMENT` — legacy payments were mislabelled as `ADJUSTMENT`
+
+Found by comparing SDevTech's and the LMS's own Daily Collection Report exports for
+`SML-PDC_00035` (Rafael Alarcon Baguio). SDevTech shows a **₱936 "Fee Repayment"** (OR 2471,
+Aug 5, Bank Transfer); the LMS showed the same money, same OR number, as **"Adjustment"**.
+
+**Root cause**: `TRANSACTION_TYPE_MAP` in `migrate-legacy-data.ts` collapsed SDevTech's 30 types
+into this system's 10, and folded `FEE_REPAYMENT`/`PENALTY_REPAYMENT` into `ADJUSTMENT` alongside
+genuine staff corrections (`WRITE_OFF`, `REPAYMENT_UNDO`, `*_DUE_REDUCED`, `*_ADJUSTMENT`). Those
+are not the same kind of event: one is a real borrower payment, the other is a manual correction.
+Collapsed together, they became indistinguishable in reports and audit trails, and any report
+filtered to "Repayment" silently omitted real collections.
+
+**Scope, measured before changing anything** (original SDevTech type recovered from the dump by
+`legacyId`, for all 5,503 migrated `ADJUSTMENT` rows): only **50 rows (0.9%)** were actually
+payments — 28 `PENALTY_REPAYMENT`, 22 `FEE_REPAYMENT`. The other 5,453 are genuine corrections
+(2,895 `FEES_DUE_REDUCED`, 922 `PENALTY_ADJUSTMENT`, 670 `REPAYMENT_ADJUSTMENT`, …) and were
+correctly mapped all along.
+
+**Fix, in four parts:**
+1. Two new `LoanTransactionType` enum values (migration `20260815003216_add_fee_penalty_repayment_types`,
+   purely additive `ALTER TYPE … ADD VALUE`).
+2. `TRANSACTION_TYPE_MAP` now maps them to themselves — **all future imports are correct**, so this
+   can't recur via `Update Database From SDevTech.bat`.
+3. New `scripts/relabel-legacy-repayment-transaction-types.ts` (dry-run by default, idempotent) for
+   rows already in the database. Not a guess: each row's original type is read back from the dump
+   and matched by `legacyId`, same technique as `backfill-payment-allocations.ts`. Applied — 50 rows
+   relabelled. Only the `type` column is written; no amount, component, balance, installment, or
+   allocation is touched, so no computed figure can change.
+4. Report labels use SDevTech's own wording ("Fee Repayment"/"Penalty Repayment") so the two
+   systems' Daily Collection Reports stay comparable line for line during the changeover — that
+   comparison is exactly what surfaced this. Badges are green like `REPAYMENT` (real money in), not
+   amber like `ADJUSTMENT`, and both types are selectable in the Transaction Report's type filter.
+
+Verified for `SML-PDC_00035`: the ₱936 row is now `FEE_REPAYMENT` with OR 2471, matching SDevTech
+exactly. System-wide: 22 `FEE_REPAYMENT` + 28 `PENALTY_REPAYMENT`.
+
+**These two types are migration-only, by design** — recorded in the enum's own doc comment and
+mirrored in every type definition. SDevTech splits one payment into a row per component; this
+system does the opposite (TXN-1: one financial event, one row), with `ProcessPaymentUseCase`
+recording a single `REPAYMENT` whose `feesComponent`/`penaltyComponent` carry the split and
+`PaymentAllocation` holding the per-installment detail. Once SDevTech is retired, no new
+`FEE_REPAYMENT` should ever be created.
+
+**Follow-up surfaced, not yet built — there is no way to charge a fee in this system.** Evidence:
+`applied_fees` and `fee_rules` are both empty (0 rows), nothing in `src/` ever constructs an
+`AppliedFee`, and all 6,010 `FEE_CHARGED` transactions came from migration. The `AppliedFee`/
+`FeeRule` models and the `FEE_CHARGED` type exist but are unimplemented. The only current
+workaround is `AdjustFeesUseCase` (raise an installment's `feesDue`), which carries correction
+semantics, links to no fee catalogue, and renders as an `ADJUSTMENT` row rather than a ledger
+transaction. Worth building before SDevTech is retired, but it needs business input first (which
+fees, fixed vs percentage, who may charge, installment- or loan-level) — flagged for the user, not
+guessed at.
+
+**Test baseline note**: the suite reports 11 failures across 6 files (borrower repository, client
+portal, and one date-drifted `ReversePaymentUseCase` assertion expecting `PENDING` where the
+installment now computes `LATE`). Confirmed pre-existing by stashing this session's work and
+re-running: identical 11 failures. None are caused by anything in this log.

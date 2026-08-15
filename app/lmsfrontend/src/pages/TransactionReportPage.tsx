@@ -27,6 +27,8 @@ const TRANSACTION_TYPES: LoanTransactionType[] = [
   'TRANSFER',
   'ADJUSTMENT',
   'REVERSAL',
+  'FEE_REPAYMENT',
+  'PENALTY_REPAYMENT',
 ];
 
 function getSortValue(txn: TransactionReportRow, key: string): string | number | Date | null | undefined {
@@ -59,6 +61,10 @@ const TYPE_BADGE_VARIANT: Record<LoanTransactionType, 'default' | 'success' | 'w
   TRANSFER: 'secondary',
   ADJUSTMENT: 'warning',
   REVERSAL: 'destructive',
+  // Green like REPAYMENT — these ARE real borrower payments (migrated SDevTech history), not the
+  // staff corrections ADJUSTMENT's amber signals.
+  FEE_REPAYMENT: 'success',
+  PENALTY_REPAYMENT: 'success',
 };
 
 /** Shows "—" for a zero/blank money or text value, same convention as the Repayment Schedule table. */

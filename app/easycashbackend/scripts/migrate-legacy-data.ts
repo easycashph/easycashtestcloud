@@ -634,8 +634,16 @@ const TRANSACTION_TYPE_MAP: Record<string, string> = {
   TRANSFER: 'TRANSFER',
   WRITE_OFF: 'ADJUSTMENT',
   REPAYMENT_UNDO: 'ADJUSTMENT',
-  FEE_REPAYMENT: 'ADJUSTMENT',
-  PENALTY_REPAYMENT: 'ADJUSTMENT',
+  // 2026-08-15 (user-confirmed): these two were previously flattened into ADJUSTMENT along with
+  // genuine staff corrections above. They are NOT corrections — they are real borrower payments,
+  // just split out per component the way SDevTech records them (a ₱7,936 payment covering a ₱936
+  // fee arrives there as FEE_REPAYMENT ₱936 + REPAYMENT ₱7,000). Collapsing them made a client
+  // payment indistinguishable from a write-off or an undo in reports and audit trails; found via
+  // a Daily Collection Report comparison on SML-PDC_00035 (Rafael Alarcon Baguio), whose ₱936
+  // "Fee Repayment" in SDevTech showed here as "Adjustment". They now map to their own types.
+  // Those types are migration-only — see the LoanTransactionType enum's doc comment.
+  FEE_REPAYMENT: 'FEE_REPAYMENT',
+  PENALTY_REPAYMENT: 'PENALTY_REPAYMENT',
   FEES_DUE_REDUCED: 'ADJUSTMENT',
   PENALTIES_DUE_REDUCED: 'ADJUSTMENT',
   INTEREST_DUE_REDUCED: 'ADJUSTMENT',

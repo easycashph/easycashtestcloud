@@ -27,7 +27,10 @@ export type LoanTransactionType =
   | 'DEFERRED_INTEREST_PAID'
   | 'TRANSFER'
   | 'ADJUSTMENT'
-  | 'REVERSAL';
+  | 'REVERSAL'
+  // Migrated SDevTech history only — see schema.prisma's LoanTransactionType doc comment.
+  | 'FEE_REPAYMENT'
+  | 'PENALTY_REPAYMENT';
 
 export interface TransactionReportRow {
   id: string;

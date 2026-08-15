@@ -186,6 +186,22 @@ enum LoanTransactionType {
   TRANSFER
   ADJUSTMENT
   REVERSAL
+  /// 2026-08-15 — MIGRATED DATA ONLY. Never produced by this system's own payment flow.
+  ///
+  /// SDevTech splits one borrower payment into several transactions, one per component: paying
+  /// ₱7,936 covering a ₱936 fee arrives there as a `FEE_REPAYMENT` of ₱936 plus a `REPAYMENT` of
+  /// ₱7,000. This system deliberately does the opposite (TXN-1: one financial event, one row) —
+  /// `ProcessPaymentUseCase` records a single REPAYMENT whose `feesComponent`/`penaltyComponent`
+  /// carry that split, with `PaymentAllocation` holding the per-installment detail.
+  ///
+  /// These two values exist only so migrated history keeps SDevTech's own labelling instead of
+  /// being flattened into `ADJUSTMENT` alongside genuine staff corrections (write-offs, undos,
+  /// due-amount reductions) — a real client payment and a manual correction are different events
+  /// and must stay distinguishable in reports and audits. See scripts/relabel-legacy-repayment-
+  /// transaction-types.ts for the retroactive fix and TRANSACTION_TYPE_MAP in
+  /// scripts/migrate-legacy-data.ts for how new imports are mapped.
+  FEE_REPAYMENT
+  PENALTY_REPAYMENT
 }
 
 /// REPAY-3: status must be derivable from due/paid amounts and due date.

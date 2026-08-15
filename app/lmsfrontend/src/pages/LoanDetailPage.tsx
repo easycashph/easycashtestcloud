@@ -259,6 +259,10 @@ const TRANSACTION_TYPE_VARIANT: Record<string, 'success' | 'warning' | 'destruct
   FEE_CHARGED: 'warning',
   REVERSAL: 'destructive',
   ADJUSTMENT: 'warning',
+  // Green like REPAYMENT — these ARE real borrower payments (migrated SDevTech history, which
+  // splits one payment into a row per component), not the staff corrections ADJUSTMENT signals.
+  FEE_REPAYMENT: 'success',
+  PENALTY_REPAYMENT: 'success',
 };
 
 function TransactionTypeBadge({ type }: { type: string }) {

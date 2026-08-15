@@ -140,6 +140,11 @@ const TRANSACTION_TYPE_LABEL: Record<string, string> = {
   TRANSFER: 'Transfer',
   ADJUSTMENT: 'Adjustment',
   REVERSAL: 'Reversal',
+  // 2026-08-15: migrated SDevTech history only. Labels match SDevTech's own Daily Collection
+  // Report wording exactly, so the two systems' reports can be compared line for line during the
+  // changeover — that comparison is how these were found mislabelled as "Adjustment".
+  FEE_REPAYMENT: 'Fee Repayment',
+  PENALTY_REPAYMENT: 'Penalty Repayment',
 };
 
 /** 2026-08-04 (user-confirmed): "First Middle Last" - matches SDevTech's own "Detailed Ending
