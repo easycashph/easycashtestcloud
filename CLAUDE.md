@@ -333,6 +333,14 @@ For each feature:
 
 Do not proceed automatically to the next major milestone.
 
+## Docker Rebuild
+
+After any backend (`app/easycashbackend`) or frontend (`app/lmsfrontend`, `app/portalfrontend`)
+code change, rebuild and restart the affected Docker container(s) automatically
+(`docker compose up -d --build <service>` from `app/docker`) — do not wait to be asked. Verify
+the container comes back healthy (`docker ps`, a `/health` check) before considering the change
+done.
+
 ---
 
 # Git Workflow

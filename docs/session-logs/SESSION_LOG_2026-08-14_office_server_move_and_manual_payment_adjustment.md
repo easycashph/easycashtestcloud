@@ -477,3 +477,52 @@ to an accidental double-submission in SDevTech itself — flagged for the user t
 SDevTech/paper records before any action, not resolved this session. Recommended a permanent,
 reusable LMS-vs-SDevTech comparison script (not yet built) for ongoing verification instead of
 one-off analysis each time.
+
+## 15. Multi-select channel filter + merging duplicate-looking channel labels
+
+Following the channel exclusion the user needed to reconcile Aug 1-14 totals, built the same
+multi-select pattern the type filter already has: a checkbox dropdown, applied to both the
+on-screen Transaction Report and the "Download report" export.
+
+**Bug found and fixed while building it**: the stored `paymentMethod` column mixes two
+conventions — `ProcessPaymentUseCase` (native payments) stores the raw uppercase
+`ACTIVE_PAYMENT_METHODS` code (e.g. `BANK_TRANSFER`), while migrated SDevTech rows store their
+own already-readable channel name (e.g. `Bank Transfer`). Verified via a live query that each
+duplicate-looking pair (`CASH`/`Cash`, `BANK_TRANSFER`/`Bank Transfer`, `PDC`/`Post Dated Checks`,
+`UNEARNED_INCOME`/`Unearned Income`) splits 100% native vs 100% migrated with zero overlap,
+confirming they're really the same real-world channel recorded two different ways — not a guess.
+This was a pre-existing display bug in the Channel report column itself (a native
+`BANK_TRANSFER` row showed literally that, unresolved), not just something the new filter
+surfaced.
+
+Fixed by expanding `PAYMENT_METHOD_LABEL` to cover every `ACTIVE_PAYMENT_METHODS`/
+`DISCONTINUED_PAYMENT_METHODS` code (previously only 5 of ~20), each mapped to the exact label
+its migrated counterpart already uses. `ChannelOption` changed from one-raw-value-per-option to
+`{ label, values[] }` so `listDistinctChannels()` groups raw values by resolved label — 18 raw
+stored values collapsed to 14 correct filter options. Frontend tracks selection by label and
+expands to every underlying raw value when building `channel` query params.
+
+New endpoint `GET /reports/transactions/channels` (`ListDistinctChannelsUseCase`) powers the
+dropdown dynamically, since `paymentMethod` has no fixed schema enum to enumerate from.
+
+Verified end to end: excluding the merged "Loan Deduct" option from Aug 1-14 brings the LMS
+Daily Collection Report to 63 rows / ₱756,488.71 — an exact match to SDevTech's own report for
+the same range, confirming every other fix this session (row-splitting, reversed-transaction
+exclusion, OR/AR correction, entryDate correction) reconciles correctly together.
+
+## 16. Confirmed: the migration-time duplicate guard (§11) covers the pattern that caused this
+
+User asked directly whether updating the LMS from SDevTech again would recreate the
+native+migrated duplicate pattern investigated in §10/§11. Confirmed it's already covered:
+`migrate-legacy-data.ts`'s pre-loaded native-signature check (added §11, before any of this
+session's later work) skips inserting a newly-seen migrated transaction that matches an existing
+native REPAYMENT's (loan, amount, Manila day) — exactly the shape of all 15 duplicates found and
+reversed in this session and the 2026-08-12 predecessor. Does not cover (by design, out of
+scope): the 21 older both-migrated 2023-2024 groups from §7/§14, which predate this guard and are
+a different shape (no native side at all).
+
+## 17. CLAUDE.md updated: auto-rebuild Docker after code changes
+
+User asked to always rebuild affected Docker containers automatically after a backend/frontend
+change, without being asked each time. Added a short "Docker Rebuild" note under Development
+Workflow in `CLAUDE.md` so this persists across sessions, not just this one.
