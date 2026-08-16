@@ -290,4 +290,19 @@ export class PrismaLoanApplicationRepository implements ILoanApplicationReposito
     const client = ctx ? resolveClient(ctx) : prisma;
     await write(client, application);
   }
+
+  async hasDownstreamRecords(id: string, ctx?: TransactionContext): Promise<boolean> {
+    const client = resolveClient(ctx);
+    const [borrower, loanAccount] = await Promise.all([
+      client.borrower.findUnique({ where: { sourceApplicationId: id }, select: { id: true } }),
+      client.loanAccount.findUnique({ where: { sourceApplicationId: id }, select: { id: true } }),
+    ]);
+    return borrower !== null || loanAccount !== null;
+  }
+
+  async delete(id: string, ctx?: TransactionContext): Promise<void> {
+    const client = ctx ? resolveClient(ctx) : prisma;
+    await client.profileActivityLog.deleteMany({ where: { profileType: 'LOAN_APPLICATION', profileId: id } });
+    await client.loanApplication.delete({ where: { id } });
+  }
 }

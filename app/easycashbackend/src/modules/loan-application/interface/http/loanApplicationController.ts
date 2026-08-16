@@ -18,6 +18,7 @@ import type { GenerateAiDocumentReviewUseCase } from '../../application/use-case
 import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use-cases/TagLoanApplicationPreApprovalUseCase';
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
+import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
@@ -49,6 +50,7 @@ export interface LoanApplicationControllerDeps {
   tagLoanApplicationPreApprovalUseCase: TagLoanApplicationPreApprovalUseCase;
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
+  deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
@@ -297,6 +299,16 @@ export class LoanApplicationController {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.revertLoanApplicationDecisionUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteApplication = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.deleteLoanApplicationUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

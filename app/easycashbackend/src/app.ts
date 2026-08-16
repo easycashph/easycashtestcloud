@@ -202,6 +202,7 @@ import { AssignLoanApplicationProductUseCase } from '@modules/loan-application/a
 import { ApproveLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/ApproveLoanApplicationUseCase';
 import { DeclineLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeclineLoanApplicationUseCase';
 import { RevertLoanApplicationDecisionUseCase } from '@modules/loan-application/application/use-cases/RevertLoanApplicationDecisionUseCase';
+import { DeleteLoanApplicationUseCase } from '@modules/loan-application/application/use-cases/DeleteLoanApplicationUseCase';
 import { StartLoanApplicationReviewUseCase } from '@modules/loan-application/application/use-cases/StartLoanApplicationReviewUseCase';
 import { SubmitLoanApplicationReviewReportUseCase } from '@modules/loan-application/application/use-cases/SubmitLoanApplicationReviewReportUseCase';
 import { SetMitigationAccountOwnerUseCase } from '@modules/loan-application/application/use-cases/SetMitigationAccountOwnerUseCase';
@@ -1287,6 +1288,7 @@ export function createApp(): Express {
       }),
       updateLoanApplicationUseCase: new UpdateLoanApplicationUseCase({ loanApplicationRepository, preQualificationService, profileActivityLogService }),
       updateLoanApplicationIntakeUseCase: new UpdateLoanApplicationIntakeUseCase({ loanApplicationRepository, preQualificationService }),
+      deleteLoanApplicationUseCase: new DeleteLoanApplicationUseCase({ loanApplicationRepository, auditLogger }),
       preQualificationService,
       borrowerRepository,
       loanAccountRepository,

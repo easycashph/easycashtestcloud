@@ -22,11 +22,13 @@ import {
   Lock,
   Mail,
   MapPin,
+  MoreVertical,
   Pencil,
   Phone,
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  Trash2,
   User as UserIcon,
   UserPlus,
   XCircle,
@@ -42,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
 import { computeAge } from '@/lib/computeAge';
@@ -1625,11 +1628,19 @@ export function LoanApplicationDetailPage() {
   // created successfully.
   const failedDocumentLabels = (location.state as { failedDocumentLabels?: string[] } | null)?.failedDocumentLabels ?? [];
   const queryClient = useQueryClient();
-  const { canAccessLoanApplications, canRevertLoanApplicationDecision, canReviewLoanApplication, canApproveLoanApplication, currentAccount } =
-    useRole();
+  const {
+    canAccessLoanApplications,
+    canRevertLoanApplicationDecision,
+    canReviewLoanApplication,
+    canApproveLoanApplication,
+    canDeleteLoanApplication,
+    currentAccount,
+  } = useRole();
   const [decisionNote, setDecisionNote] = React.useState('');
   const [confirmAction, setConfirmAction] = React.useState<'APPROVED' | 'DECLINED' | 'REVERT' | 'PRE_APPROVAL' | null>(null);
   const [createClientOpen, setCreateClientOpen] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = React.useState('');
   const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
     try {
@@ -1800,6 +1811,14 @@ export function LoanApplicationDetailPage() {
     onSuccess: invalidate,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => apiClient.delete<void>(`/loan-applications/${applicationId}`),
+    onSuccess: () => {
+      setDeleteOpen(false);
+      navigate('/applications');
+    },
+  });
+
   const tagPreApprovalMutation = useMutation({
     mutationFn: () => apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/tag-pre-approval`),
     onSuccess: () => {
@@ -1938,9 +1957,14 @@ export function LoanApplicationDetailPage() {
               {isPreApprovalStage && (
                 <p className="text-xs text-muted-foreground">
                   System pre-qualification -{' '}
-                  {application.distanceFromBranchKm !== null
-                    ? `${application.distanceFromBranchKm} km from branch`
-                    : 'distance from branch could not be verified'}
+                  {application.status === 'PREDECLINED' && application.preQualificationBreakdown
+                    ? Object.values(application.preQualificationBreakdown.checks)
+                        .filter((check) => !check.passed)
+                        .map((check) => `${check.label.toLowerCase()} failed (${check.detail})`)
+                        .join('; ') || 'did not meet requirements'
+                    : application.distanceFromBranchKm !== null
+                      ? `${application.distanceFromBranchKm} km from branch`
+                      : 'distance from branch could not be verified'}
                   .
                 </p>
               )}
@@ -1986,6 +2010,27 @@ export function LoanApplicationDetailPage() {
                 >
                   <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
                 </Button>
+              )}
+              {canDeleteLoanApplication && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" className="h-9 w-9 p-0" aria-label="More actions">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      disabled={Boolean(application.createdBorrowerId) || Boolean(application.createdLoanAccountId)}
+                      onSelect={() => {
+                        setDeleteConfirmName('');
+                        setDeleteOpen(true);
+                      }}
+                    >
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete Application
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           )}
@@ -2520,6 +2565,45 @@ export function LoanApplicationDetailPage() {
           applicationId={application.id}
         />
       )}
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => !open && !deleteMutation.isPending && setDeleteOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete this application</DialogTitle>
+            <DialogDescription>
+              This permanently removes {application.applicantName}&apos;s application. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="delete-confirm-name">Type the applicant&apos;s name to confirm</Label>
+            <Input
+              id="delete-confirm-name"
+              placeholder={application.applicantName}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              disabled={deleteMutation.isPending}
+            />
+          </div>
+          {deleteMutation.error && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Something went wrong.'}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending || deleteConfirmName.trim() !== application.applicantName}
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete Application'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
           </>
         );
 

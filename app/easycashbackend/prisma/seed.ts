@@ -65,6 +65,7 @@ async function main() {
     'loan_application.manage': 'Create, review, and pre-approve loan applications',
     'loan_application.final_approve': 'Give final approval or decline on a loan application',
     'loan_application.revert': 'Revert a loan application to an earlier stage',
+    'loan_application.delete': 'Permanently delete a loan application',
     'loan_account.originate': 'Create a new loan account from an approved application',
     'loan_account.approve': 'Approve a loan account for disbursement',
     'loan_account.undo_approve': 'Undo a loan account approval',

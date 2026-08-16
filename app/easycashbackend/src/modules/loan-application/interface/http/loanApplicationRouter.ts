@@ -107,6 +107,9 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   );
   // Mirrors the mock UI's canRevertLoanApplicationDecision — MIS only by default, a narrower gate than the rest of this router.
   router.post('/loan-applications/:id/revert', requireAuth, requirePermission('loan_application.revert'), controller.revert);
+  // 2026-08-16 (user request): permanent delete — MIS only. Blocked once the application has
+  // already produced a Borrower/LoanAccount, see DeleteLoanApplicationUseCase's doc comment.
+  router.delete('/loan-applications/:id', requireAuth, requirePermission('loan_application.delete'), controller.deleteApplication);
 
   return router;
 }
