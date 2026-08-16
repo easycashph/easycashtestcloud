@@ -44,7 +44,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/NumberInput';
 import { computeAge } from '@/lib/computeAge';
@@ -1971,15 +1977,7 @@ export function LoanApplicationDetailPage() {
             </div>
           </div>
           {canAccessLoanApplications && (
-            <div className="flex flex-col items-end gap-2">
-              {/* 2026-08-12 (user request/bug fix): full intake-field edit, mirrors the backend's
-                  updateStaffIntake() guard (PREAPPROVED/PREDECLINED/UNDER_REVIEW only) - see
-                  UpdateLoanApplicationIntakeUseCase's doc comment. */}
-              {(isPreApprovalStage || isUnderReview) && (
-                <Button size="sm" variant="outline" onClick={() => navigate(`/applications/${application.id}/edit`)}>
-                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Application
-                </Button>
-              )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {!application.createdBorrowerId && (
                 <Button
                   size="sm"
@@ -2011,7 +2009,10 @@ export function LoanApplicationDetailPage() {
                   <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
                 </Button>
               )}
-              {canDeleteLoanApplication && (
+              {/* 2026-08-16 (user request): Edit Application moved in here from its own button,
+                  alongside Delete Application - both are secondary/less-frequent actions relative
+                  to Create Client Profile / Create Loan Account, which stay as visible buttons. */}
+              {((isPreApprovalStage || isUnderReview) || canDeleteLoanApplication) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline" className="h-9 w-9 p-0" aria-label="More actions">
@@ -2019,16 +2020,27 @@ export function LoanApplicationDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      disabled={Boolean(application.createdBorrowerId) || Boolean(application.createdLoanAccountId)}
-                      onSelect={() => {
-                        setDeleteConfirmName('');
-                        setDeleteOpen(true);
-                      }}
-                    >
-                      <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete Application
-                    </DropdownMenuItem>
+                    {/* 2026-08-12 (user request/bug fix): full intake-field edit, mirrors the backend's
+                        updateStaffIntake() guard (PREAPPROVED/PREDECLINED/UNDER_REVIEW only) - see
+                        UpdateLoanApplicationIntakeUseCase's doc comment. */}
+                    {(isPreApprovalStage || isUnderReview) && (
+                      <DropdownMenuItem onSelect={() => navigate(`/applications/${application.id}/edit`)}>
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Application
+                      </DropdownMenuItem>
+                    )}
+                    {(isPreApprovalStage || isUnderReview) && canDeleteLoanApplication && <DropdownMenuSeparator />}
+                    {canDeleteLoanApplication && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        disabled={Boolean(application.createdBorrowerId) || Boolean(application.createdLoanAccountId)}
+                        onSelect={() => {
+                          setDeleteConfirmName('');
+                          setDeleteOpen(true);
+                        }}
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete Application
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
