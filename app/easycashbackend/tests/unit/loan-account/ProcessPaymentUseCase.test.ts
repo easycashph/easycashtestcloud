@@ -7,6 +7,8 @@ import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
 import { NotFoundError } from '@shared/errors/DomainError';
 import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/errors/CalculationDomainErrors';
+import { PossibleDuplicatePaymentError } from '@modules/ledger/domain/errors/LedgerDomainErrors';
+import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 
 function buildActiveLoan(principalDue: string, interestDue: string) {
@@ -70,6 +72,9 @@ function buildDeps() {
     findById: vi.fn(),
     findByLoanAccountId: vi.fn(),
     findByReversesTransactionId: vi.fn(),
+    // 2026-08-15 (Payment Recording duplicate guard) - defaults to "no duplicate found" so every
+    // existing test below (none of which are exercising this guard) keeps passing unmodified.
+    findPossibleMigratedDuplicate: vi.fn().mockResolvedValue(null),
     create: vi.fn(),
   };
   const paymentAllocationRepository = { createMany: vi.fn(), findByLoanTransactionId: vi.fn() };
@@ -110,6 +115,45 @@ describe('ProcessPaymentUseCase', () => {
 
     await expect(useCase.execute('loan-1', Money.of('0.00'), 'officer-1')).rejects.toThrow(InvalidPaymentAllocationInputError);
     expect(deps.unitOfWork.run).not.toHaveBeenCalled();
+  });
+
+  describe('Payment Recording duplicate guard (2026-08-15, hard block)', () => {
+    it('blocks recording when a migrated REPAYMENT already exists for the same loan, amount, and Manila calendar day', async () => {
+      const deps = buildDeps();
+      deps.loanAccountRepository.findById.mockResolvedValue(buildActiveLoan('3000.00', '450.00'));
+      const existing = LoanTransaction.create({
+        loanAccountId: 'loan-1',
+        type: 'REPAYMENT',
+        amount: Money.of('1300.00'),
+        components: { principalComponent: Money.of('1300.00') },
+        balanceAfter: Money.of('1700.00'),
+        branchId: 'branch-1',
+        entryDate: new Date('2026-08-15T02:00:00Z'), // 10am Manila the same day
+        legacyId: 'legacy-123',
+      });
+      deps.loanTransactionRepository.findPossibleMigratedDuplicate.mockResolvedValue(existing);
+      const useCase = new ProcessPaymentUseCase(deps);
+
+      await expect(useCase.execute('loan-1', Money.of('1300.00'), 'officer-1', new Date('2026-08-15T06:00:00Z'))).rejects.toThrow(
+        PossibleDuplicatePaymentError,
+      );
+      // Blocked before any mutation/allocation work - no installments fetched, no write attempted.
+      expect(deps.repaymentInstallmentRepository.findByLoanAccountId).not.toHaveBeenCalled();
+      expect(deps.unitOfWork.run).not.toHaveBeenCalled();
+    });
+
+    it('does not block a different amount on the same day, or the same amount on a different day', async () => {
+      const deps = buildDeps();
+      deps.loanAccountRepository.findById.mockResolvedValue(buildActiveLoan('3000.00', '450.00'));
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([buildInstallment(1, '2026-08-15', { principal: '1000.00', interest: '200.00' })]);
+      // Mock's default (see buildDeps) is "no duplicate found" - findPossibleMigratedDuplicate
+      // itself is what encodes the exact-amount/exact-day matching; this test just confirms the use
+      // case actually proceeds (not blocked) when the repository reports no match.
+      const useCase = new ProcessPaymentUseCase(deps);
+
+      await expect(useCase.execute('loan-1', Money.of('1200.00'), 'officer-1', new Date('2026-08-15T06:00:00Z'))).resolves.toBeDefined();
+      expect(deps.unitOfWork.run).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('cross-installment allocation (ADR-009 §2: oldest due first)', () => {

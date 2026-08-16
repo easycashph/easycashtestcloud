@@ -108,3 +108,28 @@ export class EmptyPaymentAdjustmentError extends DomainError {
     this.name = 'EmptyPaymentAdjustmentError';
   }
 }
+
+/**
+ * 2026-08-15 (Payment Recording duplicate guard, user-confirmed hard block): raised by
+ * `ProcessPaymentUseCase` when a migrated (SDevTech) REPAYMENT already exists on this loan for the
+ * same amount, same Asia/Manila calendar day. Real incident that motivated this: a staff member
+ * almost re-keyed `SML-PDC_00035`'s payment a second time (2026-08-12 investigation), and a
+ * separate later scan (2026-08-15) found 15 such collisions already live, ₱214,719.90 total,
+ * created when the same payment was recorded natively in the LMS *and* pulled in by a later
+ * SDevTech migration run. Hard block, no override in this flow (user-confirmed 2026-08-15) — the
+ * transaction id is surfaced so staff can open it and confirm before deciding what to do next. A
+ * genuine second same-day same-amount payment on the same loan (rare, but not impossible) would
+ * also trip this — if that happens, it needs a developer/DB-level look rather than a way to force
+ * through the UI, so a real duplicate can never be waved through by habit.
+ */
+export class PossibleDuplicatePaymentError extends DomainError {
+  constructor(existingTransactionId: string) {
+    super(
+      'POSSIBLE_DUPLICATE_PAYMENT',
+      `A payment of this exact amount was already recorded today via SDevTech migration (transaction ${existingTransactionId}) — check that transaction before recording this one.`,
+      undefined,
+      409,
+    );
+    this.name = 'PossibleDuplicatePaymentError';
+  }
+}

@@ -4,7 +4,7 @@ import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requirePermission } from '@shared/middleware/requirePermission';
 import { validateBody } from '@shared/middleware/validate';
 import { RepaymentController, type RepaymentControllerDeps } from './repaymentController';
-import { adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
+import { addFeeSchema, adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
 
 /**
  * Mostly D-2 (read-only) — CreateRepaymentInstallmentUseCase and RecordInstallmentPaymentUseCase
@@ -37,6 +37,17 @@ export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenServic
     requirePermission('fees.adjust'),
     validateBody(adjustFeesSchema),
     controller.adjustFees,
+  );
+  // 2026-08-15 (Add Fee feature, user-confirmed): a distinct, narrower permission from
+  // 'fees.adjust' - charging a brand new fee is a bigger financial action than correcting an
+  // existing figure, same "separate, independently-grantable permission" posture as
+  // undo-restructure/undo-adjust elsewhere in this codebase. MIS + Accounting by default.
+  router.post(
+    '/repayment-installments/:id/add-fee',
+    requireAuth,
+    requirePermission('fee.charge'),
+    validateBody(addFeeSchema),
+    controller.addFee,
   );
 
   return router;

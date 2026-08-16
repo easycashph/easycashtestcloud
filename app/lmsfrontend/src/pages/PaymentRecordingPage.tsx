@@ -428,7 +428,12 @@ export function PaymentRecordingForm({
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError) {
-        if (error.status === 409) {
+        if (error.code === 'POSSIBLE_DUPLICATE_PAYMENT') {
+          // 2026-08-15 (Payment Recording duplicate guard) - a specific, actionable message, not
+          // the generic 409 fallback below (which would otherwise mask it behind an unrelated
+          // "just updated by another action" explanation).
+          setSubmitError(error.message);
+        } else if (error.status === 409) {
           setSubmitError('This loan was just updated by another action (or this payment is already being processed). Refresh and try again.');
         } else if (error.status === 403) {
           setSubmitError("You don't have permission to record a payment on this loan.");

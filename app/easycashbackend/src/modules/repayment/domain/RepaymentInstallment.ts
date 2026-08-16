@@ -3,6 +3,7 @@ import type { Money } from '@shared/domain/Money';
 import { InstallmentAmounts } from './valueObjects/InstallmentAmounts';
 import {
   FeesAlreadyPaidError,
+  InvalidFeeChargeAmountError,
   InvalidFeesAdjustmentAmountError,
   InvalidPenaltyAdjustmentAmountError,
   PenaltyAlreadyPaidError,
@@ -295,6 +296,35 @@ export class RepaymentInstallment {
       throw new InvalidFeesAdjustmentAmountError(newAmount.toString());
     }
     this.props.feesOverride = { amount: newAmount, reason, byUserId, at };
+    this.props.updatedAt = new Date();
+  }
+
+  /**
+   * 2026-08-15 (Add Fee feature, user-confirmed): imposes a genuinely NEW fee charge on top of
+   * whatever's currently due — distinct from `adjustFees()` above, which corrects/replaces the
+   * existing amount. `amount` is strictly additive (always positive; see
+   * `InvalidFeeChargeAmountError`'s own doc comment), never an absolute replacement.
+   *
+   * Reuses the same `feesOverride` storage `adjustFees()` uses (no new column needed) — this just
+   * sets it to `effectiveFeesDue + amount` rather than to a staff-typed absolute value. Because it
+   * always reads the CURRENT effective amount first, multiple charges over time correctly stack
+   * (each one's `FeeCharge` audit row still records its own individual previous/new snapshot, even
+   * though only the latest charge's metadata lives in the override itself — same "live state vs.
+   * full history" split `adjustFees()`/`FeeAdjustment` already has).
+   *
+   * Unlike `adjustFees()`, NOT blocked by an already-paid fees component — a prior fee being fully
+   * settled has no bearing on whether a brand new fee may be charged now.
+   *
+   * Does not itself create the audit `FeeCharge` row or the `FEE_CHARGED` ledger transaction —
+   * that's `AddFeeUseCase`'s job, same division of responsibility as every sibling adjustment
+   * method on this entity.
+   */
+  chargeFee(amount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
+    if (!amount.isPositive()) {
+      throw new InvalidFeeChargeAmountError(amount.toString());
+    }
+    const newTotal = this.effectiveFeesDue.add(amount);
+    this.props.feesOverride = { amount: newTotal, reason, byUserId, at };
     this.props.updatedAt = new Date();
   }
 }

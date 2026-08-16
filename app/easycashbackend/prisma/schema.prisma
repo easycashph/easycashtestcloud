@@ -186,6 +186,22 @@ enum LoanTransactionType {
   TRANSFER
   ADJUSTMENT
   REVERSAL
+  /// 2026-08-15 — MIGRATED DATA ONLY. Never produced by this system's own payment flow.
+  ///
+  /// SDevTech splits one borrower payment into several transactions, one per component: paying
+  /// ₱7,936 covering a ₱936 fee arrives there as a `FEE_REPAYMENT` of ₱936 plus a `REPAYMENT` of
+  /// ₱7,000. This system deliberately does the opposite (TXN-1: one financial event, one row) —
+  /// `ProcessPaymentUseCase` records a single REPAYMENT whose `feesComponent`/`penaltyComponent`
+  /// carry that split, with `PaymentAllocation` holding the per-installment detail.
+  ///
+  /// These two values exist only so migrated history keeps SDevTech's own labelling instead of
+  /// being flattened into `ADJUSTMENT` alongside genuine staff corrections (write-offs, undos,
+  /// due-amount reductions) — a real client payment and a manual correction are different events
+  /// and must stay distinguishable in reports and audits. See scripts/relabel-legacy-repayment-
+  /// transaction-types.ts for the retroactive fix and TRANSACTION_TYPE_MAP in
+  /// scripts/migrate-legacy-data.ts for how new imports are mapped.
+  FEE_REPAYMENT
+  PENALTY_REPAYMENT
 }
 
 /// REPAY-3: status must be derivable from due/paid amounts and due date.
@@ -295,6 +311,7 @@ model User {
   penaltyReductionsMade                PenaltyReduction[]
   feesOverridesSet                     RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade                   FeeAdjustment[]
+  feeChargesMade                       FeeCharge[]
   paymentAdjustmentsMade               PaymentAdjustment[]
   loanRestructuresMade                 LoanRestructure[]             @relation("LoanRestructureBy")
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
@@ -1405,6 +1422,10 @@ model LoanTransaction {
   /// i.e. one `ReversePaymentUseCase` refuses to touch) that was corrected through this tool
   /// instead.
   paymentAdjustments PaymentAdjustment[]
+  /// 2026-08-15 (Add Fee feature) — see `FeeCharge`'s own doc comment. Present on a `FEE_CHARGED`
+  /// transaction created through this tool; empty for a migrated FEE_CHARGED row (no `FeeCharge`
+  /// backfilled for legacy data, same "written going forward only" posture as `PaymentAllocation`).
+  feeCharges         FeeCharge[]
 
   /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
   /// volume table (legacy equivalent: 524k rows) — date-range and
@@ -1512,6 +1533,7 @@ model RepaymentSchedule {
   paymentAdjustments PaymentAdjustment[]
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
+  feeCharges         FeeCharge[]
   smsReminderLogs    SmsReminderLog[]
   emailReminderLogs  EmailReminderLog[]
 
@@ -1640,6 +1662,40 @@ model FeeAdjustment {
 
   @@index([repaymentInstallmentId])
   @@map("fee_adjustments")
+}
+
+/// 2026-08-15 (Add Fee feature, user-confirmed): a genuinely NEW fee charge (e.g. a late fee),
+/// distinct from `FeeAdjustment` above — that tool corrects an already-recorded amount
+/// (correction semantics, no ledger transaction), this one imposes an additional obligation that
+/// didn't exist before (charge semantics, creates a real `FEE_CHARGED` `LoanTransaction` — see
+/// `AddFeeUseCase`'s own doc comment for why the distinction matters and mirrors SDevTech's own
+/// FEE_CHARGED vs adjustment-type event split). Same "immutable historical record, never edited"
+/// posture as `PenaltyReduction`/`FeeAdjustment`. Bidirectional-looking shape (previous/new) for
+/// consistency with those two, but in practice `newFeesAmount` is always `previousFeesAmount +
+/// the charged amount` — a charge only ever adds.
+model FeeCharge {
+  id                     String            @id @default(uuid())
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+  loanTransactionId      String
+  loanTransaction        LoanTransaction   @relation(fields: [loanTransactionId], references: [id])
+
+  /// The effective fees due (override if one was already set, else the immutable `feesDue`
+  /// snapshot) immediately before this charge.
+  previousFeesAmount Decimal @db.Decimal(14, 2)
+  newFeesAmount      Decimal @db.Decimal(14, 2)
+
+  /// Required — what this fee is for (e.g. "Late payment fee, memo #..."), same convention as
+  /// `PenaltyReduction.reason`/`FeeAdjustment.reason`.
+  reason String
+
+  chargedByUserId String
+  chargedBy       User     @relation(fields: [chargedByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([repaymentInstallmentId])
+  @@index([loanTransactionId])
+  @@map("fee_charges")
 }
 
 /// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one

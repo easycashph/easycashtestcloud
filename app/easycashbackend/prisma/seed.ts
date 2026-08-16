@@ -65,6 +65,7 @@ async function main() {
     'loan_application.manage': 'Create, review, and pre-approve loan applications',
     'loan_application.final_approve': 'Give final approval or decline on a loan application',
     'loan_application.revert': 'Revert a loan application to an earlier stage',
+    'loan_application.delete': 'Permanently delete a loan application',
     'loan_account.originate': 'Create a new loan account from an approved application',
     'loan_account.approve': 'Approve a loan account for disbursement',
     'loan_account.undo_approve': 'Undo a loan account approval',
@@ -79,6 +80,7 @@ async function main() {
     'payment.manual_adjust': 'Manually correct paid amounts on a legacy payment transaction with no per-installment breakdown',
     'penalty.reduce': 'Reduce or waive an installment penalty',
     'fees.adjust': 'Adjust an installment fee amount',
+    'fee.charge': 'Charge a new fee on an installment',
     'document.generate': 'Generate loan documents',
     // 2026-08-09 (Document Templates admin config, user request): separate, narrower, MIS-only-
     // by-default admin permission - configures the required/conditional rules `document.generate`
@@ -161,6 +163,7 @@ async function main() {
       'payment.record',
       'penalty.reduce',
       'fees.adjust',
+      'fee.charge',
       'loan_product.write',
       'document.generate',
       'statement_of_account.generate',

@@ -4,14 +4,21 @@ import { AlertCircle, ChevronDown, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
-import { downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
 import type { LoanTransactionType, TransactionReportRow } from '@/lib/reportApiTypes';
 import { formatDate, formatPeso, isoDate } from '@/lib/utils';
 
@@ -27,7 +34,41 @@ const TRANSACTION_TYPES: LoanTransactionType[] = [
   'TRANSFER',
   'ADJUSTMENT',
   'REVERSAL',
+  'FEE_REPAYMENT',
+  'PENALTY_REPAYMENT',
 ];
+
+/**
+ * 2026-08-15 (user request): the channel filter's default selection - every real collection
+ * channel, deliberately excluding `Adjustment` (not a real payment channel), `Loan Deduct` (its
+ * own payroll-deduction workflow, and the one channel that turned out to be missing entirely from
+ * SDevTech's own Daily Collection Report export - see the session log), and `Suspense Account`
+ * (not a settled collection). A channel not in this list still appears in the dropdown and can be
+ * ticked manually - it's just unchecked on first load.
+ */
+const DEFAULT_CHANNEL_LABELS = [
+  'GCash',
+  'Cash',
+  'Bank Transfer',
+  'ATM',
+  'Check',
+  'Post Dated Checks',
+  'ADA',
+  'Bank',
+  'Receipt',
+  'Unearned Income',
+  'Dragonpay',
+  'Lazada Wallet',
+];
+
+/**
+ * The three types that represent money actually collected from a borrower — the page's default
+ * filter, and what the "Payments only" shortcut selects. `FEE_REPAYMENT`/`PENALTY_REPAYMENT` only
+ * ever appear on migrated SDevTech rows (this system records one REPAYMENT with fee/penalty
+ * components instead), but they are real collections and must not be left out of a collection
+ * report — leaving them out is exactly the bug this default fixes.
+ */
+const PAYMENT_TYPES: LoanTransactionType[] = ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT'];
 
 function getSortValue(txn: TransactionReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
@@ -59,6 +100,10 @@ const TYPE_BADGE_VARIANT: Record<LoanTransactionType, 'default' | 'success' | 'w
   TRANSFER: 'secondary',
   ADJUSTMENT: 'warning',
   REVERSAL: 'destructive',
+  // Green like REPAYMENT — these ARE real borrower payments (migrated SDevTech history), not the
+  // staff corrections ADJUSTMENT's amber signals.
+  FEE_REPAYMENT: 'success',
+  PENALTY_REPAYMENT: 'success',
 };
 
 /** Shows "—" for a zero/blank money or text value, same convention as the Repayment Schedule table. */
@@ -86,18 +131,72 @@ export function TransactionReportPage() {
     const from = new Date(to.getFullYear(), to.getMonth(), 1);
     return { from: isoDate(from), to: isoDate(to) };
   });
-  const [type, setType] = React.useState<LoanTransactionType | 'ALL'>('REPAYMENT');
+  /**
+   * 2026-08-15 (user request): multi-select. This was a single-value dropdown defaulting to
+   * REPAYMENT, which silently hid real collections — a migrated SDevTech payment that settled a fee
+   * or penalty is its own type (FEE_REPAYMENT/PENALTY_REPAYMENT), so filtering to "REPAYMENT" alone
+   * left those out of the report entirely. Defaults to all three payment types together for that
+   * reason. Empty array = no filter (every type), matching the backend's own `types` semantics.
+   */
+  const [types, setTypes] = React.useState<LoanTransactionType[]>(PAYMENT_TYPES);
+  /**
+   * 2026-08-15 (user request): multi-select channel filter, same pattern as the type filter above.
+   * Empty array = no filter (every channel). Unlike type, there's no smart default here — a
+   * migrated payment's channel is whatever SDevTech recorded (e.g. "Loan Deduct"), not a bug to
+   * default around.
+   *
+   * Tracked by LABEL, not raw stored value — a native code (e.g. "BANK_TRANSFER") and its migrated
+   * counterpart ("Bank Transfer") can both resolve to one label/checkbox (`ChannelOption.values`
+   * holds every raw value that maps to it), so a single selection has to expand into possibly
+   * several `channel` query params. See the backend's `PAYMENT_METHOD_LABEL` doc comment.
+   */
+  const [channelLabels, setChannelLabels] = React.useState<string[]>(DEFAULT_CHANNEL_LABELS);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
+  const channelsQuery = useQuery({
+    queryKey: ['reports', 'transaction-channels'],
+    queryFn: () => apiClient.get<{ items: { label: string; values: string[] }[] }>('/reports/transactions/channels'),
+  });
+  const channelOptions = channelsQuery.data?.items ?? [];
+
+  /** Repeated `type`/`channel` params — the backend normalises one or many into a single list. */
+  const buildParams = React.useCallback(() => {
+    const params = new URLSearchParams();
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    for (const t of types) params.append('type', t);
+    for (const label of channelLabels) {
+      const option = channelOptions.find((c) => c.label === label);
+      for (const value of option?.values ?? [label]) params.append('channel', value);
+    }
+    return params;
+  }, [range.from, range.to, types, channelLabels, channelOptions]);
+
+  const toggleType = (t: LoanTransactionType) => {
+    setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  };
+  const toggleChannel = (label: string) => {
+    setChannelLabels((prev) => (prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]));
+  };
+
+  const typeFilterLabel =
+    types.length === 0
+      ? 'All types'
+      : types.length === 1
+        ? (types[0] as string).replaceAll('_', ' ')
+        : `${types.length} types selected`;
+  const channelFilterLabel =
+    channelLabels.length === 0
+      ? 'All channels'
+      : channelLabels.length === 1
+        ? channelLabels[0]!
+        : `${channelLabels.length} channels selected`;
+
   const transactionsQuery = useQuery({
-    queryKey: ['reports', 'transactions', range.from, range.to, type],
+    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(','), [...channelLabels].sort().join(',')],
     queryFn: () => {
-      const params = new URLSearchParams();
-      if (range.from) params.set('from', range.from);
-      if (range.to) params.set('to', range.to);
-      if (type !== 'ALL') params.set('type', type);
-      const query = params.toString();
+      const query = buildParams().toString();
       return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
     },
   });
@@ -128,11 +227,7 @@ export function TransactionReportPage() {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const params = new URLSearchParams();
-      if (range.from) params.set('from', range.from);
-      if (range.to) params.set('to', range.to);
-      if (type !== 'ALL') params.set('type', type);
-      const query = params.toString();
+      const query = buildParams().toString();
       await downloadFile(`/reports/daily-collection.xlsx${query ? `?${query}` : ''}`, 'Daily Collection Report.xlsx');
     } catch (err) {
       setDownloadError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection and try again.');
@@ -167,19 +262,54 @@ export function TransactionReportPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <DateRangeFilter value={range} onChange={setRange} />
-            <Select value={type} onValueChange={(v) => setType(v as LoanTransactionType | 'ALL')}>
-              <SelectTrigger className="w-52">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">All types</SelectItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-56 justify-between font-normal">
+                  <span className="truncate">{typeFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Checkbox items keep the menu open on select (Radix closes on DropdownMenuItem but
+                  not on CheckboxItem), so several types can be ticked in one go. */}
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setTypes(PAYMENT_TYPES)}>Payments only</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setTypes([])}>All types</DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {TRANSACTION_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
+                  <DropdownMenuCheckboxItem
+                    key={t}
+                    checked={types.includes(t)}
+                    onCheckedChange={() => toggleType(t)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
                     {t.replaceAll('_', ' ')}
-                  </SelectItem>
+                  </DropdownMenuCheckboxItem>
                 ))}
-              </SelectContent>
-            </Select>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-56 justify-between font-normal">
+                  <span className="truncate">{channelFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setChannelLabels(DEFAULT_CHANNEL_LABELS)}>Default channels</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setChannelLabels([])}>All channels</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {channelOptions.map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c.label}
+                    checked={channelLabels.includes(c.label)}
+                    onCheckedChange={() => toggleChannel(c.label)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {c.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button onClick={handleDownload} disabled={isDownloading}>
               <Download className="mr-2 h-4 w-4" />
               {isDownloading ? 'Preparing…' : 'Download report'}

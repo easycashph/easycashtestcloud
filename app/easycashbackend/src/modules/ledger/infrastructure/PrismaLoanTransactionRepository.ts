@@ -97,6 +97,26 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
     return row ? toDomain(row) : null;
   }
 
+  async findPossibleMigratedDuplicate(
+    loanAccountId: string,
+    amount: Money,
+    entryDayStart: Date,
+    entryDayEnd: Date,
+    ctx?: TransactionContext,
+  ): Promise<LoanTransaction | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanTransaction.findFirst({
+      where: {
+        loanAccountId,
+        type: 'REPAYMENT',
+        legacyId: { not: null },
+        amount: amount.toDecimal(),
+        entryDate: { gte: entryDayStart, lt: entryDayEnd },
+      },
+    });
+    return row ? toDomain(row) : null;
+  }
+
   async create(transaction: LoanTransaction, ctx?: TransactionContext): Promise<void> {
     const client = resolveClient(ctx);
     await client.loanTransaction.create({

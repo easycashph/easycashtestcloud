@@ -1,5 +1,7 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
+import { manilaDayRange } from '@shared/domain/manilaTime';
+import { PossibleDuplicatePaymentError } from '@modules/ledger/domain/errors/LedgerDomainErrors';
 import {
   PaymentAllocationService,
   type AllocatableInstallment,
@@ -246,6 +248,16 @@ export class ProcessPaymentUseCase {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) {
       throw new NotFoundError('LoanAccount', loanAccountId);
+    }
+
+    // 2026-08-15 (Payment Recording duplicate guard, user-confirmed hard block): see
+    // PossibleDuplicatePaymentError's own doc comment for the real incident and scan that
+    // motivated this. Checked before any allocation/mutation work below, so a blocked attempt
+    // leaves no partial state to clean up.
+    const { start: dayStart, end: dayEnd } = manilaDayRange(paidAt);
+    const possibleDuplicate = await this.deps.loanTransactionRepository.findPossibleMigratedDuplicate(loanAccountId, paymentAmount, dayStart, dayEnd);
+    if (possibleDuplicate) {
+      throw new PossibleDuplicatePaymentError(possibleDuplicate.id);
     }
 
     const allInstallments = await this.deps.repaymentInstallmentRepository.findByLoanAccountId(loanAccountId);

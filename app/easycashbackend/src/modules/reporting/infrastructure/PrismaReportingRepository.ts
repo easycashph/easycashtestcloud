@@ -8,6 +8,7 @@ import { isSecMc3Covered } from '@shared/domain/compliance/SecMc3Coverage';
 import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,
+  ChannelOption,
   CollectionHistoryReportRow,
   CollectionReportRow,
   DailyCollectionReportRow,
@@ -119,15 +120,73 @@ const INSTALLMENT_STATUS_LABEL: Record<string, string> = {
   LATE: 'Late',
 };
 
-/** Mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS` labels - small intentional
- * duplication (display-label mapping only) rather than a cross-package import. */
+/**
+ * Mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS`/`DISCONTINUED_PAYMENT_METHODS`
+ * codes - small intentional duplication (display-label mapping only) rather than a cross-package
+ * import.
+ *
+ * 2026-08-15 (found comparing LMS/SDevTech Daily Collection Reports): `ProcessPaymentUseCase`
+ * stores a native payment's channel as the raw uppercase CODE (e.g. "BANK_TRANSFER"), while
+ * migrated SDevTech transactions store their own already-readable channel name (e.g.
+ * "Bank Transfer") verbatim. Left unmapped, a code fell through this lookup's `?? value` fallback
+ * unresolved, so the same real-world channel showed as two different strings depending on which
+ * system recorded it - both in the `channel` report column and, worse, as two separate-looking
+ * checkboxes in the channel filter dropdown once that existed. Every code below is mapped to
+ * exactly the label its migrated counterpart already uses in the database (verified via a live
+ * query, not guessed), so both forms resolve to one canonical label and `listDistinctChannels()`
+ * can merge them into a single filter option. Codes with no current migrated counterpart (e.g.
+ * GCASH, the discontinued ones) just get their own natural label.
+ */
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   GCASH: 'GCash',
   CASH: 'Cash',
   BANK_TRANSFER: 'Bank Transfer',
-  PDC: 'Post-Dated Check (PDC)',
+  PDC: 'Post Dated Checks',
+  RESTRUCTURE: 'Restructured',
+  SUSPENSE_ACCOUNT: 'Suspense Account',
+  ADA: 'ADA',
+  UNEARNED_INCOME: 'Unearned Income',
+  ADJUSTMENT: 'Adjustment',
+  BANK: 'Bank',
+  RECEIPT: 'Receipt',
+  CHECK: 'Check',
+  LOAN_DEDUCT: 'Loan Deduct',
+  ATM: 'ATM',
   AUTO_DEBIT: 'Auto Debit',
+  DRAGONPAY: 'Dragonpay',
+  ECPAY: 'ECPay',
+  BAYAD_CENTER: 'Bayad Center',
+  LBC: 'LBC',
+  WESTERN_UNION: 'Western Union',
+  PALAWAN_PAWNSHOP: 'Palawan Pawnshop',
 };
+
+/**
+ * 2026-08-15 (user request): mirrors frontend `staticConfig.ts`'s `ACTIVE_PAYMENT_METHODS` codes -
+ * the channels currently offered on Record Payment, whether or not any transaction has used them
+ * yet (e.g. GCash: offered, zero transactions so far). `listDistinctChannels()` unions these into
+ * its result so the filter dropdown shows every real option, not just ones with history - a
+ * channel with no transactions still appears, just with an empty `values` array (nothing to
+ * actually filter by yet, but visible and selectable). Deliberately excludes
+ * `DISCONTINUED_PAYMENT_METHODS` - those aren't offered going forward, so they only appear here at
+ * all if a migrated/native transaction already used one (e.g. "Dragonpay").
+ */
+const ACTIVE_PAYMENT_METHOD_CODES = [
+  'GCASH',
+  'CASH',
+  'BANK_TRANSFER',
+  'PDC',
+  'RESTRUCTURE',
+  'SUSPENSE_ACCOUNT',
+  'ADA',
+  'UNEARNED_INCOME',
+  'ADJUSTMENT',
+  'BANK',
+  'RECEIPT',
+  'CHECK',
+  'LOAN_DEDUCT',
+  'ATM',
+];
 
 const TRANSACTION_TYPE_LABEL: Record<string, string> = {
   DISBURSEMENT: 'Disbursement',
@@ -140,6 +199,11 @@ const TRANSACTION_TYPE_LABEL: Record<string, string> = {
   TRANSFER: 'Transfer',
   ADJUSTMENT: 'Adjustment',
   REVERSAL: 'Reversal',
+  // 2026-08-15: migrated SDevTech history only. Labels match SDevTech's own Daily Collection
+  // Report wording exactly, so the two systems' reports can be compared line for line during the
+  // changeover — that comparison is how these were found mislabelled as "Adjustment".
+  FEE_REPAYMENT: 'Fee Repayment',
+  PENALTY_REPAYMENT: 'Penalty Repayment',
 };
 
 /** 2026-08-04 (user-confirmed): "First Middle Last" - matches SDevTech's own "Detailed Ending
@@ -234,7 +298,17 @@ export class PrismaReportingRepository implements IReportingRepository {
     // method's own doc comment) — REVERSAL/DISBURSEMENT's real time-of-day entryDate otherwise
     // always outranks a same-day REPAYMENT's date-only (midnight) entryDate.
     const range = entryDateFilter(options);
-    const typeClause = options.type ? Prisma.sql`AND lt."type" = ${options.type}::"LoanTransactionType"` : Prisma.empty;
+    // 2026-08-15: `= ANY(...)` rather than a single `=` — the filter is multi-select now (see
+    // ListReportTransactionsOptions.types). Cast the whole array, not each element, so this stays a
+    // single bound parameter regardless of how many types are selected.
+    const typeClause =
+      options.types && options.types.length > 0
+        ? Prisma.sql`AND lt."type" = ANY(${options.types}::"LoanTransactionType"[])`
+        : Prisma.empty;
+    // 2026-08-15 (multi-select channel filter): matches the raw stored paymentMethod value exactly
+    // - see ListReportTransactionsOptions.channels' own doc comment.
+    const channelClause =
+      options.channels && options.channels.length > 0 ? Prisma.sql`AND lt."paymentMethod" = ANY(${options.channels}::text[])` : Prisma.empty;
     const branchClause = options.branchId ? Prisma.sql`AND lt."branchId" = ${options.branchId}` : Prisma.empty;
     const fromClause = range?.gte ? Prisma.sql`AND lt."entryDate" >= ${range.gte}` : Prisma.empty;
     const toClause = range?.lte ? Prisma.sql`AND lt."entryDate" <= ${range.lte}` : Prisma.empty;
@@ -244,15 +318,30 @@ export class PrismaReportingRepository implements IReportingRepository {
         )`
       : Prisma.empty;
 
+    // 2026-08-15: a transaction that has already been reversed (TXN-1: the original row is never
+    // edited or deleted, a REVERSAL row is created alongside it — see ReversePaymentUseCase) no
+    // longer represents real activity: its net effect on the loan is zero. Left in, it silently
+    // double-counted every reversed payment in "Payments only" report views, since REVERSAL is
+    // deliberately not one of the default payment types (found comparing the LMS's and SDevTech's
+    // Daily Collection Reports — every one of the 15 duplicate payments reversed on 2026-08-12 was
+    // still showing up here as if collected). Unconditional, not tied to the type filter: a
+    // REVERSAL transaction is never itself reversed (nothing points a `reversesTransactionId` at
+    // it), so this only ever excludes the reversed original, and the REVERSAL row itself stays
+    // visible when its own type is selected — the correction is still fully auditable, just not
+    // double-counted as revenue.
+    const notReversedClause = Prisma.sql`AND NOT EXISTS (SELECT 1 FROM loan_transactions r WHERE r."reversesTransactionId" = lt.id)`;
+
     const orderedIds = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
       SELECT lt.id
       FROM loan_transactions lt
       WHERE 1=1
       ${typeClause}
+      ${channelClause}
       ${branchClause}
       ${fromClause}
       ${toClause}
       ${cursorClause}
+      ${notReversedClause}
       ORDER BY DATE(lt."entryDate") DESC, lt."createdAt" DESC, lt.id DESC
       LIMIT ${options.limit}
     `);
@@ -302,6 +391,43 @@ export class PrismaReportingRepository implements IReportingRepository {
       arNumber: row.arNumber ?? '',
       channel: row.paymentMethod ? (PAYMENT_METHOD_LABEL[row.paymentMethod] ?? row.paymentMethod) : '',
     }));
+  }
+
+  /**
+   * 2026-08-15 (multi-select channel filter, user request): the stored `paymentMethod` column
+   * mixes migrated free-text channel names (e.g. "Loan Deduct", "Dragonpay") with native
+   * ACTIVE_PAYMENT_METHODS codes (e.g. "BANK_TRANSFER") — there's no fixed enum to offer a filter
+   * dropdown from, so this queries whatever values are actually in use right now and resolves each
+   * one's display label the same way `channel` report columns already do.
+   */
+  async listDistinctChannels(): Promise<ChannelOption[]> {
+    const rows = await prisma.loanTransaction.findMany({
+      where: { paymentMethod: { not: null } },
+      distinct: ['paymentMethod'],
+      select: { paymentMethod: true },
+    });
+
+    // Grouped by resolved label, not returned one-per-raw-value - a native code (e.g.
+    // "BANK_TRANSFER") and its migrated counterpart ("Bank Transfer") both resolve to the same
+    // label via PAYMENT_METHOD_LABEL and must appear as ONE filter checkbox, not two identical-
+    // looking ones (see that map's own doc comment for the full story).
+    const valuesByLabel = new Map<string, string[]>();
+    for (const row of rows) {
+      const value = row.paymentMethod!;
+      const label = PAYMENT_METHOD_LABEL[value] ?? value;
+      if (!valuesByLabel.has(label)) valuesByLabel.set(label, []);
+      valuesByLabel.get(label)!.push(value);
+    }
+    // 2026-08-15 (user request): union in every currently-offered channel even with zero
+    // transactions so far (e.g. GCash) - see ACTIVE_PAYMENT_METHOD_CODES' own doc comment. A code
+    // whose label already has DB-observed values (e.g. CASH -> "Cash") is a no-op here; only a
+    // genuinely unused one gets an empty-`values` entry.
+    for (const code of ACTIVE_PAYMENT_METHOD_CODES) {
+      const label = PAYMENT_METHOD_LABEL[code] ?? code;
+      if (!valuesByLabel.has(label)) valuesByLabel.set(label, []);
+    }
+
+    return [...valuesByLabel.entries()].map(([label, values]) => ({ label, values })).sort((a, b) => a.label.localeCompare(b.label));
   }
 
   async getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]> {
@@ -764,16 +890,49 @@ export class PrismaReportingRepository implements IReportingRepository {
   /** One row per `LoanTransaction` in range (every type, not just REPAYMENT - the legacy sample has
    * a "Type" column). Channel = the newly-persisted `paymentMethod` (§0 of this feature).
    *
-   * 2026-08-05 (user-confirmed): `type` narrows to a single `LoanTransactionType` when given -
+   * 2026-08-05 (user-confirmed): `types` narrows to the selected `LoanTransactionType`s when given -
    * the Transaction Report page's "Download report" button reuses this same endpoint, and must
-   * only export what the on-screen "All types" dropdown is currently filtered to, not everything.
+   * only export what the on-screen type dropdown is currently filtered to, not everything.
+   * 2026-08-15: widened from a single `type` to a list, matching the page's multi-select filter.
    */
-  async getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; type?: string }): Promise<DailyCollectionReportRow[]> {
+  async getDailyCollectionReport(
+    filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] },
+  ): Promise<DailyCollectionReportRow[]> {
+    // 2026-08-15 (user-confirmed): this report mirrors SDevTech's own row structure, where a single
+    // borrower payment is emitted as SEPARATE rows - principal+interest together as `Repayment`,
+    // then fees as `Fee Repayment`, then penalty as `Penalty Repayment`. That layout is a business
+    // requirement, not a cosmetic one: the report is consumed downstream for other purposes, which
+    // is why the components can't be collapsed into one line.
+    //
+    // Storage is unchanged (TXN-1: one payment is still one `LoanTransaction` carrying all four
+    // components) - only this report's presentation splits. Migrated FEE_REPAYMENT/PENALTY_REPAYMENT
+    // rows already ARE separate transactions in SDevTech's own shape, so they pass through as-is and
+    // are never split again.
+    //
+    // Because a native REPAYMENT can produce all three OUTPUT row types, the type filter has to be
+    // applied to the emitted rows rather than to the stored transaction type - otherwise selecting
+    // "Fee Repayment" would miss the fee portion of every natively-recorded payment. So the DB query
+    // widens to include REPAYMENT whenever any payment type is selected, and the requested types are
+    // re-applied after splitting.
+    const requestedTypes = filter.types && filter.types.length > 0 ? new Set(filter.types) : null;
+    const queryTypes = requestedTypes ? new Set(requestedTypes) : null;
+    if (queryTypes && (queryTypes.has('FEE_REPAYMENT') || queryTypes.has('PENALTY_REPAYMENT'))) {
+      queryTypes.add('REPAYMENT');
+    }
+
     const transactions = await prisma.loanTransaction.findMany({
       where: {
         entryDate: entryDateFilter(filter),
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
-        ...(filter.type ? { type: filter.type as never } : {}),
+        ...(queryTypes ? { type: { in: [...queryTypes] as never[] } } : {}),
+        // 2026-08-15 (multi-select channel filter): channel is 1:1 per stored transaction (unlike
+        // type, it's never split across the emitted rows above), so a plain `in` on the raw stored
+        // value is sufficient here - no post-split re-filtering needed.
+        ...(filter.channels && filter.channels.length > 0 ? { paymentMethod: { in: filter.channels } } : {}),
+        // 2026-08-15: same fix and rationale as listTransactions' notReversedClause above - a
+        // reversed transaction no longer represents real collected money and must not be
+        // double-counted here just because its offsetting REVERSAL isn't in the selected types.
+        reversedByTransaction: null,
       },
       include: { loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } } },
       orderBy: { entryDate: 'desc' },
@@ -787,23 +946,84 @@ export class PrismaReportingRepository implements IReportingRepository {
       if (!maturityByLoanId.has(installment.loanAccountId)) maturityByLoanId.set(installment.loanAccountId, installment.dueDate);
     }
 
-    return transactions.map((transaction) => ({
-      fullName: formatFullName(transaction.loanAccount.borrower),
-      productId: transaction.loanAccount.loanProductVersion.loanProduct.code,
-      accountId: transaction.loanAccount.loanCode,
-      totalBalance: transaction.balanceAfter.toString(),
-      amount: transaction.amount.toString(),
-      principalAmount: transaction.principalComponent.toString(),
-      interestAmount: transaction.interestComponent.toString(),
-      feesAmount: transaction.feesComponent.toString(),
-      penaltyAmount: transaction.penaltyComponent.toString(),
-      expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(transaction.loanAccountId)),
-      valueDate: transaction.entryDate,
-      orNumber: transaction.orNumber ?? '',
-      arNumber: transaction.arNumber ?? '',
-      channel: transaction.paymentMethod ? (PAYMENT_METHOD_LABEL[transaction.paymentMethod] ?? transaction.paymentMethod) : '',
-      type: TRANSACTION_TYPE_LABEL[transaction.type] ?? transaction.type,
-    }));
+    const rows: DailyCollectionReportRow[] = [];
+    for (const transaction of transactions) {
+      // Everything every emitted row shares - only the four amount columns and `type` differ.
+      const base = {
+        fullName: formatFullName(transaction.loanAccount.borrower),
+        productId: transaction.loanAccount.loanProductVersion.loanProduct.code,
+        accountId: transaction.loanAccount.loanCode,
+        // One stored transaction has exactly one `balanceAfter`; SDevTech's genuinely-separate
+        // transactions each carry their own running balance. Repeating it across a split payment's
+        // rows is the honest option here - the intermediate balances were never recorded and would
+        // have to be invented to fill in per-row.
+        totalBalance: transaction.balanceAfter.toString(),
+        expectedMaturityDate: toReportCalendarDate(maturityByLoanId.get(transaction.loanAccountId)),
+        valueDate: transaction.entryDate,
+        orNumber: transaction.orNumber ?? '',
+        arNumber: transaction.arNumber ?? '',
+        channel: transaction.paymentMethod ? (PAYMENT_METHOD_LABEL[transaction.paymentMethod] ?? transaction.paymentMethod) : '',
+      };
+      const ZERO = '0';
+
+      // Only a natively-recorded REPAYMENT carries several components on one row and therefore
+      // needs splitting. Every other type (including already-split migrated FEE_REPAYMENT/
+      // PENALTY_REPAYMENT, and non-payment types like DISBURSEMENT) passes through unchanged.
+      if (transaction.type === 'REPAYMENT') {
+        const principalPlusInterest = transaction.principalComponent.add(transaction.interestComponent);
+        // Skipped when zero so a fees-only or penalty-only payment doesn't emit an empty ₱0 row.
+        if (!principalPlusInterest.isZero()) {
+          rows.push({
+            ...base,
+            amount: principalPlusInterest.toString(),
+            principalAmount: transaction.principalComponent.toString(),
+            interestAmount: transaction.interestComponent.toString(),
+            feesAmount: ZERO,
+            penaltyAmount: ZERO,
+            type: TRANSACTION_TYPE_LABEL.REPAYMENT!,
+          });
+        }
+        if (!transaction.feesComponent.isZero()) {
+          rows.push({
+            ...base,
+            amount: transaction.feesComponent.toString(),
+            principalAmount: ZERO,
+            interestAmount: ZERO,
+            feesAmount: transaction.feesComponent.toString(),
+            penaltyAmount: ZERO,
+            type: TRANSACTION_TYPE_LABEL.FEE_REPAYMENT!,
+          });
+        }
+        if (!transaction.penaltyComponent.isZero()) {
+          rows.push({
+            ...base,
+            amount: transaction.penaltyComponent.toString(),
+            principalAmount: ZERO,
+            interestAmount: ZERO,
+            feesAmount: ZERO,
+            penaltyAmount: transaction.penaltyComponent.toString(),
+            type: TRANSACTION_TYPE_LABEL.PENALTY_REPAYMENT!,
+          });
+        }
+      } else {
+        rows.push({
+          ...base,
+          amount: transaction.amount.toString(),
+          principalAmount: transaction.principalComponent.toString(),
+          interestAmount: transaction.interestComponent.toString(),
+          feesAmount: transaction.feesComponent.toString(),
+          penaltyAmount: transaction.penaltyComponent.toString(),
+          type: TRANSACTION_TYPE_LABEL[transaction.type] ?? transaction.type,
+        });
+      }
+    }
+
+    // Re-apply the caller's type filter to the EMITTED rows (see this method's opening comment):
+    // the DB query above was deliberately widened to include REPAYMENT so a native payment's fee/
+    // penalty portions could be produced at all.
+    if (!requestedTypes) return rows;
+    const requestedLabels = new Set([...requestedTypes].map((t) => TRANSACTION_TYPE_LABEL[t] ?? t));
+    return rows.filter((row) => requestedLabels.has(row.type));
   }
 
   /** As-of-today snapshot: every loan the system considers fully paid (CLOSED - excludes

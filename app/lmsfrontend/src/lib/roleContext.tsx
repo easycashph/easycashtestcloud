@@ -30,6 +30,7 @@ export type PermissionCode =
   | 'loan_application.manage'
   | 'loan_application.final_approve'
   | 'loan_application.revert'
+  | 'loan_application.delete'
   | 'loan_account.originate'
   | 'loan_account.approve'
   | 'loan_account.undo_approve'
@@ -44,6 +45,7 @@ export type PermissionCode =
   | 'payment.manual_adjust'
   | 'penalty.reduce'
   | 'fees.adjust'
+  | 'fee.charge'
   | 'document.generate'
   | 'document_template.manage'
   | 'statement_of_account.generate'
@@ -71,6 +73,7 @@ interface RoleContextValue {
   canAccessLoanApplications: boolean;
   /** Only MIS may revert a decided (Approved/Declined) Loan Application back to Pending Review - the accidental-click safety net. */
   canRevertLoanApplicationDecision: boolean;
+  canDeleteLoanApplication: boolean;
   /** Only MIS sees Activity Logs - both the dedicated section and every per-section "Recent Activity" panel. */
   canViewActivityLogs: boolean;
   /** MIS, Loan Operation Manager, and CRM may create a Loan Account from a Client profile. */
@@ -112,6 +115,8 @@ interface RoleContextValue {
   canReducePenalty: boolean;
   /** Adjust an installment fee amount. */
   canAdjustFees: boolean;
+  /** Charge a new fee on an installment. */
+  canChargeFee: boolean;
   /** Restructure a loan account. */
   canRestructureLoan: boolean;
   /** Write off/adjust a loan account. */
@@ -295,6 +300,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManageMembers: hasPermission('user.manage'),
     canAccessLoanApplications: hasPermission('loan_application.manage'),
     canRevertLoanApplicationDecision: hasPermission('loan_application.revert'),
+    canDeleteLoanApplication: hasPermission('loan_application.delete'),
     canViewActivityLogs: hasPermission('audit_log.read'),
     canCreateLoanAccount: hasPermission('loan_account.originate'),
     canApproveLoanAccount: hasPermission('loan_account.approve'),
@@ -310,6 +316,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManualAdjustPayment: hasPermission('payment.manual_adjust'),
     canReducePenalty: hasPermission('penalty.reduce'),
     canAdjustFees: hasPermission('fees.adjust'),
+    canChargeFee: hasPermission('fee.charge'),
     canRestructureLoan: hasPermission('loan_account.restructure'),
     canAdjustLoan: hasPermission('loan_account.adjust'),
     canManageClients: hasPermission('borrower.write'),

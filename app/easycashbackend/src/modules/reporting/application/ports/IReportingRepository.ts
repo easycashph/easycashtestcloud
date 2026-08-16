@@ -45,9 +45,33 @@ export interface TransactionReportRow {
 
 export interface ListReportTransactionsOptions extends DateRangeFilter {
   branchId?: string;
-  type?: string;
+  /** 2026-08-15: was a single `type`. Staff need several at once — e.g. REPAYMENT alongside
+   * FEE_REPAYMENT/PENALTY_REPAYMENT, which are separate types on migrated SDevTech rows, so a
+   * single-type filter on "REPAYMENT" silently hid real collections. Undefined/empty means no type
+   * filter at all (every type). */
+  types?: string[];
+  /** 2026-08-15 (multi-select channel filter, user request): raw `LoanTransaction.paymentMethod`
+   * values (not display labels — the stored column mixes migrated free-text channel names like
+   * "Loan Deduct" with native ACTIVE_PAYMENT_METHODS codes like "BANK_TRANSFER", so filtering
+   * happens against whatever's actually stored; `listDistinctChannels()` is what the frontend uses
+   * to offer the exact set of values that exist, each already paired with its display label).
+   * Undefined/empty means no channel filter (every channel, including a transaction with none set). */
+  channels?: string[];
   limit: number;
   cursor?: string;
+}
+
+export interface ChannelOption {
+  /** Display label, same resolution `channel` report columns already use. */
+  label: string;
+  /**
+   * Every raw stored `paymentMethod` value that resolves to this label — usually one, but two when
+   * a native code (e.g. "BANK_TRANSFER") and its migrated free-text counterpart (e.g.
+   * "Bank Transfer") both exist and share a label (see `PAYMENT_METHOD_LABEL`'s own doc comment).
+   * A filter's `channels` entries must match one of these exactly; selecting this option should
+   * pass ALL of them, not just the first.
+   */
+  values: string[];
 }
 
 /**
@@ -243,6 +267,8 @@ export interface IReportingRepository {
   getLoanOriginationReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<OriginationReportRow[]>;
   getCollectionReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<CollectionReportRow[]>;
   listTransactions(options: ListReportTransactionsOptions): Promise<TransactionReportRow[]>;
+  /** Distinct `paymentMethod` values currently in use, each paired with its display label — powers the Transaction Report's channel filter dropdown. */
+  listDistinctChannels(): Promise<ChannelOption[]>;
   getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]>;
   getAgingReport(filter: { branchId?: string }): Promise<AgingReportRow[]>;
   getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]>;
@@ -250,6 +276,6 @@ export interface IReportingRepository {
   getCollectionHistoryReport(filter: DateRangeFilter & { branchId?: string }): Promise<CollectionHistoryReportRow[]>;
   getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
-  getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; type?: string }): Promise<DailyCollectionReportRow[]>;
+  getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] }): Promise<DailyCollectionReportRow[]>;
   getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
 }

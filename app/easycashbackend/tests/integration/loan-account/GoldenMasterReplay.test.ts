@@ -46,6 +46,10 @@ function buildDeps() {
     findById: vi.fn(),
     findByLoanAccountId: vi.fn(),
     findByReversesTransactionId: vi.fn(),
+    // 2026-08-15 (Payment Recording duplicate guard) - defaults to "no duplicate found," same as
+    // ProcessPaymentUseCase.test.ts's mock, so replaying real historical payments (none of which
+    // are exercising this guard) isn't blocked.
+    findPossibleMigratedDuplicate: vi.fn().mockResolvedValue(null),
     create: vi.fn(),
   };
   const paymentAllocationRepository = { createMany: vi.fn(), findByLoanTransactionId: vi.fn() };

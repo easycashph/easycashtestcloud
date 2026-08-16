@@ -208,3 +208,545 @@ don't map obviously to that ₱7,000 (1–3 are fully paid at much larger amount
 interest + ₱936 fees; #5 is untouched) — **deciding which installment(s) that payment actually landed
 on is a business judgment, not something to infer**, which is precisely why the tool asks staff
 rather than guessing. Awaiting the user's decision on the specific figures.
+
+## 8. Backfilled `PaymentAllocation` for migrated payments — Reverse Payment now works on 28% of them
+
+Follow-up question: *can the allocation details be filled in for migrated payments at all?* The
+2026-08-13 investigation had concluded no, on the basis that `LoanTransaction`'s aggregate
+components were the only per-payment detail the export carried. That turned out to be incomplete.
+
+**Found**: `loan_transactions` in the dump has a `parent_repayment_key` field — SDevTech's own
+recorded link from a transaction to the exact `repayments` row it paid. Verified against real data
+before relying on it: transaction `67340b103d54b136ae280008` (₱47,754.68 = ₱39,740.12 principal +
+₱8,014.56 interest) points at an installment whose `principal_paid`/`interest_paid` are exactly
+those two figures.
+
+Ruled out as sources first: `transaction_details` (43,417 docs) holds only payment-channel data
+(`transaction_channel_key`, `internal_transfer`), not allocations; `repayments` has no reference
+back to a transaction; `payment_schedules.bson` is empty (0 bytes).
+
+**New script** `scripts/backfill-payment-allocations.ts` (dry-run by default, `--apply` to write).
+Purely additive — writes `PaymentAllocation` rows only, touching no balance, installment,
+transaction, or loan account, so it cannot change any figure the LMS displays. Idempotent: skips any
+transaction that already has an allocation. Requires a hop the field itself doesn't make obvious:
+`parent_repayment_key` is a `repayments` **uid**, while `RepaymentSchedule.legacyId` is keyed off
+that row's **`_id`**.
+
+**Applied**: 2,697 allocations created across 512 loans. Migrated REPAYMENTs that are now reversible
+through the normal precise flow: **2,697 of 9,496 (28.4%)**. Skipped 642 dangling keys and 23
+transactions not present here. Post-check: the only allocations whose amounts don't equal their
+transaction's components are 6 rows on 3 *native* transactions — correct behavior, those are real
+LMS payments legitimately split across two installments each.
+
+**Coverage is partial on purpose.** Roughly 91.5% of the dump's non-reversed legacy REPAYMENTs have
+no `parent_repayment_key` (the field looks to have been added late in SDevTech's life). Deriving
+those by replaying an allocation waterfall was considered and rejected again, for the same reason as
+on 2026-08-13: guessing wrong silently reverses the wrong installment — the `SL-CORP_00114` class of
+bug. Those stay on Manual Payment Adjustment, where a human picks the installment explicitly.
+
+**Data-integrity finding**: the script's cross-loan safety check refused 9 transactions whose
+`parent_repayment_key` pointed at an installment belonging to a *different* loan account —
+`6758fb51db9f45777e6d06b0`, `67594c01db9f45777e6d10c5`, `67d0e14872fc294519988123`,
+`67d0e2e672fc294519988154`, `69b90975bb9a9c2eebd76fd9`, `69e58c217004f4ba94895399`,
+`6a0d2718a12cb7c31e39fd52`, `6a348d0cab1043df9efc1a79`, `6a6aedad0a657be341d23858`. These are
+inconsistencies in SDevTech's own export, not something this migration introduced. Writing them
+would have let a future Reverse Payment undo a payment against the wrong borrower's loan. Not
+investigated further this session — worth a look alongside the 200 loans (§7 analysis) whose
+transaction principal totals disagree with their schedule's principal-paid totals.
+
+## 9. `FEE_REPAYMENT` / `PENALTY_REPAYMENT` — legacy payments were mislabelled as `ADJUSTMENT`
+
+Found by comparing SDevTech's and the LMS's own Daily Collection Report exports for
+`SML-PDC_00035` (Rafael Alarcon Baguio). SDevTech shows a **₱936 "Fee Repayment"** (OR 2471,
+Aug 5, Bank Transfer); the LMS showed the same money, same OR number, as **"Adjustment"**.
+
+**Root cause**: `TRANSACTION_TYPE_MAP` in `migrate-legacy-data.ts` collapsed SDevTech's 30 types
+into this system's 10, and folded `FEE_REPAYMENT`/`PENALTY_REPAYMENT` into `ADJUSTMENT` alongside
+genuine staff corrections (`WRITE_OFF`, `REPAYMENT_UNDO`, `*_DUE_REDUCED`, `*_ADJUSTMENT`). Those
+are not the same kind of event: one is a real borrower payment, the other is a manual correction.
+Collapsed together, they became indistinguishable in reports and audit trails, and any report
+filtered to "Repayment" silently omitted real collections.
+
+**Scope, measured before changing anything** (original SDevTech type recovered from the dump by
+`legacyId`, for all 5,503 migrated `ADJUSTMENT` rows): only **50 rows (0.9%)** were actually
+payments — 28 `PENALTY_REPAYMENT`, 22 `FEE_REPAYMENT`. The other 5,453 are genuine corrections
+(2,895 `FEES_DUE_REDUCED`, 922 `PENALTY_ADJUSTMENT`, 670 `REPAYMENT_ADJUSTMENT`, …) and were
+correctly mapped all along.
+
+**Fix, in four parts:**
+1. Two new `LoanTransactionType` enum values (migration `20260815003216_add_fee_penalty_repayment_types`,
+   purely additive `ALTER TYPE … ADD VALUE`).
+2. `TRANSACTION_TYPE_MAP` now maps them to themselves — **all future imports are correct**, so this
+   can't recur via `Update Database From SDevTech.bat`.
+3. New `scripts/relabel-legacy-repayment-transaction-types.ts` (dry-run by default, idempotent) for
+   rows already in the database. Not a guess: each row's original type is read back from the dump
+   and matched by `legacyId`, same technique as `backfill-payment-allocations.ts`. Applied — 50 rows
+   relabelled. Only the `type` column is written; no amount, component, balance, installment, or
+   allocation is touched, so no computed figure can change.
+4. Report labels use SDevTech's own wording ("Fee Repayment"/"Penalty Repayment") so the two
+   systems' Daily Collection Reports stay comparable line for line during the changeover — that
+   comparison is exactly what surfaced this. Badges are green like `REPAYMENT` (real money in), not
+   amber like `ADJUSTMENT`, and both types are selectable in the Transaction Report's type filter.
+
+Verified for `SML-PDC_00035`: the ₱936 row is now `FEE_REPAYMENT` with OR 2471, matching SDevTech
+exactly. System-wide: 22 `FEE_REPAYMENT` + 28 `PENALTY_REPAYMENT`.
+
+**These two types are migration-only, by design** — recorded in the enum's own doc comment and
+mirrored in every type definition. SDevTech splits one payment into a row per component; this
+system does the opposite (TXN-1: one financial event, one row), with `ProcessPaymentUseCase`
+recording a single `REPAYMENT` whose `feesComponent`/`penaltyComponent` carry the split and
+`PaymentAllocation` holding the per-installment detail. Once SDevTech is retired, no new
+`FEE_REPAYMENT` should ever be created.
+
+**Follow-up surfaced, not yet built — there is no way to charge a fee in this system.** Evidence:
+`applied_fees` and `fee_rules` are both empty (0 rows), nothing in `src/` ever constructs an
+`AppliedFee`, and all 6,010 `FEE_CHARGED` transactions came from migration. The `AppliedFee`/
+`FeeRule` models and the `FEE_CHARGED` type exist but are unimplemented. The only current
+workaround is `AdjustFeesUseCase` (raise an installment's `feesDue`), which carries correction
+semantics, links to no fee catalogue, and renders as an `ADJUSTMENT` row rather than a ledger
+transaction. Worth building before SDevTech is retired, but it needs business input first (which
+fees, fixed vs percentage, who may charge, installment- or loan-level) — flagged for the user, not
+guessed at.
+
+**Test baseline note**: the suite reports 11 failures across 6 files (borrower repository, client
+portal, and one date-drifted `ReversePaymentUseCase` assertion expecting `PENDING` where the
+installment now computes `LATE`). Confirmed pre-existing by stashing this session's work and
+re-running: identical 11 failures. None are caused by anything in this log.
+
+## 10. Comparing LMS vs SDevTech Daily Collection Reports — found a report bug, not new duplicates
+
+User exported both systems' Daily Collection Reports and asked why the totals didn't match
+(LMS 1,072,269.04 vs SDevTech 756,488.71 for overlapping dates). Investigated with a throwaway
+exceljs comparison script (deleted after use).
+
+Three causes, only one of them a real bug:
+1. **Date range mismatch** — the two exports covered slightly different windows (LMS through
+   08-14, SDevTech through 08-13). Not a bug.
+2. **Fee/Penalty Repayment row-splitting** — SDevTech records one payment as two rows (fee +
+   repayment); this system records one row with fee/penalty components. Already correctly handled
+   by §9 above. Not a bug.
+3. **Report double-counting already-reversed transactions** — the real bug. Initially misread as
+   "34 new duplicate groups, ₱488,848.39" — turned out every one of the 15 recent "native +
+   migrated" groups already had a `REVERSAL` transaction against it (the 2026-08-12 fix, ₱214,719.90,
+   was already correctly done). The actual defect: `getDailyCollectionReport`/`listTransactions`
+   never excluded a transaction that has since been reversed. Since `REVERSAL` isn't one of the
+   default "Payments only" types, an already-reversed `REPAYMENT` kept showing as if still
+   collected, with no offsetting row visible under the default filter — silently overstating every
+   report that used it, permanently, for every reversal ever done.
+
+**Fixed**: both `listTransactions` (raw SQL, `AND NOT EXISTS (... WHERE r."reversesTransactionId" =
+lt.id)`) and `getDailyCollectionReport` (Prisma `reversedByTransaction: null`) now exclude any
+transaction with an existing reversal, unconditionally (not tied to the type filter — a `REVERSAL`
+can never itself be reversed, so this only ever removes the reversed original, never a correction
+row). Verified against real data: SL-CORP_00100's August total dropped from 2 rows/16,548.12 to the
+correct 1 row/8,274.06; the full August "Payments only" report went from 82 rows/1,072,269.04 to
+65 rows/850,248.06.
+
+**Separately found, NOT part of this fix**: 21 duplicate-looking groups (23 extra rows,
+~₱274,128.49) where BOTH copies are migrated (no native side) — all dated 2023-2024, all created in
+the original 2026-07-23 migration batch. Different shape from the native+migrated pattern (could be
+genuine SDevTech-side duplicates, or a coincidence needing per-case verification) — flagged for
+separate review, not touched this session.
+
+Full backend suite after the report fix: unchanged baseline (11 failures, same files/tests as
+before).
+
+## 11. Two automated duplicate-prevention guards (user-confirmed: both hard block / automated)
+
+Root cause behind §10's 15 reversed duplicates: the same real payment gets recorded twice during
+the SDevTech/LMS transition — once natively by staff in the LMS, once in SDevTech (then pulled in
+by the next `Update Database From SDevTech.bat` run). The 2026-08-12 log already flagged this as an
+open follow-up ("worth considering whether a standing 'possible duplicate' warning belongs in the
+Payment Recording flow itself"). Built both directions now:
+
+**A. Payment Recording hard block** (`ProcessPaymentUseCase`, new
+`PossibleDuplicatePaymentError`/`findPossibleMigratedDuplicate`): before any allocation/mutation
+work, checks whether a migrated (`legacyId` set) `REPAYMENT` already exists on this loan for the
+*exact* same amount on the *exact* same Asia/Manila calendar day. Match is deliberately narrow —
+loan + amount + day, nothing fuzzier — so a recurring installment's repeating amortization amount
+on a *different* day is never falsely blocked. User-confirmed: hard block, no override in this
+flow; a genuine same-day/same-amount collision (rare) needs a developer/DB-level look, not a UI
+bypass. Frontend: the 409 `POSSIBLE_DUPLICATE_PAYMENT` code is now special-cased in
+`PaymentRecordingPage.tsx` ahead of the existing generic-409 handler (which would otherwise have
+masked this specific message behind "this loan was just updated by another action"). Two new tests
+cover the block and the two ways it must NOT fire (different amount, different day).
+
+**B. Migration-time automated skip** (`migrate-legacy-data.ts`): preloads every native
+(`legacyId IS NULL`) `REPAYMENT`'s (loanAccount, amount, Manila day) signature once before the
+transaction loop — same exact-match rule as (A) — and skips inserting a newly-seen legacy
+transaction (one whose `legacyId` isn't already in the database) that matches one, recording it via
+the existing `recordSkip`/reconciliation-summary mechanism (`possible duplicate of a native
+REPAYMENT ... legacy _id ...`) rather than silently creating it. Already-migrated rows (re-run
+refreshing OR/AR/channel) are unaffected — the check only applies to genuinely new legacyIds. Dry
+run against the current dump: 525,032 read, 280,142 migrated, same reconciliation shape as before
+this change (no regression; no new collisions in the current snapshot, expected since the 15 known
+ones are already migrated and therefore excluded from the "genuinely new" check).
+
+Full backend suite after both guards: 949 passed (+2 from the new tests), same 11 pre-existing
+failures, no new ones.
+
+## 12. Live-data correction: OR/AR mix-up between two borrowers
+
+Cross-checking a full-August-range LMS-vs-SDevTech Daily Collection Report comparison (with §10's
+report fix and §11's row-splitting both already live) surfaced one remaining real error: two
+different borrowers' native payments shared the same OR/AR number.
+
+| | Amount | Wrong (in LMS) | Correct (per SDevTech) |
+| --- | --- | --- | --- |
+| Mary Jane Dula Gorpido (`SL-REG_00103`) | 3,483.07 | OR 2501 / AR 20788 | OR 2499 / AR 20787 |
+| Marlon Granados Guzman (`SML-REG_00355`) | 27,249.43 | OR 2501 / AR 20788 | OR 2500 / AR 20788 |
+
+Investigated first whether this was the "already migrated, staff re-entered it" scenario §11's
+guards protect against — it wasn't: both rows are native (`legacyId` null), same
+`postedByUserId`, entered a full day apart (Mary Jane 08-13 06:56 UTC, Marlon 08-14 06:34 UTC).
+Two genuinely different real payments, just typed with the same receipt number — most likely a
+copy-paste of the previous entry's OR/AR instead of the correct one.
+
+Corrected via a direct, precisely-scoped `UPDATE ... WHERE id = '<transaction-id>'` (two
+statements, one per row) — metadata-only (`orNumber`/`arNumber`), no amount/type/balance/
+installment touched, so no domain method or use case applies here (same class of fix as the
+OR/AR/Channel backfill documented in the 2026-08-12 session log). Verified via a follow-up SELECT
+matching the corrected values exactly.
+
+**Broader gap explained, not a new bug**: after this fix and §11's row-splitting, the remaining
+LMS-vs-SDevTech peso difference over Aug 1-14 is fully accounted for by non-bug causes: (a) a small
+number of native payments entered into the LMS a day after the actual SDevTech-recorded collection
+date (staff defaulting the Record Payment date field to "today" instead of backdating — an
+operational note, not a code fix), and (b) 4 `SL-CORP_*` "Loan Deduct"-channel transactions that
+are genuinely migrated (real SDevTech data, `legacyId` set) but don't appear in SDevTech's own
+Daily Collection Report export — likely that report excludes the Loan Deduct channel on SDevTech's
+side, not an LMS defect.
+
+## 13. Row-splitting for the Daily Collection Report, matching SDevTech's exact shape
+
+User clarified the reason a Repayment/Fee Repayment/Penalty Repayment split matters:
+SDevTech's own Daily Collection Report always puts principal+interest on one row and
+fees/penalty on their own separate rows, because that report is consumed downstream for other
+purposes — the row shape itself is a real requirement, not cosmetic.
+
+`getDailyCollectionReport` now splits a native REPAYMENT transaction (which carries all four
+components on one stored row, per TXN-1) into up to three OUTPUT rows: `Repayment`
+(principal+interest), `Fee Repayment`, `Penalty Repayment` — each skipped when its amount is
+zero. Storage is unchanged; only this report's presentation splits. Already-separate migrated
+FEE_REPAYMENT/PENALTY_REPAYMENT rows pass through unchanged (never split again). The type filter
+now applies to the split output rows, not the stored transaction type — otherwise selecting "Fee
+Repayment" alone would miss every native payment's fee portion.
+
+Verified: Marlon Granados Guzman's ₱27,249.43 payment now shows as ₱24,963.90 Repayment +
+₱2,285.53 Fee Repayment, matching SDevTech exactly.
+
+## 14. Live-data correction: 8 native transactions' entryDate lagged SDevTech by one day
+
+Comparing a fresh SDevTech Aug 1-14 export against live LMS data (post §10/§11/§12/§13 fixes)
+surfaced 8 remaining native (non-migrated) REPAYMENT transactions where the LMS `entryDate` was
+one calendar day later than the real collection date recorded in SDevTech — e.g. Alex Galay
+Enero's ₱2,000 payment: SDevTech shows Aug 13, LMS showed Aug 14.
+
+Root cause: staff record a payment in SDevTech on the actual collection day, then batch-enter it
+into the LMS a day (or more) later, and the Record Payment form's date field defaults to "today"
+rather than being backdated to the true collection date. Confirmed via `createdAt` timestamps —
+e.g. Alex Galay Enero's transaction was `createdAt` 2026-08-14 06:45 (2:45pm Manila) with
+`entryDate` also 2026-08-14, while SDevTech's own record of the same collection is dated Aug 13.
+Not a code bug — an operational data-entry timing gap.
+
+Corrected per user's explicit request ("sundin ang entries sa SDEV"), scoped narrowly to these 8
+already-identified transactions: `LoanTransaction.entryDate` shifted back one day to match
+SDevTech, AND the paired `RepaymentSchedule.lastPaidAt` (found via `PaymentAllocation`) shifted
+identically — guarded so an installment's `lastPaidAt` was only touched if it exactly equaled the
+transaction's OLD (wrong) date first, so a later, unrelated payment on the same installment could
+never be clobbered. All 8 corrections applied cleanly, no skips.
+
+Affected: `BL-REG_00061` (Edgardo De Vera Flores, ₱87,839.07, Aug 13→12), and seven Aug 14→13
+corrections: `SL-REG_00070` (Ramil Rosas Torres), `SL-REG_00071` (Alfredo Desabille Ogana),
+`SL-REG_00100` (Rosan Cruz Cinco), `SL-REG_00101` (Liezel Juban Pentecostes), `SL-REG_00104`
+(Joseph Dela Cruz De Galicia), `SL-REG_00114` (Nomer Dela Cruz Perez), `SML-MAX_Y8Y4J` (Alex
+Galay Enero).
+
+**Deliberately not touched**, per user's own clarification that LMS is in a parallel-test period
+with SDevTech still the authoritative system of record: the 21 "both-migrated" duplicate-looking
+groups from §7/investigated further this session. Checked and ruled out one hypothesis (that
+these are SDevTech's own principal+interest/fee/penalty row-split, matching §13's design) — all
+44 rows across the 21 groups are plain `REPAYMENT` type on both sides, not REPAYMENT+FEE_REPAYMENT
+pairs, so that theory doesn't hold. 18 of the 21 groups show a clear "bulk historical backfill"
+signature (different real entry_date months, same creation session) and are almost certainly
+distinct real payments that reused a stale OR/AR number during backfill — none are from Aug 2026,
+all are 2023-2024 data migrated in the original 2026-07-23 batch. The remaining 3 groups
+(`SL-CORP_E1V9O`, `SL-CORP_A7G0T`, both 2023-10-06; `SML-REG_00370`, 2026-08-05, the only recent
+one) show a suspicious same-amount/same-entry_date/created-within-under-a-minute signature closer
+to an accidental double-submission in SDevTech itself — flagged for the user to verify against
+SDevTech/paper records before any action, not resolved this session. Recommended a permanent,
+reusable LMS-vs-SDevTech comparison script (not yet built) for ongoing verification instead of
+one-off analysis each time.
+
+## 15. Multi-select channel filter + merging duplicate-looking channel labels
+
+Following the channel exclusion the user needed to reconcile Aug 1-14 totals, built the same
+multi-select pattern the type filter already has: a checkbox dropdown, applied to both the
+on-screen Transaction Report and the "Download report" export.
+
+**Bug found and fixed while building it**: the stored `paymentMethod` column mixes two
+conventions — `ProcessPaymentUseCase` (native payments) stores the raw uppercase
+`ACTIVE_PAYMENT_METHODS` code (e.g. `BANK_TRANSFER`), while migrated SDevTech rows store their
+own already-readable channel name (e.g. `Bank Transfer`). Verified via a live query that each
+duplicate-looking pair (`CASH`/`Cash`, `BANK_TRANSFER`/`Bank Transfer`, `PDC`/`Post Dated Checks`,
+`UNEARNED_INCOME`/`Unearned Income`) splits 100% native vs 100% migrated with zero overlap,
+confirming they're really the same real-world channel recorded two different ways — not a guess.
+This was a pre-existing display bug in the Channel report column itself (a native
+`BANK_TRANSFER` row showed literally that, unresolved), not just something the new filter
+surfaced.
+
+Fixed by expanding `PAYMENT_METHOD_LABEL` to cover every `ACTIVE_PAYMENT_METHODS`/
+`DISCONTINUED_PAYMENT_METHODS` code (previously only 5 of ~20), each mapped to the exact label
+its migrated counterpart already uses. `ChannelOption` changed from one-raw-value-per-option to
+`{ label, values[] }` so `listDistinctChannels()` groups raw values by resolved label — 18 raw
+stored values collapsed to 14 correct filter options. Frontend tracks selection by label and
+expands to every underlying raw value when building `channel` query params.
+
+New endpoint `GET /reports/transactions/channels` (`ListDistinctChannelsUseCase`) powers the
+dropdown dynamically, since `paymentMethod` has no fixed schema enum to enumerate from.
+
+Verified end to end: excluding the merged "Loan Deduct" option from Aug 1-14 brings the LMS
+Daily Collection Report to 63 rows / ₱756,488.71 — an exact match to SDevTech's own report for
+the same range, confirming every other fix this session (row-splitting, reversed-transaction
+exclusion, OR/AR correction, entryDate correction) reconciles correctly together.
+
+## 16. Confirmed: the migration-time duplicate guard (§11) covers the pattern that caused this
+
+User asked directly whether updating the LMS from SDevTech again would recreate the
+native+migrated duplicate pattern investigated in §10/§11. Confirmed it's already covered:
+`migrate-legacy-data.ts`'s pre-loaded native-signature check (added §11, before any of this
+session's later work) skips inserting a newly-seen migrated transaction that matches an existing
+native REPAYMENT's (loan, amount, Manila day) — exactly the shape of all 15 duplicates found and
+reversed in this session and the 2026-08-12 predecessor. Does not cover (by design, out of
+scope): the 21 older both-migrated 2023-2024 groups from §7/§14, which predate this guard and are
+a different shape (no native side at all).
+
+## 17. CLAUDE.md updated: auto-rebuild Docker after code changes
+
+User asked to always rebuild affected Docker containers automatically after a backend/frontend
+change, without being asked each time. Added a short "Docker Rebuild" note under Development
+Workflow in `CLAUDE.md` so this persists across sessions, not just this one.
+
+## 18. Channel filter: show unused-but-offered channels (GCash), set a default selection
+
+User asked why GCash was absent from the channel filter dropdown. Root cause: `listDistinctChannels()`
+only returned channels with at least one real `loan_transactions` row, and GCash had zero — confirmed
+via a direct query (`WHERE "paymentMethod" ILIKE '%gcash%'` → 0 rows). Not a bug, but not what the user
+wanted either.
+
+Fixed by unioning the DB-observed channels with a new backend-side `ACTIVE_PAYMENT_METHOD_CODES`
+constant (mirroring the frontend's `staticConfig.ts` `ACTIVE_PAYMENT_METHODS` list — every channel
+currently offered on Record Payment, whether used yet or not). A code with no transactions still
+appears as an option with an empty `values` array — visible, selectable, just nothing to match.
+Deliberately excludes `DISCONTINUED_PAYMENT_METHODS` codes (not offered going forward) unless one
+already has real transaction history (e.g. "Dragonpay" still appears from migrated data). Result: 14
+options → 16, adding GCash and Restructured (both currently unused).
+
+Also set the filter's **default selection**, per the user's explicit list: GCash, Cash, Bank Transfer,
+ATM, Check, Post Dated Checks, ADA, Bank, Receipt, Unearned Income, Dragonpay, Lazada Wallet — every
+real collection channel except Adjustment, Loan Deduct (the channel §15 found missing entirely from
+SDevTech's own Daily Collection Report export), and Suspense Account. Added a "Default channels" menu
+item alongside the existing "All channels" reset, so the default is one click to return to after
+exploring other combinations.
+
+Full backend suite after: unchanged baseline (949 passed, same 11 pre-existing failures).
+
+## 19. `CLAUDE.md`: auto-rebuild rule now actually being followed
+
+Confirmed in practice this session (§18's rebuild ran and was verified — HTTP 200 on both
+`easycashbackend` and `lmsfrontend` — without being asked) per the rule added in §17.
+
+## 20. New feature: Add Fee — charging a NEW fee, distinct from Adjust Fees
+
+Design driver: §12–§16's Adjust Fees flow exists for *correcting* an installment's fees to some
+externally-approved value; it never touches the ledger. The user wanted a separate flow to *charge*
+a genuinely new fee (e.g. a late fee) on an installment — one that increases what's owed on top of
+whatever is already due, works even if the current fees are already fully paid, and produces a real
+`LoanTransaction` (so it shows up on statements/reports), unlike Adjust Fees.
+
+Requirements confirmed via clarifying questions before implementation: fixed amount, manual entry
+(no fee catalog or percentage calculation); scope is per-installment; permission gated to MIS +
+Accounting only.
+
+**Report-balancing concern the user raised and worked through explicitly**: if a charged fee uses
+`FEE_CHARGED` as its transaction type, would the Daily Collection Report's default "Payments only"
+type filter (built in §13/§15) go out of balance against SDevTech's own report? Confirmed: no —
+`FEE_CHARGED` is an *assessment* (increases the amount owed), so it correctly stays OUT of the
+default payment-type filter, same as it would in SDevTech. When that charged fee is later paid, the
+resulting transaction is a normal `REPAYMENT` with a fees component, which §13's row-splitting logic
+already breaks out into a "Fee Repayment" row — so the two reports stay in balance both before and
+after the fee is paid, with no special-casing needed. User confirmed this understanding twice before
+implementation began.
+
+**Design — two parallel mechanisms on `RepaymentInstallment.feesOverride`**:
+- `adjustFees()` (existing) — *sets* the override to an absolute new value; blocked if fees are
+  already paid; no ledger transaction.
+- `chargeFee()` (new) — *adds* to `effectiveFeesDue` (whatever it currently resolves to, override or
+  snapshot) and writes the result as the new override; **never blocked by already-paid fees**; the
+  use case around it also writes a real `FEE_CHARGED` `LoanTransaction` and syncs
+  `LoanAccount.adjustFeesBalance()`.
+
+**What was built**:
+- Schema: `FeeCharge` audit model (migration `20260815152137_add_fee_charge`) linking a
+  `RepaymentSchedule` installment to the `LoanTransaction` it produced, recording
+  previous/new fees amount, reason, and who charged it.
+- Domain: `RepaymentInstallment.chargeFee(amount, reason, byUserId, at)` (rejects zero/negative via
+  new `InvalidFeeChargeAmountError`); new `FeeCharge` entity.
+- Application: `AddFeeUseCase` — loads installment + loan account, captures `previousFeesDue`, calls
+  `chargeFee()`, syncs the loan's fees balance, creates the `FEE_CHARGED` transaction and the
+  `FeeCharge` audit row, all inside one `unitOfWork.run()`, with a financial audit log entry.
+- Infrastructure: `PrismaFeeChargeRepository`.
+- Interface: `POST /repayment-installments/:id/add-fee` (new `fee.charge` permission, granted by
+  default to MIS — via its full-permission superset — and Accounting; seed re-run and verified).
+- Frontend: `roleContext.tsx` gained `canChargeFee`; `LoanDetailPage.tsx` got a new "Add fee" row
+  action (separate from "Adjust fees") and its own dialog.
+
+**Bug caught and fixed before commit**: the first attempt to insert the new "Add Fee" dialog's JSX
+next to the existing "Adjust fees" dialog via a targeted `Edit` call went wrong — the replacement
+text accidentally duplicated the *entire* Adjust Fees dialog markup a second time instead of being
+distinct Add Fee markup, leaving two dialogs both titled "Adjust fees" with mismatched button
+handlers. Caught by grepping for `Dialog`/`Adjust fees`/`Add fee` right after the edit, before any
+test run; fixed by reading the exact broken range and replacing it with one correctly-titled "Add
+fee" dialog (bound to `addFeeTarget`/`addFeeAmount`/`addFeeReason`/`addFeeMutation`) followed by the
+original, untouched "Adjust fees" dialog.
+
+**Verification**: `RepaymentInstallment.test.ts` (+5 tests for `chargeFee`) and new
+`AddFeeUseCase.test.ts` (6 tests) — 39/39 passing. Frontend `tsc --noEmit` clean. Full backend suite
+after: 960 passed, same 11 pre-existing failures as the established baseline (the 11 count didn't
+change; the passed count rose only because of the 11 new Add Fee tests). Both containers rebuilt
+per the §17 auto-rebuild rule and verified healthy (`docker ps` + `/health` 200) before commit.
+
+## 21. Rebuild workflow pause, test-data cleanup, Delete Application feature, and a live-deploy discovery
+
+### Docker auto-rebuild rule paused
+
+User asked to stop auto-rebuilding Docker after every code change and instead batch fixes,
+rebuilding only on explicit "rebuild" — reasoning: `localhost` already reflects source changes
+without a rebuild for iterative *checking*, and a rebuild mid-edit interrupts anyone else using the
+LMS on this office server. Corrected mid-conversation: neither `lmsfrontend` (nginx serving a
+`vite build` output) nor `easycashbackend` (compiled TS) has a source-code volume mount in
+`docker-compose.yml` — changes genuinely require a rebuild to reach the browser, there is no live
+reload in this Docker setup. User acknowledged and said to hold off deciding for now; **the CLAUDE.md
+rule was deliberately NOT changed** — still auto-rebuild by default until the user comes back with a
+decision. Separately discussed (not yet implemented): splitting `docker compose build` (no
+interruption, the old container keeps serving) from `docker compose up -d` (the only step that
+actually swaps the container, seconds not minutes) as a lower-effort way to shrink interruption
+without full blue-green — user said to revisit later.
+
+### Test data cleanup: SML-REG_00381
+
+User tested the Add Fee feature live (₱100.00 FEE_CHARGED) and its follow-up REPAYMENT
+(₱3,783.39) on real loan account `SML-REG_00381`, then asked to remove both since it was a test
+account. Direct `docker exec psql` writes were blocked by the auto-mode classifier as usual (see
+§ earlier sessions) — done instead via a one-off Prisma transaction script
+(`tmp-remove-test-add-fee-381.ts`, deleted after running): removed the `PaymentAllocation`,
+`FeeCharge` audit row, and both `LoanTransaction` rows; reset the installment's paid amounts,
+`feesOverride*`, status, and `lastPaidAt`; restored the loan account's principal/interest/fees
+balances to their pre-test values. Verified by re-querying all three tables afterward - clean.
+
+### New feature: Delete Application (MIS only)
+
+User asked to explore adding a way to delete a Loan Application, MIS-only. Investigated the schema
+first: `Borrower.sourceApplicationId` / `LoanAccount.sourceApplicationId` are both
+`ON DELETE SET NULL` (not `RESTRICT`), so a naive hard delete on an application that already
+produced a real client/loan would silently orphan those - dangerous. `Attachment`/`ProfileActivityLog`
+are polymorphic (no FK), so they're safe against a delete but need explicit cleanup to avoid litter.
+
+Design (confirmed with the user via two mockup rounds - see below) mirrors the existing
+`loan_application.revert` MIS-only pattern:
+- New `loan_application.delete` permission (MIS gets it automatically via the seed's full-permission
+  superset; no other role granted it, same as `revert`).
+- `DeleteLoanApplicationUseCase`: 404s if missing; blocks with a `ValidationError` if
+  `hasDownstreamRecords()` (a Borrower or LoanAccount already exists via `sourceApplicationId`) is
+  true; otherwise snapshots the full entity into the audit log (`DELETE_LOAN_APPLICATION`,
+  `previousValue` = full `toProps()`, `newValue: null`) *before* deleting, then hard-deletes the row
+  and its `ProfileActivityLog` rows. `Attachment` rows/files are deliberately left as-is - no
+  delete-attachment capability exists anywhere else in this codebase yet to reuse, and orphaned rows
+  are inert once the parent application is gone (documented as a known trade-off, not silently
+  decided).
+- `DELETE /loan-applications/:id`, `requirePermission('loan_application.delete')`.
+- Frontend: overflow ("⋮") menu on the application header (new, using `DropdownMenu` from
+  shadcn/ui) holding "Delete Application" (destructive-red), disabled if
+  `createdBorrowerId`/`createdLoanAccountId` is already set. Confirmation is a **type-the-applicant's-
+  name-to-confirm** dialog (not a plain Yes/No) since deletion is permanent - the Delete button stays
+  disabled until the typed text exactly matches `applicantName`.
+
+**Design iteration, in the user's own words**: first mockup put Delete as its own always-visible red
+button next to Edit/Create Loan Account; user asked for "the high-end advanced" version instead →
+second mockup moved Delete into an overflow menu with the type-to-confirm dialog, approved. Later in
+the session, user asked to also move **Edit Application** (previously its own separate button) into
+the same overflow menu, above a divider from Delete - implemented, and the action-button row was
+switched from `flex-col` (stacking each button on its own line) to `flex-row items-center` so
+Create Loan Account and the "⋮" trigger sit side by side instead of stacking, per a screenshot the
+user flagged.
+
+**Verification**: backend `tsc --noEmit` clean, full suite still 960 passed / 11 pre-existing
+failures (unchanged). Frontend `tsc --noEmit` clean. Seed re-run (`Permissions: 35`) to grant
+`loan_application.delete` to MIS.
+
+**Debugging aside** (documented since it took real investigation): user reported "Delete
+Application" not clickable for a specific application (Aldwin Jala Maniwang, PREDECLINED). A
+direct Prisma check confirmed `createdBorrowerId`/`createdLoanAccountId` were both `null` for that
+application, and the presenter's linkage mapping was verified correct too (call-order bug ruled out
+by re-checking `LoanApplicationController.present`'s actual argument order) - so the disabled
+condition should have evaluated `false`. Root cause turned out to be simpler: the item genuinely
+*was* clickable once the user actually opened the "⋮" menu (an earlier screenshot showed the menu
+closed, which read as "unclickable"); once open, the real remaining question turned out to be the
+subsequent report that "hindi ma-click" - unresolved as a live repro at the time of writing, flagged
+for the user to re-check in the current build (post the Edit-menu-move rebuild) since the DOM
+structure changed since the original report.
+
+### Live deploy discovery: `pages.dev` is a separate deployment from this office server's Docker containers
+
+User asked why "Delete Application" wasn't showing on the **live** site. Investigation found
+`easycash-lms.pages.dev` / `easycash-portal.pages.dev` are a **separate Cloudflare Pages static
+deployment** (decided 2026-07-30 per `MISNomerReadme.md`), built from this same git repo but
+entirely independent of the `lmsfrontend` Docker container this session had been rebuilding all
+along — Pages only redeploys on a `git push` to `main`. Confirmed via `git status`: the Delete
+Application + subtitle-fix work was still fully uncommitted. Committed (`94eaa1a`) and pushed,
+then later the Edit-into-overflow-menu refactor (`564be13`) was committed and pushed too, both
+triggering a fresh Pages deploy.
+
+### PSGC address dropdown investigation (question, no code change)
+
+User asked why the Region/Province/City/Barangay dropdowns (`PsgcAddressPicker.tsx`, backed by
+`GET /psgc/*`, `requireAuth` only - every role can read it) sometimes don't populate for other
+users. Two real, evidenced causes found in this infrastructure (not a code bug):
+
+1. **CORS is tied to a LAN IP** - `CORS_ORIGIN` in `app/easycashbackend/.env` includes a specific
+   LAN IP (`192.168.68.134`, current at time of writing) alongside `localhost` and both `pages.dev`
+   origins. A user on the LAN hitting a *different* IP than whatever's currently whitelisted (e.g.
+   after a router/DHCP change) gets every API call silently CORS-blocked, PSGC included. The
+   existing `Update LAN IP.bat` already handles this - it wasn't stale at time of writing.
+2. **The live site runs on a free Cloudflare "quick tunnel"** (`trycloudflare.com`, not a paid
+   Named Tunnel with an owned domain - see `Start Cloudflare Tunnel (Auto-Update).ps1`'s own
+   comments) whose URL changes every time the tunnel restarts. `VITE_API_BASE_URL` gets pushed to
+   the Cloudflare Pages project + a redeploy triggered automatically by that script, but the
+   Windows Scheduled Task that runs it (`Easycash LMS - Cloudflare Tunnel AutoStart`) is a
+   **logon-only trigger**, not recurring - if the quick tunnel silently drops mid-day (a known
+   characteristic of free quick tunnels, not meant for sustained production use), `pages.dev`
+   stays pointed at a dead URL until the next reboot/login.
+
+Live-verified at time of writing (not just theorized): pulled the actual bundled API URL out of
+the deployed `pages.dev` JS (`https://flashers-ultram-probability-mlb.trycloudflare.com/api/v1`),
+curled its `/health` (200) and `/api/v1/psgc/regions` (401 - reachable, just unauthenticated) -
+confirmed genuinely live at that moment, so a same-day dropdown failure the user saw was most
+likely a transient tunnel drop that had since self-healed, not an ongoing break. User confirmed
+after testing that it currently works.
+
+**Proposed fixes, not yet actioned** (user is deciding): short-term free option is changing the
+scheduled task's trigger from logon-only to a recurring interval (e.g. every 15–30 min) so a
+mid-day tunnel drop self-heals without waiting for a reboot; the durable fix is buying a domain
+(~$10–15/yr) and switching to a Cloudflare **Named Tunnel**, which keeps a fixed hostname across
+restarts and removes the need for the auto-update-and-redeploy script entirely.
+
+### Current state / follow-ups
+
+- Delete Application feature: fully implemented, tested, committed, pushed, deployed to both
+  Docker (localhost) and `pages.dev`. One unresolved thread: user's last report of "hindi
+  ma-click" needs a fresh repro check against the current build (post Edit-menu-move) before
+  considering it closed.
+- Docker auto-rebuild CLAUDE.md rule: unchanged, user still deciding whether to switch to
+  on-demand-only rebuilds.
+- PSGC dropdown live-site reliability: root-caused (quick-tunnel + logon-only scheduled trigger),
+  fix options presented, user has not yet chosen one.

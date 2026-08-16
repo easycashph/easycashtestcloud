@@ -15,6 +15,7 @@ import type { GetExpectedCollectionReportUseCase } from '../../application/use-c
 import type { GetFirstAmortizationReportUseCase } from '../../application/use-cases/GetFirstAmortizationReportUseCase';
 import type { GetDailyCollectionReportUseCase } from '../../application/use-cases/GetDailyCollectionReportUseCase';
 import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
+import type { ListDistinctChannelsUseCase } from '../../application/use-cases/ListDistinctChannelsUseCase';
 import type { ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
 import {
@@ -43,6 +44,7 @@ export interface ReportingControllerDeps {
   getFirstAmortizationReportUseCase: GetFirstAmortizationReportUseCase;
   getDailyCollectionReportUseCase: GetDailyCollectionReportUseCase;
   getFullyPaidAccountsReportUseCase: GetFullyPaidAccountsReportUseCase;
+  listDistinctChannelsUseCase: ListDistinctChannelsUseCase;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -73,6 +75,23 @@ function parseDate(value: unknown, paramName: string, boundary: 'start' | 'end')
   if (Number.isNaN(parsed.getTime())) throw new ValidationError(`${paramName} is not a valid date.`);
   const range = manilaDayRange(parsed);
   return boundary === 'start' ? range.start : new Date(range.end.getTime() - 1);
+}
+
+/**
+ * 2026-08-15: the Transaction Report's type filter became multi-select, so `?type=` may now repeat
+ * (`?type=REPAYMENT&type=FEE_REPAYMENT`). Express hands a single occurrence back as a string and a
+ * repeated one as an array — both shapes are normalised here to one array. A single `?type=X` still
+ * works exactly as before, so any bookmarked URL or external caller keeps working.
+ *
+ * Returns undefined (no filter at all, i.e. every type) when nothing usable was supplied — an empty
+ * array would otherwise read as "match none" downstream.
+ */
+/** 2026-08-15: generic - also used for the `channel` multi-select filter below, same "single value
+ * or repeated" normalization either query param needs. */
+function parseMultiValueFilter(value: unknown): string[] | undefined {
+  const raw = Array.isArray(value) ? value : [value];
+  const values = raw.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+  return values.length > 0 ? values : undefined;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -111,16 +130,27 @@ export class ReportingController {
       const { limit, cursor } = parsePaginationParams(req.query);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
       const rows = await this.deps.listReportTransactionsUseCase.execute({
         limit,
         cursor,
         from,
         to,
-        type,
+        types: parseMultiValueFilter(req.query.type),
+        channels: parseMultiValueFilter(req.query.channel),
         branchId: resolveBranchFilter(scope),
       });
       res.status(200).json(toPaginatedResponse(rows.map(presentTransactionReportRow), limit, (item) => item.id));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-15: powers the Transaction Report's channel filter dropdown - the distinct set of
+   * `paymentMethod` values actually in use, each with its display label. */
+  channels = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const channels = await this.deps.listDistinctChannelsUseCase.execute();
+      res.status(200).json({ items: channels });
     } catch (error) {
       next(error);
     }
@@ -233,8 +263,13 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const type = typeof req.query.type === 'string' ? req.query.type : undefined;
-      const rows = await this.deps.getDailyCollectionReportUseCase.execute({ from, to, type, branchId: resolveBranchFilter(scope) });
+      const rows = await this.deps.getDailyCollectionReportUseCase.execute({
+        from,
+        to,
+        types: parseMultiValueFilter(req.query.type),
+        channels: parseMultiValueFilter(req.query.channel),
+        branchId: resolveBranchFilter(scope),
+      });
       const buffer = await writeDailyCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Daily Collection Report.xlsx"');
