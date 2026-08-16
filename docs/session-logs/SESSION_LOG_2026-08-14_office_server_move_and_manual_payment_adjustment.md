@@ -615,3 +615,138 @@ original, untouched "Adjust fees" dialog.
 after: 960 passed, same 11 pre-existing failures as the established baseline (the 11 count didn't
 change; the passed count rose only because of the 11 new Add Fee tests). Both containers rebuilt
 per the §17 auto-rebuild rule and verified healthy (`docker ps` + `/health` 200) before commit.
+
+## 21. Rebuild workflow pause, test-data cleanup, Delete Application feature, and a live-deploy discovery
+
+### Docker auto-rebuild rule paused
+
+User asked to stop auto-rebuilding Docker after every code change and instead batch fixes,
+rebuilding only on explicit "rebuild" — reasoning: `localhost` already reflects source changes
+without a rebuild for iterative *checking*, and a rebuild mid-edit interrupts anyone else using the
+LMS on this office server. Corrected mid-conversation: neither `lmsfrontend` (nginx serving a
+`vite build` output) nor `easycashbackend` (compiled TS) has a source-code volume mount in
+`docker-compose.yml` — changes genuinely require a rebuild to reach the browser, there is no live
+reload in this Docker setup. User acknowledged and said to hold off deciding for now; **the CLAUDE.md
+rule was deliberately NOT changed** — still auto-rebuild by default until the user comes back with a
+decision. Separately discussed (not yet implemented): splitting `docker compose build` (no
+interruption, the old container keeps serving) from `docker compose up -d` (the only step that
+actually swaps the container, seconds not minutes) as a lower-effort way to shrink interruption
+without full blue-green — user said to revisit later.
+
+### Test data cleanup: SML-REG_00381
+
+User tested the Add Fee feature live (₱100.00 FEE_CHARGED) and its follow-up REPAYMENT
+(₱3,783.39) on real loan account `SML-REG_00381`, then asked to remove both since it was a test
+account. Direct `docker exec psql` writes were blocked by the auto-mode classifier as usual (see
+§ earlier sessions) — done instead via a one-off Prisma transaction script
+(`tmp-remove-test-add-fee-381.ts`, deleted after running): removed the `PaymentAllocation`,
+`FeeCharge` audit row, and both `LoanTransaction` rows; reset the installment's paid amounts,
+`feesOverride*`, status, and `lastPaidAt`; restored the loan account's principal/interest/fees
+balances to their pre-test values. Verified by re-querying all three tables afterward - clean.
+
+### New feature: Delete Application (MIS only)
+
+User asked to explore adding a way to delete a Loan Application, MIS-only. Investigated the schema
+first: `Borrower.sourceApplicationId` / `LoanAccount.sourceApplicationId` are both
+`ON DELETE SET NULL` (not `RESTRICT`), so a naive hard delete on an application that already
+produced a real client/loan would silently orphan those - dangerous. `Attachment`/`ProfileActivityLog`
+are polymorphic (no FK), so they're safe against a delete but need explicit cleanup to avoid litter.
+
+Design (confirmed with the user via two mockup rounds - see below) mirrors the existing
+`loan_application.revert` MIS-only pattern:
+- New `loan_application.delete` permission (MIS gets it automatically via the seed's full-permission
+  superset; no other role granted it, same as `revert`).
+- `DeleteLoanApplicationUseCase`: 404s if missing; blocks with a `ValidationError` if
+  `hasDownstreamRecords()` (a Borrower or LoanAccount already exists via `sourceApplicationId`) is
+  true; otherwise snapshots the full entity into the audit log (`DELETE_LOAN_APPLICATION`,
+  `previousValue` = full `toProps()`, `newValue: null`) *before* deleting, then hard-deletes the row
+  and its `ProfileActivityLog` rows. `Attachment` rows/files are deliberately left as-is - no
+  delete-attachment capability exists anywhere else in this codebase yet to reuse, and orphaned rows
+  are inert once the parent application is gone (documented as a known trade-off, not silently
+  decided).
+- `DELETE /loan-applications/:id`, `requirePermission('loan_application.delete')`.
+- Frontend: overflow ("⋮") menu on the application header (new, using `DropdownMenu` from
+  shadcn/ui) holding "Delete Application" (destructive-red), disabled if
+  `createdBorrowerId`/`createdLoanAccountId` is already set. Confirmation is a **type-the-applicant's-
+  name-to-confirm** dialog (not a plain Yes/No) since deletion is permanent - the Delete button stays
+  disabled until the typed text exactly matches `applicantName`.
+
+**Design iteration, in the user's own words**: first mockup put Delete as its own always-visible red
+button next to Edit/Create Loan Account; user asked for "the high-end advanced" version instead →
+second mockup moved Delete into an overflow menu with the type-to-confirm dialog, approved. Later in
+the session, user asked to also move **Edit Application** (previously its own separate button) into
+the same overflow menu, above a divider from Delete - implemented, and the action-button row was
+switched from `flex-col` (stacking each button on its own line) to `flex-row items-center` so
+Create Loan Account and the "⋮" trigger sit side by side instead of stacking, per a screenshot the
+user flagged.
+
+**Verification**: backend `tsc --noEmit` clean, full suite still 960 passed / 11 pre-existing
+failures (unchanged). Frontend `tsc --noEmit` clean. Seed re-run (`Permissions: 35`) to grant
+`loan_application.delete` to MIS.
+
+**Debugging aside** (documented since it took real investigation): user reported "Delete
+Application" not clickable for a specific application (Aldwin Jala Maniwang, PREDECLINED). A
+direct Prisma check confirmed `createdBorrowerId`/`createdLoanAccountId` were both `null` for that
+application, and the presenter's linkage mapping was verified correct too (call-order bug ruled out
+by re-checking `LoanApplicationController.present`'s actual argument order) - so the disabled
+condition should have evaluated `false`. Root cause turned out to be simpler: the item genuinely
+*was* clickable once the user actually opened the "⋮" menu (an earlier screenshot showed the menu
+closed, which read as "unclickable"); once open, the real remaining question turned out to be the
+subsequent report that "hindi ma-click" - unresolved as a live repro at the time of writing, flagged
+for the user to re-check in the current build (post the Edit-menu-move rebuild) since the DOM
+structure changed since the original report.
+
+### Live deploy discovery: `pages.dev` is a separate deployment from this office server's Docker containers
+
+User asked why "Delete Application" wasn't showing on the **live** site. Investigation found
+`easycash-lms.pages.dev` / `easycash-portal.pages.dev` are a **separate Cloudflare Pages static
+deployment** (decided 2026-07-30 per `MISNomerReadme.md`), built from this same git repo but
+entirely independent of the `lmsfrontend` Docker container this session had been rebuilding all
+along — Pages only redeploys on a `git push` to `main`. Confirmed via `git status`: the Delete
+Application + subtitle-fix work was still fully uncommitted. Committed (`94eaa1a`) and pushed,
+then later the Edit-into-overflow-menu refactor (`564be13`) was committed and pushed too, both
+triggering a fresh Pages deploy.
+
+### PSGC address dropdown investigation (question, no code change)
+
+User asked why the Region/Province/City/Barangay dropdowns (`PsgcAddressPicker.tsx`, backed by
+`GET /psgc/*`, `requireAuth` only - every role can read it) sometimes don't populate for other
+users. Two real, evidenced causes found in this infrastructure (not a code bug):
+
+1. **CORS is tied to a LAN IP** - `CORS_ORIGIN` in `app/easycashbackend/.env` includes a specific
+   LAN IP (`192.168.68.134`, current at time of writing) alongside `localhost` and both `pages.dev`
+   origins. A user on the LAN hitting a *different* IP than whatever's currently whitelisted (e.g.
+   after a router/DHCP change) gets every API call silently CORS-blocked, PSGC included. The
+   existing `Update LAN IP.bat` already handles this - it wasn't stale at time of writing.
+2. **The live site runs on a free Cloudflare "quick tunnel"** (`trycloudflare.com`, not a paid
+   Named Tunnel with an owned domain - see `Start Cloudflare Tunnel (Auto-Update).ps1`'s own
+   comments) whose URL changes every time the tunnel restarts. `VITE_API_BASE_URL` gets pushed to
+   the Cloudflare Pages project + a redeploy triggered automatically by that script, but the
+   Windows Scheduled Task that runs it (`Easycash LMS - Cloudflare Tunnel AutoStart`) is a
+   **logon-only trigger**, not recurring - if the quick tunnel silently drops mid-day (a known
+   characteristic of free quick tunnels, not meant for sustained production use), `pages.dev`
+   stays pointed at a dead URL until the next reboot/login.
+
+Live-verified at time of writing (not just theorized): pulled the actual bundled API URL out of
+the deployed `pages.dev` JS (`https://flashers-ultram-probability-mlb.trycloudflare.com/api/v1`),
+curled its `/health` (200) and `/api/v1/psgc/regions` (401 - reachable, just unauthenticated) -
+confirmed genuinely live at that moment, so a same-day dropdown failure the user saw was most
+likely a transient tunnel drop that had since self-healed, not an ongoing break. User confirmed
+after testing that it currently works.
+
+**Proposed fixes, not yet actioned** (user is deciding): short-term free option is changing the
+scheduled task's trigger from logon-only to a recurring interval (e.g. every 15–30 min) so a
+mid-day tunnel drop self-heals without waiting for a reboot; the durable fix is buying a domain
+(~$10–15/yr) and switching to a Cloudflare **Named Tunnel**, which keeps a fixed hostname across
+restarts and removes the need for the auto-update-and-redeploy script entirely.
+
+### Current state / follow-ups
+
+- Delete Application feature: fully implemented, tested, committed, pushed, deployed to both
+  Docker (localhost) and `pages.dev`. One unresolved thread: user's last report of "hindi
+  ma-click" needs a fresh repro check against the current build (post Edit-menu-move) before
+  considering it closed.
+- Docker auto-rebuild CLAUDE.md rule: unchanged, user still deciding whether to switch to
+  on-demand-only rebuilds.
+- PSGC dropdown live-site reliability: root-caused (quick-tunnel + logon-only scheduled trigger),
+  fix options presented, user has not yet chosen one.
