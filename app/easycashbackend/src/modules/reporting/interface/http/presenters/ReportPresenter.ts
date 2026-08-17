@@ -1,4 +1,4 @@
-import type { TransactionReportRow } from '../../../application/ports/IReportingRepository';
+import type { LoanReleaseReportRow, TransactionReportRow } from '../../../application/ports/IReportingRepository';
 
 export interface TransactionReportResponse {
   id: string;
@@ -39,5 +39,50 @@ export function presentTransactionReportRow(row: TransactionReportRow): Transact
     orNumber: row.orNumber,
     arNumber: row.arNumber,
     channel: row.channel,
+  };
+}
+
+/** 2026-08-17: JSON counterpart to the existing `.xlsx` export (`ExcelJsLoanReleasesReportWriter`)
+ * - powers the Loan Releases Report's new on-screen table + column picker (user request). Every
+ * field the `.xlsx` writer emits stays here too so the export always has the full column set
+ * regardless of which columns are toggled visible on screen. */
+export interface LoanReleaseReportResponse {
+  clientId: string;
+  clientName: string;
+  address: string;
+  product: string;
+  accountId: string;
+  agencyCompany: string;
+  disbursementDate: string;
+  loanCreated: string;
+  maturityDate: string | null;
+  term: number;
+  nthLoan: number;
+  newOrRenew: 'New' | 'Renew';
+  firstRepaymentDate: string;
+  amortization: string;
+  loanAmount: string;
+  totalInterest: string;
+  totalOB: string;
+  addOnInterestRate: string | null;
+  contractualInterestRate: string | null;
+  advanceInterestFee: string;
+  processingFee: string;
+  documentationFee: string;
+  outstandingLoanBalance: string;
+  accountManagementFee: string;
+  insurance: string;
+  notarial: string;
+  webFee: string;
+  totalNetAmount: string;
+}
+
+export function presentLoanReleaseReportRow(row: LoanReleaseReportRow): LoanReleaseReportResponse {
+  return {
+    ...row,
+    disbursementDate: row.disbursementDate.toISOString(),
+    loanCreated: row.loanCreated.toISOString(),
+    maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
+    firstRepaymentDate: row.firstRepaymentDate.toISOString(),
   };
 }

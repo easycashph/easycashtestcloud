@@ -28,7 +28,7 @@ import {
   writeFirstAmortizationReportXlsx,
   writeFullyPaidAccountsReportXlsx,
 } from '../../infrastructure/reportWriters';
-import { presentTransactionReportRow } from './presenters/ReportPresenter';
+import { presentLoanReleaseReportRow, presentTransactionReportRow } from './presenters/ReportPresenter';
 
 export interface ReportingControllerDeps {
   getLoanOriginationReportUseCase: GetLoanOriginationReportUseCase;
@@ -151,6 +151,21 @@ export class ReportingController {
     try {
       const channels = await this.deps.listDistinctChannelsUseCase.execute();
       res.status(200).json({ items: channels });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-17 (user request): JSON counterpart to `loanReleasesXlsx` below, for the report's new
+   * on-screen table - not paginated (matches every other in-page report table, e.g.
+   * `transactions`'s underlying data volume: a date-range-scoped list, not the whole ledger). */
+  loanReleases = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentLoanReleaseReportRow) });
     } catch (error) {
       next(error);
     }

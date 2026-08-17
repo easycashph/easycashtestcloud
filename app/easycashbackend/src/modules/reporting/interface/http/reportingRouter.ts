@@ -18,6 +18,7 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/collections', requireAuth, requireReportView, controller.collections);
   router.get('/reports/transactions', requireAuth, requireReportView, controller.transactions);
   router.get('/reports/transactions/channels', requireAuth, requireReportView, controller.channels);
+  router.get('/reports/loan-releases', requireAuth, requireReportView, controller.loanReleases);
   router.get('/reports/loan-releases.xlsx', requireAuth, requireReportView, controller.loanReleasesXlsx);
   router.get('/reports/aging.xlsx', requireAuth, requireReportView, controller.agingXlsx);
   router.get('/reports/ending-balance.xlsx', requireAuth, requireReportView, controller.endingBalanceXlsx);

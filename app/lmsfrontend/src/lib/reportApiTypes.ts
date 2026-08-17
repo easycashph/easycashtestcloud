@@ -51,3 +51,34 @@ export interface TransactionReportRow {
   arNumber: string;
   channel: string;
 }
+
+export interface LoanReleaseReportRow {
+  clientId: string;
+  clientName: string;
+  address: string;
+  product: string;
+  accountId: string;
+  agencyCompany: string;
+  disbursementDate: string;
+  loanCreated: string;
+  maturityDate: string | null;
+  term: number;
+  nthLoan: number;
+  newOrRenew: 'New' | 'Renew';
+  firstRepaymentDate: string;
+  amortization: string;
+  loanAmount: string;
+  totalInterest: string;
+  totalOB: string;
+  addOnInterestRate: string | null;
+  contractualInterestRate: string | null;
+  advanceInterestFee: string;
+  processingFee: string;
+  documentationFee: string;
+  outstandingLoanBalance: string;
+  accountManagementFee: string;
+  insurance: string;
+  notarial: string;
+  webFee: string;
+  totalNetAmount: string;
+}
