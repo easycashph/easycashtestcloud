@@ -851,3 +851,69 @@ unchanged (960 passed / 11 pre-existing failures), rebuilt, committed, pushed.
   portal-submitted applications.
 - Same open items as §21: Delete Application's "hindi ma-click" repro check, Docker auto-rebuild
   rule decision, PSGC/tunnel reliability fix choice - none revisited this stretch.
+
+## 23. Loan Releases Report on-screen table + column picker, an advanced-mockup detour, and a full test-data purge
+
+### Loan Releases Report: on-screen table + column visibility picker
+
+User asked for the Loan Releases Report (previously download-only, 28-column `.xlsx` export with
+no in-page preview) to get an on-screen table like the Transaction Report, plus a multi-select to
+choose which columns display. Mocked up first (plain version, then confirmed); implemented:
+
+- Backend: new `GET /reports/loan-releases` JSON endpoint (`ReportingController.loanReleases`),
+  reusing the existing `GetLoanReleasesReportUseCase` and a new `presentLoanReleaseReportRow`
+  presenter - the pre-existing `.xlsx` endpoint/writer is untouched.
+- Frontend: rewrote `LoanReleasesReportPage.tsx` with a scrollable on-screen table (sticky header +
+  sticky total row, same shape as `TransactionReportPage`) and a "Columns" picker
+  (`DropdownMenuCheckboxItem` list, same pattern as `PaymentRemindersPage`'s existing column
+  toggler). Six identifying columns (client name, product, account ID, disbursement date, loan
+  amount, total net amount) stay always-visible; the other 22 default hidden, toggled on via the
+  picker, persisted per-browser in `localStorage`.
+- **User-confirmed constraint carried into the design**: the column picker only controls what's
+  shown on screen - the `.xlsx` download always includes every column regardless of toggle state,
+  since the export's whole value is completeness (staff already work with the full legacy-format
+  spreadsheet), not whatever subset happens to be visible at click time.
+
+Verified `tsc --noEmit` clean (both sides), full backend suite unchanged (960 passed / 11
+pre-existing failures), rebuilt both containers, committed, pushed.
+
+### Advanced-design mockup, deferred
+
+User asked for a "high-end and sophisticated" alternative mockup of the same report (summary stat
+cards - loans released/total loan amount/total net amount/average loan size - avatar-initial
+circles per client, refined uppercase table headers, a "Columns · N shown" trigger). Shown but not
+implemented - user said to revisit later ("balikan nalang natin yan") in favor of the more urgent
+item below.
+
+### Full purge: TESTManny Mayweather Pacquiao / SL-REG_00118
+
+User asked to remove a test client end-to-end across every LMS record (Loan Account, Client, Loan
+Application) after spotting it while reviewing the new Loan Releases table. Investigated the full
+dependency graph before deleting anything (one loan application → one converted borrower → one
+loan account, `ACTIVE` status): 1 `LoanTransaction`, 10 `RepaymentSchedule` rows, 1 `Address`, 1
+`BorrowerIncomeDetail`, 6 `Attachment` rows (application intake docs), 14 `ProfileActivityLog`
+rows, 10 `Notification` rows, 93 `AuditLog` rows (page-view history) - no `PaymentAllocation`,
+`FeeCharge`, or `AppliedFee` rows existed, so the financial trail itself was clean.
+
+First deletion attempt (Prisma transaction script, same pattern as prior test-data cleanups - see
+§21's SML-REG_00381) failed on a foreign key the initial dependency sweep missed:
+`generated_loan_documents_loanAccountId_fkey`. Investigated `GeneratedLoanDocument`'s own child
+graph before retrying: `LoanSigningDocument.sessionId` and `SigningNotificationLog.loanSigningSessionId`
+both cascade (`onDelete: Cascade`) off `LoanSigningSession`, but `LoanSigningDocument.generatedLoanDocumentId`
+does NOT cascade off `GeneratedLoanDocument` - so `LoanSigningSession` rows had to be deleted
+*before* `GeneratedLoanDocument` rows, not just before `LoanAccount`. Prisma's transaction is
+atomic, so the failed first attempt deleted nothing; the corrected script (added
+`loanSigningSession.deleteMany` + `generatedLoanDocument.deleteMany` in the right order) ran clean
+in one pass. Verified afterward: zero rows remain anywhere referencing the loan code, borrower
+name, or application. Temp script deleted immediately after running (per established convention -
+never left committed).
+
+### Current state / follow-ups
+
+- Loan Releases Report now has the same on-screen-table/column-picker UX as Transaction Report and
+  Payment Reminders; download remains a complete, unfiltered 28-column export.
+- Advanced Loan Releases Report visual redesign (stat cards, avatars, refined headers): mocked up,
+  explicitly deferred by the user, not implemented.
+- Same open items as §21/§22: Delete Application's "hindi ma-click" repro check, Docker
+  auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if wanted) -
+  none revisited this stretch.
