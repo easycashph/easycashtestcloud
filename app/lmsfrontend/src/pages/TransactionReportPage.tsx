@@ -62,19 +62,19 @@ const DEFAULT_CHANNEL_LABELS = [
 ];
 
 /**
- * The types that represent money actually collected from a borrower — the page's default filter,
- * and what the "Payments only" shortcut selects. `FEE_REPAYMENT`/`PENALTY_REPAYMENT` only ever
- * appear on migrated SDevTech rows (this system records one REPAYMENT with fee/penalty components
- * instead), but they are real collections and must not be left out of a collection report —
- * leaving them out is exactly the bug this default fixes.
+ * The three types that represent money actually collected from a borrower — the page's default
+ * filter, and what the "Payments only" shortcut selects. `FEE_REPAYMENT`/`PENALTY_REPAYMENT` only
+ * ever appear on migrated SDevTech rows (this system records one REPAYMENT with fee/penalty
+ * components instead), but they are real collections and must not be left out of a collection
+ * report — leaving them out is exactly the bug this default fixes.
  *
- * 2026-08-16 (user request): `FEE_CHARGED` added too, for comparing against the SDevTech report.
- * Unlike the other three, this is an *assessment* (increases what's owed), not money collected —
- * including it here risks double-counting a fee that's charged and then paid within the same date
- * range (once as the charge, once again as its later REPAYMENT/FEE_REPAYMENT). Flagged, not
- * silently fixed, since the user asked for it explicitly for a specific reconciliation need.
+ * 2026-08-16: `FEE_CHARGED` was briefly added here for an SDevTech reconciliation check, then
+ * reverted the same day — it's an *assessment* (increases what's owed), not money collected, and
+ * double-counted a fee that was charged and paid within the same date range (once as the charge,
+ * again as its later REPAYMENT/FEE_REPAYMENT). Confirmed via the reconciliation itself: the total
+ * only matched with `FEE_CHARGED` unchecked. Keep it out of the default.
  */
-const PAYMENT_TYPES: LoanTransactionType[] = ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT', 'FEE_CHARGED'];
+const PAYMENT_TYPES: LoanTransactionType[] = ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT'];
 
 function getSortValue(txn: TransactionReportRow, key: string): string | number | Date | null | undefined {
   switch (key) {
