@@ -750,3 +750,104 @@ restarts and removes the need for the auto-update-and-redeploy script entirely.
   on-demand-only rebuilds.
 - PSGC dropdown live-site reliability: root-caused (quick-tunnel + logon-only scheduled trigger),
   fix options presented, user has not yet chosen one.
+
+## 22. Loan-application SMS scope check, then a real Transaction Report bug found via reconciliation
+
+### SMS-on-pre-decline question (investigation, no code change)
+
+User asked to confirm that a staff-encoded walk-in application shouldn't SMS the applicant when
+the system auto-pre-declines it, and should only SMS once "Start Review" begins. Traced every
+SMS/notification path in `loan-application`: `CreateLoanApplicationUseCase`'s `notificationService`
+only alerts staff roles (MIS/Loan Operation Manager/CRM) via the internal Notification Center, never
+the applicant. Applicant-facing SMS/email (`portalNotificationService.notify`) is gated on
+`application.portalAccountId` being set — so it fires only for a Portal (self-service) submission,
+never a staff-encoded one, and only on final Approve/Decline, not on creation, pre-qualification, or
+Start Review. Conclusion reported to the user: their "no SMS on staff-encoded pre-decline" concern is
+already true today (nothing to fix); "SMS on Start Review" doesn't exist yet for either submission
+path and would be new work if wanted. User hasn't asked for that feature yet.
+
+### Re-verifying the LMS vs SDevTech Aug 1-14 reconciliation
+
+User asked to re-run the LMS-vs-SDevTech total-amount check from earlier sessions. No live SDevTech
+connection exists in this environment - the user does that side of the comparison themselves and
+supplies figures/exports to check the LMS side against.
+
+- First pass asked to add `FEE_CHARGED` to the Transaction Report's default type filter
+  (`PAYMENT_TYPES` in `TransactionReportPage.tsx`) to compare against SDevTech. Flagged the
+  double-counting risk (a fee charged and paid within the same window would be counted twice) before
+  implementing, implemented anyway per explicit request, committed, deployed. User tested, confirmed
+  the double-count risk was real ("tama ang total amount kapag naka-uncheck ang Fee charge") and
+  asked for the revert - reverted, committed, deployed, confirmed only `REPAYMENT`/`FEE_REPAYMENT`/
+  `PENALTY_REPAYMENT` belong in the default.
+- User then asked to verify a specific target total, ₱756,488.71, against "default type and channel."
+  A hand-rolled SQL approximation of the filter gave ₱978,509.69 - didn't match. User then supplied
+  the actual downloaded `Daily Collection Report.xlsx` and asked why it disagreed. Read it via
+  `exceljs` (first attempt misread the column layout - `getCell()` indices off by one against the
+  sparse `row.values` array's own indexing convention, corrected by cross-checking the totals row's
+  `SUM(D2:D64)`-style formulas against the header row) - the file's own `Total (63 transactions)` row
+  summed to exactly ₱756,488.71. Root cause of the earlier ₱978,509.69 miss: it counted raw
+  pre-split database transactions, not the report's post-split output rows (a native `REPAYMENT` with
+  fee/penalty components becomes up to 3 output rows - see §13's row-splitting design) - not a bug,
+  just an invalid manual approximation. ₱756,488.71 confirmed correct.
+
+### Real bug found: on-screen Transaction Report total silently undercounted (race condition)
+
+User then reported the on-screen table showing 49 entries / ₱609,027.03 for the same default
+filters that produced ₱756,488.71 in the Excel export, and that widening the date range from Aug
+1-14 to Aug 1-17 made the on-screen total drop further, which is impossible for a non-negative sum
+over a superset range. Investigated by calling the backend repository functions directly
+(`listTransactions`/`getDailyCollectionReport`) with identical parameters - both agreed on
+₱756,488.71 for both date ranges, clearing the backend of any bug. Escalated to hitting the real
+HTTP endpoint with a hand-minted JWT: an *incomplete* channel value list (missing raw code variants
+like `BANK_TRANSFER`/`UNEARNED_INCOME`/`PDC`, or wrong casing like `CHECK` vs the real `Check`)
+reproduced a similarly-undercounted total, which pointed straight at how the frontend resolves
+channel labels to raw values.
+
+Root cause: `TransactionReportPage.tsx`'s `transactionsQuery` React Query key included
+`channelLabels` (the selected label strings) but not `channelOptions` (the async-loaded label→raw-
+values mapping `buildParams()` actually uses to expand each label). If the transactions fetch fired
+before the separate channel-options query finished loading, `buildParams()` fell back to using the
+bare label text as the channel value (missing raw code variants like `BANK_TRANSFER`), producing an
+undercounted result that then stayed cached indefinitely - nothing in the query key ever changed
+just because `channelOptions` finished loading in the background, so it never self-corrected except
+by chance when some other filter change forced a new cache entry.
+
+Fix: added `enabled: channelsQuery.isSuccess` and folded `channelOptions` into `transactionsQuery`'s
+key, so it always waits for the real values and re-runs once they arrive; also disabled the
+"Download report" button until channel options are ready, for the same reason. Verified `tsc
+--noEmit` clean, rebuilt, committed, pushed.
+
+### Dashboard "Collections This Month" brought in line with the Transaction Report
+
+User asked whether the Dashboard's "Collections This Month" card should agree with the Transaction
+Report's total - it didn't (₱1,066,652.44 vs ₱756,488.71). Found in
+`PrismaDashboardRepository.getSummary`: the aggregate only summed `type: 'REPAYMENT'` with **no**
+reversal exclusion - two real bugs, not a scope difference: it missed migrated `FEE_REPAYMENT`/
+`PENALTY_REPAYMENT` collections entirely, and it double-counted any transaction later reversed (a
+`REVERSAL` doesn't undo the original row per TXN-1 - this is the exact same bug class §10 already
+fixed in the Transaction Report, just never applied here). Fixed both (shared `COLLECTIONS_TYPE_FILTER`
+constant: `type in (REPAYMENT, FEE_REPAYMENT, PENALTY_REPAYMENT)` + `reversedByTransaction: null`),
+applied to both the current-month and same-elapsed-window-last-month aggregates.
+
+That got the dashboard to ₱850,248.06 - still short of ₱756,488.71, because it had no channel
+filter and the Transaction Report's default excludes non-collection channels (`Loan Deduct`,
+worth ₱93,759.35 in this window). User asked to add the same exclusion. Implemented as a `notIn`
+list of the three raw `paymentMethod` values actually present in the data that aren't in the
+Transaction Report's default channel set (`Adjustment`, `Loan Deduct`, `Suspense Account`) rather
+than enumerating every included channel's raw code+text variants, so a genuinely new real channel
+defaults to counted rather than silently dropped. **Caught before shipping**: a plain
+`paymentMethod: { notIn: [...] }` filter would also silently exclude every row with a NULL
+`paymentMethod` (classic SQL `NOT IN` + NULL trap) - 1,384 such rows exist in the current dataset,
+which would have been a far larger regression than the bug being fixed. Fixed with an explicit
+`OR: [{ paymentMethod: { notIn: [...] } }, { paymentMethod: null }]`. Verified via direct SQL before
+implementing (61 rows, ₱756,488.71 - exact match), `tsc --noEmit` clean, full backend suite
+unchanged (960 passed / 11 pre-existing failures), rebuilt, committed, pushed.
+
+### Current state / follow-ups
+
+- Transaction Report total, on-screen table, and Dashboard's Collections This Month card now all
+  agree (₱756,488.71 for Aug 1-14/Aug 1-17, same underlying data).
+- SMS-on-Start-Review is a real gap if the user wants it, not yet built for either staff-encoded or
+  portal-submitted applications.
+- Same open items as §21: Delete Application's "hindi ma-click" repro check, Docker auto-rebuild
+  rule decision, PSGC/tunnel reliability fix choice - none revisited this stretch.
