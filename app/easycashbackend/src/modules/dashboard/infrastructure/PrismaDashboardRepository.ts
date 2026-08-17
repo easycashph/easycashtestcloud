@@ -12,10 +12,26 @@ const ACTIVE_STATUSES = ['ACTIVE', 'ACTIVE_IN_ARREARS'] as const;
  * later reversed (a REVERSAL doesn't undo the original row - see TXN-1 - so a reversed payment's
  * amount was still being added here as if collected). Both bugs meant this card and the Transaction
  * Report's "Payments only" default disagreed on the same real-world number.
+ *
+ * `paymentMethod` exclusion mirrors the Transaction Report's `DEFAULT_CHANNEL_LABELS` (user
+ * request, 2026-08-17, to make the two figures match exactly): those three raw values are the only
+ * ones NOT in that default channel set among every value actually stored on `paymentMethod` today
+ * ("Adjustment"/"Loan Deduct"/"Suspense Account" - internal corrections/deductions, not a borrower
+ * handing over money through a real collection channel). An `notIn` exclusion list, rather than
+ * enumerating every included channel's raw code+text variants, means a genuinely new real channel
+ * defaults to being counted as a collection instead of silently dropped.
  */
+const EXCLUDED_COLLECTION_PAYMENT_METHODS = ['Adjustment', 'Loan Deduct', 'Suspense Account'];
+
+// `paymentMethod: { notIn: [...] }` alone would ALSO silently exclude every row where
+// paymentMethod is NULL (plain SQL `NOT IN` + NULL trap: `NULL NOT IN (...)` evaluates to NULL,
+// not true) - and plenty of legitimate collections have no paymentMethod recorded (1,384 rows
+// across the current dataset). The explicit `{ paymentMethod: null }` branch below keeps those
+// counted.
 const COLLECTIONS_TYPE_FILTER: Prisma.LoanTransactionWhereInput = {
   type: { in: ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT'] },
   reversedByTransaction: null,
+  OR: [{ paymentMethod: { notIn: EXCLUDED_COLLECTION_PAYMENT_METHODS } }, { paymentMethod: null }],
 };
 
 /**
