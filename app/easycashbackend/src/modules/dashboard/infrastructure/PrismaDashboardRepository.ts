@@ -5,6 +5,20 @@ import type { DashboardSummary, IDashboardRepository } from '../application/port
 const ACTIVE_STATUSES = ['ACTIVE', 'ACTIVE_IN_ARREARS'] as const;
 
 /**
+ * 2026-08-17 (bug fix, matches PrismaReportingRepository's Transaction Report): "Collections This
+ * Month" previously only summed `type: 'REPAYMENT'` with no reversal exclusion - undercounting real
+ * collections (a migrated payment that settled a fee/penalty is its own FEE_REPAYMENT/
+ * PENALTY_REPAYMENT type, not REPAYMENT) and, separately, double-counting any transaction that was
+ * later reversed (a REVERSAL doesn't undo the original row - see TXN-1 - so a reversed payment's
+ * amount was still being added here as if collected). Both bugs meant this card and the Transaction
+ * Report's "Payments only" default disagreed on the same real-world number.
+ */
+const COLLECTIONS_TYPE_FILTER: Prisma.LoanTransactionWhereInput = {
+  type: { in: ['REPAYMENT', 'FEE_REPAYMENT', 'PENALTY_REPAYMENT'] },
+  reversedByTransaction: null,
+};
+
+/**
  * Milestone 9.2: every aggregate below is computed on demand straight from `loan_accounts`/
  * `loan_transactions`/`repayment_schedules` — no summary table, no caching. Acceptable at today's
  * volume (thousands of loans, not the 100,000+ CLAUDE.md's performance goals target); revisit with
@@ -34,13 +48,13 @@ export class PrismaDashboardRepository implements IDashboardRepository {
       }),
       findOverdueLoanAccounts(now, branchId),
       prisma.loanTransaction.aggregate({
-        where: { ...branchFilter, type: 'REPAYMENT', entryDate: { gte: startOfMonth(now), lt: startOfNextMonth(now) } },
+        where: { ...branchFilter, ...COLLECTIONS_TYPE_FILTER, entryDate: { gte: startOfMonth(now), lt: startOfNextMonth(now) } },
         _sum: { amount: true },
       }),
       prisma.loanTransaction.aggregate({
         where: {
           ...branchFilter,
-          type: 'REPAYMENT',
+          ...COLLECTIONS_TYPE_FILTER,
           entryDate: { gte: startOfLastMonth(now), lt: sameElapsedPointLastMonth(now) },
         },
         _sum: { amount: true },
