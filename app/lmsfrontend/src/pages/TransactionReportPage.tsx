@@ -200,11 +200,29 @@ export function TransactionReportPage() {
         : `${channelLabels.length} channels selected`;
 
   const transactionsQuery = useQuery({
-    queryKey: ['reports', 'transactions', range.from, range.to, [...types].sort().join(','), [...channelLabels].sort().join(',')],
+    // 2026-08-17 (bug fix): `channelOptions` must be part of this key, not just `channelLabels` -
+    // `buildParams` resolves each selected label to its raw stored values (e.g. "Bank Transfer" ->
+    // ["Bank Transfer", "BANK_TRANSFER"]) via `channelOptions`, which loads asynchronously from a
+    // separate query. Without this, a transactions fetch that raced ahead of `channelsQuery`
+    // finishing used the incomplete fallback (`[label]` alone, missing the raw code variant) and,
+    // since nothing here changed once `channelsQuery` resolved, kept that undercounted result
+    // cached indefinitely - it only ever got corrected by chance, whenever some other filter change
+    // forced a new queryKey. Gating on `channelsQuery.isSuccess` and folding its data into the key
+    // makes this fetch always wait for the real values and re-run once they arrive.
+    queryKey: [
+      'reports',
+      'transactions',
+      range.from,
+      range.to,
+      [...types].sort().join(','),
+      [...channelLabels].sort().join(','),
+      channelOptions,
+    ],
     queryFn: () => {
       const query = buildParams().toString();
       return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
     },
+    enabled: channelsQuery.isSuccess,
   });
   const transactions = transactionsQuery.data ?? [];
   const { sorted, sort, toggleSort } = useSortableTable(transactions, getSortValue, { key: 'entryDate', direction: 'desc' });
@@ -316,7 +334,7 @@ export function TransactionReportPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button onClick={handleDownload} disabled={isDownloading}>
+            <Button onClick={handleDownload} disabled={isDownloading || !channelsQuery.isSuccess}>
               <Download className="mr-2 h-4 w-4" />
               {isDownloading ? 'Preparing…' : 'Download report'}
             </Button>
