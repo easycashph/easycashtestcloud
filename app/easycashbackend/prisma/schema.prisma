@@ -1435,6 +1435,11 @@ model LoanTransaction {
   @@index([entryDate])
   @@index([postedByUserId])
   @@index([branchId])
+  /// 2026-08-17 (perf fix): `listDistinctChannels()` (Transaction Report's channel filter dropdown,
+  /// called on every page load) did `SELECT DISTINCT "paymentMethod" WHERE "paymentMethod" IS NOT
+  /// NULL` with no supporting index — a full parallel seq scan over ~280k rows, ~1s measured. This
+  /// index turns that into an index-only scan.
+  @@index([paymentMethod])
   @@map("loan_transactions")
 }
 
