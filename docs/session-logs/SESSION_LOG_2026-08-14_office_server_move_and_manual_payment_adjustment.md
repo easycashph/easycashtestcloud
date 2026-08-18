@@ -917,3 +917,44 @@ never left committed).
 - Same open items as §21/§22: Delete Application's "hindi ma-click" repro check, Docker
   auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if wanted) -
   none revisited this stretch.
+
+## 24. Transaction Report performance fix, and per-name avatar colors everywhere
+
+### Root-caused a real Transaction Report slowness (not the earlier fix's fault, but related)
+
+User asked why the Transaction Report loads slowly. Traced it to `listDistinctChannels()` (the
+channel filter dropdown's data source, called on every page load) - `SELECT DISTINCT
+"paymentMethod" WHERE "paymentMethod" IS NOT NULL` had no supporting index on a table with ~280k
+rows. `EXPLAIN ANALYZE` showed a full parallel sequential scan, ~1s. Compounding it: §22's race-
+condition fix (`enabled: channelsQuery.isSuccess`) made the transactions fetch wait for this slow
+query to finish first instead of running in parallel - correct for correctness, but meant the
+existing slow query was now fully on the critical path instead of hidden behind a parallel fetch.
+
+Fix: added `@@index([paymentMethod])` to `LoanTransaction` in `schema.prisma`, generated migration
+`20260818000750_add_payment_method_index_to_loan_transactions` (`prisma migrate dev
+--create-only`, reviewed, applied via `prisma migrate deploy` - pure additive `CREATE INDEX`, no
+data risk). Re-ran the same `EXPLAIN ANALYZE`: 999ms -> 1.7ms (index-only scan). Backend suite
+unchanged (960 passed / 11 pre-existing failures), rebuilt, committed, pushed.
+
+### Per-name avatar colors (user request, then confirmed for "everywhere")
+
+User asked for varied avatar colors instead of every initials-circle sharing the same neutral fill
+- confirmed as wanted across the whole app, not just one page. Added `avatarColorClasses(name)` in
+a new `src/lib/avatarColor.ts`: hashes the name to deterministically pick one of 9 Tailwind
+color-pair classes (light/dark-mode aware via `dark:` variants) - same person always gets the same
+color across page loads, not a random color on every render. Applied everywhere an avatar/initials
+circle exists: `ApplicantAvatar` (shared by Loan Applications list/detail, Client Profile, Client
+List - covers loan applicants and clients in one place), `AccountMenu` (header, current user),
+`SettingsPage` (own profile picture fallback), `MemberListPage` (both the row list and the member
+detail dialog), and both `RecentActivityPanel`/`RecentSystemActivityPanel` (plain-div avatars in
+activity timelines, not the shadcn `Avatar` component, handled the same way via `cn()`). `tsc
+--noEmit` clean, rebuilt, committed, pushed.
+
+### Current state / follow-ups
+
+- Transaction Report channel-filter query is now fast (index-only scan); the page's overall load
+  time should feel close to instant again.
+- Avatar colors are live everywhere an avatar renders in the app.
+- Same open items as §21-§23: Delete Application's "hindi ma-click" repro check, Docker
+  auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if wanted),
+  advanced Loan Releases Report redesign (deferred) - none revisited this stretch.
