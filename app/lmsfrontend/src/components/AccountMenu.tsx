@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useRole } from '@/lib/roleContext';
+import { avatarColorClasses } from '@/lib/avatarColor';
 
 function initialsOf(name: string) {
   return name
@@ -37,7 +38,7 @@ export function AccountMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="flex h-auto items-center gap-2 px-2 py-1">
           <Avatar>
-            <AvatarFallback>{initialsOf(currentAccount.name)}</AvatarFallback>
+            <AvatarFallback className={avatarColorClasses(currentAccount.name)}>{initialsOf(currentAccount.name)}</AvatarFallback>
           </Avatar>
           <div className="hidden text-left text-xs leading-tight sm:block">
             <p className="font-medium">{currentAccount.name}</p>

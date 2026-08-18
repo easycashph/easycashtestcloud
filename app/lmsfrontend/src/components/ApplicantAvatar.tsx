@@ -2,6 +2,8 @@ import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiClient, fetchFileBlob } from '@/lib/apiClient';
+import { avatarColorClasses } from '@/lib/avatarColor';
+import { cn } from '@/lib/utils';
 import type { Attachment, AttachmentOwnerType } from '@/lib/documentApiTypes';
 
 /**
@@ -56,7 +58,7 @@ export function ApplicantAvatar({
   return (
     <Avatar className={className ?? 'h-10 w-10'}>
       {objectUrl && <AvatarImage src={objectUrl} alt="Applicant profile picture" />}
-      <AvatarFallback className={fallbackClassName}>{initials}</AvatarFallback>
+      <AvatarFallback className={cn(avatarColorClasses(initials), fallbackClassName)}>{initials}</AvatarFallback>
     </Avatar>
   );
 }

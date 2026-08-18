@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, AlertTriangle, Bell, Check, DoorOpen, Eye, EyeOff, Globe, History, KeyRound, LayoutGrid, Laptop, LogOut, Move, Moon, Palette, RotateCcw, ShieldCheck, ShieldQuestion, Sun, Type, UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { avatarColorClasses } from '@/lib/avatarColor';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -189,7 +190,9 @@ function UserProfileTab() {
               <Label>Profile Picture</Label>
               <div className="flex items-center gap-3">
                 <Avatar className="h-16 w-16">
-                  <AvatarFallback>{initials || <UserRound className="h-6 w-6" />}</AvatarFallback>
+                  <AvatarFallback className={avatarColorClasses(initials)}>
+                    {initials || <UserRound className="h-6 w-6" />}
+                  </AvatarFallback>
                 </Avatar>
                 <ComingSoonButton type="button" variant="outline" size="sm">
                   Upload photo

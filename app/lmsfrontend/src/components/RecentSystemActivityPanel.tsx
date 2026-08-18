@@ -5,6 +5,8 @@ import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
 import { ACTION_VERB, ENTITY_ROUTE } from '@/lib/activityVerbs';
 import { initials } from '@/lib/initials';
+import { avatarColorClasses } from '@/lib/avatarColor';
+import { cn } from '@/lib/utils';
 
 interface RecentSystemActivityPanelProps {
   limit?: number;
@@ -78,7 +80,12 @@ export function RecentSystemActivityPanel({ limit = 6 }: RecentSystemActivityPan
               const routePrefix = ENTITY_ROUTE[log.entityType];
               return (
                 <li key={log.id} className={`flex items-center gap-3 py-2.5 ${index > 0 ? 'border-t' : ''}`}>
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                  <div
+                    className={cn(
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium',
+                      avatarColorClasses(log.userName),
+                    )}
+                  >
                     {initials(log.userName)}
                   </div>
                   <p className="min-w-0 flex-1 truncate text-sm">

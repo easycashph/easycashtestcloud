@@ -7,8 +7,9 @@ import { useRole } from '@/lib/roleContext';
 import { apiClient } from '@/lib/apiClient';
 import { ACTION_VERB, ENTITY_ROUTE } from '@/lib/activityVerbs';
 import { initials } from '@/lib/initials';
+import { avatarColorClasses } from '@/lib/avatarColor';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
-import { formatDateTime } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 /** action -> a sentence-builder given the panel's own `label` and the log's `entityId`. Actions not
  * listed here fall back to the original generic Badge + entityId rendering below, so every other
@@ -95,7 +96,12 @@ export function RecentActivityPanel({ label, entityTypes, entityId, limit = 5 }:
               return (
                 <li key={log.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
                   <div className="flex min-w-0 items-start gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                    <div
+                      className={cn(
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium',
+                        avatarColorClasses(log.userName),
+                      )}
+                    >
                       {initials(log.userName)}
                     </div>
                     {sentence ? (

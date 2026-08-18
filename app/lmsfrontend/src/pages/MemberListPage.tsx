@@ -26,7 +26,8 @@ import { apiClient } from '@/lib/apiClient';
 import type { CreateUserRequest, UpdateUserRequest, User, UserStatus } from '@/lib/userApiTypes';
 import type { ListRoleClassesResponse, RoleClass, RoleType } from '@/lib/roleClassApiTypes';
 import type { LmsRole } from '@/lib/staticConfig';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
+import { avatarColorClasses } from '@/lib/avatarColor';
 
 const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
 const PAGE_SIZE = 100;
@@ -668,7 +669,7 @@ export function MemberListPage() {
                       className="flex items-center gap-2 text-left hover:underline"
                     >
                       <Avatar className="h-7 w-7">
-                        <AvatarFallback className="text-xs">
+                        <AvatarFallback className={cn('text-xs', avatarColorClasses(user.fullName))}>
                           {user.fullName
                             .split(' ')
                             .filter(Boolean)
@@ -727,7 +728,7 @@ export function MemberListPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="flex items-center gap-3 sm:col-span-2">
                 <Avatar className="h-14 w-14">
-                  <AvatarFallback>
+                  <AvatarFallback className={avatarColorClasses(viewingUser.fullName)}>
                     {viewingUser.fullName
                       .split(' ')
                       .filter(Boolean)
