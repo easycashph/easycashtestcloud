@@ -1,4 +1,5 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import { env } from '@shared/config/env';
 import type { Money } from '@shared/domain/Money';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
@@ -63,6 +64,7 @@ export class ReducePenaltyUseCase {
     );
     const currentPenalty = resolveComputedPenalty(installment, {
       isProspectiveLoan: !loanAccount.legacyId,
+      autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
       principalAmount: loanAccount.principalAmount,
       isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
       maturityDate,

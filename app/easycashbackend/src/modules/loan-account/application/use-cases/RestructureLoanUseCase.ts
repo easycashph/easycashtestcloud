@@ -1,4 +1,5 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import { env } from '@shared/config/env';
 import { Money } from '@shared/domain/Money';
 import { AmortizationScheduleGenerator } from '@shared/domain/calculation/AmortizationScheduleGenerator';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
@@ -130,7 +131,12 @@ export class RestructureLoanUseCase {
     const isSecMc3Covered = await resolveSecMc3Coverage(oldLoanAccount, this.deps.loanProductRepository);
     const accruedInterestFigures = AccruedInterestCalculator.calculate(
       installments,
-      { isProspectiveLoan: true, principalAmount: oldLoanAccount.principalAmount, isSecMc3Covered },
+      {
+        isProspectiveLoan: true,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
+        principalAmount: oldLoanAccount.principalAmount,
+        isSecMc3Covered,
+      },
       oldLoanAccount.contractualInterestRate,
       now,
     );

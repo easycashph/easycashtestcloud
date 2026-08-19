@@ -97,6 +97,19 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   EMAIL_REMINDER_CRON: z.string().default('0 8 * * *'), // 8:00 AM Asia/Manila daily
 
+  // Live penalty auto-computation (ADR-050, 2026-08-19 user request): while SDevTech remains the
+  // system of record and this LMS is still parallel-run alongside it, staff manually key in
+  // whatever penalty SDevTech's own screen shows (via the new Add Penalty action) rather than this
+  // system computing its own figure - two independently-computed penalty numbers for the same loan
+  // would only cause confusion during the migration period. Defaults false (OFF) for exactly that
+  // reason; flip to true only once the LMS is the official system and SDevTech has been retired -
+  // see CurrentPenaltyResolver.resolveComputedPenalty()'s own doc comment for where this is read.
+  // Same NOT-z.coerce.boolean() reasoning as SMS_ENABLED/EMAIL_ENABLED above.
+  PENALTY_AUTO_COMPUTE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   // Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -
   // curated links only (headline + short excerpt + link out), never republished full articles -
   // see ExternalNewsLink's own doc comment (schema.prisma). Comma-separated RSS feed URL lists,

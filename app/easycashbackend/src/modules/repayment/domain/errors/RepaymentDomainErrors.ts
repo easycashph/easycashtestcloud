@@ -53,3 +53,12 @@ export class InvalidFeeChargeAmountError extends DomainError {
     this.name = 'InvalidFeeChargeAmountError';
   }
 }
+
+/** 2026-08-19 (Add Penalty feature, user-confirmed): mirrors InvalidFeeChargeAmountError — a manual
+ * penalty charge is strictly additive, must be a positive amount. */
+export class InvalidPenaltyChargeAmountError extends DomainError {
+  constructor(amount: string) {
+    super('INVALID_PENALTY_CHARGE_AMOUNT', `Penalty charge amount ${amount} must be greater than zero.`, undefined, 400);
+    this.name = 'InvalidPenaltyChargeAmountError';
+  }
+}

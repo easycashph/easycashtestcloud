@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
+import { env } from '@shared/config/env';
 import { Money } from '@shared/domain/Money';
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
 import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
@@ -676,6 +677,15 @@ export class PrismaReportingRepository implements IReportingRepository {
 
       const originationDate = loan.activatedAt ?? loan.anticipatedDisbursementDate ?? loan.firstRepaymentDate;
       const livePenaltyContext: Omit<PenaltyComputationContext, 'isProspectiveLoan'> = {
+        // 2026-08-19 (user request, migration period): same kill-switch as every other
+        // resolveComputedPenalty consumer — see CurrentPenaltyResolver.ts's own doc comment. This
+        // report's whole point was to live-compute a figure that reconciles against SDevTech's own
+        // live report, but ADR-050's generic 5%/10% formula doesn't reflect SDevTech's actual
+        // per-loan penalty handling anyway (many products' penalty_calculation_method is "NONE"
+        // there and are charged manually instead — see session log 2026-08-19), so while the LMS
+        // and SDevTech run in parallel, this falls back to the same frozen `penaltyDue` snapshot
+        // every other report already uses rather than a formula-based guess.
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: Money.of(loan.principalAmount),
         isSecMc3Covered: isSecMc3Covered({
           principalAmount: Money.of(loan.principalAmount),

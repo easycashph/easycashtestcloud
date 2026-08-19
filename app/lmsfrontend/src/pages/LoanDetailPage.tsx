@@ -1046,6 +1046,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     canReversePayment: canReversePaymentPermission,
     canManualAdjustPayment: canManualAdjustPaymentPermission,
     canReducePenalty: canReducePenaltyPermission,
+    canChargePenalty: canChargePenaltyPermission,
     canAdjustFees: canAdjustFeesPermission,
     canChargeFee: canChargeFeePermission,
     canRestructureLoan: canRestructureLoanPermission,
@@ -1125,6 +1126,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [addFeeTarget, setAddFeeTarget] = React.useState<RepaymentInstallment | null>(null);
   const [addFeeAmount, setAddFeeAmount] = React.useState('');
   const [addFeeReason, setAddFeeReason] = React.useState('');
+  // 2026-08-19 (Add Penalty feature, migration period): mirrors Add Fee exactly, but for penalty -
+  // see AddPenaltyUseCase's own doc comment for why this exists (staff manually key in whatever
+  // penalty SDevTech's own screen shows, while this system's live ADR-050 auto-computation is OFF).
+  const [addPenaltyTarget, setAddPenaltyTarget] = React.useState<RepaymentInstallment | null>(null);
+  const [addPenaltyAmount, setAddPenaltyAmount] = React.useState('');
+  const [addPenaltyReason, setAddPenaltyReason] = React.useState('');
   // 2026-07-24 (Loan Restructure feature, user-confirmed): same MIS/Accounting-only gate as Adjust
   // Penalty/Adjust Fees. Term is staff-entered (product/interest rate are copied from this loan
   // automatically, not part of this form) - firstRepaymentDate pre-fills to one month from today
@@ -1528,6 +1535,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onError: onActionError,
   });
 
+  const addPenaltyMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<RepaymentInstallment>(`/repayment-installments/${addPenaltyTarget!.id}/add-penalty`, {
+        amount: addPenaltyAmount,
+        reason: addPenaltyReason.trim(),
+      }),
+    onSuccess: () => {
+      setAddPenaltyTarget(null);
+      setAddPenaltyAmount('');
+      setAddPenaltyReason('');
+      onActionSuccess();
+    },
+    onError: onActionError,
+  });
+
   const restructureMutation = useMutation({
     mutationFn: () => {
       if (!restructureIdempotencyKeyRef.current) restructureIdempotencyKeyRef.current = generateUuid();
@@ -1601,6 +1623,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     setAddFeeAmount('');
     setAddFeeReason('');
     setAddFeeTarget(installment);
+  };
+  const openAddPenaltyConfirm = (installment: RepaymentInstallment) => {
+    setActionError(null);
+    setAddPenaltyAmount('');
+    setAddPenaltyReason('');
+    setAddPenaltyTarget(installment);
   };
   const openRestructureConfirm = () => {
     setActionError(null);
@@ -2083,7 +2111,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // 2026-07-15/16 (Reduce Penalty + Adjust Fees features, user-confirmed): "the accounting
   // officer" - matches the backend's `penalty.reduce`/`fees.adjust` default grants (identical).
   // Gates the whole Actions column, not just one of the two dropdown items.
-  const canManageInstallments = canReducePenaltyPermission || canAdjustFeesPermission || canChargeFeePermission;
+  const canManageInstallments = canReducePenaltyPermission || canChargePenaltyPermission || canAdjustFeesPermission || canChargeFeePermission;
   // 2026-07-24 (Loan Restructure feature, user-confirmed): "Ino offer lang ito sa mga past due at
   // matured account" - any installment currently `LATE` (RepaymentInstallment.status's own live
   // "dueDate passed, still unpaid" definition) covers both. "isang beses lang pwede gawin per loan
@@ -2679,7 +2707,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      disabled={!canReduceThisRow && !canAdjustFeesThisRow && !canChargeFeePermission}
+                                      disabled={!canReduceThisRow && !canAdjustFeesThisRow && !canChargeFeePermission && !canChargePenaltyPermission}
                                       className="h-7 px-2"
                                     >
                                       <MoreHorizontal className="h-3.5 w-3.5" />
@@ -2688,6 +2716,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                   <DropdownMenuContent align="end">
                                     <DropdownMenuItem disabled={!canReduceThisRow} onSelect={() => openReduceConfirm(i, penaltyDisplay)}>
                                       Adjust penalty
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem disabled={!canChargePenaltyPermission} onSelect={() => openAddPenaltyConfirm(i)}>
+                                      Add penalty
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={!canAdjustFeesThisRow}
@@ -4083,6 +4114,70 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               disabled={addFeeMutation.isPending || addFeeReason.trim().length === 0 || addFeeAmount.trim().length === 0}
             >
               {addFeeMutation.isPending ? 'Charging…' : 'Add fee'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={addPenaltyTarget !== null}
+        onOpenChange={(open) =>
+          !open && !addPenaltyMutation.isPending && (setAddPenaltyTarget(null), setAddPenaltyAmount(''), setAddPenaltyReason(''))
+        }
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add penalty</DialogTitle>
+            <DialogDescription>
+              {addPenaltyTarget &&
+                `Installment #${addPenaltyTarget.installmentNumber} · ${formatDate(addPenaltyTarget.dueDate)}. Charges a new penalty on top of this installment's current penalty due — never reduces it, even if penalty is already paid. Use this to key in the penalty amount shown on the SDevTech system while this LMS is still parallel-run alongside it.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-penalty-amount">Penalty amount</Label>
+            <Input
+              id="add-penalty-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={addPenaltyAmount}
+              onChange={(e) => setAddPenaltyAmount(e.target.value)}
+              disabled={addPenaltyMutation.isPending}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-penalty-reason">Reason</Label>
+            <Textarea
+              id="add-penalty-reason"
+              placeholder="e.g. Per SDevTech screen as of 2026-08-19"
+              value={addPenaltyReason}
+              onChange={(e) => setAddPenaltyReason(e.target.value)}
+              disabled={addPenaltyMutation.isPending}
+            />
+          </div>
+          {actionError && (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddPenaltyTarget(null);
+                setAddPenaltyAmount('');
+                setAddPenaltyReason('');
+              }}
+              disabled={addPenaltyMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => addPenaltyMutation.mutate()}
+              disabled={addPenaltyMutation.isPending || addPenaltyReason.trim().length === 0 || addPenaltyAmount.trim().length === 0}
+            >
+              {addPenaltyMutation.isPending ? 'Charging…' : 'Add penalty'}
             </Button>
           </DialogFooter>
         </DialogContent>

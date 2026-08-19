@@ -4,7 +4,7 @@ import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requirePermission } from '@shared/middleware/requirePermission';
 import { validateBody } from '@shared/middleware/validate';
 import { RepaymentController, type RepaymentControllerDeps } from './repaymentController';
-import { addFeeSchema, adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
+import { addFeeSchema, addPenaltySchema, adjustFeesSchema, reducePenaltySchema } from './repaymentSchemas';
 
 /**
  * Mostly D-2 (read-only) — CreateRepaymentInstallmentUseCase and RecordInstallmentPaymentUseCase
@@ -48,6 +48,15 @@ export function createRepaymentRouter(deps: RepaymentControllerDeps, tokenServic
     requirePermission('fee.charge'),
     validateBody(addFeeSchema),
     controller.addFee,
+  );
+  // 2026-08-19 (Add Penalty feature, user-confirmed): mirrors add-fee exactly, but for penalty -
+  // same "separate, narrower permission" posture as fee.charge vs. fees.adjust.
+  router.post(
+    '/repayment-installments/:id/add-penalty',
+    requireAuth,
+    requirePermission('penalty.charge'),
+    validateBody(addPenaltySchema),
+    controller.addPenalty,
   );
 
   return router;

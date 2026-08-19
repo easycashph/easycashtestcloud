@@ -1,7 +1,8 @@
-import type { NextFunction, Request, Response } from 'express';
+﻿import type { NextFunction, Request, Response } from 'express';
 import { assertBranchAccess, resolveBranchScope } from '@shared/http/branchScope';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
 import { Money } from '@shared/domain/Money';
+import { env } from '@shared/config/env';
 import type { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import { resolveSecMc3Coverage } from '@modules/loan-account/application/services/SecMc3CoverageResolver';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
@@ -10,11 +11,12 @@ import type { GetRepaymentInstallmentUseCase } from '../../application/use-cases
 import type { ReducePenaltyUseCase } from '../../application/use-cases/ReducePenaltyUseCase';
 import type { AdjustFeesUseCase } from '../../application/use-cases/AdjustFeesUseCase';
 import type { AddFeeUseCase } from '../../application/use-cases/AddFeeUseCase';
+import type { AddPenaltyUseCase } from '../../application/use-cases/AddPenaltyUseCase';
 import type { ListInstallmentAdjustmentsForLoanUseCase } from '../../application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
 import type { RepaymentInstallment } from '../../domain/RepaymentInstallment';
 import { presentRepaymentInstallment } from './presenters/RepaymentInstallmentPresenter';
 import { presentInstallmentAdjustment } from './presenters/InstallmentAdjustmentPresenter';
-import type { AddFeeRequestBody, AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
+import type { AddFeeRequestBody, AddPenaltyRequestBody, AdjustFeesRequestBody, ReducePenaltyRequestBody } from './repaymentSchemas';
 
 /** 2026-07-24 (user-confirmed): the loan's maturity date - the latest `dueDate` across its whole
  * schedule - same definition as the "Matured" badge/dashboard overlay elsewhere in this codebase.
@@ -29,6 +31,7 @@ export interface RepaymentControllerDeps {
   reducePenaltyUseCase: ReducePenaltyUseCase;
   adjustFeesUseCase: AdjustFeesUseCase;
   addFeeUseCase: AddFeeUseCase;
+  addPenaltyUseCase: AddPenaltyUseCase;
   listInstallmentAdjustmentsForLoanUseCase: ListInstallmentAdjustmentsForLoanUseCase;
   /**
    * Milestone 8.1 / H-1: RepaymentInstallment has no `branchId` field of
@@ -67,6 +70,7 @@ export class RepaymentController {
       // (non-migrated) loan — !legacyId — never for a migrated loan's already-snapshotted figures.
       const penaltyContext = {
         isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
         maturityDate: resolveMaturityDate(installments),
@@ -92,6 +96,7 @@ export class RepaymentController {
       assertBranchAccess(scope, loanAccount.branchId); // H-1: checked via the parent loan account's branch.
       const penaltyContext = {
         isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
         maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
@@ -117,6 +122,7 @@ export class RepaymentController {
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = {
         isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
         maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
@@ -142,6 +148,33 @@ export class RepaymentController {
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = {
         isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
+        principalAmount: loanAccount.principalAmount,
+        isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
+        maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
+      };
+      res.status(200).json(presentRepaymentInstallment(updated, penaltyContext));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addPenalty = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const installmentId = req.params.id as string;
+      const installment = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const loanAccount = await this.deps.getLoanAccountUseCase.execute(installment.loanAccountId);
+      assertBranchAccess(scope, loanAccount.branchId); // H-1: same pattern as get()/listForLoan() above.
+
+      const body = req.body as AddPenaltyRequestBody;
+      const currentUser = getCurrentUser(req);
+      await this.deps.addPenaltyUseCase.execute(installmentId, Money.of(body.amount), body.reason, currentUser.sub);
+
+      const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
+      const penaltyContext = {
+        isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
         maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),
@@ -167,6 +200,7 @@ export class RepaymentController {
       const updated = await this.deps.getRepaymentInstallmentUseCase.execute(installmentId);
       const penaltyContext = {
         isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
         principalAmount: loanAccount.principalAmount,
         isSecMc3Covered: await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository),
         maturityDate: resolveMaturityDate(await this.deps.listRepaymentInstallmentsForLoanUseCase.execute(loanAccount.id)),

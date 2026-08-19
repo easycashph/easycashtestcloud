@@ -31,6 +31,18 @@ function resolvePenaltyRatePercent(principalAmount: Money): Percentage {
 export interface PenaltyComputationContext {
   /** `true` when the loan has no `legacyId` — i.e. originated through this system, not migrated. */
   isProspectiveLoan: boolean;
+  /**
+   * 2026-08-19 (user request, migration period): mirrors `env.PENALTY_AUTO_COMPUTE_ENABLED` — every
+   * caller reads that flag at its own layer (this file is pure domain and must not import config)
+   * and passes it through here. When `false`, this resolver never runs the live ADR-050/SEC-MC3
+   * formula for ANY loan, prospective or not — it always falls back to `installment.due.penalty`,
+   * same as a migrated loan already does. This is deliberately a hard kill-switch, not scoped to
+   * `isProspectiveLoan`: while SDevTech remains the source of truth, staff key in whatever penalty
+   * SDevTech's own screen shows via the new Add Penalty action, and a live-computed figure running
+   * alongside that would only produce two disagreeing numbers for the same loan. Flip the env var
+   * back to `true` once the LMS is the official system and SDevTech is retired.
+   */
+  autoComputeEnabled: boolean;
   principalAmount: Money;
   /** `ADR-053` — when true, use the SEC MC 3 ceiling (5%/month, simple/non-compounding) instead of the ADR-050 rates. Resolved by the caller via `isSecMc3Covered()` against the loan's product/principal/tenor/origination date. */
   isSecMc3Covered: boolean;
@@ -60,7 +72,7 @@ export function resolveComputedPenalty(
   penaltyContext: PenaltyComputationContext | undefined,
   asOfDate: Date = new Date(),
 ): Money {
-  if (penaltyContext?.isProspectiveLoan && installment.status !== 'PAID') {
+  if (penaltyContext?.autoComputeEnabled && penaltyContext.isProspectiveLoan && installment.status !== 'PAID') {
     const overdueAmount = installment.due.principal
       .add(installment.due.interest)
       .subtract(installment.paid.principal.add(installment.paid.interest));

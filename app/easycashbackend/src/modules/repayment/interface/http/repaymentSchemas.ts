@@ -28,3 +28,11 @@ export const addFeeSchema = z.object({
 });
 
 export type AddFeeRequestBody = z.infer<typeof addFeeSchema>;
+
+/** 2026-08-19 (Add Penalty feature) — mirrors `addFeeSchema` exactly, but for penalty. */
+export const addPenaltySchema = z.object({
+  amount: decimalStringSchema,
+  reason: z.string().trim().min(1),
+});
+
+export type AddPenaltyRequestBody = z.infer<typeof addPenaltySchema>;
