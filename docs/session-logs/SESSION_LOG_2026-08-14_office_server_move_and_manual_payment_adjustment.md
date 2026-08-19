@@ -1227,6 +1227,67 @@ to stay on this machine (or get copied back) for any future full-reset re-run.
   TEST-named staff/login users. Awaiting user decision on whether to delete these (need to check
   `SP-Easy_00001` for real transactions/payments first, same care as the earlier
   `TESTManny Mayweather Pacquiao` cleanup).
+
+## §28 - Origination-fee snapshot (no more .xlsm dependency) + a stale-backup bug found along the way (2026-08-19)
+
+User copied `BETA 1.5.83 LMSv3.xlsm` onto the Office Server PC and asked to run the
+previously-skipped step 13. Ran it (dry-run then `--apply`): 136 rows matched, 41 backfilled
+(the ones still reading all-zero after 13b/13c), 95 already correct. Then, since a machine-local
+Excel file being available is fragile (exactly what caused step 13 to fail in the first place),
+snapshotted the 136 matched rows into a committed `scripts/data/origination-fees-excel-snapshot.json`
+and rewrote `backfill-loan-origination-fees.ts` to read from that instead of the `.xlsm` directly -
+same safety logic (only touches all-zero loans), but works on any machine with no local file
+dependency. Added `generate-origination-fees-snapshot.ts` to refresh the snapshot later if the
+Excel file ever gets new rows.
+
+User then asked why those 41 loans weren't in the SDevTech MongoDB backup at all, and whether
+`backup-mongodb.bat` was missing something. Investigation: `backup-mongodb.bat` runs a full
+`mongodump` with no `--db`/`--collection` filter - not a selective/partial backup, so it wasn't
+the cause. Confirmed directly that all 41 loans' `accountId`s are genuinely absent from
+`monthly_loan_releases.bson` in the MongoDB export itself - a real gap in the source system's
+release-report collection, not a backup gap. `monthly_loan_releases` is apparently a
+separately-maintained report collection on the SDevTech side, distinct from (and less complete
+than) MIS Nomer's own Excel LMS - explains why two different backfill passes (13b MongoDB, 13
+Excel-snapshot) are both needed for full coverage.
+
+**While verifying this, found a real, separate bug**: the 2026-08-19 full migration (§27) had
+actually run against a **5-day-stale Aug 14 backup**, not the Aug 19 one just downloaded, despite
+the `.bat` correctly identifying and extracting the true-newest zip by file date
+(`dir /b /o-d`). Root cause, two compounding bugs:
+1. `backup-mongodb.bat`'s timestamp generation parsed `%date%`/`%time%` assuming a locale format
+   with a leading day-name (e.g. "Wed 08/19/2026", 4 tokens). This Office Server PC's `%date%` is
+   just `08/19/2026` (3 tokens, no day-name) - the token-index mismatch silently mis-assigned
+   `mm="19"`, `dd="2026"`, `yyyy=""`, producing a malformed zip name `192026_184828.zip` instead of
+   `20260819_184828.zip`.
+2. `scripts/lib/legacyDumpPath.ts` (used by `migrate-legacy-data.ts` and every backfill script that
+   reads the Mongo export) picked the "latest" extracted folder by a plain alphabetical sort of
+   folder *names* - and `"192026_184828"` sorts alphabetically BEFORE `"20260814_155130"` (`'1' <
+   '2'`), so the malformed-but-actually-newer folder lost to the well-formed-but-actually-older one.
+
+Fixed both: `backup-mongodb.bat` and `backup-lms-database-remote.bat` (same bug, same fix) now
+generate their timestamp via `powershell -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`
+instead of parsing `%date%`/`%time%` at all - locale-independent, can't recur. Both files are
+gitignored (contain real credentials), so these fixes are local-only, not in git history.
+`legacyDumpPath.ts` now sorts extracted folders by filesystem modification time instead of name -
+correct regardless of whether a folder happens to be well-named.
+
+**Impact assessment**: extracted the true Aug 19 backup and compared file sizes against the
+Aug 14 one actually used - virtually identical across every collection (e.g. `loan_transactions.bson`
+588,692,057 vs 588,735,552 bytes) except `monthly_loan_releases.bson`, which was *larger* in the
+stale Aug 14 backup (743,993 bytes) than the true Aug 19 one (110,685 bytes) - meaning the
+5-day-old data actually had MORE release-report rows, not fewer. Concluded the migration does not
+need to be re-run - the bug is fixed for future backups/migrations, but this particular run's
+result is not meaningfully worse for having used the older backup.
+
+### Current state / follow-ups
+
+- Origination fees (step 13) now has zero dependency on a machine-local Excel file being present.
+- Two real, previously-unknown bugs fixed: locale-dependent backup timestamp generation (both
+  backup `.bat` files, local-only) and name-based (vs mtime-based) "latest backup" picking
+  (`legacyDumpPath.ts`, committed). Both were silently causing every prior migration run on this
+  machine's specific locale to use a stale-but-well-named backup over a fresh-but-malformed-named
+  one - worth keeping in mind if any earlier migration's data ever looks off by a few days.
+- No migration re-run needed - impact assessed as negligible (see above).
 - Loan Application downloadable/signable PDF feature: mockup approved, user said proceed with the
   real build, but two blocking implementation questions (missing real `.docx` template with merge
   fields; need a new `GeneratedLoanApplicationDocument` model since the existing one is
