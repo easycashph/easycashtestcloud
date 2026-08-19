@@ -14,7 +14,7 @@ REM never touches GitHub or the remote MongoDB server. This is NOT the same as
 REM "Update Database From SDevTech.bat" (safe, additive, skips already-migrated data) - only use
 REM this one for a genuine from-scratch rebuild.
 
-pushd "%~dp0"
+pushd "%~dp0.."
 set "ROOT_DIR=%CD%\"
 popd
 set "BACKEND_DIR=%ROOT_DIR%app\easycashbackend"

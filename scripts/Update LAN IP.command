@@ -1,7 +1,7 @@
 #!/bin/bash
 set -u
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_ENV="$ROOT_DIR/app/easycashbackend/.env"
 FRONTEND_ENV="$ROOT_DIR/app/lmsfrontend/.env"
 DOCKER_DIR="$ROOT_DIR/app/docker"

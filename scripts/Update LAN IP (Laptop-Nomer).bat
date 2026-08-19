@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "ROOT_DIR=%~dp0"
+set "ROOT_DIR=%~dp0..\"
 set "BACKEND_ENV=%ROOT_DIR%app\easycashbackend\.env"
 set "FRONTEND_ENV=%ROOT_DIR%app\lmsfrontend\.env"
 set "DOCKER_DIR=%ROOT_DIR%app\docker"

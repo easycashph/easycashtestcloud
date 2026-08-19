@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-pushd "%~dp0"
+pushd "%~dp0.."
 set "ROOT_DIR=%CD%\"
 popd
 

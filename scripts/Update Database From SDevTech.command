@@ -1,7 +1,7 @@
 #!/bin/bash
 set -u
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MONGO_DIR="$ROOT_DIR/legacy/mongodb"
 EXTRACTED_DIR="$MONGO_DIR/extracted"
 BACKEND_DIR="$ROOT_DIR/app/easycashbackend"

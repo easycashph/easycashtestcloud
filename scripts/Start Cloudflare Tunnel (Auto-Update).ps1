@@ -29,7 +29,7 @@ function Wait-Or-Exit($msg) {
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ConfigPath = Join-Path $RepoRoot 'local\tunnel-autoupdate.env'
 $CloudflaredExe = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
 
