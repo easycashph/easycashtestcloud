@@ -184,7 +184,7 @@ if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [13/18] Origination fees (Excel source)...
+echo [13/18] Origination fees (Excel snapshot, no .xlsm needed)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-origination-fees.ts --apply
 if errorlevel 1 goto :step_failed

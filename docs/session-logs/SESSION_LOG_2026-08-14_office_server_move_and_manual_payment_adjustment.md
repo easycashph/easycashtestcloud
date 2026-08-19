@@ -1048,3 +1048,293 @@ recurs after a future rebuild.
 - Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
   Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
   wanted), advanced Loan Releases Report redesign (deferred).
+
+## 26. Windows Full Legacy Migration script, and auto-preserving native applications/attachments/users across a reset
+
+### Windows counterpart of the Mac-only full-reset migration script
+
+User asked to check `legacy/Run Full Legacy Migration.command` (Mac-only bash) and asked for an
+Office Server PC (Windows) equivalent. Found the `.command` still referenced the pre-rename
+`app/backend` path (renamed to `app/easycashbackend` on 2026-07-30) - verified all 19 referenced
+migration scripts still exist under the corrected path before writing anything. Built
+`Run Full Legacy Migration (Office Server PC).bat` (user asked for "Office Server PC" explicitly in
+the filename, matching the existing `(Auto-Update)`-style parenthetical convention) - same 18 steps
+in the same order, same destructive-reset warning and Y/N confirmation gate, following the
+`Expand-Archive`/`pushd`-`popd`/errorlevel-check conventions already established in
+`Update Database From SDevTech.bat`. PowerShell-parser-validated the `.ps1` sibling work from
+earlier in this doc, and for THIS file just carefully hand-verified the batch syntax against the
+working precedent file. Nothing was run - file creation only.
+
+### Auto-preserving what a full reset can't rebuild from the legacy backup
+
+User asked whether attachments/loan-applications/user-accounts survive that destructive reset,
+which led to three rounds of the same shape of fix - back up what has no MongoDB-recoverable path,
+restore it after the fresh migration:
+
+1. **Native loan applications + their attachments** - `LoanApplication` has no `legacyId` field at
+   all (confirmed by reading the schema directly, not assumed) - it's *always* locally created,
+   never migrated, so a reset erases every one with no rebuild path. New
+   `backup-native-loan-applications.ts` (dumps every `LoanApplication` row + every `legacyId IS
+   NULL` `Attachment`) and `restore-native-loan-applications.ts` (remaps `branchId` to the
+   post-migration branch, nulls every staff-user FK since Users are wiped too, only restores an
+   Attachment whose owning application was itself restored). Deliberately excludes native
+   Borrower/LoanAccount data and everything under it (transactions, schedules, addresses) - flagged
+   to the user as a real, structural risk boundary, not silently narrowed: those sit in the actual
+   financial ledger and blind-restoring them across a full id-regenerating reset risks corrupting
+   real balances, a much higher-stakes problem than losing an uploaded ID photo.
+2. **Native user accounts** - so staff can log in immediately after a reset with their *existing*
+   email/password instead of needing `bootstrap-admin.ts` + manually re-creating every account.
+   New `backup-native-users.ts`/`restore-native-users.ts`: only `legacyId IS NULL` users (real login
+   accounts - `User.legacyId` is identity-traceability-only per ADR-039, never real credentials).
+   Denormalizes branch code and role/role-class *names* (not raw ids) into the backup, since
+   Branch/Role/RoleClass all get brand-new ids on every fresh `seed.ts` run (upserted by
+   code/name into an empty table) - remapped back on restore by looking each one up by that
+   name/code, skipping (with a warning) whatever no longer resolves rather than failing the whole
+   restore. Both new backup calls added right after the reset confirmation prompt in the `.bat`;
+   both new restore calls added right after `[18/18] Final verification`, before the closing
+   summary - which was also reworded to reflect that a restore usually makes the old
+   "run bootstrap-admin.ts" instruction unnecessary now.
+3. **Attachment FILE BYTES (not metadata)** - user asked whether files "attach automatically" after
+   migration. Traced `migrate-legacy-data.ts`'s attachment handling: step [3/18] only creates
+   metadata-only `Attachment` placeholder rows (`legacy-unmigrated:` storageKey) - the real file
+   bytes need a separate SFTP pull (`backfill-legacy-attachments.ts`, LOAN_ACCOUNT-owned only,
+   BORROWER-owned SFTP path still unconfirmed/out of scope per that script's own comment), which is
+   **not** part of the 18-step full-migration script at all. Confirmed the existing
+   `Backfill SDevTech Attachments.bat` (dry-run first, Y/N gate, idempotent, read-only against
+   SFTP) is safe to run manually right after the full migration - offered to fold it into the
+   `.bat` automatically; user said no, keep them as two separate scripts.
+
+All four new TypeScript scripts were test-run live against the real (unreset) database each time
+they were written - the backup half genuinely captured data (4 applications/15 attachments, then 9
+user accounts); the restore half was exercised against the SAME unreset database specifically to
+prove its per-row error handling works (branch/role/role-class lookups all resolved correctly,
+then each `create()` correctly hit and gracefully skipped a unique-id collision, exactly the
+expected outcome when nothing has actually been reset yet - the real "does it restore into an
+actually-empty database" path is still unverified, since that would require the user to run an
+actual destructive reset, which nobody has done this session). `legacy/native-backups/` added to
+`.gitignore` (same real-PII sensitivity class as `legacy/db-exports/`).
+
+### The mystery-deletion count keeps growing
+
+Two MORE unexplained pre-existing uncommitted deletions surfaced while committing this section's
+work (`legacy/Run Full Legacy Migration.command`, `legacy/Sync Database And Apply Migrations.command`),
+on top of the three from §25 (`Backfill SDevTech Attachments.command`,
+`Update Database From SDevTech.command`, `Update LAN IP.command`) - **five total now**, all
+`.command` (macOS) files, none touched by this session. Same handling as before: stashed only long
+enough to `git pull --rebase`/`push`, popped back immediately after, never folded into a commit.
+Flagged to the user again; still not investigated or resolved.
+
+### Current state / follow-ups
+
+- Windows Office Server PC now has its own full-reset migration script, matching the Mac
+  `.command` step for step with the path fixed.
+- A full reset now auto-preserves: loan applications + their attachments, and user accounts
+  (login-ready immediately). Explicitly does NOT preserve: native Borrower/LoanAccount data, or
+  attachment file bytes (needs the separate, still-manual `Backfill SDevTech Attachments.bat`).
+  None of this has been exercised against a REAL reset yet - only against the live, unreset
+  database (to prove the error-handling paths work), so the true end-to-end "reset, then restore
+  into empty tables" flow is still unverified in practice.
+- **Open, needs attention next session** (carried from §25): Payment Recording 500 on
+  SML-REG_00334's final installment - root cause still not found.
+- **Now FIVE, not two, unexplained pre-existing uncommitted `.command` deletions** in the working
+  tree - worth actually investigating next session rather than continuing to just stash-around them
+  indefinitely.
+- Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
+  Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
+  wanted), advanced Loan Releases Report redesign (deferred).
+
+## §27 - The real, destructive full migration (2026-08-19)
+
+User gave an explicit, informed go-ahead - `patakbuhin na ang Run Full Legacy Migration (Office
+Server PC).bat` - to run the actual reset against the newest SDevTech/MongoDB backup
+(`192026_184828.zip`), the first time this script (or its backup/restore safety net from §26) was
+ever exercised against a genuinely empty post-reset database rather than the live one.
+
+### What happened
+
+The `.bat` ran the `[BACKUP]` steps, `prisma migrate reset --force`, and steps `[1/18]`-`[12/18]`
+(CP12 core migration, PSGC/address resolution, repayment schedules, balance flag/recompute,
+document template mappings) all successfully, then **aborted at `[13/18]`**: `Error: File not
+found: legacy\reports\BETA 1.5.83 LMSv3.xlsm`. Root cause: that Excel workbook (the source for the
+Excel-based origination-fee backfill) simply isn't present on this Office Server PC - never a bug
+in the script itself, a missing local asset. Because the `.bat` aborts on first failure
+(`if errorlevel 1 goto :step_failed`), everything after step 13 - including both `[RESTORE]`
+steps - never ran, leaving the database with a real, freshly-migrated legacy dataset but **zero**
+native user accounts or loan applications (both wiped by the reset, with no automatic recovery).
+
+Completed every remaining step manually, in order, via `npx tsx` directly (same scripts the `.bat`
+would have called):
+- `[13b/18]` origination fees (MongoDB source) - 437 updates applied.
+- `[13c/18]` origination fees (inferred stragglers) - ran clean.
+- `[14/18]` interest rates - 623 addOnInterestRate + 1802 contractualInterestRate backfilled.
+- `[15/18]` net proceeds recompute - 1802/1802 corrected.
+- `[16/18]` PH ZIP codes - 1535 written.
+- `[17/18]` NCR barangay ZIP codes - 178 barangay + 9 Manila district written.
+- `[18/18]` `check-migration-status.ts` - all 6 checks PASS.
+- `restore-native-users.ts` - all 9 native accounts restored, including
+  `nomer.perez@easycash.ph` (confirmed `ACTIVE` via direct SQL). Some `roleClass` name lookups
+  ("Accounting Staff", "Operation Manager", "Collection Specialist", "Admin") didn't resolve
+  post-migration - left blank per the script's designed graceful-degradation (cosmetic field only,
+  doesn't block login/access).
+- `restore-native-loan-applications.ts` - **first run failed 0/4**: `assignedLoanProductVersionId`
+  and `borrowerId` FK violations on all 4 applications. The script's original assumption (a set FK
+  on one of these fields is always either legacy-sourced, and so survives the reset with the same
+  id, or already null) turned out to be wrong - these 4 applications had FKs pointing at *native*
+  Borrower/LoanProductVersion/PortalAccount rows, which are out of this restore's scope and
+  genuinely don't exist post-reset. Fixed `restore-native-loan-applications.ts` to look up each of
+  `borrowerId`/`assignedLoanProductVersionId`/`portalAccountId` against what actually exists
+  post-migration and null out (with a warning) whatever doesn't resolve, instead of letting the
+  whole row's `create()` fail. Re-ran: **4/4 loan applications restored, 9/15 attachments**
+  restored (the other 6 are BORROWER/LOAN_ACCOUNT-owned, out of this script's scope by design).
+
+Verified after: all 4 Docker containers `Up`/`healthy`, backend `/health` → 200,
+`check-migration-status.ts` still all-PASS.
+
+### Known, accepted gap
+
+The Excel-source origination-fee backfill (the original step 13) **never ran** for this migration
+- `legacy/reports/BETA 1.5.83 LMSv3.xlsm` isn't present on this machine. Its two fallback siblings
+(13b MongoDB-source, 13c inferred-stragglers) did run and cover most of the same ground per their
+own doc comments, but this is not a verified 1:1 substitute. If a specific loan's origination fee
+looks wrong later, this is the first thing to check - re-run 13 once that Excel file is located and
+copied to this PC (it was presumably left off during earlier `legacy/reports/` gitignore rules, or
+simply never copied over).
+
+**Update, same day**: user copied `BETA 1.5.83 LMSv3.xlsm` onto this Office Server PC. Ran step 13
+manually (dry-run first): 260 rows read, 142 matched by loanCode, 95 already had real fee data from
+13b/13c (correctly left untouched), 118 had no matching LoanAccount, and **41 loans that were still
+reading all-zero fees got real values backfilled from the Excel source**. `--apply` run succeeded,
+`check-migration-status.ts` still all-PASS afterward. This gap is now closed - the file just needs
+to stay on this machine (or get copied back) for any future full-reset re-run.
+
+### Current state / follow-ups
+
+- The Office Server PC migration script + its backup/restore safety net (§26) is now proven
+  end-to-end against a real reset, not just the live database.
+- Fixed a real bug in `restore-native-loan-applications.ts` surfaced only by the real reset (see
+  above) - future re-runs of this script will null-out-and-warn on stale native FKs instead of
+  failing those rows outright.
+- **Open, needs attention next session** (carried forward again): Payment Recording 500 on
+  SML-REG_00334's final installment - still never retried with live logs.
+- Excel-source origination fees (step 13) - closed same day, see update above.
+- Still-open from before: five unexplained pre-existing `.command` deletions, `wslrelay.exe`
+  port-4000 squatter (worked around via Docker Desktop restart, not root-caused).
+- Found several TEST-named records while checking: 2 native loan applications
+  (`TEST2NOMER TEST2NOMER TEST2NOMER`, `TEST6NOMER TEST6NOMER TEST6NOMER`, both APPROVED, both
+  restored from the pre-reset backup); 5 legacy-sourced borrowers (`ROXANNE TESTONLY`, `JAY TEST`,
+  `BHENZII TESTA`, `TEST PAYLATER`, `KABORROW TESTING` - pre-existing in the SDevTech source data,
+  not created this session); 1 ACTIVE loan account (`SP-Easy_00001`, borrower `BHENZII TESTA`); 0
+  TEST-named staff/login users. Awaiting user decision on whether to delete these (need to check
+  `SP-Easy_00001` for real transactions/payments first, same care as the earlier
+  `TESTManny Mayweather Pacquiao` cleanup).
+
+## §28 - Origination-fee snapshot (no more .xlsm dependency) + a stale-backup bug found along the way (2026-08-19)
+
+User copied `BETA 1.5.83 LMSv3.xlsm` onto the Office Server PC and asked to run the
+previously-skipped step 13. Ran it (dry-run then `--apply`): 136 rows matched, 41 backfilled
+(the ones still reading all-zero after 13b/13c), 95 already correct. Then, since a machine-local
+Excel file being available is fragile (exactly what caused step 13 to fail in the first place),
+snapshotted the 136 matched rows into a committed `scripts/data/origination-fees-excel-snapshot.json`
+and rewrote `backfill-loan-origination-fees.ts` to read from that instead of the `.xlsm` directly -
+same safety logic (only touches all-zero loans), but works on any machine with no local file
+dependency. Added `generate-origination-fees-snapshot.ts` to refresh the snapshot later if the
+Excel file ever gets new rows.
+
+User then asked why those 41 loans weren't in the SDevTech MongoDB backup at all, and whether
+`backup-mongodb.bat` was missing something. Investigation: `backup-mongodb.bat` runs a full
+`mongodump` with no `--db`/`--collection` filter - not a selective/partial backup, so it wasn't
+the cause. Confirmed directly that all 41 loans' `accountId`s are genuinely absent from
+`monthly_loan_releases.bson` in the MongoDB export itself - a real gap in the source system's
+release-report collection, not a backup gap. `monthly_loan_releases` is apparently a
+separately-maintained report collection on the SDevTech side, distinct from (and less complete
+than) MIS Nomer's own Excel LMS - explains why two different backfill passes (13b MongoDB, 13
+Excel-snapshot) are both needed for full coverage.
+
+**While verifying this, found a real, separate bug**: the 2026-08-19 full migration (§27) had
+actually run against a **5-day-stale Aug 14 backup**, not the Aug 19 one just downloaded, despite
+the `.bat` correctly identifying and extracting the true-newest zip by file date
+(`dir /b /o-d`). Root cause, two compounding bugs:
+1. `backup-mongodb.bat`'s timestamp generation parsed `%date%`/`%time%` assuming a locale format
+   with a leading day-name (e.g. "Wed 08/19/2026", 4 tokens). This Office Server PC's `%date%` is
+   just `08/19/2026` (3 tokens, no day-name) - the token-index mismatch silently mis-assigned
+   `mm="19"`, `dd="2026"`, `yyyy=""`, producing a malformed zip name `192026_184828.zip` instead of
+   `20260819_184828.zip`.
+2. `scripts/lib/legacyDumpPath.ts` (used by `migrate-legacy-data.ts` and every backfill script that
+   reads the Mongo export) picked the "latest" extracted folder by a plain alphabetical sort of
+   folder *names* - and `"192026_184828"` sorts alphabetically BEFORE `"20260814_155130"` (`'1' <
+   '2'`), so the malformed-but-actually-newer folder lost to the well-formed-but-actually-older one.
+
+Fixed both: `backup-mongodb.bat` and `backup-lms-database-remote.bat` (same bug, same fix) now
+generate their timestamp via `powershell -Command "(Get-Date).ToString('yyyyMMdd_HHmmss')"`
+instead of parsing `%date%`/`%time%` at all - locale-independent, can't recur. Both files are
+gitignored (contain real credentials), so these fixes are local-only, not in git history.
+`legacyDumpPath.ts` now sorts extracted folders by filesystem modification time instead of name -
+correct regardless of whether a folder happens to be well-named.
+
+**Initial impact assessment (later corrected - see §29)**: extracted the true Aug 19 backup and
+compared file sizes against the Aug 14 one actually used - virtually identical across every
+collection (e.g. `loan_transactions.bson` 588,692,057 vs 588,735,552 bytes) except
+`monthly_loan_releases.bson`, which was *larger* in the stale Aug 14 backup (743,993 bytes) than
+the true Aug 19 one (110,685 bytes). Concluded from file sizes alone that a re-run wasn't needed -
+**this turned out to be wrong, a file-size comparison isn't a content comparison; see §29 for the
+actual per-document diff that found real missing data and the migration re-run that followed.**
+
+### Current state / follow-ups
+
+- Origination fees (step 13) now has zero dependency on a machine-local Excel file being present.
+- Two real, previously-unknown bugs fixed: locale-dependent backup timestamp generation (both
+  backup `.bat` files, local-only) and name-based (vs mtime-based) "latest backup" picking
+  (`legacyDumpPath.ts`, committed). Both were silently causing every prior migration run on this
+  machine's specific locale to use a stale-but-well-named backup over a fresh-but-malformed-named
+  one - worth keeping in mind if any earlier migration's data ever looks off by a few days.
+- **Correction, see §29**: the "no re-run needed" conclusion above was wrong - a proper per-document
+  diff found 96 genuinely missing transactions, and the migration was re-run same day.
+- Loan Application downloadable/signable PDF feature: mockup approved, user said proceed with the
+  real build, but two blocking implementation questions (missing real `.docx` template with merge
+  fields; need a new `GeneratedLoanApplicationDocument` model since the existing one is
+  LoanAccount-only) were raised and not yet answered - pick this back up next.
+
+## §29 - The stale-backup bug DID lose real data - found it, fixed it, re-ran (2026-08-19)
+
+User pushed back on the §28 "no re-run needed" conclusion, correctly pointing out that a file-size
+comparison doesn't prove the content is the same. Did a proper per-document diff instead: re-extracted
+the true Aug 19 backup (`192026_184828.zip`) and streamed both `loan_transactions.bson` files
+(525,032 docs in Aug 14 vs 525,128 in Aug 19 - too large to load into memory at once, iterated with
+a generator) comparing by `_id`.
+
+**Found 96 real transactions genuinely missing** from the Aug 14 backup that the 2026-08-19 full
+migration (§27) had used - REPAYMENT, DISBURSMENT, FEE_CHARGED, PENALTY_APPLIED, and related entries
+dated 2026-08-17 through 2026-08-19, across 7 loan accounts. One of them: a ₱13,296.81 REPAYMENT on
+**SML-REG_00334** - very likely the same payment the user originally asked about at the start of
+this session (the "unexpected error" on that loan's last-installment payoff), meaning that payment
+had actually gone through on the legacy/SDevTech side but was silently dropped from this LMS's
+database by the stale-backup bug, not lost to the original recording error.
+
+Reused the backup/restore safety net + the now-fixed `legacyDumpPath.ts` (§28) to re-run the entire
+full migration `.bat` end-to-end. First confirmed nothing new had been created in the DB since the
+last restore (0 new users/loan applications), so re-running the `[BACKUP]` step wouldn't lose
+anything new. Full re-run succeeded cleanly - all 18 steps including step 13 (now snapshot-based,
+no `.xlsm` needed), no manual intervention required this time, both `[RESTORE]` steps succeeded
+(9/9 users, 4/4 loan applications + 9 attachments). Verified: `loan_transactions` count is now
+280,238 (up from before); the `SML-REG_00334` ₱13,296.81 REPAYMENT and a sample of the other
+previously-missing 96 transactions are now present (checked by legacy Mongo `_id` →
+`LoanTransaction.legacyId`); `check-migration-status.ts` all-PASS; all 4 Docker containers
+healthy, `/health` → 200; `nomer.perez@easycash.ph` login confirmed `ACTIVE`.
+
+### Current state / follow-ups
+
+- The stale-backup bug (§28) is now confirmed to have had real impact (96 transactions, one
+  matching the session's original payment-error report) - not the "negligible" conclusion first
+  reached from file sizes alone. Lesson: for anything touching the financial ledger, diff actual
+  content by id, never infer completeness from file/collection size.
+- The 2026-08-19 migration is now the authoritative one - it was built from the correct, true-latest
+  MongoDB backup, with the `legacyDumpPath.ts` fix already in place, so this shouldn't recur.
+- Deleted the stale Aug 14 extracted folder (`legacy/mongodb/extracted/20260814_155130/`) now that
+  it's superseded, to avoid any future confusion about which is "latest."
+- **Open, needs re-verification next session**: the earlier Payment Recording 500 error on
+  SML-REG_00334's last-installment payoff (₱13,296.81) - now that the underlying REPAYMENT
+  transaction is confirmed present in the DB, check whether the loan's balance/status reflects it
+  correctly in the LMS UI (Loan Account page), since the original report was about a UI error
+  during recording, separate from whether the transaction data itself was missing.
+- Loan Application downloadable/signable PDF feature - still not started, same two blockers as
+  before (§ above), pick up next.
