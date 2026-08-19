@@ -28,7 +28,7 @@ import {
   writeFirstAmortizationReportXlsx,
   writeFullyPaidAccountsReportXlsx,
 } from '../../infrastructure/reportWriters';
-import { presentLoanReleaseReportRow, presentTransactionReportRow } from './presenters/ReportPresenter';
+import { presentExpectedCollectionReportRow, presentLoanReleaseReportRow, presentTransactionReportRow } from './presenters/ReportPresenter';
 
 export interface ReportingControllerDeps {
   getLoanOriginationReportUseCase: GetLoanOriginationReportUseCase;
@@ -238,6 +238,20 @@ export class ReportingController {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Collection.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-19 (user request): JSON counterpart to `expectedCollectionXlsx` below, for the
+   * report's new on-screen table - same "not paginated, date-range-scoped" posture as `loanReleases`. */
+  expectedCollection = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentExpectedCollectionReportRow) });
     } catch (error) {
       next(error);
     }

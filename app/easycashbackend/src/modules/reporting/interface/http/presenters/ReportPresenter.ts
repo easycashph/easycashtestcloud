@@ -1,4 +1,4 @@
-import type { LoanReleaseReportRow, TransactionReportRow } from '../../../application/ports/IReportingRepository';
+import type { ExpectedCollectionReportRow, LoanReleaseReportRow, TransactionReportRow } from '../../../application/ports/IReportingRepository';
 
 export interface TransactionReportResponse {
   id: string;
@@ -84,5 +84,36 @@ export function presentLoanReleaseReportRow(row: LoanReleaseReportRow): LoanRele
     loanCreated: row.loanCreated.toISOString(),
     maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
     firstRepaymentDate: row.firstRepaymentDate.toISOString(),
+  };
+}
+
+/** 2026-08-19 (user request): JSON counterpart of ExpectedCollectionReportRow (the existing `.xlsx`
+ * shape), for the report's new on-screen table - mirrors presentLoanReleaseReportRow's own pattern. */
+export interface ExpectedCollectionReportResponse {
+  clientName: string;
+  product: string;
+  accountId: string;
+  mobileNumber: string;
+  accountState: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  principalDue: string;
+  interestDue: string;
+  principalPaid: string;
+  interestPaid: string;
+  monthDue: string;
+  pastDueAmount: string;
+  daysLate: number;
+  repayment: string;
+  state: string;
+}
+
+export function presentExpectedCollectionReportRow(row: ExpectedCollectionReportRow): ExpectedCollectionReportResponse {
+  return {
+    ...row,
+    dueDate: row.dueDate.toISOString(),
+    maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
+    lastPaidDate: row.lastPaidDate ? row.lastPaidDate.toISOString() : null,
   };
 }

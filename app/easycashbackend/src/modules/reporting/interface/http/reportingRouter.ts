@@ -24,6 +24,7 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/ending-balance.xlsx', requireAuth, requireReportView, controller.endingBalanceXlsx);
   router.get('/reports/accounts-past-due.xlsx', requireAuth, requireReportView, controller.accountsWithPastDueXlsx);
   router.get('/reports/collection-history.xlsx', requireAuth, requireReportView, controller.collectionHistoryXlsx);
+  router.get('/reports/expected-collection', requireAuth, requireReportView, controller.expectedCollection);
   router.get('/reports/expected-collection.xlsx', requireAuth, requireReportView, controller.expectedCollectionXlsx);
   router.get('/reports/first-amortization.xlsx', requireAuth, requireReportView, controller.firstAmortizationXlsx);
   router.get('/reports/daily-collection.xlsx', requireAuth, requireReportView, controller.dailyCollectionXlsx);

@@ -82,3 +82,24 @@ export interface LoanReleaseReportRow {
   webFee: string;
   totalNetAmount: string;
 }
+
+/** 2026-08-19 (user request): JSON counterpart of the backend's ExpectedCollectionReportResponse. */
+export interface ExpectedCollectionReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  mobileNumber: string;
+  accountState: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  principalDue: string;
+  interestDue: string;
+  principalPaid: string;
+  interestPaid: string;
+  monthDue: string;
+  pastDueAmount: string;
+  daysLate: number;
+  repayment: string;
+  state: string;
+}
