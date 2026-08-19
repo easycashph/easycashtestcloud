@@ -206,7 +206,9 @@ export function ExpectedCollectionReportPage() {
                   ) : (
                     rows.map((r, idx) => (
                       <TableRow key={`${r.accountId}-${idx}`}>
-                        <TableCell className="font-medium">{r.clientName}</TableCell>
+                        <TableCell className="max-w-[180px] truncate font-medium" title={r.clientName}>
+                          {r.clientName}
+                        </TableCell>
                         <TableCell>{r.product}</TableCell>
                         <TableCell className="font-mono">{r.accountId}</TableCell>
                         <TableCell>{formatDate(r.dueDate)}</TableCell>
