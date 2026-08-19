@@ -57,6 +57,9 @@ CLOUDFLARE_ACCOUNT_ID=1bc783e8bf1094f9380eb287df388683
 # The Pages project name (from the easycash-lms.pages.dev URL - confirm this matches your
 # Cloudflare dashboard's Workers & Pages project name exactly, case-sensitive).
 CLOUDFLARE_PAGES_PROJECT=easycash-lms
+# 2026-08-18: the Easycash Portal's Pages project (easycash-portal.pages.dev) - same backend
+# tunnel, updated and redeployed right alongside the LMS project above every run.
+CLOUDFLARE_PAGES_PROJECT_PORTAL=easycash-portal
 "@ | Set-Content -Encoding utf8 $ConfigPath
 
     Write-Warn2 "First run - created a blank config at:"
@@ -75,6 +78,10 @@ Get-Content $ConfigPath | ForEach-Object {
 $ApiToken = $config['CLOUDFLARE_API_TOKEN']
 $AccountId = $config['CLOUDFLARE_ACCOUNT_ID']
 $ProjectName = $config['CLOUDFLARE_PAGES_PROJECT']
+# 2026-08-18: optional - older config files from before the Portal was added to this script won't
+# have this key yet. Warn and skip the Portal update rather than hard-failing the whole run over
+# a project that may be deliberately unconfigured on some other machine.
+$PortalProjectName = $config['CLOUDFLARE_PAGES_PROJECT_PORTAL']
 
 if ([string]::IsNullOrWhiteSpace($ApiToken) -or [string]::IsNullOrWhiteSpace($AccountId) -or [string]::IsNullOrWhiteSpace($ProjectName)) {
     Write-Err2 "local/tunnel-autoupdate.env is missing a value (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT)."
@@ -136,11 +143,6 @@ if (-not $tunnelUrl) {
 Write-Host "      Tunnel URL: $tunnelUrl"
 Write-Host "      (cloudflared is running in the background, PID $($proc.Id) - do not close this window, it stops the tunnel.)"
 
-# --- Step 3: update the Pages project's VITE_API_BASE_URL env var ---
-Write-Step '[3/4] Updating VITE_API_BASE_URL on Cloudflare Pages...'
-$apiBase = "https://api.cloudflare.com/client/v4/accounts/$AccountId/pages/projects/$ProjectName"
-$headers = @{ Authorization = "Bearer $ApiToken"; 'Content-Type' = 'application/json' }
-
 function Get-CloudflareErrorDetail($errRecord) {
     if ($errRecord.ErrorDetails -and $errRecord.ErrorDetails.Message) {
         return $errRecord.ErrorDetails.Message
@@ -148,51 +150,81 @@ function Get-CloudflareErrorDetail($errRecord) {
     return $errRecord.Exception.Message
 }
 
-try {
-    $project = Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Get
-} catch {
-    Wait-Or-Exit "      Could not read the Pages project. Check CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT in local/tunnel-autoupdate.env.`n      $(Get-CloudflareErrorDetail $_)"
-}
+# 2026-08-18: update-env-var + redeploy, extracted so it can run once per Pages project (LMS,
+# Portal) against the same tunnel URL - both frontends call the same backend, so one tunnel serves
+# both, they just each need their own VITE_API_BASE_URL update + redeploy triggered separately.
+function Update-PagesProject($label, $projectName) {
+    Write-Step "Updating VITE_API_BASE_URL on Cloudflare Pages ($label)..."
+    $apiBase = "https://api.cloudflare.com/client/v4/accounts/$AccountId/pages/projects/$projectName"
+    $headers = @{ Authorization = "Bearer $ApiToken"; 'Content-Type' = 'application/json' }
 
-# Minimal body - only env_vars, not the full deployment_configs.production object from GET
-# (that round-trip pulled in read-only/computed fields that Cloudflare's PATCH rejected with a
-# generic 400). PATCH replaces env_vars wholesale, not per-key, so existing vars are merged in
-# here on the client side rather than relying on the API to merge them.
-$existingEnvVars = $project.result.deployment_configs.production.env_vars
-$envVarsHash = @{}
-if ($existingEnvVars) {
-    $existingEnvVars.PSObject.Properties | ForEach-Object { $envVarsHash[$_.Name] = $_.Value }
-}
-$envVarsHash['VITE_API_BASE_URL'] = @{ value = "$tunnelUrl/api/v1" }
-
-$patchBody = @{ deployment_configs = @{ production = @{ env_vars = $envVarsHash } } } | ConvertTo-Json -Depth 10
-
-try {
-    Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Patch -Body $patchBody | Out-Null
-    Write-Host '      OK.'
-} catch {
-    Wait-Or-Exit "      Failed to update the env var:`n      $(Get-CloudflareErrorDetail $_)"
-}
-
-# --- Step 4: trigger a new build so the new env var is actually baked in ---
-Write-Step '[4/4] Triggering a new deployment...'
-try {
-    $deployments = Invoke-RestMethod -Uri "$apiBase/deployments" -Headers $headers -Method Get
-    $latest = $deployments.result | Select-Object -First 1
-    if (-not $latest) {
-        Wait-Or-Exit '      No existing deployment found to retry from. Trigger one manually from the Pages dashboard once, then re-run this script.'
+    try {
+        $project = Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Get
+    } catch {
+        Write-Err2 "      Could not read the $label Pages project ('$projectName'). Check CLOUDFLARE_PAGES_PROJECT / CLOUDFLARE_PAGES_PROJECT_PORTAL in local/tunnel-autoupdate.env.`n      $(Get-CloudflareErrorDetail $_)"
+        return $false
     }
-    Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry" -Headers $headers -Method Post | Out-Null
-    Write-Host '      OK - a new build has started. It usually takes 1-2 minutes.'
-} catch {
-    Wait-Or-Exit "      Failed to trigger the deployment:`n      $(Get-CloudflareErrorDetail $_)`n      The env var was updated, but you will need to click ""Retry deployment"" manually in the Pages dashboard."
+
+    # Minimal body - only env_vars, not the full deployment_configs.production object from GET
+    # (that round-trip pulled in read-only/computed fields that Cloudflare's PATCH rejected with a
+    # generic 400). PATCH replaces env_vars wholesale, not per-key, so existing vars are merged in
+    # here on the client side rather than relying on the API to merge them.
+    $existingEnvVars = $project.result.deployment_configs.production.env_vars
+    $envVarsHash = @{}
+    if ($existingEnvVars) {
+        $existingEnvVars.PSObject.Properties | ForEach-Object { $envVarsHash[$_.Name] = $_.Value }
+    }
+    $envVarsHash['VITE_API_BASE_URL'] = @{ value = "$tunnelUrl/api/v1" }
+
+    $patchBody = @{ deployment_configs = @{ production = @{ env_vars = $envVarsHash } } } | ConvertTo-Json -Depth 10
+
+    try {
+        Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Patch -Body $patchBody | Out-Null
+        Write-Host '      OK.'
+    } catch {
+        Write-Err2 "      Failed to update the env var for $label`: $(Get-CloudflareErrorDetail $_)"
+        return $false
+    }
+
+    Write-Step "Triggering a new deployment ($label)..."
+    try {
+        $deployments = Invoke-RestMethod -Uri "$apiBase/deployments" -Headers $headers -Method Get
+        $latest = $deployments.result | Select-Object -First 1
+        if (-not $latest) {
+            Write-Err2 "      No existing deployment found to retry from for $label. Trigger one manually from the Pages dashboard once, then re-run this script."
+            return $false
+        }
+        Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry" -Headers $headers -Method Post | Out-Null
+        Write-Host '      OK - a new build has started. It usually takes 1-2 minutes.'
+        return $true
+    } catch {
+        Write-Err2 "      Failed to trigger the deployment for $label`: $(Get-CloudflareErrorDetail $_)`n      The env var was updated, but you will need to click ""Retry deployment"" manually in the Pages dashboard."
+        return $false
+    }
+}
+
+# --- Step 3: update + redeploy both Pages projects ---
+Write-Step '[3/4] Updating Cloudflare Pages projects...'
+$lmsOk = Update-PagesProject 'LMS' $ProjectName
+$portalOk = $true
+if ([string]::IsNullOrWhiteSpace($PortalProjectName)) {
+    Write-Warn2 "      CLOUDFLARE_PAGES_PROJECT_PORTAL not set in local/tunnel-autoupdate.env - skipping the Portal update. Add it (e.g. easycash-portal) to include the Portal in this script."
+} else {
+    $portalOk = Update-PagesProject 'Portal' $PortalProjectName
+}
+
+# --- Step 4: summary ---
+Write-Step '[4/4] Done.'
+if (-not $lmsOk -or -not $portalOk) {
+    Wait-Or-Exit '      One or more Pages projects failed to update - see the errors above.'
 }
 
 Write-Host ''
 Write-Host '============================================'
-Write-Host '  Done. https://easycash-lms.pages.dev will'
-Write-Host '  point at the new tunnel URL once the build'
-Write-Host '  above finishes (check the Pages dashboard).'
+Write-Host '  Done. https://easycash-lms.pages.dev and'
+Write-Host '  https://easycash-portal.pages.dev will point'
+Write-Host '  at the new tunnel URL once their builds finish'
+Write-Host '  (check the Pages dashboard).'
 Write-Host ''
 Write-Host '  KEEP THIS WINDOW OPEN - closing it stops the'
 Write-Host '  tunnel.'

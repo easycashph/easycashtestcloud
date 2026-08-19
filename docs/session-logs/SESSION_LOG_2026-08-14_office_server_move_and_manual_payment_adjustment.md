@@ -958,3 +958,93 @@ activity timelines, not the shadcn `Avatar` component, handled the same way via 
 - Same open items as §21-§23: Delete Application's "hindi ma-click" repro check, Docker
   auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if wanted),
   advanced Loan Releases Report redesign (deferred) - none revisited this stretch.
+
+## 25. Unresolved payment-recording 500, backup script explainer, Portal added to tunnel auto-update, OTP from-address fix
+
+### Payment Recording "An unexpected error occurred" - investigated, root cause not yet found
+
+User hit a generic 500 (`INTERNAL_ERROR`, the backend's catch-all `errorHandler.ts` fallback for
+any non-`DomainError` exception) confirming a ₱13,296.81 payment against SML-REG_00334 (ALFREDO
+DANSALAN MAGO). Confirmed nothing was recorded despite the error (no matching `LoanTransaction` -
+safe to retry, no double-payment risk). Noticed the amount exactly matched installment #5's full
+remaining principal+interest (₱12,681.75 + ₱615.06) - this was a **full payoff of the loan's last
+installment**, which triggers `ProcessPaymentUseCase`'s auto-close branch
+(`loanAccount.close()` when `isFullyPaid`) - a less-exercised code path than a routine partial
+payment. Could not find the original stack trace - the easycashbackend container had been
+rebuilt (for the perf/avatar-color fixes) since the failed attempt, and Docker logs don't survive
+a container recreate. Set up a live log tail and asked the user to retry the same payment in the
+UI to catch a fresh stack trace - **the session moved on to other requests before a retry
+happened, so this is still open** and needs a fresh repro next session (tail
+`docker logs easycash-easycashbackend-1 -f` while retrying the exact same payment, or any full-
+payoff-of-last-installment payment).
+
+### Backup script explainer + Office Server question
+
+Explained `backup-lms-database-remote.bat` on request: Postgres-only (`pg_dump`, custom format),
+does NOT include the attachment storage folder (bind-mounted files - IDs, payslips, signed
+contracts), saves to a `backups\` folder next to wherever the script itself runs from, and is
+designed to be run from ANOTHER device on the office LAN (not the server itself) so the backup
+copy lives somewhere other than the machine it's protecting. User asked whether it could be run ON
+the Office Server PC directly - found `Backup LMS Database.bat` already exists at the repo root as
+the on-server-native counterpart (mentioned in the remote script's own comments) - didn't get to
+fully answer before the conversation moved on.
+
+### Tunnel auto-update script: Portal added, tested live
+
+User asked to extend `Start Cloudflare Tunnel (Auto-Update).ps1` so `easycash-portal.pages.dev`
+gets the same automatic `VITE_API_BASE_URL` update + redeploy that `easycash-lms.pages.dev`
+already got (§21's live-deploy discovery). Both frontends call the same backend, so no second
+tunnel needed - just a second Cloudflare Pages project to patch. Refactored the existing update-
+and-redeploy logic (previously inline, LMS-only) into a reusable `Update-PagesProject($label,
+$projectName)` function, called once per project; added `CLOUDFLARE_PAGES_PROJECT_PORTAL` to the
+config template (and to the user's actual local, gitignored `local/tunnel-autoupdate.env` -
+`easycash-portal` value) - missing/blank on an older config just warns and skips the Portal step
+rather than failing the whole run, so this stays backward compatible with any other machine's
+config. `Start Cloudflare Tunnel (Auto-Update).bat` (the double-click launcher) needed no change -
+thin wrapper that just calls the `.ps1`. Validated PowerShell syntax via the parser before running.
+User asked to actually run it as a test: new tunnel URL obtained, both LMS and Portal Pages
+projects had their env var updated and a redeploy triggered successfully. Committed and pushed
+(only the tracked `.ps1` - the `.env` file stays gitignored, never committed).
+
+**Aside noticed while committing**: two pre-existing uncommitted deletions were sitting in the
+working tree (`Backfill SDevTech Attachments.command`, `Update Database From SDevTech.command`) -
+not something this session did. Left untouched both times (stashed only for the `git pull --rebase`
+step, popped back immediately after) rather than folded into either commit, since their origin is
+unknown - flagged to the user, not yet resolved either way.
+
+### Fix: staff 2FA "verification code" email now uses the dedicated no-reply address
+
+User asked to change the "Your Easycash verification code" email's From address from
+`collections@easycash.ph` to `noreply-verify@easycash.ph`. Investigation found this was already
+half-done: `SIGNING_OTP_SMTP_FROM_ADDRESS` (default `noreply-verify@easycash.ph`) already existed
+and was already wired into `PortalOtpSender` (Portal login/signup OTP) and the e-signature OTP
+sender (both per a 2026-07-30 decision, same reasoning - a verification code isn't
+collections/payment-reminder mail) - but the **staff LMS 2FA** `OtpSender` (`app.ts`) was still
+wired to the generic `SMTP_FROM_ADDRESS` (`collections@easycash.ph`), missed when that 2026-07-30
+change was made. Fixed by pointing `OtpSender`'s `NodemailerEmailGateway` at
+`SIGNING_OTP_SMTP_FROM_ADDRESS` too, matching the other two senders. `tsc --noEmit` clean, backend
+suite unchanged (960/11). `EMAIL_ENABLED` stays `false` (dry-run) in this environment regardless -
+user said they'll turn it on themselves once ready (needs `noreply-verify@easycash.ph` confirmed
+as a verified "Send As" alias on the Google Workspace mailbox first, same requirement as every
+other `*_FROM_ADDRESS` here - not yet confirmed).
+
+**Rebuild hiccup, resolved**: the first rebuild attempt hit the familiar transient "frontend grpc
+server closed unexpectedly" BuildKit error (retried, succeeded). After the retry, the container
+briefly showed sustained ~90% CPU and refused connections (including from inside the container
+itself) for about 30 seconds after starting - concerning enough to double-check the diff (trivial,
+one string constant swap, ruled out as the cause) before trying a plain `docker restart`, which
+came up clean (0% CPU, healthy) on the first try. Most likely resource contention with the
+just-finished image build rather than an actual code-caused hang, but worth watching for if it
+recurs after a future rebuild.
+
+### Current state / follow-ups
+
+- **Open, needs attention next session**: Payment Recording 500 on SML-REG_00334's final
+  installment - root cause not found, needs a fresh repro with live log tailing.
+- Tunnel auto-update script now covers both `pages.dev` sites; verified working via a live test run.
+- Staff 2FA OTP emails now use the correct dedicated From address (once `EMAIL_ENABLED` is turned on).
+- Two unexplained pre-existing uncommitted file deletions in the working tree, still unresolved.
+- Backup script question (can it run ON the Office Server PC) - not fully answered.
+- Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
+  Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
+  wanted), advanced Loan Releases Report redesign (deferred).

@@ -436,6 +436,12 @@ export function createApp(): Express {
   // Settings > Security > Two-Factor Authentication (2026-07-22) - the same M360/SMTP gateways
   // Payment Reminders already uses, gated by the same SMS_ENABLED/EMAIL_ENABLED dry-run flags
   // (see OtpSender's own doc comment) - safe to enable 2FA on any account in every environment.
+  //
+  // 2026-08-18 (user request): "Your Easycash verification code" now sends from the same dedicated
+  // no-reply address as the Portal's and e-signature's OTP mail (SIGNING_OTP_SMTP_FROM_ADDRESS,
+  // noreply-verify@easycash.ph by default) instead of the generic collections@ mailbox - a
+  // verification code isn't collections/payment-reminder mail, same reasoning that already put
+  // PortalOtpSender and the e-signature OTP sender on this address (see their own wiring below).
   const otpSender = new OtpSender({
     smsGateway: new M360SmsGateway({
       apiUrl: env.M360_API_URL,
@@ -448,7 +454,7 @@ export function createApp(): Express {
       port: env.SMTP_PORT,
       username: env.SMTP_USERNAME ?? '',
       password: env.SMTP_PASSWORD ?? '',
-      fromAddress: env.SMTP_FROM_ADDRESS,
+      fromAddress: env.SIGNING_OTP_SMTP_FROM_ADDRESS,
     }),
     smsEnabled: env.SMS_ENABLED,
     emailEnabled: env.EMAIL_ENABLED,
