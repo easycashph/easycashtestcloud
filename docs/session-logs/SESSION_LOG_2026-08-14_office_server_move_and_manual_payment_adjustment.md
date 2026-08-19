@@ -1048,3 +1048,97 @@ recurs after a future rebuild.
 - Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
   Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
   wanted), advanced Loan Releases Report redesign (deferred).
+
+## 26. Windows Full Legacy Migration script, and auto-preserving native applications/attachments/users across a reset
+
+### Windows counterpart of the Mac-only full-reset migration script
+
+User asked to check `legacy/Run Full Legacy Migration.command` (Mac-only bash) and asked for an
+Office Server PC (Windows) equivalent. Found the `.command` still referenced the pre-rename
+`app/backend` path (renamed to `app/easycashbackend` on 2026-07-30) - verified all 19 referenced
+migration scripts still exist under the corrected path before writing anything. Built
+`Run Full Legacy Migration (Office Server PC).bat` (user asked for "Office Server PC" explicitly in
+the filename, matching the existing `(Auto-Update)`-style parenthetical convention) - same 18 steps
+in the same order, same destructive-reset warning and Y/N confirmation gate, following the
+`Expand-Archive`/`pushd`-`popd`/errorlevel-check conventions already established in
+`Update Database From SDevTech.bat`. PowerShell-parser-validated the `.ps1` sibling work from
+earlier in this doc, and for THIS file just carefully hand-verified the batch syntax against the
+working precedent file. Nothing was run - file creation only.
+
+### Auto-preserving what a full reset can't rebuild from the legacy backup
+
+User asked whether attachments/loan-applications/user-accounts survive that destructive reset,
+which led to three rounds of the same shape of fix - back up what has no MongoDB-recoverable path,
+restore it after the fresh migration:
+
+1. **Native loan applications + their attachments** - `LoanApplication` has no `legacyId` field at
+   all (confirmed by reading the schema directly, not assumed) - it's *always* locally created,
+   never migrated, so a reset erases every one with no rebuild path. New
+   `backup-native-loan-applications.ts` (dumps every `LoanApplication` row + every `legacyId IS
+   NULL` `Attachment`) and `restore-native-loan-applications.ts` (remaps `branchId` to the
+   post-migration branch, nulls every staff-user FK since Users are wiped too, only restores an
+   Attachment whose owning application was itself restored). Deliberately excludes native
+   Borrower/LoanAccount data and everything under it (transactions, schedules, addresses) - flagged
+   to the user as a real, structural risk boundary, not silently narrowed: those sit in the actual
+   financial ledger and blind-restoring them across a full id-regenerating reset risks corrupting
+   real balances, a much higher-stakes problem than losing an uploaded ID photo.
+2. **Native user accounts** - so staff can log in immediately after a reset with their *existing*
+   email/password instead of needing `bootstrap-admin.ts` + manually re-creating every account.
+   New `backup-native-users.ts`/`restore-native-users.ts`: only `legacyId IS NULL` users (real login
+   accounts - `User.legacyId` is identity-traceability-only per ADR-039, never real credentials).
+   Denormalizes branch code and role/role-class *names* (not raw ids) into the backup, since
+   Branch/Role/RoleClass all get brand-new ids on every fresh `seed.ts` run (upserted by
+   code/name into an empty table) - remapped back on restore by looking each one up by that
+   name/code, skipping (with a warning) whatever no longer resolves rather than failing the whole
+   restore. Both new backup calls added right after the reset confirmation prompt in the `.bat`;
+   both new restore calls added right after `[18/18] Final verification`, before the closing
+   summary - which was also reworded to reflect that a restore usually makes the old
+   "run bootstrap-admin.ts" instruction unnecessary now.
+3. **Attachment FILE BYTES (not metadata)** - user asked whether files "attach automatically" after
+   migration. Traced `migrate-legacy-data.ts`'s attachment handling: step [3/18] only creates
+   metadata-only `Attachment` placeholder rows (`legacy-unmigrated:` storageKey) - the real file
+   bytes need a separate SFTP pull (`backfill-legacy-attachments.ts`, LOAN_ACCOUNT-owned only,
+   BORROWER-owned SFTP path still unconfirmed/out of scope per that script's own comment), which is
+   **not** part of the 18-step full-migration script at all. Confirmed the existing
+   `Backfill SDevTech Attachments.bat` (dry-run first, Y/N gate, idempotent, read-only against
+   SFTP) is safe to run manually right after the full migration - offered to fold it into the
+   `.bat` automatically; user said no, keep them as two separate scripts.
+
+All four new TypeScript scripts were test-run live against the real (unreset) database each time
+they were written - the backup half genuinely captured data (4 applications/15 attachments, then 9
+user accounts); the restore half was exercised against the SAME unreset database specifically to
+prove its per-row error handling works (branch/role/role-class lookups all resolved correctly,
+then each `create()` correctly hit and gracefully skipped a unique-id collision, exactly the
+expected outcome when nothing has actually been reset yet - the real "does it restore into an
+actually-empty database" path is still unverified, since that would require the user to run an
+actual destructive reset, which nobody has done this session). `legacy/native-backups/` added to
+`.gitignore` (same real-PII sensitivity class as `legacy/db-exports/`).
+
+### The mystery-deletion count keeps growing
+
+Two MORE unexplained pre-existing uncommitted deletions surfaced while committing this section's
+work (`legacy/Run Full Legacy Migration.command`, `legacy/Sync Database And Apply Migrations.command`),
+on top of the three from §25 (`Backfill SDevTech Attachments.command`,
+`Update Database From SDevTech.command`, `Update LAN IP.command`) - **five total now**, all
+`.command` (macOS) files, none touched by this session. Same handling as before: stashed only long
+enough to `git pull --rebase`/`push`, popped back immediately after, never folded into a commit.
+Flagged to the user again; still not investigated or resolved.
+
+### Current state / follow-ups
+
+- Windows Office Server PC now has its own full-reset migration script, matching the Mac
+  `.command` step for step with the path fixed.
+- A full reset now auto-preserves: loan applications + their attachments, and user accounts
+  (login-ready immediately). Explicitly does NOT preserve: native Borrower/LoanAccount data, or
+  attachment file bytes (needs the separate, still-manual `Backfill SDevTech Attachments.bat`).
+  None of this has been exercised against a REAL reset yet - only against the live, unreset
+  database (to prove the error-handling paths work), so the true end-to-end "reset, then restore
+  into empty tables" flow is still unverified in practice.
+- **Open, needs attention next session** (carried from §25): Payment Recording 500 on
+  SML-REG_00334's final installment - root cause still not found.
+- **Now FIVE, not two, unexplained pre-existing uncommitted `.command` deletions** in the working
+  tree - worth actually investigating next session rather than continuing to just stash-around them
+  indefinitely.
+- Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
+  Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
+  wanted), advanced Loan Releases Report redesign (deferred).
