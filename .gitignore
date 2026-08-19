@@ -95,6 +95,11 @@ legacy/db-exports/
 # same real-PII sensitivity class either way.
 *.dump
 
+# 2026-08-19: backup-native-loan-applications.ts's pre-reset dumps (applicant names, addresses,
+# uploaded document metadata) - same real-PII sensitivity class as legacy/db-exports/ above, never
+# committed.
+legacy/native-backups/
+
 # Old SDevTech MongoDB backup batch/PowerShell scripts — contains a hardcoded remote DB
 # username/password (root/sdevtech2021) in plain text. Never committed to git history.
 legacy/mongodb-ELCI-LMS_batchfile-source-code.zip

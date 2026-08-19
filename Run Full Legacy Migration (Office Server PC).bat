@@ -72,6 +72,19 @@ if /I not "%CONFIRM%"=="Y" (
   exit /b 0
 )
 
+REM 2026-08-19 (user request): LoanApplication rows (and native, non-legacy Attachment uploads on
+REM them - e.g. ID photos, contracts uploaded through the LMS itself) have no MongoDB source at
+REM all, so the reset below would erase them with no way to rebuild them from the legacy backup.
+REM Back them up here, before the reset, and restore them at the very end (after the fresh
+REM migration finishes) - see backup-native-loan-applications.ts's own doc comment for the exact
+REM scope (does NOT cover native Borrower/LoanAccount data - see that comment for why).
+echo.
+echo [BACKUP] Bina-backup ang mga loan application na hindi galing sa MongoDB
+echo          (mga naka-encode sa LMS mismo) bago ang reset...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backup-native-loan-applications.ts
+popd
+
 echo.
 echo [1/18] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
@@ -212,6 +225,13 @@ echo.
 echo [18/18] Final verification...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\check-migration-status.ts
+popd
+
+echo.
+echo [RESTORE] Ibinabalik ang mga native loan application (at kanilang
+echo           attachments) na binackup bago ang reset...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\restore-native-loan-applications.ts
 popd
 
 echo.
