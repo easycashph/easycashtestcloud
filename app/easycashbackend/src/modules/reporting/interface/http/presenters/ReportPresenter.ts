@@ -1,4 +1,13 @@
-import type { ExpectedCollectionReportRow, LoanReleaseReportRow, TransactionReportRow } from '../../../application/ports/IReportingRepository';
+import type {
+  AccountsWithPastDueReportRow,
+  CollectionHistoryReportRow,
+  DailyCollectionReportRow,
+  ExpectedCollectionReportRow,
+  FirstAmortizationReportRow,
+  FullyPaidAccountsReportRow,
+  LoanReleaseReportRow,
+  TransactionReportRow,
+} from '../../../application/ports/IReportingRepository';
 
 export interface TransactionReportResponse {
   id: string;
@@ -115,5 +124,128 @@ export function presentExpectedCollectionReportRow(row: ExpectedCollectionReport
     dueDate: row.dueDate.toISOString(),
     maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
     lastPaidDate: row.lastPaidDate ? row.lastPaidDate.toISOString() : null,
+  };
+}
+
+/** 2026-08-20 (user request): JSON counterpart of AccountsWithPastDueReportRow. */
+export interface AccountsWithPastDueReportResponse {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  currentAmountDue: string;
+  pastAmountDue: string;
+  daysLate: number;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  countOfPaidDue: number;
+}
+
+export function presentAccountsWithPastDueReportRow(row: AccountsWithPastDueReportRow): AccountsWithPastDueReportResponse {
+  return {
+    ...row,
+    dueDate: row.dueDate.toISOString(),
+    maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
+    lastPaidDate: row.lastPaidDate ? row.lastPaidDate.toISOString() : null,
+  };
+}
+
+/** 2026-08-20 (user request): JSON counterpart of CollectionHistoryReportRow. */
+export interface CollectionHistoryReportResponse {
+  clientName: string;
+  product: string;
+  accountId: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  amountDue: string;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  repaymentCount: number;
+  installmentNumber: number;
+}
+
+export function presentCollectionHistoryReportRow(row: CollectionHistoryReportRow): CollectionHistoryReportResponse {
+  return {
+    ...row,
+    dueDate: row.dueDate.toISOString(),
+    maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
+    lastPaidDate: row.lastPaidDate ? row.lastPaidDate.toISOString() : null,
+  };
+}
+
+/** 2026-08-20 (user request): JSON counterpart of FirstAmortizationReportRow. */
+export interface FirstAmortizationReportResponse {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  firstAmortizationDate: string;
+  principalDue: string;
+  interestDue: string;
+  feesDue: string;
+  penaltyDue: string;
+  obligation: string;
+  payment: string;
+  lastDatePaid: string | null;
+  repaymentState: string;
+}
+
+export function presentFirstAmortizationReportRow(row: FirstAmortizationReportRow): FirstAmortizationReportResponse {
+  return {
+    ...row,
+    firstAmortizationDate: row.firstAmortizationDate.toISOString(),
+    lastDatePaid: row.lastDatePaid ? row.lastDatePaid.toISOString() : null,
+  };
+}
+
+/** 2026-08-20 (user request): JSON counterpart of DailyCollectionReportRow. */
+export interface DailyCollectionReportResponse {
+  fullName: string;
+  productId: string;
+  accountId: string;
+  totalBalance: string;
+  amount: string;
+  principalAmount: string;
+  interestAmount: string;
+  feesAmount: string;
+  penaltyAmount: string;
+  expectedMaturityDate: string | null;
+  valueDate: string;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
+  type: string;
+}
+
+export function presentDailyCollectionReportRow(row: DailyCollectionReportRow): DailyCollectionReportResponse {
+  return {
+    ...row,
+    expectedMaturityDate: row.expectedMaturityDate ? row.expectedMaturityDate.toISOString() : null,
+    valueDate: row.valueDate.toISOString(),
+  };
+}
+
+/** 2026-08-20 (user request): JSON counterpart of FullyPaidAccountsReportRow. */
+export interface FullyPaidAccountsReportResponse {
+  clientName: string;
+  product: string;
+  productId: string;
+  accountId: string;
+  loanAmount: string;
+  maturityDate: string | null;
+  fullyPaidDate: string | null;
+}
+
+export function presentFullyPaidAccountsReportRow(row: FullyPaidAccountsReportRow): FullyPaidAccountsReportResponse {
+  return {
+    ...row,
+    maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
+    fullyPaidDate: row.fullyPaidDate ? row.fullyPaidDate.toISOString() : null,
   };
 }
