@@ -1338,3 +1338,65 @@ healthy, `/health` → 200; `nomer.perez@easycash.ph` login confirmed `ACTIVE`.
   during recording, separate from whether the transaction data itself was missing.
 - Loan Application downloadable/signable PDF feature - still not started, same two blockers as
   before (§ above), pick up next.
+
+## §30 - Penalty investigation → Add Penalty feature, then 6 more reports get on-screen tables (2026-08-19/20)
+
+User asked why `SL-CORP_00103`/`SL-CORP_00100` show no "Penalty Expected"/"Penalty Due" in the LMS
+when SDevTech's own screen shows one. Investigation: the transaction ledger is complete and correct
+for both loans (26/26 and 25/25 transactions match the legacy source exactly, including all
+`PENALTY_APPLIED` entries) - the gap is in the `LoanAccount`/`RepaymentSchedule` summary fields
+(`penaltyBalance`/`penaltyDue`), which read 0.00. Root cause: the `SL-Corporate` product (and 42 of
+43 products total) has `penalty_calculation_method: "NONE"` in the SDevTech source itself - a
+faithful migration, not a bug - yet SDevTech's own staff still manually apply real penalty
+transactions outside that automatic-calculation flag, which this LMS has no way to reflect until
+someone tells it what the number is.
+
+User's resolution (explicit): pull expected-penalty/fee amounts into the LMS from SDevTech - but
+investigation found neither is stored as a field in the MongoDB backup (SDevTech computes them
+live in its own app layer), so there's nothing to migrate automatically. Landed on: staff manually
+key in the SDevTech-shown figure via a new **Add Penalty** action (mirroring the existing Add Fee),
+and the LMS's own live ADR-050 penalty auto-computation gets a hard OFF switch for the whole
+migration period (both systems computing independently would just produce two disagreeing numbers).
+
+Shipped:
+- **Add Penalty**: `RepaymentInstallment.chargePenalty()`, `AddPenaltyUseCase`, new `PenaltyCharge`
+  Prisma model (mirrors `FeeCharge`), `POST /repayment-installments/:id/add-penalty`, new
+  `penalty.charge` permission (Accounting + MIS), new "Add Penalty" button/dialog on the Loan Account
+  page next to Add Fee.
+- **`PENALTY_AUTO_COMPUTE_ENABLED`** env flag, default `false` - threaded through all 7
+  `resolveComputedPenalty()` call sites via a new `PenaltyComputationContext.autoComputeEnabled`
+  field. When off, the live ADR-050 daily formula never runs for any loan (prospective or migrated) -
+  always falls back to the frozen `due.penalty` snapshot. User explicitly chose an env var (matching
+  `EMAIL_ENABLED`/`SMS_ENABLED`) over a UI toggle - flip back to `true` once SDevTech is retired.
+
+Then, three follow-up requests in quick succession, each applying the on-screen-table + column-picker
+pattern (established for Loan Releases/Expected Collection) to more download-only reports:
+1. **Expected Collection Report** - `GET /reports/expected-collection` JSON endpoint added, page
+   rewritten with an 8-always-visible/9-optional column split. A follow-up bug: `whitespace-nowrap`
+   on every `td` let the longest Client Name in the result set dictate the whole column's width -
+   fixed with `max-w-[180px] truncate` + a `title` tooltip, applied proactively to every report
+   built after this point too.
+2. **5 more reports** (user explicitly named all 5): Fully Paid Accounts (7 columns, all shown
+   always - too small to need a picker), Accounts with Past Due (7 always/7 optional), Collection
+   History (6/6), First Amortization (6/7), Daily Collection Report (6/9). Each got a new JSON `GET`
+   route alongside its existing `.xlsx` export, a `ReportPresenter` response type + presenter
+   function, and a full page rewrite. The `.xlsx` downloads are untouched - always export every
+   column regardless of on-screen visibility, same "display preference, not a scope filter" rule as
+   Loan Releases/Expected Collection.
+
+All 5 backend + frontend changes type-checked clean, Docker-rebuilt, and smoke-tested (every new
+route returns 401 without auth, not 404) before committing.
+
+### Current state / follow-ups
+
+- Every download-only report except Aging, Detailed Ending Current Balance, and Loan Origination now
+  has an on-screen table. (Origination Report/Collection Report already had one from an earlier
+  session - see `CollectionReportPage.tsx`, distinct from `CollectionHistoryReportPage.tsx`.)
+- Add Penalty ships alongside a genuine, if narrow, gap: staff must manually cross-reference
+  SDevTech's screen for the correct amount - there's no automated source for it. Worth revisiting
+  once SDevTech is retired and this system's own ADR-050 engine becomes authoritative again.
+- Same standing open items as before: Payment Recording UI re-check on SML-REG_00334 (transaction
+  data confirmed present, but the original report was about a UI error during recording - still
+  unverified), Loan Application downloadable PDF (blocked on template + new model), five
+  `.command`-deletion mystery (now solved - see the `ac0592d` reorg commit), `wslrelay.exe` port
+  squatter (worked around, not root-caused).
