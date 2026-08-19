@@ -85,6 +85,17 @@ pushd "%BACKEND_DIR%"
 call npx tsx scripts\backup-native-loan-applications.ts
 popd
 
+REM 2026-08-19 (user request): so staff can log in immediately after the migration, without
+REM needing to re-run bootstrap-admin.ts and re-create every account by hand - see
+REM backup-native-users.ts's own doc comment for the exact scope (email/password hash/roles/branch,
+REM not sessions).
+echo.
+echo [BACKUP] Bina-backup ang mga user account (para makapag-log in agad
+echo          matapos ang migration)...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backup-native-users.ts
+popd
+
 echo.
 echo [1/18] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
@@ -228,6 +239,13 @@ call npx tsx scripts\check-migration-status.ts
 popd
 
 echo.
+echo [RESTORE] Ibinabalik ang mga user account (email/password/roles) na
+echo           binackup bago ang reset - gamitin ang parehong login mo dati...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\restore-native-users.ts
+popd
+
+echo.
 echo [RESTORE] Ibinabalik ang mga native loan application (at kanilang
 echo           attachments) na binackup bago ang reset...
 pushd "%BACKEND_DIR%"
@@ -238,8 +256,13 @@ echo.
 echo ============================================
 echo   Tapos na ang buong migration.
 echo.
-echo   PAALALA: Kailangan mong gumawa ng bagong MIS account -
-echo   natanggal ang lahat ng users sa reset. Patakbuhin:
+echo   Kung na-backup ka bago mag-reset (tinitignan mo ang [BACKUP]
+echo   sa itaas), dapat gumagana na agad ang dati mo ring email/password
+echo   sa pag-log in - hindi na kailangang gumawa ng bagong account.
+echo.
+echo   Kung walang na-backup (unang beses gamitin ang .bat na ito,
+echo   o walang laman ang legacy\native-backups\), kailangan mong
+echo   gumawa ng bagong MIS account. Patakbuhin:
 echo     cd app\easycashbackend
 echo     set BOOTSTRAP_ADMIN_EMAIL=...
 echo     set BOOTSTRAP_ADMIN_PASSWORD=...
