@@ -27,17 +27,44 @@ export const LMS_DEV_TEAM_MEMBERS: LmsTeamMember[] = [
 ];
 
 /**
- * Future companion product - not part of this internal LMS build, but disclosed here since it's
- * planned to consume the same backend once built (per `CLAUDE.md`'s "Customer Self-Service
- * Portal (Future)" objective). Purely informational; nothing in this app links to it yet.
+ * The client-facing companion site - LIVE since July 29, 2026 (v1.0.0). Originally disclosed here
+ * as a future/planned product per `CLAUDE.md`'s "Customer Self-Service Portal (Future)" objective;
+ * updated 2026-08-19 once it was actually built and launched, per the same "never let this page go
+ * stale" discipline PreviewFooterNote already follows elsewhere on this page.
  */
 export const LMS_CLIENT_PORTAL = {
   androidAppName: 'Easycash Portal',
   website: 'easycashportal.ph',
-  status: 'Planned - not yet built',
+  status: 'Live',
   description:
-    'A future client-facing web/Android app where borrowers can submit a loan application online, check loan status, view transaction history, make payments, track their repayment schedule, and contact customer service - separate from this internal, staff-only LMS.',
+    'The client-facing web app where borrowers apply for a loan online, check application/loan status, view payment history and their repayment schedule, upload proof of payment, and contact their loan officer - separate from this internal, staff-only LMS, but built on the same backend.',
 };
+
+export interface PortalTeamMember {
+  name: string;
+  role: string;
+  note?: string;
+}
+
+/**
+ * FOUNDING DEVELOPMENT CREDITS (added 2026-08-19, user-requested permanent record) - this is a
+ * historical acknowledgment of who actually built the LMS and Portal platforms, not a "current
+ * team roster" (that's `LMS_DEV_TEAM_MEMBERS` above, which should be updated as staffing changes).
+ * DO NOT remove or reassign credit for past work here when the team changes - add departures/
+ * changes as a note instead, the same way a changelog entry is never rewritten after the fact.
+ * Jomer Biason built the overwhelming majority of both platforms end to end (backend, LMS
+ * frontend, and Portal frontend) across this project's entire build history - see the commit
+ * history and every dated SESSION_LOG in `docs/` and `docs/session-logs/` for the record.
+ */
+export const LMS_CREDITS: PortalTeamMember[] = [
+  {
+    name: 'Jomer Biason',
+    role: 'Founding Full-Stack Engineer',
+    note: 'Architected and built the Easycash LMS and Portal platforms end to end - backend, database, and both frontends.',
+  },
+  { name: 'Nomer Perez', role: 'MIS Manager', note: 'Quality assurance and infrastructure.' },
+  { name: 'Howell Hay', role: 'CEO', note: 'Product direction.' },
+];
 
 export const LMS_BUILD_STAGE = 'Preview';
 export const LMS_RELEASED_ON = 'July 5, 2026';
@@ -61,6 +88,141 @@ export interface LmsChangelogEntry {
  * concise and plain-language, translated for a non-technical reader - this is stakeholder-facing.)
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.9.31',
+    date: 'August 19, 2026',
+    highlights: [
+      'Staff two-factor authentication codes now send from a dedicated verification mailbox instead of the shared sales inbox, so a 2FA email reads clearly as a security message.',
+      "Continued behind-the-scenes reliability work on the live deployment's tunnel/hosting setup, including extending the same auto-update mechanism to the client Portal.",
+    ],
+  },
+  {
+    version: '0.9.30',
+    date: 'August 18, 2026',
+    highlights: [
+      "Fixed the Transaction Report undercounting results when a loan's payment channel data loaded a moment late, and fixed the Dashboard's \"Collections This Month\" figure to agree with the Transaction Report instead of drifting apart under certain filters.",
+      'Loan Releases Report gained an on-screen results table with a column picker, instead of download-only.',
+      'Every staff avatar (initials circle) now gets a consistent color based on their name, instead of a random color that changed on every page reload.',
+      'Sped up the Transaction Report on large date ranges with a new database index.',
+      "Fixed a live outage affecting Confirm Payment and the Dashboard, traced to a database update that had rebuilt the application but not yet applied its accompanying database changes - added a standing safety check so this can't happen unnoticed again.",
+    ],
+  },
+  {
+    version: '0.9.29',
+    date: 'August 16-17, 2026',
+    highlights: [
+      'New "Add Fee" feature on a loan account - staff can charge a new fee against a loan, separate from the existing Adjust Fees tool which only corrects fees already on the books.',
+      'New MIS-only "Delete Loan Application" action, and fixed the pre-decline reason not displaying correctly on some applications.',
+      'Edit Application moved into the loan application\'s overflow ("More actions") menu to match the rest of the platform\'s action-button layout.',
+      "Transaction Report gained a multi-select Type filter and a multi-select Channel filter (instead of one at a time), merged duplicate-looking channel labels that were really the same channel recorded two different ways, and now shows payment channels (like GCash) that exist in the system but weren't yet in active use.",
+      'Fixed reversed transactions still being counted as "collected" in report totals.',
+      'Automated duplicate-payment guard - the system now hard-blocks recording what looks like the same payment twice, catching a real class of double-counted payments found and corrected this same period.',
+      'Migration improvements: legacy per-installment payment breakdowns now backfill correctly, and legacy fee/penalty payments are no longer mislabeled as generic adjustments.',
+    ],
+  },
+  {
+    version: '0.9.28',
+    date: 'August 14-15, 2026',
+    highlights: [
+      "New Manual Payment Adjustment tool - for older, migrated payments that predate the Reverse Payment feature and can't be automatically undone, MIS/Accounting can now correct specific installments by hand (with a required reason and full audit trail) instead of needing a one-off database fix.",
+      "Fixed a gap in the monthly data-update process where a required step was silently skipped, meaning some newly recorded legacy payments weren't being applied to a loan's installment schedule even though the payment showed up in the transaction history. Corrected for every affected loan and fixed the update process so this can't happen again.",
+      "Loan application name fields now auto-capitalize as you type, matching the same fix already applied on the Portal's own application form.",
+      'Reliability work on the office server: the platform now auto-starts correctly after a server restart, and a proper day-to-day database backup routine is in place.',
+    ],
+  },
+  {
+    version: '0.9.27',
+    date: 'August 12-13, 2026',
+    highlights: [
+      "Statement of Account penalty figures reworked into three clear modes (Recorded, Computed, or a staff-entered Manual figure with a required reason) so a printed statement's penalty can always be explained, and now matches the live Repayment Schedule by construction.",
+      'Confirmed and corrected a policy gap inherited from the old system: penalty was still accruing on a loan\'s final installment after maturity, when it should stop. Company confirmed the rule; affected statements were reissued and the live formula corrected.',
+      'Fixed a timezone bug where a payment recorded near midnight could be read as landing on the wrong calendar day, affecting penalty and accrued-interest figures on about 1,169 loans (money already collected was unaffected). Recalculated and corrected.',
+      "Recovered 11,000+ collector field notes from the old system that had never been imported, and added them to each client's Profile Notes.",
+      "Bank/ATM/allotment account details captured during loan review can now be edited even after the application has been approved or declined, instead of being locked forever.",
+      'New read-only "Bank / ATM Details" card added to Client Profile.',
+      'Fixed a bug where reversing a payment left the "Paid Date" column showing a stale date, and fixed a stuck "In Arrears" status that could persist on a loan even after it caught back up on payments.',
+      'Traced a "feature isn\'t showing on the live site" report to the office having moved the live database to a separate server PC mid-project - documented the two-machine deployment split and built an auto-update helper so the public site\'s backend address stays current automatically.',
+    ],
+  },
+  {
+    version: '0.9.26',
+    date: 'August 9-12, 2026',
+    highlights: [
+      'New Document Templates admin config (Settings > System) - MIS can now mark any of the 12 loan document templates Required or Conditional, and choose which Loan Products a Conditional template applies to, without needing a developer.',
+      '"Acknowledgement Receipt" moved from an always-required document to a configurable one, and a new "Quit Claim" document template added with auto-filled bank/ATM details.',
+      'Undo Restructure and Undo Adjustment actions added to a Loan Account - lets staff cleanly reverse a restructure or adjustment (removing the new loan it created and reactivating the original), after the team decided a clean removal was preferable to just marking it undone.',
+      'Deed of Assignment documents now auto-fill ATM Card Number, Savings Account Number, and Branch instead of requiring manual entry.',
+      'Acknowledgement Receipt switched from landscape to portrait orientation for printing, and every generated loan document now shows peso amounts with comma separators.',
+      "Editable bank/ATM/allotment details for a loan application after it's no longer under active review.",
+      'Automated daily backup of the whole project folder to Google Drive.',
+    ],
+  },
+  {
+    version: '0.9.25',
+    date: 'August 6-9, 2026',
+    highlights: [
+      'New "Premium" theme (with its own light and dark look) added to Settings > Appearance and made the default appearance for every staff account.',
+      'Accrued Interest now correctly shows on migrated (legacy) matured loans - it had been silently skipped for older loans.',
+      'Statement of Account print refinements: larger, comma-formatted, properly-sized Remaining Amortization table; the remaining-schedule section hides itself once a loan has matured; the Penalty section shows a single "as of" date instead of implying a range; and the document reliably fits on one printed page again.',
+      'Fixed date-range filters across every report (Loan Origination, Collection, Transactions, Releases, Accounts With Past Due, Collection History, Expected Collection, First Amortization, Daily Collection, Fully Paid Accounts) that were silently excluding same-day records recorded early in the Manila business day.',
+      'Transaction Report redesigned with a fixed-height scrolling table and a sticky header/total row.',
+      "Removed the Repayment Schedule's Balance column at MIS's request.",
+      'Dashboard: removed the Portfolio Filter card and added a time-of-day greeting header.',
+      'Sidebar navigation now resets scroll position to the top when switching pages.',
+      'Faster page loads platform-wide from a caching fix that stops needless re-fetching of unchanged data.',
+    ],
+  },
+  {
+    version: '0.9.24',
+    date: 'August 5-6, 2026',
+    highlights: [
+      'New configurable Roles & Permissions system (Administration > User Accounts > Permissions) - MIS can now grant or revoke access to specific platform actions per role, instead of access being fixed in the code. Closed a real gap where document generation and e-signature sending had no role restriction at all.',
+      'Removed the ceiling on Adjust Penalty, so staff can now raise a penalty above the formula result for legitimate approved exceptions, not just lower it.',
+      "Fixed several places showing a borrower's name without their middle name (Loan Accounts list, Loan Detail, Dashboard drill-downs).",
+      'Dashboard accuracy pass: fixed Portfolio Growth comparing a partial month against a full prior month, fixed Overdue Accounts drill-downs missing some matured/in-arrears loans, and gave Delinquency Rate/Portfolio at Risk color-coded severity.',
+      'Fixed staff getting logged out of the LMS roughly every 15 minutes when accessed over the live internet tunnel, caused by a browser security policy blocking the session-refresh cookie cross-site.',
+      'New automated data-integrity spot-check that runs after every legacy data update, catching a class of missing-balance-data bug on 3 more loans.',
+    ],
+  },
+  {
+    version: '0.9.23',
+    date: 'August 3-4, 2026',
+    highlights: [
+      'New direct chat feature between a Portal client and their LMS loan officer, including a pre-chat FAQ/automated assistant and full chat logs for MIS oversight.',
+      'Report accuracy fixes: Expected Collection corrected to exclude fees/penalty and show the true remaining unpaid amount; Accounts with Past Due fixed to include every account with any unpaid installment in range (not just the oldest) and to correctly compute penalty for migrated loans; Collection History corrected to exclude penalty from Amount Due/Repayment.',
+      'Accounts with Past Due report gained a date-range filter.',
+      'Loan Detail page restyled: balance summary redesigned as a clear hero figure plus breakdown and terms, and the Repayment Schedule restyled with grouped Amount Expected/Paid/Due columns.',
+      'Client Name now shows First Middle Last across every report.',
+      'Fixed the Detailed Ending Current Balance report to exclude already-closed accounts, and fixed the Aging Report to exclude penalty from its bucket totals.',
+      'Fixed report due/maturity dates showing the raw UTC calendar day instead of the correct Manila-time day.',
+    ],
+  },
+  {
+    version: '0.9.22',
+    date: 'July 30 - August 2, 2026',
+    highlights: [
+      "Fixed loan document re-signing stamping a new signature directly on top of the same person's earlier one instead of replacing it cleanly.",
+      'Widened the E-Signature Logs activity panel and added the signer\'s IP address to each entry; activity logs now record specific actions instead of a generic "viewed" entry.',
+      'Faster page loads across the LMS from route-based code splitting.',
+      "Two-Factor Authentication's Off/On indicator in Settings is now a real, working toggle (previously visual only).",
+      'Backfilled legacy attachment files from the old system, and fixed attachment downloads not reporting the correct file type.',
+      "Blocked creating a Client Profile when a co-borrower's name is incomplete, preventing a data-quality gap at the source.",
+    ],
+  },
+  {
+    version: '0.9.21',
+    date: 'July 27-29, 2026',
+    highlights: [
+      "Live penalty computation formula revised twice this period, both confirmed by MIS/business leadership: moved from monthly-compounding to a daily-prorated calculation, then further aligned to match the company's own reference spreadsheet exactly (no grace period, divided by each installment's own due-month day count). Verified to match the company's manual reference tool to the centavo on a real loan.",
+      "Statement of Account's Penalty figure now reuses the exact same live formula as the Repayment Schedule for non-migrated loans, instead of a separate formula that could drift out of sync.",
+      "Fixed a bug where a loan's co-borrower could go completely unrecognized by the e-signature and document-generation features whenever the co-borrower had been added through the newer Client Profile flow rather than the original application - affected every migrated loan.",
+      'E-signature signing link and OTP verification can now be sent by Email as well as SMS, after discovering some mobile carriers were silently blocking link-containing text messages.',
+      'New centralized E-Signature Logs report - a full record of every OTP code and signing-link sent, to which party, over which channel, and whether it was verified.',
+      'Fixed several document-generation bugs affecting signature placement, including a long co-borrower name overlapping the audit-trail text below it, fixed across all affected document templates.',
+      'Co-borrower must now also sign the Disclosure Statement, Promissory Note, Data Privacy and Consent Form, Loan Agreement - Seafarer, and Special Power of Attorney (previously borrower-only for most of these).',
+      'Client Profile: removed a duplicate Attachments card, widened Loan History, added drag-and-drop card reordering, fixed equal-height cards, and added "no number on file" warnings on the e-signature panel.',
+    ],
+  },
   {
     version: '0.9.20',
     date: 'July 26, 2026',
@@ -369,6 +531,77 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
 /** Derived from the changelog above - see its doc comment. Never set these independently. */
 export const LMS_VERSION = LMS_CHANGELOG[0]!.version;
 export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.date;
+
+/**
+ * Companion changelog for the client-facing Easycash Portal (added 2026-08-19, user request) -
+ * shown on the LMS About page alongside the LMS's own changelog so a stakeholder can see the
+ * complete platform's history in one place, not just the internal staff app. Same
+ * plain-language, stakeholder-facing convention as `LMS_CHANGELOG` - see its doc comment.
+ * `PORTAL_VERSION`/`PORTAL_UPDATED_ON` below are derived the same way, from `PORTAL_CHANGELOG[0]`.
+ */
+export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '1.4.0',
+    date: 'August 13, 2026',
+    highlights: [
+      'Official Easycash bank account details added to the "Ways to Pay" section for clients paying by bank transfer.',
+      'Upload Proof of Payment for Bank Transfer payments - clients can now attach a receipt/screenshot directly against a loan account.',
+      "Statement of Account and Payoff Amount are disabled until a loan has actually been disbursed, avoiding a confusing request for documents that don't exist yet.",
+      'Dashboard redesigned with a compact 2-per-row card layout and a dedicated bank-account card.',
+      'Clarified that the Personal Loan product is only available to private-sector employees.',
+      'System Announcement popups added (shared with the LMS) so MIS can post maintenance/news notices to Portal visitors too.',
+    ],
+  },
+  {
+    version: '1.3.0',
+    date: 'August 3-6, 2026',
+    highlights: [
+      'Existing borrowers can now chat directly with their LMS loan officer from the Portal, starting with a pre-chat FAQ/automated assistant.',
+      'Self-service account tools: "Total Outstanding" summary, self-service Statement of Account download, Payoff Amount lookup, "Next Payment Due" reminder, and a "Recent Payments" widget added to the client Dashboard.',
+      "A Portal account can now be linked (bound) to a client's existing loan history by matching email address, so a returning borrower sees their real loan data without a fresh application.",
+      'Self-service "Delete My Portal Account" option added, blocked automatically while an active loan exists.',
+      'Security hardening: security-response headers, image lazy-loading, gzip compression, and rate limiting added to the live Portal.',
+    ],
+  },
+  {
+    version: '1.2.0',
+    date: 'July 30 - August 1, 2026',
+    highlights: [
+      'Two-factor authentication added to Portal login, on by default, plus a hard age-eligibility check on loan applications.',
+      '"Remember this device" option added at login so a trusted device can skip repeat OTP verification.',
+      'Fixed leaving the signup verification page from becoming a dead end - verification progress now persists.',
+      'Per-loan-type document upload with an "Other" slot and a missing-documents indicator.',
+      'Profile, Security, and loan-application editing now open as in-page dialogs instead of full separate pages.',
+    ],
+  },
+  {
+    version: '1.1.0',
+    date: 'July 29, 2026',
+    highlights: [
+      'Applicant profile view/edit and a Security tab added, with avatar upload.',
+      'Landing page trust strip added near the main Apply button - SEC-registration badge, a "we never ask for advance fees" notice, and a data-protection line.',
+      "New Basic Eligibility Self-Check - a quick 4-question yes/no check against Easycash's own published requirements, entirely on-device with nothing submitted or stored.",
+      'Fixed six public pages still showing hardcoded English despite the site supporting English/Filipino.',
+      'Persistent "Apply Now" bar added on mobile once the main hero button scrolls out of view.',
+      'New Privacy Policy and Terms pages.',
+    ],
+  },
+  {
+    version: '1.0.0',
+    date: 'July 27-28, 2026',
+    highlights: [
+      'Public launch of the Easycash Portal - landing page, loan calculator, requirements, security-tips, and complaints pages, alongside the existing loan-application flow.',
+      'Bilingual English/Filipino support added across the site.',
+      'New News section for company announcements, launched empty rather than with placeholder content.',
+      'Regulatory disclosure footer added to every public page (legal name, SEC registration number, Certificate of Authority number, official contact channels).',
+      'Fabricated star-rating graphics removed from landing-page testimonials, since no real review system exists behind them.',
+      'Site-wide SEO groundwork: page titles/descriptions, social-sharing preview tags, structured company data.',
+    ],
+  },
+];
+
+export const PORTAL_VERSION = PORTAL_CHANGELOG[0]!.version;
+export const PORTAL_UPDATED_ON = PORTAL_CHANGELOG[0]!.date;
 
 /** Structured "app store"-style facts shown on the About page. */
 export const LMS_ABOUT_FACTS: { label: string; value: string }[] = [

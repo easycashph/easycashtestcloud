@@ -1,4 +1,4 @@
-import { CheckCircle2, Code2, Smartphone, Sparkles } from 'lucide-react';
+import { Award, CheckCircle2, Code2, Smartphone, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -11,9 +11,13 @@ import {
   LMS_CHANGELOG,
   LMS_CLIENT_PORTAL,
   LMS_COMPANY,
+  LMS_CREDITS,
   LMS_DEV_TEAM_MEMBERS,
   LMS_DEVELOPER_TEAM,
   LMS_VERSION,
+  PORTAL_CHANGELOG,
+  PORTAL_UPDATED_ON,
+  PORTAL_VERSION,
 } from '@/lib/lmsVersion';
 
 const HELPS_YOU = [
@@ -128,21 +132,23 @@ export function AboutPage() {
         </CardContent>
       </Card>
 
-      {/* Future client portal - informational only, not part of this build */}
+      {/* Client Portal - LIVE since 2026-08-19 (see LMS_CLIENT_PORTAL's own doc comment); this
+          card used to describe it as a future, not-yet-built product. */}
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
           <Smartphone className="h-4 w-4 text-primary" />
           <div>
             <CardTitle className="flex flex-wrap items-center gap-2">
               {LMS_CLIENT_PORTAL.androidAppName}
-              <Badge variant="outline">{LMS_CLIENT_PORTAL.status}</Badge>
+              <Badge variant="success">{LMS_CLIENT_PORTAL.status}</Badge>
+              <Badge>Version {PORTAL_VERSION}</Badge>
             </CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm leading-relaxed text-muted-foreground">{LMS_CLIENT_PORTAL.description}</p>
           <p className="text-xs text-muted-foreground">
-            Future website: <span className="font-medium text-foreground">{LMS_CLIENT_PORTAL.website}</span>
+            Website: <span className="font-medium text-foreground">{LMS_CLIENT_PORTAL.website}</span>
           </p>
         </CardContent>
       </Card>
@@ -170,6 +176,62 @@ export function AboutPage() {
               </ul>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Portal Changelog (2026-08-19 user request) - the client-facing Portal's own release
+          history, shown alongside the LMS's so a stakeholder sees the whole platform's history
+          in one place, not just the internal staff app. */}
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Easycash Portal - Changelog
+            <Badge variant="outline">v{PORTAL_VERSION}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-xs text-muted-foreground">Last updated {PORTAL_UPDATED_ON}.</p>
+          {PORTAL_CHANGELOG.map((entry, index) => (
+            <div key={entry.version} className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold">Version {entry.version}</span>
+                {index === 0 && <Badge variant="success">Current</Badge>}
+                <span className="text-xs text-muted-foreground">{entry.date}</span>
+              </div>
+              <ul className="space-y-1.5 border-l-2 border-border pl-4">
+                {entry.highlights.map((h) => (
+                  <li key={h} className="text-sm text-muted-foreground">
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Founding Development Credits (2026-08-19, user-requested permanent record) - see
+          LMS_CREDITS's own doc comment: a historical acknowledgment, not the current team roster
+          (that's the Developer Team card above). Do not remove when the roster changes. */}
+      <Card className="border-primary/30">
+        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+          <Award className="h-4 w-4 text-primary" />
+          <CardTitle>Founding Development Credits</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+            The individuals who architected and built the Easycash LMS and Portal platforms, from the ground up.
+          </p>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {LMS_CREDITS.map((person) => (
+              <li key={person.name} className="rounded-md border p-3">
+                <p className="text-sm font-semibold">{person.name}</p>
+                <p className="text-xs text-muted-foreground">{person.role}</p>
+                {person.note && <p className="mt-1 text-xs text-muted-foreground">{person.note}</p>}
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
 
