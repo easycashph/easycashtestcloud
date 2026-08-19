@@ -1271,13 +1271,13 @@ gitignored (contain real credentials), so these fixes are local-only, not in git
 `legacyDumpPath.ts` now sorts extracted folders by filesystem modification time instead of name -
 correct regardless of whether a folder happens to be well-named.
 
-**Impact assessment**: extracted the true Aug 19 backup and compared file sizes against the
-Aug 14 one actually used - virtually identical across every collection (e.g. `loan_transactions.bson`
-588,692,057 vs 588,735,552 bytes) except `monthly_loan_releases.bson`, which was *larger* in the
-stale Aug 14 backup (743,993 bytes) than the true Aug 19 one (110,685 bytes) - meaning the
-5-day-old data actually had MORE release-report rows, not fewer. Concluded the migration does not
-need to be re-run - the bug is fixed for future backups/migrations, but this particular run's
-result is not meaningfully worse for having used the older backup.
+**Initial impact assessment (later corrected - see §29)**: extracted the true Aug 19 backup and
+compared file sizes against the Aug 14 one actually used - virtually identical across every
+collection (e.g. `loan_transactions.bson` 588,692,057 vs 588,735,552 bytes) except
+`monthly_loan_releases.bson`, which was *larger* in the stale Aug 14 backup (743,993 bytes) than
+the true Aug 19 one (110,685 bytes). Concluded from file sizes alone that a re-run wasn't needed -
+**this turned out to be wrong, a file-size comparison isn't a content comparison; see §29 for the
+actual per-document diff that found real missing data and the migration re-run that followed.**
 
 ### Current state / follow-ups
 
@@ -1287,8 +1287,54 @@ result is not meaningfully worse for having used the older backup.
   (`legacyDumpPath.ts`, committed). Both were silently causing every prior migration run on this
   machine's specific locale to use a stale-but-well-named backup over a fresh-but-malformed-named
   one - worth keeping in mind if any earlier migration's data ever looks off by a few days.
-- No migration re-run needed - impact assessed as negligible (see above).
+- **Correction, see §29**: the "no re-run needed" conclusion above was wrong - a proper per-document
+  diff found 96 genuinely missing transactions, and the migration was re-run same day.
 - Loan Application downloadable/signable PDF feature: mockup approved, user said proceed with the
   real build, but two blocking implementation questions (missing real `.docx` template with merge
   fields; need a new `GeneratedLoanApplicationDocument` model since the existing one is
   LoanAccount-only) were raised and not yet answered - pick this back up next.
+
+## §29 - The stale-backup bug DID lose real data - found it, fixed it, re-ran (2026-08-19)
+
+User pushed back on the §28 "no re-run needed" conclusion, correctly pointing out that a file-size
+comparison doesn't prove the content is the same. Did a proper per-document diff instead: re-extracted
+the true Aug 19 backup (`192026_184828.zip`) and streamed both `loan_transactions.bson` files
+(525,032 docs in Aug 14 vs 525,128 in Aug 19 - too large to load into memory at once, iterated with
+a generator) comparing by `_id`.
+
+**Found 96 real transactions genuinely missing** from the Aug 14 backup that the 2026-08-19 full
+migration (§27) had used - REPAYMENT, DISBURSMENT, FEE_CHARGED, PENALTY_APPLIED, and related entries
+dated 2026-08-17 through 2026-08-19, across 7 loan accounts. One of them: a ₱13,296.81 REPAYMENT on
+**SML-REG_00334** - very likely the same payment the user originally asked about at the start of
+this session (the "unexpected error" on that loan's last-installment payoff), meaning that payment
+had actually gone through on the legacy/SDevTech side but was silently dropped from this LMS's
+database by the stale-backup bug, not lost to the original recording error.
+
+Reused the backup/restore safety net + the now-fixed `legacyDumpPath.ts` (§28) to re-run the entire
+full migration `.bat` end-to-end. First confirmed nothing new had been created in the DB since the
+last restore (0 new users/loan applications), so re-running the `[BACKUP]` step wouldn't lose
+anything new. Full re-run succeeded cleanly - all 18 steps including step 13 (now snapshot-based,
+no `.xlsm` needed), no manual intervention required this time, both `[RESTORE]` steps succeeded
+(9/9 users, 4/4 loan applications + 9 attachments). Verified: `loan_transactions` count is now
+280,238 (up from before); the `SML-REG_00334` ₱13,296.81 REPAYMENT and a sample of the other
+previously-missing 96 transactions are now present (checked by legacy Mongo `_id` →
+`LoanTransaction.legacyId`); `check-migration-status.ts` all-PASS; all 4 Docker containers
+healthy, `/health` → 200; `nomer.perez@easycash.ph` login confirmed `ACTIVE`.
+
+### Current state / follow-ups
+
+- The stale-backup bug (§28) is now confirmed to have had real impact (96 transactions, one
+  matching the session's original payment-error report) - not the "negligible" conclusion first
+  reached from file sizes alone. Lesson: for anything touching the financial ledger, diff actual
+  content by id, never infer completeness from file/collection size.
+- The 2026-08-19 migration is now the authoritative one - it was built from the correct, true-latest
+  MongoDB backup, with the `legacyDumpPath.ts` fix already in place, so this shouldn't recur.
+- Deleted the stale Aug 14 extracted folder (`legacy/mongodb/extracted/20260814_155130/`) now that
+  it's superseded, to avoid any future confusion about which is "latest."
+- **Open, needs re-verification next session**: the earlier Payment Recording 500 error on
+  SML-REG_00334's last-installment payoff (₱13,296.81) - now that the underlying REPAYMENT
+  transaction is confirmed present in the DB, check whether the loan's balance/status reflects it
+  correctly in the LMS UI (Loan Account page), since the original report was about a UI error
+  during recording, separate from whether the transaction data itself was missing.
+- Loan Application downloadable/signable PDF feature - still not started, same two blockers as
+  before (§ above), pick up next.
