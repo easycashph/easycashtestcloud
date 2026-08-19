@@ -1,4 +1,4 @@
-import { Award, CheckCircle2, Code2, Smartphone, Sparkles } from 'lucide-react';
+import { CheckCircle2, Code2, Smartphone, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -11,7 +11,6 @@ import {
   LMS_CHANGELOG,
   LMS_CLIENT_PORTAL,
   LMS_COMPANY,
-  LMS_CREDITS,
   LMS_DEV_TEAM_MEMBERS,
   LMS_DEVELOPER_TEAM,
   LMS_VERSION,
@@ -208,30 +207,6 @@ export function AboutPage() {
               </ul>
             </div>
           ))}
-        </CardContent>
-      </Card>
-
-      {/* Founding Development Credits (2026-08-19, user-requested permanent record) - see
-          LMS_CREDITS's own doc comment: a historical acknowledgment, not the current team roster
-          (that's the Developer Team card above). Do not remove when the roster changes. */}
-      <Card className="border-primary/30">
-        <CardHeader className="flex flex-row items-center gap-2 space-y-0">
-          <Award className="h-4 w-4 text-primary" />
-          <CardTitle>Founding Development Credits</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
-            The individuals who architected and built the Easycash LMS and Portal platforms, from the ground up.
-          </p>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {LMS_CREDITS.map((person) => (
-              <li key={person.name} className="rounded-md border p-3">
-                <p className="text-sm font-semibold">{person.name}</p>
-                <p className="text-xs text-muted-foreground">{person.role}</p>
-                {person.note && <p className="mt-1 text-xs text-muted-foreground">{person.note}</p>}
-              </li>
-            ))}
-          </ul>
         </CardContent>
       </Card>
 

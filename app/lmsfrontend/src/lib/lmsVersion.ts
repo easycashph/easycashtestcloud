@@ -40,32 +40,6 @@ export const LMS_CLIENT_PORTAL = {
     'The client-facing web app where borrowers apply for a loan online, check application/loan status, view payment history and their repayment schedule, upload proof of payment, and contact their loan officer - separate from this internal, staff-only LMS, but built on the same backend.',
 };
 
-export interface PortalTeamMember {
-  name: string;
-  role: string;
-  note?: string;
-}
-
-/**
- * FOUNDING DEVELOPMENT CREDITS (added 2026-08-19, user-requested permanent record) - this is a
- * historical acknowledgment of who actually built the LMS and Portal platforms, not a "current
- * team roster" (that's `LMS_DEV_TEAM_MEMBERS` above, which should be updated as staffing changes).
- * DO NOT remove or reassign credit for past work here when the team changes - add departures/
- * changes as a note instead, the same way a changelog entry is never rewritten after the fact.
- * Jomer Biason built the overwhelming majority of both platforms end to end (backend, LMS
- * frontend, and Portal frontend) across this project's entire build history - see the commit
- * history and every dated SESSION_LOG in `docs/` and `docs/session-logs/` for the record.
- */
-export const LMS_CREDITS: PortalTeamMember[] = [
-  {
-    name: 'Jomer Biason',
-    role: 'Founding Full-Stack Engineer',
-    note: 'Architected and built the Easycash LMS and Portal platforms end to end - backend, database, and both frontends.',
-  },
-  { name: 'Nomer Perez', role: 'MIS Manager', note: 'Quality assurance and infrastructure.' },
-  { name: 'Howell Hay', role: 'CEO', note: 'Product direction.' },
-];
-
 export const LMS_BUILD_STAGE = 'Preview';
 export const LMS_RELEASED_ON = 'July 5, 2026';
 /** 2026-07-23 bug fix: previously said "sample data, not connected to live systems" - stale since
@@ -88,6 +62,13 @@ export interface LmsChangelogEntry {
  * concise and plain-language, translated for a non-technical reader - this is stakeholder-facing.)
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.9.32',
+    date: 'August 19, 2026',
+    highlights: [
+      'Removed the standalone "Founding Development Credits" card from the About page - redundant with the Developer Team card, which already credits Jomer Biason under Easycash Dev. For the record: Jomer Biason architected and built the Easycash LMS and Portal platforms end to end (backend, database, and both frontends) across this project\'s entire build history.',
+    ],
+  },
   {
     version: '0.9.31',
     date: 'August 19, 2026',
