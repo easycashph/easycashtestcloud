@@ -4,9 +4,15 @@
  * DUMP_DIR again after a new backup lands (see docs/Architecture/MIGRATION_LEDGER.md - every
  * script listed there that reads from the legacy MongoDB export uses this).
  *
- * Extracted folder names are the backup-mongodb.command timestamp format (YYYYMMDD_HHMMSS, e.g.
- * "20260718_233033") - lexicographic sort order matches chronological order for that format, so
- * a plain string sort picks the newest one.
+ * Extracted folder names are meant to be the backup script's timestamp format (YYYYMMDD_HHMMSS,
+ * e.g. "20260718_233033"), which would sort correctly alphabetically - but picks by folder
+ * modification time instead, not the name, since a name-based sort silently picked a 5-day-stale
+ * backup during the 2026-08-19 full migration: backup-mongodb.bat's date-parsing broke on this
+ * machine's locale and produced a malformed name ("192026_184828" instead of "20260819_184828"),
+ * which alphabetically sorted BEFORE the older, correctly-named backup it should have lost to (see
+ * that script's own fix comment, and session log §27/§28). Modification time doesn't depend on the
+ * name being well-formed, so it's safe even if a future backup run somehow mis-names its output
+ * again.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -23,16 +29,15 @@ function latestExtractedDir(): string {
   const dirs = fs
     .readdirSync(EXTRACTED_ROOT, { withFileTypes: true })
     .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort()
-    .reverse();
+    .map((e) => ({ name: e.name, mtimeMs: fs.statSync(path.join(EXTRACTED_ROOT, e.name)).mtimeMs }))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
   if (dirs.length === 0) {
     throw new Error(
       `"${EXTRACTED_ROOT}" exists but has no extracted backup folders. Extract a ` +
         `legacy/mongodb/*.zip backup first (see "legacy/Run Full Legacy Migration.command").`,
     );
   }
-  return path.join(EXTRACTED_ROOT, dirs[0]!);
+  return path.join(EXTRACTED_ROOT, dirs[0]!.name);
 }
 
 /** The db-easycash collection directory inside the newest extracted backup. */
