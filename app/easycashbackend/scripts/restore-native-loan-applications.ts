@@ -78,6 +78,12 @@ async function main() {
   }
   const newBranchId = branches[0]!.id;
 
+  const [existingBorrowerIds, existingProductVersionIds, existingPortalAccountIds] = await Promise.all([
+    prisma.borrower.findMany({ select: { id: true } }).then((rows) => new Set(rows.map((r) => r.id))),
+    prisma.loanProductVersion.findMany({ select: { id: true } }).then((rows) => new Set(rows.map((r) => r.id))),
+    prisma.portalAccount.findMany({ select: { id: true } }).then((rows) => new Set(rows.map((r) => r.id))),
+  ]);
+
   const restoredApplicationIds = new Set<string>();
   let applicationsRestored = 0;
   for (const raw of payload.loanApplications) {
@@ -87,12 +93,24 @@ async function main() {
     row.reviewedByUserId = null;
     row.reviewStartedByUserId = null;
     row.preApprovedByUserId = null;
-    // borrowerId/portalAccountId/assignedLoanProductVersionId: left as-is (may be null already for
-    // a walk-in application). If set, these referenced rows are themselves either legacy-sourced
-    // (survives the reset with the SAME id, since legacy-derived rows aren't regenerated with new
-    // ids the way branches/users are) or native (out of scope, not restored) - in the native case
-    // this FK will fail to resolve and Prisma will reject that one row rather than silently
-    // creating a dangling reference; caught per-row below instead of aborting the whole restore.
+    // borrowerId/portalAccountId/assignedLoanProductVersionId: if set, these referenced rows are
+    // themselves either legacy-sourced (survives the reset with the SAME id, since legacy-derived
+    // rows aren't regenerated with new ids the way branches/users are) or native (out of scope, not
+    // restored by this script - Borrower/LoanAccount/PortalAccount are deliberately excluded, see
+    // this script's own header comment). Null out any reference that doesn't actually resolve
+    // post-reset instead of letting the whole row's insert fail on a dangling FK.
+    if (row.borrowerId && !existingBorrowerIds.has(row.borrowerId as string)) {
+      console.warn(`  ! ${row.id} (${row.applicantName}): borrowerId ${row.borrowerId} hindi na umiiral, na-null out.`);
+      row.borrowerId = null;
+    }
+    if (row.assignedLoanProductVersionId && !existingProductVersionIds.has(row.assignedLoanProductVersionId as string)) {
+      console.warn(`  ! ${row.id} (${row.applicantName}): assignedLoanProductVersionId ${row.assignedLoanProductVersionId} hindi na umiiral, na-null out.`);
+      row.assignedLoanProductVersionId = null;
+    }
+    if (row.portalAccountId && !existingPortalAccountIds.has(row.portalAccountId as string)) {
+      console.warn(`  ! ${row.id} (${row.applicantName}): portalAccountId ${row.portalAccountId} hindi na umiiral, na-null out.`);
+      row.portalAccountId = null;
+    }
     try {
       await prisma.loanApplication.create({ data: row as never });
       restoredApplicationIds.add(row.id as string);

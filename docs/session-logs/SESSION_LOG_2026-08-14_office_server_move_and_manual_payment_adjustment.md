@@ -1142,3 +1142,78 @@ Flagged to the user again; still not investigated or resolved.
 - Same standing open items as prior sections: Delete Application's "hindi ma-click" repro check,
   Docker auto-rebuild rule decision, PSGC/tunnel reliability fix choice, SMS-on-Start-Review (if
   wanted), advanced Loan Releases Report redesign (deferred).
+
+## §27 - The real, destructive full migration (2026-08-19)
+
+User gave an explicit, informed go-ahead - `patakbuhin na ang Run Full Legacy Migration (Office
+Server PC).bat` - to run the actual reset against the newest SDevTech/MongoDB backup
+(`192026_184828.zip`), the first time this script (or its backup/restore safety net from §26) was
+ever exercised against a genuinely empty post-reset database rather than the live one.
+
+### What happened
+
+The `.bat` ran the `[BACKUP]` steps, `prisma migrate reset --force`, and steps `[1/18]`-`[12/18]`
+(CP12 core migration, PSGC/address resolution, repayment schedules, balance flag/recompute,
+document template mappings) all successfully, then **aborted at `[13/18]`**: `Error: File not
+found: legacy\reports\BETA 1.5.83 LMSv3.xlsm`. Root cause: that Excel workbook (the source for the
+Excel-based origination-fee backfill) simply isn't present on this Office Server PC - never a bug
+in the script itself, a missing local asset. Because the `.bat` aborts on first failure
+(`if errorlevel 1 goto :step_failed`), everything after step 13 - including both `[RESTORE]`
+steps - never ran, leaving the database with a real, freshly-migrated legacy dataset but **zero**
+native user accounts or loan applications (both wiped by the reset, with no automatic recovery).
+
+Completed every remaining step manually, in order, via `npx tsx` directly (same scripts the `.bat`
+would have called):
+- `[13b/18]` origination fees (MongoDB source) - 437 updates applied.
+- `[13c/18]` origination fees (inferred stragglers) - ran clean.
+- `[14/18]` interest rates - 623 addOnInterestRate + 1802 contractualInterestRate backfilled.
+- `[15/18]` net proceeds recompute - 1802/1802 corrected.
+- `[16/18]` PH ZIP codes - 1535 written.
+- `[17/18]` NCR barangay ZIP codes - 178 barangay + 9 Manila district written.
+- `[18/18]` `check-migration-status.ts` - all 6 checks PASS.
+- `restore-native-users.ts` - all 9 native accounts restored, including
+  `nomer.perez@easycash.ph` (confirmed `ACTIVE` via direct SQL). Some `roleClass` name lookups
+  ("Accounting Staff", "Operation Manager", "Collection Specialist", "Admin") didn't resolve
+  post-migration - left blank per the script's designed graceful-degradation (cosmetic field only,
+  doesn't block login/access).
+- `restore-native-loan-applications.ts` - **first run failed 0/4**: `assignedLoanProductVersionId`
+  and `borrowerId` FK violations on all 4 applications. The script's original assumption (a set FK
+  on one of these fields is always either legacy-sourced, and so survives the reset with the same
+  id, or already null) turned out to be wrong - these 4 applications had FKs pointing at *native*
+  Borrower/LoanProductVersion/PortalAccount rows, which are out of this restore's scope and
+  genuinely don't exist post-reset. Fixed `restore-native-loan-applications.ts` to look up each of
+  `borrowerId`/`assignedLoanProductVersionId`/`portalAccountId` against what actually exists
+  post-migration and null out (with a warning) whatever doesn't resolve, instead of letting the
+  whole row's `create()` fail. Re-ran: **4/4 loan applications restored, 9/15 attachments**
+  restored (the other 6 are BORROWER/LOAN_ACCOUNT-owned, out of this script's scope by design).
+
+Verified after: all 4 Docker containers `Up`/`healthy`, backend `/health` → 200,
+`check-migration-status.ts` still all-PASS.
+
+### Known, accepted gap
+
+The Excel-source origination-fee backfill (the original step 13) **never ran** for this migration
+- `legacy/reports/BETA 1.5.83 LMSv3.xlsm` isn't present on this machine. Its two fallback siblings
+(13b MongoDB-source, 13c inferred-stragglers) did run and cover most of the same ground per their
+own doc comments, but this is not a verified 1:1 substitute. If a specific loan's origination fee
+looks wrong later, this is the first thing to check - re-run 13 once that Excel file is located and
+copied to this PC (it was presumably left off during earlier `legacy/reports/` gitignore rules, or
+simply never copied over).
+
+### Current state / follow-ups
+
+- The Office Server PC migration script + its backup/restore safety net (§26) is now proven
+  end-to-end against a real reset, not just the live database.
+- Fixed a real bug in `restore-native-loan-applications.ts` surfaced only by the real reset (see
+  above) - future re-runs of this script will null-out-and-warn on stale native FKs instead of
+  failing those rows outright.
+- **Open, needs attention next session** (carried forward again): Payment Recording 500 on
+  SML-REG_00334's final installment - still never retried with live logs.
+- Excel-source origination fees (step 13) permanently skipped this run - flagged above, needs the
+  source file located before it can be re-run.
+- Still-open from before: five unexplained pre-existing `.command` deletions, `wslrelay.exe`
+  port-4000 squatter (worked around via Docker Desktop restart, not root-caused).
+- Loan Application downloadable/signable PDF feature: mockup approved, user said proceed with the
+  real build, but two blocking implementation questions (missing real `.docx` template with merge
+  fields; need a new `GeneratedLoanApplicationDocument` model since the existing one is
+  LoanAccount-only) were raised and not yet answered - pick this back up next.
