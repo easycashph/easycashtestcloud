@@ -11,23 +11,23 @@ production use.
 
 ## Status
 
-**Phase:** Milestone 9.1 — Loan Activation & Payment Processing implementation
-**Latest completed checkpoint:** CP7 (`LoanAccount.activate()` / `applyPayment()` domain methods)
-**Next up:** CP8 (`ActivateLoanUseCase`)
+**Two apps, one backend, both live:**
 
-| Area | Status |
-|---|---|
-| Domain layer (Clean Architecture core) | ✅ Complete (Milestone 7, audited & remediated) |
-| HTTP API layer | ✅ Complete (Milestone 8, audited & remediated) |
-| Legacy-data architecture research (ADRs, calculation engine spec) | ✅ Complete |
-| Concurrency infrastructure, financial audit logging, interest/amortization calculators, payment allocation | ✅ Done (CP1–CP5) |
-| Repository conditional-write refactor, loan activation/payment domain methods | ✅ Done (CP6–CP7) |
-| Loan activation use case (ledger entry, schedule generation, audit log) | 🔶 In progress (CP8) |
-| Online loan application portal, customer self-service, reporting/analytics | ⏳ Planned |
+| App | Audience | Status |
+|---|---|---|
+| **Easycash LMS** (`app/lmsfrontend`) | Internal staff (MIS, Loan Operation Management, CRM, Finance, Accounting, Collection) | 🟢 Live, wired to real production data — preview build |
+| **Easycash Portal** (`app/portalfrontend`) | Borrowers — apply for a loan, track status, view payment history, chat with their loan officer | 🟢 Live at `easycashportal.ph` |
 
-Test suite: 430+ unit tests passing. Full architectural decision history and current progress
-are tracked in [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) — read this before making
-any implementation decision.
+Both are served by the same backend (`app/easycashbackend`). Real production data has been
+migrated from the legacy MongoDB/SDevTech system: thousands of borrowers, loan products, loan
+accounts, and hundreds of thousands of transactions.
+
+The platform ships frequent, dated releases. The authoritative, plain-language version history
+for both apps — current version numbers, what shipped and when — lives in
+[`app/lmsfrontend/src/lib/lmsVersion.ts`](app/lmsfrontend/src/lib/lmsVersion.ts) and is surfaced
+on the LMS's own About page. Day-to-day engineering narrative (what was done, why, bugs found and
+fixed) is recorded per session in [`docs/session-logs/`](docs/session-logs/) and
+[`docs/`](docs/) (`SESSION_LOG_*.md`).
 
 ---
 
@@ -36,8 +36,8 @@ any implementation decision.
 Easycash Lending Company Inc. previously ran on a patchwork of Excel, Google Sheets, a legacy
 SDevTech lending application, and a MongoDB-backed transaction ledger. This platform replaces
 that patchwork with one system, while treating the legacy data as authoritative evidence — every
-non-trivial financial rule implemented here is backed by a documented Architecture Decision
-Record (ADR) tracing back to verified legacy behavior, not assumption.
+non-trivial financial rule implemented here is backed by verified legacy behavior or an explicit,
+confirmed business decision, not assumption.
 
 ### Core principles
 
@@ -46,9 +46,8 @@ Record (ADR) tracing back to verified legacy behavior, not assumption.
 - **Configurable, versioned loan products.** Interest methods, fees, penalties, and payment
   allocation rules are configurable per product version; every approved loan keeps an immutable
   snapshot of the rules it was approved under.
-- **Financial correctness over convenience.** Optimistic concurrency on every balance-mutating
-  write, fail-closed audit logging on every financial state change, and a full paper trail (ADRs)
-  for every non-obvious decision.
+- **Financial correctness over convenience.** Full audit trails, fail-closed logging on financial
+  state changes, and a documented paper trail for every non-obvious decision.
 
 ---
 
@@ -59,7 +58,8 @@ Record (ADR) tracing back to verified legacy behavior, not assumption.
 infrastructure / interface layers)
 **Database** — PostgreSQL via Prisma ORM
 **Auth** — JWT with refresh tokens, RBAC
-**Deployment** — Docker, Docker Compose (self-hosted first; portable to VPS/cloud)
+**Deployment** — Docker, Docker Compose, self-hosted (office server / mini PC) with a Cloudflare
+Tunnel for public access; portable to VPS/cloud
 **Testing** — Vitest (unit + integration)
 
 ---
@@ -68,16 +68,23 @@ infrastructure / interface layers)
 
 ```
 app/
-  backend/     Express + TypeScript API — Clean Architecture (domain/application/infrastructure/interface)
-  frontend/    React + TypeScript SPA
-  docker/      Container definitions
+  easycashbackend/   Express + TypeScript API — Clean Architecture, shared by both frontends
+  lmsfrontend/        React + TypeScript SPA — internal staff LMS
+  portalfrontend/      React + TypeScript SPA — public borrower-facing Portal (easycashportal.ph)
+  docker/             Container / compose definitions
 docs/
   Architecture/       ADRs, calculation engine spec, financial invariants, milestone roadmaps
   Legacy Analysis/    Evidence-based findings from the legacy MongoDB export and Excel reports
-  PROJECT_HANDOFF.md  Authoritative, continuously-updated project status and history
+  guides/             Setup guides (Windows, macOS, device sync, Docker cleanup, etc.)
+  session-logs/       Dated session logs — what was done, in what order, why, bugs and fixes
+  PROJECT_HANDOFF.md  Continuously-updated project status and history
 legacy/
   mongodb/     Raw legacy MongoDB collection export (reference only, never modified)
   reports/     Legacy Excel/Google Sheets exports used as evidence for financial rules
+scripts/       Operational scripts — legacy migration, database backup/update, LAN IP sync,
+               Cloudflare tunnel auto-update, Docker WSL2 disk cleanup
+local/         Machine-local config and credentials (gitignored) — see local/README.md
+logs/          Runtime logs (gitignored)
 CLAUDE.md      Engineering charter and working agreement for this codebase
 ```
 
@@ -89,31 +96,18 @@ CLAUDE.md      Engineering charter and working agreement for this codebase
 - Preserve every validated business rule from production — never silently change behavior
 - Support 10,000+ borrowers, 100,000+ loans, and millions of payments
 - Minimize infrastructure cost — self-hosted first, open-source where possible
-- Support a future online loan application portal, customer self-service portal, and
-  management/reporting dashboards
+- Give borrowers a self-service portal alongside the internal staff LMS
 - Keep documentation and financial-rule specifications continuously in sync with the code
-
-## Roadmap
-
-1. ~~Domain layer (Clean Architecture core)~~ — done
-2. ~~HTTP API layer~~ — done
-3. ~~Legacy-evidence architecture research~~ — done
-4. **Loan activation & payment processing (current)** — schedule generation, ledger entries,
-   fail-closed audit logging
-5. Reporting & analytics, notification services, document management
-6. Online loan application portal, customer self-service portal
-7. Migration of validated legacy data into production
-
-See [`docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md`](docs/Architecture/MILESTONE_9_IMPLEMENTATION_ROADMAP_V2.md)
-for the current milestone's detailed checkpoint plan.
 
 ---
 
 ## Documentation
 
-- [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) — current status, architecture overview, test coverage, resume instructions
+- [`docs/PROJECT_HANDOFF.md`](docs/PROJECT_HANDOFF.md) — current status, architecture overview, resume instructions
 - [`docs/Architecture/`](docs/Architecture/) — ADRs, `FINANCIAL_INVARIANTS.md`, `CALCULATION_ENGINE_SPEC.md`
 - [`docs/Legacy Analysis/`](docs/Legacy%20Analysis/) — legacy-data investigation findings
+- [`docs/guides/`](docs/guides/) — setup guides per platform/scenario
+- [`docs/session-logs/`](docs/session-logs/) — dated engineering session logs
 - [`CLAUDE.md`](CLAUDE.md) — engineering charter, standards, and AI-collaboration rules for this codebase
 
 ---
