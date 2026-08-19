@@ -1200,6 +1200,13 @@ looks wrong later, this is the first thing to check - re-run 13 once that Excel 
 copied to this PC (it was presumably left off during earlier `legacy/reports/` gitignore rules, or
 simply never copied over).
 
+**Update, same day**: user copied `BETA 1.5.83 LMSv3.xlsm` onto this Office Server PC. Ran step 13
+manually (dry-run first): 260 rows read, 142 matched by loanCode, 95 already had real fee data from
+13b/13c (correctly left untouched), 118 had no matching LoanAccount, and **41 loans that were still
+reading all-zero fees got real values backfilled from the Excel source**. `--apply` run succeeded,
+`check-migration-status.ts` still all-PASS afterward. This gap is now closed - the file just needs
+to stay on this machine (or get copied back) for any future full-reset re-run.
+
 ### Current state / follow-ups
 
 - The Office Server PC migration script + its backup/restore safety net (§26) is now proven
@@ -1209,10 +1216,17 @@ simply never copied over).
   failing those rows outright.
 - **Open, needs attention next session** (carried forward again): Payment Recording 500 on
   SML-REG_00334's final installment - still never retried with live logs.
-- Excel-source origination fees (step 13) permanently skipped this run - flagged above, needs the
-  source file located before it can be re-run.
+- Excel-source origination fees (step 13) - closed same day, see update above.
 - Still-open from before: five unexplained pre-existing `.command` deletions, `wslrelay.exe`
   port-4000 squatter (worked around via Docker Desktop restart, not root-caused).
+- Found several TEST-named records while checking: 2 native loan applications
+  (`TEST2NOMER TEST2NOMER TEST2NOMER`, `TEST6NOMER TEST6NOMER TEST6NOMER`, both APPROVED, both
+  restored from the pre-reset backup); 5 legacy-sourced borrowers (`ROXANNE TESTONLY`, `JAY TEST`,
+  `BHENZII TESTA`, `TEST PAYLATER`, `KABORROW TESTING` - pre-existing in the SDevTech source data,
+  not created this session); 1 ACTIVE loan account (`SP-Easy_00001`, borrower `BHENZII TESTA`); 0
+  TEST-named staff/login users. Awaiting user decision on whether to delete these (need to check
+  `SP-Easy_00001` for real transactions/payments first, same care as the earlier
+  `TESTManny Mayweather Pacquiao` cleanup).
 - Loan Application downloadable/signable PDF feature: mockup approved, user said proceed with the
   real build, but two blocking implementation questions (missing real `.docx` template with merge
   fields; need a new `GeneratedLoanApplicationDocument` model since the existing one is
