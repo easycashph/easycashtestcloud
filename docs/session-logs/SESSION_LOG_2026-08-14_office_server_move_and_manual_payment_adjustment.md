@@ -1813,3 +1813,47 @@ fresh uptime and `/health` OK. Committed and pushed (`e19a4ea`).
   same way if it ever is.
 - BL-REG_Y813H's installment #1 itself was NOT actually adjusted during this session - only the
   feature was fixed so staff can now do it themselves through the normal UI.
+
+## §40 - Restructure gets a negotiated (then made bidirectional) principal/interest rate override (2026-08-20)
+
+User asked how to Restructure **BL-SPEC_00028 (MARLON ALMANZOR RICALDE)** - which surfaced that the
+Restructure dialog's "New Principal" and "Interest Rate" had never been editable at all (always the
+system-computed figure / the old loan's own rate, no override field even existed). Also surfaced,
+independently, that BL-SPEC_00028 itself won't actually show the Restructure option until its due
+date's grace day fully elapses (§38's fix, working as intended - not a bug).
+
+**First pass** (user-confirmed: "para sa negotiated na mas mababang principal at rate"): added an
+optional override for both fields, but only allowed LOWERING them below the computed default/old
+rate - mirroring the ORIGINAL (pre-2026-08-05) ceiling rule Reduce Penalty/Adjust Fees used to have.
+Validated server-side (new `RestructureNegotiatedOverrideExceedsCeilingError`) and client-side
+(disabled submit + inline error when a typed value exceeded the ceiling). `LoanRestructure`'s audit
+record (`previousCollectionsBalance` vs `newPrincipalAmount`) now genuinely differs when an override
+is used, instead of both fields always holding the identical figure as before.
+
+**Second pass, same day** (user-confirmed: "pwede i pasok ng mataas or mababa hindi lang pababa"):
+removed that ceiling entirely - mirroring the CURRENT (2026-08-05, "ceiling removed") precedent
+Reduce Penalty/Adjust Fees actually use today, which the first pass had missed. Both fields are now
+fully bidirectional. Since a restructure moves a large one-time principal figure (unlike a per-
+installment penalty/fee tweak), added one safeguard neither of those two features has: a `reason` is
+now REQUIRED (not merely optional) whenever the actual value used differs from the computed default,
+replacing the ceiling error with a new `NegotiatedOverrideReasonRequiredError`. Frontend mirrors this
+- the Reason label reads "(required...)" and the field gets a warning border when an override is in
+effect and no reason is typed yet.
+
+Both passes verified against the live rebuilt backend (a high/negotiated value now clears Zod
+validation - 401 auth-required, not 400). The second rebuild hit a transient `npm install`
+`ECONNRESET` inside the Docker build on the first attempt (a real network blip, not the earlier
+"buildkit exits 0 without redeploying" issue from §30 - confirmed by checking container uptime, which
+stayed stale after that failed attempt) - retried and the retry redeployed cleanly. Committed and
+pushed (`a23db8a` -> `7b585eb` after rebase).
+
+### Current state / follow-ups
+
+- Restructure's New Principal/Interest Rate are now genuinely staff-editable, bidirectional, with a
+  required-reason safeguard when used. BL-SPEC_00028 itself has NOT been restructured yet - the
+  account still needs to clear its own due-date grace day first (expected shortly after this session,
+  per §38).
+- Portal Accounts Report (MIS-only report listing every borrower with a Portal login) was scoped and
+  mocked up mid-session (design matches the real "Premium" theme + Reports Hub card-grid layout,
+  landing under Accounting) but explicitly paused by the user ("stop muna natin ito") before any real
+  code was written - not built, no follow-up needed unless the user picks it back up.
