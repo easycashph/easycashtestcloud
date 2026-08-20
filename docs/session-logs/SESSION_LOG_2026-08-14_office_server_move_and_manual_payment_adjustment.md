@@ -1719,3 +1719,54 @@ Committed and pushed (`d113f98`).
 - No staff-facing indicator yet showing whether a given loan account's borrower even HAS a linked
   Portal account before they try the Portal button - right now they'd only find out via the
   `NoPortalAccountLinkedError` after clicking "Send via Portal." A small UX polish, not blocking.
+
+## §38 - "Matured" status was flagging on the due date itself, not the day after (2026-08-20)
+
+User reported a real account, **BL-SPEC_00028 (MARLON ALMANZOR RICALDE)**: due date shown as
+August 20 (today), but status already read "Matured." Investigated by querying the live database
+directly - the installment's `dueDate` is `2026-08-19T16:00:00Z`, which is Asia/Manila midnight
+(00:00) on August 20 (the established storage convention for this codebase - see
+`PrismaReportingRepository.ts`'s `daysLateOf()` doc comment, confirmed independently here). Server
+time at the time of the report was already `2026-08-20T06:02Z` (2:02 PM Manila) - past that
+midnight instant, so every overdue/LATE/MATURED check in the codebase, which compared the raw
+`dueDate` timestamp against `now` with a plain `<`, treated the installment as already overdue the
+moment its own due date began, with zero grace for the rest of that calendar day.
+
+User's explicit instruction: "i fix mo nalang ito. hanggang katapusan ng araw ng due date" (grace
+the account through the END of its due date's day, not the start).
+
+Added `shared/utils/dueDateGrace.ts` (`isDueDatePast`/`overdueCutoff`), built on the existing
+`manilaTime.ts` Manila-calendar-day helpers already used elsewhere in the codebase, and applied it
+everywhere an installment's lateness was derived from a raw `dueDate`-vs-`now` comparison:
+
+- `RepaymentInstallment.status` (domain) - the single canonical LATE determination. Everything else
+  that reads `installment.status` rather than re-deriving it (penalty/risk assessment, statement of
+  account, `GetPortalNextPaymentDueUseCase`, `ProcessPaymentUseCase`) is automatically fixed by this
+  one change, no separate edit needed.
+- `PrismaLoanAccountRepository.findMaturedLoanAccountIds` - the actual "Matured" overlay query BL-
+  SPEC_00028 was reported against.
+- `RestructureLoanUseCase`'s past-due-or-matured eligibility check - simplified to reuse
+  `installment.status === 'LATE'` directly instead of re-deriving it from a raw comparison.
+- `PrismaSmsReminderRepository`/`PrismaEmailReminderRepository`'s `findPastDueCandidates` queries -
+  an installment due today no longer gets a "past due" SMS/email the instant midnight passes.
+- `PrismaPaymentReminderRepository`'s own separate LATE derivation (payment reminders feature).
+- `PrismaReportingRepository`'s Accounts with Past Due report `overdueUnpaid` arrears-total filter.
+
+Deliberately did NOT touch penalty accrual (`CurrentPenaltyResolver`/`resolveComputedPenalty`) or
+the report's `daysLateOf()` Days Late column - both already use day-floor math
+(`Math.floor(diffMs / 86_400_000)`) that already implicitly grants this same grace (a same-day due
+date floors to 0 days late there already), so nothing there was actually wrong.
+
+Verified directly: re-ran the fixed MATURED query against the live database for BL-SPEC_00028 -
+0 rows (no longer matured). Backend type-checked clean, rebuilt, confirmed fresh uptime and `/health`
+OK, re-verified against the live rebuilt container that the loan no longer matures while its raw
+`status` stays `ACTIVE` (matured is a display overlay only, never a stored status change).
+Committed and pushed (`d71f2b2`).
+
+### Current state / follow-ups
+
+- Every overdue/LATE/MATURED determination the audit found now grants the full due-date day. No
+  other raw `dueDate < now`-style comparison is known to remain.
+- Penalty accrual amounts were intentionally left untouched (already correct per the audit above) -
+  worth a second look only if a specific penalty figure is ever reported as wrong on a same-day-due
+  installment, which was not the case here.
