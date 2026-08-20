@@ -107,6 +107,17 @@ pushd "%BACKEND_DIR%"
 call npx tsx scripts\backup-native-role-permissions.ts
 popd
 
+REM 2026-08-20 (user request): "buong system setting" - Document Templates customizations,
+REM Reminder Settings (SMS/Email toggles), at System Announcements - see
+REM backup-native-system-settings.ts's own doc comment for the exact scope (deliberately excludes
+REM Loan Products, handled separately due to its financial-ledger impact).
+echo.
+echo [BACKUP] Bina-backup ang ibang system settings (Document Templates,
+echo          Reminder Settings, Announcements)...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backup-native-system-settings.ts
+popd
+
 echo.
 echo [1/18] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
@@ -268,6 +279,13 @@ echo [RESTORE] Ibinabalik ang mga native loan application (at kanilang
 echo           attachments) na binackup bago ang reset...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\restore-native-loan-applications.ts
+popd
+
+echo.
+echo [RESTORE] Ibinabalik ang ibang system settings (Document Templates,
+echo           Reminder Settings, Announcements) na binackup bago ang reset...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\restore-native-system-settings.ts
 popd
 
 echo.
