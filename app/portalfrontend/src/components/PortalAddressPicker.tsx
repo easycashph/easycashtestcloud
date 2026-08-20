@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Select } from '@/components/ui/Select';
 import { apiClient } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PsgcBarangayOption, PsgcCityOption, PsgcOption, ResolvedAddressCodes } from '@/lib/portalApiTypes';
 import { toProperCase } from '@/lib/utils';
 
@@ -67,6 +68,7 @@ function usePsgcOptions<T extends PsgcOption = PsgcOption>(path: string, enabled
  * dropdowns pre-select the existing address instead of starting blank.
  */
 export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; onChange: (patch: Partial<AddressDraft>) => void }) {
+  const { t } = useLanguage();
   const [regionCode, setRegionCode] = React.useState('');
   const [provinceCode, setProvinceCode] = React.useState('');
   const [cityCode, setCityCode] = React.useState('');
@@ -144,9 +146,9 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Region</Label>
+          <Label>{t.addressPicker.region}</Label>
           <Select value={regionCode} onChange={(e) => pickRegion(e.target.value)}>
-            <option value="">{regions.isLoading ? 'Loading…' : 'Select region'}</option>
+            <option value="">{regions.isLoading ? t.addressPicker.loading : t.addressPicker.selectRegion}</option>
             {regions.data.map((r) => (
               <option key={r.code} value={r.code}>
                 {toProperCase(r.name)}
@@ -155,9 +157,11 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Province</Label>
+          <Label>{t.addressPicker.province}</Label>
           <Select value={provinceCode} onChange={(e) => pickProvince(e.target.value)} disabled={!regionCode}>
-            <option value="">{!regionCode ? 'Select a region first' : provinces.isLoading ? 'Loading…' : 'Select province'}</option>
+            <option value="">
+              {!regionCode ? t.addressPicker.selectRegionFirst : provinces.isLoading ? t.addressPicker.loading : t.addressPicker.selectProvince}
+            </option>
             {provinces.data.map((p) => (
               <option key={p.code} value={p.code}>
                 {toProperCase(p.name)}
@@ -166,9 +170,11 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>City / Municipality</Label>
+          <Label>{t.addressPicker.cityMunicipality}</Label>
           <Select value={cityCode} onChange={(e) => pickCity(e.target.value)} disabled={!provinceCode}>
-            <option value="">{!provinceCode ? 'Select a province first' : cities.isLoading ? 'Loading…' : 'Select city/municipality'}</option>
+            <option value="">
+              {!provinceCode ? t.addressPicker.selectProvinceFirst : cities.isLoading ? t.addressPicker.loading : t.addressPicker.selectCity}
+            </option>
             {cities.data.map((c) => (
               <option key={c.code} value={c.code}>
                 {toProperCase(c.name)}
@@ -177,9 +183,11 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Barangay</Label>
+          <Label>{t.addressPicker.barangay}</Label>
           <Select value={barangayCode} onChange={(e) => pickBarangay(e.target.value)} disabled={!cityCode}>
-            <option value="">{!cityCode ? 'Select a city/municipality first' : barangays.isLoading ? 'Loading…' : 'Select barangay'}</option>
+            <option value="">
+              {!cityCode ? t.addressPicker.selectCityFirst : barangays.isLoading ? t.addressPicker.loading : t.addressPicker.selectBarangay}
+            </option>
             {barangays.data.map((b) => (
               <option key={b.code} value={b.code}>
                 {toProperCase(b.name)}
@@ -191,15 +199,15 @@ export function PortalAddressPicker({ value, onChange }: { value: AddressDraft; 
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <Label>House / Unit / Bldg. No.</Label>
+          <Label>{t.addressPicker.houseUnitNumber}</Label>
           <Input value={value.houseUnitNumber} onChange={(e) => onChange({ houseUnitNumber: e.target.value })} />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Street</Label>
+          <Label>{t.addressPicker.street}</Label>
           <Input value={value.street} onChange={(e) => onChange({ street: e.target.value })} />
         </div>
         <div className="space-y-1.5">
-          <Label>ZIP code</Label>
+          <Label>{t.addressPicker.zipCode}</Label>
           <Input value={value.zipCode} onChange={(e) => onChange({ zipCode: e.target.value })} />
         </div>
       </div>
