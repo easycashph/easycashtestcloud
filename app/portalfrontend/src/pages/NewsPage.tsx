@@ -147,7 +147,7 @@ function CategoryChip({
 function MisPostFeedCard({ post }: { post: MisPostView }) {
   return (
     <div className="flex gap-4 rounded-2xl border border-primary/30 bg-card p-4">
-      <img src={`${API_BASE_URL}${post.imageUrl}`} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24" />
+      <img src={`${API_BASE_URL}${post.imageUrl}`} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24" />
       <div className="min-w-0">
         <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-primary">
           <Megaphone className="h-3 w-3" />

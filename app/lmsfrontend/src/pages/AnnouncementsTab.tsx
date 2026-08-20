@@ -454,7 +454,7 @@ function PortalPostsSection() {
                 const live = !p.withdrawn && !expired;
                 return (
                   <li key={p.id} className="flex items-start gap-3 py-3">
-                    <img src={`${API_BASE_URL}${p.imageUrl}`} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                    <img src={`${API_BASE_URL}${p.imageUrl}`} alt="" loading="lazy" className="h-12 w-12 shrink-0 rounded object-cover" />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={live ? 'success' : 'secondary'} className="text-[10px]">
