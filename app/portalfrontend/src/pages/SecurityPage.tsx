@@ -10,12 +10,8 @@ import { Dialog } from '@/components/ui/Dialog';
 import { PortalHeader } from '@/components/PortalHeader';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalOtpChannel, PortalTrustedDevice } from '@/lib/portalApiTypes';
-
-function channelLabel(channel: PortalOtpChannel): string {
-  if (channel === 'BOTH') return 'email address and mobile number';
-  return channel === 'SMS' ? 'mobile number' : 'email address';
-}
 
 /** Portal Security tab (2026-07-27 user request): self-service login email and password change.
  * Both require the current password (see backend's ChangePortalEmailUseCase/
@@ -32,6 +28,10 @@ function channelLabel(channel: PortalOtpChannel): string {
 export function SecurityForm() {
   const { account, refreshAccount, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
+
+  const channelLabel = (channel: PortalOtpChannel): string =>
+    channel === 'BOTH' ? t.auth.otp.channelBoth : channel === 'SMS' ? t.auth.otp.channelSms : t.auth.otp.channelEmail;
 
   const [deletePassword, setDeletePassword] = React.useState('');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -90,9 +90,9 @@ export function SecurityForm() {
       const result = await apiClient.post<{ challengeId: string }>('/portal/security/2fa/request-enable', { channel: twoFaChannel }, true);
       setTwoFaChallengeId(result.challengeId);
       setTwoFaState('idle');
-      setTwoFaMessage(`Code sent to your ${channelLabel(twoFaChannel)}.`);
+      setTwoFaMessage(t.security.twoFactor.codeSentTo.replace('{channel}', channelLabel(twoFaChannel)));
     } catch (err) {
-      setTwoFaError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setTwoFaError(err instanceof ApiError ? err.message : t.security.genericError);
       setTwoFaState('error');
     }
   };
@@ -110,7 +110,7 @@ export function SecurityForm() {
       setTwoFaState('idle');
       await refreshAccount();
     } catch (err) {
-      setTwoFaError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setTwoFaError(err instanceof ApiError ? err.message : t.security.genericError);
       setTwoFaState('error');
     }
   };
@@ -125,7 +125,7 @@ export function SecurityForm() {
       setTwoFaState('idle');
       await refreshAccount();
     } catch (err) {
-      setTwoFaError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setTwoFaError(err instanceof ApiError ? err.message : t.security.genericError);
       setTwoFaState('error');
     }
   };
@@ -141,7 +141,7 @@ export function SecurityForm() {
       setNewEmail('');
       await refreshAccount();
     } catch (err) {
-      setEmailError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setEmailError(err instanceof ApiError ? err.message : t.security.genericError);
       setEmailState('error');
     }
   };
@@ -149,7 +149,7 @@ export function SecurityForm() {
   const handleChangePassword = async (event: React.FormEvent) => {
     event.preventDefault();
     if (newPassword !== confirmPassword) {
-      setPasswordError('New password and confirmation do not match.');
+      setPasswordError(t.security.password.mismatch);
       setPasswordState('error');
       return;
     }
@@ -162,7 +162,7 @@ export function SecurityForm() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setPasswordError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setPasswordError(err instanceof ApiError ? err.message : t.security.genericError);
       setPasswordState('error');
     }
   };
@@ -177,64 +177,64 @@ export function SecurityForm() {
       logout();
       navigate('/', { replace: true });
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setDeleteError(err instanceof ApiError ? err.message : t.security.genericError);
       setDeleteState('error');
     }
   };
 
   return (
     <>
-      <p className="text-sm text-muted-foreground">Manage your login email and password.</p>
+      <p className="text-sm text-muted-foreground">{t.security.intro}</p>
 
         <Card className="mt-8 p-6">
-          <h2 className="text-base font-semibold">Login Email</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Current email: {account?.email}</p>
+          <h2 className="text-base font-semibold">{t.security.email.title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t.security.email.currentEmail.replace('{email}', account?.email ?? '')}</p>
           <form onSubmit={handleChangeEmail} className="mt-4 space-y-4">
             <div className="space-y-1.5">
-              <Label>New email</Label>
+              <Label>{t.security.email.newEmailLabel}</Label>
               <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label>Current password</Label>
+              <Label>{t.security.email.currentPasswordLabel}</Label>
               <PasswordInput value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} required />
             </div>
             {emailState === 'error' && <Alert tone="error">{emailError}</Alert>}
-            {emailState === 'saved' && <Alert tone="success">Login email updated.</Alert>}
+            {emailState === 'saved' && <Alert tone="success">{t.security.email.updated}</Alert>}
             <Button type="submit" disabled={emailState === 'saving'}>
-              {emailState === 'saving' ? 'Saving…' : 'Update Email'}
+              {emailState === 'saving' ? t.security.email.submitting : t.security.email.submit}
             </Button>
           </form>
         </Card>
 
         <Card className="mt-5 p-6">
-          <h2 className="text-base font-semibold">Password</h2>
+          <h2 className="text-base font-semibold">{t.security.password.title}</h2>
           <form onSubmit={handleChangePassword} className="mt-4 space-y-4">
             <div className="space-y-1.5">
-              <Label>Current password</Label>
+              <Label>{t.security.password.currentPasswordLabel}</Label>
               <PasswordInput value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label>New password</Label>
+              <Label>{t.security.password.newPasswordLabel}</Label>
               <PasswordInput value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label>Confirm new password</Label>
+              <Label>{t.security.password.confirmPasswordLabel}</Label>
               <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
             </div>
             {passwordState === 'error' && <Alert tone="error">{passwordError}</Alert>}
-            {passwordState === 'saved' && <Alert tone="success">Password updated.</Alert>}
+            {passwordState === 'saved' && <Alert tone="success">{t.security.password.updated}</Alert>}
             <Button type="submit" disabled={passwordState === 'saving'}>
-              {passwordState === 'saving' ? 'Saving…' : 'Update Password'}
+              {passwordState === 'saving' ? t.security.password.submitting : t.security.password.submit}
             </Button>
           </form>
         </Card>
 
         <Card className="mt-5 p-6">
-          <h2 className="text-base font-semibold">Two-Factor Authentication</h2>
+          <h2 className="text-base font-semibold">{t.security.twoFactor.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {account?.twoFactorEnabled
-              ? `Enabled - codes are sent to your ${channelLabel(account.twoFactorChannel ?? 'EMAIL')} on every login.`
-              : 'Disabled - logging in only requires your password.'}
+              ? t.security.twoFactor.enabled.replace('{channel}', channelLabel(account.twoFactorChannel ?? 'EMAIL'))
+              : t.security.twoFactor.disabled}
           </p>
 
           {twoFaError && <Alert tone="error">{twoFaError}</Alert>}
@@ -242,18 +242,18 @@ export function SecurityForm() {
           {account?.twoFactorEnabled ? (
             <form onSubmit={handleDisable} className="mt-4 space-y-4">
               <div className="space-y-1.5">
-                <Label>Current password</Label>
+                <Label>{t.security.twoFactor.currentPasswordLabel}</Label>
                 <PasswordInput value={twoFaDisablePassword} onChange={(e) => setTwoFaDisablePassword(e.target.value)} required />
               </div>
               <Button type="submit" variant="outline" disabled={twoFaState === 'saving'}>
-                {twoFaState === 'saving' ? 'Turning off…' : 'Turn Off'}
+                {twoFaState === 'saving' ? t.security.twoFactor.turningOff : t.security.twoFactor.turnOff}
               </Button>
             </form>
           ) : twoFaChallengeId ? (
             <form onSubmit={handleConfirmEnable} className="mt-4 space-y-4">
               {twoFaMessage && <Alert tone="success">{twoFaMessage}</Alert>}
               <div className="space-y-1.5">
-                <Label>Verification code</Label>
+                <Label>{t.security.twoFactor.verificationCodeLabel}</Label>
                 <Input
                   inputMode="numeric"
                   maxLength={6}
@@ -266,7 +266,7 @@ export function SecurityForm() {
               </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={twoFaState === 'saving'}>
-                  {twoFaState === 'saving' ? 'Confirming…' : 'Confirm'}
+                  {twoFaState === 'saving' ? t.security.twoFactor.confirming : t.security.twoFactor.confirm}
                 </Button>
                 <Button
                   type="button"
@@ -277,21 +277,21 @@ export function SecurityForm() {
                     setTwoFaError('');
                   }}
                 >
-                  Cancel
+                  {t.security.twoFactor.cancel}
                 </Button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleRequestEnable} className="mt-4 space-y-4">
               <div className="space-y-1.5">
-                <Label>Send code via</Label>
+                <Label>{t.security.twoFactor.sendCodeVia}</Label>
                 <div className="flex gap-2">
                   <Button
                     type="button"
                     variant={twoFaChannel === 'EMAIL' ? 'primary' : 'outline'}
                     onClick={() => setTwoFaChannel('EMAIL')}
                   >
-                    Email
+                    {t.security.twoFactor.email}
                   </Button>
                   <Button
                     type="button"
@@ -299,7 +299,7 @@ export function SecurityForm() {
                     disabled={!account?.contactNumber}
                     onClick={() => setTwoFaChannel('SMS')}
                   >
-                    SMS
+                    {t.security.twoFactor.sms}
                   </Button>
                   <Button
                     type="button"
@@ -307,36 +307,37 @@ export function SecurityForm() {
                     disabled={!account?.contactNumber}
                     onClick={() => setTwoFaChannel('BOTH')}
                   >
-                    Both
+                    {t.security.twoFactor.both}
                   </Button>
                 </div>
-                {!account?.contactNumber && <p className="text-xs text-muted-foreground">Add a mobile number to your profile to use SMS.</p>}
+                {!account?.contactNumber && <p className="text-xs text-muted-foreground">{t.security.twoFactor.addMobileNote}</p>}
               </div>
               <Button type="submit" disabled={twoFaState === 'saving'}>
-                {twoFaState === 'saving' ? 'Sending…' : 'Turn On'}
+                {twoFaState === 'saving' ? t.security.twoFactor.sending : t.security.twoFactor.turnOn}
               </Button>
             </form>
           )}
         </Card>
 
         <Card className="mt-5 p-6">
-          <h2 className="text-base font-semibold">Trusted Devices</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Devices you've chosen to remember skip the two-factor code for 30 days. Remove one if it's no longer yours or you want it to
-            require a code again.
-          </p>
+          <h2 className="text-base font-semibold">{t.security.trustedDevices.title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t.security.trustedDevices.intro}</p>
 
           {trustedDevices === null ? (
-            <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
+            <p className="mt-4 text-sm text-muted-foreground">{t.security.trustedDevices.loading}</p>
           ) : trustedDevices.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">No remembered devices right now.</p>
+            <p className="mt-4 text-sm text-muted-foreground">{t.security.trustedDevices.none}</p>
           ) : (
             <div className="mt-4 space-y-2">
               {trustedDevices.map((device) => (
                 <div key={device.id} className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
                   <div>
-                    <p className="text-sm font-medium">Remembered since {new Date(device.createdAt).toLocaleDateString()}</p>
-                    <p className="text-xs text-muted-foreground">Expires {new Date(device.expiresAt).toLocaleDateString()}</p>
+                    <p className="text-sm font-medium">
+                      {t.security.trustedDevices.rememberedSince.replace('{date}', new Date(device.createdAt).toLocaleDateString())}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.security.trustedDevices.expires.replace('{date}', new Date(device.expiresAt).toLocaleDateString())}
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -345,7 +346,7 @@ export function SecurityForm() {
                     disabled={revokingDeviceId === device.id}
                     onClick={() => handleRevokeDevice(device.id)}
                   >
-                    {revokingDeviceId === device.id ? 'Removing…' : 'Remove'}
+                    {revokingDeviceId === device.id ? t.security.trustedDevices.removing : t.security.trustedDevices.remove}
                   </Button>
                 </div>
               ))}
@@ -354,10 +355,10 @@ export function SecurityForm() {
         </Card>
 
         <Card className="mt-5 border-destructive/30 p-6">
-          <h2 className="text-base font-semibold text-destructive">Delete My Portal Account</h2>
+          <h2 className="text-base font-semibold text-destructive">{t.security.deleteAccount.title}</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>This deletes only your Easycash Portal login - it does NOT delete your loan account or loan history with Easycash.</li>
-            <li>If you still have an active loan, your Portal account cannot be deleted until it's settled or closed.</li>
+            <li>{t.security.deleteAccount.note1}</li>
+            <li>{t.security.deleteAccount.note2}</li>
           </ul>
           <Button
             type="button"
@@ -370,27 +371,24 @@ export function SecurityForm() {
               setDeleteConfirmOpen(true);
             }}
           >
-            Delete My Portal Account
+            {t.security.deleteAccount.cta}
           </Button>
         </Card>
 
-        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Delete My Portal Account">
+        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title={t.security.deleteAccount.dialogTitle}>
           <form onSubmit={handleDeleteAccount} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Enter your password to confirm. This only removes your Portal login - your client profile and loan records with Easycash stay
-              exactly as they are.
-            </p>
+            <p className="text-sm text-muted-foreground">{t.security.deleteAccount.dialogBody}</p>
             <div className="space-y-1.5">
-              <Label>Current password</Label>
+              <Label>{t.security.deleteAccount.currentPasswordLabel}</Label>
               <PasswordInput value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} required autoFocus />
             </div>
             {deleteState === 'error' && <Alert tone="error">{deleteError}</Alert>}
             <div className="flex gap-2">
               <Button type="submit" variant="outline" className="border-destructive text-destructive hover:bg-destructive/10" disabled={deleteState === 'saving'}>
-                {deleteState === 'saving' ? 'Deleting…' : 'Confirm Deletion'}
+                {deleteState === 'saving' ? t.security.deleteAccount.confirming : t.security.deleteAccount.confirm}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>
-                Cancel
+                {t.security.deleteAccount.cancel}
               </Button>
             </div>
           </form>
@@ -402,11 +400,12 @@ export function SecurityForm() {
 /** Full-page route wrapper (direct-link/bookmark entry point) - the everyday in-app flow now opens
  * `SecurityForm` inside a Dialog instead (see PortalDialogHost). */
 export function SecurityPage() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-secondary/30">
       <PortalHeader />
       <main className="container max-w-2xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Security</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.security.pageTitle}</h1>
         <div className="mt-8">
           <SecurityForm />
         </div>
