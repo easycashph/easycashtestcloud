@@ -15,6 +15,9 @@ import type { NotificationService } from '@modules/notification/application/Noti
 import { startFinanceNewsScheduler } from '@modules/finance-news/infrastructure/financeNewsScheduler';
 import { FetchExternalFinanceNewsUseCase, RssParserAdapter, type FeedSource } from '@modules/finance-news/application/use-cases/FetchExternalFinanceNewsUseCase';
 import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastructure/PrismaExternalNewsLinkRepository';
+import { startMisPostRotationScheduler } from '@modules/mis-post/infrastructure/misPostRotationScheduler';
+import { AdvanceAutoRotationUseCase } from '@modules/mis-post/application/use-cases/AdvanceAutoRotationUseCase';
+import { PrismaMisPostRepository } from '@modules/mis-post/infrastructure/PrismaMisPostRepository';
 
 const app = createApp();
 
@@ -78,6 +81,11 @@ startFinanceNewsScheduler({
   }),
   feeds: [...parseFeedUrls(env.FINANCE_NEWS_FEED_URLS, 'FINANCE'), ...parseFeedUrls(env.ADVISORY_NEWS_FEED_URLS, 'ADVISORY')],
   cronExpression: env.FINANCE_NEWS_FETCH_CRON,
+});
+
+startMisPostRotationScheduler({
+  advanceAutoRotationUseCase: new AdvanceAutoRotationUseCase({ misPostRepository: new PrismaMisPostRepository() }),
+  cronExpression: env.MIS_POST_ROTATION_CRON,
 });
 
 function shutdown(signal: string) {

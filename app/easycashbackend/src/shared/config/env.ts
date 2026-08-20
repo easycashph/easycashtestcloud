@@ -106,6 +106,9 @@ const envSchema = z.object({
   FINANCE_NEWS_FEED_URLS: z.string().default(''),
   ADVISORY_NEWS_FEED_URLS: z.string().default(''),
   FINANCE_NEWS_FETCH_CRON: z.string().default('0 6 * * *'), // 6:00 AM Asia/Manila daily
+  // MIS Portal post rotation (2026-08-20 user request: "1 active post lang per day... 24 hours") -
+  // advances the AUTO_ROTATION pool by one item. Midnight Asia/Manila daily by default.
+  MIS_POST_ROTATION_CRON: z.string().default('0 0 * * *'),
   SMTP_HOST: z.string().default('smtp.gmail.com'),
   SMTP_PORT: z.coerce.number().int().positive().default(587),
   SMTP_USERNAME: z.string().optional(), // the real mailbox's own login, NOT the Send As alias

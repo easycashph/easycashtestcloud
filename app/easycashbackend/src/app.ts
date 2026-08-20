@@ -275,6 +275,14 @@ import { UpdateSystemAnnouncementUseCase } from '@modules/system-announcement/ap
 import { DeleteSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/DeleteSystemAnnouncementUseCase';
 import { GetActiveSystemAnnouncementUseCase } from '@modules/system-announcement/application/use-cases/GetActiveSystemAnnouncementUseCase';
 import { PrismaSystemAnnouncementRepository } from '@modules/system-announcement/infrastructure/PrismaSystemAnnouncementRepository';
+import { createMisPostRouter } from '@modules/mis-post/interface/http/misPostRouter';
+import { createPublicMisPostRouter } from '@modules/mis-post/interface/http/publicMisPostRouter';
+import { CreateManualMisPostUseCase } from '@modules/mis-post/application/use-cases/CreateManualMisPostUseCase';
+import { WithdrawManualMisPostUseCase } from '@modules/mis-post/application/use-cases/WithdrawManualMisPostUseCase';
+import { ListMisPostsForAdminUseCase } from '@modules/mis-post/application/use-cases/ListMisPostsForAdminUseCase';
+import { GetActivePortalPostsUseCase } from '@modules/mis-post/application/use-cases/GetActivePortalPostsUseCase';
+import { GetMisPostImageUseCase } from '@modules/mis-post/application/use-cases/GetMisPostImageUseCase';
+import { PrismaMisPostRepository } from '@modules/mis-post/infrastructure/PrismaMisPostRepository';
 import { GetReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/GetReminderSettingsUseCase';
 import { UpdateReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/UpdateReminderSettingsUseCase';
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
@@ -1421,6 +1429,26 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', documentRouter);
+
+  // --- mis-post module wiring (2026-08-20 user request): MIS-authored Facebook-style Portal
+  // posts - a daily auto-rotating pool plus ad-hoc manual posts (e.g. typhoon advisories). Reuses
+  // the `fileStorage` wired for the document module just above; needs its own repository since
+  // `MisPost` is a distinct entity from `SystemAnnouncement` (see the Prisma model's doc comment). ---
+  const misPostRepository = new PrismaMisPostRepository();
+  const misPostRouter = createMisPostRouter(
+    {
+      createManualMisPostUseCase: new CreateManualMisPostUseCase({ misPostRepository, fileStorage }),
+      withdrawManualMisPostUseCase: new WithdrawManualMisPostUseCase({ misPostRepository }),
+      listMisPostsForAdminUseCase: new ListMisPostsForAdminUseCase({ misPostRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', misPostRouter);
+  const publicMisPostRouter = createPublicMisPostRouter({
+    getActivePortalPostsUseCase: new GetActivePortalPostsUseCase({ misPostRepository }),
+    getMisPostImageUseCase: new GetMisPostImageUseCase({ misPostRepository, fileStorage }),
+  });
+  app.use('/api/v1/portal', publicMisPostRouter);
 
   // --- Easycash Portal module wiring, Phase 2 (2026-07-23): loan application submission from the
   // portal. Reuses createLoanApplicationUseCase's own deps (loanApplicationRepository,

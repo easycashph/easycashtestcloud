@@ -55,6 +55,18 @@ export default {
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
+      keyframes: {
+        /** News Flash ticker (2026-08-20 user request: "gumagalaw from right to left...
+         * katulad ng NBA drafting pick") - translates one full copy-width to the left; the
+         * ticker renders the item list twice back to back so the loop point is invisible. */
+        marquee: {
+          '0%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+      },
+      animation: {
+        marquee: 'marquee 30s linear infinite',
+      },
     },
   },
   plugins: [],

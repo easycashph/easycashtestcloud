@@ -19,7 +19,7 @@
 // http://192.168.1.23:5173) instead of localhost, since that other device would try reaching its
 // OWN localhost:4000 (nothing there) rather than the machine actually running the backend. Reusing
 // window.location.hostname keeps existing localhost-based dev/testing behavior identical.
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:4000/api/v1`;
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? `http://${window.location.hostname}:4000/api/v1`;
 
 export class ApiError extends Error {
   readonly status: number;

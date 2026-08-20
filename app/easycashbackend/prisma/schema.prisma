@@ -318,6 +318,7 @@ model User {
   notificationsReceived                Notification[]
   reminderSettingsUpdated              ReminderSettings[]
   systemAnnouncementsCreated           SystemAnnouncement[]
+  misPostsCreated                      MisPost[]
   chatConversationsClaimed             ChatConversation[]            @relation("ChatConversationClaimedBy")
   chatConversationsOriginallyClaimed   ChatConversation[]            @relation("ChatConversationOriginallyClaimedBy")
   chatConversationsPendingTransferTo   ChatConversation[]            @relation("ChatConversationPendingTransferTo")
@@ -2716,4 +2717,61 @@ model SystemAnnouncement {
 
   @@index([active, expiresAt])
   @@map("system_announcements")
+}
+
+enum MisPostType {
+  /// System-managed rotation pool item (2026-08-20 user request) - a pre-made Facebook-style
+  /// image+caption post, one shown "live" on the Portal at a time, auto-advancing every 24 hours
+  /// in `poolOrder` sequence (wraps back to the first once it reaches the last).
+  AUTO_ROTATION
+  /// MIS-authored ad-hoc post (e.g. a typhoon/office-closure notice) - posted on demand, shown
+  /// alongside whichever AUTO_ROTATION post is currently live, and disappears on its own
+  /// `expiresAt` (duration chosen by MIS at posting time) rather than a 24-hour cycle.
+  MANUAL
+}
+
+/// MIS-authored Portal posts (2026-08-20 user request) - Facebook-style image+caption posts shown
+/// to borrowers on the Portal homepage (above the News Flash ticker) and at the top of the News &
+/// Announcements page. Two independent lifecycles share this one table because they share every
+/// other field (image, caption, who posted it) - see `MisPostType` for how AUTO_ROTATION vs MANUAL
+/// differ. Deliberately its own module rather than folded into `SystemAnnouncement`: that model is
+/// a single text-only "active announcement" popup (LMS and/or Portal), this is an image-bearing,
+/// multi-post Portal feed with a rotation schedule - different enough shape and lifecycle to keep
+/// separate rather than overloading one table with optional-when-AUTO / optional-when-MANUAL columns.
+model MisPost {
+  id                String      @id @default(uuid())
+  type              MisPostType
+
+  caption           String
+  imageStorageKey   String
+  imageFileName     String
+  imageFileType     String
+
+  /// AUTO_ROTATION only - fixed position in the rotation sequence (0-based). Null for MANUAL posts.
+  poolOrder         Int?
+  /// AUTO_ROTATION only - MIS can pull an item out of the rotation without deleting its history.
+  /// MANUAL posts use `expiresAt` instead of this flag to control visibility.
+  poolActive        Boolean     @default(true)
+  /// AUTO_ROTATION only - exactly one pool row is live at a time; the daily scheduler flips this
+  /// flag from the current row to the next `poolActive` row (by `poolOrder`, wrapping around).
+  isCurrentlyLive   Boolean     @default(false)
+
+  /// MANUAL only - when this post was published; null until then (soft-deleted/withdrawn posts
+  /// keep this so LMS history can still show when a post had been live).
+  publishedAt       DateTime?
+  /// MANUAL only - publishedAt + the duration MIS chose at posting time (default preset 30
+  /// minutes). Null for AUTO_ROTATION rows, which have no fixed expiry.
+  expiresAt         DateTime?
+  /// MANUAL only - MIS can withdraw a post early without waiting for expiresAt or deleting the row.
+  withdrawn         Boolean     @default(false)
+
+  createdByUserId   String?
+  createdBy         User?       @relation(fields: [createdByUserId], references: [id])
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([type, isCurrentlyLive])
+  @@index([type, poolOrder])
+  @@index([type, withdrawn, expiresAt])
+  @@map("mis_posts")
 }

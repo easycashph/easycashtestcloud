@@ -1,8 +1,10 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Newspaper } from 'lucide-react';
+import { Megaphone, Newspaper } from 'lucide-react';
 import { PublicPageLayout } from '@/components/PublicPageLayout';
 import { ExternalNewsLinksSection } from '@/components/ExternalNewsLinksSection';
+import { apiClient, API_BASE_URL } from '@/lib/apiClient';
+import type { ActiveMisPostsResponse, MisPostView } from '@/lib/portalApiTypes';
 import {
   NEWS_CATEGORIES,
   formatPostDate,
@@ -28,12 +30,40 @@ export function NewsPage() {
   const posts = getPublishedPosts();
   const usedCategories = getUsedCategories();
   const [activeCategory, setActiveCategory] = React.useState<NewsCategory | 'all'>('all');
+  const [misPosts, setMisPosts] = React.useState<ActiveMisPostsResponse | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get<ActiveMisPostsResponse>('/portal/mis-posts/active')
+      .then((res) => {
+        if (!cancelled) setMisPosts(res);
+      })
+      .catch(() => {
+        if (!cancelled) setMisPosts({ autoPost: null, manualPosts: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const visiblePosts =
     activeCategory === 'all' ? posts : posts.filter((post) => post.category === activeCategory);
 
+  // MIS posts lead the page (2026-08-20 user request: "dapat pinakauna at hindi nasa dulo") -
+  // manual/custom posts first, then the current auto-rotation post, both ahead of external news.
+  const misPostsInOrder = misPosts ? [...misPosts.manualPosts, ...(misPosts.autoPost ? [misPosts.autoPost] : [])] : [];
+
   return (
     <PublicPageLayout title={t.news.title} intro={t.news.intro}>
+      {misPostsInOrder.length > 0 && (
+        <div className="mb-10 grid gap-4 sm:grid-cols-2">
+          {misPostsInOrder.map((post) => (
+            <MisPostFeedCard key={post.id} post={post} />
+          ))}
+        </div>
+      )}
+
       <div className="space-y-10">
         <ExternalNewsLinksSection category="ADVISORY" title="Road & Weather Advisories (Metro Manila)" />
         <ExternalNewsLinksSection category="FINANCE" title="PH Lending & Finance News" />
@@ -111,6 +141,21 @@ function CategoryChip({
     >
       {label}
     </button>
+  );
+}
+
+function MisPostFeedCard({ post }: { post: MisPostView }) {
+  return (
+    <div className="flex gap-4 rounded-2xl border border-primary/30 bg-card p-4">
+      <img src={`${API_BASE_URL}${post.imageUrl}`} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24" />
+      <div className="min-w-0">
+        <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-primary">
+          <Megaphone className="h-3 w-3" />
+          {post.type === 'MANUAL' ? 'Announcement' : 'Easycash'}
+        </span>
+        <p className="mt-1 text-sm leading-relaxed text-foreground">{post.caption}</p>
+      </div>
+    </div>
   );
 }
 

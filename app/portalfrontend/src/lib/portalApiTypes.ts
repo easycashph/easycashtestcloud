@@ -530,3 +530,21 @@ export interface PortalChatView {
   conversation: ChatConversation;
   messages: ChatMessage[];
 }
+
+export type MisPostType = 'AUTO_ROTATION' | 'MANUAL';
+
+export interface MisPostView {
+  id: string;
+  type: MisPostType;
+  caption: string;
+  imageUrl: string;
+  publishedAt: string | null;
+  expiresAt: string | null;
+}
+
+/** `GET /portal/mis-posts/active` response - the currently-live daily rotation post (or null if
+ * the pool hasn't been seeded yet) plus every still-live manual post, shown side by side. */
+export interface ActiveMisPostsResponse {
+  autoPost: MisPostView | null;
+  manualPosts: MisPostView[];
+}

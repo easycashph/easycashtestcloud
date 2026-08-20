@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Megaphone } from 'lucide-react';
+import { AlertCircle, ImagePlus, Megaphone, RotateCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { apiClient, ApiError } from '@/lib/apiClient';
+import { apiClient, API_BASE_URL, ApiError, uploadFile } from '@/lib/apiClient';
 import {
   ANNOUNCEMENT_TEMPLATES,
   type CreateSystemAnnouncementInput,
@@ -17,6 +17,11 @@ import {
   type SystemAnnouncementType,
   type UpdateSystemAnnouncementInput,
 } from '@/lib/systemAnnouncementApiTypes';
+import {
+  DEFAULT_MANUAL_POST_DURATION_MINUTES,
+  MANUAL_POST_DURATION_PRESETS,
+  type MisPost,
+} from '@/lib/misPostApiTypes';
 
 const TYPE_LABELS: Record<SystemAnnouncementType, string> = {
   MAINTENANCE: 'Maintenance',
@@ -271,6 +276,215 @@ export function AnnouncementsTab() {
           )}
         </CardContent>
       </Card>
+
+      <PortalPostsSection />
     </div>
+  );
+}
+
+const EMPTY_POST_FORM = { caption: '', durationMinutes: DEFAULT_MANUAL_POST_DURATION_MINUTES };
+
+/**
+ * Portal Posts (2026-08-20 user request) - "gagawa ng custom post ang MIS, na ipopost nya... sa
+ * tabi ng automatic post ng system". Two independent things live here: the read-only status of the
+ * system's daily auto-rotating post (borrowers see this on the Portal without any MIS action), and
+ * the manual-post composer - a Facebook-style image + caption post with a duration (default preset
+ * 30 minutes, per the user's explicit request) after which it disappears on its own.
+ */
+function PortalPostsSection() {
+  const queryClient = useQueryClient();
+  const [form, setForm] = React.useState(EMPTY_POST_FORM);
+  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const postsQuery = useQuery({
+    queryKey: ['mis-posts'],
+    queryFn: () => apiClient.get<MisPost[]>('/mis-posts'),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (formData: FormData) => uploadFile<MisPost>('/mis-posts/manual', formData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mis-posts'] });
+      setForm(EMPTY_POST_FORM);
+      setImageFile(null);
+      setImagePreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not post.'),
+  });
+
+  const withdrawMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/mis-posts/manual/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['mis-posts'] }),
+  });
+
+  const handleFileChange = (file: File | null) => {
+    setImageFile(file);
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!imageFile) {
+      setError('An image is required.');
+      return;
+    }
+    if (!form.caption.trim()) {
+      setError('Caption is required.');
+      return;
+    }
+    const formData = new FormData();
+    formData.set('image', imageFile);
+    formData.set('caption', form.caption);
+    formData.set('durationMinutes', String(form.durationMinutes));
+    createMutation.mutate(formData);
+  };
+
+  const posts = postsQuery.data ?? [];
+  const pool = posts.filter((p) => p.type === 'AUTO_ROTATION').sort((a, b) => (a.poolOrder ?? 0) - (b.poolOrder ?? 0));
+  const livePost = pool.find((p) => p.isCurrentlyLive) ?? null;
+  const manualPosts = posts.filter((p) => p.type === 'MANUAL');
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ImagePlus className="h-4 w-4" /> Portal Posts
+        </CardTitle>
+        <CardDescription>
+          Facebook-style posts shown to borrowers on the Portal homepage and News & Announcements page.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="rounded-md border p-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <RotateCw className="h-3.5 w-3.5 text-muted-foreground" /> Today's automatic post
+          </div>
+          {postsQuery.isLoading ? (
+            <p className="mt-1 text-xs text-muted-foreground">Loading…</p>
+          ) : livePost ? (
+            <div className="mt-2 flex items-center gap-3">
+              <img src={`${API_BASE_URL}${livePost.imageUrl}`} alt="" className="h-16 w-16 shrink-0 rounded object-cover" />
+              <p className="line-clamp-2 text-xs text-muted-foreground">{livePost.caption}</p>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No rotation pool item is live yet - it lights up automatically once seeded.
+            </p>
+          )}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Rotates automatically every 24 hours through a {pool.length}-item pool - no action needed from MIS.
+          </p>
+        </div>
+
+        <form className="space-y-4 border-t pt-4" onSubmit={handleSubmit}>
+          <p className="text-sm font-medium">Post a custom announcement (e.g. typhoon, office closure)</p>
+          {error && (
+            <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mis-post-image">Image *</Label>
+            <input
+              ref={fileInputRef}
+              id="mis-post-image"
+              type="file"
+              accept="image/jpeg,image/png"
+              onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-medium"
+            />
+            {imagePreviewUrl && <img src={imagePreviewUrl} alt="Preview" className="mt-2 h-28 w-28 rounded object-cover" />}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mis-post-caption">Caption *</Label>
+            <Textarea
+              id="mis-post-caption"
+              required
+              rows={3}
+              value={form.caption}
+              onChange={(e) => setForm((f) => ({ ...f, caption: e.target.value }))}
+              placeholder="What should borrowers know?"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>How long should it show?</Label>
+            <Select
+              value={String(form.durationMinutes)}
+              onValueChange={(v) => setForm((f) => ({ ...f, durationMinutes: Number(v) }))}
+            >
+              <SelectTrigger className="sm:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MANUAL_POST_DURATION_PRESETS.map((preset) => (
+                  <SelectItem key={preset.minutes} value={String(preset.minutes)}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Defaults to 30 minutes; disappears from the Portal automatically once it expires.</p>
+          </div>
+
+          <Button type="submit" disabled={createMutation.isPending}>
+            {createMutation.isPending ? 'Posting…' : 'Post to Portal'}
+          </Button>
+        </form>
+
+        <div className="border-t pt-4">
+          <p className="text-sm font-medium">Custom post history</p>
+          {manualPosts.length === 0 ? (
+            <p className="py-4 text-center text-xs text-muted-foreground">No custom posts yet.</p>
+          ) : (
+            <ul className="mt-2 divide-y">
+              {manualPosts.map((p) => {
+                const expired = p.expiresAt !== null && new Date(p.expiresAt).getTime() <= Date.now();
+                const live = !p.withdrawn && !expired;
+                return (
+                  <li key={p.id} className="flex items-start gap-3 py-3">
+                    <img src={`${API_BASE_URL}${p.imageUrl}`} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={live ? 'success' : 'secondary'} className="text-[10px]">
+                          {p.withdrawn ? 'Withdrawn' : expired ? 'Expired' : 'Live'}
+                        </Badge>
+                        <p className="text-[11px] text-muted-foreground">
+                          Posted {p.publishedAt ? new Date(p.publishedAt).toLocaleString() : '—'}
+                          {p.expiresAt ? ` · Expires ${new Date(p.expiresAt).toLocaleString()}` : ''}
+                        </p>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.caption}</p>
+                    </div>
+                    {live && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={withdrawMutation.isPending}
+                        onClick={() => withdrawMutation.mutate(p.id)}
+                      >
+                        Withdraw
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

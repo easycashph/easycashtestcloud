@@ -69,6 +69,13 @@ legacy/sdevtech/
 # cited ADR-009/ADR-010 evidence base (templates + formula workbook) and stays tracked.
 legacy/reports/*.xlsx
 
+# Meta Business Suite marketing materials (~19 MB of ad images + captions doc, 2026-08-20) - the
+# source the MIS post rotation pool was seeded from (see app/easycashbackend/scripts/
+# seed-mis-post-pool.ts). Already migrated into the backend's own gitignored storage volume via
+# that seed script; keeping the originals out of git history for the same repo-size reasons as the
+# other legacy/reports/* exclusions above, not because of sensitivity.
+legacy/reports/Meta Business Suite/
+
 # The live, macro-enabled "OFFICIAL CALCULATOR OF EASYCASH" workbook (.xlsm) — this is not a
 # template, it's the company's actual current production ledger: real client names, birthdates,
 # SSS/TIN numbers, addresses, co-borrower/character-reference PII, and a full edit-history audit
