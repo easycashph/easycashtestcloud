@@ -18,6 +18,7 @@ import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
 import { PhoneInput } from '@/components/PhoneInput';
 import { TermsContent } from '@/pages/TermsPage';
 import { PrivacyContent } from '@/pages/PrivacyPolicyPage';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type {
   PortalBranch,
   PortalDocumentCategory,
@@ -338,14 +339,15 @@ function applyProfilePrefill(prev: FormState, profile: PortalProfile): FormState
 function documentSlotHint(
   category: UploadableDocumentCategory,
   status: 'idle' | 'uploading' | 'done' | 'error' | undefined,
+  t: import('@/lib/i18n/translations').Translations,
 ): string {
-  if (status === 'done') return 'Uploaded';
-  if (status === 'uploading') return 'Uploading…';
-  if (status === 'error') return 'Upload failed - try again';
+  if (status === 'done') return t.loanApplicationForm.uploaded;
+  if (status === 'uploading') return t.loanApplicationForm.uploading;
+  if (status === 'error') return t.loanApplicationForm.uploadFailed;
   if (category === 'OTHER_SUPPORTING_DOCUMENT') {
-    return 'For any other supporting document, or to re-upload a corrected file if something above was uploaded wrong - PDF, JPEG, or PNG, up to 10 MB';
+    return t.loanApplicationForm.otherDocumentHint;
   }
-  return 'PDF, JPEG, or PNG, up to 10 MB';
+  return t.loanApplicationForm.documentFileNote;
 }
 
 /** 2026-07-31 (user request): the reverse direction of applyProfilePrefill - after a NEW
@@ -456,6 +458,7 @@ interface LoanApplicationFormPageProps {
 
 export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: LoanApplicationFormPageProps = {}) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { id: routeEditId } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
   const editId = embeddedEditId ?? routeEditId;
@@ -557,30 +560,30 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     const requestedTermMonths = Number(form.requestedTermMonths);
 
     if (!applicantName) {
-      setError('Enter your first and last name.');
+      setError(t.loanApplicationForm.validation.applicantName);
       return;
     }
     if (!form.branchId) {
-      setError('Select the branch nearest you.');
+      setError(t.loanApplicationForm.validation.branch);
       return;
     }
     if (!requestedAmount || requestedAmount <= 0) {
-      setError('Enter a valid requested loan amount.');
+      setError(t.loanApplicationForm.validation.amount);
       return;
     }
     if (!requestedTermMonths || requestedTermMonths <= 0) {
-      setError('Enter a valid loan term in months.');
+      setError(t.loanApplicationForm.validation.term);
       return;
     }
     if (!isEditMode && !form.agreedToTerms) {
-      setError('Please acknowledge the Terms and Conditions and Data Privacy Statement before submitting.');
+      setError(t.loanApplicationForm.validation.terms);
       return;
     }
     // 2026-07-30 (user request): hard eligibility gate - applicants under 18 or over 59 cannot
     // submit at all. Only blocks when age is actually known; the backend enforces this too
     // (CreateLoanApplicationUseCase) since client-side validation alone is never a real safeguard.
     if (age !== null && (age < 18 || age > 59)) {
-      setError(`Applicants must be between 18 and 59 years old to qualify (computed age: ${age}).`);
+      setError(t.loanApplicationForm.validation.age.replace('{age}', String(age)));
       return;
     }
 
@@ -673,7 +676,13 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
           .catch(() => {});
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : `Could not ${isEditMode ? 'save your changes' : 'submit your application'}. Please try again.`);
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : isEditMode
+            ? t.loanApplicationForm.validation.genericSave
+            : t.loanApplicationForm.validation.genericSubmit,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -694,7 +703,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
   if (isEditMode && editState === 'loading') {
     return (
       <PageShell embedded={isEmbedded}>
-        <Card className="p-8 text-center text-sm text-muted-foreground">Loading your application…</Card>
+        <Card className="p-8 text-center text-sm text-muted-foreground">{t.loanApplicationForm.loading}</Card>
       </PageShell>
     );
   }
@@ -703,9 +712,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     return (
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
-          <Alert>This application can no longer be edited - it's already under review or has been decided.</Alert>
+          <Alert>{t.loanApplicationForm.notEditable}</Alert>
           <Button className="mt-6 w-full" onClick={goToDashboard}>
-            Go to Dashboard
+            {t.loanApplicationForm.goToDashboard}
           </Button>
         </Card>
       </PageShell>
@@ -716,9 +725,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     return (
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
-          <Alert>Could not load this application. It may not exist, or may belong to a different account.</Alert>
+          <Alert>{t.loanApplicationForm.loadError}</Alert>
           <Button className="mt-6 w-full" onClick={goToDashboard}>
-            Go to Dashboard
+            {t.loanApplicationForm.goToDashboard}
           </Button>
         </Card>
       </PageShell>
@@ -729,9 +738,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     return (
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
-          <Alert tone="success">Your changes were saved.</Alert>
+          <Alert tone="success">{t.loanApplicationForm.changesSaved}</Alert>
           <Button className="mt-6 w-full" onClick={goToDashboard}>
-            Go to Dashboard
+            {t.loanApplicationForm.goToDashboard}
           </Button>
         </Card>
       </PageShell>
@@ -742,18 +751,15 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
     return (
       <PageShell embedded={isEmbedded}>
         <Card className="p-8">
-          <Alert tone="success">Your loan application was submitted. We'll review it and notify you of any updates.</Alert>
-          <h1 className="mt-6 text-lg font-bold tracking-tight">10. Applicant Documents</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            You can skip this for now and submit your application - come back anytime while it's still editable to finish uploading, or our
-            staff may reach out for requirements too.
-          </p>
+          <Alert tone="success">{t.loanApplicationForm.submitted}</Alert>
+          <h1 className="mt-6 text-lg font-bold tracking-tight">{t.loanApplicationForm.documentsTitle}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t.loanApplicationForm.documentsIntro}</p>
           <div className="mt-5 space-y-4">
             {visibleDocumentSlots.map((slot) => (
               <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
                 <div>
                   <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
-                  <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
+                  <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category], t)}</p>
                 </div>
                 <Input
                   type="file"
@@ -766,7 +772,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
             ))}
           </div>
           <Button className="mt-6 w-full" onClick={goToDashboard}>
-            Go to Dashboard
+            {t.loanApplicationForm.goToDashboard}
           </Button>
         </Card>
       </PageShell>
@@ -785,17 +791,19 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
         <Card className="p-8">
           {!isEmbedded && (
             <>
-              <h1 className="text-xl font-bold tracking-tight">{isEditMode ? 'Edit Loan Application' : 'Loan Application'}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Fields marked * are required. Everything else can be filled in during review.</p>
+              <h1 className="text-xl font-bold tracking-tight">
+                {isEditMode ? t.loanApplicationForm.editTitle : t.loanApplicationForm.newTitle}
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">{t.loanApplicationForm.requiredNote}</p>
             </>
           )}
 
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
             {error && <Alert>{error}</Alert>}
 
-            <SectionCard number="1" title="How did you find out about Easycash?">
+            <SectionCard number="1" title={t.loanApplicationForm.section1.title}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Source">
+                <Field label={t.loanApplicationForm.section1.source}>
                   <Select value={form.referralSource} onChange={(e) => update('referralSource', e.target.value)}>
                     {REFERRAL_OPTIONS.map((o) => (
                       <option key={o} value={o}>
@@ -805,18 +813,24 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                   </Select>
                 </Field>
                 {(form.referralSource === 'Agent/Referral' || form.referralSource === 'Others') && (
-                  <Field label={form.referralSource === 'Agent/Referral' ? 'Agent / referrer name' : 'Please specify'}>
+                  <Field
+                    label={
+                      form.referralSource === 'Agent/Referral'
+                        ? t.loanApplicationForm.section1.agentReferrerName
+                        : t.loanApplicationForm.section1.pleaseSpecify
+                    }
+                  >
                     <Input value={form.referralDetail} onChange={(e) => update('referralDetail', e.target.value)} />
                   </Field>
                 )}
               </div>
             </SectionCard>
 
-            <SectionCard number="2" title="Loan Information">
+            <SectionCard number="2" title={t.loanApplicationForm.section2.title}>
               <div className="space-y-1.5">
-                <Label htmlFor="branchId">Nearest branch *</Label>
+                <Label htmlFor="branchId">{t.loanApplicationForm.section2.nearestBranch}</Label>
                 <Select id="branchId" required value={form.branchId} onChange={(e) => update('branchId', e.target.value)}>
-                  <option value="">Select a branch</option>
+                  <option value="">{t.loanApplicationForm.section2.selectBranch}</option>
                   {branches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
@@ -826,15 +840,15 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                 </Select>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Type of account">
+                <Field label={t.loanApplicationForm.section2.typeOfAccount}>
                   <Select value={form.accountType} onChange={(e) => update('accountType', e.target.value as 'NEW' | 'RENEWAL')}>
-                    <option value="NEW">New</option>
-                    <option value="RENEWAL">Renewal</option>
+                    <option value="NEW">{t.loanApplicationForm.section2.new}</option>
+                    <option value="RENEWAL">{t.loanApplicationForm.section2.renewal}</option>
                   </Select>
                 </Field>
-                <Field label="Type of loan *">
+                <Field label={t.loanApplicationForm.section2.typeOfLoan}>
                   <Select id="requestedCategory" required value={form.requestedCategory} onChange={(e) => update('requestedCategory', e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.loanApplicationForm.section2.select}</option>
                     {LOAN_PRODUCTS.map((product) => (
                       <option key={product.category} value={product.category}>
                         {product.displayLabel}
@@ -842,32 +856,32 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label="Desired loan amount (₱) *">
+                <Field label={t.loanApplicationForm.section2.desiredAmount}>
                   <NumberInput id="requestedAmount" min="0" required value={form.requestedAmount} onChange={(e) => update('requestedAmount', e.target.value)} />
                 </Field>
-                <Field label="Preferred loan term (months) *">
+                <Field label={t.loanApplicationForm.section2.preferredTerm}>
                   <Input id="requestedTermMonths" type="number" min={1} required value={form.requestedTermMonths} onChange={(e) => update('requestedTermMonths', e.target.value)} />
                 </Field>
               </div>
-              <Field label="What is the loan purpose?">
+              <Field label={t.loanApplicationForm.section2.loanPurpose}>
                 <Textarea id="loanPurpose" rows={2} value={form.loanPurpose} onChange={(e) => update('loanPurpose', e.target.value)} />
               </Field>
             </SectionCard>
 
-            <SectionCard number="3" title="Personal Information">
+            <SectionCard number="3" title={t.loanApplicationForm.section3.title}>
               <div className="grid gap-4 sm:grid-cols-3">
-                <Field label="First name *">
+                <Field label={t.loanApplicationForm.section3.firstName}>
                   <Input id="firstName" required value={form.firstName} onChange={(e) => update('firstName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label="Middle name">
+                <Field label={t.loanApplicationForm.section3.middleName}>
                   <Input id="middleName" value={form.middleName} onChange={(e) => update('middleName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label="Last name *">
+                <Field label={t.loanApplicationForm.section3.lastName}>
                   <Input id="lastName" required value={form.lastName} onChange={(e) => update('lastName', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label="Gender">
+                <Field label={t.loanApplicationForm.section3.gender}>
                   <Select value={form.gender} onChange={(e) => update('gender', e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.loanApplicationForm.section2.select}</option>
                     {GENDER_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -875,9 +889,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label="Civil status">
+                <Field label={t.loanApplicationForm.section3.civilStatus}>
                   <Select value={form.civilStatus} onChange={(e) => update('civilStatus', e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.loanApplicationForm.section2.select}</option>
                     {CIVIL_STATUS_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -885,25 +899,28 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label="Date of birth *" hint={age !== null ? `Age: ${age}` : undefined}>
+                <Field
+                  label={t.loanApplicationForm.section3.dateOfBirth}
+                  hint={age !== null ? t.loanApplicationForm.section3.age.replace('{age}', String(age)) : undefined}
+                >
                   <Input id="birthDate" type="date" required value={form.birthDate} onChange={(e) => update('birthDate', e.target.value)} />
                 </Field>
-                <Field label="Place of birth">
+                <Field label={t.loanApplicationForm.section3.placeOfBirth}>
                   <Input value={form.placeOfBirth} onChange={(e) => update('placeOfBirth', e.target.value)} />
                 </Field>
-                <Field label="Nationality">
+                <Field label={t.loanApplicationForm.section3.nationality}>
                   <Input value={form.nationality} onChange={(e) => update('nationality', e.target.value)} />
                 </Field>
               </div>
 
               <div className="space-y-3 border-t border-border pt-4">
-                <Label>Present address</Label>
+                <Label>{t.loanApplicationForm.section3.presentAddress}</Label>
                 <PortalAddressPicker value={form.presentAddress} onChange={(patch) => update('presentAddress', { ...form.presentAddress, ...patch })} />
               </div>
 
               <div className="space-y-3 border-t border-border pt-4">
                 <div className="flex items-center justify-between">
-                  <Label>Previous address</Label>
+                  <Label>{t.loanApplicationForm.section3.previousAddress}</Label>
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
                     <input
                       type="checkbox"
@@ -911,7 +928,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                       checked={form.sameAsPresentAddress}
                       onChange={(e) => update('sameAsPresentAddress', e.target.checked)}
                     />
-                    Same as present address
+                    {t.loanApplicationForm.section3.sameAsPresent}
                   </label>
                 </div>
                 {!form.sameAsPresentAddress && (
@@ -920,9 +937,9 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Home ownership">
+                <Field label={t.loanApplicationForm.section3.homeOwnership}>
                   <Select value={form.homeOwnership} onChange={(e) => update('homeOwnership', e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.loanApplicationForm.section2.select}</option>
                     {HOME_OWNERSHIP_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -930,51 +947,51 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     ))}
                   </Select>
                 </Field>
-                <Field label="Contact number">
+                <Field label={t.loanApplicationForm.section3.contactNumber}>
                   <PhoneInput id="mobilePhone" value={form.mobilePhone} onChange={(e) => update('mobilePhone', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
-                <Field label="Email address" className="sm:col-span-2" hint="Uses your account email if left blank.">
+                <Field label={t.loanApplicationForm.section3.email} className="sm:col-span-2" hint={t.loanApplicationForm.section3.emailHint}>
                   <Input id="email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
                 </Field>
               </div>
             </SectionCard>
 
-            <SectionCard number="4" title="Employment Information" description="Skip if you're unemployed, self-employed, or retired.">
+            <SectionCard number="4" title={t.loanApplicationForm.section4.title} description={t.loanApplicationForm.section4.description}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Name of employer">
+                <Field label={t.loanApplicationForm.section4.employer}>
                   <Input id="employer" value={form.employer} onChange={(e) => update('employer', e.target.value)} />
                 </Field>
-                <Field label="Occupation">
+                <Field label={t.loanApplicationForm.section4.occupation}>
                   <Input id="occupation" value={form.occupation} onChange={(e) => update('occupation', e.target.value)} />
                 </Field>
-                <Field label="Office address" className="sm:col-span-2">
+                <Field label={t.loanApplicationForm.section4.officeAddress} className="sm:col-span-2">
                   <Input id="officeAddress" value={form.officeAddress} onChange={(e) => update('officeAddress', e.target.value)} />
                 </Field>
-                <Field label="Monthly income (₱)">
+                <Field label={t.loanApplicationForm.section4.monthlyIncome}>
                   <NumberInput id="monthlyIncome" min="0" value={form.monthlyIncome} onChange={(e) => update('monthlyIncome', e.target.value)} placeholder="0.00" />
                 </Field>
-                <Field label="TIN">
+                <Field label={t.loanApplicationForm.section4.tin}>
                   <GroupedDigitsInput value={form.tinNumber} onChange={(e) => update('tinNumber', e.target.value)} />
                 </Field>
-                <Field label="SSS no.">
+                <Field label={t.loanApplicationForm.section4.sss}>
                   <GroupedDigitsInput value={form.sssNumber} onChange={(e) => update('sssNumber', e.target.value)} />
                 </Field>
               </div>
             </SectionCard>
 
-            <SectionCard number="5" title="Dependants">
+            <SectionCard number="5" title={t.loanApplicationForm.section5.title}>
               <div className="space-y-2">
                 {form.dependants.map((row, i) => (
                   <div key={i} className="flex flex-wrap items-end gap-2">
                     <div className="min-w-40 flex-1 space-y-1.5">
-                      <Label>Name</Label>
+                      <Label>{t.loanApplicationForm.section5.name}</Label>
                       <Input
                         value={row.name}
                         onChange={(e) => update('dependants', form.dependants.map((r, j) => (j === i ? { ...r, name: e.target.value.toUpperCase() } : r)))}
                       />
                     </div>
                     <div className="w-20 space-y-1.5">
-                      <Label>Age</Label>
+                      <Label>{t.loanApplicationForm.section5.age}</Label>
                       <Input
                         type="number"
                         value={row.age}
@@ -982,37 +999,43 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                       />
                     </div>
                     <div className="w-36 space-y-1.5">
-                      <Label>Relationship</Label>
+                      <Label>{t.loanApplicationForm.section5.relationship}</Label>
                       <Input
                         value={row.relationship}
                         onChange={(e) => update('dependants', form.dependants.map((r, j) => (j === i ? { ...r, relationship: e.target.value } : r)))}
                       />
                     </div>
-                    <Button type="button" variant="ghost" size="sm" aria-label="Remove dependant" onClick={() => update('dependants', form.dependants.filter((_, j) => j !== i))}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={t.loanApplicationForm.section5.remove}
+                      onClick={() => update('dependants', form.dependants.filter((_, j) => j !== i))}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={() => update('dependants', [...form.dependants, { name: '', age: '', relationship: '' }])}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add dependant
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> {t.loanApplicationForm.section5.add}
                 </Button>
               </div>
             </SectionCard>
 
             {form.civilStatus === 'Married' && (
-              <SectionCard number="6" title="Spouse Personal &amp; Employment Information" description="Shown because civil status is Married.">
+              <SectionCard number="6" title={t.loanApplicationForm.section6.title} description={t.loanApplicationForm.section6.description}>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Spouse full name">
+                  <Field label={t.loanApplicationForm.section6.spouseName}>
                     <Input value={form.spouseName} onChange={(e) => update('spouseName', e.target.value)} />
                   </Field>
-                  <Field label="Spouse employer / occupation">
+                  <Field label={t.loanApplicationForm.section6.spouseEmployer}>
                     <Input value={form.spouseEmployer} onChange={(e) => update('spouseEmployer', e.target.value)} />
                   </Field>
                 </div>
               </SectionCard>
             )}
 
-            <SectionCard number="7" title="Co-Borrower">
+            <SectionCard number="7" title={t.loanApplicationForm.section7.title}>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -1020,61 +1043,65 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                   checked={form.hasCoBorrower}
                   onChange={(e) => update('hasCoBorrower', e.target.checked)}
                 />
-                This application has a co-borrower
+                {t.loanApplicationForm.section7.hasCoBorrower}
               </label>
               {form.hasCoBorrower && (
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <Field label="Co-borrower full name">
+                  <Field label={t.loanApplicationForm.section7.fullName}>
                     <Input value={form.coBorrowerName} onChange={(e) => update('coBorrowerName', e.target.value.toUpperCase())} />
                   </Field>
-                  <Field label="Relationship to applicant">
-                    <Input placeholder="e.g. Spouse" value={form.coBorrowerRelationship} onChange={(e) => update('coBorrowerRelationship', e.target.value)} />
+                  <Field label={t.loanApplicationForm.section7.relationship}>
+                    <Input
+                      placeholder={t.loanApplicationForm.section7.relationshipPlaceholder}
+                      value={form.coBorrowerRelationship}
+                      onChange={(e) => update('coBorrowerRelationship', e.target.value)}
+                    />
                   </Field>
-                  <Field label="Co-borrower employer">
+                  <Field label={t.loanApplicationForm.section7.employer}>
                     <Input value={form.coBorrowerEmployer} onChange={(e) => update('coBorrowerEmployer', e.target.value)} />
                   </Field>
-                  <Field label="Contact number">
+                  <Field label={t.loanApplicationForm.section7.contactNumber}>
                     <PhoneInput value={form.coBorrowerContactNumber} onChange={(e) => update('coBorrowerContactNumber', e.target.value)} placeholder="09XX XXX XXXX" />
                   </Field>
-                  <Field label="Email address">
+                  <Field label={t.loanApplicationForm.section7.email}>
                     <Input type="email" value={form.coBorrowerEmail} onChange={(e) => update('coBorrowerEmail', e.target.value)} />
                   </Field>
-                  <Field label="Address" className="sm:col-span-3">
+                  <Field label={t.loanApplicationForm.section7.address} className="sm:col-span-3">
                     <Input value={form.coBorrowerAddress} onChange={(e) => update('coBorrowerAddress', e.target.value)} />
                   </Field>
                 </div>
               )}
             </SectionCard>
 
-            <SectionCard number="8" title="Character References">
+            <SectionCard number="8" title={t.loanApplicationForm.section8.title}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="1st reference - full name">
+                <Field label={t.loanApplicationForm.section8.name1}>
                   <Input value={form.reference1Name} onChange={(e) => update('reference1Name', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label="1st reference - contact number">
+                <Field label={t.loanApplicationForm.section8.contact1}>
                   <PhoneInput value={form.reference1Mobile} onChange={(e) => update('reference1Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
-                <Field label="2nd reference - full name">
+                <Field label={t.loanApplicationForm.section8.name2}>
                   <Input value={form.reference2Name} onChange={(e) => update('reference2Name', e.target.value.toUpperCase())} />
                 </Field>
-                <Field label="2nd reference - contact number">
+                <Field label={t.loanApplicationForm.section8.contact2}>
                   <PhoneInput value={form.reference2Mobile} onChange={(e) => update('reference2Mobile', e.target.value)} placeholder="09XX XXX XXXX" />
                 </Field>
               </div>
             </SectionCard>
 
-            <SectionCard number="9" title="Note" description="Anything else worth mentioning that doesn't have its own field above.">
-              <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Optional" />
+            <SectionCard number="9" title={t.loanApplicationForm.section9.title} description={t.loanApplicationForm.section9.description}>
+              <Textarea rows={3} value={form.note} onChange={(e) => update('note', e.target.value)} placeholder={t.loanApplicationForm.section9.placeholder} />
             </SectionCard>
 
             {isEditMode && (
-              <SectionCard number="10" title="Applicant Documents" description="Upload any requirements you skipped earlier - you can still come back later while this application remains editable.">
+              <SectionCard number="10" title={t.loanApplicationForm.section10Documents.title} description={t.loanApplicationForm.section10Documents.description}>
                 <div className="space-y-4">
                   {visibleDocumentSlots.map((slot) => (
                     <div key={slot.category} className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
                       <div>
                         <p className="text-sm font-medium">{DOCUMENT_LABELS[slot.category]}</p>
-                        <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category])}</p>
+                        <p className="text-xs text-muted-foreground">{documentSlotHint(slot.category, uploadState[slot.category], t)}</p>
                       </div>
                       <Input
                         type="file"
@@ -1090,7 +1117,7 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
             )}
 
             {!isEditMode && (
-              <SectionCard number="10" title="Terms &amp; Consent">
+              <SectionCard number="10" title={t.loanApplicationForm.section10Terms.title}>
                 <label className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm">
                   <input
                     type="checkbox"
@@ -1100,41 +1127,45 @@ export function LoanApplicationFormPage({ embeddedEditId, onEmbeddedClose }: Loa
                     onChange={(e) => update('agreedToTerms', e.target.checked)}
                   />
                   <span>
-                    I have been given the opportunity to review the{' '}
+                    {t.loanApplicationForm.section10Terms.consentPrefix}{' '}
                     <button
                       type="button"
                       onClick={() => setShowTerms(true)}
                       className="font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      Terms and Conditions
+                      {t.loanApplicationForm.section10Terms.termsLink}
                     </button>{' '}
-                    and{' '}
+                    {t.loanApplicationForm.section10Terms.and}{' '}
                     <button
                       type="button"
                       onClick={() => setShowPrivacy(true)}
                       className="font-medium text-primary underline-offset-2 hover:underline"
                     >
-                      Data Privacy Statement and Consent Form
+                      {t.loanApplicationForm.section10Terms.privacyLink}
                     </button>
-                    , and I agree to them. *
+                    {t.loanApplicationForm.section10Terms.consentSuffix}
                   </span>
                 </label>
               </SectionCard>
             )}
 
-            {!isEditMode && (
-              <p className="text-center text-xs text-muted-foreground">
-                Submitting may prompt for your device's location - this is optional and helps us verify your application faster. You can
-                still submit if you decline.
-              </p>
-            )}
+            {!isEditMode && <p className="text-center text-xs text-muted-foreground">{t.loanApplicationForm.geolocationNote}</p>}
 
             <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-              {isSubmitting ? (isEditMode ? 'Saving…' : 'Submitting…') : isEditMode ? 'Save Changes' : 'Submit Application'}
+              {isSubmitting
+                ? isEditMode
+                  ? t.loanApplicationForm.saving
+                  : t.loanApplicationForm.submitting
+                : isEditMode
+                  ? t.loanApplicationForm.save
+                  : t.loanApplicationForm.submit}
             </Button>
           </form>
         </Card>
 
+        {/* Terms/Privacy dialog titles and content deliberately stay English - see
+            translations.ts's own doc comment: legally-binding consent text, not translated without
+            professional/legal review. */}
         <Dialog open={showTerms} onClose={() => setShowTerms(false)} title="Terms and Conditions">
           <TermsContent />
         </Dialog>
