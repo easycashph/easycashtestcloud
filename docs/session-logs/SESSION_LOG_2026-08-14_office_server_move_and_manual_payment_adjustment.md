@@ -1857,3 +1857,77 @@ pushed (`a23db8a` -> `7b585eb` after rebase).
   mocked up mid-session (design matches the real "Premium" theme + Reports Hub card-grid layout,
   landing under Accounting) but explicitly paused by the user ("stop muna natin ito") before any real
   code was written - not built, no follow-up needed unless the user picks it back up.
+
+## §41 - Statement of Account penalty computation audited against a real Excel reference, two bugs found and fixed (2026-08-21)
+
+User shared a hand-built Excel workbook (`legacy/reports/PENALTY AND ACCRUED SAMPLE COMPUTATION FOR
+SOA.xlsx`) demonstrating a From/To-date-driven penalty formula and a maturity-to-today accrued
+interest formula, and asked whether the LMS's existing SOA "Compute the missing ones" (`COMPUTED`
+penalty mode) already worked this way. It does - `StatementOfAccountCalculator.ts` already
+implements the identical `(unpaid Principal+Interest) x Days x (rate/30)` penalty formula and
+`(Total Past Due x Contractual Rate)/30 x Days` accrued formula, both already exist, both already
+have From/To date inputs in the Generate SOA dialog. Confirmed the Excel sample's source data is
+literally installments 4-7 of a real account, **SML-MAX_A3F8O (DONN JAPITANA GADIAN)** - dueDate/
+principal/interest figures match exactly once read in Manila time (`2021-02-02T16:00:00Z` = the
+account's real Feb 3 due date - user separately confirmed "ang due date ay every 3rd hindi 2nd,"
+which was correct; the confusion was psql printing the raw UTC value in an earlier reply, not a
+system bug).
+
+Testing the formula against SML-MAX_A3F8O's real data (per user's explicit ask, "subukan mo dito sa
+account na ito") surfaced two real problems, not a working-as-designed situation:
+
+1. **`COMPUTED` silently does nothing for this account.** It only fills a BLANK (zero-recorded)
+   installment's penalty ("compute the MISSING ones," literally) - every one of installments 4-7
+   already has a large nonzero recorded penalty (migrated data, ~₱323,554 combined - the exact kind
+   of "years of post-maturity accrual" over-accrual the `MANUAL` mode's own doc comment already
+   warned about), so nothing was ever "missing" to fill.
+
+2. **The 5%/10% rate threshold was wrong even when it did apply.** It checked each installment's own
+   unpaid Principal+Interest against ₱10,000 - user caught this directly ("bakit sa row 4 ay 5% dapat
+   10% dahil kabuuan na loan ang pinag-uusapan"): ADR-050/`CurrentPenaltyResolver` has always
+   evaluated this threshold against the LOAN's whole `principalAmount`, never a per-installment
+   balance. A partially-paid installment (row 4 here) could read as "small balance" purely because
+   what was LEFT on that one row happened to be small, even on a ₱120,000 loan nowhere near the
+   ₱10,000 line - user confirmed this was a real divergence, not an intentional design choice.
+
+User asked for a new option to force a real recompute, and confirmed the whole-loan threshold fix.
+Both applied:
+
+- Fixed the rate threshold in `StatementOfAccountCalculator.ts` (backend) and the client-side preview
+  memo in `LoanDetailPage.tsx` (which duplicates the same formula for live display) to check the
+  loan's own `principalAmount`/`loanQuery.data?.principalAmount`, not the per-installment unpaid base.
+- Added `penaltyRecomputeAll` (new "Recompute every installment" checkbox, shown under `COMPUTED`
+  mode): when checked, the date-range formula runs for EVERY qualifying installment regardless of
+  what's already recorded, instead of only patching blanks. New Prisma migration
+  (`20260820165030_add_soa_penalty_recompute_all`) persists it on `GeneratedStatementOfAccount`,
+  same "so a statement can always be explained and reproduced" reasoning as `penaltyMode`/the date
+  range. Threaded through the full stack: calculator -> merge data resolver -> use case -> Zod
+  schema -> controller -> presenter -> frontend state/checkbox/request body.
+
+Verified against the live rebuilt backend: recomputed SML-MAX_A3F8O's installments 4-7 with the
+fixed whole-loan rate - all four now correctly use 10% (previously installment 4 alone used 5%),
+total penalty ₱6,924.13 (up from the buggy ₱6,562.01 the old per-installment threshold produced).
+`penaltyRecomputeAll` passes Zod validation end-to-end (401 auth-required, not 400). Two Docker
+rebuilds during this fix hit transient `npm install` network failures (`ECONNRESET`, then
+`ETIMEDOUT` fetching from the npm registry) - both real network blips, not the earlier "buildkit
+exits 0 without redeploying" issue (confirmed both times via container uptime staying stale after
+the failed attempt); both retried successfully with a normal-looking rebuild the second time.
+Backend + frontend type-checked clean throughout. Committed and pushed (`8423f82`).
+
+### Current state / follow-ups
+
+- SML-MAX_A3F8O itself has NOT actually had a Statement of Account generated with the corrected
+  figures during this session - only the underlying feature was fixed. Staff can now generate one
+  themselves via the normal UI (COMPUTED mode, "Recompute every installment" checked, From
+  2021-02-03 / To 2021-05-03).
+- The Excel sample's own numbers (flat 10% on the ORIGINAL, not outstanding, Principal+Interest -
+  e.g. ₱6,063.50 for installment 4) do not match the corrected live-system figure (₱724.37 for that
+  same installment, since it nets out the ₱14,632.01 already paid toward it) - this was noted to the
+  user as a real, expected divergence (the live system correctly charges penalty only on what's
+  still actually owed), not re-litigated since the user's own follow-up questions moved on to
+  confirming the rate-basis fix instead.
+- The same per-installment-vs-whole-loan threshold question was not audited in any OTHER penalty-
+  adjacent code path outside `StatementOfAccountCalculator`/its frontend preview - `CurrentPenaltyResolver`
+  (the live ADR-050 formula) was already whole-loan-based and needed no change; nothing else in the
+  audit trail suggested a third implementation exists, but this was not exhaustively re-verified
+  against every possible call site.
