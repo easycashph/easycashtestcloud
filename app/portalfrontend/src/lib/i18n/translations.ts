@@ -310,7 +310,7 @@ export const fil: Translations = {
     createAccount: 'Gumawa ng Account',
   },
   nav: {
-    requirements: 'Requirements',
+    requirements: 'Mga Kailangan',
     news: 'Balita',
     security: 'Seguridad',
     goToDashboard: 'Pumunta sa Dashboard',

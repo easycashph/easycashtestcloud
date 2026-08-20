@@ -57,11 +57,13 @@ export function RequirementsPage() {
                     </div>
                     <h3 className="text-sm font-semibold">{product.displayLabel}</h3>
                   </div>
+                  {/* Deliberately .en - see this page's own doc comment: kept in sync with the
+                      untranslated application form, not translated independently. */}
                   <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
-                    {product.details}
+                    {product.details.en}
                   </p>
                   {'eligibilityNote' in product && product.eligibilityNote && (
-                    <p className="mt-2.5 rounded-lg bg-warning/10 p-2.5 text-xs font-medium text-warning">{product.eligibilityNote}</p>
+                    <p className="mt-2.5 rounded-lg bg-warning/10 p-2.5 text-xs font-medium text-warning">{product.eligibilityNote.en}</p>
                   )}
 
                   <ul className="mt-4 space-y-2">

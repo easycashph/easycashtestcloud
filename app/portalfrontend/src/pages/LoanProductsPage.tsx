@@ -45,8 +45,10 @@ export function LoanProductsPage() {
                 <product.icon className="h-5 w-5" />
               </div>
               <h2 className="mt-4 text-base font-semibold">{product.displayLabel}</h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">{product.blurb}</p>
-              <p className="mt-2 text-xs text-muted-foreground">{product.details}</p>
+              {/* This page has no i18n wiring at all yet - English only, matching every other
+                  string on this page (unlike LandingPage, which does translate this blurb). */}
+              <p className="mt-1.5 text-sm text-muted-foreground">{product.blurb.en}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{product.details.en}</p>
               <div className="mt-5 flex items-center gap-3">
                 <Button
                   disabled={hasPendingApplication}

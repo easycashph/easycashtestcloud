@@ -31,7 +31,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
 import { COMPANY, OFFICIAL_BANK_ACCOUNT, REGULATORY_DISCLOSURE } from '@/lib/companyInfo';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import { LOAN_PRODUCTS } from '@/lib/loanProducts';
+import { LOAN_PRODUCTS, localizedProductText } from '@/lib/loanProducts';
 import { getDocumentsForProduct } from '@/lib/loanRequirements';
 
 const STEP_ICONS = [UserPlus, FileEdit, BadgeCheck];
@@ -383,7 +383,7 @@ export function LandingPage() {
                 </div>
                 <div className="p-6">
                   <h3 className="text-base font-semibold">{product.displayLabel}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{product.blurb}</p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{localizedProductText(product.blurb, locale)}</p>
                   {/* 2026-08-06 (user request, "mas informative, mas descriptive" - competitor
                       review): what this product specifically asks for, on top of the documents
                       every applicant provides - real data from loanRequirements.ts (single source
@@ -402,7 +402,7 @@ export function LandingPage() {
                       employees only - shown here too, not just the Requirements page, so a
                       government employee doesn't waste time starting an application. */}
                   {'eligibilityNote' in product && product.eligibilityNote && (
-                    <p className="mt-3 text-[11px] font-medium text-warning">{product.eligibilityNote}</p>
+                    <p className="mt-3 text-[11px] font-medium text-warning">{localizedProductText(product.eligibilityNote, locale)}</p>
                   )}
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <Link

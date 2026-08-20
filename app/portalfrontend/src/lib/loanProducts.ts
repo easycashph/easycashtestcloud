@@ -1,4 +1,5 @@
 import { Anchor, Briefcase, Landmark } from 'lucide-react';
+import type { Locale } from './i18n/LanguageContext';
 
 /** Shared between LandingPage (public marketing) and LoanProductsPage (logged-in "which loan
  * should I apply for" browser) - single source of truth so the two never drift, and so
@@ -16,36 +17,71 @@ import { Anchor, Briefcase, Landmark } from 'lucide-react';
  * LOAN_TYPE_OPTIONS still uses these same values, so changing it here would silently break every
  * application submitted through the Portal. `displayLabel` is the Portal-only rename ("SME Loan" /
  * "Personal Loan") - use it for anything user-facing (cards, dropdown option text); use `category`
- * only for the value actually sent to the backend. */
+ * only for the value actually sent to the backend. Deliberately not localized like blurb/details/
+ * eligibilityNote below - a product name, same posture as "Easycash" itself never being translated.
+ *
+ * 2026-08-20 bug fix: `blurb`/`details`/`eligibilityNote` used to be plain English strings, so
+ * every surrounding UI element translated to Filipino except these - the exact "hardcoded English"
+ * bug class already fixed once elsewhere (see LandingPage.tsx's own 2026-07-29 changelog entry)
+ * but missed here since this file is shared across four pages, none of which flagged it alone. Now
+ * `{ en, fil }` objects - read via `localizedProductText()` below, which every consumer must use
+ * instead of reading the field directly. */
 export const LOAN_PRODUCTS = [
   {
     icon: Briefcase,
     category: 'Business Loan',
     displayLabel: 'SME Loan',
-    blurb: 'Flexible financing and a simpler process for growing your business.',
-    details: 'Working capital, equipment, or expansion financing for small and medium-sized business owners.',
+    blurb: {
+      en: 'Flexible financing and a simpler process for growing your business.',
+      fil: 'Flexible na financing at mas simpleng proseso para sa paglago ng iyong negosyo.',
+    },
+    details: {
+      en: 'Working capital, equipment, or expansion financing for small and medium-sized business owners.',
+      fil: 'Working capital, kagamitan, o financing para sa pagpapalawak ng maliit at katamtamang laki ng negosyo.',
+    },
     image: './images/product-business.jpg',
   },
   {
     icon: Landmark,
     category: 'Salary Loan',
     displayLabel: 'Personal Loan',
-    blurb: 'A quick cash advance against your salary, approved fast.',
-    details: 'A short-term cash advance for employees, repaid against your regular paycheck.',
+    blurb: {
+      en: 'A quick cash advance against your salary, approved fast.',
+      fil: 'Mabilisang cash advance laban sa iyong sahod, mabilis maaprubahan.',
+    },
+    details: {
+      en: 'A short-term cash advance for employees, repaid against your regular paycheck.',
+      fil: 'Panandaliang cash advance para sa mga empleyado, babayaran laban sa iyong regular na sahod.',
+    },
     image: './images/product-salary.jpg',
     /** 2026-08-14 (business owner confirmed): private-sector employees only - Easycash does not
      * currently accept government employees for this product. */
-    eligibilityNote: 'For private-sector employees only. Easycash does not currently accept government employees for this product.',
+    eligibilityNote: {
+      en: 'For private-sector employees only. Easycash does not currently accept government employees for this product.',
+      fil: 'Para sa mga empleyado ng pribadong sektor lamang. Hindi pa tumatanggap ang Easycash ng mga government employee para sa produktong ito.',
+    },
   },
   {
     icon: Anchor,
     category: 'Seafarer Loan',
     displayLabel: 'Seafarer Loan',
-    blurb: 'Lower rates and faster approvals, tailored around irregular allotment income.',
-    details: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
+    blurb: {
+      en: 'Lower rates and faster approvals, tailored around irregular allotment income.',
+      fil: 'Mas mababang rate at mas mabilis na approval, iniangkop sa hindi regular na allotment income.',
+    },
+    details: {
+      en: 'Built for seafarers with allotment-based income - flexible terms around your contract and deployment schedule.',
+      fil: 'Ginawa para sa mga seafarer na may allotment-based na kita - flexible na termino ayon sa iyong kontrata at deployment schedule.',
+    },
     image: './images/product-seafarer.jpg',
   },
 ] as const;
+
+/** Every consumer of blurb/details/eligibilityNote must go through this - see LOAN_PRODUCTS's own
+ * 2026-08-20 doc comment for why the fields are `{ en, fil }` objects instead of plain strings. */
+export function localizedProductText(text: { en: string; fil: string }, locale: Locale): string {
+  return text[locale];
+}
 
 /** 2026-08-12 (CEO request, Portal display only) - looks up the Portal-facing rename for a stored
  * `requestedCategory` value (e.g. an existing application's category on the Dashboard/detail view).
