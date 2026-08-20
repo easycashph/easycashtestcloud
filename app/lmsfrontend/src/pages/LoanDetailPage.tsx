@@ -4047,7 +4047,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
             <Button
               onClick={() => reduceMutation.mutate()}
-              disabled={reduceMutation.isPending || reduceReason.trim().length === 0 || reduceAmount.trim().length === 0}
+              disabled={
+                reduceMutation.isPending ||
+                reduceReason.trim().length === 0 ||
+                reduceAmount.trim().length === 0 ||
+                !(Number(reduceAmount) >= 0)
+              }
             >
               {reduceMutation.isPending ? 'Adjusting…' : 'Adjust penalty'}
             </Button>
@@ -4111,7 +4116,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
             <Button
               onClick={() => addFeeMutation.mutate()}
-              disabled={addFeeMutation.isPending || addFeeReason.trim().length === 0 || addFeeAmount.trim().length === 0}
+              disabled={addFeeMutation.isPending || addFeeReason.trim().length === 0 || !(Number(addFeeAmount) > 0)}
             >
               {addFeeMutation.isPending ? 'Charging…' : 'Add fee'}
             </Button>
@@ -4175,7 +4180,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
             <Button
               onClick={() => addPenaltyMutation.mutate()}
-              disabled={addPenaltyMutation.isPending || addPenaltyReason.trim().length === 0 || addPenaltyAmount.trim().length === 0}
+              disabled={addPenaltyMutation.isPending || addPenaltyReason.trim().length === 0 || !(Number(addPenaltyAmount) > 0)}
             >
               {addPenaltyMutation.isPending ? 'Charging…' : 'Add penalty'}
             </Button>
@@ -4250,7 +4255,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </Button>
             <Button
               onClick={() => adjustFeesMutation.mutate()}
-              disabled={adjustFeesMutation.isPending || adjustFeesReason.trim().length === 0 || adjustFeesAmount.trim().length === 0}
+              disabled={
+                adjustFeesMutation.isPending ||
+                adjustFeesReason.trim().length === 0 ||
+                adjustFeesAmount.trim().length === 0 ||
+                !(Number(adjustFeesAmount) >= 0)
+              }
             >
               {adjustFeesMutation.isPending ? 'Adjusting…' : 'Adjust fees'}
             </Button>
