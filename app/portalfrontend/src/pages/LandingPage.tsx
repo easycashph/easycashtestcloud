@@ -121,9 +121,11 @@ function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
-      <div className="container flex h-16 items-center justify-between">
+      {/* 2026-08-20 (user request): logo enlarged from h-12 (48px) to h-[72px] - navbar height
+          grown to match (h-16/64px -> h-[88px]) so the bigger logo doesn't get clipped/cramped. */}
+      <div className="container flex h-[88px] items-center justify-between">
         <Link to="/" className="flex items-center gap-2.5">
-          <img src="./logo-easycash.png" alt="Easycash" className="h-12 w-12 rounded-lg object-contain" />
+          <img src="./logo-easycash.png" alt="Easycash" className="h-[72px] w-[72px] rounded-lg object-contain" />
         </Link>
 
         <div className="hidden items-center gap-4 md:flex">
