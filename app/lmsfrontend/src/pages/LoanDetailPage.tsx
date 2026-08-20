@@ -74,7 +74,17 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import type { LoanRiskAssessment, RiskLevel } from '@/lib/riskAssessmentApiTypes';
-import { buildDocumentFileName, cn, formatDate, formatDateTime, formatPercentage, formatPeso, generateUuid, manilaDaysBetween } from '@/lib/utils';
+import {
+  buildDocumentFileName,
+  cn,
+  formatDate,
+  formatDateTime,
+  formatPercentage,
+  formatPeso,
+  generateUuid,
+  manilaDaysBetween,
+  manilaDateInputValue,
+} from '@/lib/utils';
 import { previewLoanSchedule } from '@/lib/loanSchedulePreview';
 import { PaymentRecordingForm } from '@/pages/PaymentRecordingPage';
 
@@ -1841,14 +1851,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [soaPenaltyMode, setSoaPenaltyMode] = React.useState<SoaPenaltyMode>('RECORDED');
   const [soaManualPenalty, setSoaManualPenalty] = React.useState('');
   const [soaManualReason, setSoaManualReason] = React.useState('');
-  const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => manilaDateInputValue(new Date()));
+  const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => manilaDateInputValue(new Date()));
   // 2026-08-21 (user-reported, SML-MAX_A3F8O): COMPUTED normally only fills a BLANK (zero-recorded)
   // installment's penalty - for a migrated account whose recorded penalty is itself wrong (years of
   // post-maturity accrual baked in) but non-zero, there's nothing "missing" to fill. This forces the
   // date-range formula to run for every qualifying installment regardless of what's recorded.
   const [soaPenaltyRecomputeAll, setSoaPenaltyRecomputeAll] = React.useState(false);
-  const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => manilaDateInputValue(new Date()));
   const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
   const [soaError, setSoaError] = React.useState<string | null>(null);
@@ -1900,6 +1910,19 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     let pastDueInterest = 0;
     let pastDuePenalty = 0;
     let filledCount = 0;
+    // 2026-08-21 (user request) - on-screen "Penalty computation" table, one row per past-due
+    // installment, mirroring the user's own Excel reference tool. Empty under MANUAL (no
+    // per-installment figure to show there). Mirrors StatementOfAccountCalculator's own
+    // `penaltyBreakdown`, kept as a second copy here for the same reason the rest of this preview
+    // already is - a live, no-round-trip preview as staff adjust the penalty dates.
+    const penaltyBreakdown: {
+      fromDate: Date;
+      toDate: Date;
+      principal: number;
+      interest: number;
+      daysLate: number;
+      penalty: number;
+    }[] = [];
     // Reference figures shown under MANUAL: what the schedule records, and what it would be if
     // penalty stopped at maturity. Both are display-only - neither drives the generated statement.
     let recordedPenaltyTotal = 0;
@@ -1931,16 +1954,35 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       }
 
         if (soaPenaltyMode === 'MANUAL') continue; // staff supply the whole figure instead
+      const rowFrom = penaltyFrom.getTime() > new Date(inst.dueDate).getTime() ? penaltyFrom : new Date(inst.dueDate);
+      const rowDaysLate = Math.max(0, daysBetween(rowFrom, penaltyCutoff));
       if (soaPenaltyMode === 'RECORDED' || (!soaPenaltyRecomputeAll && recorded > 0)) {
         pastDuePenalty += recorded;
+        penaltyBreakdown.push({
+          fromDate: rowFrom,
+          toDate: penaltyCutoff,
+          principal: unpaidPrincipal,
+          interest: unpaidInterest,
+          daysLate: rowDaysLate,
+          penalty: recorded,
+        });
         continue;
       }
       const from = new Date(inst.dueDate).getTime() > penaltyFrom.getTime() ? new Date(inst.dueDate) : penaltyFrom;
       const days = daysBetween(from, penaltyCutoff);
       if (days <= 0) continue;
       const rate = loanPrincipal > 10000 ? 0.1 : 0.05;
-      pastDuePenalty += Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
+      const rowPenalty = Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
+      pastDuePenalty += rowPenalty;
       filledCount += 1;
+      penaltyBreakdown.push({
+        fromDate: from,
+        toDate: penaltyCutoff,
+        principal: unpaidPrincipal,
+        interest: unpaidInterest,
+        daysLate: days,
+        penalty: rowPenalty,
+      });
     }
     if (soaPenaltyMode === 'MANUAL') pastDuePenalty = Number.parseFloat(soaManualPenalty) || 0;
 
@@ -1967,12 +2009,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
 
     const contractualRate = parseNum(loanQuery.data?.contractualInterestRate);
     let accruedInterest = 0;
+    let accruedDaysLate = 0;
     if (isMatured && lastInstallment && contractualRate > 0 && totalPastDue > 0) {
       const accruedDays = daysBetween(new Date(lastInstallment.dueDate), accruedTo);
       if (accruedDays > 0) {
         accruedInterest = Math.round(((totalPastDue * (contractualRate / 100)) / 30) * accruedDays * 100) / 100;
+        accruedDaysLate = accruedDays;
       }
     }
+    const accruedBreakdown = {
+      fromDate: lastInstallment ? new Date(lastInstallment.dueDate) : accruedTo,
+      toDate: accruedTo,
+      days: accruedDaysLate,
+      accrued: accruedInterest,
+    };
 
     const totalAmountDue =
       currentAmortizationDue + totalPastDue + accruedInterest + (Number.parseFloat(soaCollectionFee) || 0) + (Number.parseFloat(soaOtherFee) || 0);
@@ -1993,6 +2043,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       isMatured,
       accruedInterest,
       totalAmountDue,
+      penaltyBreakdown,
+      accruedBreakdown,
     };
   }, [
     installmentsQuery.data,
@@ -2007,11 +2059,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     soaOtherFee,
   ]);
 
-  // 2026-08-12: sensible defaults for COMPUTED, applied when the dialog opens. "From" is the
-  // earliest past-due installment that has no penalty on record (the ones this mode fills in);
-  // "To" is min(today, maturity) - the same cap `CurrentPenaltyResolver` applies, so a loan that
-  // matured years ago doesn't silently compute zero days against a today-dated range, and one that
-  // has NOT matured yet is never charged penalty for days that have not happened.
+  // 2026-08-21 (user request): sensible defaults for COMPUTED, applied when the dialog opens.
+  // "From" is the earliest installment that is not yet fully paid (unpaid Principal + Interest >
+  // 0), regardless of whatever penalty is or isn't already on record - matches how the user
+  // themselves describes picking the start date. "To" is the maturity date once the loan has
+  // actually matured, otherwise today - the same cap `CurrentPenaltyResolver` applies, so a loan
+  // that matured years ago doesn't silently compute zero days against a today-dated range, and one
+  // that has NOT matured yet is never charged penalty for days that have not happened.
   React.useEffect(() => {
     if (!soaDialogOpen) return;
     const items = installmentsQuery.data?.items ?? [];
@@ -2020,13 +2074,17 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     const sorted = [...items].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const maturity = new Date(sorted[sorted.length - 1]!.dueDate);
     const now = new Date();
-    const firstBlank = sorted.find((i) => {
+    const firstUnpaid = sorted.find((i) => {
       const unpaid = num(i.due.principal) - num(i.paid.principal) + (num(i.due.interest) - num(i.paid.interest));
-      return new Date(i.dueDate).getTime() <= now.getTime() && unpaid > 0 && num(i.currentPenaltyOwed ?? i.due.penalty) === 0;
+      return unpaid > 0;
     });
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    setSoaPenaltyFromDate(iso(firstBlank ? new Date(firstBlank.dueDate) : sorted[0]!.dueDate ? new Date(sorted[0]!.dueDate) : now));
-    setSoaPenaltyToDate(iso(now.getTime() > maturity.getTime() ? maturity : now));
+    setSoaPenaltyFromDate(manilaDateInputValue(firstUnpaid ? new Date(firstUnpaid.dueDate) : now));
+    setSoaPenaltyToDate(manilaDateInputValue(now.getTime() > maturity.getTime() ? maturity : now));
+    // 2026-08-21 (user request): Accrued Interest's own "As of date" defaults to today every time
+    // the dialog opens, same as the two Penalty dates above - it's a separate field from Penalty
+    // To date (independent "as of" per this class's own doc comment), but "today" is still the
+    // sensible starting point for it.
+    setSoaAccruedInterestAsOfDate(manilaDateInputValue(now));
   }, [soaDialogOpen, installmentsQuery.data]);
 
   const generateStatementMutation = useMutation({
@@ -3492,6 +3550,51 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     Rate is 5%/month for a loan with a principal ≤ ₱10,000, otherwise 10%/month (whole-loan basis, matching the live
                     Repayment Schedule).
                   </p>
+                  {/* 2026-08-21 (user request) - on-screen penalty computation table, one row per
+                      past-due installment, mirroring the user's own Excel reference tool
+                      (FROM/TO/PRINCIPAL/INTEREST/DAYS LATE/PENALTY). Collapsed by default so it
+                      doesn't dominate the dialog on a loan with a long schedule. */}
+                  {soaPreview.penaltyBreakdown.length > 0 && (
+                    <details className="mt-3 border-t pt-2 text-xs">
+                      <summary className="cursor-pointer font-medium text-foreground">
+                        Penalty computation ({soaPreview.penaltyBreakdown.length} installment
+                        {soaPreview.penaltyBreakdown.length === 1 ? '' : 's'})
+                      </summary>
+                      <div className="mt-2 overflow-x-auto">
+                        <table className="w-full whitespace-nowrap text-xs">
+                          <thead>
+                            <tr className="text-muted-foreground">
+                              <th className="pb-1 pr-2 text-left font-normal">From</th>
+                              <th className="pb-1 pr-2 text-left font-normal">To</th>
+                              <th className="pb-1 pr-2 text-right font-normal">Principal</th>
+                              <th className="pb-1 pr-2 text-right font-normal">Interest</th>
+                              <th className="pb-1 pr-2 text-right font-normal">Days late</th>
+                              <th className="pb-1 text-right font-normal">Penalty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {soaPreview.penaltyBreakdown.map((row, i) => (
+                              <tr key={i} className="border-t">
+                                <td className="py-1 pr-2">{formatDate(row.fromDate)}</td>
+                                <td className="py-1 pr-2">{formatDate(row.toDate)}</td>
+                                <td className="py-1 pr-2 text-right">{formatPeso(row.principal)}</td>
+                                <td className="py-1 pr-2 text-right">{formatPeso(row.interest)}</td>
+                                <td className="py-1 pr-2 text-right">{row.daysLate}</td>
+                                <td className="py-1 text-right">{formatPeso(row.penalty)}</td>
+                              </tr>
+                            ))}
+                            <tr className="border-t font-medium">
+                              <td className="py-1 pr-2" colSpan={2} />
+                              <td className="py-1 pr-2 text-right">{formatPeso(soaPreview.pastDuePrincipal)}</td>
+                              <td className="py-1 pr-2 text-right">{formatPeso(soaPreview.pastDueInterest)}</td>
+                              <td className="py-1 pr-2" />
+                              <td className="py-1 text-right">{formatPeso(soaPreview.pastDuePenalty)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
 
@@ -3514,6 +3617,26 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 <div className="mt-2 border-t pt-2 text-xs">
                   <p className="text-muted-foreground">Accrued interest amount</p>
                   <p className="font-medium">{formatPeso(soaPreview.accruedInterest)}</p>
+                  {soaPreview.accruedBreakdown.days > 0 && (
+                    <table className="mt-2 w-full whitespace-nowrap border-t pt-2 text-xs">
+                      <thead>
+                        <tr className="text-muted-foreground">
+                          <th className="pb-1 pr-2 text-left font-normal">From</th>
+                          <th className="pb-1 pr-2 text-left font-normal">To</th>
+                          <th className="pb-1 pr-2 text-right font-normal">No. of days</th>
+                          <th className="pb-1 text-right font-normal">Accrued</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="py-1 pr-2">{formatDate(soaPreview.accruedBreakdown.fromDate)}</td>
+                          <td className="py-1 pr-2">{formatDate(soaPreview.accruedBreakdown.toDate)}</td>
+                          <td className="py-1 pr-2 text-right">{soaPreview.accruedBreakdown.days}</td>
+                          <td className="py-1 text-right font-medium">{formatPeso(soaPreview.accruedBreakdown.accrued)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               ) : (
                 <div className="mt-2 flex items-center gap-1.5 border-t pt-2 text-xs text-muted-foreground">

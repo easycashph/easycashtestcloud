@@ -88,6 +88,19 @@ export function manilaDaysBetween(from: Date, to: Date): number {
   return Math.max(0, Math.round((tUtc - fUtc) / 86_400_000));
 }
 
+/** 2026-08-21 (bug fix): `date.toISOString().slice(0, 10)` reads the UTC calendar day, which is a
+ * day EARLIER than the Manila one for any Manila-midnight-as-`T16:00:00Z` value (i.e. most due
+ * dates in this system) - exactly the class of bug this module exists to prevent, just applied to
+ * an `<input type="date">` value instead of a day count. Use this instead of the naive slice
+ * whenever pre-filling a date input from a backend-supplied date. */
+export function manilaDateInputValue(date: Date): string {
+  const shifted = new Date(date.getTime() + MANILA_OFFSET_MS);
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shifted.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** Days (28/29/30/31) in the Asia/Manila calendar month `date` falls in — the ADR-050 penalty divisor. */
 export function manilaDaysInMonth(date: Date): number {
   const d = new Date(date.getTime() + MANILA_OFFSET_MS);

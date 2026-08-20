@@ -18,6 +18,31 @@ export interface RemainingScheduleRow {
   totalDue: Money;
 }
 
+/** One row per past-due installment that fed into `pastDuePenalty` - the on-screen "Penalty
+ * computation" table (2026-08-21, user request, mirroring the user's own Excel reference tool's
+ * FROM/TO/PRINCIPAL/INTEREST/DAYS LATE/PENALTY layout). `fromDate` is the installment's own due
+ * date (or the staff "from" date, whichever is later - same rule the formula itself uses);
+ * `toDate` is the shared `penaltyCutoff` for every row. Not populated under `MANUAL` (there is no
+ * per-installment figure to show - the whole Past Due Penalty is a single staff-typed override). */
+export interface PenaltyBreakdownRow {
+  fromDate: Date;
+  toDate: Date;
+  principal: Money;
+  interest: Money;
+  daysLate: number;
+  penalty: Money;
+}
+
+/** The "Accrued interest computation" section — a single row since the formula runs once, over
+ * the whole Total Past Due base, not per installment. `fromDate` is the last installment's due
+ * date (maturity); `days`/`accrued` are 0 when `toDate` hasn't reached maturity yet. */
+export interface AccruedInterestBreakdown {
+  fromDate: Date;
+  toDate: Date;
+  days: number;
+  accrued: Money;
+}
+
 export interface StatementOfAccountFigures {
   /** Total due on the next unpaid installment whose due date is AFTER `penaltyToDate` (0 if every installment is already due on/before that date). */
   currentAmortizationDue: Money;
@@ -29,6 +54,9 @@ export interface StatementOfAccountFigures {
   accruedInterest: Money;
   /** Every installment with a positive remaining balance, oldest first — the "Remaining Amortization" table (date-independent). */
   remainingSchedule: RemainingScheduleRow[];
+  /** Per-installment penalty computation rows, oldest first - empty under `MANUAL`. */
+  penaltyBreakdown: PenaltyBreakdownRow[];
+  accruedBreakdown: AccruedInterestBreakdown;
 }
 
 /**
@@ -170,6 +198,7 @@ export class StatementOfAccountCalculator {
     let pastDuePrincipal = Money.ZERO;
     let pastDueInterest = Money.ZERO;
     let pastDuePenalty = Money.ZERO;
+    const penaltyBreakdown: PenaltyBreakdownRow[] = [];
 
     for (const installment of sorted) {
       if (installment.dueDate.getTime() > asOfDate.getTime()) continue; // not yet due as of the chosen date
@@ -181,8 +210,15 @@ export class StatementOfAccountCalculator {
       if (unpaidPrincipal.isPositive()) pastDuePrincipal = pastDuePrincipal.add(unpaidPrincipal);
       if (unpaidInterest.isPositive()) pastDueInterest = pastDueInterest.add(unpaidInterest);
 
+      // Same "from" rule the COMPUTED formula uses below, applied to every row so the on-screen
+      // table's Days Late column is meaningful even under RECORDED (where the formula itself
+      // isn't run, but staff still want to see how overdue this installment is).
+      const rowFrom = penaltyFromDate && installment.dueDate.getTime() < penaltyFromDate.getTime() ? penaltyFromDate : installment.dueDate;
+      const rowDaysLate = Math.max(0, manilaDaysBetween(rowFrom, penaltyCutoff));
+
       // MANUAL replaces the whole Past Due Penalty with the staff-typed figure (added after the
-      // loop), so no per-installment penalty is accumulated here at all.
+      // loop), so no per-installment penalty is accumulated here at all - and no breakdown row
+      // either, since there is no per-installment figure to show.
       if (penaltyMode === 'MANUAL') continue;
 
       // What the Repayment Schedule itself shows for this installment: the frozen SDevTech snapshot
@@ -194,6 +230,14 @@ export class StatementOfAccountCalculator {
       // installment that already has a (possibly wrong) nonzero recorded penalty.
       if (penaltyMode === 'RECORDED' || (!penaltyRecomputeAll && (recorded.isPositive() || !penaltyFromDate))) {
         pastDuePenalty = pastDuePenalty.add(recorded);
+        penaltyBreakdown.push({
+          fromDate: rowFrom,
+          toDate: penaltyCutoff,
+          principal: unpaidPrincipal,
+          interest: unpaidInterest,
+          daysLate: rowDaysLate,
+          penalty: recorded,
+        });
         continue;
       }
 
@@ -208,9 +252,18 @@ export class StatementOfAccountCalculator {
       // 2026-08-21 (user-reported): whole-loan basis, not this installment's own unpaid balance -
       // see this file's own doc comment above.
       const rate = penaltyContext.principalAmount.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
-      pastDuePenalty = pastDuePenalty.add(
-        Money.of(unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)),
+      const computedPenalty = Money.of(
+        unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
       );
+      pastDuePenalty = pastDuePenalty.add(computedPenalty);
+      penaltyBreakdown.push({
+        fromDate: from,
+        toDate: penaltyCutoff,
+        principal: unpaidPrincipal,
+        interest: unpaidInterest,
+        daysLate: days,
+        penalty: computedPenalty,
+      });
     }
 
     if (penaltyMode === 'MANUAL') {
@@ -225,13 +278,21 @@ export class StatementOfAccountCalculator {
     const currentAmortizationDue = currentInstallment ? outstandingBase(currentInstallment) : Money.ZERO;
 
     let accruedInterest = Money.ZERO;
+    let accruedDaysLate = 0;
     if (lastInstallment && contractualRate && !contractualRate.isZero() && totalPastDue.isPositive()) {
       const daysLate = manilaDaysBetween(lastInstallment.dueDate, accruedInterestAsOfDate);
       if (daysLate > 0) {
         const dailyBase = totalPastDue.toDecimal().times(contractualRate.asFraction()).dividedBy(30);
         accruedInterest = Money.of(dailyBase.times(daysLate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP));
+        accruedDaysLate = daysLate;
       }
     }
+    const accruedBreakdown: AccruedInterestBreakdown = {
+      fromDate: lastInstallment?.dueDate ?? accruedInterestAsOfDate,
+      toDate: accruedInterestAsOfDate,
+      days: accruedDaysLate,
+      accrued: accruedInterest,
+    };
 
     const remainingSchedule: RemainingScheduleRow[] = sorted
       .filter((i) => outstandingBase(i).isPositive())
@@ -250,6 +311,8 @@ export class StatementOfAccountCalculator {
       totalPastDue,
       accruedInterest,
       remainingSchedule,
+      penaltyBreakdown,
+      accruedBreakdown,
     };
   }
 }
