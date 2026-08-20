@@ -1176,6 +1176,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [restructureInstallmentCount, setRestructureInstallmentCount] = React.useState('12');
   const [restructureFirstRepaymentDate, setRestructureFirstRepaymentDate] = React.useState('');
   const [restructureReason, setRestructureReason] = React.useState('');
+  // 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate"): optional
+  // overrides, blank = use the computed principal / this loan's own rate (unchanged default
+  // behavior). Never allowed to exceed that default - see RestructureLoanUseCase's own doc comment.
+  const [restructureNegotiatedPrincipal, setRestructureNegotiatedPrincipal] = React.useState('');
+  const [restructureNegotiatedRate, setRestructureNegotiatedRate] = React.useState('');
   const adjustIdempotencyKeyRef = React.useRef<string | null>(null);
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): same MIS/Accounting-only gate as
   // Restructure. Unlike Restructure, term is NOT staff-entered (copied verbatim from this loan) -
@@ -1594,6 +1599,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           installmentCount: Number.parseInt(restructureInstallmentCount, 10),
           firstRepaymentDate: restructureFirstRepaymentDate,
           reason: restructureReason.trim() || undefined,
+          negotiatedNewPrincipal: restructureNegotiatedPrincipal.trim() || undefined,
+          negotiatedInterestRate: restructureNegotiatedRate.trim() || undefined,
         },
         { 'Idempotency-Key': restructureIdempotencyKeyRef.current },
       );
@@ -1674,6 +1681,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
     setRestructureFirstRepaymentDate(oneMonthFromNow.toISOString().slice(0, 10));
     setRestructureReason('');
+    setRestructureNegotiatedPrincipal('');
+    setRestructureNegotiatedRate('');
     setRestructureOpen(true);
   };
   const openAdjustConfirm = () => {
@@ -2107,9 +2116,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const restructureNewPrincipalNum = accruedInterestQuery.data
     ? num(accruedInterestQuery.data.restructureNewPrincipal)
     : num(loan.collectionsBalance);
+  // 2026-08-20 (user-confirmed, negotiated restructure): blank negotiated fields fall back to the
+  // computed defaults above - entering a value only ever LOWERS what the schedule preview (and the
+  // actual backend charge) uses; the invalid-if-higher check below just disables the submit button,
+  // the real ceiling enforcement lives server-side (RestructureLoanUseCase).
+  const restructureNegotiatedPrincipalNum = restructureNegotiatedPrincipal.trim() ? Number(restructureNegotiatedPrincipal) : null;
+  const restructureNegotiatedRateNum = restructureNegotiatedRate.trim() ? Number(restructureNegotiatedRate) : null;
+  const restructurePrincipalTooHigh = restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum > restructureNewPrincipalNum;
+  const restructureRateTooHigh = restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum > num(loan.interestRate);
+  const restructureEffectivePrincipalNum =
+    restructureNegotiatedPrincipalNum !== null && !restructurePrincipalTooHigh ? restructureNegotiatedPrincipalNum : restructureNewPrincipalNum;
+  const restructureEffectiveRateNum =
+    restructureNegotiatedRateNum !== null && !restructureRateTooHigh ? restructureNegotiatedRateNum : num(loan.interestRate);
   const restructurePreview =
     restructureOpen && restructureFirstRepaymentDate
-      ? previewLoanSchedule(restructureNewPrincipalNum, num(loan.interestRate), restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
+      ? previewLoanSchedule(restructureEffectivePrincipalNum, restructureEffectiveRateNum, restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
       : null;
   // 2026-07-24 (Loan Adjustment feature): same client-side preview convention as Restructure -
   // principal, rate, and term are all copied verbatim from this loan, only the date changes.
@@ -4328,25 +4349,54 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             <DialogTitle>Restructure loan</DialogTitle>
             <DialogDescription>
               Creates a brand new loan account with unpaid principal + unpaid interest (whole remaining schedule) + unpaid penalty +
-              accrued interest + unpaid fees as its principal, using the same product and interest rate. This loan closes as
-              Restructured. Can only be done once per loan account.
+              accrued interest + unpaid fees as its principal, using the same product and interest rate by default. This loan closes
+              as Restructured. Can only be done once per loan account.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground">New principal</p>
-              <p className="font-semibold">{formatPeso(restructureNewPrincipalNum)}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="restructure-negotiated-principal">New principal</Label>
+              <Input
+                id="restructure-negotiated-principal"
+                type="number"
+                min="0"
+                max={restructureNewPrincipalNum}
+                step="0.01"
+                placeholder={restructureNewPrincipalNum.toFixed(2)}
+                value={restructureNegotiatedPrincipal}
+                onChange={(e) => setRestructureNegotiatedPrincipal(e.target.value)}
+                disabled={restructureMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                Computed: {formatPeso(restructureNewPrincipalNum)}. Leave blank to use it as-is, or enter a lower negotiated amount.
+              </p>
+              {restructurePrincipalTooHigh && (
+                <p className="text-xs text-destructive">Cannot exceed the computed principal - a restructure may only lower it.</p>
+              )}
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Interest rate</p>
-              <p className="font-semibold">{formatPercentage(loan.interestRate)} / month</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Product</p>
-              <p className="font-semibold">Same as {loan.loanCode}</p>
+            <div className="space-y-1.5">
+              <Label htmlFor="restructure-negotiated-rate">Interest rate (% / month)</Label>
+              <Input
+                id="restructure-negotiated-rate"
+                type="number"
+                min="0"
+                max={num(loan.interestRate)}
+                step="0.001"
+                placeholder={formatPercentage(loan.interestRate)}
+                value={restructureNegotiatedRate}
+                onChange={(e) => setRestructureNegotiatedRate(e.target.value)}
+                disabled={restructureMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                This loan's rate: {formatPercentage(loan.interestRate)} / month. Leave blank to keep it, or enter a lower negotiated rate.
+              </p>
+              {restructureRateTooHigh && (
+                <p className="text-xs text-destructive">Cannot exceed this loan's own rate - a restructure may only lower it.</p>
+              )}
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">Product: same as {loan.loanCode}.</p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -4437,7 +4487,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 restructureMutation.isPending ||
                 !restructureInstallmentCount.trim() ||
                 Number.parseInt(restructureInstallmentCount, 10) <= 0 ||
-                !restructureFirstRepaymentDate
+                !restructureFirstRepaymentDate ||
+                restructurePrincipalTooHigh ||
+                restructureRateTooHigh ||
+                (restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum <= 0) ||
+                (restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum < 0)
               }
             >
               {restructureMutation.isPending ? 'Restructuring…' : 'Restructure loan'}

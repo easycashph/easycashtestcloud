@@ -100,6 +100,26 @@ export class LoanNotEligibleForRestructureError extends DomainError {
 }
 
 /**
+ * 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate"): staff may
+ * optionally negotiate the new loan's principal/interest rate DOWN from the system-computed figure
+ * (unpaid principal+interest+penalty+accrued interest+fees / the old loan's own rate) - never up,
+ * since a "negotiated" restructure is by definition a concession to the borrower, not a way to
+ * charge more than what's actually owed or a higher rate than what was originally agreed. Thrown
+ * when a staff-entered override exceeds its computed/original ceiling.
+ */
+export class RestructureNegotiatedOverrideExceedsCeilingError extends DomainError {
+  constructor(field: 'principal' | 'interest rate', overrideValue: string, ceilingValue: string) {
+    super(
+      'RESTRUCTURE_NEGOTIATED_OVERRIDE_EXCEEDS_CEILING',
+      `Negotiated new ${field} (${overrideValue}) cannot exceed the computed ${field} (${ceilingValue}) - a restructure may only lower these, not raise them.`,
+      undefined,
+      400,
+    );
+    this.name = 'RestructureNegotiatedOverrideExceedsCeilingError';
+  }
+}
+
+/**
  * 2026-07-24 (Loan Restructure feature, user-confirmed): "isang beses lang pwede gawin per loan
  * account" - a specific LoanAccount may be the OLD side of at most one restructure ever. Enforced
  * both here (fast, pre-transaction check) and by the `LoanRestructure.oldLoanAccountId` unique

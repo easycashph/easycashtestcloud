@@ -162,6 +162,11 @@ export const restructureLoanSchema = z.object({
   installmentCount: z.coerce.number().int().positive(),
   firstRepaymentDate: z.coerce.date(),
   reason: z.string().trim().min(1).optional(),
+  /** 2026-08-20 (user-confirmed, negotiated restructure): optional - default to the system-computed
+   * principal / the old loan's own rate when omitted. The use case rejects either one if it exceeds
+   * that default (a restructure may only lower these, not raise them). */
+  negotiatedNewPrincipal: decimalStringSchema.optional(),
+  negotiatedInterestRate: decimalStringSchema.optional(),
 });
 
 export type RestructureLoanRequestBody = z.infer<typeof restructureLoanSchema>;

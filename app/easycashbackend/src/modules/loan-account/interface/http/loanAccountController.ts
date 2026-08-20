@@ -4,6 +4,7 @@ import { parsePaginationParams, parseSearchParam, toPaginatedResponse } from '@s
 import { assertBranchAccess, resolveBranchFilter, resolveBranchScope, resolveWriteBranchId } from '@shared/http/branchScope';
 import { withIdempotency } from '@shared/http/idempotency';
 import { Money } from '@shared/domain/Money';
+import { Percentage } from '@shared/domain/Percentage';
 import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotencyKeyStore';
 import type { LoanAccountStatus } from '../../domain/LoanAccount';
 import type { CreateLoanAccountUseCase } from '../../application/use-cases/CreateLoanAccountUseCase';
@@ -389,6 +390,8 @@ export class LoanAccountController {
           firstRepaymentDate: body.firstRepaymentDate,
           reason: body.reason,
           restructuredByUserId: currentUser.sub,
+          negotiatedNewPrincipal: body.negotiatedNewPrincipal ? Money.of(body.negotiatedNewPrincipal) : undefined,
+          negotiatedInterestRate: body.negotiatedInterestRate ? Percentage.of(body.negotiatedInterestRate) : undefined,
         });
         return {
           statusCode: 200,

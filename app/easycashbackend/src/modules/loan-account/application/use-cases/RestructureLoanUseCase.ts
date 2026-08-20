@@ -1,6 +1,7 @@
 import { NotFoundError } from '@shared/errors/DomainError';
 import { env } from '@shared/config/env';
 import { Money } from '@shared/domain/Money';
+import type { Percentage } from '@shared/domain/Percentage';
 import { AmortizationScheduleGenerator } from '@shared/domain/calculation/AmortizationScheduleGenerator';
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
@@ -13,7 +14,12 @@ import { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstall
 import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/InstallmentAmounts';
 import { LoanAccount } from '../../domain/LoanAccount';
 import { LoanRestructure } from '../../domain/LoanRestructure';
-import { LoanAlreadyRestructuredError, LoanNotEligibleForRestructureError, UnsupportedInterestCalculationMethodError } from '../../domain/errors/LoanAccountDomainErrors';
+import {
+  LoanAlreadyRestructuredError,
+  LoanNotEligibleForRestructureError,
+  RestructureNegotiatedOverrideExceedsCeilingError,
+  UnsupportedInterestCalculationMethodError,
+} from '../../domain/errors/LoanAccountDomainErrors';
 import { resolveSecMc3Coverage } from '../services/SecMc3CoverageResolver';
 import { AccruedInterestCalculator } from '../services/AccruedInterestCalculator';
 import type { ILoanAccountRepository } from '../ports/ILoanAccountRepository';
@@ -36,6 +42,12 @@ export interface RestructureLoanInput {
   firstRepaymentDate: Date;
   reason?: string;
   restructuredByUserId: string;
+  /** 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate") - optional
+   * staff override, only ever LOWER than the system-computed principal/original interest rate, for
+   * a real out-of-band concession negotiated with the borrower. See
+   * RestructureNegotiatedOverrideExceedsCeilingError's own doc comment for the ceiling rule. */
+  negotiatedNewPrincipal?: Money;
+  negotiatedInterestRate?: Percentage;
 }
 
 /** Mirrors `ActivateLoanUseCase`'s identical, non-exported helper — ADR-045: calendar-month
@@ -70,10 +82,16 @@ function addMonths(date: Date, months: number): Date {
  *   + unpaid Fees. Despite the interest-on-interest/SEC-MC3-non-compounding-penalty implications
  *   discussed with the user; mitigated by making this explicit on the new loan's Disclosure
  *   Statement (existing ADR-051 document generation, unchanged by this feature).
- * - Product/interest rate are copied from the old loan (its own LA-4 snapshot fields) — user
- *   chose NOT to let staff pick a different product. Term (`installmentCount`) and
- *   `firstRepaymentDate` ARE staff-entered, per ADR-045's "no recoverable generation rule" stance
- *   on `firstRepaymentDate` (mirrors `CreateLoanAccountUseCase`'s identical requirement).
+ * - Product is copied from the old loan (its own LA-4 snapshot fields) — user chose NOT to let
+ *   staff pick a different product. Term (`installmentCount`) and `firstRepaymentDate` ARE
+ *   staff-entered, per ADR-045's "no recoverable generation rule" stance on `firstRepaymentDate`
+ *   (mirrors `CreateLoanAccountUseCase`'s identical requirement).
+ * - 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate"): principal
+ *   and interest rate default to the system-computed figure / the old loan's own rate, same as
+ *   before, but staff may now optionally override EITHER with a negotiated figure — only ever LOWER
+ *   than that default, never higher (a restructure negotiation is a concession to the borrower, not
+ *   a way to charge more than what's actually owed). See
+ *   `RestructureNegotiatedOverrideExceedsCeilingError`'s own doc comment.
  * - Goes directly to ACTIVE — no approval step (user-confirmed: "isang click lang"). Internally
  *   still passes through `LoanAccount.create()` (PENDING_APPROVAL) -> `approve()` -> the same
  *   schedule-generation/disbursement mechanics `ActivateLoanUseCase` uses, all inside one
@@ -143,7 +161,29 @@ export class RestructureLoanUseCase {
       oldLoanAccount.contractualInterestRate,
       now,
     );
-    const newPrincipalAmount = accruedInterestFigures.restructureNewPrincipal;
+    const computedNewPrincipal = accruedInterestFigures.restructureNewPrincipal;
+    // 2026-08-20 (user-confirmed, negotiated restructure): a staff-entered override may only lower
+    // the principal/interest rate from the computed/original figure - never raise it (see
+    // RestructureNegotiatedOverrideExceedsCeilingError's own doc comment).
+    if (input.negotiatedNewPrincipal && input.negotiatedNewPrincipal.greaterThan(computedNewPrincipal)) {
+      throw new RestructureNegotiatedOverrideExceedsCeilingError(
+        'principal',
+        input.negotiatedNewPrincipal.toString(),
+        computedNewPrincipal.toString(),
+      );
+    }
+    if (
+      input.negotiatedInterestRate &&
+      input.negotiatedInterestRate.toDecimal().greaterThan(oldLoanAccount.interestRate.toDecimal())
+    ) {
+      throw new RestructureNegotiatedOverrideExceedsCeilingError(
+        'interest rate',
+        input.negotiatedInterestRate.toString(),
+        oldLoanAccount.interestRate.toString(),
+      );
+    }
+    const newPrincipalAmount = input.negotiatedNewPrincipal ?? computedNewPrincipal;
+    const newInterestRate = input.negotiatedInterestRate ?? oldLoanAccount.interestRate;
     const loanCode = await this.generateLoanCode(oldLoanAccount.loanProductVersionId);
 
     const newLoanAccount = LoanAccount.create({
@@ -153,9 +193,9 @@ export class RestructureLoanUseCase {
       branchId: oldLoanAccount.branchId,
       loanOfficerId: oldLoanAccount.loanOfficerId,
       principalAmount: newPrincipalAmount,
-      interestRate: oldLoanAccount.interestRate,
+      interestRate: newInterestRate,
       addOnInterestRate: oldLoanAccount.addOnInterestRate,
-      contractualInterestRate: oldLoanAccount.contractualInterestRate,
+      contractualInterestRate: newInterestRate,
       installmentCount: input.installmentCount,
       gracePeriodDays: oldLoanAccount.gracePeriodDays,
       firstRepaymentDate: input.firstRepaymentDate,
@@ -195,7 +235,12 @@ export class RestructureLoanUseCase {
     const restructure = LoanRestructure.create({
       oldLoanAccountId: oldLoanAccount.id,
       newLoanAccountId: newLoanAccount.id,
-      previousCollectionsBalance: newPrincipalAmount,
+      // 2026-08-20 (negotiated restructure): now genuinely distinct when a negotiated override was
+      // used - previousCollectionsBalance keeps the system-COMPUTED figure (what was actually
+      // owed), newPrincipalAmount is what the new loan was actually opened with (the negotiated,
+      // possibly lower, figure) - a meaningful before/after for the audit trail. Identical when no
+      // override was given, same as before this feature.
+      previousCollectionsBalance: computedNewPrincipal,
       newPrincipalAmount,
       reason: input.reason,
       restructuredByUserId: input.restructuredByUserId,
