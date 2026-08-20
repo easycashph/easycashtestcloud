@@ -36,7 +36,7 @@ echo.
 
 echo [2/2] Kumukuha ng remote snapshot...
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%local\backup-remote-postgres.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT_DIR%scripts\backup-remote-postgres.ps1"
 if errorlevel 1 (
   echo.
   echo       May error sa backup - suriin ang error sa itaas.

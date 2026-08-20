@@ -12,11 +12,12 @@ clones the repo and finds an empty `local/` directory.
   repo root.
 - Local-only database backups, ad-hoc exports, or scratch files you generate while working that
   have no reason to be shared or committed.
-- `backup-remote-postgres.ps1` (2026-08-20) and its `postgres-remote-backup.env` config - pulls a
-  fresh pg_dump snapshot directly from the office server's live Postgres over the network, the same
-  way a fresh MongoDB dump is pulled from SDevTech. Run via `scripts/Backup Remote Postgres
-  Snapshot.bat`; connection details (host/port/db/user/password) live only in the gitignored
-  `.env` file here, never in the tracked `.bat`.
+- `postgres-remote-backup.env` (2026-08-20) - connection details (host/port/db/user/password) for
+  pulling a remote Postgres snapshot from the office server. The actual script logic
+  (`scripts/backup-remote-postgres.ps1`) is tracked and travels with the repo to any machine that
+  clones it, since it holds no secrets itself - only this `.env` file, generated fresh (blank) the
+  first time the script runs on a new machine, ever holds the real values. Run via
+  `scripts/Backup Remote Postgres Snapshot.bat`.
 - Anything you'd previously have dropped loose at the repo root "just for now."
 
 ## What does NOT belong here
