@@ -1,28 +1,35 @@
 /**
  * English/Filipino dictionaries for the portal's public marketing and trust pages.
  *
- * ── SCOPE (deliberately limited) ─────────────────────────────────────────────────────────────
- * Translated: the landing page, site footer, and the standalone public pages a visitor can reach
- * without logging in (Requirements, Security & Anti-Scam, Complaints, Contact, News chrome,
- * Not Found).
+ * ── SCOPE ─────────────────────────────────────────────────────────────────────────────────────
+ * Translated: the landing page, site footer, the standalone public pages a visitor can reach
+ * without logging in (Requirements, Security & Anti-Scam, Complaints, Contact, News chrome, Not
+ * Found), the auth/account-action flow (Login, Sign Up, Verify Email, Forgot/Reset Password,
+ * Change-Password-Required), and the authenticated app (Dashboard, Profile, Security settings,
+ * Loan Products, Portal Signing, the Loan Application form).
  *
  * NOT translated, on purpose:
  *   - Privacy Policy / Terms and Conditions: this is legally-binding consent text sourced from
  *     RA 9510/RA 10173 boilerplate carried over from the legacy site. Machine-translating binding
  *     legal language without professional/legal review is a real liability, not a nice-to-have -
  *     it stays English-only until legal signs off on a reviewed Filipino version.
- *   - The loan application form, auth pages (login/signup/etc.), and the authenticated app
- *     (Dashboard/Profile/Loan Products): large surface area, and a partially-translated banking
- *     flow reads as broken rather than bilingual. Scoped out as follow-up work rather than done
- *     half-way - see docs/PORTAL_WEBSITE_STRATEGY.md.
- *   - Loan product names/details (`loanProducts.ts`) and document/eligibility terms
- *     (`loanRequirements.ts`): shared with the (untranslated) application form, and product/
+ *   - Loan product names (`loanProducts.ts` `displayLabel`) and document/eligibility terms
+ *     (`loanRequirements.ts`, and `loanProducts.ts` `details`/`eligibilityNote` specifically where
+ *     shown on RequirementsPage): shared with the (untranslated) application form, and product/
  *     document names are conventionally kept in English/official terminology even on Filipino bank
- *     pages in the Philippines (e.g. "Valid ID", "Proof of Billing").
- *   - OfflineBanner / ErrorBoundary: these render globally, including over the untranslated
- *     authenticated app and legal pages. Translating them would let the offline/error message flip
- *     to Filipino on an otherwise all-English screen, which reads as a bug, not bilingual support -
- *     so this shared chrome stays English-only regardless of the selected language.
+ *     pages in the Philippines (e.g. "Valid ID", "Proof of Billing"). `blurb` (marketing copy,
+ *     landing/product-browser pages only, never shown on the form) IS translated - see
+ *     `localizedProductText()`.
+ *   - OfflineBanner / ErrorBoundary: these render globally, including over legal pages. Translating
+ *     them would let the offline/error message flip to Filipino on an otherwise all-English screen,
+ *     which reads as a bug, not bilingual support - so this shared chrome stays English-only
+ *     regardless of the selected language.
+ *
+ * 2026-08-20 (user request, live-site bug hunt): the auth pages and authenticated app were
+ * previously deliberately scoped out here as "a partially-translated banking flow reads as broken
+ * rather than bilingual, do it properly later." That "later" is now - every page below the login
+ * wall is translated in this same pass, all at once, specifically to avoid landing exactly that
+ * half-translated state.
  *
  * ── WHY A TYPED OBJECT, NOT i18next-STYLE STRING KEYS ────────────────────────────────────────
  * `t('landing.hero.title')` has no compile-time link between the key string and its usage - a typo
@@ -296,6 +303,181 @@ export const en = {
     linkContact: 'Contact Us',
     backToHome: 'Back to home',
   },
+  /** 2026-08-20 (user request): auth/account-action pages, previously deliberately scoped out
+   * (see this file's top doc comment - now superseded for this section specifically). Covers
+   * Login, its 2FA step, Sign Up, Verify Email, Forgot/Reset Password, and the forced
+   * Change-Password-Required gate. */
+  auth: {
+    emailLabel: 'Email address',
+    passwordLabel: 'Password',
+    login: {
+      title: 'Welcome back',
+      subtitle: 'Log in to check your application status.',
+      forgotPassword: 'Forgot password?',
+      rememberDevice: 'Remember this device for 30 days',
+      submit: 'Log In',
+      submitting: 'Logging in…',
+      noAccount: "Don't have an account?",
+      signUpLink: 'Sign up',
+      genericError: 'Could not log in. Please try again.',
+    },
+    otp: {
+      verifyTitle: "Verify it's you",
+      verifySubtitle: 'Enter the 6-digit code sent to your {channel}. It expires in 5 minutes.',
+      codeLabel: 'Verification code',
+      verify: 'Verify',
+      verifying: 'Verifying…',
+      sending: 'Sending…',
+      resend: "Didn't get a code? Resend",
+      resendWithCooldown: 'Resend code ({seconds}s)',
+      backToLogin: 'Back to login',
+      resendSuccess: 'A new code was sent to your {channel}.',
+      channelEmail: 'email address',
+      channelSms: 'mobile number',
+      channelBoth: 'email address and mobile number',
+    },
+    signUp: {
+      title: 'Create your account',
+      subtitle: 'Apply for a loan and track your status online.',
+      contactLabel: 'Mobile number (optional)',
+      passwordHint: 'At least 12 characters.',
+      confirmPasswordLabel: 'Confirm password',
+      submit: 'Create Account',
+      submitting: 'Creating account…',
+      haveAccount: 'Already have an account?',
+      logInLink: 'Log in',
+      passwordTooShort: 'Password must be at least 12 characters.',
+      passwordMismatch: 'Passwords do not match.',
+      genericError: 'Could not create your account. Please try again.',
+    },
+    verifyEmail: {
+      title: 'Verify your account',
+      subtitle: 'Enter the 6-digit code sent to your {channel}. It expires in 5 minutes.',
+      expiredTitle: 'Verification link expired',
+      expiredSubtitle: 'Please sign up again to get a new code.',
+      backToSignUp: 'Back to Sign Up',
+      codeLabel: 'Verification code',
+      submit: 'Verify',
+      submitting: 'Verifying…',
+      requestAnother: 'Request another code',
+      requestAnotherWithCooldown: 'Request another code ({seconds}s)',
+      success: 'Verified! Taking you to log in…',
+      genericError: 'Could not verify your code. Please try again.',
+      resendError: 'Could not resend your code. Please try again.',
+    },
+    forgotPassword: {
+      title: 'Forgot your password?',
+      subtitle: "Enter your email and we'll send you a reset code.",
+      submit: 'Send Reset Code',
+      submitting: 'Sending…',
+      rememberedIt: 'Remembered it?',
+      logInLink: 'Log in',
+      genericError: 'Something went wrong. Please try again.',
+    },
+    resetPassword: {
+      title: 'Reset your password',
+      subtitle: 'Enter the code we sent you and your new password.',
+      expiredTitle: 'Reset link expired',
+      expiredSubtitle: 'Please request a new password reset code.',
+      backToForgot: 'Back to Forgot Password',
+      codeLabel: 'Reset code',
+      newPasswordLabel: 'New password',
+      passwordHint: 'At least 12 characters.',
+      confirmPasswordLabel: 'Confirm new password',
+      submit: 'Reset Password',
+      submitting: 'Resetting…',
+      success: 'Password reset! Taking you to log in…',
+      passwordTooShort: 'Password must be at least 12 characters.',
+      passwordMismatch: 'Passwords do not match.',
+      genericError: 'Could not reset your password. Please try again.',
+    },
+    changePasswordRequired: {
+      title: 'Set a new password',
+      subtitle:
+        'For your security, you must set your own password before continuing - the temporary one your loan officer gave you can no longer be used after this.',
+      currentPasswordLabel: 'Temporary password',
+      newPasswordLabel: 'New password',
+      confirmPasswordLabel: 'Confirm new password',
+      submit: 'Set password and continue',
+      submitting: 'Saving…',
+      passwordMismatch: 'New passwords do not match.',
+      genericError: 'Could not change your password. Please try again.',
+    },
+  },
+  loanProductsPage: {
+    title: 'Loan Products',
+    intro: 'Pick the product that fits what you need, then apply in a few minutes.',
+    pendingApplicationNote: "You already have an application in progress - you can apply again once it's declined.",
+    pendingApplicationTitle: 'You already have an application in progress',
+    applyNow: 'Apply Now',
+    seeRequirements: 'See requirements',
+  },
+  dashboard: {
+    welcomeBack: 'Welcome back',
+    subtitle: "Here's your Easycash account.",
+    loanApplicationCardTitle: 'Loan Application',
+    loanApplicationPending: "You already have an application in progress - see it below. You can apply again once it's declined.",
+    loanApplicationCta: 'Apply for a new loan, or check the status of one you already submitted.',
+    createApplication: 'Create Loan Application',
+    pendingApplicationTitle: 'You already have an application in progress',
+    disbursementNote: 'Approved loans are released via {method} only - Easycash never disburses in cash, GCash, or bank transfer.',
+    myApplications: 'My Applications',
+    noApplicationsYet: "You haven't submitted a loan application yet.",
+    submitted: 'Submitted',
+    months: 'months',
+    documentsNeeded: 'Documents needed - some requirements are still missing.',
+    edit: 'Edit',
+    statusTimeline: 'Status Timeline',
+    loanApplicationDialogTitle: 'Loan Application',
+    detailLoadError: 'Unable to load this application right now.',
+    statusLabels: {
+      PREAPPROVED: 'Pre-approved',
+      PREDECLINED: 'Pre-declined',
+      UNDER_REVIEW: 'Under review',
+      PRE_APPROVAL: 'Pre-approval',
+      APPROVED: 'Approved',
+      DECLINED: 'Declined',
+    },
+    statusNextSteps: {
+      PREAPPROVED: 'Our system pre-approved this application. A loan officer will review it next, usually within 1-2 business days.',
+      PREDECLINED: 'Our system flagged this application. You can edit and resubmit it, or a loan officer may reach out for more information.',
+      UNDER_REVIEW: "A loan officer is reviewing this application now. We'll notify you as soon as there's a decision.",
+      PRE_APPROVAL: 'This application passed initial review and is pending final approval.',
+      APPROVED: 'This loan is approved. Our team will reach out to complete the release of proceeds.',
+      DECLINED: "This application wasn't approved this time. You're welcome to apply again.",
+    },
+  },
+  portalSigning: {
+    loading: 'Loading…',
+    expiredTitle: 'This signing request is no longer available',
+    expiredFallback: 'It may have expired. Ask your loan officer to send a new one.',
+    backToDashboard: 'Back to Dashboard',
+    confirmItsYou: "Confirm it's you",
+    sendCodeEmail: 'Send code to my email',
+    sendCodePhone: 'Send code to my phone',
+    sending: 'Sending…',
+    enterCode: 'Enter the 6-digit code we {channel} you.',
+    channelEmailed: 'emailed',
+    channelTexted: 'texted',
+    verifyCode: 'Verify code',
+    verifying: 'Verifying…',
+    resendCode: 'Resend code',
+    otpIncorrect: 'That code is incorrect. Try again.',
+    otpSendError: 'Could not send the code. Check your connection and try again.',
+    otpVerifyError: 'Could not verify the code. Check your connection and try again.',
+    allSignedTitle: 'All documents signed',
+    allSignedBody: 'Thank you - {loanCode} is now fully signed.',
+    documentCount: '{current} of {total}',
+    consentLabel: 'I have read this document and agree to its terms.',
+    signBelow: 'Sign below',
+    clear: 'Clear',
+    signAndContinue: 'Sign and continue',
+    saving: 'Saving…',
+    signedSoFar: '{signed} of {total} signed so far',
+    signError: 'Could not save your signature. Check your connection and try again.',
+    documentLoadError: 'Could not load this document. Check your connection and try again.',
+    documentLoading: 'Loading document…',
+  },
 };
 
 /** The canonical shape every locale must satisfy - derived from `en` above so a missing or
@@ -562,5 +744,176 @@ export const fil: Translations = {
     linkSecurity: 'Seguridad at Anti-Scam',
     linkContact: 'Makipag-ugnayan sa Amin',
     backToHome: 'Bumalik sa home',
+  },
+  auth: {
+    emailLabel: 'Email address',
+    passwordLabel: 'Password',
+    login: {
+      title: 'Maligayang pagbabalik',
+      subtitle: 'Mag-log in para tingnan ang status ng iyong aplikasyon.',
+      forgotPassword: 'Nakalimutan ang password?',
+      rememberDevice: 'Tandaan ang device na ito sa loob ng 30 araw',
+      submit: 'Mag-log In',
+      submitting: 'Nagla-log in…',
+      noAccount: 'Wala pang account?',
+      signUpLink: 'Mag-sign up',
+      genericError: 'Hindi makapag-log in. Pakisubukan muli.',
+    },
+    otp: {
+      verifyTitle: 'I-verify na ikaw ito',
+      verifySubtitle: 'Ilagay ang 6-digit na code na ipinadala sa iyong {channel}. Mag-e-expire ito sa loob ng 5 minuto.',
+      codeLabel: 'Verification code',
+      verify: 'I-verify',
+      verifying: 'Ni-verify…',
+      sending: 'Ipinapadala…',
+      resend: 'Hindi nakatanggap ng code? Ipadala ulit',
+      resendWithCooldown: 'Ipadala ulit ang code ({seconds}s)',
+      backToLogin: 'Bumalik sa login',
+      resendSuccess: 'May bagong code na ipinadala sa iyong {channel}.',
+      channelEmail: 'email address',
+      channelSms: 'mobile number',
+      channelBoth: 'email address at mobile number',
+    },
+    signUp: {
+      title: 'Gumawa ng iyong account',
+      subtitle: 'Mag-apply ng loan at subaybayan ang status nito online.',
+      contactLabel: 'Mobile number (opsyonal)',
+      passwordHint: 'Hindi bababa sa 12 characters.',
+      confirmPasswordLabel: 'Kumpirmahin ang password',
+      submit: 'Gumawa ng Account',
+      submitting: 'Gumagawa ng account…',
+      haveAccount: 'May account ka na ba?',
+      logInLink: 'Mag-log in',
+      passwordTooShort: 'Dapat hindi bababa sa 12 characters ang password.',
+      passwordMismatch: 'Hindi magkatugma ang mga password.',
+      genericError: 'Hindi magawa ang iyong account. Pakisubukan muli.',
+    },
+    verifyEmail: {
+      title: 'I-verify ang iyong account',
+      subtitle: 'Ilagay ang 6-digit na code na ipinadala sa iyong {channel}. Mag-e-expire ito sa loob ng 5 minuto.',
+      expiredTitle: 'Nag-expire na ang verification link',
+      expiredSubtitle: 'Mag-sign up muli para makakuha ng bagong code.',
+      backToSignUp: 'Bumalik sa Sign Up',
+      codeLabel: 'Verification code',
+      submit: 'I-verify',
+      submitting: 'Ni-verify…',
+      requestAnother: 'Humingi ng ibang code',
+      requestAnotherWithCooldown: 'Humingi ng ibang code ({seconds}s)',
+      success: 'Na-verify! Dadalhin ka sa login…',
+      genericError: 'Hindi ma-verify ang iyong code. Pakisubukan muli.',
+      resendError: 'Hindi maipadala ulit ang iyong code. Pakisubukan muli.',
+    },
+    forgotPassword: {
+      title: 'Nakalimutan ang password?',
+      subtitle: 'Ilagay ang iyong email at magpapadala kami ng reset code.',
+      submit: 'Ipadala ang Reset Code',
+      submitting: 'Ipinapadala…',
+      rememberedIt: 'Naalala mo na?',
+      logInLink: 'Mag-log in',
+      genericError: 'May naganap na error. Pakisubukan muli.',
+    },
+    resetPassword: {
+      title: 'I-reset ang iyong password',
+      subtitle: 'Ilagay ang code na ipinadala namin sa iyo at ang iyong bagong password.',
+      expiredTitle: 'Nag-expire na ang reset link',
+      expiredSubtitle: 'Humingi ng bagong password reset code.',
+      backToForgot: 'Bumalik sa Forgot Password',
+      codeLabel: 'Reset code',
+      newPasswordLabel: 'Bagong password',
+      passwordHint: 'Hindi bababa sa 12 characters.',
+      confirmPasswordLabel: 'Kumpirmahin ang bagong password',
+      submit: 'I-reset ang Password',
+      submitting: 'Nire-reset…',
+      success: 'Na-reset ang password! Dadalhin ka sa login…',
+      passwordTooShort: 'Dapat hindi bababa sa 12 characters ang password.',
+      passwordMismatch: 'Hindi magkatugma ang mga password.',
+      genericError: 'Hindi ma-reset ang iyong password. Pakisubukan muli.',
+    },
+    changePasswordRequired: {
+      title: 'Magtakda ng bagong password',
+      subtitle:
+        'Para sa iyong seguridad, kailangan mong magtakda ng sarili mong password bago magpatuloy - ang pansamantalang password na ibinigay ng iyong loan officer ay hindi na magagamit pagkatapos nito.',
+      currentPasswordLabel: 'Pansamantalang password',
+      newPasswordLabel: 'Bagong password',
+      confirmPasswordLabel: 'Kumpirmahin ang bagong password',
+      submit: 'Itakda ang password at magpatuloy',
+      submitting: 'Sine-save…',
+      passwordMismatch: 'Hindi magkatugma ang mga bagong password.',
+      genericError: 'Hindi mabago ang iyong password. Pakisubukan muli.',
+    },
+  },
+  loanProductsPage: {
+    title: 'Mga Produktong Loan',
+    intro: 'Piliin ang produktong tugma sa iyong pangangailangan, tapos mag-apply sa loob lang ng ilang minuto.',
+    pendingApplicationNote: 'May kasalukuyan ka nang aplikasyon - puwede kang mag-apply ulit kapag na-decline na ito.',
+    pendingApplicationTitle: 'May kasalukuyan ka nang aplikasyon',
+    applyNow: 'Mag-apply Ngayon',
+    seeRequirements: 'Tingnan ang mga kailangan',
+  },
+  dashboard: {
+    welcomeBack: 'Maligayang pagbabalik',
+    subtitle: 'Ito ang iyong Easycash account.',
+    loanApplicationCardTitle: 'Loan Application',
+    loanApplicationPending: 'May kasalukuyan ka nang aplikasyon - makikita ito sa ibaba. Puwede kang mag-apply ulit kapag na-decline na ito.',
+    loanApplicationCta: 'Mag-apply ng bagong loan, o tingnan ang status ng isinumite mo na.',
+    createApplication: 'Gumawa ng Loan Application',
+    pendingApplicationTitle: 'May kasalukuyan ka nang aplikasyon',
+    disbursementNote: 'Ang mga inaprubahang loan ay ibinibigay sa pamamagitan ng {method} lamang - hindi kailanman nagbibigay ang Easycash sa cash, GCash, o bank transfer.',
+    myApplications: 'Aking mga Aplikasyon',
+    noApplicationsYet: 'Wala ka pang isinumiteng loan application.',
+    submitted: 'Isinumite',
+    months: 'buwan',
+    documentsNeeded: 'Kailangan ng dokumento - may mga kulang pang requirement.',
+    edit: 'I-edit',
+    statusTimeline: 'Status Timeline',
+    loanApplicationDialogTitle: 'Loan Application',
+    detailLoadError: 'Hindi ma-load ang aplikasyong ito ngayon.',
+    statusLabels: {
+      PREAPPROVED: 'Pre-approved',
+      PREDECLINED: 'Pre-declined',
+      UNDER_REVIEW: 'Sinusuri',
+      PRE_APPROVAL: 'Pre-approval',
+      APPROVED: 'Aprubado',
+      DECLINED: 'Na-decline',
+    },
+    statusNextSteps: {
+      PREAPPROVED: 'Pre-approved ang aplikasyong ito ng aming sistema. Susuriin ito ng loan officer, karaniwang sa loob ng 1-2 business days.',
+      PREDECLINED: 'Na-flag ng aming sistema ang aplikasyong ito. Puwede mo itong i-edit at isumite ulit, o maaaring makipag-ugnayan ang loan officer para sa karagdagang impormasyon.',
+      UNDER_REVIEW: 'Sinusuri ngayon ng loan officer ang aplikasyong ito. Aabisuhan ka namin sa sandaling may desisyon na.',
+      PRE_APPROVAL: 'Nakapasa ang aplikasyong ito sa unang review at naghihintay na ng final approval.',
+      APPROVED: 'Aprubado ang loan na ito. Makikipag-ugnayan ang aming team para tapusin ang paglabas ng pondo.',
+      DECLINED: 'Hindi na-aprubahan ang aplikasyong ito ngayon. Malugod kang tinatanggap na mag-apply ulit.',
+    },
+  },
+  portalSigning: {
+    loading: 'Naglo-load…',
+    expiredTitle: 'Hindi na available ang kahilingang ito sa pag-sign',
+    expiredFallback: 'Maaaring nag-expire na ito. Hilingin sa iyong loan officer na magpadala ng bago.',
+    backToDashboard: 'Bumalik sa Dashboard',
+    confirmItsYou: 'Kumpirmahin na ikaw ito',
+    sendCodeEmail: 'Ipadala ang code sa aking email',
+    sendCodePhone: 'Ipadala ang code sa aking telepono',
+    sending: 'Ipinapadala…',
+    enterCode: 'Ilagay ang 6-digit na code na aming {channel} sa iyo.',
+    channelEmailed: 'ipinadala sa email',
+    channelTexted: 'ipinadala sa text',
+    verifyCode: 'I-verify ang code',
+    verifying: 'Ni-verify…',
+    resendCode: 'Ipadala ulit ang code',
+    otpIncorrect: 'Mali ang code na iyon. Subukan ulit.',
+    otpSendError: 'Hindi naipadala ang code. Suriin ang iyong koneksyon at subukan muli.',
+    otpVerifyError: 'Hindi ma-verify ang code. Suriin ang iyong koneksyon at subukan muli.',
+    allSignedTitle: 'Nai-sign na lahat ng dokumento',
+    allSignedBody: 'Salamat - kumpleto nang na-sign ang {loanCode}.',
+    documentCount: '{current} ng {total}',
+    consentLabel: 'Nabasa ko na ang dokumentong ito at sumasang-ayon ako sa mga tuntunin nito.',
+    signBelow: 'Pumirma sa ibaba',
+    clear: 'I-clear',
+    signAndContinue: 'Pumirma at magpatuloy',
+    saving: 'Sine-save…',
+    signedSoFar: '{signed} ng {total} ang nai-sign na',
+    signError: 'Hindi na-save ang iyong pirma. Suriin ang iyong koneksyon at subukan muli.',
+    documentLoadError: 'Hindi ma-load ang dokumentong ito. Suriin ang iyong koneksyon at subukan muli.',
+    documentLoading: 'Nilo-load ang dokumento…',
   },
 };

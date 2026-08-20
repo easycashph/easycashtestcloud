@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { ForgotPasswordRequest, ForgotPasswordResponse } from '@/lib/portalApiTypes';
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [email, setEmail] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -26,27 +28,27 @@ export function ForgotPasswordPage() {
       // page can never leak which emails are registered.
       navigate('/reset-password', { state: { challengeId: result.challengeId, email } });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.auth.forgotPassword.genericError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <AuthLayout title="Forgot your password?" subtitle="Enter your email and we'll send you a reset code.">
+    <AuthLayout title={t.auth.forgotPassword.title} subtitle={t.auth.forgotPassword.subtitle}>
       <form className="space-y-4" onSubmit={handleSubmit}>
         {error && <Alert>{error}</Alert>}
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t.auth.emailLabel}</Label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
         </div>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Sending…' : 'Send Reset Code'}
+          {isSubmitting ? t.auth.forgotPassword.submitting : t.auth.forgotPassword.submit}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          Remembered it?{' '}
+          {t.auth.forgotPassword.rememberedIt}{' '}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Log in
+            {t.auth.forgotPassword.logInLink}
           </Link>
         </p>
       </form>

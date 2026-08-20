@@ -8,19 +8,10 @@ import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError, getStoredDeviceToken, setStoredDeviceToken } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { LoginRequest, LoginResult, LoginResponse, LoginTwoFactorRequired, PortalOtpChannel } from '@/lib/portalApiTypes';
 
 const RESEND_COOLDOWN_SECONDS = 30;
-
-function friendlyApiError(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  return 'Could not log in. Please try again.';
-}
-
-function channelLabel(channel: PortalOtpChannel): string {
-  if (channel === 'BOTH') return 'email address and mobile number';
-  return channel === 'EMAIL' ? 'email address' : 'mobile number';
-}
 
 /**
  * Login 2FA (2026-07-30 user request, default ON): if `/portal/login` resolves with
@@ -38,6 +29,11 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const prefillEmail = (location.state as { email?: string } | null)?.email ?? '';
+  const { t } = useLanguage();
+
+  const friendlyApiError = (err: unknown): string => (err instanceof ApiError ? err.message : t.auth.login.genericError);
+  const channelLabel = (channel: PortalOtpChannel): string =>
+    channel === 'BOTH' ? t.auth.otp.channelBoth : channel === 'EMAIL' ? t.auth.otp.channelEmail : t.auth.otp.channelSms;
 
   const { login } = useAuth();
   const [email, setEmail] = React.useState(prefillEmail);
@@ -113,7 +109,7 @@ export function LoginPage() {
       setOtpStep({ challengeId: result.challengeId, channel: result.channel });
       setOtpCode('');
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
-      setResendMessage(`A new code was sent to your ${channelLabel(result.channel)}.`);
+      setResendMessage(t.auth.otp.resendSuccess.replace('{channel}', channelLabel(result.channel)));
     } catch (err) {
       setError(friendlyApiError(err));
     } finally {
@@ -124,14 +120,14 @@ export function LoginPage() {
   if (otpStep) {
     return (
       <AuthLayout
-        title="Verify it's you"
-        subtitle={`Enter the 6-digit code sent to your ${channelLabel(otpStep.channel)}. It expires in 5 minutes.`}
+        title={t.auth.otp.verifyTitle}
+        subtitle={t.auth.otp.verifySubtitle.replace('{channel}', channelLabel(otpStep.channel))}
       >
         <form className="space-y-4" onSubmit={handleVerifyOtp}>
           {error && <Alert>{error}</Alert>}
           {resendMessage && <Alert tone="success">{resendMessage}</Alert>}
           <div className="space-y-1.5">
-            <Label htmlFor="otp-code">Verification code</Label>
+            <Label htmlFor="otp-code">{t.auth.otp.codeLabel}</Label>
             <Input
               id="otp-code"
               inputMode="numeric"
@@ -146,7 +142,7 @@ export function LoginPage() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Verifying…' : 'Verify'}
+            {isSubmitting ? t.auth.otp.verifying : t.auth.otp.verify}
           </Button>
           <button
             type="button"
@@ -154,7 +150,11 @@ export function LoginPage() {
             onClick={handleResendOtp}
             disabled={isResending || resendCooldown > 0}
           >
-            {isResending ? 'Sending…' : resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Didn't get a code? Resend"}
+            {isResending
+              ? t.auth.otp.sending
+              : resendCooldown > 0
+                ? t.auth.otp.resendWithCooldown.replace('{seconds}', String(resendCooldown))
+                : t.auth.otp.resend}
           </button>
           <button
             type="button"
@@ -167,7 +167,7 @@ export function LoginPage() {
               setResendCooldown(0);
             }}
           >
-            Back to login
+            {t.auth.otp.backToLogin}
           </button>
         </form>
       </AuthLayout>
@@ -175,18 +175,18 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Log in to check your application status.">
+    <AuthLayout title={t.auth.login.title} subtitle={t.auth.login.subtitle}>
       <form className="space-y-4" onSubmit={handleSubmit}>
         {error && <Alert>{error}</Alert>}
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t.auth.emailLabel}</Label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t.auth.passwordLabel}</Label>
             <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">
-              Forgot password?
+              {t.auth.login.forgotPassword}
             </Link>
           </div>
           <PasswordInput id="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -198,15 +198,15 @@ export function LoginPage() {
             onChange={(e) => setRememberDevice(e.target.checked)}
             className="h-4 w-4 rounded border-border accent-primary"
           />
-          Remember this device for 30 days
+          {t.auth.login.rememberDevice}
         </label>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Logging in…' : 'Log In'}
+          {isSubmitting ? t.auth.login.submitting : t.auth.login.submit}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{' '}
+          {t.auth.login.noAccount}{' '}
           <Link to="/signup" className="font-medium text-primary hover:underline">
-            Sign up
+            {t.auth.login.signUpLink}
           </Link>
         </p>
       </form>

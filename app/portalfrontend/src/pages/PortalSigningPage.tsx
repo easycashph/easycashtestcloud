@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { SignaturePad, type SignaturePadHandle } from '@/components/SignaturePad';
 import { apiClient, ApiError, API_BASE_URL, getStoredToken } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalSigningSessionView } from '@/lib/portalApiTypes';
 
 /**
@@ -23,6 +24,7 @@ import type { PortalSigningSessionView } from '@/lib/portalApiTypes';
 export function PortalSigningPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [session, setSession] = React.useState<PortalSigningSessionView | null | undefined>(undefined);
   const [sessionError, setSessionError] = React.useState<string | null>(null);
@@ -37,9 +39,9 @@ export function PortalSigningPage() {
       })
       .catch((error: unknown) => {
         setSession(null);
-        setSessionError(error instanceof ApiError ? error.message : 'It may have expired. Ask your loan officer to send a new one.');
+        setSessionError(error instanceof ApiError ? error.message : t.portalSigning.expiredFallback);
       });
-  }, [sessionId]);
+  }, [sessionId, t.portalSigning.expiredFallback]);
 
   React.useEffect(() => {
     loadSession();
@@ -58,7 +60,7 @@ export function PortalSigningPage() {
       await apiClient.post(`/portal/signing-sessions/${sessionId}/request-otp`, undefined, true);
       setOtpSent(true);
     } catch (error) {
-      setOtpError(error instanceof ApiError ? error.message : 'Could not send the code. Check your connection and try again.');
+      setOtpError(error instanceof ApiError ? error.message : t.portalSigning.otpSendError);
     } finally {
       setIsSendingOtp(false);
     }
@@ -70,12 +72,12 @@ export function PortalSigningPage() {
     try {
       const result = await apiClient.post<{ verified: boolean }>(`/portal/signing-sessions/${sessionId}/verify-otp`, { code: otpCode }, true);
       if (!result.verified) {
-        setOtpError('That code is incorrect. Try again.');
+        setOtpError(t.portalSigning.otpIncorrect);
         return;
       }
       loadSession();
     } catch (error) {
-      setOtpError(error instanceof ApiError ? error.message : 'Could not verify the code. Check your connection and try again.');
+      setOtpError(error instanceof ApiError ? error.message : t.portalSigning.otpVerifyError);
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -106,7 +108,7 @@ export function PortalSigningPage() {
       signaturePadRef.current?.clear();
       loadSession();
     } catch (error) {
-      setSignError(error instanceof ApiError ? error.message : 'Could not save your signature. Check your connection and try again.');
+      setSignError(error instanceof ApiError ? error.message : t.portalSigning.signError);
     } finally {
       setIsSigning(false);
     }
@@ -117,7 +119,7 @@ export function PortalSigningPage() {
   if (session === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-secondary/30 p-4">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t.portalSigning.loading}</p>
       </div>
     );
   }
@@ -127,10 +129,10 @@ export function PortalSigningPage() {
       <div className="flex min-h-screen items-center justify-center bg-secondary/30 p-4">
         <Card className="w-full max-w-sm p-5 text-center">
           <AlertCircle className="mx-auto mb-2 h-8 w-8 text-destructive" />
-          <p className="text-sm font-medium">This signing request is no longer available</p>
+          <p className="text-sm font-medium">{t.portalSigning.expiredTitle}</p>
           <p className="mt-1 text-xs text-muted-foreground">{sessionError}</p>
           <Button className="mt-4" variant="outline" size="sm" onClick={() => navigate('/dashboard')}>
-            Back to Dashboard
+            {t.portalSigning.backToDashboard}
           </Button>
         </Card>
       </div>
@@ -142,7 +144,7 @@ export function PortalSigningPage() {
       <div className="flex min-h-screen items-center justify-center bg-secondary/30 p-4">
         <Card className="w-full max-w-sm space-y-4 p-5">
           <div>
-            <p className="text-sm font-medium">Confirm it's you</p>
+            <p className="text-sm font-medium">{t.portalSigning.confirmItsYou}</p>
             <p className="text-xs text-muted-foreground">{session.loanCode}</p>
           </div>
           {otpError && (
@@ -153,12 +155,19 @@ export function PortalSigningPage() {
           )}
           {!otpSent ? (
             <Button className="w-full" onClick={requestOtp} disabled={isSendingOtp}>
-              {isSendingOtp ? 'Sending…' : session.channel === 'EMAIL' ? 'Send code to my email' : 'Send code to my phone'}
+              {isSendingOtp
+                ? t.portalSigning.sending
+                : session.channel === 'EMAIL'
+                  ? t.portalSigning.sendCodeEmail
+                  : t.portalSigning.sendCodePhone}
             </Button>
           ) : (
             <>
               <p className="text-xs text-muted-foreground">
-                Enter the 6-digit code we {session.channel === 'EMAIL' ? 'emailed' : 'texted'} you.
+                {t.portalSigning.enterCode.replace(
+                  '{channel}',
+                  session.channel === 'EMAIL' ? t.portalSigning.channelEmailed : t.portalSigning.channelTexted,
+                )}
               </p>
               <input
                 inputMode="numeric"
@@ -169,10 +178,10 @@ export function PortalSigningPage() {
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               />
               <Button className="w-full" onClick={verifyOtp} disabled={otpCode.length !== 6 || isVerifyingOtp}>
-                {isVerifyingOtp ? 'Verifying…' : 'Verify code'}
+                {isVerifyingOtp ? t.portalSigning.verifying : t.portalSigning.verifyCode}
               </Button>
               <button type="button" className="w-full text-center text-xs text-muted-foreground underline" onClick={requestOtp} disabled={isSendingOtp}>
-                Resend code
+                {t.portalSigning.resendCode}
               </button>
             </>
           )}
@@ -186,10 +195,10 @@ export function PortalSigningPage() {
       <div className="flex min-h-screen items-center justify-center bg-secondary/30 p-4">
         <Card className="w-full max-w-sm p-5 text-center">
           <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-success" />
-          <p className="text-sm font-medium">All documents signed</p>
-          <p className="mt-1 text-xs text-muted-foreground">Thank you - {session.loanCode} is now fully signed.</p>
+          <p className="text-sm font-medium">{t.portalSigning.allSignedTitle}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t.portalSigning.allSignedBody.replace('{loanCode}', session.loanCode)}</p>
           <Button className="mt-4" size="sm" onClick={() => navigate('/dashboard')}>
-            Back to Dashboard
+            {t.portalSigning.backToDashboard}
           </Button>
         </Card>
       </div>
@@ -206,7 +215,7 @@ export function PortalSigningPage() {
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">{currentDocument.name}</p>
           <p className="text-xs text-muted-foreground">
-            {currentIndex + 1} of {totalCount}
+            {t.portalSigning.documentCount.replace('{current}', String(currentIndex + 1)).replace('{total}', String(totalCount))}
           </p>
         </div>
         <div className="flex gap-1">
@@ -235,11 +244,11 @@ export function PortalSigningPage() {
             checked={consentChecked}
             onChange={(e) => setConsentChecked(e.target.checked)}
           />
-          I have read this document and agree to its terms.
+          {t.portalSigning.consentLabel}
         </label>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-medium">Sign below</p>
+          <p className="text-xs font-medium">{t.portalSigning.signBelow}</p>
           <SignaturePad
             ref={signaturePadRef}
             onChange={(dataUrl) => {
@@ -248,15 +257,15 @@ export function PortalSigningPage() {
             }}
           />
           <button type="button" className="text-xs text-muted-foreground underline" onClick={() => signaturePadRef.current?.clear()}>
-            Clear
+            {t.portalSigning.clear}
           </button>
         </div>
 
         <Button className="w-full" onClick={signCurrentDocument} disabled={!consentChecked || !hasSignature || isSigning}>
-          {isSigning ? 'Saving…' : 'Sign and continue'}
+          {isSigning ? t.portalSigning.saving : t.portalSigning.signAndContinue}
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          {signedCount} of {totalCount} signed so far
+          {t.portalSigning.signedSoFar.replace('{signed}', String(signedCount)).replace('{total}', String(totalCount))}
         </p>
       </Card>
     </div>
@@ -274,6 +283,7 @@ function SigningDocumentFrame({
   documentId: string;
   documentName: string;
 }) {
+  const { t } = useLanguage();
   const [objectUrl, setObjectUrl] = React.useState<string | null>(null);
   const [loadError, setLoadError] = React.useState(false);
 
@@ -309,7 +319,7 @@ function SigningDocumentFrame({
   if (loadError) {
     return (
       <div className="flex h-56 w-full items-center justify-center rounded-md border border-border text-xs text-muted-foreground">
-        Could not load this document. Check your connection and try again.
+        {t.portalSigning.documentLoadError}
       </div>
     );
   }
@@ -317,7 +327,7 @@ function SigningDocumentFrame({
   if (!objectUrl) {
     return (
       <div className="flex h-56 w-full items-center justify-center rounded-md border border-border text-xs text-muted-foreground">
-        Loading document…
+        {t.portalSigning.documentLoading}
       </div>
     );
   }

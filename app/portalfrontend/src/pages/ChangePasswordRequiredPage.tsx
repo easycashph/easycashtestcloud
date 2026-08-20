@@ -7,11 +7,7 @@ import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
-
-function friendlyApiError(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  return 'Could not change your password. Please try again.';
-}
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /**
  * Bind existing Client data to Portal (2026-08-06, explicit user decision): shown instead of every
@@ -25,6 +21,7 @@ function friendlyApiError(err: unknown): string {
 export function ChangePasswordRequiredPage() {
   const navigate = useNavigate();
   const { refreshAccount } = useAuth();
+  const { t } = useLanguage();
 
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
@@ -36,7 +33,7 @@ export function ChangePasswordRequiredPage() {
     e.preventDefault();
     setError(null);
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match.');
+      setError(t.auth.changePasswordRequired.passwordMismatch);
       return;
     }
     setIsSubmitting(true);
@@ -45,33 +42,30 @@ export function ChangePasswordRequiredPage() {
       await refreshAccount();
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(friendlyApiError(err));
+      setError(err instanceof ApiError ? err.message : t.auth.changePasswordRequired.genericError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <AuthLayout
-      title="Set a new password"
-      subtitle="For your security, you must set your own password before continuing - the temporary one your loan officer gave you can no longer be used after this."
-    >
+    <AuthLayout title={t.auth.changePasswordRequired.title} subtitle={t.auth.changePasswordRequired.subtitle}>
       <form className="space-y-4" onSubmit={handleSubmit}>
         {error && <Alert>{error}</Alert>}
         <div className="space-y-1.5">
-          <Label htmlFor="current-password">Temporary password</Label>
+          <Label htmlFor="current-password">{t.auth.changePasswordRequired.currentPasswordLabel}</Label>
           <PasswordInput id="current-password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="new-password">New password</Label>
+          <Label htmlFor="new-password">{t.auth.changePasswordRequired.newPasswordLabel}</Label>
           <PasswordInput id="new-password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="confirm-password">Confirm new password</Label>
+          <Label htmlFor="confirm-password">{t.auth.changePasswordRequired.confirmPasswordLabel}</Label>
           <PasswordInput id="confirm-password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
         </div>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving…' : 'Set password and continue'}
+          {isSubmitting ? t.auth.changePasswordRequired.submitting : t.auth.changePasswordRequired.submit}
         </Button>
       </form>
     </AuthLayout>

@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { PhoneInput } from '@/components/PhoneInput';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { SignUpRequest, SignUpResponse } from '@/lib/portalApiTypes';
 import { SIGNUP_VERIFY_STORAGE_KEY } from './VerifyEmailPage';
 
 export function SignUpPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
@@ -25,11 +27,11 @@ export function SignUpPage() {
     setError(null);
 
     if (password.length < 12) {
-      setError('Password must be at least 12 characters.');
+      setError(t.auth.signUp.passwordTooShort);
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t.auth.signUp.passwordMismatch);
       return;
     }
 
@@ -44,31 +46,31 @@ export function SignUpPage() {
       sessionStorage.setItem(SIGNUP_VERIFY_STORAGE_KEY, JSON.stringify({ challengeId: result.challengeId, channel: result.channel, email }));
       navigate('/verify', { state: { challengeId: result.challengeId, channel: result.channel, email } });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create your account. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.auth.signUp.genericError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <AuthLayout title="Create your account" subtitle="Apply for a loan and track your status online.">
+    <AuthLayout title={t.auth.signUp.title} subtitle={t.auth.signUp.subtitle}>
       <form className="space-y-4" onSubmit={handleSubmit}>
         {error && <Alert>{error}</Alert>}
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email address</Label>
+          <Label htmlFor="email">{t.auth.emailLabel}</Label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="contact">Mobile number (optional)</Label>
+          <Label htmlFor="contact">{t.auth.signUp.contactLabel}</Label>
           <PhoneInput id="contact" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t.auth.passwordLabel}</Label>
           <PasswordInput id="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <p className="text-xs text-muted-foreground">At least 12 characters.</p>
+          <p className="text-xs text-muted-foreground">{t.auth.signUp.passwordHint}</p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="confirm-password">Confirm password</Label>
+          <Label htmlFor="confirm-password">{t.auth.signUp.confirmPasswordLabel}</Label>
           <PasswordInput
             id="confirm-password"
             required
@@ -77,12 +79,12 @@ export function SignUpPage() {
           />
         </div>
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Creating account…' : 'Create Account'}
+          {isSubmitting ? t.auth.signUp.submitting : t.auth.signUp.submit}
         </Button>
         <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{' '}
+          {t.auth.signUp.haveAccount}{' '}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Log in
+            {t.auth.signUp.logInLink}
           </Link>
         </p>
       </form>

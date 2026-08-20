@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { VerifySignUpRequest, PortalOtpChannel } from '@/lib/portalApiTypes';
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -31,14 +32,12 @@ function readStoredState(): LocationState | null {
   }
 }
 
-function channelLabel(channel: PortalOtpChannel): string {
-  if (channel === 'BOTH') return 'email address and mobile number';
-  return channel === 'EMAIL' ? 'email address' : 'mobile number';
-}
-
 export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useLanguage();
+  const channelLabel = (channel: PortalOtpChannel): string =>
+    channel === 'BOTH' ? t.auth.otp.channelBoth : channel === 'EMAIL' ? t.auth.otp.channelEmail : t.auth.otp.channelSms;
   const routerState = (location.state ?? {}) as LocationState;
   // Router state (fresh navigation from Sign Up) wins when present; otherwise fall back to
   // whatever SignUpPage last persisted - covers a reload, a closed tab reopened, or hitting Back
@@ -65,9 +64,9 @@ export function VerifyEmailPage() {
 
   if (!challenge) {
     return (
-      <AuthLayout title="Verification link expired" subtitle="Please sign up again to get a new code.">
+      <AuthLayout title={t.auth.verifyEmail.expiredTitle} subtitle={t.auth.verifyEmail.expiredSubtitle}>
         <Link to="/signup">
-          <Button className="w-full">Back to Sign Up</Button>
+          <Button className="w-full">{t.auth.verifyEmail.backToSignUp}</Button>
         </Link>
       </AuthLayout>
     );
@@ -84,7 +83,7 @@ export function VerifyEmailPage() {
       setSuccess(true);
       window.setTimeout(() => navigate('/login', { state: { email } }), 1500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not verify your code. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.auth.verifyEmail.genericError);
     } finally {
       setIsSubmitting(false);
     }
@@ -106,10 +105,10 @@ export function VerifyEmailPage() {
       setChallenge(result);
       setCode('');
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
-      setResendMessage(`A new code was sent to your ${channelLabel(result.channel)}.`);
+      setResendMessage(t.auth.otp.resendSuccess.replace('{channel}', channelLabel(result.channel)));
       sessionStorage.setItem(SIGNUP_VERIFY_STORAGE_KEY, JSON.stringify({ ...result, email }));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not resend your code. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.auth.verifyEmail.resendError);
     } finally {
       setIsResending(false);
     }
@@ -117,17 +116,17 @@ export function VerifyEmailPage() {
 
   return (
     <AuthLayout
-      title="Verify your account"
-      subtitle={`Enter the 6-digit code sent to your ${channelLabel(challenge.channel)}. It expires in 5 minutes.`}
+      title={t.auth.verifyEmail.title}
+      subtitle={t.auth.verifyEmail.subtitle.replace('{channel}', channelLabel(challenge.channel))}
     >
       {success ? (
-        <Alert tone="success">Verified! Taking you to log in…</Alert>
+        <Alert tone="success">{t.auth.verifyEmail.success}</Alert>
       ) : (
         <form className="space-y-4" onSubmit={handleSubmit}>
           {error && <Alert>{error}</Alert>}
           {resendMessage && <Alert tone="success">{resendMessage}</Alert>}
           <div className="space-y-1.5">
-            <Label htmlFor="code">Verification code</Label>
+            <Label htmlFor="code">{t.auth.verifyEmail.codeLabel}</Label>
             <Input
               id="code"
               inputMode="numeric"
@@ -141,7 +140,7 @@ export function VerifyEmailPage() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Verifying…' : 'Verify'}
+            {isSubmitting ? t.auth.verifyEmail.submitting : t.auth.verifyEmail.submit}
           </Button>
           <button
             type="button"
@@ -149,7 +148,11 @@ export function VerifyEmailPage() {
             onClick={handleResend}
             disabled={isResending || resendCooldown > 0}
           >
-            {isResending ? 'Sending…' : resendCooldown > 0 ? `Request another code (${resendCooldown}s)` : 'Request another code'}
+            {isResending
+              ? t.auth.otp.sending
+              : resendCooldown > 0
+                ? t.auth.verifyEmail.requestAnotherWithCooldown.replace('{seconds}', String(resendCooldown))
+                : t.auth.verifyEmail.requestAnother}
           </button>
         </form>
       )}

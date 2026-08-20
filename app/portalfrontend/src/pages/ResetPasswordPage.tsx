@@ -7,6 +7,7 @@ import { PasswordInput } from '@/components/ui/PasswordInput';
 import { Label } from '@/components/ui/Label';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { ResetPasswordRequest } from '@/lib/portalApiTypes';
 
 interface LocationState {
@@ -18,6 +19,7 @@ export function ResetPasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
+  const { t } = useLanguage();
 
   const [code, setCode] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
@@ -28,9 +30,9 @@ export function ResetPasswordPage() {
 
   if (!state.challengeId) {
     return (
-      <AuthLayout title="Reset link expired" subtitle="Please request a new password reset code.">
+      <AuthLayout title={t.auth.resetPassword.expiredTitle} subtitle={t.auth.resetPassword.expiredSubtitle}>
         <Link to="/forgot-password">
-          <Button className="w-full">Back to Forgot Password</Button>
+          <Button className="w-full">{t.auth.resetPassword.backToForgot}</Button>
         </Link>
       </AuthLayout>
     );
@@ -41,11 +43,11 @@ export function ResetPasswordPage() {
     setError(null);
 
     if (newPassword.length < 12) {
-      setError('Password must be at least 12 characters.');
+      setError(t.auth.resetPassword.passwordTooShort);
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t.auth.resetPassword.passwordMismatch);
       return;
     }
 
@@ -56,21 +58,21 @@ export function ResetPasswordPage() {
       setSuccess(true);
       window.setTimeout(() => navigate('/login', { state: { email: state.email } }), 1500);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not reset your password. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.auth.resetPassword.genericError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <AuthLayout title="Reset your password" subtitle="Enter the code we sent you and your new password.">
+    <AuthLayout title={t.auth.resetPassword.title} subtitle={t.auth.resetPassword.subtitle}>
       {success ? (
-        <Alert tone="success">Password reset! Taking you to log in…</Alert>
+        <Alert tone="success">{t.auth.resetPassword.success}</Alert>
       ) : (
         <form className="space-y-4" onSubmit={handleSubmit}>
           {error && <Alert>{error}</Alert>}
           <div className="space-y-1.5">
-            <Label htmlFor="code">Reset code</Label>
+            <Label htmlFor="code">{t.auth.resetPassword.codeLabel}</Label>
             <Input
               id="code"
               inputMode="numeric"
@@ -83,7 +85,7 @@ export function ResetPasswordPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="new-password">New password</Label>
+            <Label htmlFor="new-password">{t.auth.resetPassword.newPasswordLabel}</Label>
             <PasswordInput
               id="new-password"
               required
@@ -91,10 +93,10 @@ export function ResetPasswordPage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">At least 12 characters.</p>
+            <p className="text-xs text-muted-foreground">{t.auth.resetPassword.passwordHint}</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Label htmlFor="confirm-password">{t.auth.resetPassword.confirmPasswordLabel}</Label>
             <PasswordInput
               id="confirm-password"
               required
@@ -103,7 +105,7 @@ export function ResetPasswordPage() {
             />
           </div>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? 'Resetting…' : 'Reset Password'}
+            {isSubmitting ? t.auth.resetPassword.submitting : t.auth.resetPassword.submit}
           </Button>
         </form>
       )}
