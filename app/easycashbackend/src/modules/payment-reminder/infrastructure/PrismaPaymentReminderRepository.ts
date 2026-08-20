@@ -1,4 +1,5 @@
 import { prisma } from '@shared/database/prismaClient';
+import { isDueDatePast } from '@shared/utils/dueDateGrace';
 import type { IPaymentReminderRepository, PaymentReminderCandidate } from '../application/ports/IPaymentReminderRepository';
 
 const ACTIVE_LOAN_STATUSES = ['ACTIVE', 'ACTIVE_IN_ARREARS'] as const;
@@ -84,13 +85,14 @@ export class PrismaPaymentReminderRepository implements IPaymentReminderReposito
     const paidCountByLoan = new Map(paidCounts.map((g) => [g.loanAccountId, g._count]));
     const totalCountByLoan = new Map(totalCounts.map((g) => [g.loanAccountId, g._count]));
 
-    const now = Date.now();
     const nextDueByLoan = new Map<string, PaymentReminderCandidate>();
     for (const row of candidateRows) {
       if (nextDueByLoan.has(row.loanAccountId)) continue; // rows are ordered by installmentNumber asc — first hit per loan is the next-due one.
 
       const paidTotal = Number(row.principalPaid) + Number(row.interestPaid) + Number(row.feesPaid) + Number(row.penaltyPaid);
-      const status = row.dueDate.getTime() < now ? 'LATE' : paidTotal > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+      // 2026-08-20 (user-reported, BL-SPEC_00028): grace through the FULL calendar day of the due
+      // date - see dueDateGrace.ts's own doc comment.
+      const status = isDueDatePast(row.dueDate) ? 'LATE' : paidTotal > 0 ? 'PARTIALLY_PAID' : 'PENDING';
 
       nextDueByLoan.set(row.loanAccountId, {
         installmentId: row.id,

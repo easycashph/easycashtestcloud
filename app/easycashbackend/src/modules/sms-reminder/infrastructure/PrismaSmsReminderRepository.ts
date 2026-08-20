@@ -1,5 +1,6 @@
 import { prisma } from '@shared/database/prismaClient';
 import { manilaCalendarDay, manilaDayRange } from '@shared/domain/manilaTime';
+import { overdueCutoff } from '@shared/utils/dueDateGrace';
 import type {
   ISmsReminderRepository,
   LogReminderFailedInput,
@@ -73,13 +74,17 @@ export class PrismaSmsReminderRepository implements ISmsReminderRepository {
 
   async findPastDueCandidates(branchId: string | undefined): Promise<SmsReminderCandidate[]> {
     const now = new Date();
+    // 2026-08-20 (user-reported, BL-SPEC_00028): grace through the FULL calendar day of the due
+    // date - see dueDateGrace.ts's own doc comment. An installment due "today" shouldn't get a
+    // past-due SMS the instant midnight ticks over.
+    const cutoff = overdueCutoff(now);
     const loanAccountFilter = {
       status: { in: [...ACTIVE_LOAN_STATUSES] },
       ...(branchId ? { branchId } : {}),
     };
 
     const overdueRows = await prisma.repaymentSchedule.findMany({
-      where: { status: { not: 'PAID' }, dueDate: { lt: now }, loanAccount: loanAccountFilter },
+      where: { status: { not: 'PAID' }, dueDate: { lt: cutoff }, loanAccount: loanAccountFilter },
       orderBy: [{ loanAccountId: 'asc' }, { dueDate: 'asc' }],
       include: {
         loanAccount: {

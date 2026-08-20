@@ -106,7 +106,10 @@ export class RestructureLoanUseCase {
 
     const installments = await this.deps.repaymentInstallmentRepository.findByLoanAccountId(oldLoanAccount.id);
     const now = new Date();
-    const isPastDueOrMatured = installments.some((i) => i.dueDate < now && i.paid.total().lessThan(i.due.total()));
+    // 2026-08-20 (user-reported, BL-SPEC_00028): reuse RepaymentInstallment.status (LATE) instead
+    // of re-deriving "past due" from a raw dueDate/now comparison here - keeps this in lockstep
+    // with the single source of truth, including its day-of-due-date grace (see dueDateGrace.ts).
+    const isPastDueOrMatured = installments.some((i) => i.status === 'LATE');
     if (!isPastDueOrMatured) {
       throw new LoanNotEligibleForRestructureError(oldLoanAccount.id, 'no past due or matured installment - only offered for past due/matured accounts');
     }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Money } from '@shared/domain/Money';
+import { isDueDatePast } from '@shared/utils/dueDateGrace';
 import { InstallmentAmounts } from './valueObjects/InstallmentAmounts';
 import {
   FeesAlreadyPaidError,
@@ -207,7 +208,9 @@ export class RepaymentInstallment {
     if (totalPaid.greaterThan(totalDue) || totalPaid.equals(totalDue)) {
       return 'PAID';
     }
-    if (this.props.dueDate.getTime() < Date.now()) {
+    // 2026-08-20 (user-reported, BL-SPEC_00028): grace through the FULL calendar day of the due
+    // date - see dueDateGrace.ts's own doc comment for the storage convention this relies on.
+    if (isDueDatePast(this.props.dueDate)) {
       return 'LATE';
     }
     if (totalPaid.isPositive()) {

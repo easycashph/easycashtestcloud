@@ -6,6 +6,7 @@ import type { TransactionContext } from '@shared/application/TransactionContext'
 import { ConcurrencyConflictError } from '@shared/errors/DomainError';
 import { Money } from '@shared/domain/Money';
 import { Percentage } from '@shared/domain/Percentage';
+import { overdueCutoff } from '@shared/utils/dueDateGrace';
 import { LoanAccount, type LoanAccountProps } from '../domain/LoanAccount';
 import { LoanBalances } from '../domain/valueObjects/LoanBalances';
 import { OriginationFees } from '../domain/valueObjects/OriginationFees';
@@ -366,13 +367,16 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
   async findMaturedLoanAccountIds(loanAccountIds: string[], ctx?: TransactionContext): Promise<Set<string>> {
     if (loanAccountIds.length === 0) return new Set();
     const client = resolveClient(ctx);
-    const now = new Date();
+    // 2026-08-20 (user-reported, BL-SPEC_00028): grace through the FULL calendar day of the due
+    // date - see dueDateGrace.ts's own doc comment. `cutoff` = now minus 1 day, so `dueDate <
+    // cutoff` is equivalent to "that due date's entire day has already elapsed."
+    const cutoff = overdueCutoff();
     const rows = await client.$queryRaw<{ id: string }[]>(Prisma.sql`
       WITH overdue AS (
         SELECT DISTINCT rs."loanAccountId" AS id
         FROM repayment_schedules rs
         JOIN loan_accounts la ON la.id = rs."loanAccountId"
-        WHERE rs."dueDate" < ${now}
+        WHERE rs."dueDate" < ${cutoff}
           AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
               < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
           AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
@@ -387,7 +391,7 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
       SELECT overdue.id
       FROM overdue
       JOIN maturity ON maturity.id = overdue.id
-      WHERE maturity.maturity_date < ${now}
+      WHERE maturity.maturity_date < ${cutoff}
     `);
     return new Set(rows.map((r) => r.id));
   }
