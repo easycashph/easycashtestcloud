@@ -1670,6 +1670,52 @@ Backend type-checked clean. Committed and pushed (`12dc9e7`).
   `Borrower`-referencing foreign key via `legacyId`, not a raw id. The `Borrower.id`-instability bug
   found in §35 is now fully closed - no known script still trusts a raw pre-reset id as stable.
 - Still deliberately open: Loan Products/Product Versions/penalty & fee rules backup/restore (§33).
-- Portal e-signature (§34) still has no end-to-end test with a real borrower login, and no staff UI
-  to choose "notify via Portal" vs. mailed link for a signing session - both still just noted, not
-  built.
+- Portal e-signature (§34) still has no end-to-end test with a real borrower login.
+
+## §37 - "Portal" channel enabled on the Loan Detail e-signature panel (2026-08-20)
+
+User noticed the "Portal" option on Loan Detail's "Send for Signing" panel still showed a disabled
+"Soon" badge, despite §34's Portal e-signature feature already existing - the button had never
+actually been wired up. Enabled it for the **borrower only** (co-borrowers have no Portal login -
+`PortalAccount.borrowerId` only ever points at a `Borrower`, never a `CoBorrower` - so that button
+stays disabled/"Soon" on purpose).
+
+Backend changes, all in `loan-signing`:
+- `SigningLinkChannel` (domain) gains `'PORTAL'` alongside `'SMS'`/`'EMAIL'`.
+- `CreateLoanSigningSessionUseCase`: a `PORTAL`-channel request resolves the borrower's linked
+  `PortalAccount` (via `IPortalAccountRepository.findByBorrowerId`), throws a new
+  `NoPortalAccountLinkedError` if none exists, and - instead of sending an SMS/email link - fires
+  the existing `PortalNotificationService` (already used for application-approved/loan-account
+  lifecycle notifications) with a new `DOCUMENT_SIGNING_REQUESTED` type. No new session-discovery
+  logic was needed: `ListPortalSigningSessionsUseCase` (built in §34) already surfaces ANY active
+  BORROWER-party session on the Portal dashboard regardless of channel, so a Portal-channel session
+  just shows up there like any other.
+- `RequestPortalSigningOtpUseCase`: OTP delivery used to hard-check `channel === 'EMAIL'` before
+  using email - broadened to "use email whenever the session has one on file," so a PORTAL-channel
+  session (which always populates email from the borrower profile) gets its OTP by email
+  automatically, with an SMS fallback if the borrower has no email. Verified this is a no-op change
+  for existing SMS-channel sessions (they never populate `email` in the first place).
+- Threaded `'PORTAL'` through every other spot the channel type touched: the Zod request schema,
+  the staff-side session list view type, and the two document-signing use cases' OTP-stamp channel
+  (both now compute the stamp channel from `session.email` presence directly, matching the OTP
+  use-case's own logic, rather than trusting `session.channel` to only ever be SMS/EMAIL).
+
+Frontend (`LoanDetailPage.tsx`, `EsignatureLogsPage.tsx`, `loanSigningApiTypes.ts`): un-disabled the
+borrower "Portal" button, added a `sendViaPortalMutation` (no phone/email in the request body - the
+backend resolves everything from the borrower's own profile/PortalAccount), updated the OTP-channel
+helper text and the "Sent to..." session list line for the Portal case, and added `PORTAL` to the
+E-signature Logs page's channel filter.
+
+Backend + frontend type-checked clean. Rebuilt `easycashbackend`/`lmsfrontend`, verified fresh
+uptime post-rebuild (not stale), confirmed `/health` responds and the signing-sessions endpoint
+accepts `channel: "PORTAL"` past Zod validation (401 auth-required, not a 400 schema error).
+Committed and pushed (`d113f98`).
+
+### Current state / follow-ups
+
+- Portal channel is live for borrower e-signature sessions. Still not tested end-to-end with a real
+  borrower Portal login clicking "Sign now" on a Portal-channel session specifically (§34's broader
+  "no real end-to-end test yet" follow-up now also covers this).
+- No staff-facing indicator yet showing whether a given loan account's borrower even HAS a linked
+  Portal account before they try the Portal button - right now they'd only find out via the
+  `NoPortalAccountLinkedError` after clicking "Send via Portal." A small UX polish, not blocking.
