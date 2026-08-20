@@ -57,6 +57,11 @@ export class GetChatConversationForStaffUseCase {
 
     const messages = await this.deps.chatRepository.listMessages(conversationId);
     const client = await buildChatClientInfo(this.deps, conversation.portalAccountId);
+    // 2026-08-20 (read receipts) - only the current claimant actually viewing counts as "staff has
+    // read this"; a read-only history viewer or a not-yet-claiming previewer shouldn't mark it seen.
+    if (isCurrentClaimant) {
+      await this.deps.chatRepository.markReadByStaff(conversationId);
+    }
     return { conversation: conversationForViewer, messages, isReadOnly: !isCurrentClaimant, client };
   }
 }

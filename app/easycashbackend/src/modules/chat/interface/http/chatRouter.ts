@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { ChatController, type ChatControllerDeps } from './chatController';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -14,6 +15,7 @@ export function createChatRouter(deps: ChatControllerDeps, tokenService: ITokenS
   const router = Router();
   const controller = new ChatController(deps);
   const requireAuth = createRequireAuth(tokenService);
+  const cannedResponsesManage = requirePermission('chat_canned_response.manage');
 
   router.get('/chat/queue', requireAuth, controller.listQueue);
   router.get('/chat/mine', requireAuth, controller.listMine);
@@ -24,6 +26,14 @@ export function createChatRouter(deps: ChatControllerDeps, tokenService: ITokenS
   router.get('/chat/oversight/staff', requireAuth, controller.listOversightStaff);
   router.get('/chat/oversight/staff/:userId/conversations', requireAuth, controller.listOversightConversationsForStaff);
   router.get('/chat/oversight/conversations/:id', requireAuth, controller.getOversightConversation);
+  // BPO-style UX (2026-08-20 user request) - registered before the generic '/chat/:id' route below
+  // (Express matches by registration order) so these literal segments aren't captured as an :id.
+  router.post('/chat/presence', requireAuth, controller.updatePresence);
+  router.get('/chat/presence', requireAuth, controller.listPresence);
+  router.get('/chat/canned-responses', requireAuth, controller.listCannedResponses);
+  router.post('/chat/canned-responses', requireAuth, cannedResponsesManage, controller.createCannedResponse);
+  router.patch('/chat/canned-responses/:id', requireAuth, cannedResponsesManage, controller.updateCannedResponse);
+  router.delete('/chat/canned-responses/:id', requireAuth, cannedResponsesManage, controller.deleteCannedResponse);
   router.get('/chat/:id', requireAuth, controller.get);
   router.post('/chat/:id/claim', requireAuth, controller.claim);
   router.post('/chat/:id/transfer/initiate', requireAuth, controller.initiateTransfer);
@@ -31,6 +41,7 @@ export function createChatRouter(deps: ChatControllerDeps, tokenService: ITokenS
   router.post('/chat/:id/transfer/cancel', requireAuth, controller.cancelTransfer);
   router.post('/chat/:id/close', requireAuth, controller.close);
   router.post('/chat/:id/messages', requireAuth, upload.single('file'), controller.sendMessage);
+  router.post('/chat/:id/typing', requireAuth, controller.typing);
   router.get('/chat/:id/attachments/:attachmentId/download', requireAuth, controller.downloadAttachment);
 
   return router;

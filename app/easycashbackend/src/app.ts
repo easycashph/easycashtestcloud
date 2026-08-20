@@ -79,6 +79,15 @@ import { DownloadChatAttachmentForStaffUseCase } from '@modules/chat/application
 import { ListChatOversightStaffUseCase } from '@modules/chat/application/use-cases/ListChatOversightStaffUseCase';
 import { ListChatConversationsForStaffUseCase } from '@modules/chat/application/use-cases/ListChatConversationsForStaffUseCase';
 import { GetChatConversationForMisUseCase } from '@modules/chat/application/use-cases/GetChatConversationForMisUseCase';
+import { SetPortalChatTypingUseCase } from '@modules/chat/application/use-cases/SetPortalChatTypingUseCase';
+import { SetStaffChatTypingUseCase } from '@modules/chat/application/use-cases/SetStaffChatTypingUseCase';
+import { SubmitChatRatingUseCase } from '@modules/chat/application/use-cases/SubmitChatRatingUseCase';
+import { UpdateAgentPresenceUseCase } from '@modules/chat/application/use-cases/UpdateAgentPresenceUseCase';
+import { ListAgentPresenceUseCase } from '@modules/chat/application/use-cases/ListAgentPresenceUseCase';
+import { ListChatCannedResponsesUseCase } from '@modules/chat/application/use-cases/ListChatCannedResponsesUseCase';
+import { CreateChatCannedResponseUseCase } from '@modules/chat/application/use-cases/CreateChatCannedResponseUseCase';
+import { UpdateChatCannedResponseUseCase } from '@modules/chat/application/use-cases/UpdateChatCannedResponseUseCase';
+import { DeleteChatCannedResponseUseCase } from '@modules/chat/application/use-cases/DeleteChatCannedResponseUseCase';
 import { createChatRouter } from '@modules/chat/interface/http/chatRouter';
 import { UpdatePortalLoanApplicationUseCase } from '@modules/client-portal/application/use-cases/UpdatePortalLoanApplicationUseCase';
 import { ListPortalBranchesUseCase } from '@modules/client-portal/application/use-cases/ListPortalBranchesUseCase';
@@ -1626,6 +1635,8 @@ export function createApp(): Express {
       getPortalChatUseCase: new GetPortalChatUseCase({ chatRepository }),
       sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
       downloadPortalChatAttachmentUseCase: new DownloadPortalChatAttachmentUseCase({ chatRepository, attachmentRepository, fileStorage }),
+      setPortalChatTypingUseCase: new SetPortalChatTypingUseCase({ chatRepository }),
+      submitChatRatingUseCase: new SubmitChatRatingUseCase({ chatRepository }),
     },
     portalTokenService,
   );
@@ -1648,6 +1659,13 @@ export function createApp(): Express {
       listChatOversightStaffUseCase: new ListChatOversightStaffUseCase({ userRepository }),
       listChatConversationsForStaffUseCase: new ListChatConversationsForStaffUseCase({ userRepository, chatRepository }),
       getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository }),
+      setStaffChatTypingUseCase: new SetStaffChatTypingUseCase({ chatRepository }),
+      updateAgentPresenceUseCase: new UpdateAgentPresenceUseCase({ chatRepository }),
+      listAgentPresenceUseCase: new ListAgentPresenceUseCase({ chatRepository }),
+      listChatCannedResponsesUseCase: new ListChatCannedResponsesUseCase({ chatRepository }),
+      createChatCannedResponseUseCase: new CreateChatCannedResponseUseCase({ chatRepository }),
+      updateChatCannedResponseUseCase: new UpdateChatCannedResponseUseCase({ chatRepository }),
+      deleteChatCannedResponseUseCase: new DeleteChatCannedResponseUseCase({ chatRepository }),
     },
     tokenService,
   );

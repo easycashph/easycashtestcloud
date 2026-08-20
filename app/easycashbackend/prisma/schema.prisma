@@ -320,6 +320,8 @@ model User {
   reminderSettingsUpdated              ReminderSettings[]
   systemAnnouncementsCreated           SystemAnnouncement[]
   misPostsCreated                      MisPost[]
+  chatAgentPresence                    ChatAgentPresence?
+  chatCannedResponsesCreated           ChatCannedResponse[]
   chatConversationsClaimed             ChatConversation[]            @relation("ChatConversationClaimedBy")
   chatConversationsOriginallyClaimed   ChatConversation[]            @relation("ChatConversationOriginallyClaimedBy")
   chatConversationsPendingTransferTo   ChatConversation[]            @relation("ChatConversationPendingTransferTo")
@@ -648,6 +650,22 @@ model ChatConversation {
   /// than a secret - the real access control is `pendingTransferToUserId` itself.
   pendingTransferPin        String?
   closedAt                  DateTime?
+  /// BPO-style chat UX (2026-08-20 user request). Last-read watermarks, not per-message read
+  /// rows - a message is "seen" once its `createdAt` <= the other side's watermark. Cheap to
+  /// update (one column) and cheap to query (no join).
+  portalLastReadAt          DateTime?
+  staffLastReadAt           DateTime?
+  /// Typing indicator (2026-08-20) - a heartbeat timestamp, not a boolean: the client re-sends it
+  /// every keystroke pause, and a reader treats it as "currently typing" only while recent (see
+  /// TYPING_INDICATOR_TTL_MS in the use case) - so a tab closed mid-type never gets stuck showing
+  /// "typing…" forever.
+  portalTypingAt            DateTime?
+  staffTypingAt             DateTime?
+  /// Post-chat CSAT rating (2026-08-20 user request) - optional, client-submitted once, only after
+  /// `status` reaches CLOSED. 1-5 stars; `ratingComment` is optional free text.
+  rating                    Int?
+  ratingComment             String?
+  ratedAt                   DateTime?
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
   messages                  ChatMessage[]
@@ -659,6 +677,40 @@ model ChatConversation {
   @@index([pendingTransferToUserId])
   @@index([portalAccountId, status])
   @@map("chat_conversations")
+}
+
+/// Staff online/away/offline presence for chat (2026-08-20 user request, BPO-style support) - one
+/// row per user, upserted on every heartbeat/explicit status change from the LMS chat page. A
+/// separate table rather than columns on `User`: presence is high-churn, ephemeral-ish data (every
+/// few seconds while the chat page is open) that has nothing to do with the account record itself.
+model ChatAgentPresence {
+  userId    String              @id
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    ChatAgentStatusType @default(OFFLINE)
+  updatedAt DateTime            @updatedAt
+
+  @@map("chat_agent_presence")
+}
+
+enum ChatAgentStatusType {
+  ONLINE
+  AWAY
+  OFFLINE
+}
+
+/// MIS-managed canned/quick responses (2026-08-20 user request) - a shared library any chat agent
+/// can insert into the composer instead of retyping common answers. Global, not per-user: the same
+/// "how do I check my application status" answer should read identically no matter who sends it.
+model ChatCannedResponse {
+  id              String   @id @default(uuid())
+  title           String
+  body            String
+  createdByUserId String
+  createdBy       User     @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("chat_canned_responses")
 }
 
 /// 2026-08-03 (user request: "gusto ko maging trackable talaga ang chat logs") - one row per

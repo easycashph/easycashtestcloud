@@ -1,11 +1,25 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Paperclip, Send } from 'lucide-react';
+import { CheckCheck, Copy, MessageSquareText, Paperclip, Plus, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
+
+/** How long after the last typing heartbeat we still show "typing…" (2026-08-20 user request,
+ * BPO-style support) - matches the Portal widget's own constant. */
+const TYPING_INDICATOR_TTL_MS = 6000;
+const TYPING_HEARTBEAT_THROTTLE_MS = 2500;
+/** How often this tab re-asserts its current presence status while open (2026-08-20) - keeps
+ * "Online" from silently going stale if the agent just leaves the tab open without switching
+ * away; a closed tab simply stops heartbeating and reads as stale to anyone checking timestamps. */
+const PRESENCE_HEARTBEAT_MS = 60000;
+
+function isRecentlyActive(timestamp: string | null, ttlMs: number): boolean {
+  if (!timestamp) return false;
+  return Date.now() - new Date(timestamp).getTime() < ttlMs;
+}
 
 /** Standardized display labels for the real, short role names stored in the database
  * (2026-08-03 user request) - shown everywhere a role type appears in the chat feature. The
@@ -52,6 +66,23 @@ interface ChatConversation {
   createdAt: string;
   claimedAt: string | null;
   closedAt: string | null;
+  /** BPO-style UX (2026-08-20 user request). */
+  portalLastReadAt: string | null;
+  staffLastReadAt: string | null;
+  portalTypingAt: string | null;
+  staffTypingAt: string | null;
+  rating: number | null;
+  ratingComment: string | null;
+  ratedAt: string | null;
+}
+
+interface ChatCannedResponse {
+  id: string;
+  title: string;
+  body: string;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ChatMessage {
@@ -120,7 +151,8 @@ const POLL_INTERVAL_MS = 4000;
  * not WebSockets - matches the Portal widget's own tradeoff (see its doc comment).
  */
 export function ChatPage() {
-  const { canManageMembers: isMis } = useRole();
+  const { canManageMembers: isMis, hasPermission } = useRole();
+  const canManageCannedResponses = hasPermission('chat_canned_response.manage');
 
   const [queue, setQueue] = React.useState<ChatConversation[] | null>(null);
   const [mine, setMine] = React.useState<ChatConversation[] | null>(null);
@@ -154,6 +186,71 @@ export function ChatPage() {
   const [isTransferring, setIsTransferring] = React.useState(false);
   const [confirmPinDrafts, setConfirmPinDrafts] = React.useState<Record<string, string>>({});
   const [confirmError, setConfirmError] = React.useState<string | null>(null);
+
+  // BPO-style presence (2026-08-20 user request) - the agent's own explicit Online/Away/Offline
+  // toggle, re-asserted periodically while this tab stays open. No reliable way to detect the tab
+  // actually closing while still able to send an authenticated request, so a status just goes
+  // stale (readable from its own `updatedAt`) rather than flipping to Offline automatically.
+  const [myStatus, setMyStatus] = React.useState<'ONLINE' | 'AWAY' | 'OFFLINE'>('ONLINE');
+  const lastTypingSentAtRef = React.useRef(0);
+
+  // Canned/quick responses (2026-08-20 user request) - shared library, MIS-managed.
+  const [cannedResponses, setCannedResponses] = React.useState<ChatCannedResponse[]>([]);
+  const [showCannedPicker, setShowCannedPicker] = React.useState(false);
+  const [showCannedManager, setShowCannedManager] = React.useState(false);
+  const [cannedDraftTitle, setCannedDraftTitle] = React.useState('');
+  const [cannedDraftBody, setCannedDraftBody] = React.useState('');
+  const [editingCannedId, setEditingCannedId] = React.useState<string | null>(null);
+
+  const refreshCannedResponses = React.useCallback(() => {
+    apiClient
+      .get<ChatCannedResponse[]>('/chat/canned-responses')
+      .then(setCannedResponses)
+      .catch(() => setCannedResponses([]));
+  }, []);
+
+  React.useEffect(() => {
+    refreshCannedResponses();
+  }, [refreshCannedResponses]);
+
+  const sendPresence = React.useCallback((status: 'ONLINE' | 'AWAY' | 'OFFLINE') => {
+    apiClient.post('/chat/presence', { status }).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    sendPresence(myStatus);
+    if (myStatus === 'OFFLINE') return;
+    const timer = window.setInterval(() => sendPresence(myStatus), PRESENCE_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myStatus]);
+
+  const resetCannedDraft = () => {
+    setCannedDraftTitle('');
+    setCannedDraftBody('');
+    setEditingCannedId(null);
+  };
+
+  const handleSaveCannedResponse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cannedDraftTitle.trim() || !cannedDraftBody.trim()) return;
+    try {
+      if (editingCannedId) {
+        await apiClient.patch(`/chat/canned-responses/${editingCannedId}`, { title: cannedDraftTitle, body: cannedDraftBody });
+      } else {
+        await apiClient.post('/chat/canned-responses', { title: cannedDraftTitle, body: cannedDraftBody });
+      }
+      resetCannedDraft();
+      refreshCannedResponses();
+    } catch {
+      // Best-effort - the form stays open so they can retry.
+    }
+  };
+
+  const handleDeleteCannedResponse = async (id: string) => {
+    await apiClient.delete(`/chat/canned-responses/${id}`);
+    refreshCannedResponses();
+  };
 
   React.useEffect(() => {
     apiClient
@@ -301,6 +398,19 @@ export function ChatPage() {
     refreshLists();
   };
 
+  const sendTypingHeartbeat = () => {
+    if (!activeConversationId) return;
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < TYPING_HEARTBEAT_THROTTLE_MS) return;
+    lastTypingSentAtRef.current = now;
+    apiClient.post(`/chat/${activeConversationId}/typing`).catch(() => {});
+  };
+
+  const insertCannedResponse = (response: ChatCannedResponse) => {
+    setDraft((prev) => (prev.trim() ? `${prev}\n${response.body}` : response.body));
+    setShowCannedPicker(false);
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeConversationId || (!draft.trim() && !file) || isSending) return;
@@ -326,6 +436,33 @@ export function ChatPage() {
   return (
     <div className="grid h-[calc(100vh-8rem)] grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr]">
       <div className="flex flex-col gap-4 overflow-y-auto">
+        {/* BPO-style presence (2026-08-20 user request) - the agent's own status, visible to the
+            Portal widget for whichever client they're currently claimed by. */}
+        <Card>
+          <CardContent className="flex items-center justify-between gap-2 py-3">
+            <span className="text-xs font-medium text-muted-foreground">My status</span>
+            <div className="flex gap-1.5">
+              {(['ONLINE', 'AWAY', 'OFFLINE'] as const).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setMyStatus(status)}
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                    myStatus === status ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-accent'
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      status === 'ONLINE' ? 'bg-success' : status === 'AWAY' ? 'bg-warning' : 'bg-muted-foreground/50'
+                    }`}
+                  />
+                  {status === 'ONLINE' ? 'Online' : status === 'AWAY' ? 'Away' : 'Offline'}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Waiting ({queue?.length ?? '…'})</CardTitle>
@@ -479,6 +616,76 @@ export function ChatPage() {
             </CardContent>
           </Card>
         )}
+
+        {canManageCannedResponses && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-sm">Canned Responses</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  resetCannedDraft();
+                  setShowCannedManager((v) => !v);
+                }}
+              >
+                {showCannedManager ? 'Close' : <Plus className="h-3.5 w-3.5" />}
+              </Button>
+            </CardHeader>
+            {showCannedManager && (
+              <CardContent className="space-y-3">
+                <form onSubmit={handleSaveCannedResponse} className="space-y-2 rounded-md border p-2.5">
+                  <Input placeholder="Title (e.g. Application Status)" value={cannedDraftTitle} onChange={(e) => setCannedDraftTitle(e.target.value)} />
+                  <textarea
+                    placeholder="Response text"
+                    value={cannedDraftBody}
+                    onChange={(e) => setCannedDraftBody(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={!cannedDraftTitle.trim() || !cannedDraftBody.trim()}>
+                      {editingCannedId ? 'Save' : 'Add'}
+                    </Button>
+                    {editingCannedId && (
+                      <Button type="button" size="sm" variant="outline" onClick={resetCannedDraft}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </form>
+                <div className="space-y-1.5">
+                  {cannedResponses.length === 0 && <p className="text-xs text-muted-foreground">No canned responses yet.</p>}
+                  {cannedResponses.map((response) => (
+                    <div key={response.id} className="flex items-start justify-between gap-2 rounded-md border p-2">
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => {
+                          setEditingCannedId(response.id);
+                          setCannedDraftTitle(response.title);
+                          setCannedDraftBody(response.body);
+                        }}
+                      >
+                        <p className="truncate text-xs font-medium">{response.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">{response.body}</p>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Delete canned response"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteCannedResponse(response.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
       </div>
 
       <Card className="flex flex-col overflow-hidden">
@@ -502,7 +709,12 @@ export function ChatPage() {
                           : 'Client conversation'}
                 </CardTitle>
                 {view.client.portalAccountEmail && (
-                  <p className="mt-0.5 text-xs text-muted-foreground">Chatting with: {view.client.portalAccountEmail}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Chatting with: {view.client.portalAccountEmail}
+                    {isRecentlyActive(view.conversation.portalTypingAt, TYPING_INDICATOR_TTL_MS) && (
+                      <span className="ml-2 italic text-primary">typing…</span>
+                    )}
+                  </p>
                 )}
                 {view.client.loanApplications.length > 0 && (
                   <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs">
@@ -623,7 +835,13 @@ export function ChatPage() {
             )}
 
             <div ref={scrollRef} className={`flex-1 space-y-3 overflow-y-auto p-4 ${view.isReadOnly || oversightMode ? 'opacity-70 grayscale' : ''}`}>
-              {view.messages.map((message) => (
+              {(() => {
+                const lastStaffMessage = [...view.messages].reverse().find((m) => m.senderType === 'STAFF');
+                const lastStaffMessageSeen =
+                  lastStaffMessage && view.conversation.portalLastReadAt
+                    ? new Date(view.conversation.portalLastReadAt).getTime() >= new Date(lastStaffMessage.createdAt).getTime()
+                    : false;
+                return view.messages.map((message) => (
                 <div
                   key={message.id}
                   className={message.senderType === 'SYSTEM' ? 'text-center' : message.senderType === 'STAFF' ? 'flex justify-end' : 'flex justify-start'}
@@ -652,14 +870,39 @@ export function ChatPage() {
                           <Paperclip className="h-3 w-3" /> {message.attachment.fileName}
                         </button>
                       )}
-                      <p className="mt-1 text-[10px] opacity-70">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      <p className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {message.senderType === 'STAFF' && lastStaffMessage?.id === message.id && lastStaffMessageSeen && (
+                          <CheckCheck className="h-3 w-3" aria-label="Seen" />
+                        )}
+                      </p>
                     </div>
                   )}
                 </div>
-              ))}
+                ));
+              })()}
             </div>
             {!oversightMode && !view.isReadOnly && view.conversation.status === 'CLAIMED' && (
-              <form onSubmit={handleSend} className="border-t p-3">
+              <form onSubmit={handleSend} className="relative border-t p-3">
+                {showCannedPicker && (
+                  <div className="absolute bottom-full left-3 right-3 z-10 mb-1 max-h-56 overflow-y-auto rounded-md border bg-popover p-1.5 shadow-md">
+                    {cannedResponses.length === 0 ? (
+                      <p className="p-2 text-xs text-muted-foreground">No canned responses yet.</p>
+                    ) : (
+                      cannedResponses.map((response) => (
+                        <button
+                          key={response.id}
+                          type="button"
+                          onClick={() => insertCannedResponse(response)}
+                          className="block w-full rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
+                        >
+                          <p className="font-medium">{response.title}</p>
+                          <p className="truncate text-muted-foreground">{response.body}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
                 {file && (
                   <p className="mb-2 flex items-center justify-between rounded-md bg-muted px-2 py-1 text-xs">
                     <span className="truncate">{file.name}</span>
@@ -679,7 +922,24 @@ export function ChatPage() {
                   <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file">
                     <Paperclip className="h-4 w-4" />
                   </Button>
-                  <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message…" className="flex-1" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCannedPicker((v) => !v)}
+                    aria-label="Insert a canned response"
+                  >
+                    <MessageSquareText className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    value={draft}
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      sendTypingHeartbeat();
+                    }}
+                    placeholder="Type a message…"
+                    className="flex-1"
+                  />
                   <Button type="submit" size="sm" disabled={isSending || (!draft.trim() && !file)}>
                     <Send className="h-4 w-4" />
                   </Button>

@@ -61,7 +61,8 @@ export type PermissionCode =
   | 'user.manage'
   | 'audit_log.read'
   | 'reminder_settings.manage'
-  | 'profile_activity_log.manage';
+  | 'profile_activity_log.manage'
+  | 'chat_canned_response.manage';
 
 interface RoleContextValue {
   currentAccount: AuthenticatedAccount;

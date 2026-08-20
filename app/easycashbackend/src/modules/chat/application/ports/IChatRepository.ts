@@ -37,6 +37,33 @@ export interface ChatConversationRecord {
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
+  /** BPO-style UX (2026-08-20) - see the Prisma model's own doc comment for why these are
+   * watermarks/heartbeats rather than per-message rows or a boolean. */
+  portalLastReadAt: Date | null;
+  staffLastReadAt: Date | null;
+  portalTypingAt: Date | null;
+  staffTypingAt: Date | null;
+  rating: number | null;
+  ratingComment: string | null;
+  ratedAt: Date | null;
+}
+
+export type ChatAgentStatus = 'ONLINE' | 'AWAY' | 'OFFLINE';
+
+export interface ChatAgentPresenceRecord {
+  userId: string;
+  userName: string;
+  status: ChatAgentStatus;
+  updatedAt: Date;
+}
+
+export interface ChatCannedResponseRecord {
+  id: string;
+  title: string;
+  body: string;
+  createdByUserId: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface ChatMessageAttachmentRecord {
@@ -103,4 +130,29 @@ export interface IChatRepository {
    * attachment without a second round-trip from the client. */
   findMessageById(id: string): Promise<ChatMessageRecord | null>;
   listMessages(conversationId: string): Promise<ChatMessageRecord[]>;
+
+  /** BPO-style UX (2026-08-20 user request) - read receipts, typing indicator, queue position,
+   * CSAT rating, agent presence, canned responses. */
+  markReadByPortal(conversationId: string): Promise<void>;
+  markReadByStaff(conversationId: string): Promise<void>;
+  setPortalTyping(conversationId: string): Promise<void>;
+  setStaffTyping(conversationId: string): Promise<void>;
+  /** Count of still-WAITING conversations created strictly before this one - the portal widget's
+   * "N ahead of you" queue position. 0 once this conversation is no longer WAITING itself. */
+  countWaitingAheadOf(conversationId: string): Promise<number>;
+  submitRating(conversationId: string, rating: number, comment: string | null): Promise<void>;
+
+  upsertAgentPresence(userId: string, status: ChatAgentStatus): Promise<void>;
+  /** Presence for every user who currently has ANY presence row - callers filter to who they
+   * actually need (e.g. a conversation's claimant) themselves. */
+  listAgentPresence(): Promise<ChatAgentPresenceRecord[]>;
+  /** Single-user lookup - null if that user has never set a presence status (treated as OFFLINE
+   * by callers). Used to show "your officer is online" on the Portal widget without exposing the
+   * full staff presence list to a client. */
+  getAgentPresence(userId: string): Promise<ChatAgentStatus | null>;
+
+  listCannedResponses(): Promise<ChatCannedResponseRecord[]>;
+  createCannedResponse(title: string, body: string, createdByUserId: string): Promise<ChatCannedResponseRecord>;
+  updateCannedResponse(id: string, title: string, body: string): Promise<ChatCannedResponseRecord>;
+  deleteCannedResponse(id: string): Promise<void>;
 }

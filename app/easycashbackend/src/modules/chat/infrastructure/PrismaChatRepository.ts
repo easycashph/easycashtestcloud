@@ -5,6 +5,9 @@ import type {
   ChatMessageRecord,
   ChatParticipantRecord,
   CreateChatMessageInput,
+  ChatAgentStatus,
+  ChatAgentPresenceRecord,
+  ChatCannedResponseRecord,
 } from '../application/ports/IChatRepository';
 
 type UserNameRow = { firstName: string; lastName: string } | null;
@@ -47,6 +50,13 @@ function mapConversation(row: {
   createdAt: Date;
   claimedAt: Date | null;
   closedAt: Date | null;
+  portalLastReadAt: Date | null;
+  staffLastReadAt: Date | null;
+  portalTypingAt: Date | null;
+  staffTypingAt: Date | null;
+  rating: number | null;
+  ratingComment: string | null;
+  ratedAt: Date | null;
 }): ChatConversationRecord {
   return {
     id: row.id,
@@ -66,6 +76,13 @@ function mapConversation(row: {
     createdAt: row.createdAt,
     claimedAt: row.claimedAt,
     closedAt: row.closedAt,
+    portalLastReadAt: row.portalLastReadAt,
+    staffLastReadAt: row.staffLastReadAt,
+    portalTypingAt: row.portalTypingAt,
+    staffTypingAt: row.staffTypingAt,
+    rating: row.rating,
+    ratingComment: row.ratingComment,
+    ratedAt: row.ratedAt,
   };
 }
 
@@ -268,5 +285,76 @@ export class PrismaChatRepository implements IChatRepository {
       include: MESSAGE_INCLUDE,
     });
     return Promise.all(rows.map(mapMessage));
+  }
+
+  async markReadByPortal(conversationId: string): Promise<void> {
+    await prisma.chatConversation.update({ where: { id: conversationId }, data: { portalLastReadAt: new Date() } });
+  }
+
+  async markReadByStaff(conversationId: string): Promise<void> {
+    await prisma.chatConversation.update({ where: { id: conversationId }, data: { staffLastReadAt: new Date() } });
+  }
+
+  async setPortalTyping(conversationId: string): Promise<void> {
+    await prisma.chatConversation.update({ where: { id: conversationId }, data: { portalTypingAt: new Date() } });
+  }
+
+  async setStaffTyping(conversationId: string): Promise<void> {
+    await prisma.chatConversation.update({ where: { id: conversationId }, data: { staffTypingAt: new Date() } });
+  }
+
+  async countWaitingAheadOf(conversationId: string): Promise<number> {
+    const conversation = await prisma.chatConversation.findUnique({ where: { id: conversationId }, select: { status: true, createdAt: true } });
+    if (!conversation || conversation.status !== 'WAITING') return 0;
+    return prisma.chatConversation.count({ where: { status: 'WAITING', createdAt: { lt: conversation.createdAt } } });
+  }
+
+  async submitRating(conversationId: string, rating: number, comment: string | null): Promise<void> {
+    await prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { rating, ratingComment: comment, ratedAt: new Date() },
+    });
+  }
+
+  async upsertAgentPresence(userId: string, status: ChatAgentStatus): Promise<void> {
+    await prisma.chatAgentPresence.upsert({
+      where: { userId },
+      create: { userId, status },
+      update: { status },
+    });
+  }
+
+  async listAgentPresence(): Promise<ChatAgentPresenceRecord[]> {
+    const rows = await prisma.chatAgentPresence.findMany({
+      include: { user: { select: { firstName: true, lastName: true } } },
+    });
+    return rows.map((row) => ({
+      userId: row.userId,
+      userName: `${row.user.firstName} ${row.user.lastName}`,
+      status: row.status as ChatAgentStatus,
+      updatedAt: row.updatedAt,
+    }));
+  }
+
+  async getAgentPresence(userId: string): Promise<ChatAgentStatus | null> {
+    const row = await prisma.chatAgentPresence.findUnique({ where: { userId }, select: { status: true } });
+    return row ? (row.status as ChatAgentStatus) : null;
+  }
+
+  async listCannedResponses(): Promise<ChatCannedResponseRecord[]> {
+    const rows = await prisma.chatCannedResponse.findMany({ orderBy: { title: 'asc' } });
+    return rows;
+  }
+
+  async createCannedResponse(title: string, body: string, createdByUserId: string): Promise<ChatCannedResponseRecord> {
+    return prisma.chatCannedResponse.create({ data: { title, body, createdByUserId } });
+  }
+
+  async updateCannedResponse(id: string, title: string, body: string): Promise<ChatCannedResponseRecord> {
+    return prisma.chatCannedResponse.update({ where: { id }, data: { title, body } });
+  }
+
+  async deleteCannedResponse(id: string): Promise<void> {
+    await prisma.chatCannedResponse.delete({ where: { id } });
   }
 }

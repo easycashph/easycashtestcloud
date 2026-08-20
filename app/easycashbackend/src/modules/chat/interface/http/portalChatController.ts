@@ -5,6 +5,8 @@ import type { GetActivePortalChatUseCase } from '../../application/use-cases/Get
 import type { GetPortalChatUseCase } from '../../application/use-cases/GetPortalChatUseCase';
 import type { SendPortalChatMessageUseCase } from '../../application/use-cases/SendPortalChatMessageUseCase';
 import type { DownloadPortalChatAttachmentUseCase } from '../../application/use-cases/DownloadPortalChatAttachmentUseCase';
+import type { SetPortalChatTypingUseCase } from '../../application/use-cases/SetPortalChatTypingUseCase';
+import type { SubmitChatRatingUseCase } from '../../application/use-cases/SubmitChatRatingUseCase';
 import { getCurrentPortalAccount } from '@modules/client-portal/interface/http/requirePortalAuth';
 
 export interface PortalChatControllerDeps {
@@ -13,6 +15,8 @@ export interface PortalChatControllerDeps {
   getPortalChatUseCase: GetPortalChatUseCase;
   sendPortalChatMessageUseCase: SendPortalChatMessageUseCase;
   downloadPortalChatAttachmentUseCase: DownloadPortalChatAttachmentUseCase;
+  setPortalChatTypingUseCase: SetPortalChatTypingUseCase;
+  submitChatRatingUseCase: SubmitChatRatingUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture). */
@@ -63,6 +67,28 @@ export class PortalChatController {
         file: req.file ? { fileName: req.file.originalname, fileType: req.file.mimetype, data: req.file.buffer } : undefined,
       });
       res.status(201).json(message);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  typing = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      await this.deps.setPortalChatTypingUseCase.execute(account.sub, req.params.id as string);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  submitRating = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const account = getCurrentPortalAccount(req);
+      const rating = Number(req.body?.rating);
+      const comment = typeof req.body?.comment === 'string' ? req.body.comment : null;
+      await this.deps.submitChatRatingUseCase.execute(account.sub, req.params.id as string, rating, comment);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

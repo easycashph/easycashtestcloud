@@ -16,6 +16,13 @@ import type { DownloadChatAttachmentForStaffUseCase } from '../../application/us
 import type { ListChatOversightStaffUseCase } from '../../application/use-cases/ListChatOversightStaffUseCase';
 import type { ListChatConversationsForStaffUseCase } from '../../application/use-cases/ListChatConversationsForStaffUseCase';
 import type { GetChatConversationForMisUseCase } from '../../application/use-cases/GetChatConversationForMisUseCase';
+import type { SetStaffChatTypingUseCase } from '../../application/use-cases/SetStaffChatTypingUseCase';
+import type { UpdateAgentPresenceUseCase } from '../../application/use-cases/UpdateAgentPresenceUseCase';
+import type { ListAgentPresenceUseCase } from '../../application/use-cases/ListAgentPresenceUseCase';
+import type { ListChatCannedResponsesUseCase } from '../../application/use-cases/ListChatCannedResponsesUseCase';
+import type { CreateChatCannedResponseUseCase } from '../../application/use-cases/CreateChatCannedResponseUseCase';
+import type { UpdateChatCannedResponseUseCase } from '../../application/use-cases/UpdateChatCannedResponseUseCase';
+import type { DeleteChatCannedResponseUseCase } from '../../application/use-cases/DeleteChatCannedResponseUseCase';
 
 export interface ChatControllerDeps {
   listChatQueueUseCase: ListChatQueueUseCase;
@@ -33,6 +40,13 @@ export interface ChatControllerDeps {
   listChatOversightStaffUseCase: ListChatOversightStaffUseCase;
   listChatConversationsForStaffUseCase: ListChatConversationsForStaffUseCase;
   getChatConversationForMisUseCase: GetChatConversationForMisUseCase;
+  setStaffChatTypingUseCase: SetStaffChatTypingUseCase;
+  updateAgentPresenceUseCase: UpdateAgentPresenceUseCase;
+  listAgentPresenceUseCase: ListAgentPresenceUseCase;
+  listChatCannedResponsesUseCase: ListChatCannedResponsesUseCase;
+  createChatCannedResponseUseCase: CreateChatCannedResponseUseCase;
+  updateChatCannedResponseUseCase: UpdateChatCannedResponseUseCase;
+  deleteChatCannedResponseUseCase: DeleteChatCannedResponseUseCase;
 }
 
 /** Thin controller only - no business logic here (CLAUDE.md §Architecture). */
@@ -200,6 +214,74 @@ export class ChatController {
       res.setHeader('Content-Type', record.fileType);
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.fileName)}"`);
       res.status(200).send(data);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  typing = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.setStaffChatTypingUseCase.execute(currentUser.sub, req.params.id as string);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updatePresence = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.updateAgentPresenceUseCase.execute(currentUser.sub, req.body?.status);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listPresence = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const presence = await this.deps.listAgentPresenceUseCase.execute();
+      res.status(200).json(presence);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listCannedResponses = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const responses = await this.deps.listChatCannedResponsesUseCase.execute();
+      res.status(200).json(responses);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createCannedResponse = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const body = req.body as { title: string; body: string };
+      const response = await this.deps.createChatCannedResponseUseCase.execute(body.title, body.body, currentUser.sub);
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateCannedResponse = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = req.body as { title: string; body: string };
+      const response = await this.deps.updateChatCannedResponseUseCase.execute(req.params.id as string, body.title, body.body);
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteCannedResponse = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await this.deps.deleteChatCannedResponseUseCase.execute(req.params.id as string);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

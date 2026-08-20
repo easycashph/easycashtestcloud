@@ -1,12 +1,17 @@
 import * as React from 'react';
-import { ChevronDown, MessageCircle, Paperclip, Send, X } from 'lucide-react';
+import { CheckCheck, ChevronDown, MessageCircle, Paperclip, Send, Star, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { apiClient, fetchFileBlob } from '@/lib/apiClient';
 import { useLanguage } from '@/lib/i18n/LanguageContext';
-import type { ChatConversation, ChatMessage, PortalChatView } from '@/lib/portalApiTypes';
+import type { ChatAgentStatus, ChatConversation, ChatMessage, PortalChatView } from '@/lib/portalApiTypes';
 
 const POLL_INTERVAL_MS = 4000;
+/** How long after the last typing heartbeat we still show "typing…" (2026-08-20 user request,
+ * BPO-style UX) - a bit longer than POLL_INTERVAL_MS so a heartbeat lost to one missed poll doesn't
+ * flicker the indicator off and back on. */
+const TYPING_INDICATOR_TTL_MS = 6000;
+const TYPING_HEARTBEAT_THROTTLE_MS = 2500;
 
 async function downloadAttachment(conversationId: string, attachmentId: string, fileName: string): Promise<void> {
   try {
@@ -20,6 +25,44 @@ async function downloadAttachment(conversationId: string, attachmentId: string, 
   } catch {
     // Best-effort - nothing to recover into if the download itself fails.
   }
+}
+
+/** Two-tone "beep" via the Web Audio API (2026-08-20 user request: notification sound when a
+ * reply arrives while the widget is minimized) - no external asset file needed. Best-effort: a
+ * browser that blocks audio without a prior user gesture just stays silent. */
+function playNotificationSound() {
+  try {
+    const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+    [880, 1108].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.001, now + i * 0.14);
+      gain.gain.exponentialRampToValueAtTime(0.15, now + i * 0.14 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.16);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.14);
+      osc.stop(now + i * 0.14 + 0.18);
+    });
+    window.setTimeout(() => ctx.close(), 500);
+  } catch {
+    // Best-effort.
+  }
+}
+
+function isRecentlyActive(timestamp: string | null, ttlMs: number): boolean {
+  if (!timestamp) return false;
+  return Date.now() - new Date(timestamp).getTime() < ttlMs;
+}
+
+function presenceDotClass(status: ChatAgentStatus | null): string {
+  if (status === 'ONLINE') return 'bg-success';
+  if (status === 'AWAY') return 'bg-warning';
+  return 'bg-muted-foreground/40';
 }
 
 function statusLabel(conversation: ChatConversation): string {
@@ -55,10 +98,67 @@ function FaqAccordion() {
   );
 }
 
-/** Portal<->LMS support chat widget (2026-07-31 user request, revised 2026-08-03) - a floating
- * button/panel available on every authenticated page (mounted once in App.tsx). Deliberately
- * polling, not WebSockets - a few seconds of latency is fine for support chat, and it needs no new
- * infrastructure.
+/** Post-chat CSAT rating (2026-08-20 user request, BPO-style support) - shown once, only after
+ * the conversation is CLOSED and not yet rated. */
+function RatingPrompt({ conversationId, onSubmitted }: { conversationId: string; onSubmitted: () => void }) {
+  const [hovered, setHovered] = React.useState(0);
+  const [selected, setSelected] = React.useState(0);
+  const [comment, setComment] = React.useState('');
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const submit = async () => {
+    if (selected === 0 || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await apiClient.post(`/portal/chat/${conversationId}/rating`, { rating: selected, comment: comment.trim() || undefined }, true);
+      onSubmitted();
+    } catch {
+      // Best-effort - leave the prompt open so they can try again.
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
+      <p className="text-xs font-medium">How was your experience?</p>
+      <div className="mt-2 flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onMouseEnter={() => setHovered(n)}
+            onMouseLeave={() => setHovered(0)}
+            onClick={() => setSelected(n)}
+            aria-label={`Rate ${n} star${n === 1 ? '' : 's'}`}
+          >
+            <Star className={`h-6 w-6 ${(hovered || selected) >= n ? 'fill-warning text-warning' : 'text-muted-foreground/40'}`} />
+          </button>
+        ))}
+      </div>
+      {selected > 0 && (
+        <>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Anything else you'd like to share? (optional)"
+            rows={2}
+            className="mt-2 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs"
+          />
+          <Button type="button" size="sm" className="mt-2 w-full" onClick={submit} disabled={isSubmitting}>
+            {isSubmitting ? 'Submitting…' : 'Submit Rating'}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Portal<->LMS support chat widget (2026-07-31 user request, revised 2026-08-03, BPO-style pass
+ * 2026-08-20) - a floating button/panel available on every authenticated page (mounted once in
+ * App.tsx). Deliberately polling, not WebSockets - a few seconds of latency is fine for support
+ * chat, and it needs no new infrastructure; every "real-time" feature below (typing indicator,
+ * read receipts, unread badge) is built on top of that same poll rather than a push channel.
  *
  * 2026-08-03 (user request): opening the widget no longer creates/activates a chat session by
  * itself - it only peeks at an existing one (GET /portal/chat/active, no side effect). A brand-new
@@ -72,12 +172,23 @@ export function PortalChatWidget() {
   const [mode, setMode] = React.useState<'preChat' | 'composing' | 'chatting'>('preChat');
   const [conversation, setConversation] = React.useState<ChatConversation | null>(null);
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+  const [waitingPosition, setWaitingPosition] = React.useState<number | null>(null);
+  const [officerPresence, setOfficerPresence] = React.useState<ChatAgentStatus | null>(null);
   const [draft, setDraft] = React.useState('');
   const [file, setFile] = React.useState<File | null>(null);
   const [isSending, setIsSending] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [unreadCount, setUnreadCount] = React.useState(0);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const isOpenRef = React.useRef(isOpen);
+  const lastMessageIdRef = React.useRef<string | null>(null);
+  const lastTypingSentAtRef = React.useRef(0);
+
+  React.useEffect(() => {
+    isOpenRef.current = isOpen;
+    if (isOpen) setUnreadCount(0);
+  }, [isOpen]);
 
   const poll = React.useCallback((conversationId: string) => {
     apiClient
@@ -85,6 +196,21 @@ export function PortalChatWidget() {
       .then((view) => {
         setConversation(view.conversation);
         setMessages(view.messages);
+        setWaitingPosition(view.waitingPosition);
+        setOfficerPresence(view.officerPresence);
+
+        // Unread badge + notification sound (2026-08-20 user request) - only for a genuinely NEW
+        // staff message arriving while the widget is minimized, never on the first load of an
+        // already-seen history.
+        const lastStaffMessage = [...view.messages].reverse().find((m) => m.senderType === 'STAFF');
+        if (lastStaffMessage && lastStaffMessage.id !== lastMessageIdRef.current) {
+          const isFirstCheck = lastMessageIdRef.current === null;
+          lastMessageIdRef.current = lastStaffMessage.id;
+          if (!isFirstCheck && !isOpenRef.current) {
+            setUnreadCount((n) => n + 1);
+            playNotificationSound();
+          }
+        }
       })
       .catch(() => {});
   }, []);
@@ -121,6 +247,13 @@ export function PortalChatWidget() {
     setMode('composing');
   };
 
+  const sendTypingHeartbeat = (conversationId: string) => {
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < TYPING_HEARTBEAT_THROTTLE_MS) return;
+    lastTypingSentAtRef.current = now;
+    apiClient.post(`/portal/chat/${conversationId}/typing`, undefined, true).catch(() => {});
+  };
+
   /** The actual moment a conversation gets created and enters the real Waiting queue - only once
    * the client has typed/attached something and hit Send. */
   const handleComposeSend = async (e: React.FormEvent) => {
@@ -148,10 +281,23 @@ export function PortalChatWidget() {
   };
 
   React.useEffect(() => {
-    if (!isOpen || mode !== 'chatting' || !conversation || conversation.status === 'CLOSED') return;
+    if (!isOpen || mode !== 'chatting' || !conversation) return;
+    poll(conversation.id);
+    if (conversation.status === 'CLOSED') return;
     const timer = window.setInterval(() => poll(conversation.id), POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [isOpen, mode, conversation, poll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, conversation?.id, conversation?.status, poll]);
+
+  // Keeps polling in the background even while minimized (so the unread badge/sound actually
+  // fire) - a shorter-lived effect scoped to "have an active conversation at all", independent of
+  // the widget being open.
+  React.useEffect(() => {
+    if (!conversation || conversation.status === 'CLOSED' || mode !== 'chatting') return;
+    const timer = window.setInterval(() => poll(conversation.id), POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.id, conversation?.status, mode, poll]);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -178,6 +324,14 @@ export function PortalChatWidget() {
     }
   };
 
+  const staffIsTyping = conversation ? isRecentlyActive(conversation.staffTypingAt, TYPING_INDICATOR_TTL_MS) : false;
+  const lastOwnMessage = [...messages].reverse().find((m) => m.senderType === 'PORTAL_ACCOUNT');
+  const lastOwnMessageSeen =
+    lastOwnMessage && conversation?.staffLastReadAt
+      ? new Date(conversation.staffLastReadAt).getTime() >= new Date(lastOwnMessage.createdAt).getTime()
+      : false;
+  const showRatingPrompt = conversation?.status === 'CLOSED' && !conversation.ratedAt;
+
   if (!isOpen) {
     return (
       <button
@@ -187,6 +341,11 @@ export function PortalChatWidget() {
         className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90"
       >
         <MessageCircle className="h-6 w-6" />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold text-destructive-foreground">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
       </button>
     );
   }
@@ -196,13 +355,18 @@ export function PortalChatWidget() {
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <p className="text-sm font-semibold">Chat with Easycash</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {mode === 'chatting' && conversation?.status === 'CLAIMED' && (
+              <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${presenceDotClass(officerPresence)}`} />
+            )}
             {mode === 'preChat'
               ? 'Automated assistant'
               : mode === 'composing'
                 ? 'Type your message to reach a loan officer'
                 : conversation
-                  ? statusLabel(conversation)
+                  ? staffIsTyping
+                    ? `${conversation.claimedByUserName ?? 'Agent'} is typing…`
+                    : statusLabel(conversation)
                   : 'Starting…'}
           </p>
         </div>
@@ -273,6 +437,13 @@ export function PortalChatWidget() {
         <>
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             {isLoading && <p className="text-center text-xs text-muted-foreground">Connecting…</p>}
+            {mode === 'chatting' && conversation?.status === 'WAITING' && waitingPosition !== null && (
+              <div className="rounded-lg bg-secondary/70 px-3 py-2 text-center text-xs text-muted-foreground">
+                {waitingPosition === 0
+                  ? "You're next in line - a loan officer will be with you shortly."
+                  : `${waitingPosition} ${waitingPosition === 1 ? 'person is' : 'people are'} ahead of you in the queue.`}
+              </div>
+            )}
             {messages.map((message) => (
               <div key={message.id} className={message.senderType === 'SYSTEM' ? 'text-center' : message.senderType === 'PORTAL_ACCOUNT' ? 'flex justify-end' : 'flex justify-start'}>
                 {message.senderType === 'SYSTEM' ? (
@@ -297,11 +468,30 @@ export function PortalChatWidget() {
                         <Paperclip className="h-3 w-3" /> {message.attachment.fileName}
                       </button>
                     )}
-                    <p className="mt-1 text-[10px] opacity-70">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {/* Read receipt (2026-08-20 user request) - only on this client's own last
+                          message, and only once the agent's read watermark has caught up to it. */}
+                      {message.senderType === 'PORTAL_ACCOUNT' && lastOwnMessage?.id === message.id && lastOwnMessageSeen && (
+                        <CheckCheck className="h-3 w-3" aria-label="Seen" />
+                      )}
+                    </p>
                   </div>
                 )}
               </div>
             ))}
+            {staffIsTyping && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-1 rounded-2xl bg-secondary px-3 py-2">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
+                </div>
+              </div>
+            )}
+            {showRatingPrompt && conversation && (
+              <RatingPrompt conversationId={conversation.id} onSubmitted={() => poll(conversation.id)} />
+            )}
           </div>
 
           {conversation && conversation.status !== 'CLOSED' && (
@@ -325,7 +515,15 @@ export function PortalChatWidget() {
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} aria-label="Attach a file">
                   <Paperclip className="h-4 w-4" />
                 </Button>
-                <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Type a message…" className="flex-1" />
+                <Input
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    if (conversation) sendTypingHeartbeat(conversation.id);
+                  }}
+                  placeholder="Type a message…"
+                  className="flex-1"
+                />
                 <Button type="submit" size="sm" disabled={isSending || (!draft.trim() && !file)} aria-label="Send">
                   <Send className="h-4 w-4" />
                 </Button>

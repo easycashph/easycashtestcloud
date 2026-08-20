@@ -513,6 +513,14 @@ export interface ChatConversation {
   createdAt: string;
   claimedAt: string | null;
   closedAt: string | null;
+  /** BPO-style UX (2026-08-20 user request). */
+  portalLastReadAt: string | null;
+  staffLastReadAt: string | null;
+  portalTypingAt: string | null;
+  staffTypingAt: string | null;
+  rating: number | null;
+  ratingComment: string | null;
+  ratedAt: string | null;
 }
 
 export interface ChatMessage {
@@ -526,9 +534,13 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+export type ChatAgentStatus = 'ONLINE' | 'AWAY' | 'OFFLINE';
+
 export interface PortalChatView {
   conversation: ChatConversation;
   messages: ChatMessage[];
+  waitingPosition: number | null;
+  officerPresence: ChatAgentStatus | null;
 }
 
 export type MisPostType = 'AUTO_ROTATION' | 'MANUAL';
