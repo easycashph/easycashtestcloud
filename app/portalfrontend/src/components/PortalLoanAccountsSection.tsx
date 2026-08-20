@@ -6,19 +6,14 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { apiClient, downloadFile } from '@/lib/apiClient';
 import { previewLoanSchedule, type SchedulePreviewResult } from '@/lib/loanSchedulePreview';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import type { Translations } from '@/lib/i18n/translations';
 import type { PortalInstallmentEntry, PortalLoanAccountSummary, PortalStatementOfAccountEntry } from '@/lib/portalApiTypes';
 
 function peso(value: string): string {
   const n = Number(value);
   return Number.isFinite(n) ? `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : value;
 }
-
-const INSTALLMENT_STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Not yet due',
-  PARTIALLY_PAID: 'Partially paid',
-  PAID: 'Paid',
-  LATE: 'Overdue',
-};
 
 const INSTALLMENT_STATUS_TONE: Record<string, string> = {
   PENDING: 'bg-secondary text-secondary-foreground',
@@ -31,18 +26,6 @@ const INSTALLMENT_STATUS_TONE: Record<string, string> = {
  * its StatusBadge component) so "Active"/"Closed" reads the same way to a client here as it does
  * to staff internally. Every value of the backend's LoanAccountStatus enum is covered so an
  * unrecognized future status still renders as its raw string rather than disappearing silently. */
-const LOAN_ACCOUNT_STATUS_LABELS: Record<string, string> = {
-  PENDING_APPROVAL: 'Pending Approval',
-  APPROVED: 'Approved',
-  ACTIVE: 'Active',
-  ACTIVE_IN_ARREARS: 'Active (Past Due)',
-  CLOSED: 'Closed',
-  CLOSED_WRITTEN_OFF: 'Closed (Written Off)',
-  CLOSED_REJECTED: 'Closed (Rejected)',
-  CLOSED_RESTRUCTURED: 'Closed (Restructured)',
-  CLOSED_ADJUSTED: 'Closed (Adjusted)',
-};
-
 const LOAN_ACCOUNT_STATUS_TONE: Record<string, string> = {
   PENDING_APPROVAL: 'bg-secondary text-secondary-foreground',
   APPROVED: 'bg-secondary text-secondary-foreground',
@@ -55,10 +38,11 @@ const LOAN_ACCOUNT_STATUS_TONE: Record<string, string> = {
   CLOSED_ADJUSTED: 'bg-secondary text-secondary-foreground',
 };
 
-function LoanAccountStatusBadge({ status }: { status: string }) {
+function LoanAccountStatusBadge({ status, t }: { status: string; t: Translations }) {
+  const labels: Record<string, string> = t.loanAccounts.accountStatus;
   return (
     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${LOAN_ACCOUNT_STATUS_TONE[status] ?? 'bg-secondary text-secondary-foreground'}`}>
-      {LOAN_ACCOUNT_STATUS_LABELS[status] ?? status}
+      {labels[status] ?? status}
     </span>
   );
 }
@@ -88,6 +72,7 @@ function totalOutstanding(loanAccounts: PortalLoanAccountSummary[]): number {
  * of "No installment schedule found for this loan." (which reads like a data error, not the
  * expected pre-disbursement state). */
 function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
+  const { t } = useLanguage();
   const [installments, setInstallments] = React.useState<PortalInstallmentEntry[] | null>(null);
 
   React.useEffect(() => {
@@ -109,7 +94,10 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
       )
     : null;
 
-  const title = loanAccount ? `${showPreview ? 'Repayment Schedule Preview' : 'Payment Schedule'} - ${loanAccount.loanCode}` : 'Payment Schedule';
+  const d = t.loanAccounts.scheduleDialog;
+  const title = loanAccount
+    ? (showPreview ? d.previewTitle : d.title).replace('{loanCode}', loanAccount.loanCode)
+    : d.defaultTitle;
 
   return (
     <Dialog open={loanAccount !== null} onClose={onClose} title={title}>
@@ -124,18 +112,17 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
           <>
             <div className="mb-3 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              Preview only - this loan hasn&apos;t been disbursed yet, so this schedule hasn&apos;t been generated. It&apos;s computed
-              from the current Principal, Interest Rate, and Term, and may still change before disbursement.
+              {d.previewNote}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">#</th>
-                    <th className="py-2 pr-3 font-medium">Due Date</th>
-                    <th className="py-2 pr-3 font-medium">Principal</th>
-                    <th className="py-2 pr-3 font-medium">Interest</th>
-                    <th className="py-2 font-medium">Payment</th>
+                    <th className="py-2 pr-3 font-medium">{d.colNumber}</th>
+                    <th className="py-2 pr-3 font-medium">{d.colDueDate}</th>
+                    <th className="py-2 pr-3 font-medium">{d.colPrincipal}</th>
+                    <th className="py-2 pr-3 font-medium">{d.colInterest}</th>
+                    <th className="py-2 font-medium">{d.colPayment}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -153,37 +140,40 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
             </div>
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">A schedule preview isn&apos;t available for this loan yet.</p>
+          <p className="text-sm text-muted-foreground">{d.previewUnavailable}</p>
         )
       ) : installments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No installment schedule found for this loan.</p>
+        <p className="text-sm text-muted-foreground">{d.noSchedule}</p>
       ) : (
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">#</th>
-                  <th className="py-2 pr-3 font-medium">Due Date</th>
-                  <th className="py-2 pr-3 font-medium">Amount Due</th>
-                  <th className="py-2 pr-3 font-medium">Paid</th>
-                  <th className="py-2 font-medium">Status</th>
+                  <th className="py-2 pr-3 font-medium">{d.colNumber}</th>
+                  <th className="py-2 pr-3 font-medium">{d.colDueDate}</th>
+                  <th className="py-2 pr-3 font-medium">{d.colAmountDue}</th>
+                  <th className="py-2 pr-3 font-medium">{d.colPaid}</th>
+                  <th className="py-2 font-medium">{d.colStatus}</th>
                 </tr>
               </thead>
               <tbody>
-                {installments.map((installment) => (
-                  <tr key={installment.installmentNumber} className="border-b border-border/60 last:border-0">
-                    <td className="py-2 pr-3">{installment.installmentNumber}</td>
-                    <td className="py-2 pr-3">{new Date(installment.dueDate).toLocaleDateString()}</td>
-                    <td className="py-2 pr-3">{peso(installment.totalDue)}</td>
-                    <td className="py-2 pr-3">{peso(installment.totalPaid)}</td>
-                    <td className="py-2">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${INSTALLMENT_STATUS_TONE[installment.status] ?? 'bg-secondary'}`}>
-                        {INSTALLMENT_STATUS_LABELS[installment.status] ?? installment.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {installments.map((installment) => {
+                  const statusLabels: Record<string, string> = t.loanAccounts.installmentStatus;
+                  return (
+                    <tr key={installment.installmentNumber} className="border-b border-border/60 last:border-0">
+                      <td className="py-2 pr-3">{installment.installmentNumber}</td>
+                      <td className="py-2 pr-3">{new Date(installment.dueDate).toLocaleDateString()}</td>
+                      <td className="py-2 pr-3">{peso(installment.totalDue)}</td>
+                      <td className="py-2 pr-3">{peso(installment.totalPaid)}</td>
+                      <td className="py-2">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${INSTALLMENT_STATUS_TONE[installment.status] ?? 'bg-secondary'}`}>
+                          {statusLabels[installment.status] ?? installment.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -191,7 +181,7 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
               downloadable copy without generating/storing a separate PDF that could drift from the
               live schedule above. */}
           <Button type="button" variant="outline" className="mt-4" onClick={() => window.print()}>
-            Print / Save as PDF
+            {d.printSave}
           </Button>
         </>
       )}
@@ -204,6 +194,8 @@ function InstallmentScheduleDialog({ loanAccount, onClose }: { loanAccount: Port
  * option: an SOA's fee/date parameters are staff-set, not something a client should self-serve.
  */
 function StatementsOfAccountDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
+  const { t } = useLanguage();
+  const d = t.loanAccounts.soaDialog;
   const [statements, setStatements] = React.useState<PortalStatementOfAccountEntry[] | null>(null);
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
@@ -228,14 +220,14 @@ function StatementsOfAccountDialog({ loanAccount, onClose }: { loanAccount: Port
         `Statement of Account - ${statement.soaNumber}.pdf`,
       );
     } catch {
-      setDownloadError('Could not download this statement. Please try again.');
+      setDownloadError(d.downloadError);
     } finally {
       setDownloadingId(null);
     }
   };
 
   return (
-    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? `Statement of Account - ${loanAccount.loanCode}` : 'Statement of Account'}>
+    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? d.title.replace('{loanCode}', loanAccount.loanCode) : d.defaultTitle}>
       {statements === null ? (
         <div className="space-y-2">
           {[0, 1].map((i) => (
@@ -243,22 +235,22 @@ function StatementsOfAccountDialog({ loanAccount, onClose }: { loanAccount: Port
           ))}
         </div>
       ) : statements.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No Statement of Account has been generated for this loan yet - ask your loan officer to generate one.
-        </p>
+        <p className="text-sm text-muted-foreground">{d.none}</p>
       ) : (
         <div className="divide-y divide-border">
           {downloadError && <p className="pb-3 text-sm text-destructive">{downloadError}</p>}
           {statements.map((statement) => (
             <div key={statement.id} className="flex items-center justify-between gap-3 py-3">
               <div>
-                <p className="text-sm font-medium">SOA #{statement.soaNumber}</p>
+                <p className="text-sm font-medium">{d.soaNumber.replace('{number}', statement.soaNumber)}</p>
                 <p className="text-xs text-muted-foreground">
-                  Generated {new Date(statement.generatedAt).toLocaleDateString()} - Total amount due: {peso(statement.totalAmountDue)}
+                  {d.generatedNote
+                    .replace('{date}', new Date(statement.generatedAt).toLocaleDateString())
+                    .replace('{amount}', peso(statement.totalAmountDue))}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" disabled={downloadingId === statement.id} onClick={() => handleDownload(statement)}>
-                {downloadingId === statement.id ? 'Downloading…' : 'Download'}
+                {downloadingId === statement.id ? d.downloading : d.download}
               </Button>
             </div>
           ))}
@@ -279,36 +271,35 @@ function StatementsOfAccountDialog({ loanAccount, onClose }: { loanAccount: Port
  * worse than being upfront about what this figure does and doesn't include.
  */
 function PayoffAmountDialog({ loanAccount, onClose }: { loanAccount: PortalLoanAccountSummary | null; onClose: () => void }) {
+  const { t } = useLanguage();
+  const d = t.loanAccounts.payoffDialog;
   return (
-    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? `Payoff Amount - ${loanAccount.loanCode}` : 'Payoff Amount'}>
+    <Dialog open={loanAccount !== null} onClose={onClose} title={loanAccount ? d.title.replace('{loanCode}', loanAccount.loanCode) : d.defaultTitle}>
       {loanAccount && (
         <div className="space-y-4">
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
-            <p className="text-xs text-muted-foreground">Pay this amount today to fully close this loan</p>
+            <p className="text-xs text-muted-foreground">{d.payToday}</p>
             <p className="mt-1 text-2xl font-bold text-primary">{peso(loanAccount.outstandingBalance)}</p>
           </div>
           <dl className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">Principal</dt>
+              <dt className="text-muted-foreground">{d.principal}</dt>
               <dd>{peso(loanAccount.principalBalance)}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">Interest</dt>
+              <dt className="text-muted-foreground">{d.interest}</dt>
               <dd>{peso(loanAccount.interestBalance)}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">Fees</dt>
+              <dt className="text-muted-foreground">{d.fees}</dt>
               <dd>{peso(loanAccount.feesBalance)}</dd>
             </div>
             <div className="flex items-center justify-between">
-              <dt className="text-muted-foreground">Penalty</dt>
+              <dt className="text-muted-foreground">{d.penalty}</dt>
               <dd>{peso(loanAccount.penaltyBalance)}</dd>
             </div>
           </dl>
-          <p className="text-xs text-muted-foreground">
-            As of your last posted transaction - may not include interest still accruing since then. Confirm the exact amount with your loan
-            officer before paying.
-          </p>
+          <p className="text-xs text-muted-foreground">{d.note}</p>
         </div>
       )}
     </Dialog>
@@ -321,6 +312,7 @@ function PayoffAmountDialog({ loanAccount, onClose }: { loanAccount: PortalLoanA
  * pre-approval/under review, or not yet linked) - never a placeholder/empty-state card implying a
  * loan exists. */
 export function PortalLoanAccountsSection() {
+  const { t } = useLanguage();
   const [loanAccounts, setLoanAccounts] = React.useState<PortalLoanAccountSummary[] | null>(null);
   const [viewingLoanAccount, setViewingLoanAccount] = React.useState<PortalLoanAccountSummary | null>(null);
   const [viewingStatementsFor, setViewingStatementsFor] = React.useState<PortalLoanAccountSummary | null>(null);
@@ -339,10 +331,11 @@ export function PortalLoanAccountsSection() {
     <>
       <Card className="p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 className="text-base font-semibold">My Loans</h2>
+          <h2 className="text-base font-semibold">{t.loanAccounts.myLoans}</h2>
           {loanAccounts !== null && loanAccounts.some((l) => OPEN_LOAN_ACCOUNT_STATUSES.has(l.status)) && (
             <p className="text-sm text-muted-foreground">
-              Total outstanding: <span className="font-semibold text-foreground">{peso(totalOutstanding(loanAccounts).toString())}</span>
+              {t.loanAccounts.totalOutstanding.split('{amount}')[0]}
+              <span className="font-semibold text-foreground">{peso(totalOutstanding(loanAccounts).toString())}</span>
             </p>
           )}
         </div>
@@ -361,36 +354,38 @@ export function PortalLoanAccountsSection() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm font-medium">{loanAccount.loanCode}</p>
-                      <LoanAccountStatusBadge status={loanAccount.status} />
+                      <LoanAccountStatusBadge status={loanAccount.status} t={t} />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Outstanding balance: {peso(loanAccount.outstandingBalance)} of {peso(loanAccount.principalAmount)}
+                      {t.loanAccounts.outstandingOf
+                        .replace('{outstanding}', peso(loanAccount.outstandingBalance))
+                        .replace('{principal}', peso(loanAccount.principalAmount))}
                     </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => setViewingLoanAccount(loanAccount)}>
-                    View Payment Schedule
+                    {t.loanAccounts.viewSchedule}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     disabled={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status)}
-                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? 'Available once this loan has been disbursed' : undefined}
+                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? t.loanAccounts.availableOnceDisbursed : undefined}
                     onClick={() => setViewingStatementsFor(loanAccount)}
                   >
-                    Statement of Account
+                    {t.loanAccounts.statementOfAccount}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     disabled={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status)}
-                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? 'Available once this loan has been disbursed' : undefined}
+                    title={NOT_YET_DISBURSED_STATUSES.has(loanAccount.status) ? t.loanAccounts.availableOnceDisbursed : undefined}
                     onClick={() => setViewingPayoffFor(loanAccount)}
                   >
-                    Payoff Amount
+                    {t.loanAccounts.payoffAmount}
                   </Button>
                 </div>
               </div>
