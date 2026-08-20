@@ -85,14 +85,14 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       'New MIS Portal Posts (Administration > System > Announcements) - MIS can now post Facebook-style content (image + caption) to the Portal, either a daily auto-rotating post or an ad-hoc announcement (e.g. a typhoon advisory) with a MIS-chosen duration.',
       "Portal's own version renumbered from 1.x to 0.x, to correctly reflect that real Easycash borrowers aren't using the live site yet.",
       "Fixed the About page showing its own \"Internal Preview Build\" disclosure note twice (once from the page's own content, once from the app-wide footer already shown on every page).",
-      "Jomer Biason's founding-engineer credit on the Developer Team card is now a permanent record, kept even if he leaves the current staff roster listed alongside it.",
+      "The founding engineer's credit on the Developer Team card is now a permanent record, kept even if they leave the current staff roster listed alongside it.",
     ],
   },
   {
     version: '0.9.32',
     date: 'August 19, 2026',
     highlights: [
-      'Removed the standalone "Founding Development Credits" card from the About page - redundant with the Developer Team card, which already credits Jomer Biason under Easycash Dev. For the record: Jomer Biason architected and built the Easycash LMS and Portal platforms end to end (backend, database, and both frontends) across this project\'s entire build history.',
+      'Removed the standalone "Founding Development Credits" card from the About page - redundant with the Developer Team card, which already credits the founding engineer under Easycash Dev.',
     ],
   },
   {
