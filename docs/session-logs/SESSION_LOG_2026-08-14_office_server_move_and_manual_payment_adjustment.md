@@ -1435,12 +1435,44 @@ differences**, confirming §27's `restore-native-users.ts` run already recovered
 
 - Roles & Permissions now fully match the pre-migration (2026-08-18) state, plus this session's own
   additions - confirmed by direct diff against a real pre-reset backup, not assumption.
-- **New standing gap identified**: `RolePermission` customizations have no backup/restore pair the
-  way native loan applications/users do (§26). If another full reset ever happens, this same
-  manual pg_dump-diff-restore recovery process would be needed again - worth building a proper
-  `backup-native-role-permissions.ts`/`restore-native-role-permissions.ts` pair (mirroring the
-  existing two) before the next one, rather than relying on a lucky same-day pg_dump existing.
 - `local/backups/` (gitignored, local-only) turned out to hold real pg_dump snapshots
   (`easycash_20260814_130033.dump`, `pre_resync_20260814_162157.dump`,
   `easycash_20260818_132805.dump`) plus `storage_*.tar.gz` attachment-file backups - worth
   remembering this exists next time something appears lost after a reset.
+- **Gap closed same day, see §32**: `backup-native-role-permissions.ts`/
+  `restore-native-role-permissions.ts` now exist and are wired into the migration `.bat`, so the
+  next full reset won't need another manual pg_dump-diff-restore recovery.
+
+## §32 - Roles & Permissions now has a backup/restore pair too (2026-08-20)
+
+Direct follow-up to §31: user asked to make the recovery permanent so it "hindi mawala" (doesn't
+get lost) on the next full migration, covering User Accounts + Members + Roles + Permissions
+together.
+
+Members/User Accounts + their role assignments were already fully covered by the existing
+`backup-native-users.ts`/`restore-native-users.ts` pair (§26/§27) - confirmed again in §31 via a
+direct diff against the Aug 18 pre-reset dump, zero differences. The actual gap was
+`role_permissions` (which permissions each role is GRANTED, not who has which role) - built
+`backup-native-role-permissions.ts`/`restore-native-role-permissions.ts`, mirroring the
+users pair's shape exactly:
+- Backup captures the FULL current table (not a diff against `seed.ts` defaults), denormalized to
+  (role name, permission code) pairs - both ids get regenerated on every fresh migration.
+- Restore uses `prisma.rolePermission.createMany({ skipDuplicates: true })` - idempotent by
+  design, since re-granting something `seed.ts` already set is a harmless no-op; a role name or
+  permission code that no longer exists post-migration is skipped with a warning, not fatal.
+- Wired into the `.bat`'s `[BACKUP]` section (right after `backup-native-users.ts`) and `[RESTORE]`
+  section (right after `restore-native-users.ts`), same position/pairing as the existing two.
+
+Ran the backup once immediately against the live (already-corrected) database as an out-of-band
+safety net - 98 grants captured - and test-ran the restore against that same live database to
+confirm it's a correct no-op (0 new rows, all 98 already present) rather than only trusting it
+untested until the next real reset.
+
+### Current state / follow-ups
+
+- All three native-data categories a full reset can destroy - loan applications/attachments, user
+  accounts, and now role-permission grants - have a backup/restore pair wired into the migration
+  `.bat`. No known remaining gap of this kind.
+- The next full migration should show three `[BACKUP]` lines and three `[RESTORE]` lines; if any
+  are missing from the console output, something regressed and should be flagged before trusting
+  the run's completeness.
