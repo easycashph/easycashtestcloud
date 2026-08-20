@@ -118,6 +118,18 @@ pushd "%BACKEND_DIR%"
 call npx tsx scripts\backup-native-system-settings.ts
 popd
 
+REM 2026-08-20 (user request, real 6-account loss found and recovered manually via a lucky
+REM same-day pg_dump - see session log): Portal self-service borrower login accounts have no other
+REM record and are permanently wiped by a reset - see backup-native-portal-accounts.ts's own doc
+REM comment for the exact scope (also where the "Borrower.id is not actually stable across a
+REM reset" finding came from).
+echo.
+echo [BACKUP] Bina-backup ang mga Portal account (self-service na login
+echo          ng mga borrower)...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backup-native-portal-accounts.ts
+popd
+
 echo.
 echo [1/18] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
@@ -286,6 +298,13 @@ echo [RESTORE] Ibinabalik ang ibang system settings (Document Templates,
 echo           Reminder Settings, Announcements) na binackup bago ang reset...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\restore-native-system-settings.ts
+popd
+
+echo.
+echo [RESTORE] Ibinabalik ang mga Portal account (self-service na login
+echo           ng mga borrower) na binackup bago ang reset...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\restore-native-portal-accounts.ts
 popd
 
 echo.

@@ -36,7 +36,7 @@ function jsonSafe(value: unknown): unknown {
 }
 
 async function main() {
-  const loanApplications = await prisma.loanApplication.findMany();
+  const loanApplications = await prisma.loanApplication.findMany({ include: { borrower: { select: { legacyId: true } } } });
   const attachments = await prisma.attachment.findMany({ where: { legacyId: null } });
 
   if (loanApplications.length === 0 && attachments.length === 0) {
@@ -48,9 +48,18 @@ async function main() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outPath = path.join(BACKUP_DIR, `native-loan-applications-${timestamp}.json`);
 
+  // 2026-08-20 (bug fix, session log §35): `borrowerId` used to be left as a raw id, on the wrong
+  // assumption that a legacy-sourced Borrower's id survives a reset unchanged - it doesn't (see
+  // restore-native-portal-accounts.ts's own doc comment for the full finding). Denormalized to the
+  // borrower's own `legacyId` here instead, same fix already applied there.
+  const loanApplicationsWithLegacyBorrowerId = loanApplications.map((la) => {
+    const { borrower, ...rest } = la;
+    return { ...rest, borrowerLegacyId: borrower?.legacyId ?? null };
+  });
+
   const payload = {
     createdAt: new Date().toISOString(),
-    loanApplications: JSON.parse(JSON.stringify(loanApplications, (_key, v) => jsonSafe(v))),
+    loanApplications: JSON.parse(JSON.stringify(loanApplicationsWithLegacyBorrowerId, (_key, v) => jsonSafe(v))),
     attachments: JSON.parse(JSON.stringify(attachments, (_key, v) => jsonSafe(v))),
   };
 

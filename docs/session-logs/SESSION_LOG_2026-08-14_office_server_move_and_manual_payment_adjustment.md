@@ -1594,3 +1594,50 @@ not `404`).
     through the actual flow) - recommend a real walkthrough (create a session in LMS, log into the
     Portal as that borrower, confirm the Dashboard card appears and the full sign flow completes)
     before treating this as production-verified.
+
+## §35 - Portal Account logins were also being wiped by a reset - recovered, backup/restore added (2026-08-20)
+
+User asked to check the pre-migration pg_dump backup for `PortalAccount` data. Found the live
+database had **0** `PortalAccount` rows - self-service borrower login accounts for the Portal, a
+table `seed.ts` never populates, so a full reset wipes it with nothing to rebuild it (same shape of
+gap as Roles & Permissions §31/§32, but never checked for this table until now). Restored the same
+2026-08-18 pre-migration dump into a scratch database (same technique as §31), found **7** accounts
+there - 6 real, plus `TESTManny Mayweather Pacquiao` (`101xsalt@gmail.com`), the test account
+already deliberately deleted from every other table earlier this session - excluded from recovery.
+
+**A second, more consequential bug surfaced while remapping `borrowerId`**: the initial attempt to
+restore the 5 borrower-linked accounts found none of their `borrowerId`s existed in the live,
+post-migration database. Root cause: `Borrower.id` is **not actually stable across a full reset**,
+even for a legacy-sourced borrower - `migrate-legacy-data.ts`'s `borrower.upsert()` always hits the
+`create` path against an empty post-reset table, which assigns a fresh random `@default(uuid())`
+`id` every time; only `legacyId` itself stays constant. This directly contradicts
+`restore-native-loan-applications.ts`'s own doc comment ("legacy-derived rows... survive the reset
+with the SAME id") - that script's `borrowerId` fields were being silently **null'd out** rather
+than correctly remapped, for every restored loan application that had one set. Not fixed in that
+script this session (flagged as a known follow-up in the new script's doc comment) - the 4 loan
+applications restored in §27 should be checked and their real borrower links re-established by hand
+if this matters going forward.
+
+Built `backup-native-portal-accounts.ts`/`restore-native-portal-accounts.ts` correctly this time -
+denormalizes `borrowerId` to the borrower's `legacyId` (not the raw id) and remaps it against
+whatever `Borrower.id` currently has that `legacyId` post-migration, dropping the link (not the
+whole account) with a warning if it no longer resolves. Wired into both `[BACKUP]`/`[RESTORE]`
+sections of the migration `.bat`, same position/pairing as the other four pairs.
+
+Recovered all 6 real accounts against the live database today: hand-built a backup JSON from the
+scratch-database query results (matching the new script's exact shape), ran the restore script
+against it, verified all 6 landed with correctly remapped borrower links (`nomer.perez@easycash.ph`,
+`developer@easycash.ph`, `ericpacetes05@gmail.com`, `aldz.maniwang@gmail.com`,
+`sephdegalicia1@gmail.com`, `herugrim246@gmail.com` - the last one unlinked, matches its pre-reset
+state).
+
+### Current state / follow-ups
+
+- Five native-data categories now have a backup/restore pair wired into the migration `.bat`: loan
+  applications/attachments, users, role-permission grants, system settings, and (as of today) Portal
+  Accounts. Still deliberately open: Loan Products/Product Versions/penalty & fee rules (§33).
+- **New follow-up, not yet done**: `restore-native-loan-applications.ts`'s `borrowerId` handling has
+  the same "assumed stable, actually isn't" bug this section found and fixed for Portal Accounts -
+  worth applying the same `legacyId`-remap fix there, and checking whether the 4 applications
+  restored back in §27 need their borrower links manually repaired now that this is understood.
+- The next full migration should show five `[BACKUP]` lines and five `[RESTORE]` lines.
