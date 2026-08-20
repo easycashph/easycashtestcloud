@@ -38,7 +38,12 @@ export class RequestPortalSigningOtpUseCase {
 
     const messageBody = `Easycash: Your loan document signing code is ${otpCode}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`;
     let recipient: string;
-    if (session.channel === 'EMAIL' && session.email) {
+    // 2026-08-20 (Portal e-signature): a PORTAL-channel session has no SMS-only guarantee like an
+    // SMS-channel one does - prefer email whenever it's on the session (both EMAIL and PORTAL
+    // channels always populate it, see CreateLoanSigningSessionUseCase), falling back to SMS only
+    // when there's genuinely no email on file. Unchanged for SMS-channel sessions, which never set
+    // `email` in the first place.
+    if (session.email) {
       recipient = session.email;
       await this.deps.emailGateway.send(session.email, 'Easycash: Your loan document signing code', messageBody);
     } else {
@@ -52,7 +57,7 @@ export class RequestPortalSigningOtpUseCase {
         loanAccountId: session.loanAccountId,
         type: 'OTP',
         partyType: session.partyType,
-        channel: session.channel === 'EMAIL' && session.email ? 'EMAIL' : 'SMS',
+        channel: session.email ? 'EMAIL' : 'SMS',
         recipient,
       })
       .catch(() => undefined);

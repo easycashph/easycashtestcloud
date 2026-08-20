@@ -10,12 +10,15 @@ import type { IEmailGateway } from '@modules/email-reminder/application/ports/IE
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
 import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
+import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
+import type { PortalNotificationService } from '@modules/client-portal/application/PortalNotificationService';
 import { LoanSigningSession, type SigningPartyType, type SigningLinkChannel } from '../../domain/LoanSigningSession';
 import {
   NoCoBorrowerLinkedError,
   NoDocumentsForPartyError,
   NoEmailOnFileError,
   NoPhoneNumberOnFileError,
+  NoPortalAccountLinkedError,
   NoRequiredDocumentTemplatesError,
 } from '../../domain/errors/LoanSigningDomainErrors';
 import type { ILoanSigningSessionRepository } from '../ports/ILoanSigningSessionRepository';
@@ -55,6 +58,8 @@ export interface CreateLoanSigningSessionUseCaseDeps {
   borrowerRepository: IBorrowerRepository;
   coBorrowerRepository: ICoBorrowerRepository;
   loanApplicationRepository: ILoanApplicationRepository;
+  portalAccountRepository: IPortalAccountRepository;
+  portalNotificationService: PortalNotificationService;
   smsGateway: ISmsGateway;
   emailGateway: IEmailGateway;
 }
@@ -127,7 +132,24 @@ export class CreateLoanSigningSessionUseCase {
 
     let recipientPhoneNumber: string;
     let recipientEmail: string | undefined;
-    if (channel === 'EMAIL') {
+    let portalAccountId: string | undefined;
+    if (channel === 'PORTAL') {
+      // 2026-08-20 (Portal e-signature) - only meaningful for the borrower's own Portal login;
+      // co-borrowers never have a PortalAccount (see SigningLinkChannel's own doc comment).
+      if (partyType === 'CO_BORROWER') {
+        throw new ValidationError('A Portal-channel signing session is only available for the borrower, not the co-borrower.');
+      }
+      const [borrower, portalAccount] = await Promise.all([
+        this.deps.borrowerRepository.findById(loanAccount.borrowerId),
+        this.deps.portalAccountRepository.findByBorrowerId(loanAccount.borrowerId),
+      ]);
+      if (!borrower) throw new NotFoundError('Borrower', loanAccount.borrowerId);
+      if (!portalAccount) throw new NoPortalAccountLinkedError();
+      recipientEmail = borrower.email ?? portalAccount.email;
+      recipientPhoneNumber = borrower.mobilePhone1 ?? portalAccount.contactNumber ?? '';
+      if (!recipientEmail && !recipientPhoneNumber) throw new NoEmailOnFileError(partyType);
+      portalAccountId = portalAccount.id;
+    } else if (channel === 'EMAIL') {
       if (partyType === 'CO_BORROWER') {
         recipientEmail = coBorrowerEmail;
         recipientPhoneNumber = coBorrowerPhone ?? '';
@@ -203,20 +225,37 @@ export class CreateLoanSigningSessionUseCase {
     });
     await this.deps.loanSigningSessionRepository.create(session);
 
-    const signingUrl = `${env.SIGNING_LINK_BASE_URL}/sign/${rawToken}`;
     const partyLabel = partyType === 'CO_BORROWER' ? ' (co-borrower)' : '';
-    // 2026-07-28 (user-picked wording, option 3): "Hi! Please review and sign..." - used for both
-    // the SMS message and the plain-text email fallback, kept identical across channels.
-    const messageBody = `Hi! Please review and sign ${documents.length} loan document(s)${partyLabel} for your Easycash loan: ${signingUrl} - valid for ${SESSION_TTL_DAYS} days.`;
-    if (channel === 'EMAIL') {
-      await this.deps.emailGateway.send(
-        recipientEmail!,
-        'Easycash: Please review and sign your loan document(s)',
-        messageBody,
-        buildSigningEmailHtml({ partyLabel, documentCount: documents.length, signingUrl, ttlDays: SESSION_TTL_DAYS }),
-      );
+    let notificationRecipient: string;
+    if (channel === 'PORTAL') {
+      // 2026-08-20 (Portal e-signature) - no raw link goes out at all; the session shows up
+      // automatically on the borrower's Portal dashboard (ListPortalSigningSessionsUseCase) and is
+      // opened via their Portal login (resolvePortalSigningSession), not this session's own token.
+      await this.deps.portalNotificationService.notify({
+        portalAccountId: portalAccountId!,
+        type: 'DOCUMENT_SIGNING_REQUESTED',
+        title: 'Please sign your loan document(s)',
+        body: `You have ${documents.length} loan document(s) to review and sign. Log in to the Easycash Portal to continue.`,
+        entityType: 'LoanSigningSession',
+        entityId: session.id,
+      });
+      notificationRecipient = recipientEmail ?? recipientPhoneNumber;
     } else {
-      await this.deps.smsGateway.send(recipientPhoneNumber, messageBody);
+      const signingUrl = `${env.SIGNING_LINK_BASE_URL}/sign/${rawToken}`;
+      // 2026-07-28 (user-picked wording, option 3): "Hi! Please review and sign..." - used for both
+      // the SMS message and the plain-text email fallback, kept identical across channels.
+      const messageBody = `Hi! Please review and sign ${documents.length} loan document(s)${partyLabel} for your Easycash loan: ${signingUrl} - valid for ${SESSION_TTL_DAYS} days.`;
+      if (channel === 'EMAIL') {
+        await this.deps.emailGateway.send(
+          recipientEmail!,
+          'Easycash: Please review and sign your loan document(s)',
+          messageBody,
+          buildSigningEmailHtml({ partyLabel, documentCount: documents.length, signingUrl, ttlDays: SESSION_TTL_DAYS }),
+        );
+      } else {
+        await this.deps.smsGateway.send(recipientPhoneNumber, messageBody);
+      }
+      notificationRecipient = channel === 'EMAIL' ? recipientEmail! : recipientPhoneNumber;
     }
 
     // 2026-07-29 (user request): "may OTP sms and email log ba tayo?" - log every LINK send so
@@ -230,7 +269,7 @@ export class CreateLoanSigningSessionUseCase {
         type: 'LINK',
         partyType,
         channel,
-        recipient: channel === 'EMAIL' ? recipientEmail! : recipientPhoneNumber,
+        recipient: notificationRecipient,
       })
       .catch(() => undefined);
 

@@ -13,7 +13,7 @@ export interface LoanSigningSessionStatus {
   loanAccountId: string;
   partyType: 'BORROWER' | 'CO_BORROWER';
   phoneNumber: string;
-  channel: 'SMS' | 'EMAIL';
+  channel: 'SMS' | 'EMAIL' | 'PORTAL';
   email: string | null;
   expiresAt: string;
   revokedAt: string | null;
@@ -44,5 +44,5 @@ export interface SigningSessionView {
   otpVerified: boolean;
   fullySigned: boolean;
   documents: SigningSessionDocumentView[];
-  channel: 'SMS' | 'EMAIL';
+  channel: 'SMS' | 'EMAIL' | 'PORTAL';
 }

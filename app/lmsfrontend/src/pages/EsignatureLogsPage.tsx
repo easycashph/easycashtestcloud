@@ -20,7 +20,7 @@ import { formatDateTime } from '@/lib/utils';
 const PAGE_SIZE = 50;
 
 type SigningType = SigningNotificationLog['type'];
-type SigningChannel = 'SMS' | 'EMAIL';
+type SigningChannel = 'SMS' | 'EMAIL' | 'PORTAL';
 type SigningParty = SigningNotificationLog['partyType'];
 
 const TYPE_OPTIONS: { value: SigningType | 'ALL'; label: string }[] = [
@@ -33,6 +33,7 @@ const CHANNEL_OPTIONS: { value: SigningChannel | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All channels' },
   { value: 'SMS', label: 'SMS' },
   { value: 'EMAIL', label: 'Email' },
+  { value: 'PORTAL', label: 'Portal' },
 ];
 
 const PARTY_OPTIONS: { value: SigningParty | 'ALL'; label: string }[] = [

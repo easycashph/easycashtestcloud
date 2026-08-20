@@ -1093,6 +1093,8 @@ export function createApp(): Express {
         borrowerRepository,
         coBorrowerRepository,
         loanApplicationRepository: new PrismaLoanApplicationRepository(),
+        portalAccountRepository,
+        portalNotificationService,
         smsGateway: signingSmsGateway,
         emailGateway: signingEmailGateway,
       }),

@@ -4,13 +4,16 @@ import { randomUUID } from 'node:crypto';
  * loan application decision types (user's explicit choice, 2026-07-24); the 3 LOAN_ACCOUNT_* types
  * added 2026-08-14 (user request) for the separate LoanAccount lifecycle (booking/disbursing/
  * rejecting a LoanAccount from an approved application - see ApproveLoanUseCase/
- * ActivateLoanUseCase/RejectLoanUseCase), which previously had no portal notification at all. */
+ * ActivateLoanUseCase/RejectLoanUseCase), which previously had no portal notification at all.
+ * DOCUMENT_SIGNING_REQUESTED added 2026-08-20 for a "Send via Portal" e-signature session - see
+ * CreateLoanSigningSessionUseCase's `channel: 'PORTAL'` handling. */
 export type PortalNotificationType =
   | 'APPLICATION_APPROVED'
   | 'APPLICATION_DECLINED'
   | 'LOAN_ACCOUNT_APPROVED'
   | 'LOAN_ACCOUNT_DISBURSED'
-  | 'LOAN_ACCOUNT_REJECTED';
+  | 'LOAN_ACCOUNT_REJECTED'
+  | 'DOCUMENT_SIGNING_REQUESTED';
 
 export interface PortalNotificationProps {
   id: string;

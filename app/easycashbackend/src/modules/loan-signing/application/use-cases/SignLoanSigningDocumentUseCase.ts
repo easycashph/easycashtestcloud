@@ -101,8 +101,8 @@ export class SignLoanSigningDocumentUseCase {
       // 2026-07-29 (user request) - which channel/recipient the OTP for THIS signature went to,
       // same value SigningNotificationLog records for the OTP send itself (session.channel/email/
       // phoneNumber are captured once at send time, never re-read from the profile later).
-      otpChannel: session.channel,
-      otpRecipient: session.channel === 'EMAIL' && session.email ? session.email : session.phoneNumber,
+      otpChannel: session.email ? 'EMAIL' : 'SMS',
+      otpRecipient: session.email ? session.email : session.phoneNumber,
     });
 
     const signedStorageKey = `loan-signing/${session.id}/${entry.id}-signed.pdf`;

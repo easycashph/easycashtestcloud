@@ -455,7 +455,7 @@ function partyInitials(name: string | undefined, fallback: string): string {
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || fallback;
 }
 
-type SigningChannel = 'SMS' | 'EMAIL';
+type SigningChannel = 'SMS' | 'EMAIL' | 'PORTAL';
 
 function LoanSigningPanel({
   loanId,
@@ -597,11 +597,29 @@ function LoanSigningPanel({
     },
   });
 
+  // 2026-08-20 (Portal e-signature) - no phoneNumber/email is sent; the borrower's own linked
+  // PortalAccount and profile contact info are resolved server-side (CreateLoanSigningSessionUseCase).
+  // Borrower-only - co-borrowers have no Portal login (see SigningLinkChannel's own doc comment).
+  const sendViaPortalMutation = useMutation({
+    mutationFn: () =>
+      apiClient.post<LoanSigningSessionStatus>(`/loan-accounts/${loanId}/signing-sessions`, {
+        partyType: 'BORROWER',
+        channel: 'PORTAL',
+      }),
+    onSuccess: () => {
+      setSendError(null);
+      void queryClient.invalidateQueries({ queryKey: ['loan-signing-sessions', loanId] });
+    },
+    onError: (error: unknown) => {
+      setSendError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
+    },
+  });
+
   if (!canSend) return null;
 
-  const borrowerSendMutation = borrowerChannel === 'EMAIL' ? sendViaEmailMutation : sendMutation;
+  const borrowerSendMutation = borrowerChannel === 'PORTAL' ? sendViaPortalMutation : borrowerChannel === 'EMAIL' ? sendViaEmailMutation : sendMutation;
   const coBorrowerSendMutation = coBorrowerChannel === 'EMAIL' ? sendCoBorrowerViaEmailMutation : sendCoBorrowerMutation;
-  const borrowerCanSend = borrowerChannel === 'EMAIL' ? Boolean(borrowerEmail) : Boolean(phoneNumber.trim());
+  const borrowerCanSend = borrowerChannel === 'PORTAL' ? true : borrowerChannel === 'EMAIL' ? Boolean(borrowerEmail) : Boolean(phoneNumber.trim());
   const coBorrowerCanSend = coBorrowerChannel === 'EMAIL' ? Boolean(coBorrowerEmail) : Boolean(coBorrowerPhoneNumber.trim());
 
   return (
@@ -648,6 +666,10 @@ function LoanSigningPanel({
                 </div>
               )}
             </>
+          ) : borrowerChannel === 'PORTAL' ? (
+            <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              No link is sent - the borrower sees this in their Easycash Portal dashboard after logging in.
+            </p>
           ) : (
             <p className="mb-2.5 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
               {borrowerEmail ?? 'No email on file for the borrower'}
@@ -676,23 +698,36 @@ function LoanSigningPanel({
               <Mail className={cn('h-4 w-4', borrowerChannel === 'EMAIL' ? 'text-primary' : 'text-muted-foreground')} />
               <span className={cn('text-xs font-medium', borrowerChannel === 'EMAIL' && 'text-primary')}>Email</span>
             </button>
-            <button type="button" disabled className="relative flex cursor-not-allowed flex-col items-center gap-1 rounded-md border p-2 opacity-50">
-              <Badge variant="warning" className="absolute -right-1.5 -top-2 px-1.5 py-0 text-[9px]">
-                Soon
-              </Badge>
-              <Globe2 className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Portal</span>
+            <button
+              type="button"
+              onClick={() => setBorrowerChannel('PORTAL')}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-md border p-2 transition-colors',
+                borrowerChannel === 'PORTAL' ? 'border-primary bg-primary/10' : 'hover:bg-muted/40',
+              )}
+            >
+              <Globe2 className={cn('h-4 w-4', borrowerChannel === 'PORTAL' ? 'text-primary' : 'text-muted-foreground')} />
+              <span className={cn('text-xs font-medium', borrowerChannel === 'PORTAL' && 'text-primary')}>Portal</span>
             </button>
           </div>
           <div className="mb-2.5 flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
-              OTP verification will also be sent via <span className="font-medium text-foreground">{borrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> —
-              same channel as the link
+              {borrowerChannel === 'PORTAL'
+                ? 'The borrower must have an Easycash Portal account linked to sign here. OTP verification still applies on their end.'
+                : (
+                  <>
+                    OTP verification will also be sent via{' '}
+                    <span className="font-medium text-foreground">{borrowerChannel === 'EMAIL' ? 'email' : 'SMS'}</span> — same channel as
+                    the link
+                  </>
+                )}
             </p>
           </div>
           <Button className="w-full" onClick={() => borrowerSendMutation.mutate()} disabled={!borrowerCanSend || borrowerSendMutation.isPending}>
-            {borrowerSendMutation.isPending ? 'Sending…' : `Send via ${borrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
+            {borrowerSendMutation.isPending
+              ? 'Sending…'
+              : `Send via ${borrowerChannel === 'PORTAL' ? 'Portal' : borrowerChannel === 'EMAIL' ? 'Email' : 'SMS'}`}
           </Button>
         </div>
 
@@ -788,7 +823,7 @@ function LoanSigningPanel({
                   <div>
                     <p className="text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">{s.partyType === 'CO_BORROWER' ? 'Co-Borrower' : 'Borrower'}</span> ·
-                      Sent to {s.channel === 'EMAIL' ? s.email ?? s.phoneNumber : s.phoneNumber} · {formatDate(s.createdAt)}
+                      {s.channel === 'PORTAL' ? 'Sent via Portal' : `Sent to ${s.channel === 'EMAIL' ? s.email ?? s.phoneNumber : s.phoneNumber}`} · {formatDate(s.createdAt)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {s.signedDocuments} of {s.totalDocuments} signed
