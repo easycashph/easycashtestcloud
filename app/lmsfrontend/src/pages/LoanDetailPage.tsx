@@ -2116,18 +2116,18 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const restructureNewPrincipalNum = accruedInterestQuery.data
     ? num(accruedInterestQuery.data.restructureNewPrincipal)
     : num(loan.collectionsBalance);
-  // 2026-08-20 (user-confirmed, negotiated restructure): blank negotiated fields fall back to the
-  // computed defaults above - entering a value only ever LOWERS what the schedule preview (and the
-  // actual backend charge) uses; the invalid-if-higher check below just disables the submit button,
-  // the real ceiling enforcement lives server-side (RestructureLoanUseCase).
+  // 2026-08-20 (user-confirmed, "pwede i pasok ng mataas or mababa hindi lang pababa"): blank
+  // negotiated fields fall back to the computed defaults above - entering a value overrides it in
+  // EITHER direction (bidirectional, mirroring Reduce Penalty/Adjust Fees's own "ceiling removed"
+  // precedent), but the backend requires a Reason whenever the actual value used differs from the
+  // default - see restructureReasonRequired below.
   const restructureNegotiatedPrincipalNum = restructureNegotiatedPrincipal.trim() ? Number(restructureNegotiatedPrincipal) : null;
   const restructureNegotiatedRateNum = restructureNegotiatedRate.trim() ? Number(restructureNegotiatedRate) : null;
-  const restructurePrincipalTooHigh = restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum > restructureNewPrincipalNum;
-  const restructureRateTooHigh = restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum > num(loan.interestRate);
-  const restructureEffectivePrincipalNum =
-    restructureNegotiatedPrincipalNum !== null && !restructurePrincipalTooHigh ? restructureNegotiatedPrincipalNum : restructureNewPrincipalNum;
-  const restructureEffectiveRateNum =
-    restructureNegotiatedRateNum !== null && !restructureRateTooHigh ? restructureNegotiatedRateNum : num(loan.interestRate);
+  const restructureEffectivePrincipalNum = restructureNegotiatedPrincipalNum ?? restructureNewPrincipalNum;
+  const restructureEffectiveRateNum = restructureNegotiatedRateNum ?? num(loan.interestRate);
+  const restructureReasonRequired =
+    (restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum !== restructureNewPrincipalNum) ||
+    (restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum !== num(loan.interestRate));
   const restructurePreview =
     restructureOpen && restructureFirstRepaymentDate
       ? previewLoanSchedule(restructureEffectivePrincipalNum, restructureEffectiveRateNum, restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
@@ -4361,7 +4361,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 id="restructure-negotiated-principal"
                 type="number"
                 min="0"
-                max={restructureNewPrincipalNum}
                 step="0.01"
                 placeholder={restructureNewPrincipalNum.toFixed(2)}
                 value={restructureNegotiatedPrincipal}
@@ -4369,11 +4368,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 disabled={restructureMutation.isPending}
               />
               <p className="text-xs text-muted-foreground">
-                Computed: {formatPeso(restructureNewPrincipalNum)}. Leave blank to use it as-is, or enter a lower negotiated amount.
+                Computed: {formatPeso(restructureNewPrincipalNum)}. Leave blank to use it as-is, or enter a negotiated amount (higher or
+                lower) - a reason is required if you do.
               </p>
-              {restructurePrincipalTooHigh && (
-                <p className="text-xs text-destructive">Cannot exceed the computed principal - a restructure may only lower it.</p>
-              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="restructure-negotiated-rate">Interest rate (% / month)</Label>
@@ -4381,7 +4378,6 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 id="restructure-negotiated-rate"
                 type="number"
                 min="0"
-                max={num(loan.interestRate)}
                 step="0.001"
                 placeholder={formatPercentage(loan.interestRate)}
                 value={restructureNegotiatedRate}
@@ -4389,11 +4385,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 disabled={restructureMutation.isPending}
               />
               <p className="text-xs text-muted-foreground">
-                This loan's rate: {formatPercentage(loan.interestRate)} / month. Leave blank to keep it, or enter a lower negotiated rate.
+                This loan's rate: {formatPercentage(loan.interestRate)} / month. Leave blank to keep it, or enter a negotiated rate
+                (higher or lower) - a reason is required if you do.
               </p>
-              {restructureRateTooHigh && (
-                <p className="text-xs text-destructive">Cannot exceed this loan's own rate - a restructure may only lower it.</p>
-              )}
             </div>
           </div>
           <p className="text-xs text-muted-foreground">Product: same as {loan.loanCode}.</p>
@@ -4423,13 +4417,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="restructure-reason">Reason (optional)</Label>
+            <Label htmlFor="restructure-reason">Reason{restructureReasonRequired ? ' (required - negotiated principal or rate entered above)' : ' (optional)'}</Label>
             <Textarea
               id="restructure-reason"
               placeholder="e.g. Client requested a lower monthly amount"
               value={restructureReason}
               onChange={(e) => setRestructureReason(e.target.value)}
               disabled={restructureMutation.isPending}
+              className={restructureReasonRequired && !restructureReason.trim() ? 'border-warning' : undefined}
             />
           </div>
 
@@ -4488,10 +4483,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 !restructureInstallmentCount.trim() ||
                 Number.parseInt(restructureInstallmentCount, 10) <= 0 ||
                 !restructureFirstRepaymentDate ||
-                restructurePrincipalTooHigh ||
-                restructureRateTooHigh ||
                 (restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum <= 0) ||
-                (restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum < 0)
+                (restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum < 0) ||
+                (restructureReasonRequired && !restructureReason.trim())
               }
             >
               {restructureMutation.isPending ? 'Restructuring…' : 'Restructure loan'}

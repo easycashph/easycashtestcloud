@@ -17,7 +17,7 @@ import { LoanRestructure } from '../../domain/LoanRestructure';
 import {
   LoanAlreadyRestructuredError,
   LoanNotEligibleForRestructureError,
-  RestructureNegotiatedOverrideExceedsCeilingError,
+  NegotiatedOverrideReasonRequiredError,
   UnsupportedInterestCalculationMethodError,
 } from '../../domain/errors/LoanAccountDomainErrors';
 import { resolveSecMc3Coverage } from '../services/SecMc3CoverageResolver';
@@ -86,12 +86,13 @@ function addMonths(date: Date, months: number): Date {
  *   staff pick a different product. Term (`installmentCount`) and `firstRepaymentDate` ARE
  *   staff-entered, per ADR-045's "no recoverable generation rule" stance on `firstRepaymentDate`
  *   (mirrors `CreateLoanAccountUseCase`'s identical requirement).
- * - 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate"): principal
- *   and interest rate default to the system-computed figure / the old loan's own rate, same as
- *   before, but staff may now optionally override EITHER with a negotiated figure — only ever LOWER
- *   than that default, never higher (a restructure negotiation is a concession to the borrower, not
- *   a way to charge more than what's actually owed). See
- *   `RestructureNegotiatedOverrideExceedsCeilingError`'s own doc comment.
+ * - 2026-08-20 (user-confirmed): principal and interest rate default to the system-computed figure /
+ *   the old loan's own rate, same as before, but staff may now optionally override EITHER with a
+ *   negotiated figure — bidirectional ("pwede i pasok ng mataas or mababa hindi lang pababa"),
+ *   mirroring Reduce Penalty/Adjust Fees's own "ceiling removed" precedent. Whenever the actual
+ *   figure used differs from the computed default (either direction), a `reason` is REQUIRED (not
+ *   merely optional like a plain restructure's reason) — see
+ *   `NegotiatedOverrideReasonRequiredError`'s own doc comment.
  * - Goes directly to ACTIVE — no approval step (user-confirmed: "isang click lang"). Internally
  *   still passes through `LoanAccount.create()` (PENDING_APPROVAL) -> `approve()` -> the same
  *   schedule-generation/disbursement mechanics `ActivateLoanUseCase` uses, all inside one
@@ -162,25 +163,21 @@ export class RestructureLoanUseCase {
       now,
     );
     const computedNewPrincipal = accruedInterestFigures.restructureNewPrincipal;
-    // 2026-08-20 (user-confirmed, negotiated restructure): a staff-entered override may only lower
-    // the principal/interest rate from the computed/original figure - never raise it (see
-    // RestructureNegotiatedOverrideExceedsCeilingError's own doc comment).
-    if (input.negotiatedNewPrincipal && input.negotiatedNewPrincipal.greaterThan(computedNewPrincipal)) {
-      throw new RestructureNegotiatedOverrideExceedsCeilingError(
-        'principal',
-        input.negotiatedNewPrincipal.toString(),
-        computedNewPrincipal.toString(),
-      );
+    // 2026-08-20 (user-confirmed, "pwede i pasok ng mataas or mababa hindi lang pababa"): a
+    // staff-entered override may raise OR lower the principal/interest rate from the
+    // computed/original default - bidirectional, mirroring Reduce Penalty/Adjust Fees's own
+    // "ceiling removed" precedent (see NegotiatedOverrideReasonRequiredError's own doc comment).
+    // Whenever the override actually differs from the default, a reason is required - the audit
+    // trail must say why, not just that it happened.
+    if (input.negotiatedNewPrincipal && !input.negotiatedNewPrincipal.equals(computedNewPrincipal) && !input.reason?.trim()) {
+      throw new NegotiatedOverrideReasonRequiredError('principal');
     }
     if (
       input.negotiatedInterestRate &&
-      input.negotiatedInterestRate.toDecimal().greaterThan(oldLoanAccount.interestRate.toDecimal())
+      !input.negotiatedInterestRate.equals(oldLoanAccount.interestRate) &&
+      !input.reason?.trim()
     ) {
-      throw new RestructureNegotiatedOverrideExceedsCeilingError(
-        'interest rate',
-        input.negotiatedInterestRate.toString(),
-        oldLoanAccount.interestRate.toString(),
-      );
+      throw new NegotiatedOverrideReasonRequiredError('interest rate');
     }
     const newPrincipalAmount = input.negotiatedNewPrincipal ?? computedNewPrincipal;
     const newInterestRate = input.negotiatedInterestRate ?? oldLoanAccount.interestRate;

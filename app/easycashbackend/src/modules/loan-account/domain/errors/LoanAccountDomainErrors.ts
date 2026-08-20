@@ -100,22 +100,23 @@ export class LoanNotEligibleForRestructureError extends DomainError {
 }
 
 /**
- * 2026-08-20 (user-confirmed, "para sa negotiated na mas mababang principal at rate"): staff may
- * optionally negotiate the new loan's principal/interest rate DOWN from the system-computed figure
- * (unpaid principal+interest+penalty+accrued interest+fees / the old loan's own rate) - never up,
- * since a "negotiated" restructure is by definition a concession to the borrower, not a way to
- * charge more than what's actually owed or a higher rate than what was originally agreed. Thrown
- * when a staff-entered override exceeds its computed/original ceiling.
+ * 2026-08-20 (user-confirmed, "pwede i pasok ng mataas or mababa hindi lang pababa"): staff may
+ * negotiate the new loan's principal/interest rate to ANY value, above or below the system-computed
+ * figure (unpaid principal+interest+penalty+accrued interest+fees / the old loan's own rate) - same
+ * "ceiling removed, real out-of-band approval" precedent as Reduce Penalty/Adjust Fees. Unlike those
+ * two, though, a restructure moves a large, one-time principal figure, so a `reason` is required
+ * (not merely optional) whenever the actual figure used differs from the computed default in either
+ * direction - the audit trail must say why, not just that it happened.
  */
-export class RestructureNegotiatedOverrideExceedsCeilingError extends DomainError {
-  constructor(field: 'principal' | 'interest rate', overrideValue: string, ceilingValue: string) {
+export class NegotiatedOverrideReasonRequiredError extends DomainError {
+  constructor(field: 'principal' | 'interest rate') {
     super(
-      'RESTRUCTURE_NEGOTIATED_OVERRIDE_EXCEEDS_CEILING',
-      `Negotiated new ${field} (${overrideValue}) cannot exceed the computed ${field} (${ceilingValue}) - a restructure may only lower these, not raise them.`,
+      'NEGOTIATED_OVERRIDE_REASON_REQUIRED',
+      `A reason is required when the negotiated ${field} differs from the computed default.`,
       undefined,
       400,
     );
-    this.name = 'RestructureNegotiatedOverrideExceedsCeilingError';
+    this.name = 'NegotiatedOverrideReasonRequiredError';
   }
 }
 
