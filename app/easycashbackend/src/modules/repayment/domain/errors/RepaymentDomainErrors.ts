@@ -10,12 +10,18 @@ export class InvalidPenaltyAdjustmentAmountError extends DomainError {
   }
 }
 
-/** 2026-07-15 (Reduce Penalty feature, user-confirmed): penalty already paid is settled — reducing it would require a refund/credit disposition that was explicitly ruled out of scope. */
+/** 2026-07-15 (Reduce Penalty feature, user-confirmed) / 2026-08-20 (user-reported, BL-REG_Y813H,
+ * narrowed): the already-PAID portion of a penalty is settled — bringing the new total BELOW what
+ * was already collected would require a refund/credit disposition that was explicitly ruled out of
+ * scope, and is still blocked. Bringing it down to (but not below) the paid amount - waiving only
+ * the still-UNPAID remainder - is a normal case (a real out-of-band approval to forgive the rest of
+ * a penalty after a partial payment) and is allowed as of 2026-08-20; see `reducePenalty()`'s own
+ * doc comment. */
 export class PenaltyAlreadyPaidError extends DomainError {
-  constructor(installmentId: string) {
+  constructor(installmentId: string, paidAmount: string) {
     super(
       'PENALTY_ALREADY_PAID',
-      `Installment ${installmentId} has a paid penalty component — an already-paid penalty cannot be reduced.`,
+      `Installment ${installmentId} already has ${paidAmount} paid toward its penalty — the new penalty amount cannot go below that.`,
       undefined,
       409,
     );

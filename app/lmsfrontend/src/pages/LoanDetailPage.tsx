@@ -2645,7 +2645,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         // concept for fees the way penalty has, so no separate isLiveFees flag needed).
                         const feesDisplay = num(i.currentFeesDue);
                         const rowPaid = num(i.paid.principal) + num(i.paid.interest) + num(i.paid.fees) + num(i.paid.penalty);
-                        const canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0;
+                        // 2026-08-20 (user-reported, BL-REG_Y813H): a partially-paid penalty may
+                        // still be reduced, down to (never below) the amount already paid - only a
+                        // FULLY paid installment is excluded now. See RepaymentInstallment.
+                        // reducePenalty()'s own doc comment for the backend-side rule this mirrors.
+                        const canReduceThisRow = i.status !== 'PAID';
                         const canAdjustFeesThisRow = i.status !== 'PAID' && num(i.paid.fees) === 0;
                         // 2026-08-04 (user request): "Amount Expected/Paid/Due" grouped layout, per
                         // component - matches the legacy SDevTech schedule view's own convention
@@ -4035,20 +4039,35 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 `Installment #${reduceTarget.installmentNumber} · ${formatDate(reduceTarget.dueDate)}. Raise or lower this installment's penalty - freezes it at the amount entered, so it stops recalculating day over day until paid or adjusted again. Approved outside this system; the reason below records that reference.`}
             </DialogDescription>
           </DialogHeader>
+          {reduceTarget && num(reduceTarget.paid.penalty) > 0 && (
+            <div className="flex items-start gap-2 rounded-md bg-muted/40 px-2.5 py-2">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">
+                {formatPeso(num(reduceTarget.paid.penalty))} of this installment's penalty is already paid - the new amount can't go below
+                that (an already-collected amount is a refund/credit decision, out of scope here).
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="reduce-amount">New penalty amount</Label>
             <div className="flex gap-2">
               <Input
                 id="reduce-amount"
                 type="number"
-                min="0"
+                min={reduceTarget ? num(reduceTarget.paid.penalty) : 0}
                 step="0.01"
                 value={reduceAmount}
                 onChange={(e) => setReduceAmount(e.target.value)}
                 disabled={reduceMutation.isPending}
               />
-              <Button type="button" variant="outline" size="sm" onClick={() => setReduceAmount('0.00')} disabled={reduceMutation.isPending}>
-                Set to ₱0.00
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setReduceAmount((reduceTarget ? num(reduceTarget.paid.penalty) : 0).toFixed(2))}
+                disabled={reduceMutation.isPending}
+              >
+                {reduceTarget && num(reduceTarget.paid.penalty) > 0 ? 'Waive the rest' : 'Set to ₱0.00'}
               </Button>
             </div>
           </div>
@@ -4086,7 +4105,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 reduceMutation.isPending ||
                 reduceReason.trim().length === 0 ||
                 reduceAmount.trim().length === 0 ||
-                !(Number(reduceAmount) >= 0)
+                !(Number(reduceAmount) >= (reduceTarget ? num(reduceTarget.paid.penalty) : 0))
               }
             >
               {reduceMutation.isPending ? 'Adjusting…' : 'Adjust penalty'}

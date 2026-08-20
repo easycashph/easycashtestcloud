@@ -251,17 +251,22 @@ export class RepaymentInstallment {
    *   live daily formula from this point on, until paid or adjusted again. This is why the override
    *   is stored here rather than applied as a one-time delta: a stored, static value is what
    *   "frozen" means, as opposed to a delta a live recomputation would immediately swallow.
-   * - Cannot be applied once any penalty has already been paid on this installment (approval
-   *   happens outside this system; an already-collected amount is out of scope for a waiver -
-   *   that would be a refund/credit decision, explicitly not part of this feature).
+   * - `newAmount` may not go below whatever penalty has already been PAID on this installment
+   *   (approval happens outside this system; an already-collected amount is out of scope for a
+   *   waiver - that would be a refund/credit decision, explicitly not part of this feature). Above
+   *   or equal to the paid amount is fine, including waiving the rest of a partially-paid penalty
+   *   down to exactly what was already collected - 2026-08-20 (user-reported, BL-REG_Y813H): the
+   *   original rule blocked ANY reduction once ANYTHING had been paid, even when the intent was only
+   *   to waive the still-unpaid remainder, never touching the paid portion - narrowed to the actual
+   *   invariant that matters (never let the ceiling fall below what's already collected).
    *
    * Does not itself create the audit `PenaltyReduction` row — that's the use case's job (needs the
    * repository), same division of responsibility as `ProcessPaymentUseCase` building
    * `PaymentAllocation` rows alongside this entity's own `recordPayment()` call.
    */
   reducePenalty(newAmount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
-    if (this.props.paid.penalty.isPositive()) {
-      throw new PenaltyAlreadyPaidError(this.props.id);
+    if (newAmount.lessThan(this.props.paid.penalty)) {
+      throw new PenaltyAlreadyPaidError(this.props.id, this.props.paid.penalty.toString());
     }
     if (newAmount.isNegative()) {
       throw new InvalidPenaltyAdjustmentAmountError(newAmount.toString());
