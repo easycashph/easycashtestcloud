@@ -5,6 +5,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /** Shared header for every logged-in page (Dashboard, My Profile, ...) - extracted so nav links
  * stay in one place as more authenticated pages get added. "Loan Products" tab removed 2026-07-27
@@ -15,6 +16,7 @@ import { usePortalDialogs } from '@/lib/portalDialogContext';
 export function PortalHeader() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { openProfileDialog, openSecurityDialog } = usePortalDialogs();
 
   const handleLogout = () => {
@@ -31,20 +33,20 @@ export function PortalHeader() {
         </Link>
         <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground sm:flex">
           <Link to="/dashboard" className="hover:text-foreground">
-            Dashboard
+            {t.portalHeader.dashboard}
           </Link>
           <button type="button" onClick={openProfileDialog} className="hover:text-foreground">
-            My Profile
+            {t.portalHeader.myProfile}
           </button>
           <button type="button" onClick={openSecurityDialog} className="hover:text-foreground">
-            Security
+            {t.portalHeader.security}
           </button>
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <NotificationBell />
           <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4" /> Log Out
+            <LogOut className="h-4 w-4" /> {t.portalHeader.logOut}
           </Button>
         </div>
       </div>
