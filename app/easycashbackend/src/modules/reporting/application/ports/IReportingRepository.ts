@@ -274,7 +274,8 @@ export interface IReportingRepository {
   getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]>;
   getAccountsWithPastDueReport(filter: DateRangeFilter & { branchId?: string }): Promise<AccountsWithPastDueReportRow[]>;
   getCollectionHistoryReport(filter: DateRangeFilter & { branchId?: string }): Promise<CollectionHistoryReportRow[]>;
-  getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]>;
+  /** 2026-08-20 (user request): `productCodes` - multi-select filter on `LoanProduct.code`, undefined/empty means every product. */
+  getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string; productCodes?: string[] }): Promise<ExpectedCollectionReportRow[]>;
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
   getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] }): Promise<DailyCollectionReportRow[]>;
   getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;

@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Columns3, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, Columns3, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -15,7 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
-import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
+import type { LoanProduct } from '@/lib/loanApiTypes';
 import type { ExpectedCollectionReportRow } from '@/lib/reportApiTypes';
 import { formatDate, formatPeso, isoDate } from '@/lib/utils';
 
@@ -85,15 +87,35 @@ export function ExpectedCollectionReportPage() {
   const toggleColumn = (key: OptionalColumnKey) => setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
   const visibleOptionalColumns = OPTIONAL_COLUMNS.filter((c) => visibleColumns[c.key]);
 
+  /** 2026-08-20 (user request): multi-select Product filter, same pattern as Transaction Report's
+   * type/channel filters - `productCodes` selected by `LoanProduct.code` (stable), displayed by
+   * `name` (what the report's own Product column shows). Undefined/empty means every product. */
+  const productsQuery = useQuery({
+    queryKey: ['loan-products', 'for-report-filter'],
+    queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
+  });
+  const productOptions = productsQuery.data ?? [];
+  const [productCodes, setProductCodes] = React.useState<string[]>([]);
+  const toggleProduct = (code: string) => {
+    setProductCodes((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
+  };
+  const productFilterLabel =
+    productCodes.length === 0
+      ? 'All products'
+      : productCodes.length === 1
+        ? (productOptions.find((p) => p.code === productCodes[0])?.name ?? productCodes[0]!)
+        : `${productCodes.length} products selected`;
+
   const buildParams = React.useCallback(() => {
     const params = new URLSearchParams();
     if (range.from) params.set('from', range.from);
     if (range.to) params.set('to', range.to);
+    for (const code of productCodes) params.append('product', code);
     return params;
-  }, [range.from, range.to]);
+  }, [range.from, range.to, productCodes]);
 
   const collectionQuery = useQuery({
-    queryKey: ['reports', 'expected-collection', range.from, range.to],
+    queryKey: ['reports', 'expected-collection', range.from, range.to, [...productCodes].sort().join(',')],
     queryFn: () => apiClient.get<{ items: ExpectedCollectionReportRow[] }>(`/reports/expected-collection?${buildParams().toString()}`),
   });
   const rows = collectionQuery.data?.items ?? [];
@@ -138,11 +160,34 @@ export function ExpectedCollectionReportPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>Date range filters on installment due date. Defaults to the current month.</CardDescription>
+          <CardDescription>Date range filters on installment due date, defaulting to the current month. Product filters by loan product, multiple selectable.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <DateRangeFilter value={range} onChange={setRange} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-56 justify-between font-normal">
+                  <span className="truncate">{productFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Checkbox items keep the menu open on select, so several products can be ticked in one go. */}
+              <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+                <DropdownMenuItem onSelect={() => setProductCodes([])}>All products</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {productOptions.map((product) => (
+                  <DropdownMenuCheckboxItem
+                    key={product.code}
+                    checked={productCodes.includes(product.code)}
+                    onCheckedChange={() => toggleProduct(product.code)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {product.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">

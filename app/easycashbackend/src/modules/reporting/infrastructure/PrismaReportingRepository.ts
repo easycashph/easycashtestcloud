@@ -792,7 +792,7 @@ export class PrismaReportingRepository implements IReportingRepository {
    * unpaid on any of the loan's OTHER installments due before the range start - separate backlog
    * from the "this period" installment shown in the other columns.
    */
-  async getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string }): Promise<ExpectedCollectionReportRow[]> {
+  async getExpectedCollectionReport(filter: DateRangeFilter & { branchId?: string; productCodes?: string[] }): Promise<ExpectedCollectionReportRow[]> {
     const range = entryDateFilter(filter);
     const installments = await prisma.repaymentSchedule.findMany({
       where: {
@@ -800,6 +800,9 @@ export class PrismaReportingRepository implements IReportingRepository {
         loanAccount: {
           status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] },
           ...(filter.branchId ? { branchId: filter.branchId } : {}),
+          ...(filter.productCodes && filter.productCodes.length > 0
+            ? { loanProductVersion: { loanProduct: { code: { in: filter.productCodes } } } }
+            : {}),
         },
       },
       include: { loanAccount: { include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } } } },

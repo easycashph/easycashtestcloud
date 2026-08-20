@@ -280,13 +280,20 @@ export class ReportingController {
   };
 
   /** 2026-08-19 (user request): JSON counterpart to `expectedCollectionXlsx` below, for the
-   * report's new on-screen table - same "not paginated, date-range-scoped" posture as `loanReleases`. */
+   * report's new on-screen table - same "not paginated, date-range-scoped" posture as `loanReleases`.
+   * 2026-08-20 (user request): added a multi-select `product` filter (repeated `product` query
+   * params, one per `LoanProduct.code` - same `parseMultiValueFilter` normalization as `type`/`channel`). */
   expectedCollection = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({
+        from,
+        to,
+        branchId: resolveBranchFilter(scope),
+        productCodes: parseMultiValueFilter(req.query.product),
+      });
       res.status(200).json({ items: rows.map(presentExpectedCollectionReportRow) });
     } catch (error) {
       next(error);
@@ -298,7 +305,12 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({
+        from,
+        to,
+        branchId: resolveBranchFilter(scope),
+        productCodes: parseMultiValueFilter(req.query.product),
+      });
       const buffer = await writeExpectedCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Expected Collection.xlsx"');
