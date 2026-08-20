@@ -38,6 +38,7 @@ const NewsPage = React.lazy(() => import('@/pages/NewsPage').then((m) => ({ defa
 const NewsArticlePage = React.lazy(() => import('@/pages/NewsArticlePage').then((m) => ({ default: m.NewsArticlePage })));
 const RequirementsPage = React.lazy(() => import('@/pages/RequirementsPage').then((m) => ({ default: m.RequirementsPage })));
 const ContactPage = React.lazy(() => import('@/pages/ContactPage').then((m) => ({ default: m.ContactPage })));
+const PortalSigningPage = React.lazy(() => import('@/pages/PortalSigningPage').then((m) => ({ default: m.PortalSigningPage })));
 const NotFoundPage = React.lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 /** HashRouter, not BrowserRouter: GitHub Pages serves static files only (no server-side rewrite
@@ -136,6 +137,17 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <SecurityPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* 2026-08-20 (Portal e-signature, user request) - authenticated counterpart of
+          lmsfrontend's public /sign/:token, reached from a "Sign Documents" prompt on the
+          Dashboard instead of a mailed link. See PortalSigningPage's own doc comment. */}
+      <Route
+        path="/sign/:sessionId"
+        element={
+          <ProtectedRoute>
+            <PortalSigningPage />
           </ProtectedRoute>
         }
       />

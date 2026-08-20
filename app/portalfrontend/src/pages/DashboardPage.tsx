@@ -10,6 +10,7 @@ import { PortalHeader } from '@/components/PortalHeader';
 import { LoanApplicationDetailView } from '@/components/LoanApplicationDetailView';
 import { PortalLoanAccountsSection } from '@/components/PortalLoanAccountsSection';
 import { PortalNextPaymentDueCard } from '@/components/PortalNextPaymentDueCard';
+import { PortalSignDocumentsCard } from '@/components/PortalSignDocumentsCard';
 import { PortalOfficialBankAccountCard } from '@/components/PortalOfficialBankAccountCard';
 import { PortalPaymentProofCard } from '@/components/PortalPaymentProofCard';
 import { PortalRecentPaymentsSection } from '@/components/PortalRecentPaymentsSection';
@@ -178,6 +179,7 @@ export function DashboardPage() {
             widgets below (My Loans, Recent Payments) stay full-width - they hold multi-column rows
             and per-row action buttons that would cramp badly at half width. */}
         <div className="mt-8 grid gap-5 sm:grid-cols-2">
+          <PortalSignDocumentsCard />
           <PortalTwoFactorNudgeCard />
           <PortalNextPaymentDueCard />
           <PortalOfficialBankAccountCard />

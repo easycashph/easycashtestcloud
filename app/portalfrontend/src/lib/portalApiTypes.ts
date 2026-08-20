@@ -548,3 +548,24 @@ export interface ActiveMisPostsResponse {
   autoPost: MisPostView | null;
   manualPosts: MisPostView[];
 }
+
+/** 2026-08-20 (Portal e-signature) - `GET /portal/signing-sessions` response item. Mirrors the
+ * backend's `PortalPendingSigningSessionView`. */
+export interface PortalPendingSigningSession {
+  sessionId: string;
+  loanAccountId: string;
+  loanCode: string;
+  documentCount: number;
+  documentsSignedCount: number;
+}
+
+/** 2026-08-20 (Portal e-signature) - `GET /portal/signing-sessions/:sessionId` response. Mirrors
+ * the backend's `SigningSessionView` (same shape the public /sign/:token flow already used). */
+export interface PortalSigningSessionView {
+  loanCode: string;
+  borrowerName: string;
+  otpVerified: boolean;
+  fullySigned: boolean;
+  documents: { id: string; name: string; sortIndex: number; signed: boolean }[];
+  channel: 'SMS' | 'EMAIL';
+}
