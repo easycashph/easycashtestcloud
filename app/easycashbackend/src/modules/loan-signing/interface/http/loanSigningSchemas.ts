@@ -11,7 +11,7 @@ export const createLoanSigningSessionSchema = z.object({
   // this is ignored if supplied. The use case itself validates presence for the SMS channel.
   phoneNumber: z.string().min(1).optional(),
   partyType: z.enum(['BORROWER', 'CO_BORROWER']).default('BORROWER'),
-  channel: z.enum(['SMS', 'EMAIL']).default('SMS'),
+  channel: z.enum(['SMS', 'EMAIL', 'PORTAL']).default('SMS'),
 });
 export type CreateLoanSigningSessionRequestBody = z.infer<typeof createLoanSigningSessionSchema>;
 

@@ -81,8 +81,8 @@ export class SignPortalLoanSigningDocumentUseCase {
       ipAddress: input.ipAddress,
       templateCode: template?.code,
       anchorTarget: session.partyType,
-      otpChannel: session.channel,
-      otpRecipient: session.channel === 'EMAIL' && session.email ? session.email : session.phoneNumber,
+      otpChannel: session.email ? 'EMAIL' : 'SMS',
+      otpRecipient: session.email ? session.email : session.phoneNumber,
     });
 
     const signedStorageKey = `loan-signing/${session.id}/${entry.id}-signed.pdf`;

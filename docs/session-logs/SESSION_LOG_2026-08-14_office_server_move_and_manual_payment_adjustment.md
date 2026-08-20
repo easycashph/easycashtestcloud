@@ -1636,8 +1636,86 @@ state).
 - Five native-data categories now have a backup/restore pair wired into the migration `.bat`: loan
   applications/attachments, users, role-permission grants, system settings, and (as of today) Portal
   Accounts. Still deliberately open: Loan Products/Product Versions/penalty & fee rules (§33).
-- **New follow-up, not yet done**: `restore-native-loan-applications.ts`'s `borrowerId` handling has
-  the same "assumed stable, actually isn't" bug this section found and fixed for Portal Accounts -
-  worth applying the same `legacyId`-remap fix there, and checking whether the 4 applications
-  restored back in §27 need their borrower links manually repaired now that this is understood.
 - The next full migration should show five `[BACKUP]` lines and five `[RESTORE]` lines.
+
+## §36 - Closed the loop: fixed the same borrowerId bug in the loan-application restore script (2026-08-20)
+
+Follow-up to §35's flagged item. Checked the 4 loan applications restored back in §27 against the
+original pre-reset backup (`native-loan-applications-2026-08-19T10-56-33-997Z.json`): 2 of them
+(TEST2NOMER, TEST6NOMER) had `borrowerId: null` originally, nothing to fix; the other 2 (**NOMER
+DELA CRUZ PEREZ**, **ALDWIN JALA MANIWANG**) had a real borrowerId that §27's restore had silently
+null'd out per the §35 bug. Looked up their current (post-migration) `Borrower.id` via each
+person's `legacyId`, confirmed both resolve to the correct people, and fixed the live data by hand
+with a one-off `npx tsx` script (created and deleted same turn, per this repo's temp-script
+convention) - `NOMER DELA CRUZ PEREZ: borrowerId -> 8fa9efa9-1b48-42df-b945-28d3dfed3aef`,
+`ALDWIN JALA MANIWANG: borrowerId -> 3f2783c1-8949-49ae-a73f-ac4c61f8bb22`.
+
+Then fixed the scripts themselves so this can't recur on the next migration, applying the exact
+pattern already proven in `backup/restore-native-portal-accounts.ts`:
+
+- `backup-native-loan-applications.ts` now denormalizes each application's `borrowerId` to the
+  linked `Borrower.legacyId` (`borrowerLegacyId` field in the backup JSON) instead of saving the
+  raw id.
+- `restore-native-loan-applications.ts` now builds a `legacyId -> current Borrower.id` map from the
+  post-migration database and remaps `borrowerId` through it, dropping the link (not the whole
+  application) with a warning only when the legacyId genuinely doesn't resolve - instead of the old
+  logic that checked the stale raw id against a fresh table and always null'd it out.
+
+Backend type-checked clean. Committed and pushed (`12dc9e7`).
+
+### Current state / follow-ups
+
+- All five native-data backup/restore pairs (loan applications/attachments, users,
+  role-permission grants, system settings, Portal Accounts) now correctly remap every
+  `Borrower`-referencing foreign key via `legacyId`, not a raw id. The `Borrower.id`-instability bug
+  found in §35 is now fully closed - no known script still trusts a raw pre-reset id as stable.
+- Still deliberately open: Loan Products/Product Versions/penalty & fee rules backup/restore (§33).
+- Portal e-signature (§34) still has no end-to-end test with a real borrower login.
+
+## §37 - "Portal" channel enabled on the Loan Detail e-signature panel (2026-08-20)
+
+User noticed the "Portal" option on Loan Detail's "Send for Signing" panel still showed a disabled
+"Soon" badge, despite §34's Portal e-signature feature already existing - the button had never
+actually been wired up. Enabled it for the **borrower only** (co-borrowers have no Portal login -
+`PortalAccount.borrowerId` only ever points at a `Borrower`, never a `CoBorrower` - so that button
+stays disabled/"Soon" on purpose).
+
+Backend changes, all in `loan-signing`:
+- `SigningLinkChannel` (domain) gains `'PORTAL'` alongside `'SMS'`/`'EMAIL'`.
+- `CreateLoanSigningSessionUseCase`: a `PORTAL`-channel request resolves the borrower's linked
+  `PortalAccount` (via `IPortalAccountRepository.findByBorrowerId`), throws a new
+  `NoPortalAccountLinkedError` if none exists, and - instead of sending an SMS/email link - fires
+  the existing `PortalNotificationService` (already used for application-approved/loan-account
+  lifecycle notifications) with a new `DOCUMENT_SIGNING_REQUESTED` type. No new session-discovery
+  logic was needed: `ListPortalSigningSessionsUseCase` (built in §34) already surfaces ANY active
+  BORROWER-party session on the Portal dashboard regardless of channel, so a Portal-channel session
+  just shows up there like any other.
+- `RequestPortalSigningOtpUseCase`: OTP delivery used to hard-check `channel === 'EMAIL'` before
+  using email - broadened to "use email whenever the session has one on file," so a PORTAL-channel
+  session (which always populates email from the borrower profile) gets its OTP by email
+  automatically, with an SMS fallback if the borrower has no email. Verified this is a no-op change
+  for existing SMS-channel sessions (they never populate `email` in the first place).
+- Threaded `'PORTAL'` through every other spot the channel type touched: the Zod request schema,
+  the staff-side session list view type, and the two document-signing use cases' OTP-stamp channel
+  (both now compute the stamp channel from `session.email` presence directly, matching the OTP
+  use-case's own logic, rather than trusting `session.channel` to only ever be SMS/EMAIL).
+
+Frontend (`LoanDetailPage.tsx`, `EsignatureLogsPage.tsx`, `loanSigningApiTypes.ts`): un-disabled the
+borrower "Portal" button, added a `sendViaPortalMutation` (no phone/email in the request body - the
+backend resolves everything from the borrower's own profile/PortalAccount), updated the OTP-channel
+helper text and the "Sent to..." session list line for the Portal case, and added `PORTAL` to the
+E-signature Logs page's channel filter.
+
+Backend + frontend type-checked clean. Rebuilt `easycashbackend`/`lmsfrontend`, verified fresh
+uptime post-rebuild (not stale), confirmed `/health` responds and the signing-sessions endpoint
+accepts `channel: "PORTAL"` past Zod validation (401 auth-required, not a 400 schema error).
+Committed and pushed (`d113f98`).
+
+### Current state / follow-ups
+
+- Portal channel is live for borrower e-signature sessions. Still not tested end-to-end with a real
+  borrower Portal login clicking "Sign now" on a Portal-channel session specifically (§34's broader
+  "no real end-to-end test yet" follow-up now also covers this).
+- No staff-facing indicator yet showing whether a given loan account's borrower even HAS a linked
+  Portal account before they try the Portal button - right now they'd only find out via the
+  `NoPortalAccountLinkedError` after clicking "Send via Portal." A small UX polish, not blocking.

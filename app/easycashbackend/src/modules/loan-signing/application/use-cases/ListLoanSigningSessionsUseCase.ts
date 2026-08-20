@@ -14,8 +14,10 @@ export interface StaffSigningSessionView {
   partyType: 'BORROWER' | 'CO_BORROWER';
   phoneNumber: string;
   /** 2026-07-29 - which channel actually delivered the link, so the panel can show "Sent to
-   * {email}" instead of the (unused-for-delivery) phoneNumber when channel is EMAIL. */
-  channel: 'SMS' | 'EMAIL';
+   * {email}" instead of the (unused-for-delivery) phoneNumber when channel is EMAIL. 2026-08-20:
+   * 'PORTAL' - no link sent, shows up on the borrower's Portal dashboard instead (see
+   * ListPortalSigningSessionsUseCase). */
+  channel: 'SMS' | 'EMAIL' | 'PORTAL';
   email: string | null;
   expiresAt: string;
   revokedAt: string | null;

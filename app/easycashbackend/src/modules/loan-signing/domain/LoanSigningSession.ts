@@ -23,8 +23,14 @@ export type SigningPartyType = 'BORROWER' | 'CO_BORROWER';
 /** 2026-07-28 - which channel delivers the link. The OTP (see `RequestSigningOtpUseCase`) always
  * follows this SAME channel - a link sent by email gets its OTP by email too - rather than being
  * an independent toggle, since a number that can't receive the link (telco link-filtering) likely
- * can't receive an OTP SMS either for the same reason. */
-export type SigningLinkChannel = 'SMS' | 'EMAIL';
+ * can't receive an OTP SMS either for the same reason.
+ * 2026-08-20 (Portal e-signature): 'PORTAL' - no SMS/email link is sent at all; the session shows
+ * up automatically on the borrower's Portal dashboard (see ListPortalSigningSessionsUseCase) and is
+ * opened/authorized by their Portal login instead of a raw token. Only valid for `partyType:
+ * 'BORROWER'` - co-borrowers have no Portal login (`PortalAccount.borrowerId` only ever points at a
+ * Borrower, never a CoBorrower). The OTP still goes out (by email if on file, else SMS), same as
+ * every other channel - see this file's own OTP-follows-channel note above. */
+export type SigningLinkChannel = 'SMS' | 'EMAIL' | 'PORTAL';
 
 export interface LoanSigningSessionProps {
   id: string;

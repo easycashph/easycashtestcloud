@@ -89,6 +89,17 @@ export class NoEmailOnFileError extends DomainError {
  * which channel delivered the initial link (a plain numeric code isn't affected by the
  * link-filtering issue that motivated the email channel), so a phone number is still required even
  * for an EMAIL-channel send - auto-read from the profile in that case, same as the email address. */
+/** 2026-08-20 (Portal e-signature) - thrown when "Send via Portal" is attempted but the borrower
+ * has no linked `PortalAccount` yet. Unlike SMS/email, a Portal-channel session cannot fall back to
+ * a staff-entered value - the borrower must already have a Portal login for the session to be
+ * reachable at all. */
+export class NoPortalAccountLinkedError extends DomainError {
+  constructor() {
+    super('NO_PORTAL_ACCOUNT_LINKED', 'This borrower has no Easycash Portal account linked yet.', undefined, 400);
+    this.name = 'NoPortalAccountLinkedError';
+  }
+}
+
 export class NoPhoneNumberOnFileError extends DomainError {
   constructor(partyType: string) {
     super(
