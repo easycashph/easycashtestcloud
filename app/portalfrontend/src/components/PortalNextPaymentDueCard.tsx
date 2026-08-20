@@ -2,6 +2,7 @@ import * as React from 'react';
 import { CalendarClock } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalNextPaymentDue } from '@/lib/portalApiTypes';
 
 function peso(value: string): string {
@@ -25,6 +26,7 @@ function daysUntil(dueDate: string): number {
  * something exists" posture as `PortalLoanAccountsSection`.
  */
 export function PortalNextPaymentDueCard() {
+  const { t } = useLanguage();
   const [nextPaymentDue, setNextPaymentDue] = React.useState<PortalNextPaymentDue | null | undefined>(undefined);
 
   React.useEffect(() => {
@@ -41,13 +43,13 @@ export function PortalNextPaymentDueCard() {
   const isOverdue = nextPaymentDue.status === 'LATE' || days < 0;
   const dueLabel = isOverdue
     ? days < 0
-      ? `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
-      : 'Past due'
+      ? t.dashboardCards.nextPaymentDue.overdueDays.replace('{days}', String(Math.abs(days))).replace('{plural}', Math.abs(days) === 1 ? '' : 's')
+      : t.dashboardCards.nextPaymentDue.pastDue
     : days === 0
-      ? 'Due today'
+      ? t.dashboardCards.nextPaymentDue.dueToday
       : days === 1
-        ? 'Due tomorrow'
-        : `Due in ${days} days`;
+        ? t.dashboardCards.nextPaymentDue.dueTomorrow
+        : t.dashboardCards.nextPaymentDue.dueInDays.replace('{days}', String(days));
 
   return (
     <Card className={`flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between ${isOverdue ? 'border-destructive/40 bg-destructive/5' : 'border-primary/30 bg-primary/5'}`}>
@@ -56,10 +58,15 @@ export function PortalNextPaymentDueCard() {
           <CalendarClock className="h-5 w-5" />
         </div>
         <div>
-          <p className={`text-sm font-semibold ${isOverdue ? 'text-destructive' : 'text-foreground'}`}>Next Payment Due - {dueLabel}</p>
+          <p className={`text-sm font-semibold ${isOverdue ? 'text-destructive' : 'text-foreground'}`}>
+            {t.dashboardCards.nextPaymentDue.title.replace('{label}', dueLabel)}
+          </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {peso(remainingDue.toString())} for {nextPaymentDue.loanCode}, installment #{nextPaymentDue.installmentNumber} - due{' '}
-            {new Date(nextPaymentDue.dueDate).toLocaleDateString()}
+            {t.dashboardCards.nextPaymentDue.body
+              .replace('{amount}', peso(remainingDue.toString()))
+              .replace('{loanCode}', nextPaymentDue.loanCode)
+              .replace('{installment}', String(nextPaymentDue.installmentNumber))
+              .replace('{date}', new Date(nextPaymentDue.dueDate).toLocaleDateString())}
           </p>
         </div>
       </div>

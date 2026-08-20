@@ -3,6 +3,7 @@ import { ReceiptText } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { apiClient } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalPaymentEntry } from '@/lib/portalApiTypes';
 
 function peso(value: string): string {
@@ -17,6 +18,7 @@ function peso(value: string): string {
  * "never a placeholder implying something exists" posture as `PortalLoanAccountsSection`.
  */
 export function PortalRecentPaymentsSection() {
+  const { t } = useLanguage();
   const [payments, setPayments] = React.useState<PortalPaymentEntry[] | null>(null);
 
   React.useEffect(() => {
@@ -30,7 +32,7 @@ export function PortalRecentPaymentsSection() {
 
   return (
     <Card className="p-6">
-      <h2 className="text-base font-semibold">Recent Payments</h2>
+      <h2 className="text-base font-semibold">{t.dashboardCards.recentPayments.title}</h2>
       {payments === null ? (
         <div className="mt-4 space-y-2">
           <Skeleton className="h-14 w-full" />

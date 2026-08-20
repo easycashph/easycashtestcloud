@@ -2,6 +2,7 @@ import * as React from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 interface PortalAssignedLoanOfficer {
   firstName: string;
@@ -17,6 +18,7 @@ interface PortalAssignedLoanOfficer {
  * control today, and this card's job is just to set the right expectation before the client clicks it.
  */
 export function PortalLoanOfficerCard() {
+  const { t } = useLanguage();
   const [loanOfficer, setLoanOfficer] = React.useState<PortalAssignedLoanOfficer | null | undefined>(undefined);
 
   React.useEffect(() => {
@@ -34,11 +36,11 @@ export function PortalLoanOfficerCard() {
         <MessageCircle className="h-5 w-5" />
       </div>
       <div>
-        <h2 className="text-base font-semibold">Need help?</h2>
+        <h2 className="text-base font-semibold">{t.dashboardCards.loanOfficer.title}</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
           {loanOfficer
-            ? `Chat with ${loanOfficer.firstName}, your Easycash loan officer - click the chat bubble at the bottom-right corner.`
-            : 'A loan officer will respond to you via chat - click the chat bubble at the bottom-right corner to get started.'}
+            ? t.dashboardCards.loanOfficer.withOfficer.replace('{name}', loanOfficer.firstName)
+            : t.dashboardCards.loanOfficer.withoutOfficer}
         </p>
       </div>
     </Card>

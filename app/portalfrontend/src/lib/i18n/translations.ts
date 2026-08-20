@@ -45,6 +45,8 @@ export const en = {
     applyNow: 'Apply Now',
     logIn: 'Log In',
     createAccount: 'Create Your Account',
+    loading: 'Loading…',
+    editLoanApplication: 'Edit Loan Application',
   },
   nav: {
     requirements: 'Requirements',
@@ -602,6 +604,52 @@ export const en = {
     save: 'Save Changes',
     saving: 'Saving…',
   },
+  dashboardCards: {
+    twoFactorNudge: {
+      title: 'Secure your account',
+      body: 'Two-factor authentication is off. Turn it on so a code is required to log in, even if someone else knows your password.',
+      cta: 'Turn On 2FA',
+    },
+    loanOfficer: {
+      title: 'Need help?',
+      withOfficer: 'Chat with {name}, your Easycash loan officer - click the chat bubble at the bottom-right corner.',
+      withoutOfficer: 'A loan officer will respond to you via chat - click the chat bubble at the bottom-right corner to get started.',
+    },
+    officialBankAccount: {
+      title: 'Official Bank Account',
+      body: 'Send your Bank Transfer payment here, then upload your proof of payment below.',
+      accountName: 'Account Name',
+      bankName: 'Bank Name',
+      branch: 'Branch',
+      accountNo: 'Account No.',
+    },
+    signDocuments: {
+      pending: '{count} document{plural} waiting for your signature',
+      note: '{loanCodes} - sign online, no need to visit a branch.',
+      cta: 'Sign now',
+    },
+    recentPayments: {
+      title: 'Recent Payments',
+    },
+    nextPaymentDue: {
+      overdueDays: '{days} day{plural} overdue',
+      pastDue: 'Past due',
+      dueToday: 'Due today',
+      dueTomorrow: 'Due tomorrow',
+      dueInDays: 'Due in {days} days',
+      title: 'Next Payment Due - {label}',
+      body: '{amount} for {loanCode}, installment #{installment} - due {date}',
+    },
+    paymentProof: {
+      title: 'Upload Proof of Payment',
+      body: 'Made a Bank Transfer to our official account? Upload your receipt or screenshot here and our team will match it to your loan.',
+      upload: 'Upload',
+      uploading: 'Uploading…',
+      done: 'Uploaded. Our team will review and match it to your loan.',
+      fileNote: 'PDF, JPEG, or PNG, up to 10 MB.',
+      genericError: 'Could not upload your proof of payment. Please try again.',
+    },
+  },
 };
 
 /** The canonical shape every locale must satisfy - derived from `en` above so a missing or
@@ -614,6 +662,8 @@ export const fil: Translations = {
     applyNow: 'Mag-apply Ngayon',
     logIn: 'Mag-log In',
     createAccount: 'Gumawa ng Account',
+    loading: 'Naglo-load…',
+    editLoanApplication: 'I-edit ang Loan Application',
   },
   nav: {
     requirements: 'Mga Kailangan',
@@ -1163,5 +1213,51 @@ export const fil: Translations = {
     saved: 'Na-update ang profile.',
     save: 'I-save ang mga Pagbabago',
     saving: 'Sine-save…',
+  },
+  dashboardCards: {
+    twoFactorNudge: {
+      title: 'Siguraduhin ang iyong account',
+      body: 'Naka-off ang two-factor authentication. I-on ito para kailanganin ang code kapag mag-lo-log in, kahit malaman ng iba ang iyong password.',
+      cta: 'I-on ang 2FA',
+    },
+    loanOfficer: {
+      title: 'Kailangan ng tulong?',
+      withOfficer: 'Mag-chat kay {name}, ang iyong Easycash loan officer - i-click ang chat bubble sa ibabang kanang sulok.',
+      withoutOfficer: 'Sasagot sa iyo ang isang loan officer sa pamamagitan ng chat - i-click ang chat bubble sa ibabang kanang sulok para magsimula.',
+    },
+    officialBankAccount: {
+      title: 'Opisyal na Bank Account',
+      body: 'Ipadala dito ang iyong Bank Transfer na bayad, tapos i-upload ang iyong proof of payment sa ibaba.',
+      accountName: 'Pangalan ng Account',
+      bankName: 'Pangalan ng Bangko',
+      branch: 'Branch',
+      accountNo: 'Account No.',
+    },
+    signDocuments: {
+      pending: '{count} dokumento ang naghihintay sa iyong pirma',
+      note: '{loanCodes} - pumirma online, hindi na kailangang pumunta sa branch.',
+      cta: 'Pumirma ngayon',
+    },
+    recentPayments: {
+      title: 'Mga Kamakailang Bayad',
+    },
+    nextPaymentDue: {
+      overdueDays: '{days} araw nang overdue',
+      pastDue: 'Lagpas na sa due date',
+      dueToday: 'Due ngayon',
+      dueTomorrow: 'Due bukas',
+      dueInDays: 'Due sa loob ng {days} araw',
+      title: 'Susunod na Bayad - {label}',
+      body: '{amount} para sa {loanCode}, installment #{installment} - due {date}',
+    },
+    paymentProof: {
+      title: 'I-upload ang Proof of Payment',
+      body: 'Nag-Bank Transfer ka sa aming opisyal na account? I-upload dito ang iyong resibo o screenshot at itutugma ito ng aming team sa iyong loan.',
+      upload: 'I-upload',
+      uploading: 'Ina-upload…',
+      done: 'Na-upload na. Susuriin at itutugma ito ng aming team sa iyong loan.',
+      fileNote: 'PDF, JPEG, o PNG, hanggang 10 MB.',
+      genericError: 'Hindi na-upload ang iyong proof of payment. Pakisubukan muli.',
+    },
   },
 };

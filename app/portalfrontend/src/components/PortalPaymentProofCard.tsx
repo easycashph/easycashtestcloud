@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalLoanAccountSummary } from '@/lib/portalApiTypes';
 
 const OPEN_LOAN_ACCOUNT_STATUSES = new Set(['ACTIVE', 'ACTIVE_IN_ARREARS']);
@@ -23,6 +24,7 @@ const ACCEPTED_TYPES = 'application/pdf,image/jpeg,image/png';
  * UploadPortalPaymentProofUseCase), so this never sends a loanAccountId.
  */
 export function PortalPaymentProofCard() {
+  const { t } = useLanguage();
   const [loanAccounts, setLoanAccounts] = React.useState<PortalLoanAccountSummary[] | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
   const [status, setStatus] = React.useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
@@ -50,7 +52,7 @@ export function PortalPaymentProofCard() {
       if (inputRef.current) inputRef.current.value = '';
     } catch (err) {
       setStatus('error');
-      setError(err instanceof ApiError ? err.message : 'Could not upload your proof of payment. Please try again.');
+      setError(err instanceof ApiError ? err.message : t.dashboardCards.paymentProof.genericError);
     }
   };
 
@@ -61,10 +63,8 @@ export function PortalPaymentProofCard() {
           <Receipt className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-base font-semibold">Upload Proof of Payment</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Made a Bank Transfer to our official account? Upload your receipt or screenshot here and our team will match it to your loan.
-          </p>
+          <h2 className="text-base font-semibold">{t.dashboardCards.paymentProof.title}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t.dashboardCards.paymentProof.body}</p>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <input
@@ -80,19 +80,19 @@ export function PortalPaymentProofCard() {
               }}
             />
             <Button type="button" size="sm" disabled={!file || status === 'uploading'} onClick={handleUpload}>
-              {status === 'uploading' ? 'Uploading…' : 'Upload'}
+              {status === 'uploading' ? t.dashboardCards.paymentProof.uploading : t.dashboardCards.paymentProof.upload}
             </Button>
           </div>
 
           {status === 'done' && (
             <Alert tone="success" className="mt-3">
-              Uploaded. Our team will review and match it to your loan.
+              {t.dashboardCards.paymentProof.done}
             </Alert>
           )}
           {status === 'error' && error && (
             <Alert className="mt-3">{error}</Alert>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">PDF, JPEG, or PNG, up to 10 MB.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t.dashboardCards.paymentProof.fileNote}</p>
         </div>
       </div>
     </Card>

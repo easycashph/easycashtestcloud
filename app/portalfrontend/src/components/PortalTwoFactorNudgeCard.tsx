@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/lib/authContext';
 import { usePortalDialogs } from '@/lib/portalDialogContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 
 /**
  * Dashboard security nudge (2026-08-06 user request) - 2FA already exists (Security tab,
@@ -14,6 +15,7 @@ import { usePortalDialogs } from '@/lib/portalDialogContext';
 export function PortalTwoFactorNudgeCard() {
   const { account } = useAuth();
   const { openSecurityDialog } = usePortalDialogs();
+  const { t } = useLanguage();
 
   if (!account || account.twoFactorEnabled) return null;
 
@@ -24,14 +26,12 @@ export function PortalTwoFactorNudgeCard() {
           <ShieldAlert className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold">Secure your account</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Two-factor authentication is off. Turn it on so a code is required to log in, even if someone else knows your password.
-          </p>
+          <h2 className="text-sm font-semibold">{t.dashboardCards.twoFactorNudge.title}</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t.dashboardCards.twoFactorNudge.body}</p>
         </div>
       </div>
       <Button type="button" variant="outline" className="shrink-0 border-warning text-warning hover:bg-warning/10" onClick={openSecurityDialog}>
-        Turn On 2FA
+        {t.dashboardCards.twoFactorNudge.cta}
       </Button>
     </Card>
   );

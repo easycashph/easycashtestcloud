@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { apiClient } from '@/lib/apiClient';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import type { PortalPendingSigningSession } from '@/lib/portalApiTypes';
 
 /**
@@ -15,6 +16,7 @@ import type { PortalPendingSigningSession } from '@/lib/portalApiTypes';
  */
 export function PortalSignDocumentsCard() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [sessions, setSessions] = React.useState<PortalPendingSigningSession[] | null>(null);
 
   const refetch = React.useCallback(() => {
@@ -40,15 +42,17 @@ export function PortalSignDocumentsCard() {
         </div>
         <div>
           <p className="text-sm font-semibold">
-            {totalUnsigned} document{totalUnsigned === 1 ? '' : 's'} waiting for your signature
+            {t.dashboardCards.signDocuments.pending
+              .replace('{count}', String(totalUnsigned))
+              .replace('{plural}', totalUnsigned === 1 ? '' : 's')}
           </p>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {sessions.map((s) => s.loanCode).join(', ')} - sign online, no need to visit a branch.
+            {t.dashboardCards.signDocuments.note.replace('{loanCodes}', sessions.map((s) => s.loanCode).join(', '))}
           </p>
         </div>
       </div>
       <Button size="sm" onClick={() => navigate(`/sign/${sessions[0]!.sessionId}`)}>
-        Sign now
+        {t.dashboardCards.signDocuments.cta}
       </Button>
     </Card>
   );
