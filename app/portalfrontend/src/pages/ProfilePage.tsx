@@ -11,6 +11,7 @@ import { PortalHeader } from '@/components/PortalHeader';
 import { PortalAddressPicker, emptyAddressDraft, type AddressDraft } from '@/components/PortalAddressPicker';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import { useAuth } from '@/lib/authContext';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
 import { PhoneInput } from '@/components/PhoneInput';
 import { NumberInput } from '@/components/NumberInput';
 import { GroupedDigitsInput } from '@/components/GroupedDigitsInput';
@@ -81,6 +82,7 @@ function ProfileFormSkeleton() {
  * a dialog (2026-07-31 user request) from the header nav or Dashboard. */
 export function ProfileForm() {
   const { account } = useAuth();
+  const { t } = useLanguage();
   const isLinked = Boolean(account?.borrowerId);
 
   const [state, setState] = React.useState<'loading' | 'ready' | 'error'>('loading');
@@ -191,24 +193,20 @@ export function ProfileForm() {
       await apiClient.patch<PortalProfile>('/portal/profile', body, true);
       setSaveState('saved');
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setSaveError(err instanceof ApiError ? err.message : t.profile.genericSaveError);
       setSaveState('error');
     }
   };
 
   return (
     <>
-      <p className="text-sm text-muted-foreground">
-        {isLinked
-          ? 'This is the same client record Easycash staff sees - you can update your contact info here.'
-          : "Personalize your profile now, or fill it in later when you apply for a loan."}
-      </p>
+      <p className="text-sm text-muted-foreground">{isLinked ? t.profile.introLinked : t.profile.introUnlinked}</p>
 
       {state === 'loading' && <ProfileFormSkeleton />}
 
         {state === 'error' && (
           <Alert tone="error" className="mt-8">
-            Couldn't load your profile. Please try again later.
+            {t.profile.loadError}
           </Alert>
         )}
 
@@ -216,47 +214,43 @@ export function ProfileForm() {
           <form onSubmit={handleSave} className="mt-8 space-y-5">
             {!isLinked && (
               <Card className="p-6">
-                <p className="text-sm text-muted-foreground">
-                  You're not yet an official Easycash client - that happens once a loan officer creates your loan account in
-                  the LMS after reviewing an approved application. Everything below is saved to your account and will carry
-                  over once that happens.
-                </p>
+                <p className="text-sm text-muted-foreground">{t.profile.unlinkedNote}</p>
               </Card>
             )}
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Personal Information</h2>
+              <h2 className="text-sm font-semibold">{t.profile.personalInfo.title}</h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 {isLinked ? (
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Full name</Label>
+                    <Label>{t.profile.personalInfo.fullName}</Label>
                     <Input value={[firstName, middleName, lastName].filter(Boolean).join(' ')} disabled />
-                    <p className="text-xs text-muted-foreground">Name is set by Easycash staff. Contact Easycash if this needs correcting.</p>
+                    <p className="text-xs text-muted-foreground">{t.profile.personalInfo.nameLockedNote}</p>
                   </div>
                 ) : (
                   <>
                     <div className="space-y-1.5">
-                      <Label>First name</Label>
+                      <Label>{t.profile.personalInfo.firstName}</Label>
                       <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Middle name</Label>
+                      <Label>{t.profile.personalInfo.middleName}</Label>
                       <Input value={middleName} onChange={(e) => setMiddleName(e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Last name</Label>
+                      <Label>{t.profile.personalInfo.lastName}</Label>
                       <Input value={lastName} onChange={(e) => setLastName(e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Suffix</Label>
+                      <Label>{t.profile.personalInfo.suffix}</Label>
                       <Input value={suffix} onChange={(e) => setSuffix(e.target.value)} placeholder="Jr., Sr., III, …" />
                     </div>
                   </>
                 )}
                 <div className="space-y-1.5">
-                  <Label>Gender</Label>
+                  <Label>{t.profile.personalInfo.gender}</Label>
                   <Select value={gender} onChange={(e) => setGender(e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.profile.personalInfo.select}</option>
                     {GENDER_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -265,9 +259,9 @@ export function ProfileForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Civil status</Label>
+                  <Label>{t.profile.personalInfo.civilStatus}</Label>
                   <Select value={civilStatus} onChange={(e) => setCivilStatus(e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.profile.personalInfo.select}</option>
                     {CIVIL_STATUS_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -276,22 +270,26 @@ export function ProfileForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Birth date</Label>
+                  <Label>{t.profile.personalInfo.birthDate}</Label>
                   <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
-                  {computeAge(birthDate) !== null && <p className="text-xs text-muted-foreground">Age: {computeAge(birthDate)}</p>}
+                  {computeAge(birthDate) !== null && (
+                    <p className="text-xs text-muted-foreground">
+                      {t.profile.personalInfo.age}: {computeAge(birthDate)}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Place of birth</Label>
+                  <Label>{t.profile.personalInfo.placeOfBirth}</Label>
                   <Input value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Nationality</Label>
+                  <Label>{t.profile.personalInfo.nationality}</Label>
                   <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Home ownership</Label>
+                  <Label>{t.profile.personalInfo.homeOwnership}</Label>
                   <Select value={homeOwnership} onChange={(e) => setHomeOwnership(e.target.value)}>
-                    <option value="">Select</option>
+                    <option value="">{t.profile.personalInfo.select}</option>
                     {HOME_OWNERSHIP_OPTIONS.map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -300,106 +298,106 @@ export function ProfileForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Mobile number</Label>
+                  <Label>{t.profile.personalInfo.mobileNumber}</Label>
                   <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Alternate mobile number</Label>
+                  <Label>{t.profile.personalInfo.altMobileNumber}</Label>
                   <PhoneInput value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Email</Label>
+                  <Label>{t.profile.personalInfo.email}</Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
               </div>
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Address</h2>
+              <h2 className="text-sm font-semibold">{t.profile.address.title}</h2>
               <div className="mt-4">
                 <PortalAddressPicker value={addressDraft} onChange={(patch) => setAddressDraft((prev) => ({ ...prev, ...patch }))} />
               </div>
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Employment Information</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Skip if you're unemployed, self-employed, or retired.</p>
+              <h2 className="text-sm font-semibold">{t.profile.employment.title}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">{t.profile.employment.note}</p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Name of employer</Label>
+                  <Label>{t.profile.employment.employer}</Label>
                   <Input value={employer} onChange={(e) => setEmployer(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Occupation</Label>
+                  <Label>{t.profile.employment.occupation}</Label>
                   <Input value={occupation} onChange={(e) => setOccupation(e.target.value)} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Office address</Label>
+                  <Label>{t.profile.employment.officeAddress}</Label>
                   <Input value={officeAddress} onChange={(e) => setOfficeAddress(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Monthly income (₱)</Label>
+                  <Label>{t.profile.employment.monthlyIncome}</Label>
                   <NumberInput min="0" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} placeholder="0.00" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>TIN</Label>
+                  <Label>{t.profile.employment.tin}</Label>
                   <GroupedDigitsInput value={tinNumber} onChange={(e) => setTinNumber(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>SSS no.</Label>
+                  <Label>{t.profile.employment.sss}</Label>
                   <GroupedDigitsInput value={sssNumber} onChange={(e) => setSssNumber(e.target.value)} />
                 </div>
               </div>
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Dependants</h2>
+              <h2 className="text-sm font-semibold">{t.profile.dependants.title}</h2>
               <div className="mt-4 space-y-2">
                 {dependants.map((row, i) => (
                   <div key={i} className="flex flex-wrap items-end gap-2">
                     <div className="min-w-40 flex-1 space-y-1.5">
-                      <Label>Name</Label>
+                      <Label>{t.profile.dependants.name}</Label>
                       <Input value={row.name} onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))} />
                     </div>
                     <div className="w-20 space-y-1.5">
-                      <Label>Age</Label>
+                      <Label>{t.profile.dependants.age}</Label>
                       <Input type="number" value={row.age} onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, age: e.target.value } : r)))} />
                     </div>
                     <div className="w-36 space-y-1.5">
-                      <Label>Relationship</Label>
+                      <Label>{t.profile.dependants.relationship}</Label>
                       <Input
                         value={row.relationship}
                         onChange={(e) => setDependants(dependants.map((r, j) => (j === i ? { ...r, relationship: e.target.value } : r)))}
                       />
                     </div>
-                    <Button type="button" variant="ghost" size="sm" aria-label="Remove dependant" onClick={() => setDependants(dependants.filter((_, j) => j !== i))}>
+                    <Button type="button" variant="ghost" size="sm" aria-label={t.profile.dependants.remove} onClick={() => setDependants(dependants.filter((_, j) => j !== i))}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={() => setDependants([...dependants, { name: '', age: '', relationship: '' }])}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add dependant
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> {t.profile.dependants.add}
                 </Button>
               </div>
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-sm font-semibold">Character References</h2>
+              <h2 className="text-sm font-semibold">{t.profile.references.title}</h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>1st reference - full name</Label>
+                  <Label>{t.profile.references.name1}</Label>
                   <Input value={reference1Name} onChange={(e) => setReference1Name(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>1st reference - contact number</Label>
+                  <Label>{t.profile.references.contact1}</Label>
                   <PhoneInput value={reference1Mobile} onChange={(e) => setReference1Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>2nd reference - full name</Label>
+                  <Label>{t.profile.references.name2}</Label>
                   <Input value={reference2Name} onChange={(e) => setReference2Name(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>2nd reference - contact number</Label>
+                  <Label>{t.profile.references.contact2}</Label>
                   <PhoneInput value={reference2Mobile} onChange={(e) => setReference2Mobile(e.target.value)} placeholder="09XX XXX XXXX" />
                 </div>
               </div>
@@ -407,10 +405,10 @@ export function ProfileForm() {
 
             <Card className="p-6">
               {saveState === 'error' && <Alert tone="error" className="mb-4">{saveError}</Alert>}
-              {saveState === 'saved' && <Alert tone="success" className="mb-4">Profile updated.</Alert>}
+              {saveState === 'saved' && <Alert tone="success" className="mb-4">{t.profile.saved}</Alert>}
 
               <Button type="submit" disabled={saveState === 'saving'}>
-                {saveState === 'saving' ? 'Saving…' : 'Save Changes'}
+                {saveState === 'saving' ? t.profile.saving : t.profile.save}
               </Button>
             </Card>
           </form>
@@ -422,11 +420,12 @@ export function ProfileForm() {
 /** Full-page route wrapper (direct-link/bookmark entry point) - the everyday in-app flow now opens
  * `ProfileForm` inside a Dialog instead (see PortalDialogHost). */
 export function ProfilePage() {
+  const { t } = useLanguage();
   return (
     <div className="min-h-screen bg-secondary/30">
       <PortalHeader />
       <main className="container max-w-3xl py-10">
-        <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.profile.pageTitle}</h1>
         <div className="mt-8">
           <ProfileForm />
         </div>
