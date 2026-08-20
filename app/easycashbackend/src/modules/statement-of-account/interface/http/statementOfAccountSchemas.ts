@@ -16,6 +16,8 @@ export const generateStatementOfAccountSchema = z
     /** ISO date (YYYY-MM-DD). Both required under `COMPUTED`, ignored otherwise — the resolver validates. */
     penaltyFromDate: z.string().date().optional(),
     penaltyToDate: z.string().date().optional(),
+    /** `COMPUTED` only — see `StatementOfAccountCalculator`'s own doc comment. */
+    penaltyRecomputeAll: z.boolean().optional().default(false),
     /** `MANUAL` only. */
     manualPenaltyAmount: decimalString.optional(),
     penaltyManualReason: z.string().trim().min(1).optional(),

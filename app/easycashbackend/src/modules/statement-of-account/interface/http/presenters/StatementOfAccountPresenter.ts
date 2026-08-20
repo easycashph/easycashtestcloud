@@ -9,6 +9,7 @@ export function presentGeneratedStatementOfAccount(statement: GeneratedStatement
     penaltyMode: statement.penaltyMode,
     penaltyFromDate: statement.penaltyFromDate?.toISOString().slice(0, 10) ?? null,
     penaltyToDate: statement.penaltyToDate?.toISOString().slice(0, 10) ?? null,
+    penaltyRecomputeAll: statement.penaltyRecomputeAll,
     penaltyManualReason: statement.penaltyManualReason,
     accruedInterestAsOfDate: statement.accruedInterestAsOfDate.toISOString().slice(0, 10),
     currentAmortizationDue: statement.currentAmortizationDue.toString(),

@@ -40,6 +40,8 @@ export interface GenerateStatementOfAccountInput {
   /** Both required under `COMPUTED`, ignored otherwise — the resolver validates and throws. */
   penaltyFromDate?: Date;
   penaltyToDate?: Date;
+  /** `COMPUTED` only — see `StatementOfAccountCalculator`'s own doc comment. Defaults to `false`. */
+  penaltyRecomputeAll?: boolean;
   /** Both required under `MANUAL`, ignored otherwise. The reason is what makes a hand-set figure
    * explainable later against the schedule it disagrees with. */
   manualPenaltyAmount?: Money;
@@ -70,18 +72,20 @@ export class GenerateStatementOfAccountUseCase {
     const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber(input.loanAccountId)) + 1;
     const statementDate = new Date();
     const soaNumber = formatSoaNumber(soaSequenceNumber, statementDate);
-    const { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate } = await this.deps.mergeDataResolver.resolve(
-      input.loanAccountId,
-      soaNumber,
-      statementDate,
-      input.penaltyMode,
-      input.penaltyFromDate,
-      input.penaltyToDate,
-      input.manualPenaltyAmount,
-      input.accruedInterestAsOfDate,
-      input.collectionFee,
-      input.otherFee,
-    );
+    const { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll } =
+      await this.deps.mergeDataResolver.resolve(
+        input.loanAccountId,
+        soaNumber,
+        statementDate,
+        input.penaltyMode,
+        input.penaltyFromDate,
+        input.penaltyToDate,
+        input.penaltyRecomputeAll ?? false,
+        input.manualPenaltyAmount,
+        input.accruedInterestAsOfDate,
+        input.collectionFee,
+        input.otherFee,
+      );
     const totalAmountDue = figures.totalPastDue
       .add(figures.currentAmortizationDue)
       .add(figures.accruedInterest)
@@ -100,6 +104,7 @@ export class GenerateStatementOfAccountUseCase {
       penaltyMode: input.penaltyMode,
       penaltyFromDate: effectivePenaltyFromDate,
       penaltyToDate: effectivePenaltyToDate,
+      penaltyRecomputeAll: effectivePenaltyRecomputeAll,
       penaltyManualReason: input.penaltyMode === 'MANUAL' ? input.penaltyManualReason?.trim() ?? null : null,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
       currentAmortizationDue: figures.currentAmortizationDue,

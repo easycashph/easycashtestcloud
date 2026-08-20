@@ -66,6 +66,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     penaltyMode: SoaPenaltyMode,
     penaltyFromDate: Date | undefined,
     penaltyToDate: Date | undefined,
+    penaltyRecomputeAll: boolean,
     manualPenaltyAmount: Money | undefined,
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
@@ -121,6 +122,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       penaltyMode,
       penaltyFromDate,
       penaltyToDate,
+      penaltyRecomputeAll: penaltyMode === 'COMPUTED' ? penaltyRecomputeAll : false,
       manualPenaltyAmount,
       accruedInterestAsOfDate,
       penaltyContext,
@@ -130,6 +132,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     // prints exactly what they entered.
     const effectivePenaltyFromDate = penaltyMode === 'COMPUTED' ? penaltyFromDate ?? null : null;
     const effectivePenaltyToDate = penaltyMode === 'COMPUTED' ? penaltyToDate ?? null : null;
+    const effectivePenaltyRecomputeAll = penaltyMode === 'COMPUTED' && penaltyRecomputeAll;
 
     // PN Amount (`btnCreateSOA_Click`'s `totalObligation`) = Principal + Interest summed across the
     // ENTIRE original schedule (not just unpaid amounts, and excluding fees) — the loan's total
@@ -207,6 +210,6 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       })),
     };
 
-    return { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate };
+    return { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll };
   }
 }

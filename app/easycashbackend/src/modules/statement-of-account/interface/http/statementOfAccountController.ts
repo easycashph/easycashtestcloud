@@ -39,6 +39,7 @@ export class StatementOfAccountController {
           penaltyMode: body.penaltyMode,
           penaltyFromDate: body.penaltyFromDate ? new Date(`${body.penaltyFromDate}T00:00:00.000Z`) : undefined,
           penaltyToDate: body.penaltyToDate ? new Date(`${body.penaltyToDate}T00:00:00.000Z`) : undefined,
+          penaltyRecomputeAll: body.penaltyRecomputeAll,
           manualPenaltyAmount: body.manualPenaltyAmount ? Money.of(body.manualPenaltyAmount) : undefined,
           penaltyManualReason: body.penaltyManualReason,
           accruedInterestAsOfDate: new Date(`${body.accruedInterestAsOfDate}T00:00:00.000Z`),

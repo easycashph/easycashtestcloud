@@ -13,6 +13,8 @@ export interface GeneratedStatementOfAccountProps {
   /** Null whenever `penaltyMode` is `RECORDED` — that mode asks staff for no dates. */
   penaltyFromDate: Date | null;
   penaltyToDate: Date | null;
+  /** `COMPUTED` only — see schema.prisma's own doc comment. Always `false` under `RECORDED`/`MANUAL`. */
+  penaltyRecomputeAll: boolean;
   /** Required under `MANUAL`, null otherwise — see the schema's own doc comment for why. */
   penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
@@ -36,6 +38,8 @@ export interface CreateGeneratedStatementOfAccountProps {
   penaltyMode: SoaPenaltyMode;
   penaltyFromDate: Date | null;
   penaltyToDate: Date | null;
+  /** `COMPUTED` only — see schema.prisma's own doc comment. Always `false` under `RECORDED`/`MANUAL`. */
+  penaltyRecomputeAll: boolean;
   /** Required under `MANUAL`, null otherwise — see the schema's own doc comment for why. */
   penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
@@ -103,6 +107,10 @@ export class GeneratedStatementOfAccount {
 
   get penaltyToDate(): Date | null {
     return this.props.penaltyToDate;
+  }
+
+  get penaltyRecomputeAll(): boolean {
+    return this.props.penaltyRecomputeAll;
   }
 
   get penaltyManualReason(): string | null {

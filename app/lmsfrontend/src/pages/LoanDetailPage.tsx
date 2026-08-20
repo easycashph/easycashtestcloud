@@ -1843,6 +1843,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const [soaManualReason, setSoaManualReason] = React.useState('');
   const [soaPenaltyFromDate, setSoaPenaltyFromDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaPenaltyToDate, setSoaPenaltyToDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  // 2026-08-21 (user-reported, SML-MAX_A3F8O): COMPUTED normally only fills a BLANK (zero-recorded)
+  // installment's penalty - for a migrated account whose recorded penalty is itself wrong (years of
+  // post-maturity accrual baked in) but non-zero, there's nothing "missing" to fill. This forces the
+  // date-range formula to run for every qualifying installment regardless of what's recorded.
+  const [soaPenaltyRecomputeAll, setSoaPenaltyRecomputeAll] = React.useState(false);
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
@@ -1899,6 +1904,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // penalty stopped at maturity. Both are display-only - neither drives the generated statement.
     let recordedPenaltyTotal = 0;
     let cappedPenaltyTotal = 0;
+    // 2026-08-21 (user-reported, SML-MAX_A3F8O): whole-loan basis, matching ADR-050/
+    // CurrentPenaltyResolver - NOT a per-installment unpaid balance (a partially-paid installment on
+    // a large loan could otherwise read as "small balance" just because what's left on THAT ONE
+    // installment happens to be small).
+    const loanPrincipal = parseNum(loanQuery.data?.principalAmount);
     for (const inst of sorted) {
       if (new Date(inst.dueDate).getTime() > asOfDate.getTime()) continue;
       const unpaidPrincipal = parseNum(inst.due.principal) - parseNum(inst.paid.principal);
@@ -1916,19 +1926,19 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       // offered under MANUAL. `min` so it can never exceed what is actually on record.
       if (maturityDate) {
         const toMaturity = daysBetween(new Date(inst.dueDate), maturityDate);
-        const rate = unpaidBase > 10000 ? 0.1 : 0.05;
+        const rate = loanPrincipal > 10000 ? 0.1 : 0.05;
         cappedPenaltyTotal += Math.min(recorded, Math.round(((unpaidBase * toMaturity * rate) / 30) * 100) / 100);
       }
 
         if (soaPenaltyMode === 'MANUAL') continue; // staff supply the whole figure instead
-      if (soaPenaltyMode === 'RECORDED' || recorded > 0) {
+      if (soaPenaltyMode === 'RECORDED' || (!soaPenaltyRecomputeAll && recorded > 0)) {
         pastDuePenalty += recorded;
         continue;
       }
       const from = new Date(inst.dueDate).getTime() > penaltyFrom.getTime() ? new Date(inst.dueDate) : penaltyFrom;
       const days = daysBetween(from, penaltyCutoff);
       if (days <= 0) continue;
-      const rate = unpaidBase > 10000 ? 0.1 : 0.05;
+      const rate = loanPrincipal > 10000 ? 0.1 : 0.05;
       pastDuePenalty += Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
       filledCount += 1;
     }
@@ -1990,6 +2000,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     soaPenaltyMode,
     soaPenaltyFromDate,
     soaPenaltyToDate,
+    soaPenaltyRecomputeAll,
     soaManualPenalty,
     soaAccruedInterestAsOfDate,
     soaCollectionFee,
@@ -2027,7 +2038,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           // Dates only mean anything under COMPUTED - RECORDED takes the penalty straight off the
           // repayment schedule and the backend rejects stray dates as unused input.
           ...(soaPenaltyMode === 'COMPUTED'
-            ? { penaltyFromDate: soaPenaltyFromDate, penaltyToDate: soaPenaltyToDate }
+            ? { penaltyFromDate: soaPenaltyFromDate, penaltyToDate: soaPenaltyToDate, penaltyRecomputeAll: soaPenaltyRecomputeAll }
             : {}),
           ...(soaPenaltyMode === 'MANUAL'
             ? { manualPenaltyAmount: soaManualPenalty, penaltyManualReason: soaManualReason.trim() }
@@ -2045,6 +2056,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       setSoaOtherFee('0.00');
       setSoaManualPenalty('');
       setSoaManualReason('');
+      setSoaPenaltyRecomputeAll(false);
     },
     onError: (error) => {
       setSoaError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
@@ -3438,6 +3450,25 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                       />
                     </div>
                   </div>
+                  {/* 2026-08-21 (user-reported, SML-MAX_A3F8O): normal COMPUTED only fills a BLANK
+                      (zero-recorded) installment - useless for a migrated account whose recorded
+                      penalty is itself wrong but non-zero. This forces every qualifying installment
+                      through the date-range formula instead, ignoring whatever is recorded. */}
+                  <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={soaPenaltyRecomputeAll}
+                      onChange={(e) => setSoaPenaltyRecomputeAll(e.target.checked)}
+                    />
+                    <span>
+                      <span className="block text-sm">Recompute every installment</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Ignores whatever penalty is already on record - for an account where the recorded figure is itself wrong (e.g.
+                        years of post-maturity accrual baked in), not just missing.
+                      </span>
+                    </span>
+                  </label>
                   {/* 2026-08-12: penalty stops at maturity - say so out loud rather than silently
                       clamping a later To date to zero days, which read as "no penalty owed". */}
                   {soaPreview.maturityDate && (
@@ -3458,7 +3489,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Rate is 5%/month per installment with an unpaid balance ≤ ₱10,000, otherwise 10%/month.
+                    Rate is 5%/month for a loan with a principal ≤ ₱10,000, otherwise 10%/month (whole-loan basis, matching the live
+                    Repayment Schedule).
                   </p>
                 </div>
               )}

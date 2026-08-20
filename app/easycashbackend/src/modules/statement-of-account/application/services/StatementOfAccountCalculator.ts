@@ -66,6 +66,13 @@ export interface StatementOfAccountFigures {
  *   stops accruing at maturity, after which it is INTEREST that continues (see Accrued Interest
  *   below), never more penalty.
  *
+ *   `penaltyRecomputeAll` (2026-08-21, user-reported via SML-MAX_A3F8O): an optional sibling flag,
+ *   `COMPUTED`-only. Normal `COMPUTED` only fills a BLANK (zero-recorded) installment - useless for
+ *   a migrated account whose recorded penalty is itself wrong (see `MANUAL`'s "years of
+ *   post-maturity accrual" note) but non-zero, since there is nothing "missing" to fill. When true,
+ *   the formula above runs for EVERY qualifying installment regardless of what is recorded,
+ *   replacing it outright rather than only patching gaps.
+ *
  * - `MANUAL`: staff type the Past Due Penalty themselves and a reason is required. For the
  *   long-defaulted migrated accounts whose recorded penalty includes years of post-maturity
  *   accrual the business no longer charges (681 loans carry ~₱19.3M of it on their final
@@ -74,10 +81,14 @@ export interface StatementOfAccountFigures {
  *   so an automatic figure would be a guess dressed up as a calculation. The statement records
  *   both the amount and the reason so it can be explained against the schedule it disagrees with.
  *
- * `rate` is 5%/month if THAT installment's own unpaid Principal + Interest <= ₱10,000, else
- * 10%/month (same ₱10,000 threshold as ADR-050, but evaluated per-installment here, not against the
- * whole loan's principal) — flat, non-compounding, no grace period, matching the legacy tool's own
- * flat-rate mechanics otherwise.
+ * `rate` is 5%/month if the LOAN's own `principalAmount` <= ₱10,000, else 10%/month — the same
+ * whole-loan basis ADR-050/`CurrentPenaltyResolver.resolvePenaltyRatePercent` already uses
+ * everywhere else, not a per-installment balance. (2026-08-21, user-reported via SML-MAX_A3F8O:
+ * this used to check each installment's own unpaid Principal + Interest instead, which disagreed
+ * with ADR-050 - a partially-paid installment on a ₱120,000 loan could read as "small balance" and
+ * get the 5% rate just because what was LEFT on that one installment happened to be small, even
+ * though the loan itself is nowhere near ₱10,000. Fixed to match the canonical rule.) Flat,
+ * non-compounding, no grace period, matching the legacy tool's own flat-rate mechanics otherwise.
  *
  * **Current Amortization Due** — the next unpaid installment whose `dueDate` is AFTER
  * `penaltyToDate` (mirrors `btnCreateSOA_Click`'s "current month" bucket, generalized from "the
@@ -112,6 +123,8 @@ export interface StatementOfAccountCalculatorInput {
   /** `COMPUTED` only — ignored entirely under `RECORDED` and `MANUAL`. */
   penaltyFromDate?: Date | undefined;
   penaltyToDate?: Date | undefined;
+  /** `COMPUTED` only — see this class's own doc comment for what it changes. */
+  penaltyRecomputeAll?: boolean | undefined;
   /** `MANUAL` only — the figure staff typed, used verbatim as the whole Past Due Penalty. */
   manualPenaltyAmount?: Money | undefined;
   accruedInterestAsOfDate: Date;
@@ -128,6 +141,7 @@ export class StatementOfAccountCalculator {
       penaltyMode,
       penaltyFromDate,
       penaltyToDate,
+      penaltyRecomputeAll,
       manualPenaltyAmount,
       accruedInterestAsOfDate,
       penaltyContext,
@@ -175,18 +189,25 @@ export class StatementOfAccountCalculator {
       // for a migrated loan, the live ADR-050 figure for one originated here.
       const recorded = resolveComputedPenalty(installment, penaltyContext, penaltyCutoff);
 
-      if (penaltyMode === 'RECORDED' || recorded.isPositive() || !penaltyFromDate) {
+      // 2026-08-21 (user-reported via SML-MAX_A3F8O): `penaltyRecomputeAll` skips the
+      // recorded.isPositive() short-circuit below, so the date-range formula runs even for an
+      // installment that already has a (possibly wrong) nonzero recorded penalty.
+      if (penaltyMode === 'RECORDED' || (!penaltyRecomputeAll && (recorded.isPositive() || !penaltyFromDate))) {
         pastDuePenalty = pastDuePenalty.add(recorded);
         continue;
       }
 
-      // COMPUTED, and this installment has no penalty on record — fill just this one in. Counted
-      // from its OWN due date (or the staff "from" date, whichever is later) up to the cutoff, so
-      // an installment that was not yet overdue can never be charged a full period.
+      // COMPUTED - either this installment has no penalty on record, or penaltyRecomputeAll forces
+      // every installment through this formula regardless. Counted from its OWN due date (or the
+      // staff "from" date, whichever is later) up to the cutoff, so an installment that was not yet
+      // overdue can never be charged a full period.
+      if (!penaltyFromDate) continue;
       const from = installment.dueDate.getTime() > penaltyFromDate.getTime() ? installment.dueDate : penaltyFromDate;
       const days = manilaDaysBetween(from, penaltyCutoff);
       if (days <= 0) continue;
-      const rate = unpaidBase.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
+      // 2026-08-21 (user-reported): whole-loan basis, not this installment's own unpaid balance -
+      // see this file's own doc comment above.
+      const rate = penaltyContext.principalAmount.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
       pastDuePenalty = pastDuePenalty.add(
         Money.of(unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP)),
       );

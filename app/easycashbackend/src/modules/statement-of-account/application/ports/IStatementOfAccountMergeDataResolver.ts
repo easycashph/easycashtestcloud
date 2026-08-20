@@ -14,6 +14,8 @@ export interface StatementOfAccountResolveResult {
    */
   effectivePenaltyFromDate: Date | null;
   effectivePenaltyToDate: Date | null;
+  /** Echoed back for persistence, same reason as the two dates above. Always `false` outside `COMPUTED`. */
+  effectivePenaltyRecomputeAll: boolean;
 }
 
 export interface IStatementOfAccountMergeDataResolver {
@@ -25,6 +27,8 @@ export interface IStatementOfAccountMergeDataResolver {
     /** Both required under `COMPUTED`; ignored under `RECORDED` and `MANUAL`. */
     penaltyFromDate: Date | undefined,
     penaltyToDate: Date | undefined,
+    /** `COMPUTED` only — see `StatementOfAccountCalculator`'s own doc comment. */
+    penaltyRecomputeAll: boolean,
     /** Required under `MANUAL`; ignored otherwise. */
     manualPenaltyAmount: Money | undefined,
     accruedInterestAsOfDate: Date,
