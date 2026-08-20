@@ -44,6 +44,7 @@ export type PermissionCode =
   | 'payment.reverse'
   | 'payment.manual_adjust'
   | 'penalty.reduce'
+  | 'penalty.charge'
   | 'fees.adjust'
   | 'fee.charge'
   | 'document.generate'
@@ -113,6 +114,8 @@ interface RoleContextValue {
   canManualAdjustPayment: boolean;
   /** Reduce/waive an installment penalty. */
   canReducePenalty: boolean;
+  /** Charge a new penalty on an installment. */
+  canChargePenalty: boolean;
   /** Adjust an installment fee amount. */
   canAdjustFees: boolean;
   /** Charge a new fee on an installment. */
@@ -315,6 +318,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canReversePayment: hasPermission('payment.reverse'),
     canManualAdjustPayment: hasPermission('payment.manual_adjust'),
     canReducePenalty: hasPermission('penalty.reduce'),
+    canChargePenalty: hasPermission('penalty.charge'),
     canAdjustFees: hasPermission('fees.adjust'),
     canChargeFee: hasPermission('fee.charge'),
     canRestructureLoan: hasPermission('loan_account.restructure'),

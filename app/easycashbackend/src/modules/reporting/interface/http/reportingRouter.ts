@@ -22,11 +22,17 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/loan-releases.xlsx', requireAuth, requireReportView, controller.loanReleasesXlsx);
   router.get('/reports/aging.xlsx', requireAuth, requireReportView, controller.agingXlsx);
   router.get('/reports/ending-balance.xlsx', requireAuth, requireReportView, controller.endingBalanceXlsx);
+  router.get('/reports/accounts-past-due', requireAuth, requireReportView, controller.accountsWithPastDue);
   router.get('/reports/accounts-past-due.xlsx', requireAuth, requireReportView, controller.accountsWithPastDueXlsx);
+  router.get('/reports/collection-history', requireAuth, requireReportView, controller.collectionHistory);
   router.get('/reports/collection-history.xlsx', requireAuth, requireReportView, controller.collectionHistoryXlsx);
+  router.get('/reports/expected-collection', requireAuth, requireReportView, controller.expectedCollection);
   router.get('/reports/expected-collection.xlsx', requireAuth, requireReportView, controller.expectedCollectionXlsx);
+  router.get('/reports/first-amortization', requireAuth, requireReportView, controller.firstAmortization);
   router.get('/reports/first-amortization.xlsx', requireAuth, requireReportView, controller.firstAmortizationXlsx);
+  router.get('/reports/daily-collection', requireAuth, requireReportView, controller.dailyCollection);
   router.get('/reports/daily-collection.xlsx', requireAuth, requireReportView, controller.dailyCollectionXlsx);
+  router.get('/reports/fully-paid', requireAuth, requireReportView, controller.fullyPaid);
   router.get('/reports/fully-paid.xlsx', requireAuth, requireReportView, controller.fullyPaidXlsx);
 
   return router;

@@ -312,6 +312,7 @@ model User {
   feesOverridesSet                     RepaymentSchedule[]           @relation("FeesOverrideBy")
   feeAdjustmentsMade                   FeeAdjustment[]
   feeChargesMade                       FeeCharge[]
+  penaltyChargesMade                   PenaltyCharge[]
   paymentAdjustmentsMade               PaymentAdjustment[]
   loanRestructuresMade                 LoanRestructure[]             @relation("LoanRestructureBy")
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
@@ -1427,6 +1428,10 @@ model LoanTransaction {
   /// transaction created through this tool; empty for a migrated FEE_CHARGED row (no `FeeCharge`
   /// backfilled for legacy data, same "written going forward only" posture as `PaymentAllocation`).
   feeCharges         FeeCharge[]
+  /// 2026-08-19 (Add Penalty feature) — see `PenaltyCharge`'s own doc comment. Present on a
+  /// `PENALTY_APPLIED` transaction created through this tool; empty for a migrated row, same
+  /// "written going forward only" posture as `feeCharges`.
+  penaltyCharges     PenaltyCharge[]
 
   /// Schema Review SR-11 (Critical): `loan_transactions` is the highest-
   /// volume table (legacy equivalent: 524k rows) — date-range and
@@ -1540,6 +1545,7 @@ model RepaymentSchedule {
   penaltyReductions  PenaltyReduction[]
   feeAdjustments     FeeAdjustment[]
   feeCharges         FeeCharge[]
+  penaltyCharges     PenaltyCharge[]
   smsReminderLogs    SmsReminderLog[]
   emailReminderLogs  EmailReminderLog[]
 
@@ -1702,6 +1708,36 @@ model FeeCharge {
   @@index([repaymentInstallmentId])
   @@index([loanTransactionId])
   @@map("fee_charges")
+}
+
+/// 2026-08-19 (Add Penalty feature) — mirrors FeeCharge exactly, but for penalty. Built for the
+/// migration period: with the live ADR-050 auto-computation disabled
+/// (PENALTY_AUTO_COMPUTE_ENABLED=false, see CurrentPenaltyResolver.ts), staff manually key in
+/// whatever penalty SDevTech's own screen shows via this action, one immutable row per charge —
+/// same "historical record, never edited" posture as PenaltyReduction/FeeCharge.
+model PenaltyCharge {
+  id                     String            @id @default(uuid())
+  repaymentInstallmentId String
+  repaymentInstallment   RepaymentSchedule @relation(fields: [repaymentInstallmentId], references: [id])
+  loanTransactionId      String
+  loanTransaction        LoanTransaction   @relation(fields: [loanTransactionId], references: [id])
+
+  /// The effective penalty due (override if one was already set, else the immutable/computed
+  /// `due.penalty`) immediately before this charge.
+  previousPenaltyAmount Decimal @db.Decimal(14, 2)
+  newPenaltyAmount      Decimal @db.Decimal(14, 2)
+
+  /// Required — what this penalty is for (e.g. "Per SDevTech screen as of 2026-08-19"), same
+  /// convention as PenaltyReduction.reason/FeeCharge.reason.
+  reason String
+
+  chargedByUserId String
+  chargedBy       User     @relation(fields: [chargedByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([repaymentInstallmentId])
+  @@index([loanTransactionId])
+  @@map("penalty_charges")
 }
 
 /// 2026-07-11 (Reverse Payment feature). `ProcessPaymentUseCase` applies one

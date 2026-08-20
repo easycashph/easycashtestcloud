@@ -28,7 +28,16 @@ import {
   writeFirstAmortizationReportXlsx,
   writeFullyPaidAccountsReportXlsx,
 } from '../../infrastructure/reportWriters';
-import { presentLoanReleaseReportRow, presentTransactionReportRow } from './presenters/ReportPresenter';
+import {
+  presentAccountsWithPastDueReportRow,
+  presentCollectionHistoryReportRow,
+  presentDailyCollectionReportRow,
+  presentExpectedCollectionReportRow,
+  presentFirstAmortizationReportRow,
+  presentFullyPaidAccountsReportRow,
+  presentLoanReleaseReportRow,
+  presentTransactionReportRow,
+} from './presenters/ReportPresenter';
 
 export interface ReportingControllerDeps {
   getLoanOriginationReportUseCase: GetLoanOriginationReportUseCase;
@@ -213,6 +222,20 @@ export class ReportingController {
     }
   };
 
+  /** 2026-08-20 (user request): JSON counterpart to `accountsWithPastDueXlsx` below, for the
+   * report's new on-screen table - same "not paginated, date-range-scoped" posture as `loanReleases`. */
+  accountsWithPastDue = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getAccountsWithPastDueReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentAccountsWithPastDueReportRow) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   accountsWithPastDueXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
@@ -223,6 +246,19 @@ export class ReportingController {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Accounts with Past Due.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-20 (user request): JSON counterpart to `collectionHistoryXlsx` below. */
+  collectionHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getCollectionHistoryReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentCollectionHistoryReportRow) });
     } catch (error) {
       next(error);
     }
@@ -243,16 +279,55 @@ export class ReportingController {
     }
   };
 
+  /** 2026-08-19 (user request): JSON counterpart to `expectedCollectionXlsx` below, for the
+   * report's new on-screen table - same "not paginated, date-range-scoped" posture as `loanReleases`.
+   * 2026-08-20 (user request): added a multi-select `product` filter (repeated `product` query
+   * params, one per `LoanProduct.code` - same `parseMultiValueFilter` normalization as `type`/`channel`). */
+  expectedCollection = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({
+        from,
+        to,
+        branchId: resolveBranchFilter(scope),
+        productCodes: parseMultiValueFilter(req.query.product),
+      });
+      res.status(200).json({ items: rows.map(presentExpectedCollectionReportRow) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   expectedCollectionXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const rows = await this.deps.getExpectedCollectionReportUseCase.execute({
+        from,
+        to,
+        branchId: resolveBranchFilter(scope),
+        productCodes: parseMultiValueFilter(req.query.product),
+      });
       const buffer = await writeExpectedCollectionReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Expected Collection.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-20 (user request): JSON counterpart to `firstAmortizationXlsx` below. */
+  firstAmortization = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getFirstAmortizationReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentFirstAmortizationReportRow) });
     } catch (error) {
       next(error);
     }
@@ -268,6 +343,25 @@ export class ReportingController {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="First Amortization.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-20 (user request): JSON counterpart to `dailyCollectionXlsx` below. */
+  dailyCollection = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getDailyCollectionReportUseCase.execute({
+        from,
+        to,
+        types: parseMultiValueFilter(req.query.type),
+        channels: parseMultiValueFilter(req.query.channel),
+        branchId: resolveBranchFilter(scope),
+      });
+      res.status(200).json({ items: rows.map(presentDailyCollectionReportRow) });
     } catch (error) {
       next(error);
     }
@@ -289,6 +383,19 @@ export class ReportingController {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Daily Collection Report.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-20 (user request): JSON counterpart to `fullyPaidXlsx` below. */
+  fullyPaid = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const from = parseDate(req.query.from, 'from', 'start');
+      const to = parseDate(req.query.to, 'to', 'end');
+      const rows = await this.deps.getFullyPaidAccountsReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({ items: rows.map(presentFullyPaidAccountsReportRow) });
     } catch (error) {
       next(error);
     }

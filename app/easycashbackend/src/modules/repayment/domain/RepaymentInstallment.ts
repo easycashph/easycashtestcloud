@@ -6,6 +6,7 @@ import {
   InvalidFeeChargeAmountError,
   InvalidFeesAdjustmentAmountError,
   InvalidPenaltyAdjustmentAmountError,
+  InvalidPenaltyChargeAmountError,
   PenaltyAlreadyPaidError,
 } from './errors/RepaymentDomainErrors';
 
@@ -325,6 +326,39 @@ export class RepaymentInstallment {
     }
     const newTotal = this.effectiveFeesDue.add(amount);
     this.props.feesOverride = { amount: newTotal, reason, byUserId, at };
+    this.props.updatedAt = new Date();
+  }
+
+  /**
+   * 2026-08-19 (Add Penalty feature, user-confirmed): mirrors `chargeFee()` above, but for penalty —
+   * imposes a genuinely NEW penalty charge on top of whatever's currently in effect
+   * (`penaltyOverride?.amount ?? due.penalty`, the same "effective" value `resolveEffectivePenaltyDue()`
+   * reads elsewhere), rather than replacing it the way `reducePenalty()` does. `amount` is strictly
+   * additive (always positive).
+   *
+   * Built for the migration period (2026-08-19): while SDevTech remains the source of truth and the
+   * live ADR-050 auto-computation is disabled (`PENALTY_AUTO_COMPUTE_ENABLED=false`), staff manually
+   * key in whatever penalty SDevTech's own screen shows via this method, rather than relying on this
+   * system to compute it — see `CurrentPenaltyResolver.resolveComputedPenalty()`'s own doc comment
+   * for the toggle.
+   *
+   * Reuses the same `penaltyOverride` storage `reducePenalty()` uses (no new column needed) — this
+   * just sets it to `effective penalty + amount` rather than to a staff-typed absolute value. Unlike
+   * `reducePenalty()`, NOT blocked by an already-paid penalty component — a prior penalty being fully
+   * settled has no bearing on whether a brand new penalty may be charged now (same reasoning as
+   * `chargeFee()` vs. `adjustFees()`).
+   *
+   * Does not itself create the audit row or the `PENALTY_APPLIED` ledger transaction — that's
+   * `AddPenaltyUseCase`'s job, same division of responsibility as every sibling adjustment method on
+   * this entity.
+   */
+  chargePenalty(amount: Money, reason: string, byUserId: string, at: Date = new Date()): void {
+    if (!amount.isPositive()) {
+      throw new InvalidPenaltyChargeAmountError(amount.toString());
+    }
+    const effectivePenaltyDue = this.props.penaltyOverride?.amount ?? this.props.due.penalty;
+    const newTotal = effectivePenaltyDue.add(amount);
+    this.props.penaltyOverride = { amount: newTotal, reason, byUserId, at };
     this.props.updatedAt = new Date();
   }
 }

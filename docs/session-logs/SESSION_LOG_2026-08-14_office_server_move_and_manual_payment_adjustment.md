@@ -1338,3 +1338,188 @@ healthy, `/health` → 200; `nomer.perez@easycash.ph` login confirmed `ACTIVE`.
   during recording, separate from whether the transaction data itself was missing.
 - Loan Application downloadable/signable PDF feature - still not started, same two blockers as
   before (§ above), pick up next.
+
+## §30 - Penalty investigation → Add Penalty feature, then 6 more reports get on-screen tables (2026-08-19/20)
+
+User asked why `SL-CORP_00103`/`SL-CORP_00100` show no "Penalty Expected"/"Penalty Due" in the LMS
+when SDevTech's own screen shows one. Investigation: the transaction ledger is complete and correct
+for both loans (26/26 and 25/25 transactions match the legacy source exactly, including all
+`PENALTY_APPLIED` entries) - the gap is in the `LoanAccount`/`RepaymentSchedule` summary fields
+(`penaltyBalance`/`penaltyDue`), which read 0.00. Root cause: the `SL-Corporate` product (and 42 of
+43 products total) has `penalty_calculation_method: "NONE"` in the SDevTech source itself - a
+faithful migration, not a bug - yet SDevTech's own staff still manually apply real penalty
+transactions outside that automatic-calculation flag, which this LMS has no way to reflect until
+someone tells it what the number is.
+
+User's resolution (explicit): pull expected-penalty/fee amounts into the LMS from SDevTech - but
+investigation found neither is stored as a field in the MongoDB backup (SDevTech computes them
+live in its own app layer), so there's nothing to migrate automatically. Landed on: staff manually
+key in the SDevTech-shown figure via a new **Add Penalty** action (mirroring the existing Add Fee),
+and the LMS's own live ADR-050 penalty auto-computation gets a hard OFF switch for the whole
+migration period (both systems computing independently would just produce two disagreeing numbers).
+
+Shipped:
+- **Add Penalty**: `RepaymentInstallment.chargePenalty()`, `AddPenaltyUseCase`, new `PenaltyCharge`
+  Prisma model (mirrors `FeeCharge`), `POST /repayment-installments/:id/add-penalty`, new
+  `penalty.charge` permission (Accounting + MIS), new "Add Penalty" button/dialog on the Loan Account
+  page next to Add Fee.
+- **`PENALTY_AUTO_COMPUTE_ENABLED`** env flag, default `false` - threaded through all 7
+  `resolveComputedPenalty()` call sites via a new `PenaltyComputationContext.autoComputeEnabled`
+  field. When off, the live ADR-050 daily formula never runs for any loan (prospective or migrated) -
+  always falls back to the frozen `due.penalty` snapshot. User explicitly chose an env var (matching
+  `EMAIL_ENABLED`/`SMS_ENABLED`) over a UI toggle - flip back to `true` once SDevTech is retired.
+
+Then, three follow-up requests in quick succession, each applying the on-screen-table + column-picker
+pattern (established for Loan Releases/Expected Collection) to more download-only reports:
+1. **Expected Collection Report** - `GET /reports/expected-collection` JSON endpoint added, page
+   rewritten with an 8-always-visible/9-optional column split. A follow-up bug: `whitespace-nowrap`
+   on every `td` let the longest Client Name in the result set dictate the whole column's width -
+   fixed with `max-w-[180px] truncate` + a `title` tooltip, applied proactively to every report
+   built after this point too.
+2. **5 more reports** (user explicitly named all 5): Fully Paid Accounts (7 columns, all shown
+   always - too small to need a picker), Accounts with Past Due (7 always/7 optional), Collection
+   History (6/6), First Amortization (6/7), Daily Collection Report (6/9). Each got a new JSON `GET`
+   route alongside its existing `.xlsx` export, a `ReportPresenter` response type + presenter
+   function, and a full page rewrite. The `.xlsx` downloads are untouched - always export every
+   column regardless of on-screen visibility, same "display preference, not a scope filter" rule as
+   Loan Releases/Expected Collection.
+
+All 5 backend + frontend changes type-checked clean, Docker-rebuilt, and smoke-tested (every new
+route returns 401 without auth, not 404) before committing.
+
+### Current state / follow-ups
+
+- Every download-only report except Aging, Detailed Ending Current Balance, and Loan Origination now
+  has an on-screen table. (Origination Report/Collection Report already had one from an earlier
+  session - see `CollectionReportPage.tsx`, distinct from `CollectionHistoryReportPage.tsx`.)
+- Add Penalty ships alongside a genuine, if narrow, gap: staff must manually cross-reference
+  SDevTech's screen for the correct amount - there's no automated source for it. Worth revisiting
+  once SDevTech is retired and this system's own ADR-050 engine becomes authoritative again.
+- Same standing open items as before: Payment Recording UI re-check on SML-REG_00334 (transaction
+  data confirmed present, but the original report was about a UI error during recording - still
+  unverified), Loan Application downloadable PDF (blocked on template + new model), five
+  `.command`-deletion mystery (now solved - see the `ac0592d` reorg commit), `wslrelay.exe` port
+  squatter (worked around, not root-caused).
+
+## §31 - Recovered 6 lost Roles & Permissions grants from the pre-reset pg_dump (2026-08-20)
+
+User asked whether the Roles & Permissions settings from before the Aug 19 full migration could
+still be recovered - a real concern, since (unlike native loan applications/users, which had a
+purpose-built backup/restore pair - see §26/§27) nothing captured `RolePermission` customizations
+made through the live Roles & Permissions UI (`RolesPermissionsTab.tsx` /
+`UpdateRolePermissionsUseCase`) before the reset wiped the table and `seed.ts` recreated only its
+own hardcoded defaults.
+
+Found a real path to recover it: `local/backups/easycash_20260818_132805.dump`, a full
+`pg_dump` taken the day before the migration by the existing (gitignored, credential-bearing)
+`backup-lms-database-remote.bat`/`Backup LMS Database.bat` scripts - nobody had needed it until
+now. Restored it into a scratch database (`easycash_prereset_check`, dropped after use, never
+touched the live `easycash` database) and diffed its `role_permissions` table against the current
+one.
+
+**Found 6 real, lost customizations** (present pre-reset, absent after both Aug 19 resets, not
+part of `seed.ts`'s defaults):
+- Accounting: `attachment.upload`, `payment.reverse`
+- Collection Officer: `attachment.upload`
+- Loan Operation Manager: `loan_account.adjust`, `loan_account.restructure`, `loan_application.revert`
+
+User confirmed these were real, intentional prior configuration ("ito yung mga user account
+setting ng members, roles at permission na na i set ko na before, tama?"). Restored all 6 via a
+direct `INSERT ... ON CONFLICT DO NOTHING` against `role_permissions`, matching role/permission by
+name/code. Re-diffed afterward: exact match against the Aug 18 pre-reset state, plus this session's
+own `penalty.charge` addition (expected, not a regression). Also cross-checked native user-role
+assignments (`user_roles` for `legacyId IS NULL` users) against the same pre-reset dump - **zero
+differences**, confirming §27's `restore-native-users.ts` run already recovered that part correctly.
+
+### Current state / follow-ups
+
+- Roles & Permissions now fully match the pre-migration (2026-08-18) state, plus this session's own
+  additions - confirmed by direct diff against a real pre-reset backup, not assumption.
+- `local/backups/` (gitignored, local-only) turned out to hold real pg_dump snapshots
+  (`easycash_20260814_130033.dump`, `pre_resync_20260814_162157.dump`,
+  `easycash_20260818_132805.dump`) plus `storage_*.tar.gz` attachment-file backups - worth
+  remembering this exists next time something appears lost after a reset.
+- **Gap closed same day, see §32**: `backup-native-role-permissions.ts`/
+  `restore-native-role-permissions.ts` now exist and are wired into the migration `.bat`, so the
+  next full reset won't need another manual pg_dump-diff-restore recovery.
+
+## §32 - Roles & Permissions now has a backup/restore pair too (2026-08-20)
+
+Direct follow-up to §31: user asked to make the recovery permanent so it "hindi mawala" (doesn't
+get lost) on the next full migration, covering User Accounts + Members + Roles + Permissions
+together.
+
+Members/User Accounts + their role assignments were already fully covered by the existing
+`backup-native-users.ts`/`restore-native-users.ts` pair (§26/§27) - confirmed again in §31 via a
+direct diff against the Aug 18 pre-reset dump, zero differences. The actual gap was
+`role_permissions` (which permissions each role is GRANTED, not who has which role) - built
+`backup-native-role-permissions.ts`/`restore-native-role-permissions.ts`, mirroring the
+users pair's shape exactly:
+- Backup captures the FULL current table (not a diff against `seed.ts` defaults), denormalized to
+  (role name, permission code) pairs - both ids get regenerated on every fresh migration.
+- Restore uses `prisma.rolePermission.createMany({ skipDuplicates: true })` - idempotent by
+  design, since re-granting something `seed.ts` already set is a harmless no-op; a role name or
+  permission code that no longer exists post-migration is skipped with a warning, not fatal.
+- Wired into the `.bat`'s `[BACKUP]` section (right after `backup-native-users.ts`) and `[RESTORE]`
+  section (right after `restore-native-users.ts`), same position/pairing as the existing two.
+
+Ran the backup once immediately against the live (already-corrected) database as an out-of-band
+safety net - 98 grants captured - and test-ran the restore against that same live database to
+confirm it's a correct no-op (0 new rows, all 98 already present) rather than only trusting it
+untested until the next real reset.
+
+### Current state / follow-ups
+
+- All three native-data categories a full reset can destroy - loan applications/attachments, user
+  accounts, and role-permission grants - have a backup/restore pair wired into the migration `.bat`.
+- **Extended same day, see §33**: three more settings categories (Document Templates, Reminder
+  Settings, Announcements) now have the same treatment.
+- The next full migration should show four `[BACKUP]` lines and four `[RESTORE]` lines; if any
+  are missing from the console output, something regressed and should be flagged before trusting
+  the run's completeness.
+
+## §33 - "Buong system setting," not just User Accounts (2026-08-20)
+
+Direct follow-up to §32: user asked for the WHOLE system's settings to survive a future reset, not
+just user accounts. Surveyed every tab under Settings (`SystemPage.tsx`: Messaging & Alerts, User
+Accounts, Loan Products, Document Templates, Announcements, Activity Logs) for admin-configurable
+state that (a) isn't already covered, and (b) isn't re-derived from the legacy migration itself.
+
+Also, separately this session (before this section's own work): converted `DocumentTemplatesTab.tsx`'s
+Required/Conditional and Borrower/Co-Borrower signature toggles from instant-save to the same
+draft-then-"Save changes" shape `RolesPermissionsTab.tsx` already used - user noticed the
+inconsistency and asked for it directly (a genuine accidental-click risk on settings that decide
+which documents a loan requires, not related to the reset-recovery work but landed the same day).
+
+Found three more genuinely at-risk categories and presented them alongside one deliberately
+excluded:
+1. `DocumentTemplate.isRequired`/signature-requirement customizations - `seed.ts` recreates these
+   rows with its OWN defaults every reset, silently reverting any admin change.
+2. `DocumentTemplateMapping` rows beyond the migration's own auto-regenerated default set (steps
+   10-12 only ensure a fixed baseline exists, not anything an admin manually added via the UI).
+3. `ReminderSettings` (SMS/Email toggle singleton) - `seed.ts` doesn't create this row at all, so a
+   reset leaves it completely missing, not just reverted.
+4. `SystemAnnouncement` - pure runtime content, permanently deleted with nothing to regenerate it.
+5. **Excluded, flagged separately**: Loan Products/Product Versions/penalty & fee rules - these
+   interact directly with the financial ledger (a disbursed loan references a specific
+   `LoanProductVersion` snapshot), so a blind restore risks real version-drift against active
+   loans. User agreed to scope this out and revisit it separately with more care.
+
+Built `backup-native-system-settings.ts`/`restore-native-system-settings.ts` covering items 1-4,
+same shape as the three existing pairs (denormalized to codes/names, restore skips-with-warning on
+anything that no longer resolves post-migration, idempotent via `createMany({ skipDuplicates })`
+for the mapping extras and an update-if-changed check for the template fields). Wired into both
+`[BACKUP]`/`[RESTORE]` sections of the migration `.bat`. Test-ran both against the live database:
+backup captured 12 templates/145 mappings/1 reminder-settings row/0 announcements; restore
+correctly no-op'd (nothing changed, confirming idempotency before trusting it untested).
+
+### Current state / follow-ups
+
+- Four native-data categories now have a backup/restore pair wired into the migration `.bat`: loan
+  applications/attachments, users, role-permission grants, and (as of today) Document Templates/
+  Reminder Settings/Announcements.
+- **Deliberately still open**: Loan Products/Product Versions/penalty & fee rules have no
+  backup/restore pair - flagged as a separate, higher-risk piece of work, not started.
+- Document Templates settings tab: Required/Conditional and signature toggles now match Roles &
+  Permissions' draft-then-Save UX (separate from the reset-recovery work above, but done the same
+  session).

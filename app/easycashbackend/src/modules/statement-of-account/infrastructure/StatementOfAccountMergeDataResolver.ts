@@ -1,4 +1,5 @@
 import { NotFoundError, ValidationError } from '@shared/errors/DomainError';
+import { env } from '@shared/config/env';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ICoBorrowerRepository } from '@modules/borrower/application/ports/ICoBorrowerRepository';
@@ -101,6 +102,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     const isProspectiveLoan = !loanAccount.legacyId;
     const penaltyContext: PenaltyComputationContext = {
       isProspectiveLoan,
+      autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
       principalAmount: loanAccount.principalAmount,
       isSecMc3Covered: isProspectiveLoan ? await resolveSecMc3Coverage(loanAccount, this.deps.loanProductRepository) : false,
       maturityDate: lastInstallment?.dueDate ?? statementDate,

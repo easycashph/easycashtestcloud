@@ -187,9 +187,11 @@ import { PrismaRepaymentInstallmentRepository } from '@modules/repayment/infrast
 import { PrismaPenaltyReductionRepository } from '@modules/repayment/infrastructure/PrismaPenaltyReductionRepository';
 import { PrismaFeeAdjustmentRepository } from '@modules/repayment/infrastructure/PrismaFeeAdjustmentRepository';
 import { PrismaFeeChargeRepository } from '@modules/repayment/infrastructure/PrismaFeeChargeRepository';
+import { PrismaPenaltyChargeRepository } from '@modules/repayment/infrastructure/PrismaPenaltyChargeRepository';
 import { ReducePenaltyUseCase } from '@modules/repayment/application/use-cases/ReducePenaltyUseCase';
 import { AdjustFeesUseCase } from '@modules/repayment/application/use-cases/AdjustFeesUseCase';
 import { AddFeeUseCase } from '@modules/repayment/application/use-cases/AddFeeUseCase';
+import { AddPenaltyUseCase } from '@modules/repayment/application/use-cases/AddPenaltyUseCase';
 import { ListInstallmentAdjustmentsForLoanUseCase } from '@modules/repayment/application/use-cases/ListInstallmentAdjustmentsForLoanUseCase';
 import { createDashboardRouter } from '@modules/dashboard/interface/http/dashboardRouter';
 import { GetDashboardSummaryUseCase } from '@modules/dashboard/application/use-cases/GetDashboardSummaryUseCase';
@@ -1192,6 +1194,7 @@ export function createApp(): Express {
   const penaltyReductionRepository = new PrismaPenaltyReductionRepository();
   const feeAdjustmentRepository = new PrismaFeeAdjustmentRepository();
   const feeChargeRepository = new PrismaFeeChargeRepository();
+  const penaltyChargeRepository = new PrismaPenaltyChargeRepository();
   const repaymentRouter = createRepaymentRouter(
     {
       listRepaymentInstallmentsForLoanUseCase: new ListRepaymentInstallmentsForLoanUseCase({ repaymentInstallmentRepository }),
@@ -1216,6 +1219,14 @@ export function createApp(): Express {
         loanAccountRepository,
         loanTransactionRepository,
         feeChargeRepository,
+        financialAuditLogger,
+        unitOfWork,
+      }),
+      addPenaltyUseCase: new AddPenaltyUseCase({
+        repaymentInstallmentRepository,
+        loanAccountRepository,
+        loanTransactionRepository,
+        penaltyChargeRepository,
         financialAuditLogger,
         unitOfWork,
       }),

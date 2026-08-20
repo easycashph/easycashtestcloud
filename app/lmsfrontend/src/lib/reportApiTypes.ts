@@ -82,3 +82,105 @@ export interface LoanReleaseReportRow {
   webFee: string;
   totalNetAmount: string;
 }
+
+/** 2026-08-19 (user request): JSON counterpart of the backend's ExpectedCollectionReportResponse. */
+export interface ExpectedCollectionReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  mobileNumber: string;
+  accountState: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  principalDue: string;
+  interestDue: string;
+  principalPaid: string;
+  interestPaid: string;
+  monthDue: string;
+  pastDueAmount: string;
+  daysLate: number;
+  repayment: string;
+  state: string;
+}
+
+/** 2026-08-20 (user request): JSON counterpart of the backend's AccountsWithPastDueReportResponse. */
+export interface AccountsWithPastDueReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  currentAmountDue: string;
+  pastAmountDue: string;
+  daysLate: number;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  countOfPaidDue: number;
+}
+
+/** 2026-08-20 (user request): JSON counterpart of the backend's CollectionHistoryReportResponse. */
+export interface CollectionHistoryReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  dueDate: string;
+  maturityDate: string | null;
+  lastPaidDate: string | null;
+  amountDue: string;
+  repayment: string;
+  lackOrExcess: string;
+  repaymentState: string;
+  repaymentCount: number;
+  installmentNumber: number;
+}
+
+/** 2026-08-20 (user request): JSON counterpart of the backend's FirstAmortizationReportResponse. */
+export interface FirstAmortizationReportRow {
+  clientName: string;
+  product: string;
+  accountId: string;
+  accountState: string;
+  firstAmortizationDate: string;
+  principalDue: string;
+  interestDue: string;
+  feesDue: string;
+  penaltyDue: string;
+  obligation: string;
+  payment: string;
+  lastDatePaid: string | null;
+  repaymentState: string;
+}
+
+/** 2026-08-20 (user request): JSON counterpart of the backend's DailyCollectionReportResponse. */
+export interface DailyCollectionReportRow {
+  fullName: string;
+  productId: string;
+  accountId: string;
+  totalBalance: string;
+  amount: string;
+  principalAmount: string;
+  interestAmount: string;
+  feesAmount: string;
+  penaltyAmount: string;
+  expectedMaturityDate: string | null;
+  valueDate: string;
+  orNumber: string;
+  arNumber: string;
+  channel: string;
+  type: string;
+}
+
+/** 2026-08-20 (user request): JSON counterpart of the backend's FullyPaidAccountsReportResponse. */
+export interface FullyPaidAccountsReportRow {
+  clientName: string;
+  product: string;
+  productId: string;
+  accountId: string;
+  loanAmount: string;
+  maturityDate: string | null;
+  fullyPaidDate: string | null;
+}

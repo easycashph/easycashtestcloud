@@ -1,4 +1,5 @@
 import { NotFoundError } from '@shared/errors/DomainError';
+import { env } from '@shared/config/env';
 import type { IRepaymentInstallmentRepository } from '@modules/repayment/application/ports/IRepaymentInstallmentRepository';
 import { resolveSecMc3Coverage } from '@modules/loan-account/application/services/SecMc3CoverageResolver';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
@@ -40,7 +41,12 @@ export class GetAccruedInterestUseCase {
 
     return AccruedInterestCalculator.calculate(
       installments,
-      { isProspectiveLoan: !loanAccount.legacyId, principalAmount: loanAccount.principalAmount, isSecMc3Covered },
+      {
+        isProspectiveLoan: !loanAccount.legacyId,
+        autoComputeEnabled: env.PENALTY_AUTO_COMPUTE_ENABLED,
+        principalAmount: loanAccount.principalAmount,
+        isSecMc3Covered,
+      },
       loanAccount.contractualInterestRate,
     );
   }
