@@ -96,6 +96,17 @@ pushd "%BACKEND_DIR%"
 call npx tsx scripts\backup-native-users.ts
 popd
 
+REM 2026-08-20 (user request, prompted by a real 6-grant loss recovered manually via a lucky
+REM same-day pg_dump - see session log §31): Roles & Permissions customizations made via the
+REM live settings page have no other record and get silently reverted to seed.ts's defaults on
+REM every reset - see backup-native-role-permissions.ts's own doc comment for the exact scope.
+echo.
+echo [BACKUP] Bina-backup ang mga Roles ^& Permissions setting (para hindi
+echo          mawala ang custom na binigay na access)...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backup-native-role-permissions.ts
+popd
+
 echo.
 echo [1/18] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
@@ -243,6 +254,13 @@ echo [RESTORE] Ibinabalik ang mga user account (email/password/roles) na
 echo           binackup bago ang reset - gamitin ang parehong login mo dati...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\restore-native-users.ts
+popd
+
+echo.
+echo [RESTORE] Ibinabalik ang mga Roles ^& Permissions setting na binackup
+echo           bago ang reset...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\restore-native-role-permissions.ts
 popd
 
 echo.
