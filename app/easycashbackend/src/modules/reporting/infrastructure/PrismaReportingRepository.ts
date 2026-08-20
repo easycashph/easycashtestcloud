@@ -6,6 +6,7 @@ import { InstallmentAmounts } from '@modules/repayment/domain/valueObjects/Insta
 import { resolveComputedPenalty, type PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import type { RepaymentInstallment } from '@modules/repayment/domain/RepaymentInstallment';
 import { isSecMc3Covered } from '@shared/domain/compliance/SecMc3Coverage';
+import { isDueDatePast } from '@shared/utils/dueDateGrace';
 import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,
@@ -705,7 +706,10 @@ export class PrismaReportingRepository implements IReportingRepository {
       // etc.) with 2 overdue unpaid installments where the two figures should differ. Falls back to
       // `amountDue` when `reported` is the only overdue installment, matching the user's own
       // expectation ("dapat magkapareho lang kung 1 buwan lang ang late").
-      const overdueUnpaid = installments.filter((i) => i.status !== 'PAID' && i.dueDate < today);
+      // 2026-08-20 (user-reported, BL-SPEC_00028): grace through the FULL calendar day of the due
+      // date - see dueDateGrace.ts's own doc comment. An installment due "today" isn't part of the
+      // arrears total yet.
+      const overdueUnpaid = installments.filter((i) => i.status !== 'PAID' && isDueDatePast(i.dueDate, today));
       const pastAmountDue = overdueUnpaid.reduce((sum, installment) => {
         const installmentPenalty = installment.id === reported.id ? penalty : liveEffectivePenalty(installment, livePenaltyContext, today);
         return sum + Number(installment.principalDue) + Number(installment.interestDue) + effectiveFees(installment) + installmentPenalty;

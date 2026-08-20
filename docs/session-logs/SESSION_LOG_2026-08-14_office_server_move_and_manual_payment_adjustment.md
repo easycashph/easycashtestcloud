@@ -1719,3 +1719,97 @@ Committed and pushed (`d113f98`).
 - No staff-facing indicator yet showing whether a given loan account's borrower even HAS a linked
   Portal account before they try the Portal button - right now they'd only find out via the
   `NoPortalAccountLinkedError` after clicking "Send via Portal." A small UX polish, not blocking.
+
+## §38 - "Matured" status was flagging on the due date itself, not the day after (2026-08-20)
+
+User reported a real account, **BL-SPEC_00028 (MARLON ALMANZOR RICALDE)**: due date shown as
+August 20 (today), but status already read "Matured." Investigated by querying the live database
+directly - the installment's `dueDate` is `2026-08-19T16:00:00Z`, which is Asia/Manila midnight
+(00:00) on August 20 (the established storage convention for this codebase - see
+`PrismaReportingRepository.ts`'s `daysLateOf()` doc comment, confirmed independently here). Server
+time at the time of the report was already `2026-08-20T06:02Z` (2:02 PM Manila) - past that
+midnight instant, so every overdue/LATE/MATURED check in the codebase, which compared the raw
+`dueDate` timestamp against `now` with a plain `<`, treated the installment as already overdue the
+moment its own due date began, with zero grace for the rest of that calendar day.
+
+User's explicit instruction: "i fix mo nalang ito. hanggang katapusan ng araw ng due date" (grace
+the account through the END of its due date's day, not the start).
+
+Added `shared/utils/dueDateGrace.ts` (`isDueDatePast`/`overdueCutoff`), built on the existing
+`manilaTime.ts` Manila-calendar-day helpers already used elsewhere in the codebase, and applied it
+everywhere an installment's lateness was derived from a raw `dueDate`-vs-`now` comparison:
+
+- `RepaymentInstallment.status` (domain) - the single canonical LATE determination. Everything else
+  that reads `installment.status` rather than re-deriving it (penalty/risk assessment, statement of
+  account, `GetPortalNextPaymentDueUseCase`, `ProcessPaymentUseCase`) is automatically fixed by this
+  one change, no separate edit needed.
+- `PrismaLoanAccountRepository.findMaturedLoanAccountIds` - the actual "Matured" overlay query BL-
+  SPEC_00028 was reported against.
+- `RestructureLoanUseCase`'s past-due-or-matured eligibility check - simplified to reuse
+  `installment.status === 'LATE'` directly instead of re-deriving it from a raw comparison.
+- `PrismaSmsReminderRepository`/`PrismaEmailReminderRepository`'s `findPastDueCandidates` queries -
+  an installment due today no longer gets a "past due" SMS/email the instant midnight passes.
+- `PrismaPaymentReminderRepository`'s own separate LATE derivation (payment reminders feature).
+- `PrismaReportingRepository`'s Accounts with Past Due report `overdueUnpaid` arrears-total filter.
+
+Deliberately did NOT touch penalty accrual (`CurrentPenaltyResolver`/`resolveComputedPenalty`) or
+the report's `daysLateOf()` Days Late column - both already use day-floor math
+(`Math.floor(diffMs / 86_400_000)`) that already implicitly grants this same grace (a same-day due
+date floors to 0 days late there already), so nothing there was actually wrong.
+
+Verified directly: re-ran the fixed MATURED query against the live database for BL-SPEC_00028 -
+0 rows (no longer matured). Backend type-checked clean, rebuilt, confirmed fresh uptime and `/health`
+OK, re-verified against the live rebuilt container that the loan no longer matures while its raw
+`status` stays `ACTIVE` (matured is a display overlay only, never a stored status change).
+Committed and pushed (`d71f2b2`).
+
+### Current state / follow-ups
+
+- Every overdue/LATE/MATURED determination the audit found now grants the full due-date day. No
+  other raw `dueDate < now`-style comparison is known to remain.
+- Penalty accrual amounts were intentionally left untouched (already correct per the audit above) -
+  worth a second look only if a specific penalty figure is ever reported as wrong on a same-day-due
+  installment, which was not the case here.
+
+## §39 - "Adjust penalty" couldn't waive a partially-paid installment's remaining balance (2026-08-20)
+
+User reported another real account, **BL-REG_Y813H (PESOPLUS DRUGSTORE / CRISALDO BAUTISTA
+BALUCANAG)**, installment #1: ₱10,000 already paid toward its ₱22,395.87 penalty, ₱12,395.87 still
+unpaid ("penalty balance"), and the "Adjust penalty" menu item was greyed out entirely. Traced to
+`canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0` (`LoanDetailPage.tsx`) mirroring
+the backend's `RepaymentInstallment.reducePenalty()`, which unconditionally threw
+`PenaltyAlreadyPaidError` the moment ANY penalty had been paid - not partial-aware, so there was no
+way to waive just the still-unpaid remainder without also (impossibly, given the rule) touching the
+already-collected ₱10,000.
+
+User confirmed the actual intent: adjust the **penalty balance** (the unpaid remainder) to zero,
+leaving the ₱10,000 already collected untouched - i.e., set the installment's total penalty ceiling
+to exactly ₱10,000 (what's already paid), which is precisely what the existing "New penalty amount"
+field already models (an absolute total, not a delta) - the field was already the right shape, only
+the guard blocking it was wrong.
+
+Narrowed the rule instead of removing it: `reducePenalty()` now only blocks a new amount that would
+fall BELOW what's already been paid (still correctly refusing to touch a refund/credit scenario,
+which remains out of scope) - waiving the rest of a partially-paid penalty down to exactly the paid
+amount is now allowed. `PenaltyAlreadyPaidError`'s message now states the actual floor.
+`ReducePenaltyUseCase`'s doc comment updated to match - no logic change there, validation already
+lived entirely on the entity.
+
+Frontend (`LoanDetailPage.tsx`): `canReduceThisRow` now only excludes a fully-PAID installment; the
+"New penalty amount" input's `min` is the paid amount; a hint explains the floor when something's
+already paid; the quick-set button becomes "Waive the rest" (sets to exactly the paid amount)
+instead of "Set to ₱0.00" in that case; the submit button's validation now checks against the paid
+floor instead of a flat `>= 0`.
+
+Verified against the live rebuilt backend: BL-REG_Y813H installment #1 (₱10,000 paid) now accepts a
+new penalty amount of ₱10,000 (waiving the ₱12,395.87 remainder) and still correctly rejects
+anything below ₱10,000. Backend + frontend type-checked clean, rebuilt both containers, confirmed
+fresh uptime and `/health` OK. Committed and pushed (`e19a4ea`).
+
+### Current state / follow-ups
+
+- The same "already-paid blocks everything" rule was intentionally NOT touched for `adjustFees()`
+  (Adjust Fees feature) - not reported as a problem this session, but the same fix would apply the
+  same way if it ever is.
+- BL-REG_Y813H's installment #1 itself was NOT actually adjusted during this session - only the
+  feature was fixed so staff can now do it themselves through the normal UI.

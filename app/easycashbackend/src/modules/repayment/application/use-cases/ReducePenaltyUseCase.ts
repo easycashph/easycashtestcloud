@@ -32,8 +32,11 @@ export interface ReducePenaltyUseCaseDeps {
  *   computed figure) is removed — staff can set any non-negative amount, including one that
  *   exceeds what the formula would produce today, for a real out-of-band approval.
  * - A reduction FREEZES the penalty; it does not resume growing per ADR-050's daily formula.
- * - Cannot reduce an installment whose penalty has already been paid — approval happens outside
- *   this system; an already-collected amount is a refund/credit decision, explicitly out of scope.
+ * - New amount may not go below whatever has already been PAID toward this installment's penalty
+ *   (approval happens outside this system; an already-collected amount is a refund/credit decision,
+ *   explicitly out of scope) - but waiving the rest of a partially-paid penalty down to exactly the
+ *   paid amount IS allowed (2026-08-20, user-reported BL-REG_Y813H - see
+ *   `RepaymentInstallment.reducePenalty()`'s own doc comment for the narrowed rule).
  * - Required `reason` captures the external approval reference — this system records that a
  *   reduction was approved elsewhere, it does not run its own in-app approval workflow.
  *
