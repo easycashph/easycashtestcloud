@@ -1636,8 +1636,40 @@ state).
 - Five native-data categories now have a backup/restore pair wired into the migration `.bat`: loan
   applications/attachments, users, role-permission grants, system settings, and (as of today) Portal
   Accounts. Still deliberately open: Loan Products/Product Versions/penalty & fee rules (§33).
-- **New follow-up, not yet done**: `restore-native-loan-applications.ts`'s `borrowerId` handling has
-  the same "assumed stable, actually isn't" bug this section found and fixed for Portal Accounts -
-  worth applying the same `legacyId`-remap fix there, and checking whether the 4 applications
-  restored back in §27 need their borrower links manually repaired now that this is understood.
 - The next full migration should show five `[BACKUP]` lines and five `[RESTORE]` lines.
+
+## §36 - Closed the loop: fixed the same borrowerId bug in the loan-application restore script (2026-08-20)
+
+Follow-up to §35's flagged item. Checked the 4 loan applications restored back in §27 against the
+original pre-reset backup (`native-loan-applications-2026-08-19T10-56-33-997Z.json`): 2 of them
+(TEST2NOMER, TEST6NOMER) had `borrowerId: null` originally, nothing to fix; the other 2 (**NOMER
+DELA CRUZ PEREZ**, **ALDWIN JALA MANIWANG**) had a real borrowerId that §27's restore had silently
+null'd out per the §35 bug. Looked up their current (post-migration) `Borrower.id` via each
+person's `legacyId`, confirmed both resolve to the correct people, and fixed the live data by hand
+with a one-off `npx tsx` script (created and deleted same turn, per this repo's temp-script
+convention) - `NOMER DELA CRUZ PEREZ: borrowerId -> 8fa9efa9-1b48-42df-b945-28d3dfed3aef`,
+`ALDWIN JALA MANIWANG: borrowerId -> 3f2783c1-8949-49ae-a73f-ac4c61f8bb22`.
+
+Then fixed the scripts themselves so this can't recur on the next migration, applying the exact
+pattern already proven in `backup/restore-native-portal-accounts.ts`:
+
+- `backup-native-loan-applications.ts` now denormalizes each application's `borrowerId` to the
+  linked `Borrower.legacyId` (`borrowerLegacyId` field in the backup JSON) instead of saving the
+  raw id.
+- `restore-native-loan-applications.ts` now builds a `legacyId -> current Borrower.id` map from the
+  post-migration database and remaps `borrowerId` through it, dropping the link (not the whole
+  application) with a warning only when the legacyId genuinely doesn't resolve - instead of the old
+  logic that checked the stale raw id against a fresh table and always null'd it out.
+
+Backend type-checked clean. Committed and pushed (`12dc9e7`).
+
+### Current state / follow-ups
+
+- All five native-data backup/restore pairs (loan applications/attachments, users,
+  role-permission grants, system settings, Portal Accounts) now correctly remap every
+  `Borrower`-referencing foreign key via `legacyId`, not a raw id. The `Borrower.id`-instability bug
+  found in §35 is now fully closed - no known script still trusts a raw pre-reset id as stable.
+- Still deliberately open: Loan Products/Product Versions/penalty & fee rules backup/restore (§33).
+- Portal e-signature (§34) still has no end-to-end test with a real borrower login, and no staff UI
+  to choose "notify via Portal" vs. mailed link for a signing session - both still just noted, not
+  built.
