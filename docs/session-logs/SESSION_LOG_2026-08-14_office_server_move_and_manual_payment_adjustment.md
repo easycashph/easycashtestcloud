@@ -1523,3 +1523,74 @@ correctly no-op'd (nothing changed, confirming idempotency before trusting it un
 - Document Templates settings tab: Required/Conditional and signature toggles now match Roles &
   Permissions' draft-then-Save UX (separate from the reset-recovery work above, but done the same
   session).
+
+## §34 - E-signature reachable from inside the Portal (2026-08-20)
+
+User asked to bring e-signature into the Portal, explicitly wanting to see the design/plan first
+("sabihin muna sa akin kung paano mo ito gagawin"), then a mockup ("patingin muna ng mockup") -
+mid-mockup, redirected hard: "bakit sa redesign ang pinakita mo. stop muna natin itong re design" -
+the mockup's invented palette/typography read as an unrelated visual overhaul, not what was asked.
+Stopped, confirmed scope explicitly (no new visual language anywhere, including the earlier Portal
+landing-page redesign work), then proceeded once told "sa live tayo" - build directly against the
+Portal's real, existing design system (`Button`/`Card` from `components/ui`, the real Tailwind HSL
+tokens in `index.css`), not a separate mockup aesthetic.
+
+**Investigation** (via a research subagent) found a complete, working e-signature system already
+built for the internal LMS - `loan-signing` module: `LoanSigningSession`/`LoanSigningDocument`
+domain, OTP-gated, PDF-stamped (`pdf-lib`, drawn signature image + audit block), reachable only via
+a mailed `/sign/:token` public link (`app/lmsfrontend`, outside all staff auth). Nothing existed on
+the Portal side at all (zero matches for "sign"/"signature" in `app/portalfrontend`).
+
+**Design decision (explained before building, user confirmed)**: rather than just embedding the
+existing public token link inside the Portal (Option A, minimal), built a Portal-native
+authenticated path (Option B) - a logged-in borrower's identity is already established by their
+Portal JWT, so a new session lookup by `sessionId + portalAccountId` ownership
+(`resolvePortalSigningSession`, scoped to `partyType: 'BORROWER'` only - a co-borrower has no
+Portal login of their own) replaces the raw link token as the access-control mechanism. **OTP
+verification is deliberately kept**, not skipped for a logged-in user - Portal login proves valid
+credentials, OTP additionally proves control of the phone/email on file, which matters for a
+legally-binding signature.
+
+Built as a parallel `portal/` subfolder of use-cases (`ListPortalSigningSessionsUseCase`,
+`GetPortalSigningSessionUseCase`, `Request/VerifyPortalSigningOtpUseCase`,
+`GetPortalSigningDocumentFileUseCase`, `SignPortalLoanSigningDocumentUseCase`), reusing every
+existing repository/file-storage/signature-stamper/SMS-email-gateway dependency already wired in
+`app.ts` for the staff/public flow - zero changes to that existing code path. New
+`portalLoanSigningRouter.ts` under `/api/v1/portal`, gated by the existing `requirePortalAuth`.
+
+Frontend: `PortalSigningPage.tsx` (`/sign/:sessionId`, protected route) reimplements
+`lmsfrontend`'s `LoanSigningPage.tsx` flow (OTP -> document -> `SignaturePad` -> next document ->
+done) using the Portal's own components and its plain-`useState`-no-`react-query` convention (a
+first draft used `@tanstack/react-query`, which this app doesn't have installed - caught by
+`tsc`). `SignaturePad.tsx` copied verbatim (no shared package between the two frontends yet). New
+`PortalSignDocumentsCard.tsx` on the Dashboard, matching `PortalNextPaymentDueCard`'s "renders
+nothing when there's nothing pending" shape.
+
+**Real bug caught before shipping**: `apiClient.post()` in this app defaults its third `auth`
+parameter to `false` (unlike `apiClient.get()`, which defaults to authenticated) - the first draft
+of all three POST calls (request-otp, verify-otp, sign) would have silently gone out
+unauthenticated and been rejected by `requirePortalAuth`. Found by checking how every other
+authenticated POST call in this codebase does it (`NotificationBell.tsx`,
+`ChangePasswordRequiredPage.tsx`, etc. all pass `true` explicitly) and fixed before the first
+Docker rebuild.
+
+Verified: backend + portal frontend type-checked clean (one unrelated pre-existing error from a
+concurrent session's `mis-post` module, confirmed not caused by this work), Docker-rebuilt (a
+transient `buildkit` grpc crash on the first attempt was caught by checking container uptime, not
+just exit code, and retried), both containers healthy, new route smoke-tested (`401` without auth,
+not `404`).
+
+### Current state / follow-ups
+
+- E-signature is now reachable two ways: the original mailed `/sign/:token` link (unchanged, still
+  works), and the new in-Portal `/sign/:sessionId` flow for an already-logged-in borrower.
+- Not yet done: no UI anywhere lets staff choose which delivery path a given signing session should
+  favor - a session created today still only sends the mailed link; a client discovers the in-Portal
+  path only by noticing the new Dashboard card once a session already exists. Worth a follow-up
+  conversation on whether "created a signing session" should also just work in-Portal automatically
+  (it does, this session's own account/`borrowerId` link is all that's needed) or whether staff
+  should get an explicit "notify via Portal" option.
+  - Not tested end-to-end with a real borrower login this session (no portal test account driven
+    through the actual flow) - recommend a real walkthrough (create a session in LMS, log into the
+    Portal as that borrower, confirm the Dashboard card appears and the full sign flow completes)
+    before treating this as production-verified.

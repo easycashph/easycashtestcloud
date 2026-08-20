@@ -340,6 +340,13 @@ import { GetLoanSigningSessionUseCase } from '@modules/loan-signing/application/
 import { GetLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetLoanSigningDocumentFileUseCase';
 import { GetSignedLoanSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/GetSignedLoanSigningDocumentFileUseCase';
 import { SignLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/SignLoanSigningDocumentUseCase';
+import { createPortalLoanSigningRouter } from '@modules/loan-signing/interface/http/portalLoanSigningRouter';
+import { ListPortalSigningSessionsUseCase } from '@modules/loan-signing/application/use-cases/portal/ListPortalSigningSessionsUseCase';
+import { GetPortalSigningSessionUseCase } from '@modules/loan-signing/application/use-cases/portal/GetPortalSigningSessionUseCase';
+import { RequestPortalSigningOtpUseCase } from '@modules/loan-signing/application/use-cases/portal/RequestPortalSigningOtpUseCase';
+import { VerifyPortalSigningOtpUseCase } from '@modules/loan-signing/application/use-cases/portal/VerifyPortalSigningOtpUseCase';
+import { GetPortalSigningDocumentFileUseCase } from '@modules/loan-signing/application/use-cases/portal/GetPortalSigningDocumentFileUseCase';
+import { SignPortalLoanSigningDocumentUseCase } from '@modules/loan-signing/application/use-cases/portal/SignPortalLoanSigningDocumentUseCase';
 import { PrismaLoanSigningSessionRepository } from '@modules/loan-signing/infrastructure/PrismaLoanSigningSessionRepository';
 import { PrismaSigningNotificationLogRepository } from '@modules/loan-signing/infrastructure/PrismaSigningNotificationLogRepository';
 import { ListSigningNotificationLogsUseCase } from '@modules/loan-signing/application/use-cases/ListSigningNotificationLogsUseCase';
@@ -1136,6 +1143,62 @@ export function createApp(): Express {
     }),
   });
   app.use('/api/v1/public', publicLoanSigningRouter);
+
+  // 2026-08-20 (Portal e-signature, user request): e-signature reachable from inside the Portal
+  // for a logged-in borrower, no mailed link needed - see createPortalLoanSigningRouter's own doc
+  // comment. Reuses every dependency already constructed above for the staff/public loan-signing
+  // wiring (same repositories, file storage, SMS/email gateways, signature stamper) plus
+  // portalAccountRepository/portalTokenService from the Portal Phase 1 wiring earlier in this file.
+  const portalLoanSigningRouter = createPortalLoanSigningRouter(
+    {
+      listPortalSigningSessionsUseCase: new ListPortalSigningSessionsUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+      }),
+      getPortalSigningSessionUseCase: new GetPortalSigningSessionUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+        borrowerRepository,
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+      }),
+      requestPortalSigningOtpUseCase: new RequestPortalSigningOtpUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+        signingNotificationLogRepository,
+        smsGateway: signingSmsGateway,
+        emailGateway: signingOtpEmailGateway,
+      }),
+      verifyPortalSigningOtpUseCase: new VerifyPortalSigningOtpUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+        signingNotificationLogRepository,
+      }),
+      getPortalSigningDocumentFileUseCase: new GetPortalSigningDocumentFileUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+        generatedLoanDocumentRepository,
+        fileStorage: loanDocumentFileStorage,
+      }),
+      signPortalLoanSigningDocumentUseCase: new SignPortalLoanSigningDocumentUseCase({
+        loanSigningSessionRepository,
+        portalAccountRepository,
+        loanAccountRepository,
+        borrowerRepository,
+        generatedLoanDocumentRepository,
+        documentTemplateRepository,
+        fileStorage: loanDocumentFileStorage,
+        signatureStamper,
+      }),
+    },
+    portalTokenService,
+  );
+  app.use('/api/v1/portal', portalLoanSigningRouter);
 
   // --- statement-of-account module wiring (ADR-052, 2026-07-19: Statement of Account Generation) ---
   // Deliberately separate from the loan-document module above — ADR-051 §1/§9 explicitly excluded
