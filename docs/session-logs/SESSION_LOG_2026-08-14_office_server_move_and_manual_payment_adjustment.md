@@ -1770,3 +1770,46 @@ Committed and pushed (`d71f2b2`).
 - Penalty accrual amounts were intentionally left untouched (already correct per the audit above) -
   worth a second look only if a specific penalty figure is ever reported as wrong on a same-day-due
   installment, which was not the case here.
+
+## §39 - "Adjust penalty" couldn't waive a partially-paid installment's remaining balance (2026-08-20)
+
+User reported another real account, **BL-REG_Y813H (PESOPLUS DRUGSTORE / CRISALDO BAUTISTA
+BALUCANAG)**, installment #1: ₱10,000 already paid toward its ₱22,395.87 penalty, ₱12,395.87 still
+unpaid ("penalty balance"), and the "Adjust penalty" menu item was greyed out entirely. Traced to
+`canReduceThisRow = i.status !== 'PAID' && num(i.paid.penalty) === 0` (`LoanDetailPage.tsx`) mirroring
+the backend's `RepaymentInstallment.reducePenalty()`, which unconditionally threw
+`PenaltyAlreadyPaidError` the moment ANY penalty had been paid - not partial-aware, so there was no
+way to waive just the still-unpaid remainder without also (impossibly, given the rule) touching the
+already-collected ₱10,000.
+
+User confirmed the actual intent: adjust the **penalty balance** (the unpaid remainder) to zero,
+leaving the ₱10,000 already collected untouched - i.e., set the installment's total penalty ceiling
+to exactly ₱10,000 (what's already paid), which is precisely what the existing "New penalty amount"
+field already models (an absolute total, not a delta) - the field was already the right shape, only
+the guard blocking it was wrong.
+
+Narrowed the rule instead of removing it: `reducePenalty()` now only blocks a new amount that would
+fall BELOW what's already been paid (still correctly refusing to touch a refund/credit scenario,
+which remains out of scope) - waiving the rest of a partially-paid penalty down to exactly the paid
+amount is now allowed. `PenaltyAlreadyPaidError`'s message now states the actual floor.
+`ReducePenaltyUseCase`'s doc comment updated to match - no logic change there, validation already
+lived entirely on the entity.
+
+Frontend (`LoanDetailPage.tsx`): `canReduceThisRow` now only excludes a fully-PAID installment; the
+"New penalty amount" input's `min` is the paid amount; a hint explains the floor when something's
+already paid; the quick-set button becomes "Waive the rest" (sets to exactly the paid amount)
+instead of "Set to ₱0.00" in that case; the submit button's validation now checks against the paid
+floor instead of a flat `>= 0`.
+
+Verified against the live rebuilt backend: BL-REG_Y813H installment #1 (₱10,000 paid) now accepts a
+new penalty amount of ₱10,000 (waiving the ₱12,395.87 remainder) and still correctly rejects
+anything below ₱10,000. Backend + frontend type-checked clean, rebuilt both containers, confirmed
+fresh uptime and `/health` OK. Committed and pushed (`e19a4ea`).
+
+### Current state / follow-ups
+
+- The same "already-paid blocks everything" rule was intentionally NOT touched for `adjustFees()`
+  (Adjust Fees feature) - not reported as a problem this session, but the same fix would apply the
+  same way if it ever is.
+- BL-REG_Y813H's installment #1 itself was NOT actually adjusted during this session - only the
+  feature was fixed so staff can now do it themselves through the normal UI.
