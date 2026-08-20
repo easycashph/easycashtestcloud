@@ -1400,3 +1400,47 @@ route returns 401 without auth, not 404) before committing.
   unverified), Loan Application downloadable PDF (blocked on template + new model), five
   `.command`-deletion mystery (now solved - see the `ac0592d` reorg commit), `wslrelay.exe` port
   squatter (worked around, not root-caused).
+
+## §31 - Recovered 6 lost Roles & Permissions grants from the pre-reset pg_dump (2026-08-20)
+
+User asked whether the Roles & Permissions settings from before the Aug 19 full migration could
+still be recovered - a real concern, since (unlike native loan applications/users, which had a
+purpose-built backup/restore pair - see §26/§27) nothing captured `RolePermission` customizations
+made through the live Roles & Permissions UI (`RolesPermissionsTab.tsx` /
+`UpdateRolePermissionsUseCase`) before the reset wiped the table and `seed.ts` recreated only its
+own hardcoded defaults.
+
+Found a real path to recover it: `local/backups/easycash_20260818_132805.dump`, a full
+`pg_dump` taken the day before the migration by the existing (gitignored, credential-bearing)
+`backup-lms-database-remote.bat`/`Backup LMS Database.bat` scripts - nobody had needed it until
+now. Restored it into a scratch database (`easycash_prereset_check`, dropped after use, never
+touched the live `easycash` database) and diffed its `role_permissions` table against the current
+one.
+
+**Found 6 real, lost customizations** (present pre-reset, absent after both Aug 19 resets, not
+part of `seed.ts`'s defaults):
+- Accounting: `attachment.upload`, `payment.reverse`
+- Collection Officer: `attachment.upload`
+- Loan Operation Manager: `loan_account.adjust`, `loan_account.restructure`, `loan_application.revert`
+
+User confirmed these were real, intentional prior configuration ("ito yung mga user account
+setting ng members, roles at permission na na i set ko na before, tama?"). Restored all 6 via a
+direct `INSERT ... ON CONFLICT DO NOTHING` against `role_permissions`, matching role/permission by
+name/code. Re-diffed afterward: exact match against the Aug 18 pre-reset state, plus this session's
+own `penalty.charge` addition (expected, not a regression). Also cross-checked native user-role
+assignments (`user_roles` for `legacyId IS NULL` users) against the same pre-reset dump - **zero
+differences**, confirming §27's `restore-native-users.ts` run already recovered that part correctly.
+
+### Current state / follow-ups
+
+- Roles & Permissions now fully match the pre-migration (2026-08-18) state, plus this session's own
+  additions - confirmed by direct diff against a real pre-reset backup, not assumption.
+- **New standing gap identified**: `RolePermission` customizations have no backup/restore pair the
+  way native loan applications/users do (§26). If another full reset ever happens, this same
+  manual pg_dump-diff-restore recovery process would be needed again - worth building a proper
+  `backup-native-role-permissions.ts`/`restore-native-role-permissions.ts` pair (mirroring the
+  existing two) before the next one, rather than relying on a lucky same-day pg_dump existing.
+- `local/backups/` (gitignored, local-only) turned out to hold real pg_dump snapshots
+  (`easycash_20260814_130033.dump`, `pre_resync_20260814_162157.dump`,
+  `easycash_20260818_132805.dump`) plus `storage_*.tar.gz` attachment-file backups - worth
+  remembering this exists next time something appears lost after a reset.
