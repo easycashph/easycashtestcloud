@@ -27,7 +27,23 @@ export const LMS_DEV_TEAM_MEMBERS: LmsTeamMember[] = [
 ];
 
 /**
- * The client-facing companion site - LIVE since July 29, 2026 (v1.0.0). Originally disclosed here
+ * PERMANENT CREDIT (2026-08-20, Jomer Biason's explicit instruction: "gusto ko na hindi dapat ito
+ * mabubura kahit mag resign na ako") - unlike `LMS_DEV_TEAM_MEMBERS` above (the *current* staff
+ * roster, which is expected to change as people join/leave), this single entry is NOT tied to
+ * current employment status. AboutPage.tsx always merges this into the Developer Team card even
+ * if a future edit removes Jomer from the roster array above - do not delete this constant or its
+ * merge logic, regardless of staffing changes.
+ */
+export const LMS_PERMANENT_CREDIT: LmsTeamMember = {
+  name: 'Jomer Biason',
+  role: 'MIS Assistant',
+  note: 'Full-stack Engineer',
+};
+
+/**
+ * The client-facing companion site - LIVE (technically reachable) since July 29, 2026 (v0.1.0 -
+ * see PORTAL_CHANGELOG's 2026-08-20 renumbering note: still 0.x because real borrowers aren't
+ * using it yet). Originally disclosed here
  * as a future/planned product per `CLAUDE.md`'s "Customer Self-Service Portal (Future)" objective;
  * updated 2026-08-19 once it was actually built and launched, per the same "never let this page go
  * stale" discipline PreviewFooterNote already follows elsewhere on this page.
@@ -62,6 +78,16 @@ export interface LmsChangelogEntry {
  * concise and plain-language, translated for a non-technical reader - this is stakeholder-facing.)
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.9.33',
+    date: 'August 20, 2026',
+    highlights: [
+      'New MIS Portal Posts (Administration > System > Announcements) - MIS can now post Facebook-style content (image + caption) to the Portal, either a daily auto-rotating post or an ad-hoc announcement (e.g. a typhoon advisory) with a MIS-chosen duration.',
+      "Portal's own version renumbered from 1.x to 0.x, to correctly reflect that real Easycash borrowers aren't using the live site yet.",
+      "Fixed the About page showing its own \"Internal Preview Build\" disclosure note twice (once from the page's own content, once from the app-wide footer already shown on every page).",
+      "Jomer Biason's founding-engineer credit on the Developer Team card is now a permanent record, kept even if he leaves the current staff roster listed alongside it.",
+    ],
+  },
   {
     version: '0.9.32',
     date: 'August 19, 2026',
@@ -522,7 +548,20 @@ export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.date;
  */
 export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '1.4.0',
+    // 2026-08-20 (user-corrected): renumbered the whole Portal changelog from 1.x down to 0.x -
+    // the site is technically live and reachable, but real Easycash borrowers are not using it
+    // yet, so a 1.0+ version overstated its actual rollout status. Every entry below keeps its
+    // original date and content; only the version numbers changed (1.0.0->0.1.0 ... 1.4.0->0.5.0).
+    version: '0.6.0',
+    date: 'August 20, 2026',
+    highlights: [
+      "Renumbered the Portal's own version from 1.x to 0.x, to correctly reflect that real borrowers aren't using the live site yet (technically live and reachable, but not yet the platform's official rollout).",
+      "New homepage banner for MIS-authored posts (Facebook-style image + caption) - a daily auto-rotating post plus ad-hoc announcements (e.g. typhoon advisories), shown above the News Flash strip; the same posts also now lead the News & Announcements page.",
+      'News Flash strip now scrolls continuously right-to-left.',
+    ],
+  },
+  {
+    version: '0.5.0',
     date: 'August 13, 2026',
     highlights: [
       'Official Easycash bank account details added to the "Ways to Pay" section for clients paying by bank transfer.',
@@ -534,7 +573,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '1.3.0',
+    version: '0.4.0',
     date: 'August 3-6, 2026',
     highlights: [
       'Existing borrowers can now chat directly with their LMS loan officer from the Portal, starting with a pre-chat FAQ/automated assistant.',
@@ -545,7 +584,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '1.2.0',
+    version: '0.3.0',
     date: 'July 30 - August 1, 2026',
     highlights: [
       'Two-factor authentication added to Portal login, on by default, plus a hard age-eligibility check on loan applications.',
@@ -556,7 +595,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '1.1.0',
+    version: '0.2.0',
     date: 'July 29, 2026',
     highlights: [
       'Applicant profile view/edit and a Security tab added, with avatar upload.',
@@ -568,7 +607,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '1.0.0',
+    version: '0.1.0',
     date: 'July 27-28, 2026',
     highlights: [
       'Public launch of the Easycash Portal - landing page, loan calculator, requirements, security-tips, and complaints pages, alongside the existing loan-application flow.',

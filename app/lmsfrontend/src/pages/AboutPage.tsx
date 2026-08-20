@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useLogPageView } from '@/lib/activityLog';
-import { PreviewFooterNote } from '@/components/PreviewBanner';
 import {
   LMS_ABOUT_FACTS,
   LMS_ABOUT_SECTIONS,
@@ -13,11 +12,20 @@ import {
   LMS_COMPANY,
   LMS_DEV_TEAM_MEMBERS,
   LMS_DEVELOPER_TEAM,
+  LMS_PERMANENT_CREDIT,
   LMS_VERSION,
   PORTAL_CHANGELOG,
   PORTAL_UPDATED_ON,
   PORTAL_VERSION,
 } from '@/lib/lmsVersion';
+
+// Always includes LMS_PERMANENT_CREDIT first (2026-08-20, Jomer Biason's explicit instruction -
+// see that constant's own doc comment) - deduped by name so it doesn't double up while he's still
+// on the current roster below.
+const DEVELOPER_TEAM_DISPLAY = [
+  LMS_PERMANENT_CREDIT,
+  ...LMS_DEV_TEAM_MEMBERS.filter((m) => m.name !== LMS_PERMANENT_CREDIT.name),
+];
 
 const HELPS_YOU = [
   'Originate and service loans with configurable products, interest, fees, and penalties',
@@ -120,7 +128,7 @@ export function AboutPage() {
         </CardHeader>
         <CardContent>
           <ul className="grid gap-3 sm:grid-cols-2">
-            {LMS_DEV_TEAM_MEMBERS.map((member) => (
+            {DEVELOPER_TEAM_DISPLAY.map((member) => (
               <li key={member.name} className="rounded-md border p-3">
                 <p className="text-sm font-semibold">{member.name}</p>
                 <p className="text-xs text-muted-foreground">{member.role}</p>
@@ -210,12 +218,10 @@ export function AboutPage() {
         </CardContent>
       </Card>
 
-      {/* 2026-07-23 bug fix: this used to be its own hardcoded paragraph claiming "sample data...
-          not connected to live systems" - stale since the 2026-07-12 mock-removal pass, and
-          drifted out of sync with the accurate, actively-maintained disclosure already shown
-          platform-wide (PreviewBanner.tsx). Reusing that single source of truth here instead of
-          maintaining a second, separately-worded copy that can go stale again. */}
-      <PreviewFooterNote />
+      {/* 2026-08-20 bug fix: this page used to render its own <PreviewFooterNote /> here, on top of
+          the one AppLayout.tsx already renders after every page's <Outlet /> - the "Internal
+          Preview Build..." disclosure was showing twice in a row on this page specifically.
+          AppLayout's copy already covers this page; nothing else needed here. */}
     </div>
   );
 }
