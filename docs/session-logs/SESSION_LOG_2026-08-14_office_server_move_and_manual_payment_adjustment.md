@@ -1471,8 +1471,55 @@ untested until the next real reset.
 ### Current state / follow-ups
 
 - All three native-data categories a full reset can destroy - loan applications/attachments, user
-  accounts, and now role-permission grants - have a backup/restore pair wired into the migration
-  `.bat`. No known remaining gap of this kind.
-- The next full migration should show three `[BACKUP]` lines and three `[RESTORE]` lines; if any
+  accounts, and role-permission grants - have a backup/restore pair wired into the migration `.bat`.
+- **Extended same day, see §33**: three more settings categories (Document Templates, Reminder
+  Settings, Announcements) now have the same treatment.
+- The next full migration should show four `[BACKUP]` lines and four `[RESTORE]` lines; if any
   are missing from the console output, something regressed and should be flagged before trusting
   the run's completeness.
+
+## §33 - "Buong system setting," not just User Accounts (2026-08-20)
+
+Direct follow-up to §32: user asked for the WHOLE system's settings to survive a future reset, not
+just user accounts. Surveyed every tab under Settings (`SystemPage.tsx`: Messaging & Alerts, User
+Accounts, Loan Products, Document Templates, Announcements, Activity Logs) for admin-configurable
+state that (a) isn't already covered, and (b) isn't re-derived from the legacy migration itself.
+
+Also, separately this session (before this section's own work): converted `DocumentTemplatesTab.tsx`'s
+Required/Conditional and Borrower/Co-Borrower signature toggles from instant-save to the same
+draft-then-"Save changes" shape `RolesPermissionsTab.tsx` already used - user noticed the
+inconsistency and asked for it directly (a genuine accidental-click risk on settings that decide
+which documents a loan requires, not related to the reset-recovery work but landed the same day).
+
+Found three more genuinely at-risk categories and presented them alongside one deliberately
+excluded:
+1. `DocumentTemplate.isRequired`/signature-requirement customizations - `seed.ts` recreates these
+   rows with its OWN defaults every reset, silently reverting any admin change.
+2. `DocumentTemplateMapping` rows beyond the migration's own auto-regenerated default set (steps
+   10-12 only ensure a fixed baseline exists, not anything an admin manually added via the UI).
+3. `ReminderSettings` (SMS/Email toggle singleton) - `seed.ts` doesn't create this row at all, so a
+   reset leaves it completely missing, not just reverted.
+4. `SystemAnnouncement` - pure runtime content, permanently deleted with nothing to regenerate it.
+5. **Excluded, flagged separately**: Loan Products/Product Versions/penalty & fee rules - these
+   interact directly with the financial ledger (a disbursed loan references a specific
+   `LoanProductVersion` snapshot), so a blind restore risks real version-drift against active
+   loans. User agreed to scope this out and revisit it separately with more care.
+
+Built `backup-native-system-settings.ts`/`restore-native-system-settings.ts` covering items 1-4,
+same shape as the three existing pairs (denormalized to codes/names, restore skips-with-warning on
+anything that no longer resolves post-migration, idempotent via `createMany({ skipDuplicates })`
+for the mapping extras and an update-if-changed check for the template fields). Wired into both
+`[BACKUP]`/`[RESTORE]` sections of the migration `.bat`. Test-ran both against the live database:
+backup captured 12 templates/145 mappings/1 reminder-settings row/0 announcements; restore
+correctly no-op'd (nothing changed, confirming idempotency before trusting it untested).
+
+### Current state / follow-ups
+
+- Four native-data categories now have a backup/restore pair wired into the migration `.bat`: loan
+  applications/attachments, users, role-permission grants, and (as of today) Document Templates/
+  Reminder Settings/Announcements.
+- **Deliberately still open**: Loan Products/Product Versions/penalty & fee rules have no
+  backup/restore pair - flagged as a separate, higher-risk piece of work, not started.
+- Document Templates settings tab: Required/Conditional and signature toggles now match Roles &
+  Permissions' draft-then-Save UX (separate from the reset-recovery work above, but done the same
+  session).
