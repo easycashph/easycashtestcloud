@@ -91,7 +91,6 @@ $containerTmpPath = "/tmp/$dumpFileName"
 $localPath = Join-Path $BackupDir $dumpFileName
 
 Write-Step "[2/3] Kumukuha ng snapshot mula sa $($config.REMOTE_PG_HOST):$($config.REMOTE_PG_PORT)/$($config.REMOTE_PG_DB) (maaaring tumagal, depende sa laki ng database)..."
-$env:PGPASSWORD_FOR_DOCKER = $config.REMOTE_PG_PASSWORD
 docker exec -e PGPASSWORD=$($config.REMOTE_PG_PASSWORD) easycash-postgres-1 pg_dump `
     -h $config.REMOTE_PG_HOST -p $config.REMOTE_PG_PORT -U $config.REMOTE_PG_USER -d $config.REMOTE_PG_DB `
     -F c -f $containerTmpPath
@@ -101,10 +100,32 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# 2026-08-21 (user-reported): $ErrorActionPreference = 'Stop' does NOT apply to external/native
+# commands like `docker` - only $LASTEXITCODE does, and only where actually checked. `docker cp`
+# and the cleanup `rm` below went unchecked, so a failed copy (disk full, permission issue) still
+# fell through to the "OK - na-save" message and log line - a false-positive success with no file,
+# or an incomplete one, that would only be discovered when the backup was actually needed.
 docker cp "easycash-postgres-1:$containerTmpPath" $localPath
+if ($LASTEXITCODE -ne 0) {
+    Write-Err2 "Nabigo ang docker cp mula sa container patungong $localPath."
+    Write-Log "FAILED - docker cp exit code $LASTEXITCODE"
+    docker exec easycash-postgres-1 rm -f $containerTmpPath
+    exit 1
+}
 docker exec easycash-postgres-1 rm -f $containerTmpPath
+if ($LASTEXITCODE -ne 0) {
+    Write-Warn2 "Hindi nabura ang container temp file ($containerTmpPath) - hindi ito seryosong problema (naiwan lang ang scratch file sa container), pero itala natin ito."
+    Write-Log "WARNING - could not remove container temp file $containerTmpPath (exit code $LASTEXITCODE)"
+}
 
-$sizeMb = [math]::Round((Get-Item $localPath).Length / 1MB, 2)
+$localFile = Get-Item $localPath -ErrorAction SilentlyContinue
+if (-not $localFile -or $localFile.Length -eq 0) {
+    Write-Err2 "Nag-report ng success ang docker cp pero walang laman o wala talaga ang file sa: $localPath"
+    Write-Log "FAILED - $dumpFileName missing or empty after docker cp"
+    exit 1
+}
+
+$sizeMb = [math]::Round($localFile.Length / 1MB, 2)
 Write-Host "      OK - na-save sa: $localPath ($sizeMb MB)"
 Write-Log "OK - $dumpFileName ($sizeMb MB) from $($config.REMOTE_PG_HOST)/$($config.REMOTE_PG_DB)"
 

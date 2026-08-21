@@ -1931,3 +1931,85 @@ Backend + frontend type-checked clean throughout. Committed and pushed (`8423f82
   (the live ADR-050 formula) was already whole-loan-based and needed no change; nothing else in the
   audit trail suggested a third implementation exists, but this was not exhaustively re-verified
   against every possible call site.
+
+## §42 - Cloudflare Tunnel auto-start broken by a stale path, remote-backup script hardened, session logs split per machine (2026-08-21)
+
+**Cloudflare Tunnel didn't auto-start after a reboot.** User restarted the Office Server PC and the
+tunnel (`Start Cloudflare Tunnel (Auto-Update).bat`) never came up on its own, despite §4 (2026-08-14)
+having set up a Scheduled Task specifically for this. Root cause: an earlier, unrelated repo
+reorganization (a concurrent session's commit) moved `Start Cloudflare Tunnel (Auto-Update).ps1` from
+the repo root into `scripts/`, but the Scheduled Task's own Action still pointed at the OLD root-level
+path - confirmed via `Test-Path` (old path gone, new path exists) and the task's `LastTaskResult`
+(`0xFFFD0000`, consistent with "the file to run doesn't exist"). Fixed with `Set-ScheduledTask` (new
+`ScheduledTaskAction` pointing at the correct `scripts\` path), then manually triggered the task to
+bring the tunnel up immediately rather than waiting for the next reboot. Verified end-to-end, not just
+"a process is running": pulled the actual tunnel URL from `cloudflared`'s own log
+(`yamaha-broader-glance-championships.trycloudflare.com`), then confirmed the LIVE built JS bundle on
+BOTH `easycash-lms.pages.dev` and `easycash-portal.pages.dev` references that exact same hostname -
+proof the whole 4-step script (health check -> start tunnel -> update+redeploy LMS -> update+redeploy
+Portal) ran correctly through the fixed task, not just that a stale build happened to still respond.
+
+**`backup-remote-postgres.ps1` reviewed on request, two real bugs fixed.** User asked for an analysis
+of this script (pulls a `pg_dump` snapshot of the office server's live Postgres over the LAN, run FROM
+a teammate's machine, using that machine's own local Docker Postgres container purely as the `pg_dump`
+client). Found:
+1. `docker cp` (copying the dump out of the container) and the container-side `rm -f` cleanup were
+   completely unchecked - `$ErrorActionPreference = 'Stop'` does NOT apply to external/native command
+   failures, only `$LASTEXITCODE` does, and neither step checked it. A failed copy (disk full,
+   permission issue) still fell through to "OK - na-save" and a success log line, with no file or an
+   incomplete one on disk - a false positive only discoverable when the backup was actually needed.
+2. A vestigial `$env:PGPASSWORD_FOR_DOCKER` assignment that was never actually read anywhere - the
+   real password was always passed inline via the `docker exec -e PGPASSWORD=...` flag instead; dead
+   code from an abandoned earlier approach.
+
+Fixed both: `docker cp`'s exit code is now checked (cleans up the container temp file and exits
+non-zero on failure), the cleanup `rm`'s own failure is now a non-fatal warning (logged, not fatal -
+losing a scratch file inside the container isn't worth aborting a good backup over), and success is
+now only reported after verifying the copied local file actually exists and is non-empty. Removed the
+dead env var. Syntax-checked via `[System.Management.Automation.Language.Parser]::ParseFile` (no
+Docker rebuild needed - this is a standalone script, not part of the containerized app). Committed and
+pushed (`d0b5432`).
+
+**Tried to help fill in `local/postgres-remote-backup.env` for a teammate machine - blocked on a real
+constraint, paused by the user.** User wanted to set this up so Nomer's Laptop/MacBook could pull a
+remote snapshot. Retrieved the local Postgres container's real `easycash`/`easycash`/`easycash`
+user/password/db and this machine's LAN IP (`192.168.68.134`, confirmed via `Get-NetIPAddress` -
+matches the `192.168.68.134` already referenced in §5/2026-08-14's `backup-lms-database-remote.bat`
+note) - but before writing anything, asked whether the target machine would actually be on the office
+LAN (a prerequisite for that IP to be reachable at all, since the Postgres port is deliberately NOT
+exposed through the Cloudflare Tunnel - the same conscious security decision from §5). User confirmed
+Nomer's Laptop and MacBook are currently OFF the office LAN entirely (not physically present). Offered
+three real options (fall back to the existing manual pg_dump + Google-Drive-style transfer; set up a
+Tailscale VPN between the office server and those two devices, which would require access to those
+devices Claude does not have; or deliberately expose the Postgres port to the public internet through
+a tunnel, explicitly flagged as reversing an already-made security decision and NOT recommended) - user
+chose to pause and think it over rather than pick one yet. No config file was created, no port was
+opened, nothing was changed on the network side.
+
+**Session logs reorganized per machine, per user request.** User works across three machines (this
+Office Server PC, "Laptop Nomer", "Macbook Nomer") all cloning the same repo, and wants to `git pull`
+on any one of them and immediately see, by folder name, which machine a given session's work happened
+on - he'd already set up an analogous `docs/session-logs/Laptop Nomer/` folder there himself. Created
+`docs/session-logs/Office Server PC/` and `git mv`'d this actively-updated 2026-08-14 log into it
+(history preserved via Git's rename detection). Deliberately scoped narrow: the ~40 older,
+non-machine-tagged logs already sitting in `docs/session-logs/` root were left untouched, to avoid
+churn and any broken cross-references between them (several reference each other by relative path).
+Saved as a standing feedback memory (`feedback_session_logs_per_machine.md`) so future sessions on
+this machine default to writing new logs into this subfolder without being asked again. Committed and
+pushed (`d2c0928`).
+
+### Current state / follow-ups
+
+- Cloudflare Tunnel auto-start is fixed and verified end-to-end; should survive the next real reboot
+  without intervention.
+- `backup-remote-postgres.ps1` is hardened against the silent-success failure mode, but still has no
+  real end-to-end test on this machine (it's designed to be run FROM a different machine pulling
+  AGAINST this one - `local/postgres-remote-backup.env` was deliberately not created here per the
+  paused decision above).
+- **Open decision, explicitly paused by the user**: how Nomer's Laptop/MacBook should reach the office
+  server's Postgres while off the office LAN (manual transfer vs. Tailscale VPN vs. public tunnel
+  exposure - the last one flagged as not recommended, reversing an existing security decision). Revisit
+  when the user has decided.
+- New session logs written on this machine going forward belong in
+  `docs/session-logs/Office Server PC/`, not the flat `docs/session-logs/` root - this is now a saved
+  preference, not just a one-off request.
