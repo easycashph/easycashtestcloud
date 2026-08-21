@@ -169,6 +169,13 @@ backend/schema change was needed. The input now shows a small live line undernea
 of accrued interest = ₱1,234.56") so staff can see the computed peso figure without leaving the
 field.
 
+## 9. SOA penalty-mode label wording
+
+Renamed the "COMPUTED" penalty-mode radio option in the Create SOA dialog from "Compute the
+missing ones" to **"Compute Missing Entries"** for a more formal banking-UI tone, per user request
+(went through a few label suggestions in chat before landing on this one). Purely a copy change in
+`LoanDetailPage.tsx` — no logic touched. Frontend container rebuilt and confirmed healthy.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

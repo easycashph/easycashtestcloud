@@ -3424,7 +3424,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     onChange={() => setSoaPenaltyMode('COMPUTED')}
                   />
                   <span>
-                    <span className="block text-sm">Compute the missing ones</span>
+                    <span className="block text-sm">Compute Missing Entries</span>
                     <span className="block text-xs text-muted-foreground">
                       Keeps recorded figures, fills only the blanks.
                     </span>
