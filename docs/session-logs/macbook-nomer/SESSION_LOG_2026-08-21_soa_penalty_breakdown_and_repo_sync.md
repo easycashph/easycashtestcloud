@@ -204,6 +204,32 @@ not be click-verified in this session due to a Browser-tool timeout quirk unrela
 — the mobile markup reuses the exact same list pattern already working for Requirements/News/
 Security, so risk is low, but worth a manual phone check next time this machine is used.
 
+## 11. Portal: removed Personal Loan eligibility note and the public bank account card
+
+Two display-only removals, both per explicit user request, neither changing any underlying
+business rule:
+
+- Removed the "For private-sector employees only..." note shown on the Personal Loan card
+  (`eligibilityNote` field on the Salary Loan entry in `app/portalfrontend/src/lib/
+  loanProducts.ts`). Confirmed with the user first: Easycash still does **not** accept government
+  employees for this product — only the visible note is gone, not the actual restriction (that
+  restriction isn't enforced anywhere in code today; it was UI-only messaging). Cleaned up the two
+  now-dead `'eligibilityNote' in product` render checks in `LandingPage.tsx` and
+  `RequirementsPage.tsx` rather than leaving them as no-ops.
+- Removed the "Payment to Official Bank Account" card (BDO account details) from the public
+  landing page's "Ways to Pay" section — user wants the bank account no longer shown there. The
+  two payment-method tiles (Bank Transfer / Post-Dated Check) stay. This only touches the public
+  landing page; the equivalent card on the authenticated Dashboard
+  (`PortalOfficialBankAccountCard.tsx`) and the `OFFICIAL_BANK_ACCOUNT` constant itself in
+  `companyInfo.ts` were left untouched — the account details are still shown to logged-in
+  clients, just not to anonymous visitors on the marketing page.
+
+Verified: `npx tsc --noEmit` clean; `portalfrontend` Docker rebuild hit a transient Docker Hub TLS
+timeout on the first attempt (`docker compose up -d --build`), diagnosed via its logs, then
+resolved by rebuilding the image directly (`docker compose build portalfrontend`) followed by
+`docker compose up -d portalfrontend` - confirmed both the note and the bank account card are gone
+from the live page afterward.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

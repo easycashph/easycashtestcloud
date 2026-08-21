@@ -54,12 +54,6 @@ export const LOAN_PRODUCTS = [
       fil: 'Panandaliang cash advance para sa mga empleyado, babayaran laban sa iyong regular na sahod.',
     },
     image: './images/product-salary.jpg',
-    /** 2026-08-14 (business owner confirmed): private-sector employees only - Easycash does not
-     * currently accept government employees for this product. */
-    eligibilityNote: {
-      en: 'For private-sector employees only. Easycash does not currently accept government employees for this product.',
-      fil: 'Para sa mga empleyado ng pribadong sektor lamang. Hindi pa tumatanggap ang Easycash ng mga government employee para sa produktong ito.',
-    },
   },
   {
     icon: Anchor,
