@@ -341,6 +341,41 @@ REPAYMENT-then-same-timestamp-ADJUSTMENT signature, which found just this one lo
 "installment PAID but account balance nonzero, regardless of status or ledger shape" query has not
 been run yet).
 
+## 14. Payment History: added a "Recorded by" column
+
+User asked whether the Loan Detail page's Payment History table could show which staff member
+recorded each transaction. Mocked up the change first (Artifact) and got sign-off before touching
+code, per the standing mockup-before-UI-changes rule.
+
+Implementation follows this codebase's existing `PenaltyOverride.byName` / `FeesOverride.byName`
+convention (repayment module) - a display-only, denormalized name field on the domain entity,
+populated by the repository's read query via a Prisma `include`, never set on write:
+
+- `LoanTransaction` domain entity (`app/easycashbackend/src/modules/ledger/domain/
+  LoanTransaction.ts`): added `postedByName?: string` to `LoanTransactionProps` plus a getter,
+  documented as read-path-only exactly like the repayment module's precedent.
+- `PrismaLoanTransactionRepository.findByLoanAccountId` (`app/easycashbackend/src/modules/ledger/
+  infrastructure/PrismaLoanTransactionRepository.ts`): added `include: { postedBy: { select:
+  { firstName: true, lastName: true } } }` to the `findMany` call, and `toDomain()` now builds
+  `postedByName` from the joined `postedBy` relation when present.
+- `LoanTransactionPresenter`: added `postedByName` to the JSON response.
+- Frontend `LoanTransaction` type (`app/lmsfrontend/src/lib/loanApiTypes.ts`) and the Payment
+  History table (`LoanDetailPage.tsx`): new "Recorded by" column between Date and Type, showing
+  the staff name or "Legacy" (muted) for rows with no `postedByUserId` (legacy-migrated). The
+  existing penalty-reduction/fee-adjustment row type already showed `byName` inline in its Comment
+  column ("Installment #X · byName · reason") - moved that into the new column too instead of
+  duplicating it, and bumped the expanded-allocations-panel row's `colSpan` by 1 for the new
+  column.
+
+Verified: `npx tsc --noEmit` clean on both apps. Docker rebuild hit the same Docker Desktop
+stuck-backend-process issue as before (`com.docker.backend` survived a graceful `quit`, pegged at
+500%+ CPU since that morning's launch) - fixed with a harder `pkill -9` sweep of the Docker
+processes before relaunching, same as the known workaround, just needed to be more forceful this
+time since the graceful quit alone didn't clear the stuck process. Both `easycashbackend` and
+`lmsfrontend` rebuilt clean and healthy afterward. Could not verify the column visually in the
+browser - no staff login credentials available in this session - so this is unverified in the UI;
+next session should log in and confirm the column renders correctly before considering this done.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

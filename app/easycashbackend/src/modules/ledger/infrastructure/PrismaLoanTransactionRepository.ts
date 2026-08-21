@@ -7,8 +7,12 @@ import { TransactionComponents } from '../domain/valueObjects/TransactionCompone
 import type { FindByLoanAccountIdOptions, ILoanTransactionRepository } from '../application/ports/ILoanTransactionRepository';
 
 type LoanTransactionRow = Prisma.LoanTransactionGetPayload<Record<string, never>>;
+type LoanTransactionRowWithPostedBy = Prisma.LoanTransactionGetPayload<{
+  include: { postedBy: { select: { firstName: true; lastName: true } } };
+}>;
 
-function toDomain(row: LoanTransactionRow): LoanTransaction {
+function toDomain(row: LoanTransactionRow | LoanTransactionRowWithPostedBy): LoanTransaction {
+  const postedBy = 'postedBy' in row ? row.postedBy : null;
   const props: LoanTransactionProps = {
     id: row.id,
     loanAccountId: row.loanAccountId,
@@ -22,6 +26,7 @@ function toDomain(row: LoanTransactionRow): LoanTransaction {
     }),
     balanceAfter: Money.of(row.balanceAfter),
     postedByUserId: row.postedByUserId ?? undefined,
+    postedByName: postedBy ? `${postedBy.firstName} ${postedBy.lastName}`.trim() : undefined,
     branchId: row.branchId,
     entryDate: row.entryDate,
     comment: row.comment ?? undefined,
@@ -86,7 +91,10 @@ export class PrismaLoanTransactionRepository implements ILoanTransactionReposito
 
     if (orderedIds.length === 0) return [];
 
-    const rows = await client.loanTransaction.findMany({ where: { id: { in: orderedIds.map((r) => r.id) } } });
+    const rows = await client.loanTransaction.findMany({
+      where: { id: { in: orderedIds.map((r) => r.id) } },
+      include: { postedBy: { select: { firstName: true, lastName: true } } },
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     return orderedIds.map((r) => toDomain(byId.get(r.id)!));
   }

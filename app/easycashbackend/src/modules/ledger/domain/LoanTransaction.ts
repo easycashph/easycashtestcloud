@@ -28,6 +28,12 @@ export interface LoanTransactionProps {
   components: TransactionComponents;
   balanceAfter: Money;
   postedByUserId?: string;
+  /** Display-only, read-path convenience (never set by `create()` — that's a pure write with no
+   * user-name lookup) — populated by the repository's `findByLoanAccountId` read for the presenter
+   * to surface "Recorded by X" without a second query. `undefined` for legacy-migrated rows (no
+   * `postedByUserId`) or a freshly-constructed entity before its first save. Same convention as
+   * `PenaltyOverride.byName` in the repayment module. */
+  postedByName?: string;
   branchId: string;
   entryDate: Date;
   comment?: string;
@@ -135,6 +141,10 @@ export class LoanTransaction {
 
   get postedByUserId(): string | undefined {
     return this.props.postedByUserId;
+  }
+
+  get postedByName(): string | undefined {
+    return this.props.postedByName;
   }
 
   get branchId(): string {

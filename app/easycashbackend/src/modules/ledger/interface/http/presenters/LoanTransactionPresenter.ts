@@ -13,6 +13,7 @@ export function presentLoanTransaction(transaction: LoanTransaction) {
     penaltyComponent: transaction.components.penaltyComponent.toString(),
     balanceAfter: transaction.balanceAfter.toString(),
     postedByUserId: transaction.postedByUserId ?? null,
+    postedByName: transaction.postedByName ?? null,
     branchId: transaction.branchId,
     entryDate: transaction.entryDate.toISOString(),
     comment: transaction.comment ?? null,

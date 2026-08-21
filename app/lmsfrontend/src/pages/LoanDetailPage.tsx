@@ -2981,6 +2981,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     <TableRow>
                       <TableCell className="w-8" />
                       <TableCell className="font-medium text-muted-foreground">Date</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Recorded by</TableCell>
                       <TableCell className="font-medium text-muted-foreground">Type</TableCell>
                       <TableCell className="font-medium text-muted-foreground">OR#</TableCell>
                       <TableCell className="font-medium text-muted-foreground">AR#</TableCell>
@@ -3007,6 +3008,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           <TableRow key={a.id} className="bg-primary/5">
                             <TableCell />
                             <TableCell className="text-primary">{formatDate(a.at)}</TableCell>
+                            <TableCell className="text-xs text-primary">{a.byName ?? 'Accounting'}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className="border-primary/40 text-primary">
                                 {label}
@@ -3019,7 +3021,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                             </TableCell>
                             <TableCell />
                             <TableCell className="text-xs text-primary" title={a.reason}>
-                              Installment #{a.installmentNumber} · {a.byName ?? 'Accounting'} · {a.reason}
+                              Installment #{a.installmentNumber} · {a.reason}
                             </TableCell>
                             {canReversePayment && <TableCell />}
                           </TableRow>
@@ -3048,6 +3050,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 Reversed
                               </Badge>
                             )}
+                          </TableCell>
+                          <TableCell className={cn('text-xs', !t.postedByName && 'text-muted-foreground')}>
+                            {t.postedByName ?? 'Legacy'}
                           </TableCell>
                           <TableCell>
                             <TransactionTypeBadge type={t.type} />
@@ -3081,7 +3086,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         {isExpanded && (
                           <TableRow className="bg-muted/30 hover:bg-muted/30">
                             <TableCell />
-                            <TableCell colSpan={canReversePayment ? 12 : 11}>
+                            <TableCell colSpan={canReversePayment ? 13 : 12}>
                               <TransactionAllocationsPanel transactionId={t.id} />
                             </TableCell>
                           </TableRow>
