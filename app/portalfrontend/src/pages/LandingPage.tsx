@@ -116,8 +116,9 @@ function Reveal({ children, className }: { children: React.ReactNode; className?
 
 function Navbar() {
   const { isAuthenticated } = useAuth();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [open, setOpen] = React.useState(false);
+  const [productMenuOpen, setProductMenuOpen] = React.useState(false);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
@@ -139,6 +140,53 @@ function Navbar() {
             <Phone className="h-3.5 w-3.5" />
             {COMPANY.contact.landline}
           </a>
+          <div
+            className="relative"
+            onMouseEnter={() => setProductMenuOpen(true)}
+            onMouseLeave={() => setProductMenuOpen(false)}
+          >
+            <button
+              type="button"
+              className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => setProductMenuOpen((o) => !o)}
+              aria-expanded={productMenuOpen}
+            >
+              {t.nav.product}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {productMenuOpen && (
+              <div className="absolute left-1/2 top-full z-50 mt-2.5 w-[420px] -translate-x-1/2 rounded-xl border border-border bg-card p-2 shadow-xl">
+                <div className="grid grid-cols-2 gap-1">
+                  {LOAN_PRODUCTS.map((product) => (
+                    <Link
+                      key={product.category}
+                      to="/signup"
+                      onClick={() => setProductMenuOpen(false)}
+                      className="flex items-start gap-3 rounded-lg p-3 hover:bg-secondary"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <product.icon className="h-[18px] w-[18px]" />
+                      </span>
+                      <span>
+                        <span className="block text-[13.5px] font-semibold">{product.displayLabel}</span>
+                        <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                          {localizedProductText(product.blurb, locale)}
+                        </span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+                <Link
+                  to="/#products"
+                  onClick={() => setProductMenuOpen(false)}
+                  className="mt-1 flex items-center justify-center gap-1 rounded-lg p-2.5 text-xs font-semibold text-primary hover:bg-secondary"
+                >
+                  {t.nav.seeAllProducts}
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+          </div>
           <Link
             to="/requirements"
             className="text-sm font-medium text-muted-foreground hover:text-foreground"
@@ -187,6 +235,21 @@ function Navbar() {
               <Phone className="h-3.5 w-3.5 text-muted-foreground" />
               {COMPANY.contact.landline}
             </a>
+            <div>
+              <p className="text-sm font-medium">{t.nav.productFull}</p>
+              <div className="mt-2 flex flex-col gap-2 border-l border-border pl-3">
+                {LOAN_PRODUCTS.map((product) => (
+                  <Link
+                    key={product.category}
+                    to="/signup"
+                    onClick={() => setOpen(false)}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {product.displayLabel}
+                  </Link>
+                ))}
+              </div>
+            </div>
             <Link to="/requirements" onClick={() => setOpen(false)} className="text-sm font-medium">
               {t.nav.requirementsFull}
             </Link>

@@ -176,6 +176,34 @@ missing ones" to **"Compute Missing Entries"** for a more formal banking-UI tone
 (went through a few label suggestions in chat before landing on this one). Purely a copy change in
 `LoanDetailPage.tsx` — no logic touched. Frontend container rebuilt and confirmed healthy.
 
+## 10. Portal: "Product" dropdown added to the top navigation
+
+User asked to add a "Product" item to the public Portal's top nav (`LandingPage.tsx`'s `Navbar`).
+Mocked up two variants first (plain link vs. a dropdown) via an Artifact and got explicit sign-off
+on the dropdown variant before touching code, per the standing mockup-before-UI-changes rule.
+
+Implementation reused the existing `LOAN_PRODUCTS` catalog (`app/portalfrontend/src/lib/
+loanProducts.ts`) rather than inventing new product copy — this is the single source of truth
+already shared with the Products section further down the same landing page, the Loan Calculator
+widget, and the actual application form, so the dropdown can never drift out of sync with what's
+really offered. Per user's explicit product selection ("Seafarer, Personal at MSE"), all 3 active
+products in the catalog are shown (SME Loan, Personal Loan, Seafarer Loan — Easycash currently has
+no others), each with its icon, `displayLabel`, and localized `blurb`, linking to `/signup`; a
+"See all products" footer link jumps to the existing `#products` anchor section.
+
+Added `nav.product` / `nav.productFull` / `nav.seeAllProducts` translation keys (English + Filipino)
+in `app/portalfrontend/src/lib/i18n/translations.ts`, matching the existing nav key style. Desktop
+nav shows a hover/click dropdown panel (2-column grid) positioned first, before Requirements/News/
+Security. Mobile nav shows the same 3 products as a flat indented list under a "Our Loan Products"
+heading, consistent with how the other mobile nav sections are laid out.
+
+Verified: `npx tsc --noEmit` clean; `portalfrontend` Docker container rebuilt and healthy; dropdown
+visually confirmed in the Browser preview in both dark and light theme (hover interaction, icons,
+descriptions, "See all products" link all render correctly). Mobile hamburger-menu open/close could
+not be click-verified in this session due to a Browser-tool timeout quirk unrelated to this change
+— the mobile markup reuses the exact same list pattern already working for Requirements/News/
+Security, so risk is low, but worth a manual phone check next time this machine is used.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

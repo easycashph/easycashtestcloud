@@ -49,15 +49,18 @@ export const en = {
     editLoanApplication: 'Edit Loan Application',
   },
   nav: {
-    requirements: 'Requirements',
+    product: 'Product',
     news: 'News',
+    requirements: 'Requirements',
     security: 'Security',
     goToDashboard: 'Go to Dashboard',
+    productFull: 'Our Loan Products',
     requirementsFull: 'Loan Requirements',
     newsFull: 'News & Announcements',
     securityFull: 'Security & Anti-Scam',
     theme: 'Theme',
     language: 'Language',
+    seeAllProducts: 'See all products',
   },
   footer: {
     tagline:
@@ -924,15 +927,18 @@ export const fil: Translations = {
     editLoanApplication: 'I-edit ang Loan Application',
   },
   nav: {
-    requirements: 'Mga Kailangan',
+    product: 'Produkto',
     news: 'Balita',
+    requirements: 'Mga Kailangan',
     security: 'Seguridad',
     goToDashboard: 'Pumunta sa Dashboard',
+    productFull: 'Aming mga Produktong Loan',
     requirementsFull: 'Mga Kailangan sa Pag-apply',
     newsFull: 'Balita at mga Anunsyo',
     securityFull: 'Seguridad at Anti-Scam',
     theme: 'Tema',
     language: 'Wika',
+    seeAllProducts: 'Tingnan lahat ng produkto',
   },
   footer: {
     tagline:
