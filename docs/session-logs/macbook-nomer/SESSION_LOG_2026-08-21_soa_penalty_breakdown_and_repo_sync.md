@@ -279,7 +279,22 @@ picks this up next should re-show that mockup (or rebuild it) and get explicit s
 final photo set before saving real files into `public/images/` and wiring them into
 `LandingPage.tsx`.
 
-## 13. Loan SL-LAZ_Y1T1R (FAYE MARIE ELEONOR GO LEJERO) - status/balance mismatch investigated, NOT fixed yet
+## 13. Loan SL-LAZ_Y1T1R (FAYE MARIE ELEONOR GO LEJERO) - status/balance mismatch investigated on this Mac, RESOLVED on the Office Server PC
+
+**Update (same day, pulled from `origin/main`):** resolved on the Office Server PC (see
+`docs/session-logs/Office Server PC/SESSION_LOG_2026-08-14_office_server_move_and_manual_payment_
+adjustment.md` §43) - root cause was that this loan's real payoff was a legacy-migrated
+`REPAYMENT`, so it never passed through `ProcessPaymentUseCase`'s auto-close logic. Fixed directly
+against the live database there: `principalBalance`/`interestBalance` corrected to 0.00, status
+transitioned `ACTIVE_IN_ARREARS -> CLOSED`, and a native `ADJUSTMENT` transaction recorded as a
+true-up entry that also permanently locks this loan (`lockedLoanAccountIds` in
+`migrate-legacy-data.ts`) against ever being silently overwritten by a future SDevTech re-sync.
+Confirmed isolated (full-database scan, no other matches) - no broader migration-script change was
+needed. The investigation below is this Mac's own read-only trail from earlier the same day, kept
+for context on how the diagnosis unfolded before the fix landed elsewhere - it's superseded by §43,
+not a second source of truth.
+
+## 13a. Original investigation on this Mac (superseded by the fix above)
 
 User reported: this loan shows "in arrears" even though they believed it was closed with zero
 balance. Investigated via two background agents plus direct DB queries (all read-only, no writes
@@ -327,19 +342,9 @@ So the finding above may not reflect the true current SDevTech state and should 
 final - it only proves the *shape* of the mismatch (installment vs. account-aggregate disagreement)
 existed in whatever backup snapshot this Mac happens to have, not that it's still true today.
 
-**Status: paused, unresolved.** Nothing was written to any database. Next step (whoever picks this
-up, likely on the Office Server PC where the real migration source lives): re-check this loan
-(code `SL-LAZ_Y1T1R`, legacy Mongo `_id` `65e92e0266c29ea553b5277e`, `uid`
-`8a8e8e6b7ca49791017cb58d882b7d7a`) against the Office Server PC's actual SDevTech source/backup
-before deciding whether to (a) write a proper reversal script to force it CLOSED with zero balance
-(only if the authoritative source genuinely shows it closed), or (b) flag it for manual accounting
-review instead, consistent with ADR-007 §4's "never fabricate a corrected balance" precedent (if
-the authoritative source turns out to have the same unresolved mismatch). Also worth checking
-whether other loans have this same installment-PAID-vs-account-aggregate-mismatch pattern under a
-non-ACTIVE_IN_ARREARS status (this investigation only searched for the specific
-REPAYMENT-then-same-timestamp-ADJUSTMENT signature, which found just this one loan - a broader
-"installment PAID but account balance nonzero, regardless of status or ledger shape" query has not
-been run yet).
+**Status at the time this Mac paused:** nothing had been written to any database here - the actual
+fix (see §13's update above) was applied on the Office Server PC later the same day. Left as
+originally written below for the investigation trail; superseded, not a live TODO anymore.
 
 ## 14. Payment History: added a "Recorded by" column
 
