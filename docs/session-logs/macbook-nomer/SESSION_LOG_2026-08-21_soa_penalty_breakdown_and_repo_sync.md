@@ -230,6 +230,55 @@ resolved by rebuilding the image directly (`docker compose build portalfrontend`
 `docker compose up -d portalfrontend` - confirmed both the note and the bank account card are gone
 from the live page afterward.
 
+## 12. Portal landing page: photo mockups explored (not yet implemented)
+
+User asked to explore adding real photos to the Portal landing page's hero and the 3 product
+cards (`hero-seafarer.jpg`, `product-business.jpg`, `product-salary.jpg`, `product-seafarer.jpg`
+— the 4 slots already documented in `app/portalfrontend/public/images/README.md`, currently empty
+so the page falls back to icon placeholders). Per the standing mockup-before-UI-changes rule,
+several rounds of mockups were built and shown via Artifact before touching any code — **no code
+was changed in this exploration**, everything below happened only in the chat/Artifact.
+
+Sequence of directions tried, each shown as a separate mockup and iterated on user feedback:
+
+1. **Direction A** - real photos cropped from the old `New Website picture/` folder (2016-2017
+   Easycash campaign posters), text/logo overlays cropped out. User rejected this - didn't want
+   photos from that old folder.
+2. **Direction B** - photo-free, abstract/illustrative: gradient hero art with a line-art
+   "compass and sail" motif, an editorial serif (Fraunces, paired with the portal's existing Plus
+   Jakarta Sans) added for headlines, brass/gold accent added alongside the existing Emerald
+   brand color. User then asked for actual images of people/objects instead of pure abstraction.
+3. **Direction C** - original flat-style SVG illustrations (not photos) of a seafarer at a ship
+   rail, a market stall owner, and someone reviewing a payslip, in the same emerald+brass
+   palette. User then explicitly asked for **real people**, not illustrations.
+4. **Direction D** - real, freely-licensed stock photography sourced from Unsplash (Unsplash
+   License, free for commercial use, no attribution required) after asking the user's explicit
+   permission to search and download external images (per the standing download-permission rule).
+   Cropped/graded 4 photos to fit the exact 4 required slots: a ship-deck sunset shot for hero,
+   two crew members on a teal-water deck for Seafarer Loan, a candid office portrait for Personal
+   Loan, and (after two more rounds of swaps per user feedback - first "big business" workshop
+   owner, then a suited "businessman", then a symmetric city skyline - none of which stuck) a
+   small online seller packing shipping boxes for SME Loan.
+5. Checked the live `easycash.ph` site as a design reference per user request (navigated with the
+   Browser tool, dismissed a data-privacy consent overlay via JS to see the page underneath).
+   Confirmed the real site's product pages use literal, on-theme photography rather than
+   abstraction - an actual cargo ship for Seafarer Loan, a laptop + shipping boxes for SME Loan
+   (small online seller framing), and a rubber stamp + coins + a house model for Personal Loan.
+   The SME Loan mockup photo was swapped to match that same "small online seller" framing instead
+   of the corporate-skyline direction, to stay consistent with how Easycash already positions
+   this product. Also confirmed the live nav pattern: "Seafarer Loan" as a direct top-level link
+   (flagship product) plus an "Other Products" dropdown for Personal Loan and SME Loan - worth
+   revisiting if the Portal's earlier `Product` dropdown work (see §10) should be restructured
+   to match.
+
+User paused the work here ("stop muna natin") before approving a final direction or asking for
+implementation. **Nothing was written to `app/portalfrontend/public/images/` and no component code
+was touched** - the 4 candidate photos only exist embedded in the throwaway mockup Artifact
+(`portal_real_photos_mockup.html`, in this machine's session scratchpad, not the repo). Whoever
+picks this up next should re-show that mockup (or rebuild it) and get explicit sign-off on the
+final photo set before saving real files into `public/images/` and wiring them into
+`LandingPage.tsx`.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run
