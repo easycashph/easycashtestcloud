@@ -2013,3 +2013,65 @@ pushed (`d2c0928`).
 - New session logs written on this machine going forward belong in
   `docs/session-logs/Office Server PC/`, not the flat `docs/session-logs/` root - this is now a saved
   preference, not just a one-off request.
+
+## §43 - SL-LAZ_Y1T1R stuck ACTIVE_IN_ARREARS despite a fully-paid schedule - root-caused and fixed (2026-08-21)
+
+User reported **SL-LAZ_Y1T1R (FAYE MARIE ELEONOR GO LEJERO)**: status `ACTIVE_IN_ARREARS` despite the
+loan's single installment showing fully paid on the Repayment Schedule (principal 1000/1000, interest
+249.90/249.90). Investigated directly against the live database:
+
+- `repayment_schedules` for this loan: fully paid, matches what the user saw.
+- `loan_accounts.principalBalance`/`interestBalance`: still **1000.00**/**249.90** - i.e. as if
+  nothing had been paid at all, completely out of sync with the schedule.
+- Every transaction on this loan's ledger is `legacyId`-tagged (migrated), including the REPAYMENT
+  (₱1,249.90, Bank Transfer, 2025-07-14) that actually settled it - it never went through
+  `ProcessPaymentUseCase`, so the live "loan just became fully paid -> close it" logic
+  (`ProcessPaymentUseCase.ts:320-324`, `LoanAccount.isFullyPaid`/`close()`) never ran for it.
+- A stray legacy `PENALTY_APPLIED` (₱124.99, dated 2025-07-15, one day AFTER the full payoff) was also
+  found - not reflected in current `penaltyDue`/`penaltyBalance` (both already 0.00, consistent), so
+  left alone as an unexplained but currently-inert historical artifact, not a live discrepancy.
+
+**Scope check requested by the user** ("tignan pa ang ibang migrated account na ganito"): queried the
+ENTIRE database (every ACTIVE/ACTIVE_IN_ARREARS loan, legacy and native) for the same pattern -
+schedule fully paid but account-level balance still nonzero. **SL-LAZ_Y1T1R was the only match** - not
+a widespread migration bug, an isolated case.
+
+**User then asked the sharper question**: "hindi na ba ito mangyayari kapag nag re-migrate ulit ako?"
+Traced into `migrate-legacy-data.ts` to answer properly rather than assume: on every migration run,
+`principalBalance`/`interestBalance` are copied DIRECTLY from SDevTech's own snapshot fields, never
+derived from the schedule or ledger. The existing safety net for this class of bug
+(`legacyBalanceDataMissing` + `recompute-active-loan-balances-from-schedule.ts`, from the 2026-08-04
+`OTH-COMP_00002` incident) only protects loans where SDevTech has NO balance data at all - this loan's
+problem was stale/wrong data, not absent data, so that net didn't catch it. Answer given: yes, it
+would recur on the next re-migration, UNLESS something changes.
+
+Found the fix already exists in the migration script itself, no schema change needed:
+`lockedLoanAccountIds` (`migrate-legacy-data.ts` ~line 407) permanently excludes any migrated loan
+from balance/status resync forever, the moment it has even one NATIVE (non-legacy, `legacyId: null`)
+`LoanTransaction` recorded against it - "once a loan has live activity in this system, its balance is
+never again silently overwritten by a stale SDevTech re-sync." Applied the actual fix accordingly via
+a one-off `npx tsx` script (created, run, then deleted same turn, per this repo's convention):
+
+- `principalBalance`/`interestBalance` corrected to 0.00 (`feesBalance`/`penaltyBalance` already 0.00,
+  untouched), status transitioned `ACTIVE_IN_ARREARS` -> `CLOSED`.
+- A native (`legacyId: null`) ₱0.00 `ADJUSTMENT` `LoanTransaction` recorded - not a new cash movement
+  (the real payment is already on the ledger as the legacy REPAYMENT), purely a "true-up" entry
+  explaining the balance-column correction AND, as a direct side effect, permanently locking this loan
+  against the exact resync bug that caused the problem in the first place.
+
+Verified: re-ran the migration script's own `lockedLoanAccountIds` query directly against the live
+database afterward - confirms `9ae38fd8-7140-4ac4-bcb3-4759e2c90946` (SL-LAZ_Y1T1R) is now included,
+i.e. genuinely protected on the next re-migration, not just fixed for today.
+
+### Current state / follow-ups
+
+- SL-LAZ_Y1T1R is CLOSED with correct zero balances and is now migration-resync-proof.
+- The stray post-payoff `PENALTY_APPLIED` (₱124.99, 2025-07-15) on this same loan was noted but not
+  investigated further or corrected - it isn't reflected in any current balance, so there was nothing
+  live to fix; flag for follow-up only if SDevTech's own record of it ever resurfaces as a real
+  discrepancy.
+- This was confirmed to be an ISOLATED case (full-database scan found no other match) - no broader
+  migration-script change was needed or made. If another loan surfaces with the same "schedule paid,
+  account balance stale" symptom in the future, the same fix pattern applies: correct the balance,
+  record a native `$0.00 ADJUSTMENT` transaction to lock it against resync, verify via the
+  `lockedLoanAccountIds` query.
