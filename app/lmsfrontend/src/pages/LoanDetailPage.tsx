@@ -1859,7 +1859,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // date-range formula to run for every qualifying installment regardless of what's recorded.
   const [soaPenaltyRecomputeAll, setSoaPenaltyRecomputeAll] = React.useState(false);
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => manilaDateInputValue(new Date()));
-  const [soaCollectionFee, setSoaCollectionFee] = React.useState('0.00');
+  // 2026-08-21 (user request): staff enter a PERCENTAGE, not a peso amount - the actual fee is
+  // derived (accrued interest amount x this percent), computed in soaPreview below rather than
+  // typed in directly.
+  const [soaCollectionFeePercent, setSoaCollectionFeePercent] = React.useState('0');
   const [soaOtherFee, setSoaOtherFee] = React.useState('0.00');
   const [soaError, setSoaError] = React.useState<string | null>(null);
   // 2026-08-07 (user request, mocked up first): this dialog's content can run taller than the
@@ -1970,17 +1973,23 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       }
       const from = new Date(inst.dueDate).getTime() > penaltyFrom.getTime() ? new Date(inst.dueDate) : penaltyFrom;
       const days = daysBetween(from, penaltyCutoff);
-      if (days <= 0) continue;
-      const rate = loanPrincipal > 10000 ? 0.1 : 0.05;
-      const rowPenalty = Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
-      pastDuePenalty += rowPenalty;
-      filledCount += 1;
+      // 2026-08-21 (user-reported): a row still belongs in the table at 0 days late (e.g. an
+      // installment due exactly on the cutoff) - matches the Excel reference tool, and keeps this
+      // table's own totals row consistent with pastDuePrincipal/pastDueInterest above (which count
+      // every past-due installment regardless of days late).
+      let rowPenalty = 0;
+      if (days > 0) {
+        const rate = loanPrincipal > 10000 ? 0.1 : 0.05;
+        rowPenalty = Math.round(((unpaidBase * days * rate) / 30) * 100) / 100;
+        pastDuePenalty += rowPenalty;
+        filledCount += 1;
+      }
       penaltyBreakdown.push({
         fromDate: from,
         toDate: penaltyCutoff,
         principal: unpaidPrincipal,
         interest: unpaidInterest,
-        daysLate: days,
+        daysLate: Math.max(0, days),
         penalty: rowPenalty,
       });
     }
@@ -2024,8 +2033,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       accrued: accruedInterest,
     };
 
-    const totalAmountDue =
-      currentAmortizationDue + totalPastDue + accruedInterest + (Number.parseFloat(soaCollectionFee) || 0) + (Number.parseFloat(soaOtherFee) || 0);
+    // 2026-08-21 (user request): Collection Fee is staff-entered as a PERCENTAGE, not a peso
+    // amount - Collection Fee amount = Accrued interest amount x this percent.
+    const collectionFeePercent = Number.parseFloat(soaCollectionFeePercent) || 0;
+    const collectionFeeAmount = Math.round(accruedInterest * (collectionFeePercent / 100) * 100) / 100;
+
+    const totalAmountDue = currentAmortizationDue + totalPastDue + accruedInterest + collectionFeeAmount + (Number.parseFloat(soaOtherFee) || 0);
 
     return {
       pastDuePrincipal,
@@ -2042,6 +2055,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       maturityDate,
       isMatured,
       accruedInterest,
+      collectionFeeAmount,
       totalAmountDue,
       penaltyBreakdown,
       accruedBreakdown,
@@ -2055,7 +2069,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     soaPenaltyRecomputeAll,
     soaManualPenalty,
     soaAccruedInterestAsOfDate,
-    soaCollectionFee,
+    soaCollectionFeePercent,
     soaOtherFee,
   ]);
 
@@ -2102,7 +2116,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             ? { manualPenaltyAmount: soaManualPenalty, penaltyManualReason: soaManualReason.trim() }
             : {}),
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
-          collectionFee: soaCollectionFee,
+          // 2026-08-21 (user request): staff enter a percent (soaCollectionFeePercent) - the
+          // backend still stores/persists a peso amount, same as Other Fee, so we send the
+          // computed figure (soaPreview.collectionFeeAmount), not the raw percent typed in.
+          collectionFee: soaPreview.collectionFeeAmount.toFixed(2),
           otherFee: soaOtherFee,
         },
         { 'Idempotency-Key': generateUuid() },
@@ -2110,7 +2127,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['statements-of-account', loanId] });
       setSoaDialogOpen(false);
-      setSoaCollectionFee('0.00');
+      setSoaCollectionFeePercent('0');
       setSoaOtherFee('0.00');
       setSoaManualPenalty('');
       setSoaManualReason('');
@@ -3536,26 +3553,20 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         : `Loan matures ${formatDate(soaPreview.maturityDate)}. Penalty counts up to today only.`}
                     </p>
                   )}
-                  <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Days</p>
-                      <p className="font-medium">{soaPreview.penaltyDays}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Installments filled in</p>
-                      <p className="font-medium">{soaPreview.filledCount}</p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
                     Rate is 5%/month for a loan with a principal ≤ ₱10,000, otherwise 10%/month (whole-loan basis, matching the live
                     Repayment Schedule).
                   </p>
                   {/* 2026-08-21 (user request) - on-screen penalty computation table, one row per
                       past-due installment, mirroring the user's own Excel reference tool
                       (FROM/TO/PRINCIPAL/INTEREST/DAYS LATE/PENALTY). Collapsed by default so it
-                      doesn't dominate the dialog on a loan with a long schedule. */}
+                      doesn't dominate the dialog on a loan with a long schedule. Replaces the old
+                      "Days / Installments filled in" summary counters - this table shows the same
+                      information per row instead. Totals row sums the array itself (not the
+                      standalone pastDuePrincipal/pastDueInterest scalars) so it can never disagree
+                      with what's actually listed above it. */}
                   {soaPreview.penaltyBreakdown.length > 0 && (
-                    <details className="mt-3 border-t pt-2 text-xs">
+                    <details className="mt-3 border-t pt-2 text-xs" open>
                       <summary className="cursor-pointer font-medium text-foreground">
                         Penalty computation ({soaPreview.penaltyBreakdown.length} installment
                         {soaPreview.penaltyBreakdown.length === 1 ? '' : 's'})
@@ -3580,15 +3591,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                                 <td className="py-1 pr-2 text-right">{formatPeso(row.principal)}</td>
                                 <td className="py-1 pr-2 text-right">{formatPeso(row.interest)}</td>
                                 <td className="py-1 pr-2 text-right">{row.daysLate}</td>
-                                <td className="py-1 text-right">{formatPeso(row.penalty)}</td>
+                                <td className="py-1 text-right">{row.penalty > 0 ? formatPeso(row.penalty) : '—'}</td>
                               </tr>
                             ))}
                             <tr className="border-t font-medium">
                               <td className="py-1 pr-2" colSpan={2} />
-                              <td className="py-1 pr-2 text-right">{formatPeso(soaPreview.pastDuePrincipal)}</td>
-                              <td className="py-1 pr-2 text-right">{formatPeso(soaPreview.pastDueInterest)}</td>
+                              <td className="py-1 pr-2 text-right">
+                                {formatPeso(soaPreview.penaltyBreakdown.reduce((sum, row) => sum + row.principal, 0))}
+                              </td>
+                              <td className="py-1 pr-2 text-right">
+                                {formatPeso(soaPreview.penaltyBreakdown.reduce((sum, row) => sum + row.interest, 0))}
+                              </td>
                               <td className="py-1 pr-2" />
-                              <td className="py-1 text-right">{formatPeso(soaPreview.pastDuePenalty)}</td>
+                              <td className="py-1 text-right">
+                                {formatPeso(soaPreview.penaltyBreakdown.reduce((sum, row) => sum + row.penalty, 0))}
+                              </td>
                             </tr>
                           </tbody>
                         </table>
@@ -3649,15 +3666,18 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label htmlFor="soa-collection-fee">Collection Fee</Label>
+                <Label htmlFor="soa-collection-fee">Collection Fee (%)</Label>
                 <Input
                   id="soa-collection-fee"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={soaCollectionFee}
-                  onChange={(e) => setSoaCollectionFee(e.target.value)}
+                  value={soaCollectionFeePercent}
+                  onChange={(e) => setSoaCollectionFeePercent(e.target.value)}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {soaCollectionFeePercent || 0}% of accrued interest = {formatPeso(soaPreview.collectionFeeAmount)}
+                </p>
               </div>
               <div>
                 <Label htmlFor="soa-other-fee">Other Fee</Label>

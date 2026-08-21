@@ -131,13 +131,52 @@ input gets a computed default in this dialog.
   otherwise today (Manila calendar day) — both re-applied every time the dialog opens, not just on
   first mount.
 
+## 7. Penalty computation table totals bug (found via user screenshot)
+
+The new table's totals row (Principal/Interest columns) disagreed with what its own visible rows
+summed to. Root cause: `pastDuePrincipal`/`pastDueInterest` in both the backend calculator and its
+frontend mirror are accumulated for every past-due installment unconditionally, near the top of the
+loop — but the COMPUTED-mode branch that pushes a `penaltyBreakdown` row used to `continue` early
+(skipping the push entirely) whenever an installment's own days-late worked out to 0 (e.g. an
+installment due exactly on the penalty cutoff/maturity date), even though its principal/interest
+had already been folded into the running totals a few lines earlier. Net effect: an installment
+could be silently invisible in the table yet still counted in the total beneath it.
+
+Fixed two ways, mirrored in both `StatementOfAccountCalculator.ts` and the `soaPreview` client
+copy: (1) every past-due installment now always gets a breakdown row, even at 0 days late/0
+penalty (rendered as "—" for the penalty cell) — matching the user's own Excel reference tool,
+which shows exactly such a row rather than omitting it; (2) as a second, independent safety net,
+the table's own totals row now sums directly from the rendered `penaltyBreakdown` array
+(`.reduce(...)`) instead of reusing the separate `pastDuePrincipal`/`pastDueInterest`/
+`pastDuePenalty` scalars, so the two can never disagree again even if a future edit reintroduces a
+similar gap. Also dropped the old "Days" / "Installments filled in" summary counters above the
+table — redundant now that the table itself shows the same information per row — and left the
+table expanded (`open`) by default in their place.
+
+## 8. Collection Fee changed to a percentage input
+
+User request: Collection Fee should be entered as a **percentage of the Accrued Interest amount**,
+not typed in as a peso figure directly — `Collection Fee amount = Accrued interest amount x
+entered percent`. Confirmed this applies to every loan account's Create SOA dialog (the single
+shared dialog component, not gated per loan type/product).
+
+Implementation stayed entirely client-side: renamed the state to `soaCollectionFeePercent`,
+computed `collectionFeeAmount` inside the existing `soaPreview` memo (`accruedInterest x
+(percent / 100)`, rounded to 2 decimals) and used that computed figure both in the on-screen Total
+Amount Due and in the actual `POST /statements-of-account` payload sent to the backend — the
+backend's own `collectionFee` field is unchanged (still a plain peso decimal string), so no
+backend/schema change was needed. The input now shows a small live line underneath it (e.g. "10%
+of accrued interest = ₱1,234.56") so staff can see the computed peso figure without leaving the
+field.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run
   multiple times, consistently 947-948 passed / 24 pre-existing failures (confirmed via `git stash`
   to be present on `origin/main` before any of this session's edits — unrelated portal/borrower-
   repository test-mock gaps and an already-broken SOA penalty-rate test, not touched or introduced
-  here); Docker rebuilt and healthy after every backend/frontend change.
+  here); Docker rebuilt and healthy after every backend/frontend change, including the two follow-up
+  fixes in §7 and §8.
 - This machine's local database is now fully synced with the latest SDevTech export, has every
   pending migration applied, has a complete Roles & Permissions seed, and its `.env`/LAN IP config
   is current as of this session's end.

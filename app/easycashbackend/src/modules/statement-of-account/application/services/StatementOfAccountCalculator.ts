@@ -248,20 +248,27 @@ export class StatementOfAccountCalculator {
       if (!penaltyFromDate) continue;
       const from = installment.dueDate.getTime() > penaltyFromDate.getTime() ? installment.dueDate : penaltyFromDate;
       const days = manilaDaysBetween(from, penaltyCutoff);
-      if (days <= 0) continue;
-      // 2026-08-21 (user-reported): whole-loan basis, not this installment's own unpaid balance -
-      // see this file's own doc comment above.
-      const rate = penaltyContext.principalAmount.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
-      const computedPenalty = Money.of(
-        unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
-      );
-      pastDuePenalty = pastDuePenalty.add(computedPenalty);
+      // 2026-08-21 (user-reported): a row still belongs in the breakdown even at 0 days late (e.g.
+      // an installment due exactly on the cutoff) - matches the user's own Excel reference tool,
+      // which shows every past-due installment with a "-" penalty rather than omitting the row. A
+      // row that's silently dropped here but still counted in pastDuePrincipal/pastDueInterest
+      // above is exactly what made the table's own totals row disagree with its visible rows.
+      let computedPenalty = Money.ZERO;
+      if (days > 0) {
+        // 2026-08-21 (user-reported): whole-loan basis, not this installment's own unpaid balance -
+        // see this file's own doc comment above.
+        const rate = penaltyContext.principalAmount.greaterThan(SMALL_BALANCE_THRESHOLD) ? STANDARD_RATE : SMALL_BALANCE_RATE;
+        computedPenalty = Money.of(
+          unpaidBase.toDecimal().times(days).times(rate).dividedBy(30).toDecimalPlaces(2, Decimal.ROUND_HALF_UP),
+        );
+        pastDuePenalty = pastDuePenalty.add(computedPenalty);
+      }
       penaltyBreakdown.push({
         fromDate: from,
         toDate: penaltyCutoff,
         principal: unpaidPrincipal,
         interest: unpaidInterest,
-        daysLate: days,
+        daysLate: Math.max(0, days),
         penalty: computedPenalty,
       });
     }
