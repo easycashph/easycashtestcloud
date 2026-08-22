@@ -632,6 +632,19 @@ and `CoBorrower`) was removed afterward. The temporary `tsx` install and copied 
 `easycashbackend` container were also removed - the container is back to its normal production
 image state.
 
+**Follow-up (same conversation):** user separately noticed the LMS staff-facing "Create Loan
+Signing Session" dialog (`LoanDetailPage.tsx:798-804`) already shows a disabled Portal button with
+a "Soon" `Badge` in the Co-Borrower section - confirmed this is the frontend's own deliberate
+mirror of the exact same backend restriction verified in §19 (not a bug, not an oversight): the
+Borrower party has all three channels (SMS/Email/Portal) enabled, the Co-Borrower party only has
+SMS/Email enabled with Portal disabled+badged, so the UI already prevents picking an impossible
+combination rather than letting it fail on submit. Discussed whether to build a full co-borrower
+Portal-login feature to remove this "Soon" state - user decided to leave it as-is: the existing
+SMS/email-link flow is a complete, working solution (verified in §19) and doesn't need a
+co-borrower account to function; building real Portal accounts for co-borrowers would only be
+worth it if co-borrowers need broader Portal access later (checking loan status, payment history,
+etc.), not just to remove this badge. No code changes made or needed.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
