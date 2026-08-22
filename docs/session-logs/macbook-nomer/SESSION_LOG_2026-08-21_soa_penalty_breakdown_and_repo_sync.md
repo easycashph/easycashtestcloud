@@ -579,15 +579,34 @@ on the Reports hub for a role without it.
 
 ## Current state
 
-- All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run
-  multiple times, consistently 947-948 passed / 24 pre-existing failures (confirmed via `git stash`
-  to be present on `origin/main` before any of this session's edits — unrelated portal/borrower-
-  repository test-mock gaps and an already-broken SOA penalty-rate test, not touched or introduced
-  here); Docker rebuilt and healthy after every backend/frontend change, including the two follow-up
-  fixes in §7 and §8.
-- This machine's local database is now fully synced with the latest SDevTech export, has every
-  pending migration applied, has a complete Roles & Permissions seed, and its `.env`/LAN IP config
-  is current as of this session's end.
+This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
+original repo-sync + SOA penalty breakdown work on this Mac; §9-18 (added later the same "day",
+still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
+afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
+here - see that section's own cross-link. Everything else below (§14-§18) is native to this Mac.
+
+- All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
+  log, including every feature added after the original SOA work; backend suite run multiple times
+  early in the session, consistently 947-948 passed / 24 pre-existing failures (confirmed via `git
+  stash` to be present on `origin/main` before any of this session's edits - unrelated portal/
+  borrower-repository test-mock gaps and an already-broken SOA penalty-rate test, not touched or
+  introduced here) - not re-run after §9 onward, worth a fresh run next session given how much
+  landed afterward. Docker rebuilt and healthy after every single backend/frontend change across
+  the whole log, including two mid-session Docker Desktop crash/stuck-process recoveries (see §14
+  and its follow-ups) that needed a hard `pkill -9` sweep before relaunching.
+- This machine's local database is fully synced with the latest SDevTech export it has (see §13's
+  caveat: this Mac's own legacy Mongo backup is NOT the authoritative source - only the Office
+  Server PC's is), has every pending migration applied, has a complete Roles & Permissions seed
+  (now including the 13 new per-report codes from §18), and its `.env`/LAN IP config is current as
+  of this session's end.
+- **Everything added from §14 onward is backend-verified only, never click-tested in a real
+  browser** - this Mac had no staff login credentials available anywhere in this session. Each of
+  those sections used one-off scripts (created, run, deleted) to exercise the real use case/
+  repository code directly against the local dev database instead, which caught one real bug
+  (§15's peso-sign PDF-encoding crash) before it would have reached a user. Next session with
+  actual LMS credentials should click through: the "Recorded by" column (§14), Print Application +
+  its Attachments auto-attach (§15/§16), the Portal Accounts report (§17), and the new per-report
+  Roles & Permissions toggles (§18).
 
 ## Known follow-up work
 
