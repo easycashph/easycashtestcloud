@@ -523,6 +523,60 @@ work, confirmed the `.xlsx` writer produces a valid buffer - then deleted both t
 Not yet checked: the actual page in a real browser session (same caveat as the last two features
 this session - no staff login available here).
 
+## 18. Reports: split the single blanket `report.view` permission into one code per report
+
+User asked whether Reports could be added to Roles & Permissions so MIS can control who sees which
+reports. Confirmed `report.view` already existed as a permission gate on every report route
+(`reportingRouter.ts`, added 2026-08-06) and already had its own "Reports" section in the Roles &
+Permissions screen (`RolesPermissionsTab.tsx` - prefix-grouped, `report` already mapped to its own
+category) - but it was **one blanket toggle**: on granted every report, off granted none, with no
+way to restrict a role to a subset. User confirmed they wanted true per-report granularity, and
+scoped it to the 13 reports actually gated by `reportingRouter.ts` - Reminder Logs/E-signature Logs
+are separate routers with no permission gate at all yet (not even `report.view`), left as a
+follow-up rather than pulled into this change.
+
+Implementation:
+- `seed.ts`: replaced the single `'report.view'` entry with 13 codes
+  (`report.loan_origination.view`, `report.collections.view`, `report.transactions.view`,
+  `report.loan_releases.view`, `report.aging.view`, `report.ending_balance.view`,
+  `report.accounts_past_due.view`, `report.collection_history.view`,
+  `report.expected_collection.view`, `report.first_amortization.view`,
+  `report.daily_collection.view`, `report.fully_paid.view`, `report.portal_accounts.view`) - one
+  per report card on the Reports hub. Added an `ALL_REPORT_PERMISSIONS` constant and replaced every
+  role's `'report.view'` grant with `...ALL_REPORT_PERMISSIONS` (Loan Operation Manager, CRM,
+  Finance, Accounting, Collection Officer - MIS already gets every permission automatically), so
+  the migration preserves "sees every report" as every role's starting point; MIS can narrow
+  individual roles down from there.
+- `reportingRouter.ts`: each route now checks its own `report.<name>.view` code instead of the
+  shared `requireReportView` middleware.
+- `roleContext.tsx` (frontend): `PermissionCode` union updated to match - removed `'report.view'`,
+  added the 13 new codes (this type isn't just documentation - a stale code here would silently
+  make `hasPermission()` calls fail to compile-check against reality).
+- `ReportsHubPage.tsx`: **this was the "makikita" (see) half of the ask, not just API-level
+  gating** - added a `permission` field to `ReportEntry` and filed each of the 13 report cards
+  under its matching code, then filtered `CATEGORIES` through `hasPermission()` before rendering -
+  a report the current user isn't granted no longer shows a card at all, rather than showing one
+  that 403s on click when they navigate to it. A category that ends up with zero visible reports is
+  hidden entirely, and an empty "no access to any reports" state was added for the edge case of a
+  role with none of the 13 granted. Reminder Logs/E-signature Logs have no `permission` set, so
+  they stay always-visible, unchanged from before (matches their still-ungated backend routes).
+
+**Cleanup of the now-superseded `report.view` DB row**: `seed.ts` is purely additive
+(upsert-based) - re-running it never deletes a permission that's no longer in
+`permissionDescriptions`, so the old row and its 6 role grants would otherwise sit in the database
+forever as a dead, confusing toggle. Ran the seed first (adds the 13 new codes + grants, verified
+via direct query: all 13 codes present, 6/6 roles granted each), then wrote and ran a one-off
+cleanup script (`scripts/remove-report-view-permission.ts`, dry-run first, then `--apply`, then
+deleted per this repo's convention) that deleted the `report.view` `Permission` row - the FK
+cascade on `rolePermission.permissionId` removed its 6 stale grants automatically. Confirmed via a
+final query: `permissions` table now has exactly the 13 new `report.*` codes, `report.view` gone.
+
+Verified: `npx tsc --noEmit` clean on both apps. `easycashbackend` and `lmsfrontend` rebuilt clean
+and healthy. Not yet checked in a real browser session (same no-login-credentials limitation as
+§15-17) - next session should log in as MIS, open Roles & Permissions, confirm the Reports section
+now shows 13 individual toggles instead of one, and confirm unchecking one hides that report's card
+on the Reports hub for a role without it.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

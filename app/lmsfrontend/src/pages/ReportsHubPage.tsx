@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLogPageView } from '@/lib/activityLog';
+import { useRole, type PermissionCode } from '@/lib/roleContext';
 import { cn } from '@/lib/utils';
 
 interface ReportEntry {
@@ -23,6 +24,12 @@ interface ReportEntry {
   description: string;
   icon: LucideIcon;
   status: 'live' | 'planned';
+  /** 2026-08-22 (user request): gates whether this card shows at all - each report now has its
+   * own permission code instead of one blanket `report.view` (see reportingRouter.ts's doc
+   * comment). Omitted for Reminder Logs/E-signature Logs - those routes have no permission gate
+   * at all yet, deliberately out of scope for this change, so they stay always-visible like
+   * before. */
+  permission?: PermissionCode;
 }
 
 interface ReportCategory {
@@ -41,28 +48,58 @@ const CATEGORIES: ReportCategory[] = [
   {
     label: 'General',
     reports: [
-      { to: '/reports/loans', label: 'Loan report', description: 'Loans originated over time', icon: CalendarClock, status: 'live' },
-      { to: '/reports/collections', label: 'Collection report', description: 'Amount collected over time', icon: PiggyBank, status: 'live' },
-      { to: '/reports/transactions', label: 'Transaction report', description: 'Every ledger entry, filterable', icon: Receipt, status: 'live' },
+      {
+        to: '/reports/loans',
+        label: 'Loan report',
+        description: 'Loans originated over time',
+        icon: CalendarClock,
+        status: 'live',
+        permission: 'report.loan_origination.view',
+      },
+      {
+        to: '/reports/collections',
+        label: 'Collection report',
+        description: 'Amount collected over time',
+        icon: PiggyBank,
+        status: 'live',
+        permission: 'report.collections.view',
+      },
+      {
+        to: '/reports/transactions',
+        label: 'Transaction report',
+        description: 'Every ledger entry, filterable',
+        icon: Receipt,
+        status: 'live',
+        permission: 'report.transactions.view',
+      },
       {
         to: '/reports/portal-accounts',
         label: 'Portal accounts',
         description: 'Client self-service portal logins',
         icon: Users,
         status: 'live',
+        permission: 'report.portal_accounts.view',
       },
     ],
   },
   {
     label: 'Accounting',
     reports: [
-      { to: '/reports/aging', label: 'Aging report', description: 'Past due, bucketed by age', icon: BarChart3, status: 'live' },
+      {
+        to: '/reports/aging',
+        label: 'Aging report',
+        description: 'Past due, bucketed by age',
+        icon: BarChart3,
+        status: 'live',
+        permission: 'report.aging.view',
+      },
       {
         to: '/reports/ending-balance',
         label: 'Detailed ending current balance',
         description: 'Per-loan balance snapshot',
         icon: FileSpreadsheet,
         status: 'live',
+        permission: 'report.ending_balance.view',
       },
     ],
   },
@@ -75,6 +112,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'Currently overdue accounts',
         icon: ListChecks,
         status: 'live',
+        permission: 'report.accounts_past_due.view',
       },
       {
         to: '/reports/collection-history',
@@ -82,6 +120,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'Paid-installment history',
         icon: Receipt,
         status: 'live',
+        permission: 'report.collection_history.view',
       },
       {
         to: '/reports/expected-collection',
@@ -89,6 +128,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'What should come in and when',
         icon: CalendarCheck,
         status: 'live',
+        permission: 'report.expected_collection.view',
       },
       {
         to: '/reports/first-amortization',
@@ -96,6 +136,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'First installment per loan',
         icon: CalendarClock,
         status: 'live',
+        permission: 'report.first_amortization.view',
       },
       {
         to: '/reports/daily-collection',
@@ -103,6 +144,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'Per-day collections, OR#/AR#/channel',
         icon: CalendarCheck,
         status: 'live',
+        permission: 'report.daily_collection.view',
       },
     ],
   },
@@ -115,6 +157,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'Every disbursed loan, one row per loan',
         icon: FileSpreadsheet,
         status: 'live',
+        permission: 'report.loan_releases.view',
       },
       {
         to: '/reports/fully-paid',
@@ -122,6 +165,7 @@ const CATEGORIES: ReportCategory[] = [
         description: 'Loans settled in full',
         icon: CheckSquare,
         status: 'live',
+        permission: 'report.fully_paid.view',
       },
       {
         to: '/reports/reminder-logs',
@@ -175,6 +219,16 @@ function ReportCard({ report }: { report: ReportEntry }) {
 
 export function ReportsHubPage() {
   useLogPageView('Reports');
+  const { hasPermission } = useRole();
+
+  // 2026-08-22 (user request): each card is now gated by its own permission code instead of one
+  // blanket `report.view` - a report the current user isn't granted simply doesn't appear, rather
+  // than showing a card that 403s on click. Reminder Logs/E-signature Logs have no `permission`
+  // set (see ReportEntry's own doc comment) so they're always shown, unchanged from before.
+  const visibleCategories = CATEGORIES.map((category) => ({
+    ...category,
+    reports: category.reports.filter((report) => !report.permission || hasPermission(report.permission)),
+  })).filter((category) => category.reports.length > 0);
 
   return (
     <div className="space-y-8">
@@ -183,16 +237,20 @@ export function ReportsHubPage() {
         <p className="text-sm text-muted-foreground">Grouped the same way as the legacy system's own report menu.</p>
       </div>
 
-      {CATEGORIES.map((category) => (
-        <div key={category.label} className="space-y-3">
-          <h3 className="text-sm font-medium text-muted-foreground">{category.label}</h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {category.reports.map((report) => (
-              <ReportCard key={report.to} report={report} />
-            ))}
+      {visibleCategories.length === 0 ? (
+        <p className="text-sm text-muted-foreground">You don't have access to any reports yet. Ask an MIS administrator to grant access.</p>
+      ) : (
+        visibleCategories.map((category) => (
+          <div key={category.label} className="space-y-3">
+            <h3 className="text-sm font-medium text-muted-foreground">{category.label}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {category.reports.map((report) => (
+                <ReportCard key={report.to} report={report} />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }

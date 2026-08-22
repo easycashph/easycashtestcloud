@@ -95,7 +95,26 @@ async function main() {
     'ai_extraction.use': 'Use AI document extraction',
     'collection.view_past_due': 'View past due / overdue accounts',
     'collection.note.write': 'Add collection notes to a borrower or loan profile',
-    'report.view': 'View and download reports',
+    // 2026-08-22 (user request): split the single blanket `report.view` into one code per report,
+    // so MIS can grant/restrict access to individual reports instead of all-or-nothing. Covers the
+    // 13 reports gated by reportingRouter.ts as of this change - Reminder Logs/E-signature Logs
+    // are separate routers with no permission gate at all yet, deliberately out of scope here (see
+    // this session's log for the follow-up note). `report.view` itself is removed below (a
+    // one-off cleanup script deletes the now-superseded DB row/grants - see
+    // scripts/remove-report-view-permission.ts, run once then deleted per this repo's convention).
+    'report.loan_origination.view': 'View and download the Loan report',
+    'report.collections.view': 'View and download the Collection report',
+    'report.transactions.view': 'View and download the Transaction report',
+    'report.loan_releases.view': 'View and download the Loan Releases report',
+    'report.aging.view': 'View and download the Aging report',
+    'report.ending_balance.view': 'View and download the Detailed Ending Current Balance report',
+    'report.accounts_past_due.view': 'View and download the Accounts with Past Due report',
+    'report.collection_history.view': 'View and download the Collection (history) report',
+    'report.expected_collection.view': 'View and download the Expected Collection report',
+    'report.first_amortization.view': 'View and download the First Amortization report',
+    'report.daily_collection.view': 'View and download the Daily Collection report',
+    'report.fully_paid.view': 'View and download the Fully Paid Accounts report',
+    'report.portal_accounts.view': 'View and download the Portal Accounts report',
     'user.manage': 'Manage staff user accounts and roles',
     'audit_log.read': 'View the audit log',
     'reminder_settings.manage': 'Manage SMS/email reminder settings',
@@ -113,6 +132,25 @@ async function main() {
       create: { code, description: permissionDescriptions[code] },
     });
   }
+
+  // 2026-08-22: every role that previously had the single `report.view` gets all 13 granular
+  // report codes instead, preserving "sees every report" as the default - MIS can narrow
+  // individual roles down from there via the Roles & Permissions screen.
+  const ALL_REPORT_PERMISSIONS = [
+    'report.loan_origination.view',
+    'report.collections.view',
+    'report.transactions.view',
+    'report.loan_releases.view',
+    'report.aging.view',
+    'report.ending_balance.view',
+    'report.accounts_past_due.view',
+    'report.collection_history.view',
+    'report.expected_collection.view',
+    'report.first_amortization.view',
+    'report.daily_collection.view',
+    'report.fully_paid.view',
+    'report.portal_accounts.view',
+  ];
 
   // Default grants per role, mirroring each route's pre-existing `_ROLES` allow-list exactly (see
   // this block's own doc comment above for the full rationale).
@@ -134,7 +172,7 @@ async function main() {
       'ai_extraction.use',
       'collection.view_past_due',
       'collection.note.write',
-      'report.view',
+      ...ALL_REPORT_PERMISSIONS,
     ],
     CRM: [
       'loan_application.manage',
@@ -147,7 +185,7 @@ async function main() {
       'ai_extraction.use',
       'collection.view_past_due',
       'collection.note.write',
-      'report.view',
+      ...ALL_REPORT_PERMISSIONS,
     ],
     Finance: [
       'loan_product.write',
@@ -156,7 +194,7 @@ async function main() {
       'esignature.manage',
       'collection.view_past_due',
       'collection.note.write',
-      'report.view',
+      ...ALL_REPORT_PERMISSIONS,
     ],
     Accounting: [
       'loan_account.activate',
@@ -173,7 +211,7 @@ async function main() {
       'esignature.manage',
       'collection.view_past_due',
       'collection.note.write',
-      'report.view',
+      ...ALL_REPORT_PERMISSIONS,
     ],
     'Collection Officer': [
       'payment.record',
@@ -182,7 +220,7 @@ async function main() {
       'esignature.manage',
       'collection.view_past_due',
       'collection.note.write',
-      'report.view',
+      ...ALL_REPORT_PERMISSIONS,
     ],
   };
   for (const [roleName, codes] of Object.entries(defaultRolePermissions)) {
