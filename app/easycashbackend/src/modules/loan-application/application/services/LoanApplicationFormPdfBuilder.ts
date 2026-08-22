@@ -26,9 +26,11 @@ interface Field {
   value: string;
 }
 
+/** "PHP" not "₱" - pdf-lib's standard (non-embedded) fonts use WinAnsi encoding, which has no
+ * glyph for the peso sign and throws on `drawText` if given one. */
 function money(amount: number | undefined | null): string {
   if (amount === undefined || amount === null) return '—';
-  return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `PHP ${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function date(d: Date | undefined | null): string {

@@ -420,10 +420,32 @@ signature-stamping an existing PDF in the loan-signing module, not for building 
 
 Verified: `npx tsc --noEmit` clean on both apps. Docker Desktop had crashed/quit between sessions
 (unrelated to this change) - relaunched, waited for the daemon, then rebuilt `easycashbackend` and
-`lmsfrontend` clean; both containers came back healthy. Still not verified end-to-end in the
-browser (no staff login credentials available in this session, same limitation as §14). Next
-session should log in, generate a form on a real approved
-application, and confirm the PDF renders correctly and appears in Attachments.
+`lmsfrontend` clean; both containers came back healthy.
+
+**End-to-end verified without a browser login** (none available in this session, same limitation
+as §14): wrote a one-off script (`scripts/verify-generate-loan-application-form.ts`, created, run,
+then deleted per this repo's convention) that calls `GenerateLoanApplicationFormUseCase` directly
+against the real local dev database - bypasses HTTP/auth entirely, but exercises the exact same
+code path the UI button calls. Ran it against a real (test) APPROVED application
+(`60bf78bf-58e6-40c2-ba8a-257143dacb1f`, "TESTNOMER TESTMIDDLE TESTLASTNAME").
+
+**Bug found and fixed by this verification**: pdf-lib's standard (non-embedded) Helvetica font uses
+WinAnsi encoding, which has no glyph for "₱" (U+20B1) - `drawText` threw
+`WinAnsi cannot encode "₱"` the first time this ran. Fixed by switching the `money()` formatter in
+`LoanApplicationFormPdfBuilder.ts` to prefix amounts with "PHP " instead of the peso sign
+(`—` for missing values is fine - that's a standard WinAnsi/cp1252 character). Re-ran after the
+fix: succeeded, produced a 3.4 KB PDF, matched the approved mockup layout exactly when inspected
+visually (letterhead, all 4 sections, signature lines). Confirmed the resulting `Attachment` row
+is findable via `attachmentRepository.listByOwner('LOAN_APPLICATION', applicationId)` - the exact
+query `AttachmentsPanel` uses - with the correct `uploadedByName` ("Nomer Perez") resolved, proving
+the "auto-attach, no manual upload" behavior actually works, not just compiles. Cleaned up
+afterward: deleted the test `Attachment` row and its underlying storage file, deleted the temporary
+verification script, rebuilt `easycashbackend` once more with the peso-sign fix included.
+
+Not yet checked: the actual "Print Application" button click in a real browser session (only the
+underlying use case was exercised, not the HTTP route/frontend wiring) - low risk since both are
+thin pass-throughs verified separately (`tsc` clean, route wired in the router, button wired to the
+mutation), but worth a real click-through next session if a staff login becomes available.
 
 ## Current state
 
