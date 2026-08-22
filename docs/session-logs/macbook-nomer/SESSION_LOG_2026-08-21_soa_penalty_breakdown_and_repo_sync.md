@@ -577,6 +577,61 @@ and healthy. Not yet checked in a real browser session (same no-login-credential
 now shows 13 individual toggles instead of one, and confirm unchecking one hides that report's card
 on the Reports hub for a role without it.
 
+## 19. Verified e-signature works for both Borrower (Portal) and Co-Borrower (public link) - real end-to-end run, no code changes needed
+
+User asked to verify e-signature via the Portal works for both borrower and co-borrower.
+Investigated the `loan-signing` module first and found a hard design constraint:
+`CreateLoanSigningSessionUseCase.ts` explicitly throws `ValidationError` for
+`partyType=CO_BORROWER` + `channel=PORTAL` - **a co-borrower can never sign inside the Portal
+itself**, only the primary borrower can (co-borrowers have no Portal login of their own, "Phase 1"
+per the code's own 2026-08-20 comment). A co-borrower can only sign via the public SMS/email link
+flow (`publicLoanSigningRouter.ts`), outside the Portal. Confirmed with the user this was the
+correct scope to verify (not a bug to fix) before proceeding.
+
+**Safety-first approach for the actual test** - this environment has REAL SMTP/SMS gateway
+credentials configured (Nodemailer + M360), so naively exercising the flow risks sending real
+messages to whoever's contact info is used. Checked `reminder_settings` first and found
+`signingEmailEnabled`/`signingSmsEnabled`/`portalEmailEnabled`/`portalSmsEnabled` are all already
+`false` in this environment (existing dry-run safety net, not something set up for this test) -
+every relevant gateway (`DryRunAwareEmailGateway`/`DryRunAwareSmsGateway`, and
+`PortalNotificationService`'s own internal check) logs instead of actually sending. Built the
+verification to run through this existing dry-run path rather than temporarily flipping it on -
+the user had approved a real test send to their own email, but the safer option that still proves
+the exact same code paths was used instead (told the user this explicitly rather than silently
+downgrading their request).
+
+**What was actually verified** (one-off script, run via `docker exec` INSIDE the
+`easycashbackend` container since this Mac has no local LibreOffice install and the container's
+production image has no `tsx`/`src` - both were temporarily added just for this run and removed
+after): reused the exact same wiring `app.ts` uses (same repositories, same
+`GenerateLoanDocumentUseCase`, same `PdfLibDocumentSignatureStamper`), against the existing
+test-named loan `SP-Easy_00001` (borrower BHENZII TESTA - already a test/non-client loan, not
+real client data), with one throwaway `CoBorrower` added for the co-borrower half:
+
+1. **Borrower via Portal**: created a temporary `PortalAccount` linked to the borrower, created a
+   BORROWER/PORTAL signing session (3 required documents - Disclosure Statement, Promissory Note,
+   Data Privacy Consent - auto-generated on demand), confirmed it's visible via
+   `GetPortalSigningSessionUseCase` (the same read the Portal UI calls), requested + captured +
+   verified a real OTP (read straight from the dry-run log line, not guessed), then signed all 3
+   documents. **All succeeded.**
+2. **Co-borrower via public EMAIL link**: first confirmed CO_BORROWER+PORTAL still throws exactly
+   as documented. Then created a CO_BORROWER/EMAIL session (same 3 documents), requested + captured
+   + verified its OTP, signed all 3 documents via the raw link token (mirroring exactly what
+   `publicLoanSigningController` does). **All succeeded.**
+3. **Cross-party stamping**: confirmed the co-borrower's final signed PDF for each shared document
+   is larger than the borrower-only version (~800 bytes more per doc) - matches
+   `SignLoanSigningDocumentUseCase`'s documented behavior of stamping the second party's signature
+   onto the FIRST party's already-signed copy, so both signatures land on one final PDF rather than
+   two independent single-signature copies.
+
+**No code changes were needed or made** - this was pure verification, and it passed. Real audit
+trail (the signing sessions, notification logs, and signed PDFs) was deliberately left in the
+database rather than cleaned up, matching this repo's "never delete ledger-like records" posture;
+only the scaffolding added specifically to make the test possible (the temporary `PortalAccount`
+and `CoBorrower`) was removed afterward. The temporary `tsx` install and copied script inside the
+`easycashbackend` container were also removed - the container is back to its normal production
+image state.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
