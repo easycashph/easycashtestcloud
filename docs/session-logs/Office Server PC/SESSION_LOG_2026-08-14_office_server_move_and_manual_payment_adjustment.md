@@ -2075,3 +2075,33 @@ i.e. genuinely protected on the next re-migration, not just fixed for today.
   account balance stale" symptom in the future, the same fix pattern applies: correct the balance,
   record a native `$0.00 ADJUSTMENT` transaction to lock it against resync, verify via the
   `lockedLoanAccountIds` query.
+
+## §44 - Two rounds of `git pull` from concurrent sessions, rebuilt and verified (2026-08-21/22)
+
+Housekeeping, no new work authored on this machine. Two separate `git pull`s brought in work from a
+concurrent session (MacBook Nomer), each followed by the standard type-check -> rebuild -> health-check
+routine on this machine:
+
+1. **`3e7f4bc`**: a new Loan Application Form PDF generator
+   (`LoanApplicationFormPdfBuilder.ts`/`GenerateLoanApplicationFormUseCase.ts`, wired into
+   `loanApplicationController.ts`/`Router.ts` and a new download action on
+   `LoanApplicationDetailPage.tsx`) plus some `LoanTransaction` domain additions.
+2. **`3bead23`**: the **Portal Accounts Report** - the exact MIS-only report scoped and mocked up
+   earlier this session (§ mockups, paused mid-session by the user with "stop muna natin ito") turned
+   out to have been built for real on MacBook Nomer instead:
+   `GetPortalAccountsReportUseCase.ts`, `PrismaReportingRepository.ts`/`reportWriters.ts` additions, a
+   new reporting router/controller/presenter surface, `PortalAccountsReportPage.tsx`, and a
+   `ReportsHubPage.tsx`/`roleContext.tsx` update to surface it (role-gated, matching the MIS-only intent
+   from the earlier mockup conversation).
+
+Both rounds: `npx tsc --noEmit` clean, `docker compose up -d --build easycashbackend lmsfrontend`,
+confirmed fresh (non-stale) container uptime and `/health` 200 both times - no code authored, purely
+sync + verify.
+
+### Current state / follow-ups
+
+- This machine (Office Server PC) is fully caught up with `origin/main` as of `3bead23`, running the
+  Loan Application Form PDF feature and the real Portal Accounts Report live.
+- The Portal Accounts Report work-in-progress on THIS machine (mockups only, never coded per the
+  user's pause) is now moot - the real, shipped version arrived via sync from MacBook Nomer instead.
+  Nothing further to do here.
