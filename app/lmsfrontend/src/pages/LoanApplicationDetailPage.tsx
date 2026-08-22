@@ -73,7 +73,7 @@ import { TermTip } from '@/components/TermTip';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, downloadFile, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, fetchAllPages, fetchFileBlob } from '@/lib/apiClient';
 import type { Attachment } from '@/lib/documentApiTypes';
 import { classifyProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
@@ -1797,12 +1797,25 @@ export function LoanApplicationDetailPage() {
 
   /** 2026-08-21 (user request): "Print Application" - generates the PDF, saves it as an Attachment
    * on the application (auto-shows in the Attachments tab below without a manual upload), then
-   * immediately downloads it for the staff member who clicked the button. */
+   * opens it in a new tab so staff can preview it before printing/saving - not a forced download.
+   * The tab is opened synchronously in the button's onClick (see `previewWindowRef` below), before
+   * any awaiting happens, since browsers block `window.open` calls made outside a direct click
+   * handler - the fetched PDF is then loaded into that already-open tab once ready. */
+  const previewWindowRef = React.useRef<Window | null>(null);
   const generateFormMutation = useMutation({
     mutationFn: () => apiClient.post<Attachment>(`/loan-applications/${applicationId}/generate-form`, {}),
     onSuccess: async (attachment) => {
       queryClient.invalidateQueries({ queryKey: ['attachments', 'LOAN_APPLICATION', applicationId] });
-      await downloadFile(`/attachments/${attachment.id}/download`, attachment.fileName);
+      const blob = await fetchFileBlob(`/attachments/${attachment.id}/download`);
+      const url = URL.createObjectURL(blob);
+      if (previewWindowRef.current && !previewWindowRef.current.closed) {
+        previewWindowRef.current.location.href = url;
+      } else {
+        window.open(url, '_blank');
+      }
+    },
+    onError: () => {
+      previewWindowRef.current?.close();
     },
   });
 
@@ -2003,7 +2016,10 @@ export function LoanApplicationDetailPage() {
                   variant="outline"
                   className="border-primary/50 text-primary hover:bg-primary/5"
                   disabled={generateFormMutation.isPending}
-                  onClick={() => generateFormMutation.mutate()}
+                  onClick={() => {
+                    previewWindowRef.current = window.open('', '_blank');
+                    generateFormMutation.mutate();
+                  }}
                 >
                   {generateFormMutation.isPending ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

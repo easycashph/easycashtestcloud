@@ -447,6 +447,36 @@ underlying use case was exercised, not the HTTP route/frontend wiring) - low ris
 thin pass-throughs verified separately (`tsc` clean, route wired in the router, button wired to the
 mutation), but worth a real click-through next session if a staff login becomes available.
 
+## 16. Print Application now previews in a new tab instead of forcing a download
+
+User asked whether clicking "Print Application" shows a preview first - it didn't (§15's
+implementation force-downloaded via the existing `downloadFile` helper, same as every other
+attachment download in this app). Changed to open the generated PDF in a new browser tab instead,
+so staff see it before deciding to print/save (a plain browser PDF viewer, with its own
+print/save/zoom controls) - a better fit for something literally called "Print Application" than a
+blind download.
+
+Implementation note: opening a new tab has to happen synchronously inside the button's `onClick`
+(`window.open('', '_blank')`, before any `await`) - browsers block `window.open` calls made from
+inside an async callback (the mutation's `onSuccess`) as an unrequested popup. The blank tab's
+`Window` reference is stashed in a ref, then once the PDF blob is fetched (`fetchFileBlob`, the
+existing authenticated-blob helper - `downloadFile` wasn't reusable here since it forces a save
+dialog instead of just returning the bytes), that already-open tab's `location.href` is set to the
+blob's object URL.
+
+**Verified with a real generation, left in place per user request** (not cleaned up like §15's
+test run): re-ran the same one-off verification script (created, run, deleted again) against the
+existing TESTNOMER application (`60bf78bf-58e6-40c2-ba8a-257143dacb1f`) - the user's original
+ask was to test against TEST2NOMER specifically, but that borrower/application no longer exists
+(removed in this same session's earlier test-account cleanup, see the "Test account cleanup"
+context from earlier in this log) - confirmed with the user and used TESTNOMER instead. This
+attachment (`eff81539-9be7-4277-a9f4-c3eee854b19a`) is intentionally left on the application for
+the user to see in the actual Attachments tab, unlike §15's test run which was cleaned up
+immediately after.
+
+Verified: `npx tsc --noEmit` clean. Docker rebuild of `lmsfrontend` (and `easycashbackend` came
+along as a dependency recreate) succeeded, both containers healthy.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run
