@@ -645,13 +645,55 @@ co-borrower account to function; building real Portal accounts for co-borrowers 
 worth it if co-borrowers need broader Portal access later (checking loan status, payment history,
 etc.), not just to remove this badge. No code changes made or needed.
 
+## 20. Sidebar logo: replaced the small cropped icon + company-name text with the full wordmark logo (dark-mode-aware)
+
+User showed a screenshot of the LMS sidebar header in dark mode - the Easycash logo was squeezed
+into a 36x36 icon box with "Easycash Lending Company Inc." / "Manila Branch" text beside it - and
+asked to show the Easycash logo only, dark mode. Went through a mockup round first per the standing
+workflow rule.
+
+User supplied a source file at `/Users/nomer/Downloads/B&W-Logo.png` for the dark-mode version.
+First read of it appeared blank/white - turned out to be a real image with a fully transparent
+background (confirmed via `alpha.getbbox()`), just invisible without something to composite it
+onto. Compositing onto a dark background revealed a pure-white "easycash" wordmark (with the ®
+mark), purpose-built for dark surfaces - no white card needed behind it. Cropped to its content
+bbox (800x207) and saved as `app/lmsfrontend/public/logo-easycash-white.png`.
+
+Presented mockups for both the header layout (logo-only vs. logo + "Manila Branch" caption) and,
+after user asked "paano kung nasa light mode nga pala?", for how light mode should look (the
+existing colored logo stays as-is there, since its navy wordmark reads fine on a light sidebar).
+User picked logo-only, both modes: **"option b. logo only"** then **"oo, ituloy mo na"**.
+
+Implementation, [AppLayout.tsx](../../../app/lmsfrontend/src/layouts/AppLayout.tsx):
+- Removed the `COMPANY_INFO` import (no longer referenced in the sidebar header).
+- Replaced the old `<img className="h-9 w-9 ... rounded bg-white ...">` + name/branch text block
+  with two `<img>` tags switched by Tailwind's `dark:` variant (matches how every other themed
+  value in this app already switches - no JS-based theme branching):
+  - `logo-easycash.png` (existing colored logo) with `dark:hidden` for light mode
+  - `logo-easycash-white.png` (new) with `hidden dark:block` for dark mode
+- Branch name ("Manila Branch") dropped from the sidebar header per this request; still shown
+  elsewhere in the app (e.g. the account menu), not removed from the system.
+
+Verified: `npx tsc --noEmit` clean on `lmsfrontend`. Docker Desktop had crashed/stuck again between
+sessions (`docker info` NOT_READY) - relaunched via `open -a Docker`, waited for the daemon, then
+`docker compose up -d --build lmsfrontend`; `docker ps` confirmed both `lmsfrontend` and
+`easycashbackend` came back up healthy. Confirmed both `/logo-easycash-white.png` and
+`/logo-easycash.png` are served with HTTP 200 from the running container, and loaded the white
+logo directly in the browser to visually confirm it renders correctly (crisp, correct 800x207
+dimensions, no artifacts) against a dark background.
+
+**Not verified**: the actual logged-in sidebar view itself - this Mac still has no staff login
+credentials available (same limitation as every UI feature since §14). The asset and the component
+change are confirmed correct in isolation; next session with real credentials should do a final
+visual check of the live sidebar in both light and dark mode.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-18 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-20 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§18) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§20) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
@@ -673,8 +715,8 @@ here - see that section's own cross-link. Everything else below (§14-§18) is n
   repository code directly against the local dev database instead, which caught one real bug
   (§15's peso-sign PDF-encoding crash) before it would have reached a user. Next session with
   actual LMS credentials should click through: the "Recorded by" column (§14), Print Application +
-  its Attachments auto-attach (§15/§16), the Portal Accounts report (§17), and the new per-report
-  Roles & Permissions toggles (§18).
+  its Attachments auto-attach (§15/§16), the Portal Accounts report (§17), the new per-report
+  Roles & Permissions toggles (§18), and the sidebar logo swap in both light and dark mode (§20).
 
 ## Known follow-up work
 
