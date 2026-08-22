@@ -477,6 +477,52 @@ immediately after.
 Verified: `npx tsc --noEmit` clean. Docker rebuild of `lmsfrontend` (and `easycashbackend` came
 along as a dependency recreate) succeeded, both containers healthy.
 
+## 17. New report: Portal Accounts (net-new, no prior list endpoint existed)
+
+User asked for a new report listing every client self-service Portal Account. Mocked up first
+(new card on the Reports hub + the report page itself) and got sign-off before implementing.
+
+Confirmed this is genuinely net-new, not just wiring up an existing endpoint - there was no
+staff-facing "list all Portal Accounts" endpoint anywhere; `PortalAccount` data was previously
+only ever looked up one-at-a-time (a single client's own portal status). Built following this
+module's existing "one flat table -> one .xlsx sheet" convention exactly (matches all 14 other
+live reports):
+
+- `IReportingRepository`: new `PortalAccountReportRow` type + `getPortalAccountsReport(filter:
+  { search?, status? })`. Deliberately **not branch-scoped**, unlike most other reports here - a
+  `PortalAccount` has no `branchId` of its own (only gains one indirectly once linked to a
+  Borrower), and the login itself isn't a per-branch concept.
+- `PrismaReportingRepository.getPortalAccountsReport`: `name` prefers the linked Borrower's name
+  (authoritative once linked, per `PortalAccount`'s own schema doc comment) and falls back to the
+  account's own pre-application profile fields, then the email if neither has a name yet.
+  `linkedTo` is deliberately the Borrower's *name*, not a specific loan code - a Borrower can have
+  more than one loan account and there's no single "the" one to pick without inventing a rule.
+  `search` matches name/email across both the account's own fields and the linked Borrower's.
+- `GetPortalAccountsReportUseCase`, `presentPortalAccountReportRow`, `writePortalAccountsReportXlsx`
+  (no legacy `.xlsx` sample to match column-for-column, unlike most of this module's other
+  writers - net-new report, own column order), new routes `GET /reports/portal-accounts` (JSON) /
+  `.xlsx` (export), wired into `app.ts` alongside the other report use cases.
+- Frontend: `PortalAccountsReportPage.tsx` (search box + status dropdown, debounced via the
+  existing `useDebouncedValue` hook, no date-range filter - account creation date isn't what staff
+  filter portal accounts by), new route in `App.tsx`, new "Portal accounts" card (marked live) in
+  the Reports hub's General category.
+
+**No "Last Login" column** - confirmed `PortalAccount` has no such field in the schema today;
+left out rather than inventing one, per CLAUDE.md's "never fabricate" rule. Could be added later
+if that data starts being tracked.
+
+Verified end-to-end without a browser login (same limitation as §15/§16): wrote a one-off script
+(created, run, then deleted) that calls `GetPortalAccountsReportUseCase` directly. This local dev
+database has zero `PortalAccount` rows today, so also inserted two throwaway test rows directly
+via SQL (one linked to a real Borrower, one not) to exercise the name-resolution/linking logic,
+confirmed both resolved correctly (linked row showed the Borrower's name and `linkedTo`; unlinked
+row showed its own profile name and `linkedTo: null`), confirmed the status filter and search both
+work, confirmed the `.xlsx` writer produces a valid buffer - then deleted both test rows. `npx tsc
+--noEmit` clean on both apps; `easycashbackend` and `lmsfrontend` rebuilt clean and healthy.
+
+Not yet checked: the actual page in a real browser session (same caveat as the last two features
+this session - no staff login available here).
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run

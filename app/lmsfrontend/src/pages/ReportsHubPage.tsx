@@ -11,6 +11,7 @@ import {
   CheckSquare,
   MessageSquare,
   FileSignature,
+  Users,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLogPageView } from '@/lib/activityLog';
@@ -43,6 +44,13 @@ const CATEGORIES: ReportCategory[] = [
       { to: '/reports/loans', label: 'Loan report', description: 'Loans originated over time', icon: CalendarClock, status: 'live' },
       { to: '/reports/collections', label: 'Collection report', description: 'Amount collected over time', icon: PiggyBank, status: 'live' },
       { to: '/reports/transactions', label: 'Transaction report', description: 'Every ledger entry, filterable', icon: Receipt, status: 'live' },
+      {
+        to: '/reports/portal-accounts',
+        label: 'Portal accounts',
+        description: 'Client self-service portal logins',
+        icon: Users,
+        status: 'live',
+      },
     ],
   },
   {

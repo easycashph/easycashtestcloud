@@ -184,3 +184,14 @@ export interface FullyPaidAccountsReportRow {
   maturityDate: string | null;
   fullyPaidDate: string | null;
 }
+
+/** 2026-08-22 (user request): JSON counterpart of the backend's PortalAccountReportResponse. */
+export interface PortalAccountReportRow {
+  name: string;
+  email: string;
+  contactNumber: string | null;
+  status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'DELETED';
+  linkedTo: string | null;
+  emailVerifiedAt: string | null;
+  createdAt: string;
+}

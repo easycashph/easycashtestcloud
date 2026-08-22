@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type PortalAccountStatus } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
 import { env } from '@shared/config/env';
 import { Money } from '@shared/domain/Money';
@@ -23,6 +23,7 @@ import type {
   ListReportTransactionsOptions,
   LoanReleaseReportRow,
   OriginationReportRow,
+  PortalAccountReportRow,
   ReportGranularity,
   TransactionReportRow,
 } from '../application/ports/IReportingRepository';
@@ -1103,6 +1104,41 @@ export class PrismaReportingRepository implements IReportingRepository {
     }
     rows.sort((a, b) => (b.fullyPaidDate?.getTime() ?? 0) - (a.fullyPaidDate?.getTime() ?? 0));
     return rows;
+  }
+
+  async getPortalAccountsReport(filter: { search?: string; status?: string }): Promise<PortalAccountReportRow[]> {
+    const accounts = await prisma.portalAccount.findMany({
+      where: {
+        ...(filter.status ? { status: filter.status as PortalAccountStatus } : {}),
+        ...(filter.search
+          ? {
+              OR: [
+                { email: { contains: filter.search, mode: 'insensitive' } },
+                { firstName: { contains: filter.search, mode: 'insensitive' } },
+                { lastName: { contains: filter.search, mode: 'insensitive' } },
+                { borrower: { firstName: { contains: filter.search, mode: 'insensitive' } } },
+                { borrower: { lastName: { contains: filter.search, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      include: { borrower: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return accounts.map((account) => {
+      const ownName = [account.firstName, account.middleName, account.lastName].filter(Boolean).join(' ');
+      const borrowerName = account.borrower ? formatFullName(account.borrower) : '';
+      return {
+        name: borrowerName || ownName || account.email,
+        email: account.email,
+        contactNumber: account.contactNumber ?? account.mobilePhone1 ?? null,
+        status: account.status,
+        linkedTo: account.borrower ? borrowerName : null,
+        emailVerifiedAt: account.emailVerifiedAt,
+        createdAt: account.createdAt,
+      };
+    });
   }
 }
 

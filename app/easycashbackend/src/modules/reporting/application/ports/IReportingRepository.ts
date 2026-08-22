@@ -263,6 +263,22 @@ export interface FullyPaidAccountsReportRow {
   fullyPaidDate: Date | null;
 }
 
+/** 2026-08-22 (user request): every client self-service Portal account on file. `name` prefers
+ * the linked Borrower's name (authoritative once linked, per PortalAccount's own schema doc
+ * comment) and falls back to the account's own pre-application profile fields, then finally the
+ * email if neither has a name on file yet. `linkedTo` is the Borrower's display name when linked,
+ * `null` otherwise - deliberately not a specific loan code, since a Borrower can have more than
+ * one loan account and there's no single "the" one to pick without inventing a rule. */
+export interface PortalAccountReportRow {
+  name: string;
+  email: string;
+  contactNumber: string | null;
+  status: string;
+  linkedTo: string | null;
+  emailVerifiedAt: Date | null;
+  createdAt: Date;
+}
+
 export interface IReportingRepository {
   getLoanOriginationReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<OriginationReportRow[]>;
   getCollectionReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<CollectionReportRow[]>;
@@ -279,4 +295,7 @@ export interface IReportingRepository {
   getFirstAmortizationReport(filter: DateRangeFilter & { branchId?: string }): Promise<FirstAmortizationReportRow[]>;
   getDailyCollectionReport(filter: DateRangeFilter & { branchId?: string; types?: string[]; channels?: string[] }): Promise<DailyCollectionReportRow[]>;
   getFullyPaidAccountsReport(filter: DateRangeFilter & { branchId?: string }): Promise<FullyPaidAccountsReportRow[]>;
+  /** Not branch-scoped - a PortalAccount has no `branchId` of its own (only gains one indirectly,
+   * once linked to a Borrower), and the login itself isn't a per-branch concept. */
+  getPortalAccountsReport(filter: { search?: string; status?: string }): Promise<PortalAccountReportRow[]>;
 }

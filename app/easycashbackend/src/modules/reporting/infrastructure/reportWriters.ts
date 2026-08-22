@@ -8,6 +8,7 @@ import type {
   ExpectedCollectionReportRow,
   FirstAmortizationReportRow,
   FullyPaidAccountsReportRow,
+  PortalAccountReportRow,
 } from '../application/ports/IReportingRepository';
 
 const DATE_FMT = 'mm/dd/yyyy';
@@ -206,6 +207,26 @@ export function writeFullyPaidAccountsReportXlsx(rows: FullyPaidAccountsReportRo
   return writeTabularXlsx({
     sheetName: 'Fully Paid Accounts',
     columns: FULLY_PAID_COLUMNS,
+    rows,
+    totals: { label: `Total (${rows.length} accounts)` },
+  });
+}
+
+/** 2026-08-22 (user request) - net-new report, no legacy `.xlsx` sample to match column-for-column. */
+const PORTAL_ACCOUNTS_COLUMNS: TabularColumn<PortalAccountReportRow>[] = [
+  { header: 'Name', key: 'name', width: 28 },
+  { header: 'Email', key: 'email', width: 28 },
+  { header: 'Contact Number', key: 'contactNumber', width: 16 },
+  { header: 'Status', key: 'status', width: 18 },
+  { header: 'Linked Client', key: 'linkedTo', width: 24 },
+  { header: 'Email Verified', key: 'emailVerifiedAt', width: 14, numFmt: DATE_FMT },
+  { header: 'Created', key: 'createdAt', width: 14, numFmt: DATE_FMT },
+];
+
+export function writePortalAccountsReportXlsx(rows: PortalAccountReportRow[]): Promise<Buffer> {
+  return writeTabularXlsx({
+    sheetName: 'Portal Accounts',
+    columns: PORTAL_ACCOUNTS_COLUMNS,
     rows,
     totals: { label: `Total (${rows.length} accounts)` },
   });

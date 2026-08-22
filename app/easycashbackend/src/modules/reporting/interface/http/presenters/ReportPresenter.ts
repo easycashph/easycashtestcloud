@@ -6,6 +6,7 @@ import type {
   FirstAmortizationReportRow,
   FullyPaidAccountsReportRow,
   LoanReleaseReportRow,
+  PortalAccountReportRow,
   TransactionReportRow,
 } from '../../../application/ports/IReportingRepository';
 
@@ -247,5 +248,24 @@ export function presentFullyPaidAccountsReportRow(row: FullyPaidAccountsReportRo
     ...row,
     maturityDate: row.maturityDate ? row.maturityDate.toISOString() : null,
     fullyPaidDate: row.fullyPaidDate ? row.fullyPaidDate.toISOString() : null,
+  };
+}
+
+/** 2026-08-22 (user request): JSON counterpart of PortalAccountReportRow. */
+export interface PortalAccountReportResponse {
+  name: string;
+  email: string;
+  contactNumber: string | null;
+  status: string;
+  linkedTo: string | null;
+  emailVerifiedAt: string | null;
+  createdAt: string;
+}
+
+export function presentPortalAccountReportRow(row: PortalAccountReportRow): PortalAccountReportResponse {
+  return {
+    ...row,
+    emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
   };
 }

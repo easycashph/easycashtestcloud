@@ -34,6 +34,8 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/daily-collection.xlsx', requireAuth, requireReportView, controller.dailyCollectionXlsx);
   router.get('/reports/fully-paid', requireAuth, requireReportView, controller.fullyPaid);
   router.get('/reports/fully-paid.xlsx', requireAuth, requireReportView, controller.fullyPaidXlsx);
+  router.get('/reports/portal-accounts', requireAuth, requireReportView, controller.portalAccounts);
+  router.get('/reports/portal-accounts.xlsx', requireAuth, requireReportView, controller.portalAccountsXlsx);
 
   return router;
 }

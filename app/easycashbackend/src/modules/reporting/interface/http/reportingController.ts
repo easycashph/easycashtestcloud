@@ -15,6 +15,7 @@ import type { GetExpectedCollectionReportUseCase } from '../../application/use-c
 import type { GetFirstAmortizationReportUseCase } from '../../application/use-cases/GetFirstAmortizationReportUseCase';
 import type { GetDailyCollectionReportUseCase } from '../../application/use-cases/GetDailyCollectionReportUseCase';
 import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
+import type { GetPortalAccountsReportUseCase } from '../../application/use-cases/GetPortalAccountsReportUseCase';
 import type { ListDistinctChannelsUseCase } from '../../application/use-cases/ListDistinctChannelsUseCase';
 import type { ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
@@ -27,6 +28,7 @@ import {
   writeExpectedCollectionReportXlsx,
   writeFirstAmortizationReportXlsx,
   writeFullyPaidAccountsReportXlsx,
+  writePortalAccountsReportXlsx,
 } from '../../infrastructure/reportWriters';
 import {
   presentAccountsWithPastDueReportRow,
@@ -36,6 +38,7 @@ import {
   presentFirstAmortizationReportRow,
   presentFullyPaidAccountsReportRow,
   presentLoanReleaseReportRow,
+  presentPortalAccountReportRow,
   presentTransactionReportRow,
 } from './presenters/ReportPresenter';
 
@@ -53,6 +56,7 @@ export interface ReportingControllerDeps {
   getFirstAmortizationReportUseCase: GetFirstAmortizationReportUseCase;
   getDailyCollectionReportUseCase: GetDailyCollectionReportUseCase;
   getFullyPaidAccountsReportUseCase: GetFullyPaidAccountsReportUseCase;
+  getPortalAccountsReportUseCase: GetPortalAccountsReportUseCase;
   listDistinctChannelsUseCase: ListDistinctChannelsUseCase;
 }
 
@@ -410,6 +414,35 @@ export class ReportingController {
       const buffer = await writeFullyPaidAccountsReportXlsx(rows);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Fully Paid Accounts.xlsx"');
+      res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-22 (user request): every client self-service Portal account on file - `search`
+   * matches name (own profile fields or linked Borrower's) or email; `status` filters to one of
+   * PENDING_VERIFICATION/ACTIVE/DELETED. Not branch-scoped - see IReportingRepository's doc
+   * comment on why. */
+  portalAccounts = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const search = typeof req.query.search === 'string' && req.query.search.trim() ? req.query.search.trim() : undefined;
+      const status = typeof req.query.status === 'string' && req.query.status.trim() ? req.query.status.trim() : undefined;
+      const rows = await this.deps.getPortalAccountsReportUseCase.execute({ search, status });
+      res.status(200).json({ items: rows.map(presentPortalAccountReportRow) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  portalAccountsXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const search = typeof req.query.search === 'string' && req.query.search.trim() ? req.query.search.trim() : undefined;
+      const status = typeof req.query.status === 'string' && req.query.status.trim() ? req.query.status.trim() : undefined;
+      const rows = await this.deps.getPortalAccountsReportUseCase.execute({ search, status });
+      const buffer = await writePortalAccountsReportXlsx(rows);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="Portal Accounts.xlsx"');
       res.status(200).send(buffer);
     } catch (error) {
       next(error);

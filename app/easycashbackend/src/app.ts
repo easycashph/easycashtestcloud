@@ -315,6 +315,7 @@ import { GetFirstAmortizationReportUseCase } from '@modules/reporting/applicatio
 import { GetDailyCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetDailyCollectionReportUseCase';
 import { ListDistinctChannelsUseCase } from '@modules/reporting/application/use-cases/ListDistinctChannelsUseCase';
 import { GetFullyPaidAccountsReportUseCase } from '@modules/reporting/application/use-cases/GetFullyPaidAccountsReportUseCase';
+import { GetPortalAccountsReportUseCase } from '@modules/reporting/application/use-cases/GetPortalAccountsReportUseCase';
 import { PrismaReportingRepository } from '@modules/reporting/infrastructure/PrismaReportingRepository';
 import { ExcelJsLoanReleasesReportWriter } from '@modules/reporting/infrastructure/ExcelJsLoanReleasesReportWriter';
 import { PrismaUnitOfWork } from '@shared/infrastructure/PrismaUnitOfWork';
@@ -1514,6 +1515,7 @@ export function createApp(): Express {
       getDailyCollectionReportUseCase: new GetDailyCollectionReportUseCase({ reportingRepository }),
       listDistinctChannelsUseCase: new ListDistinctChannelsUseCase({ reportingRepository }),
       getFullyPaidAccountsReportUseCase: new GetFullyPaidAccountsReportUseCase({ reportingRepository }),
+      getPortalAccountsReportUseCase: new GetPortalAccountsReportUseCase({ reportingRepository }),
     },
     tokenService,
   );
