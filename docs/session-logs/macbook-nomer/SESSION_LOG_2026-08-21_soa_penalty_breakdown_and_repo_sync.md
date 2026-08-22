@@ -687,6 +687,33 @@ credentials available (same limitation as every UI feature since §14). The asse
 change are confirmed correct in isolation; next session with real credentials should do a final
 visual check of the live sidebar in both light and dark mode.
 
+## 20a. Follow-up: white logo also needed for Premium + Light mode, and centered
+
+User reported the white logo also needs to show for the **Premium** Theme Style (Settings >
+Appearance) while in light mode, not just regular dark mode - Premium's light-mode sidebar
+(`--sidebar-background: 221 51% 16%` in `index.css`, under `[data-theme-style='premium']`) is
+already navy, the same family as regular dark mode, so the colored logo's navy wordmark disappears
+there too. A plain Tailwind `dark:` class variant can't express this (it only tracks the `.dark`
+class, not `[data-theme-style]`), so switched the logo choice to JS via the existing `useTheme()`
+hook from [theme-provider.tsx](../../../app/lmsfrontend/src/components/theme-provider.tsx):
+
+```
+const { theme, themeStyle } = useTheme();
+const useWhiteLogo = theme === 'dark' || themeStyle === 'premium';
+```
+
+Also centered the logo in the header (`justify-center` on the header `<div>`, dropping the old
+`gap-3` used for the removed text). Both changes in the `Sidebar` component of
+[AppLayout.tsx](../../../app/lmsfrontend/src/layouts/AppLayout.tsx) (not the outer `AppLayout`
+component - the header markup lives in a separate `Sidebar` sub-component, caught by a first typecheck
+pass failing with "Cannot find name 'useWhiteLogo'" since the hook was initially added to the wrong
+function).
+
+Verified: `npx tsc --noEmit` clean, Docker `lmsfrontend`+`easycashbackend` rebuilt and confirmed
+"Up" via `docker ps`. Same as §20's own caveat - could not visually confirm inside the actual
+logged-in sidebar (no staff credentials on this Mac); only reached the login page in the browser
+check.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the

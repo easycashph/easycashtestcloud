@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/components/theme-provider';
 
 /** 2026-07-31 (user request): a live count of unclaimed Portal chat requests, polled from the
  * sidebar so any eligible staff member sees a fresh "someone's waiting" indicator without opening
@@ -116,6 +117,11 @@ const NAV_VISIBILITY: Partial<Record<string, (permissions: ReturnType<typeof use
 };
 
 function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
+  const { theme, themeStyle } = useTheme();
+  // Premium's light-mode sidebar uses the same navy background as regular dark mode (see
+  // index.css's `[data-theme-style='premium']` block) - the colored logo's navy wordmark
+  // disappears there too, so it needs the white logo just like dark mode does.
+  const useWhiteLogo = theme === 'dark' || themeStyle === 'premium';
   const chatQueueCount = useChatQueueCount();
   const permissions = useRole();
   return (
@@ -136,15 +142,17 @@ function Sidebar({ open, collapsed }: { open: boolean; collapsed: boolean }) {
         )}
       >
         {/* 2026-08-22 (user request): logo-only header - the old 36x36 box cropped the wide
-            logo down to just its icon and repeated the company name in text beside it. Swaps
-            between the colored logo (light mode) and a dedicated white logo (dark mode, where the
-            colored version's navy text would disappear against the dark sidebar) via Tailwind's
-            `dark:` class variant - no JS, matches how every other themed value in this app already
-            switches. Branch name dropped from here per that same request; still available
-            elsewhere (e.g. the account menu). */}
-        <div className="flex min-h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-5 py-3">
-          <img src="/logo-easycash.png" alt="Easycash" className="h-8 w-auto object-contain dark:hidden" />
-          <img src="/logo-easycash-white.png" alt="Easycash" className="hidden h-6 w-auto object-contain dark:block" />
+            logo down to just its icon and repeated the company name in text beside it. Branch
+            name dropped from here per that same request; still available elsewhere (e.g. the
+            account menu). Logo choice needs JS (useWhiteLogo above), not a plain `dark:` variant -
+            Premium's light-mode sidebar is navy too (same as dark mode), so the colored logo's
+            navy wordmark would disappear there as well. Centered per follow-up request. */}
+        <div className="flex min-h-16 shrink-0 items-center justify-center border-b border-sidebar-border px-5 py-3">
+          {useWhiteLogo ? (
+            <img src="/logo-easycash-white.png" alt="Easycash" className="h-6 w-auto object-contain" />
+          ) : (
+            <img src="/logo-easycash.png" alt="Easycash" className="h-8 w-auto object-contain" />
+          )}
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           {NAV_GROUPS.map((group) => {
