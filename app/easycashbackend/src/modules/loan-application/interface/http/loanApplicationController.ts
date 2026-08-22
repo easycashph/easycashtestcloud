@@ -19,6 +19,7 @@ import type { TagLoanApplicationPreApprovalUseCase } from '../../application/use
 import type { UpdateLoanApplicationUseCase } from '../../application/use-cases/UpdateLoanApplicationUseCase';
 import type { UpdateLoanApplicationIntakeUseCase } from '../../application/use-cases/UpdateLoanApplicationIntakeUseCase';
 import type { DeleteLoanApplicationUseCase } from '../../application/use-cases/DeleteLoanApplicationUseCase';
+import type { GenerateLoanApplicationFormUseCase } from '../../application/use-cases/GenerateLoanApplicationFormUseCase';
 import type { LoanApplicationPreQualificationService } from '../../application/services/LoanApplicationPreQualificationService';
 import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
@@ -51,6 +52,7 @@ export interface LoanApplicationControllerDeps {
   updateLoanApplicationUseCase: UpdateLoanApplicationUseCase;
   updateLoanApplicationIntakeUseCase: UpdateLoanApplicationIntakeUseCase;
   deleteLoanApplicationUseCase: DeleteLoanApplicationUseCase;
+  generateLoanApplicationFormUseCase: GenerateLoanApplicationFormUseCase;
   preQualificationService: LoanApplicationPreQualificationService;
   borrowerRepository: IBorrowerRepository;
   loanAccountRepository: ILoanAccountRepository;
@@ -299,6 +301,21 @@ export class LoanApplicationController {
       const currentUser = getCurrentUser(req);
       const application = await this.deps.revertLoanApplicationDecisionUseCase.execute(req.params.id as string, currentUser.sub);
       res.status(200).json(await this.present(application));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-21 (user request): prints the original application intake as a PDF, saved as an
+   * Attachment on the application so it shows up in the client's Attachments tab automatically -
+   * see GenerateLoanApplicationFormUseCase's doc comment. Responds with the created Attachment's
+   * metadata; the frontend downloads/prints it via the existing `GET /attachments/:id/download`
+   * endpoint rather than this one streaming the PDF bytes directly. */
+  generateForm = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      const attachment = await this.deps.generateLoanApplicationFormUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(201).json(attachment);
     } catch (error) {
       next(error);
     }

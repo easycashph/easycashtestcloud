@@ -23,8 +23,10 @@ import {
   Mail,
   MapPin,
   MoreVertical,
+  Loader2,
   Pencil,
   Phone,
+  Printer,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -71,7 +73,8 @@ import { TermTip } from '@/components/TermTip';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, fetchAllPages } from '@/lib/apiClient';
+import { apiClient, downloadFile, fetchAllPages } from '@/lib/apiClient';
+import type { Attachment } from '@/lib/documentApiTypes';
 import { classifyProductType } from '@/lib/productTypeClassification';
 import { productTypeLabel, useProductTypeLabels } from '@/lib/productTypeLabels';
 import type {
@@ -1792,6 +1795,17 @@ export function LoanApplicationDetailPage() {
     onSuccess: invalidate,
   });
 
+  /** 2026-08-21 (user request): "Print Application" - generates the PDF, saves it as an Attachment
+   * on the application (auto-shows in the Attachments tab below without a manual upload), then
+   * immediately downloads it for the staff member who clicked the button. */
+  const generateFormMutation = useMutation({
+    mutationFn: () => apiClient.post<Attachment>(`/loan-applications/${applicationId}/generate-form`, {}),
+    onSuccess: async (attachment) => {
+      queryClient.invalidateQueries({ queryKey: ['attachments', 'LOAN_APPLICATION', applicationId] });
+      await downloadFile(`/attachments/${attachment.id}/download`, attachment.fileName);
+    },
+  });
+
   const decideMutation = useMutation({
     mutationFn: (decision: 'APPROVED' | 'DECLINED') =>
       apiClient.post<LoanApplication>(`/loan-applications/${applicationId}/${decision === 'APPROVED' ? 'approve' : 'decline'}`, {
@@ -1978,6 +1992,27 @@ export function LoanApplicationDetailPage() {
           </div>
           {canAccessLoanApplications && (
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* 2026-08-21 (user request): prints the application intake as a PDF, auto-saved to
+                  the Attachments tab. Outlined (not filled) since it's optional/repeatable, unlike
+                  Create Client Profile / Create Loan Account below which are one-time transitions.
+                  Available once the application has a decision - nothing meaningful to print while
+                  still under review. */}
+              {(application.status === 'APPROVED' || application.status === 'DECLINED') && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-primary/50 text-primary hover:bg-primary/5"
+                  disabled={generateFormMutation.isPending}
+                  onClick={() => generateFormMutation.mutate()}
+                >
+                  {generateFormMutation.isPending ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Printer className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Print Application
+                </Button>
+              )}
               {!application.createdBorrowerId && (
                 <Button
                   size="sm"

@@ -91,6 +91,10 @@ export function createLoanApplicationRouter(deps: LoanApplicationControllerDeps,
   // 2026-07-22: mocked "Assist" panel above the Credit Evaluation Report - see
   // AiDocumentReviewResult's doc comment. Same access gate as the review report it feeds.
   router.post('/loan-applications/:id/ai-document-review', requireAuth, requireApplicationAccess, controller.aiDocumentReview);
+  // 2026-08-21 (user request): "Print Application" - saves a generated PDF of the application as
+  // an Attachment on it. Same access gate as the rest of this router (not decision-gated - it's
+  // available once there's something meaningful to show, see the use case's doc comment).
+  router.post('/loan-applications/:id/generate-form', requireAuth, requireApplicationAccess, controller.generateForm);
   router.post(
     '/loan-applications/:id/approve',
     requireAuth,

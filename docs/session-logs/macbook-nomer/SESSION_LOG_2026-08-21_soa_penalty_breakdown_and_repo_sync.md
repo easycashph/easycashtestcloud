@@ -381,6 +381,50 @@ time since the graceful quit alone didn't clear the stuck process. Both `easycas
 browser - no staff login credentials available in this session - so this is unverified in the UI;
 next session should log in and confirm the column renders correctly before considering this done.
 
+## 15. "Print Application" - generate a PDF of the Loan Application, auto-saved to Attachments
+
+User asked whether an approved Loan Application (once the applicant becomes a client) could be
+printed. Mocked up first (button placement + a sample printed form layout) and got sign-off before
+implementing, per the standing rule.
+
+**Why a new PDF path instead of the existing `loan-document` module:** that module's
+`GenerateLoanDocumentUseCase` fills an admin-uploaded `.docx` template and only ever reads
+`LoanAccount` data (post-approval agreements/promissory notes) - there's no `.docx` template to
+author for "the application form itself" (nothing like it exists), and hand-authoring a `.docx`
+file isn't something that can be done blindly through text tools anyway. Built a new path instead
+that draws the PDF directly with `pdf-lib` (already a dependency, previously only used for
+signature-stamping an existing PDF in the loan-signing module, not for building one from scratch):
+
+- `LoanApplicationFormPdfBuilder` (`app/easycashbackend/src/modules/loan-application/application/
+  services/`) - draws the letterhead, Applicant Information / Employment & Income / Requested Loan
+  Terms sections from the application, and a 4th "Approval & Resulting Account" section (only when
+  the application has a reviewer or a linked `LoanAccount`) showing who approved it and the
+  resulting loan account code/amount/activation date. Signature lines at the bottom since it
+  doubles as a printable/physical form.
+- `GenerateLoanApplicationFormUseCase` - fetches the application, resolves the approval/linkage
+  details (reviewer name via `IUserRepository`, linked `LoanAccount` via
+  `findBySourceApplicationId`), builds the PDF, then calls the existing `UploadAttachmentUseCase`
+  (reused as-is, not re-implemented) with `ownerType: 'LOAN_APPLICATION'` - this is what makes it
+  "auto-attach": no new Attachment-creation logic, just the same path a manual upload takes.
+  `documentCategory` left `null` - none of the existing categories (all borrower-supplied document
+  types) describe a system-generated form, and adding a new one wasn't asked for.
+- New endpoint `POST /loan-applications/:id/generate-form` (same `loan_application.manage` access
+  gate as the rest of that router), returns the created Attachment's metadata.
+- Frontend: new outlined "Print Application" button in `LoanApplicationDetailPage.tsx`'s header
+  action group (distinct styling from the filled Create Client Profile/Create Loan Account buttons
+  next to it, since printing is optional/repeatable rather than a one-time state transition),
+  visible once the application is APPROVED or DECLINED. On success, invalidates the Attachments
+  panel's query (`['attachments', 'LOAN_APPLICATION', applicationId]` - same key the existing
+  `AttachmentsPanel` component already uses for this page) so the new PDF appears there
+  immediately, and triggers an immediate download via the existing `downloadFile` helper.
+
+Verified: `npx tsc --noEmit` clean on both apps. Docker Desktop had crashed/quit between sessions
+(unrelated to this change) - relaunched, waited for the daemon, then rebuilt `easycashbackend` and
+`lmsfrontend` clean; both containers came back healthy. Still not verified end-to-end in the
+browser (no staff login credentials available in this session, same limitation as §14). Next
+session should log in, generate a form on a real approved
+application, and confirm the PDF renders correctly and appears in Attachments.
+
 ## Current state
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit; backend suite run
