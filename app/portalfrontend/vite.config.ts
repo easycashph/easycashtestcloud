@@ -1,9 +1,30 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // 2026-08-23 (user request): installable app + offline resilience. `manifest: false` because
+    // index.html already links its own hand-tuned site.webmanifest (see that file's own comment) -
+    // this plugin only needs to generate the service worker. `registerType: 'autoUpdate'` silently
+    // swaps in a new service worker on the next load rather than making the portal show a stale
+    // cached build after a deploy (a manual "update available" prompt is unnecessary complexity
+    // for this app's release cadence). App shell (JS/CSS/HTML/icons) is precached so the portal
+    // still loads offline; `/api/` calls are explicitly NOT precached or matched by any runtime
+    // rule below, since a cached loan balance or status silently going stale is worse than the
+    // existing OfflineBanner honestly telling the borrower they're offline - matches CLAUDE.md's
+    // "cached recently viewed data... graceful retry... clear offline indicators", not "serve
+    // stale financial data as if it were live".
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: false,
+      workbox: {
+        navigateFallbackDenylist: [/^\/api\//],
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

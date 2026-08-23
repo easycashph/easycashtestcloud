@@ -714,13 +714,66 @@ Verified: `npx tsc --noEmit` clean, Docker `lmsfrontend`+`easycashbackend` rebui
 logged-in sidebar (no staff credentials on this Mac); only reached the login page in the browser
 check.
 
+## 21. Portal as an installable mobile app - added PWA service worker + offline app-shell caching
+
+User asked whether the client Portal could become a mobile app someone installs on their phone.
+Investigated first rather than assuming: [portalfrontend](../../../app/portalfrontend) already had
+a working `site.webmanifest` (icons, `display: standalone`, theme color) linked from
+[index.html](../../../app/portalfrontend/index.html) - so "Add to Home Screen" already worked in
+some form on both Android and iOS Safari before this session touched anything. What was missing for
+a real installable PWA (Chrome's "Install app" prompt, not just a bookmark shortcut) and for the
+offline resilience CLAUDE.md's "Offline-Friendly Design" section calls for was a **service worker**.
+
+Presented a mockup first (home screen icon, install prompt, standalone fullscreen view) per the
+standing workflow rule; user approved building it for real ("oo, ituloy mo na").
+
+Chose `vite-plugin-pwa` (open-source, Workbox-based, the standard Vite PWA tool) over hand-rolling a
+service worker - installed as a portalfrontend devDependency. Implementation:
+
+- [vite.config.ts](../../../app/portalfrontend/vite.config.ts): added the `VitePWA` plugin,
+  `registerType: 'autoUpdate'` (silently swaps in a new service worker on next load - no "update
+  available" prompt UI, matching this app's release cadence), `manifest: false` since
+  `index.html` already links its own hand-tuned `site.webmanifest` and only the service worker
+  needed generating. `navigateFallbackDenylist: [/^\/api\//]` keeps API routes out of the SPA
+  navigation fallback.
+- **Deliberately did NOT cache `/api/` responses** - a stale cached loan balance or application
+  status shown as if live would be worse than the existing [OfflineBanner](../../../app/portalfrontend/src/components/OfflineBanner.tsx)
+  (already built, already wired into `App.tsx`) honestly telling the borrower they're offline. The
+  service worker only precaches the static app shell (JS/CSS/HTML/icons via Workbox
+  `generateSW`/`precacheAndRoute`, 40 entries / ~687 KiB in this build) so the app itself still
+  loads with no connection - matches CLAUDE.md's "cached recently viewed data... graceful retry...
+  clear offline indicators", not "serve stale financial data".
+- [main.tsx](../../../app/portalfrontend/src/main.tsx): `registerSW({ immediate: true })` from the
+  plugin's `virtual:pwa-register` module.
+- [vite-env.d.ts](../../../app/portalfrontend/src/vite-env.d.ts): added the
+  `vite-plugin-pwa/client` type reference (the virtual module has no types without it).
+
+Verified: `npx tsc -b` clean, `npx vite build` succeeded and generated `dist/sw.js` +
+`dist/workbox-*.js` precaching 40 entries. Docker `portalfrontend` (Docker Desktop had crashed
+again between sessions, same recurring issue - relaunched via `open -a Docker` + waited for the
+daemon) rebuilt and confirmed "Up" via `docker ps`; `sw.js` confirmed served correctly (HTTP 200,
+correct `Content-Type: application/javascript`, correct byte length) via both `curl` and an
+in-browser `fetch()`.
+
+**Known limitation found while verifying**: `navigator.serviceWorker.register()` fails inside this
+Mac's automated Browser-pane tool specifically - `TypeError: ... An unknown error occurred when
+fetching the script`, even though the exact same file fetches successfully via plain `fetch()` from
+the same page. This points to the embedded browser-automation sandbox itself blocking/restricting
+Service Worker registration (a known category of restriction in hosted/automated browser tools,
+unrelated to the generated service worker's own correctness), not a bug in this change - the
+Workbox output itself is standard and was independently confirmed byte-correct. **Not yet verified
+in a real, unrestricted browser** (desktop Chrome or an actual phone) - next session (or Nomer
+directly, right now, from his phone on the LAN) should open the Portal URL in a real mobile browser
+and confirm the "Install app" / "Add to Home Screen" prompt appears and the installed app opens
+standalone.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-20 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-21 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§20) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§21) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
@@ -743,7 +796,9 @@ here - see that section's own cross-link. Everything else below (§14-§20) is n
   (§15's peso-sign PDF-encoding crash) before it would have reached a user. Next session with
   actual LMS credentials should click through: the "Recorded by" column (§14), Print Application +
   its Attachments auto-attach (§15/§16), the Portal Accounts report (§17), the new per-report
-  Roles & Permissions toggles (§18), and the sidebar logo swap in both light and dark mode (§20).
+  Roles & Permissions toggles (§18), the sidebar logo swap in both light and dark mode (§20), and
+  the Portal's new install-as-app prompt on a real phone (§21 - blocked from verifying in this
+  Mac's own Browser-pane tool, see that section's caveat).
 
 ## Known follow-up work
 
