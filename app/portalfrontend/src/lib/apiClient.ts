@@ -12,7 +12,12 @@
  * portal's own JWT is short-lived-ish (PORTAL_JWT_TTL, 24h) and scoped to a lower-stakes account
  * than a staff login, per the Phase 1 design notes.
  */
-export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
+// Falls back to window.location.hostname (not a hardcoded 'localhost') so local/LAN/Docker
+// testing works from any device on the network without a rebuild - same pattern as the LMS
+// frontend's apiClient.ts. Production GitHub Pages builds always set VITE_API_BASE_URL explicitly
+// (see this file's own doc comment above) and are unaffected by this fallback.
+export const API_BASE_URL: string =
+  import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:4000/api/v1`;
 const TOKEN_STORAGE_KEY = 'easycash-portal-token';
 /** "Remember this device" (2026-07-30 user request) - deliberately a SEPARATE key from the access
  * token, and never cleared by clearStoredToken()/logout(): the whole point is that it survives a

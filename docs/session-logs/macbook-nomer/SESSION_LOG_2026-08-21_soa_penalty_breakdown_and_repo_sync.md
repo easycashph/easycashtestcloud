@@ -767,6 +767,48 @@ directly, right now, from his phone on the LAN) should open the Portal URL in a 
 and confirm the "Install app" / "Add to Home Screen" prompt appears and the installed app opens
 standalone.
 
+## 21a. Follow-up: fixed two real bugs found from an actual phone test, found the address-bar-on-install cause was HTTPS, deferred that fix
+
+User tested §21 on a real Android phone (Chrome) over LAN. Two real problems surfaced, plus one
+root cause identified and deliberately deferred:
+
+1. **Portal was unreachable from any other device on the LAN at all** - unlike
+   [lmsfrontend's apiClient.ts](../../../app/lmsfrontend/src/lib/apiClient.ts) (`API_BASE_URL =
+   import.meta.env.VITE_API_BASE_URL ?? \`http://${'{window.location.hostname}'}:4000/api/v1\``,
+   which "just works" from any host without a rebuild), [portalfrontend's apiClient.ts](../../../app/portalfrontend/src/lib/apiClient.ts)
+   had a hardcoded `'http://localhost:4000/api/v1'` fallback - on a phone, "localhost" means the
+   phone itself, so every API call silently failed. Root cause: the Portal was previously only ever
+   tested via `npm run dev` on the host or deployed to Cloudflare Pages (which always sets
+   `VITE_API_BASE_URL` explicitly at build time) - LAN/phone access through the Docker container was
+   never exercised before. Fixed by matching the LMS frontend's own proven fallback pattern
+   (`window.location.hostname` instead of a literal `'localhost'`) - doesn't touch the Pages
+   deployment (still overridden by its own explicit env var), only fixes the local/LAN fallback.
+   Also discovered the existing `scripts/Update LAN IP (Macbook-Nomer).command` only ever updates
+   `lmsfrontend`'s config/CORS, never `portalfrontend`'s - flagged as a follow-up below rather than
+   fixed here (out of scope for this immediate test).
+2. **Backend CORS didn't allow the Portal's LAN origin** - `CORS_ORIGIN` in `.env` had `:5173` (LMS)
+   but not `:5199` (Portal). Added `http://192.168.1.25:5199` to the existing list and restarted
+   the backend (CORS is read at runtime, no rebuild needed - same as the LAN-IP script's own
+   pattern).
+3. **Root cause of "may address bar pa rin" after install**: Chrome only grants a PWA true
+   standalone/fullscreen display (and the real "Install app" prompt) over HTTPS or `localhost` -
+   never over a plain LAN IP like `http://192.168.1.25:5199`. That's a browser security requirement,
+   not something fixable in the app's own code. Investigated the repo's existing (but currently
+   disabled) Tailscale HTTPS scaffolding in
+   [docker-compose.yml](../../../app/docker/docker-compose.yml) and
+   [lmsfrontend/nginx.conf](../../../app/lmsfrontend/nginx.conf) (commented out since 2026-07-30,
+   waiting on a re-issued cert) - found Tailscale itself isn't even installed on this Mac (`tailscale`
+   not in `PATH`, no `Tailscale.app` in `/Applications`), and the existing scaffolding only ever
+   covered `lmsfrontend`, never `portalfrontend`. Asked the user whether to install and sign into
+   Tailscale now to pursue this; **user chose to defer** ("Panatilihin muna as-is") rather than set
+   up a new account/install mid-session - the Portal stays reachable and functional over LAN HTTP,
+   it just won't show the fully chromeless standalone window until HTTPS is wired up.
+
+Verified: `npx tsc -b` clean, Docker `portalfrontend`+`easycashbackend` rebuilt, confirmed `curl
+http://192.168.1.25:5199/` returns 200 and the built JS bundle now bakes in
+`` `http://${window.location.hostname}:4000/api/v1` `` instead of the old hardcoded localhost
+string.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
@@ -802,6 +844,19 @@ here - see that section's own cross-link. Everything else below (§14-§21) is n
 
 ## Known follow-up work
 
+- Portal on the phone still shows Chrome's address bar even after "Add to Home screen" - this is
+  expected until the Portal is served over HTTPS (Chrome requires HTTPS or `localhost` for a true
+  standalone PWA window). Deferred (§21a) - needs Tailscale installed + signed in on this Mac, a
+  cert issued via `tailscale cert`, and both `docker-compose.yml`/`nginx.conf`'s disabled Tailscale
+  HTTPS block re-enabled for `lmsfrontend` *and* newly wired up for `portalfrontend` (which never
+  had it in the first place).
+- `scripts/Update LAN IP (Macbook-Nomer).command` only updates `lmsfrontend`'s `.env`/CORS/rebuild -
+  never touches `portalfrontend` at all. Not extended this session (worked around by fixing
+  `portalfrontend/apiClient.ts`'s fallback to derive the host dynamically instead - see §21a - which
+  makes a per-network Portal rebuild unnecessary going forward), but the script's own description
+  ("Isang click lang ito para sa lahat") is no longer fully accurate since it silently skips the
+  Portal - worth updating its wording, or extending it to also restart `portalfrontend`, at some
+  point.
 - The SOA penalty/accrued breakdown is preview-only (not persisted on the generated SOA record) —
   if staff need to see the same table again later against an already-generated statement, that
   requires new `jsonb` columns on `GeneratedStatementOfAccount` plus a migration, not done here.
