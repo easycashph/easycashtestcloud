@@ -327,4 +327,25 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
       }
     });
   }
+
+  async findManyCreatedBetween(
+    from: Date,
+    to: Date,
+    branchId: string | undefined,
+    ctx?: TransactionContext,
+  ): Promise<{ id: string; displayName: string }[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.borrower.findMany({
+      where: { createdAt: { gte: from, lte: to }, ...(branchId ? { branchId } : {}) },
+      select: { id: true, firstName: true, lastName: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows.map((row) => ({ id: row.id, displayName: `${row.lastName}_${row.firstName}` }));
+  }
+
+  async findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null> {
+    const client = resolveClient(ctx);
+    const row = await client.borrower.findFirst({ orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    return row?.createdAt ?? null;
+  }
 }

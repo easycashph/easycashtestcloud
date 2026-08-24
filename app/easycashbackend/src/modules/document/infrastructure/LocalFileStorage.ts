@@ -1,5 +1,7 @@
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
+import type { Readable, Writable } from 'node:stream';
 import { env } from '@shared/config/env';
 import type { IFileStorage } from '../application/ports/IFileStorage';
 
@@ -22,6 +24,18 @@ export class LocalFileStorage implements IFileStorage {
 
   async delete(key: string): Promise<void> {
     await fs.rm(this.resolveWithinRoot(key), { force: true });
+  }
+
+  /** Streaming counterparts (2026-08-24, MIS bulk document export) - see `IFileStorage`'s (shared
+   * port) own doc comment for why these exist alongside the buffer-based `save`/`read` above. */
+  createReadStream(key: string): Readable {
+    return fsSync.createReadStream(this.resolveWithinRoot(key));
+  }
+
+  createWriteStream(key: string): Writable {
+    const fullPath = this.resolveWithinRoot(key);
+    fsSync.mkdirSync(path.dirname(fullPath), { recursive: true });
+    return fsSync.createWriteStream(fullPath);
   }
 
   /** Rejects any key that would resolve outside the storage root — defense in depth even though

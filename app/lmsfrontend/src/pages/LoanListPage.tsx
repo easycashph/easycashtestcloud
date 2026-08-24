@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
+import { BulkExportDialog } from '@/components/BulkExportDialog';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
@@ -102,7 +103,7 @@ const STATUS_OPTIONS: { value: LoanAccountStatus | 'MATURED' | 'ALL'; label: str
  */
 export function LoanListPage() {
   const navigate = useNavigate();
-  const { canCreateLoanAccount } = useRole();
+  const { canCreateLoanAccount, currentAccount } = useRole();
   useLogPageView('List of Loan Accounts');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -243,11 +244,21 @@ export function LoanListPage() {
             {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
           </p>
         </div>
-        {canCreateLoanAccount && (
-          <Button onClick={() => navigate('/loans/new')}>
-            <Plus className="mr-1.5 h-4 w-4" /> New Loan Account
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {currentAccount.roles.includes('MIS') && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/exports')}>
+                My Exports
+              </Button>
+              <BulkExportDialog exportType="LOAN_ACCOUNT_ATTACHMENTS" label="Download All Loan Accounts" />
+            </>
+          )}
+          {canCreateLoanAccount && (
+            <Button onClick={() => navigate('/loans/new')}>
+              <Plus className="mr-1.5 h-4 w-4" /> New Loan Account
+            </Button>
+          )}
+        </div>
       </div>
 
       {loansQuery.isError && (

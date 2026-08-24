@@ -241,6 +241,7 @@ model Branch {
   transactions     LoanTransaction[]
   loanApplications LoanApplication[]
   notifications    Notification[]
+  bulkExportJobs   BulkExportJob[]
 
   @@map("branches")
 }
@@ -307,6 +308,7 @@ model User {
   loanDocumentsGenerated               GeneratedLoanDocument[]       @relation("LoanDocumentGeneratedBy")
   loanSigningSessionsCreated           LoanSigningSession[]          @relation("LoanSigningSessionCreatedBy")
   statementsOfAccountGenerated         GeneratedStatementOfAccount[] @relation("StatementOfAccountGeneratedBy")
+  bulkExportJobsRequested              BulkExportJob[]               @relation("BulkExportJobRequestedBy")
   penaltyOverridesSet                  RepaymentSchedule[]           @relation("PenaltyOverrideBy")
   penaltyReductionsMade                PenaltyReduction[]
   feesOverridesSet                     RepaymentSchedule[]           @relation("FeesOverrideBy")
@@ -2296,6 +2298,9 @@ enum NotificationType {
   APPLICATION_PRE_APPROVAL_READY
   APPLICATION_DECIDED
   LOAN_OVERDUE
+  /// 2026-08-24 (MIS bulk document export, user request): fired when a BulkExportJob finishes
+  /// (COMPLETED or FAILED) - entityType 'BulkExportJob'/entityId points back at the job.
+  BULK_EXPORT_READY
 }
 
 /// Notification Center (2026-07-17 user request). Distinct from AuditLog (which is a write/
@@ -2321,6 +2326,49 @@ model Notification {
   @@index([recipientUserId, read, createdAt])
   @@index([type, entityId, createdAt])
   @@map("notifications")
+}
+
+enum BulkExportType {
+  BORROWER_ATTACHMENTS
+  LOAN_ACCOUNT_ATTACHMENTS
+}
+
+enum BulkExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+/// MIS bulk document export (2026-08-24 user request): "download all client attachments" / "download
+/// all loan account attachments" for every record whose createdAt falls within a chosen date range,
+/// packaged into one ZIP. Runs as an in-process fire-and-forget background job (no queue/Redis - this
+/// codebase's existing scheduler pattern, see misPostRotationScheduler.ts's own doc comment on why),
+/// not a synchronous request - a job this size (thousands of records, hundreds of MB+) would time out
+/// or block the request otherwise. If the server restarts mid-job, the job is simply left PROCESSING
+/// forever (user-confirmed acceptable - re-request rather than auto-resume); a stuck job is a UI
+/// concern, not something this table's shape needs to solve. `resultStorageKey` files are pruned
+/// after 7 days by BulkExportCleanupScheduler.ts (user-confirmed retention).
+model BulkExportJob {
+  id                String           @id @default(uuid())
+  requestedByUserId String
+  requestedBy       User             @relation("BulkExportJobRequestedBy", fields: [requestedByUserId], references: [id])
+  branchId          String?
+  branch            Branch?          @relation(fields: [branchId], references: [id])
+  exportType        BulkExportType
+  startDate         DateTime
+  endDate           DateTime
+  status            BulkExportStatus @default(PENDING)
+  recordCount       Int?
+  fileCount         Int?
+  resultStorageKey  String?
+  resultFileSize    Int?
+  errorMessage      String?
+  createdAt         DateTime         @default(now())
+  completedAt       DateTime?
+
+  @@index([requestedByUserId, createdAt])
+  @@map("bulk_export_jobs")
 }
 
 enum SmsReminderStatus {
@@ -2837,36 +2885,36 @@ enum MisPostType {
 /// multi-post Portal feed with a rotation schedule - different enough shape and lifecycle to keep
 /// separate rather than overloading one table with optional-when-AUTO / optional-when-MANUAL columns.
 model MisPost {
-  id                String      @id @default(uuid())
-  type              MisPostType
+  id   String      @id @default(uuid())
+  type MisPostType
 
-  caption           String
-  imageStorageKey   String
-  imageFileName     String
-  imageFileType     String
+  caption         String
+  imageStorageKey String
+  imageFileName   String
+  imageFileType   String
 
   /// AUTO_ROTATION only - fixed position in the rotation sequence (0-based). Null for MANUAL posts.
-  poolOrder         Int?
+  poolOrder       Int?
   /// AUTO_ROTATION only - MIS can pull an item out of the rotation without deleting its history.
   /// MANUAL posts use `expiresAt` instead of this flag to control visibility.
-  poolActive        Boolean     @default(true)
+  poolActive      Boolean @default(true)
   /// AUTO_ROTATION only - exactly one pool row is live at a time; the daily scheduler flips this
   /// flag from the current row to the next `poolActive` row (by `poolOrder`, wrapping around).
-  isCurrentlyLive   Boolean     @default(false)
+  isCurrentlyLive Boolean @default(false)
 
   /// MANUAL only - when this post was published; null until then (soft-deleted/withdrawn posts
   /// keep this so LMS history can still show when a post had been live).
-  publishedAt       DateTime?
+  publishedAt DateTime?
   /// MANUAL only - publishedAt + the duration MIS chose at posting time (default preset 30
   /// minutes). Null for AUTO_ROTATION rows, which have no fixed expiry.
-  expiresAt         DateTime?
+  expiresAt   DateTime?
   /// MANUAL only - MIS can withdraw a post early without waiting for expiresAt or deleting the row.
-  withdrawn         Boolean     @default(false)
+  withdrawn   Boolean   @default(false)
 
-  createdByUserId   String?
-  createdBy         User?       @relation(fields: [createdByUserId], references: [id])
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdByUserId String?
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([type, isCurrentlyLive])
   @@index([type, poolOrder])

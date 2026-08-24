@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-export type NotificationType = 'APPLICATION_SUBMITTED' | 'APPLICATION_PRE_APPROVAL_READY' | 'APPLICATION_DECIDED' | 'LOAN_OVERDUE';
+export type NotificationType =
+  | 'APPLICATION_SUBMITTED'
+  | 'APPLICATION_PRE_APPROVAL_READY'
+  | 'APPLICATION_DECIDED'
+  | 'LOAN_OVERDUE'
+  | 'BULK_EXPORT_READY';
 
 export interface NotificationProps {
   id: string;

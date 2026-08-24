@@ -72,6 +72,7 @@ const SettingsPage = lazyNamed(() => import('@/pages/SettingsPage'), 'SettingsPa
 const SystemPage = lazyNamed(() => import('@/pages/SystemPage'), 'SystemPage');
 const AboutPage = lazyNamed(() => import('@/pages/AboutPage'), 'AboutPage');
 const ChatPage = lazyNamed(() => import('@/pages/ChatPage'), 'ChatPage');
+const BulkExportsPage = lazyNamed(() => import('@/pages/BulkExportsPage'), 'BulkExportsPage');
 
 /** Bare, dependency-free fallback shown only for the brief window a lazy chunk is downloading -
  * deliberately not a full skeleton (that's each page's own job once it renders) since this can
@@ -136,6 +137,7 @@ export default function App() {
           <Route path="admin/system" element={<SystemPage />} />
           <Route path="admin/about" element={<Navigate to="/support/about" replace />} />
           <Route path="chat" element={<ChatPage />} />
+          <Route path="exports" element={<BulkExportsPage />} />
           <Route path="support/about" element={<AboutPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

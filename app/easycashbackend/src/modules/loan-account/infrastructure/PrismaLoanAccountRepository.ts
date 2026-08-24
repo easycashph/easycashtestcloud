@@ -403,4 +403,25 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     await client.appliedFee.deleteMany({ where: { loanAccountId: id } });
     await client.loanAccount.delete({ where: { id } });
   }
+
+  async findManyCreatedBetween(
+    from: Date,
+    to: Date,
+    branchId: string | undefined,
+    ctx?: TransactionContext,
+  ): Promise<{ id: string; loanCode: string }[]> {
+    const client = resolveClient(ctx);
+    const rows = await client.loanAccount.findMany({
+      where: { createdAt: { gte: from, lte: to }, ...(branchId ? { branchId } : {}) },
+      select: { id: true, loanCode: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return rows;
+  }
+
+  async findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null> {
+    const client = resolveClient(ctx);
+    const row = await client.loanAccount.findFirst({ orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    return row?.createdAt ?? null;
+  }
 }

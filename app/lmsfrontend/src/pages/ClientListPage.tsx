@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
+import { BulkExportDialog } from '@/components/BulkExportDialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
@@ -82,7 +83,7 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
  */
 export function ClientListPage() {
   const navigate = useNavigate();
-  const { canManageClients } = useRole();
+  const { canManageClients, currentAccount } = useRole();
   useLogPageView('List of Clients');
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -150,7 +151,17 @@ export function ClientListPage() {
           <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
           <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
         </div>
-        {canManageClients && <Button onClick={() => navigate('/clients/new')}>Add Client</Button>}
+        <div className="flex flex-wrap items-center gap-2">
+          {currentAccount.roles.includes('MIS') && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/exports')}>
+                My Exports
+              </Button>
+              <BulkExportDialog exportType="BORROWER_ATTACHMENTS" label="Download All Clients" />
+            </>
+          )}
+          {canManageClients && <Button onClick={() => navigate('/clients/new')}>Add Client</Button>}
+        </div>
       </div>
 
       {borrowersQuery.isError && (

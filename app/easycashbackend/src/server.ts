@@ -18,6 +18,10 @@ import { PrismaExternalNewsLinkRepository } from '@modules/finance-news/infrastr
 import { startMisPostRotationScheduler } from '@modules/mis-post/infrastructure/misPostRotationScheduler';
 import { AdvanceAutoRotationUseCase } from '@modules/mis-post/application/use-cases/AdvanceAutoRotationUseCase';
 import { PrismaMisPostRepository } from '@modules/mis-post/infrastructure/PrismaMisPostRepository';
+import { startBulkExportCleanupScheduler } from '@modules/bulk-export/infrastructure/BulkExportCleanupScheduler';
+import { CleanupBulkExportJobsUseCase } from '@modules/bulk-export/application/use-cases/CleanupBulkExportJobsUseCase';
+import { PrismaBulkExportJobRepository } from '@modules/bulk-export/infrastructure/PrismaBulkExportJobRepository';
+import { LocalFileStorage } from '@modules/document/infrastructure/LocalFileStorage';
 
 const app = createApp();
 
@@ -86,6 +90,15 @@ startFinanceNewsScheduler({
 startMisPostRotationScheduler({
   advanceAutoRotationUseCase: new AdvanceAutoRotationUseCase({ misPostRepository: new PrismaMisPostRepository() }),
   cronExpression: env.MIS_POST_ROTATION_CRON,
+});
+
+// 2026-08-24 (MIS bulk document export, user-confirmed 7-day retention): daily prune of completed
+// export ZIPs - see BulkExportCleanupScheduler.ts's own doc comment.
+startBulkExportCleanupScheduler({
+  cleanupBulkExportJobsUseCase: new CleanupBulkExportJobsUseCase({
+    bulkExportJobRepository: new PrismaBulkExportJobRepository(),
+    fileStorage: new LocalFileStorage(),
+  }),
 });
 
 function shutdown(signal: string) {

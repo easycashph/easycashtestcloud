@@ -1,0 +1,16 @@
+export type BulkExportType = 'BORROWER_ATTACHMENTS' | 'LOAN_ACCOUNT_ATTACHMENTS';
+export type BulkExportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+export interface BulkExportJob {
+  id: string;
+  exportType: BulkExportType;
+  startDate: string;
+  endDate: string;
+  status: BulkExportStatus;
+  recordCount: number | null;
+  fileCount: number | null;
+  resultFileSize: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}

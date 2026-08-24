@@ -241,6 +241,13 @@ import { UploadAttachmentUseCase } from '@modules/document/application/use-cases
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
 import { DownloadAllBorrowerDocumentsUseCase } from '@modules/document/application/use-cases/DownloadAllBorrowerDocumentsUseCase';
+import { PrismaBulkExportJobRepository } from '@modules/bulk-export/infrastructure/PrismaBulkExportJobRepository';
+import { ProcessBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/ProcessBulkExportJobUseCase';
+import { CreateBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/CreateBulkExportJobUseCase';
+import { ListMyBulkExportJobsUseCase } from '@modules/bulk-export/application/use-cases/ListMyBulkExportJobsUseCase';
+import { DownloadBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/DownloadBulkExportJobUseCase';
+import { GetBulkExportDefaultRangeUseCase } from '@modules/bulk-export/application/use-cases/GetBulkExportDefaultRangeUseCase';
+import { createBulkExportRouter } from '@modules/bulk-export/interface/http/bulkExportRouter';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
 import { PrismaProfileNoteRepository } from '@modules/profile-note/infrastructure/PrismaProfileNoteRepository';
 import { CreateProfileNoteUseCase } from '@modules/profile-note/application/use-cases/CreateProfileNoteUseCase';
@@ -1821,6 +1828,30 @@ export function createApp(): Express {
   );
   const profileActivityLogRouter = createProfileActivityLogRouter(profileActivityLogController, tokenService);
   app.use('/api/v1', profileActivityLogRouter);
+
+  // --- bulk-export module wiring (2026-08-24 user request): MIS "download all client/loan account
+  // attachments in a date range" background export. Reuses attachmentRepository/fileStorage from
+  // the document module wiring above. ---
+  const bulkExportJobRepository = new PrismaBulkExportJobRepository();
+  const processBulkExportJobUseCase = new ProcessBulkExportJobUseCase({
+    bulkExportJobRepository,
+    borrowerRepository,
+    loanAccountRepository,
+    attachmentRepository,
+    userRepository,
+    fileStorage,
+    notificationService,
+  });
+  const bulkExportRouter = createBulkExportRouter(
+    {
+      createBulkExportJobUseCase: new CreateBulkExportJobUseCase({ bulkExportJobRepository, processBulkExportJobUseCase }),
+      listMyBulkExportJobsUseCase: new ListMyBulkExportJobsUseCase({ bulkExportJobRepository }),
+      downloadBulkExportJobUseCase: new DownloadBulkExportJobUseCase({ bulkExportJobRepository, fileStorage }),
+      getBulkExportDefaultRangeUseCase: new GetBulkExportDefaultRangeUseCase({ borrowerRepository, loanAccountRepository }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', bulkExportRouter);
 
   // Further module routers are mounted under /api/v1/* as each is built out.
 

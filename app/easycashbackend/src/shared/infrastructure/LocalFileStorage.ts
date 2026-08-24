@@ -1,5 +1,7 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import type { Readable, Writable } from 'node:stream';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 
 /**
@@ -18,6 +20,20 @@ export class LocalFileStorage implements IFileStorage {
 
   async read(key: string): Promise<Buffer> {
     return readFile(this.resolveKey(key));
+  }
+
+  createReadStream(key: string): Readable {
+    return createReadStream(this.resolveKey(key));
+  }
+
+  createWriteStream(key: string): Writable {
+    const fullPath = this.resolveKey(key);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    return createWriteStream(fullPath);
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(this.resolveKey(key), { force: true });
   }
 
   private resolveKey(key: string): string {
