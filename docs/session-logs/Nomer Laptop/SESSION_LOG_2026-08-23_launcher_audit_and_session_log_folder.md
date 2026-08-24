@@ -58,6 +58,29 @@ place at `docs/session-logs/` root rather than moved here — which of those wer
 on this specific machine isn't reliably knowable after the fact, and moving them without being
 asked risked guessing wrong. Only new logs from this point on go into this folder.
 
+## 5. Caught up again, then rebuilt this laptop end to end
+
+A fourth pull landed after §2 (`fc6fc33..3209212` at the time §4's commit went out, then this
+laptop's own commit merged on top) — no new commits from elsewhere beyond that at rebuild time.
+
+Full rebuild sequence run and verified, same discipline as §2:
+1. Docker Desktop had stopped again between turns (same recurring flakiness noted in earlier
+   logs) — confirmed via `docker version`, waited for the user to restart it, confirmed again
+   before proceeding.
+2. `docker compose build easycashbackend lmsfrontend` — clean build, no errors.
+3. `docker compose up -d easycashbackend lmsfrontend` — noted `postgres` also showed `Recreate`
+   this cycle (a `docker-compose.yml` change came in with one of the pulls), but its named volume
+   persisted normally; `migrate status` afterward confirmed no data loss.
+4. `docker compose exec easycashbackend npx prisma migrate status` → 3 pending
+   (`add_mis_post`, `add_chat_bpo_features`, `add_soa_penalty_recompute_all`) →
+   `migrate deploy` applied all three cleanly.
+5. Verified `localhost:4000/health` and `localhost:5173/` both 200, all three containers
+   (`postgres`/`easycashbackend`/`lmsfrontend`) healthy.
+
+No code changes this session — confirmed via `git status` before considering "commit" requests:
+only the pre-existing untouched leftovers (`package-lock.json`, the penalty decision-brief `.docx`,
+`legacy/` files) remain, same as every prior log has noted. Nothing new to push.
+
 ## Open
 
 - The pre-split loose session logs at `docs/session-logs/` root are not sorted into any
