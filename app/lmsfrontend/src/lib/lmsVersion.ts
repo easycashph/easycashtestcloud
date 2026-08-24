@@ -6,6 +6,14 @@
  * not the granular developer CHANGELOG in `app/frontend/CHANGELOG.md`. Bump
  * `LMS_VERSION` / `LMS_UPDATED_ON` and prepend a new `LMS_CHANGELOG` entry whenever
  * a user-visible release ships.
+ *
+ * VERSIONING RULE (2026-08-24, user request): real semantic-versioning discipline, not
+ * "always bump the last number" - MINOR (the middle number, e.g. 0.51.0) bumps for any
+ * release that ships a genuinely new capability, even a small one, even if it also
+ * includes fixes; PATCH (the last number, e.g. 0.46.1) bumps ONLY for a release that is
+ * fix-only/maintenance-only with no new capability. One version per real release day -
+ * every entry below is exactly one calendar day, cross-checked against real git commit
+ * history, never a fabricated filler day.
  */
 
 export const LMS_APP_NAME = 'Easycash Loan Management System Platform';
@@ -70,12 +78,9 @@ export interface LmsChangelogDay {
 
 export interface LmsChangelogEntry {
   version: string;
-  /**
-   * 2026-08-24 (user request): one entry can now cover several real, separately-dated release
-   * days instead of a single `date` spanning a range (e.g. "August 16-17") - every day here is a
-   * day real work actually shipped (cross-checked against git history), never a filler entry for
-   * a day with no real activity. Newest day first within the array.
-   */
+  /** Always exactly one real release day (see this file's top VERSIONING RULE doc comment) -
+   * kept as an array, not a bare `date`, so a future entry covering a genuine multi-day release
+   * batch can still be represented without another type change. */
   days: LmsChangelogDay[];
 }
 
@@ -89,7 +94,7 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
-    version: '0.9.37',
+    version: '0.51.0',
     days: [
       {
         date: 'August 24, 2026',
@@ -101,7 +106,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.36',
+    version: '0.50.0',
     days: [
       {
         date: 'August 23, 2026',
@@ -113,7 +118,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.35',
+    version: '0.49.0',
     days: [
       {
         date: 'August 22, 2026',
@@ -128,7 +133,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.34',
+    version: '0.48.0',
     days: [
       {
         date: 'August 21, 2026',
@@ -142,7 +147,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.33',
+    version: '0.47.0',
     days: [
       {
         date: 'August 20, 2026',
@@ -156,7 +161,8 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.31',
+    // PATCH - maintenance/reliability only, no new capability.
+    version: '0.46.1',
     days: [
       {
         date: 'August 19, 2026',
@@ -168,7 +174,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.30',
+    version: '0.46.0',
     days: [
       {
         date: 'August 18, 2026',
@@ -183,9 +189,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24 (user request): split from one entry previously dated "August 16-17" into its
-    // real two release days, cross-checked against git commit history for those dates.
-    version: '0.9.29',
+    version: '0.45.0',
     days: [
       {
         date: 'August 17, 2026',
@@ -194,6 +198,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Loan Releases Report gained an on-screen results table with a column picker, instead of download-only.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.44.0',
+    days: [
       {
         date: 'August 16, 2026',
         highlights: [
@@ -205,8 +214,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 14-15".
-    version: '0.9.28',
+    version: '0.43.0',
     days: [
       {
         date: 'August 15, 2026',
@@ -218,6 +226,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           "Daily Collection Report rows restructured to match SDevTech's original shape.",
         ],
       },
+    ],
+  },
+  {
+    version: '0.42.0',
+    days: [
       {
         date: 'August 14, 2026',
         highlights: [
@@ -230,8 +243,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 12-13".
-    version: '0.9.27',
+    version: '0.41.0',
     days: [
       {
         date: 'August 13, 2026',
@@ -241,6 +253,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Traced a "feature isn\'t showing on the live site" report to the office having moved the live database to a separate server PC mid-project - documented the two-machine deployment split and built an auto-update helper so the public site\'s backend address stays current automatically.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.40.0',
+    days: [
       {
         date: 'August 12, 2026',
         highlights: [
@@ -254,9 +271,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 9-12" (August 11 genuinely had no
-    // shipped work, so it has no entry here - not a fabricated day).
-    version: '0.9.26',
+    version: '0.39.0',
     days: [
       {
         date: 'August 10, 2026',
@@ -266,6 +281,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Automated daily backup of the whole project folder to Google Drive.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.38.0',
+    days: [
       {
         date: 'August 9, 2026',
         highlights: [
@@ -274,6 +294,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           "Editable bank/ATM/allotment details for a loan application after it's no longer under active review.",
         ],
       },
+    ],
+  },
+  {
+    version: '0.37.0',
+    days: [
       {
         date: 'August 8, 2026',
         highlights: [
@@ -284,9 +309,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 6-9" (its own real days were
-    // Aug 6-7; Aug 8-9's real work is now under the 0.9.26 entry above).
-    version: '0.9.25',
+    version: '0.36.0',
     days: [
       {
         date: 'August 7, 2026',
@@ -297,9 +320,15 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Sidebar navigation now resets scroll position to the top when switching pages.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.35.0',
+    days: [
       {
         date: 'August 6, 2026',
         highlights: [
+          'New configurable Roles & Permissions system (Administration > User Accounts > Permissions) - MIS can now grant or revoke access to specific platform actions per role, instead of access being fixed in the code. Closed a real gap where document generation and e-signature sending had no role restriction at all.',
           'Accrued Interest now correctly shows on migrated (legacy) matured loans - it had been silently skipped for older loans.',
           'Statement of Account print refinements: larger, comma-formatted, properly-sized Remaining Amortization table; the remaining-schedule section hides itself once a loan has matured; the Penalty section shows a single "as of" date instead of implying a range; and the document reliably fits on one printed page again.',
           'Fixed date-range filters across every report (Loan Origination, Collection, Transactions, Releases, Accounts With Past Due, Collection History, Expected Collection, First Amortization, Daily Collection, Fully Paid Accounts) that were silently excluding same-day records recorded early in the Manila business day.',
@@ -310,15 +339,8 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 5-6".
-    version: '0.9.24',
+    version: '0.34.0',
     days: [
-      {
-        date: 'August 6, 2026',
-        highlights: [
-          'New configurable Roles & Permissions system (Administration > User Accounts > Permissions) - MIS can now grant or revoke access to specific platform actions per role, instead of access being fixed in the code. Closed a real gap where document generation and e-signature sending had no role restriction at all.',
-        ],
-      },
       {
         date: 'August 5, 2026',
         highlights: [
@@ -332,8 +354,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 3-4".
-    version: '0.9.23',
+    version: '0.33.0',
     days: [
       {
         date: 'August 4, 2026',
@@ -344,6 +365,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Fixed report due/maturity dates showing the raw UTC calendar day instead of the correct Manila-time day.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.32.0',
+    days: [
       {
         date: 'August 3, 2026',
         highlights: [
@@ -355,8 +381,8 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "July 30 - August 2".
-    version: '0.9.22',
+    // PATCH - a single validation fix, no new capability.
+    version: '0.31.1',
     days: [
       {
         date: 'August 2, 2026',
@@ -364,6 +390,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           "Blocked creating a Client Profile when a co-borrower's name is incomplete, preventing a data-quality gap at the source.",
         ],
       },
+    ],
+  },
+  {
+    version: '0.31.0',
+    days: [
       {
         date: 'July 31, 2026',
         highlights: [
@@ -372,6 +403,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'LMS and Portal became reachable over the public internet for the first time, via a Cloudflare Tunnel.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.30.0',
+    days: [
       {
         date: 'July 30, 2026',
         highlights: [
@@ -383,9 +419,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "July 27-29" (July 27 was Portal-only work,
-    // already covered in PORTAL_CHANGELOG, so it has no LMS-specific entry here).
-    version: '0.9.21',
+    version: '0.29.0',
     days: [
       {
         date: 'July 29, 2026',
@@ -396,6 +430,11 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
           'Client Profile: removed a duplicate Attachments card, widened Loan History, fixed equal-height cards, and added "no number on file" warnings on the e-signature panel.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.28.0',
+    days: [
       {
         date: 'July 28, 2026',
         highlights: [
@@ -409,7 +448,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.20',
+    version: '0.27.0',
     days: [
       {
         date: 'July 26, 2026',
@@ -425,7 +464,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.19',
+    version: '0.26.0',
     days: [
       {
         date: 'July 25, 2026',
@@ -439,7 +478,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.18',
+    version: '0.25.0',
     days: [
       {
         date: 'July 24, 2026',
@@ -455,7 +494,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.17',
+    version: '0.24.0',
     days: [
       {
         date: 'July 23, 2026',
@@ -473,7 +512,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.16',
+    version: '0.23.0',
     days: [
       {
         date: 'July 22, 2026',
@@ -486,7 +525,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.15',
+    version: '0.22.0',
     days: [
       {
         date: 'July 21, 2026',
@@ -503,10 +542,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-07-23: merged from two same-day entries (was separately 0.9.15 and 0.9.14, both dated
-    // July 20, 2026) - one release, one version bump, one changelog entry per calendar day (same
-    // convention as the 0.9.6 entry further below).
-    version: '0.9.14',
+    version: '0.21.0',
     days: [
       {
         date: 'July 20, 2026',
@@ -530,7 +566,8 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.13',
+    // PATCH - a single scroll-behavior bug fix, no new capability.
+    version: '0.20.1',
     days: [
       {
         date: 'July 19, 2026',
@@ -541,7 +578,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.12',
+    version: '0.20.0',
     days: [
       {
         date: 'July 18, 2026',
@@ -560,7 +597,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.11',
+    version: '0.19.0',
     days: [
       {
         date: 'July 17, 2026',
@@ -578,7 +615,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.10',
+    version: '0.18.0',
     days: [
       {
         date: 'July 16, 2026',
@@ -599,7 +636,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.9',
+    version: '0.17.0',
     days: [
       {
         date: 'July 15, 2026',
@@ -617,7 +654,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.8',
+    version: '0.16.0',
     days: [
       {
         date: 'July 14, 2026',
@@ -633,7 +670,8 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.7',
+    // PATCH - renames and bug fixes only, no new capability.
+    version: '0.15.1',
     days: [
       {
         date: 'July 13, 2026',
@@ -649,7 +687,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
     // 2026-07-16: merged from two same-day entries (was separately 0.9.7 and 0.9.6, both dated
     // July 12, 2026) - one release, one version bump, one changelog entry per calendar day.
-    version: '0.9.6',
+    version: '0.15.0',
     days: [
       {
         date: 'July 12, 2026',
@@ -675,7 +713,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.5',
+    version: '0.14.0',
     days: [
       {
         date: 'July 11, 2026',
@@ -693,7 +731,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.4',
+    version: '0.13.0',
     days: [
       {
         date: 'July 10, 2026',
@@ -710,7 +748,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.3',
+    version: '0.12.0',
     days: [
       {
         date: 'July 9, 2026',
@@ -726,7 +764,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.2',
+    version: '0.11.0',
     days: [
       {
         date: 'July 8, 2026',
@@ -746,7 +784,7 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.9.1',
+    version: '0.10.0',
     days: [
       {
         date: 'July 7, 2026',
@@ -809,15 +847,13 @@ export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.days[0]!.date;
  * Companion changelog for the client-facing Easycash Portal (added 2026-08-19, user request) -
  * shown on the LMS About page alongside the LMS's own changelog so a stakeholder can see the
  * complete platform's history in one place, not just the internal staff app. Same
- * plain-language, stakeholder-facing convention as `LMS_CHANGELOG` - see its doc comment.
+ * plain-language, stakeholder-facing convention as `LMS_CHANGELOG` - see its doc comment,
+ * including the same real MINOR/PATCH versioning rule.
  * `PORTAL_VERSION`/`PORTAL_UPDATED_ON` below are derived the same way, from `PORTAL_CHANGELOG[0]`.
  */
 export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
   {
-    // 2026-08-24 (user request): split from one entry previously dated "August 21-23" (August 22
-    // had no Portal-specific real work, cross-checked against git history, so it has no entry
-    // here - not a fabricated day).
-    version: '0.7.0',
+    version: '0.10.0',
     days: [
       {
         date: 'August 23, 2026',
@@ -826,6 +862,11 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
           "Fixed the Portal sometimes trying to reach a developer's local server instead of the live backend.",
         ],
       },
+    ],
+  },
+  {
+    version: '0.9.0',
+    days: [
       {
         date: 'August 21, 2026',
         highlights: [
@@ -838,9 +879,8 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
   {
     // 2026-08-20 (user-corrected): renumbered the whole Portal changelog from 1.x down to 0.x -
     // the site is technically live and reachable, but real Easycash borrowers are not using it
-    // yet, so a 1.0+ version overstated its actual rollout status. Every entry below keeps its
-    // original date and content; only the version numbers changed (1.0.0->0.1.0 ... 1.4.0->0.5.0).
-    version: '0.6.0',
+    // yet, so a 1.0+ version overstated its actual rollout status.
+    version: '0.8.0',
     days: [
       {
         date: 'August 20, 2026',
@@ -853,7 +893,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    version: '0.5.0',
+    version: '0.7.0',
     days: [
       {
         date: 'August 13, 2026',
@@ -869,9 +909,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "August 3-6" (August 4-5 had no
-    // Portal-specific real work, cross-checked against git history).
-    version: '0.4.0',
+    version: '0.6.0',
     days: [
       {
         date: 'August 6, 2026',
@@ -882,6 +920,11 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
           'Security hardening: security-response headers, image lazy-loading, gzip compression, and rate limiting added to the live Portal.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.5.0',
+    days: [
       {
         date: 'August 3, 2026',
         highlights: [
@@ -891,9 +934,7 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: split from one entry previously dated "July 30 - August 1" (August 1 had no
-    // Portal-specific real work, cross-checked against git history).
-    version: '0.3.0',
+    version: '0.4.0',
     days: [
       {
         date: 'July 31, 2026',
@@ -903,6 +944,11 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
           'Profile, Security, and loan-application editing now open as in-page dialogs instead of full separate pages.',
         ],
       },
+    ],
+  },
+  {
+    version: '0.3.0',
+    days: [
       {
         date: 'July 30, 2026',
         highlights: [
@@ -929,9 +975,6 @@ export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
     ],
   },
   {
-    // 2026-08-24: collapsed from a "July 27-28" range down to its one real day - no July 28
-    // Portal-specific commit was found in git history for this launch, so no second day is
-    // listed rather than inventing one.
     version: '0.1.0',
     days: [
       {
