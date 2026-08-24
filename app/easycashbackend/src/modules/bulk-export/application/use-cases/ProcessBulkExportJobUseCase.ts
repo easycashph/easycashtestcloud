@@ -7,6 +7,7 @@ import type { IBorrowerRepository } from '@modules/borrower/application/ports/IB
 import type { ILoanAccountRepository } from '@modules/loan-account/application/ports/ILoanAccountRepository';
 import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
 import { documentCategoryLabel } from '@modules/document/application/documentCategoryLabel';
+import { resolveAttachmentFileName } from '@modules/document/application/resolveAttachmentFileName';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
 import type { BulkExportJob } from '../../domain/BulkExportJob';
@@ -138,7 +139,7 @@ export class ProcessBulkExportJobUseCase {
           const path = buildUniqueZipEntryPath(
             usedPaths,
             `${recordFolder}/${documentCategoryLabel(attachment.documentCategory)}`,
-            attachment.fileName,
+            resolveAttachmentFileName(attachment.fileName, attachment.fileType),
           );
           archive.append(data, { name: path });
           fileCount += 1;

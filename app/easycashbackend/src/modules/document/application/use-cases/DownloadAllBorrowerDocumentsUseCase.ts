@@ -4,6 +4,7 @@ import { buildUniqueZipEntryPath } from '@shared/application/buildUniqueZipEntry
 import type { IAttachmentRepository } from '../ports/IAttachmentRepository';
 import type { IFileStorage } from '../ports/IFileStorage';
 import { documentCategoryLabel } from '../documentCategoryLabel';
+import { resolveAttachmentFileName } from '../resolveAttachmentFileName';
 
 export interface ZipEntry {
   path: string;
@@ -36,7 +37,11 @@ export class DownloadAllBorrowerDocumentsUseCase {
       // MIS. Same underlying gap the single-attachment download endpoint has always had.
       try {
         const data = await this.deps.fileStorage.read(attachment.storageKey);
-        const path = buildUniqueZipEntryPath(usedPaths, documentCategoryLabel(attachment.documentCategory), attachment.fileName);
+        const path = buildUniqueZipEntryPath(
+          usedPaths,
+          documentCategoryLabel(attachment.documentCategory),
+          resolveAttachmentFileName(attachment.fileName, attachment.fileType),
+        );
         entries.push({ path, data });
       } catch (error) {
         console.error(`[DownloadAllBorrowerDocumentsUseCase] skipping unreadable attachment ${attachment.id}`, error);
