@@ -243,11 +243,13 @@ export function LoanListPage() {
             {isLoading ? 'Loading…' : `${rows.length} loan accounts on this page.`}
           </p>
         </div>
-        {canCreateLoanAccount && (
-          <Button onClick={() => navigate('/loans/new')}>
-            <Plus className="mr-1.5 h-4 w-4" /> New Loan Account
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateLoanAccount && (
+            <Button onClick={() => navigate('/loans/new')}>
+              <Plus className="mr-1.5 h-4 w-4" /> New Loan Account
+            </Button>
+          )}
+        </div>
       </div>
 
       {loansQuery.isError && (

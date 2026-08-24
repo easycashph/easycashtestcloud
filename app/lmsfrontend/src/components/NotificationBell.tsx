@@ -19,6 +19,7 @@ function entityLink(notification: Notification): string | null {
   if (!notification.entityId) return null;
   if (notification.entityType === 'LoanApplication') return `/applications/${notification.entityId}`;
   if (notification.entityType === 'LoanAccount') return `/loans/${notification.entityId}`;
+  if (notification.entityType === 'BulkExportJob') return '/exports';
   return null;
 }
 

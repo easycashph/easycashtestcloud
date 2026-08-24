@@ -18,7 +18,10 @@ WORKDIR /app
 # substitute Word's Arial/Times New Roman/Calibri/Segoe UI with — every generated PDF rendered as
 # blank tofu boxes until this was added (2026-07-14, found via visual PDF review, not caught by
 # text-extraction-only testing since the underlying text layer survives even with missing glyphs).
-RUN apk add --no-cache openssl libreoffice ttf-liberation font-noto fontconfig && fc-cache -f
+# postgresql16-client: pg_dump binary for the MIS "Export Database" feature (2026-08-24 user
+# request) - matches the postgres:16-alpine image this stack's own Postgres container runs, so the
+# dump format is always compatible with what pg_restore expects for this database.
+RUN apk add --no-cache openssl libreoffice ttf-liberation font-noto fontconfig postgresql16-client && fc-cache -f
 ENV NODE_ENV=production
 COPY package*.json ./
 COPY prisma ./prisma

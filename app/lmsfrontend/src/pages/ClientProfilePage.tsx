@@ -1,6 +1,24 @@
 import * as React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Briefcase, Copy, FilePlus2, Home, KeyRound, Landmark, Link2, Mail, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Briefcase,
+  Copy,
+  Download,
+  FilePlus2,
+  Home,
+  KeyRound,
+  Landmark,
+  Link2,
+  Loader2,
+  Mail,
+  Pencil,
+  Phone,
+  Plus,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -26,7 +44,7 @@ import { ProfileActivityTimeline } from '@/components/ProfileActivityTimeline';
 import { type AddressDraft, emptyAddressDraft, PsgcAddressPicker } from '@/components/PsgcAddressPicker';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { apiClient, ApiError, fetchAllPages, uploadFile } from '@/lib/apiClient';
+import { apiClient, ApiError, downloadFile, fetchAllPages, uploadFile } from '@/lib/apiClient';
 import { ATTACHMENT_ACCEPTED_MIME, ATTACHMENT_ACCEPTED_TYPES, ATTACHMENT_MAX_FILE_SIZE_BYTES } from '@/lib/documentApiTypes';
 import type { Borrower as RealBorrower, CoBorrower, LoanAccount, LoanAccountStatus, LoanProduct } from '@/lib/loanApiTypes';
 import type { LoanApplication } from '@/lib/loanApplicationApiTypes';
@@ -1103,6 +1121,19 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const [editOpen, setEditOpen] = React.useState(false);
   const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
   const [createLoanAccountOpen, setCreateLoanAccountOpen] = React.useState(false);
+  const [downloadingAll, setDownloadingAll] = React.useState(false);
+  const [downloadAllError, setDownloadAllError] = React.useState<string | null>(null);
+  const handleDownloadAll = async () => {
+    setDownloadAllError(null);
+    setDownloadingAll(true);
+    try {
+      await downloadFile(`/borrowers/${borrowerId}/documents/download-all`, 'documents.zip');
+    } catch {
+      setDownloadAllError('Could not download this client’s documents. Please try again.');
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
   const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
     try {
@@ -1208,9 +1239,22 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        {currentAccount.roles.includes('MIS') && (
+          <Button variant="outline" size="sm" disabled={downloadingAll} onClick={() => void handleDownloadAll()}>
+            {downloadingAll ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+            {downloadingAll ? 'Preparing ZIP…' : 'Download All Documents'}
+          </Button>
+        )}
+      </div>
+      {downloadAllError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {downloadAllError}
+        </div>
+      )}
 
       <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary">
         Real client, migrated from legacy data (CP12) - details, loan history, and Create Loan Account below are live.

@@ -150,7 +150,9 @@ export function ClientListPage() {
           <h2 className="text-2xl font-semibold tracking-tight">List of Clients</h2>
           <p className="text-sm text-muted-foreground">{isLoading ? 'Loading…' : `${rows.length} borrower profiles on this page.`}</p>
         </div>
-        {canManageClients && <Button onClick={() => navigate('/clients/new')}>Add Client</Button>}
+        <div className="flex flex-wrap items-center gap-2">
+          {canManageClients && <Button onClick={() => navigate('/clients/new')}>Add Client</Button>}
+        </div>
       </div>
 
       {borrowersQuery.isError && (

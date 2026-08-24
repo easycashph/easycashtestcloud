@@ -36,4 +36,11 @@ export interface IBorrowerRepository {
    * single match. */
   findManyByEmail(email: string, ctx?: TransactionContext): Promise<Borrower[]>;
   save(borrower: Borrower, ctx?: TransactionContext): Promise<void>;
+  /** 2026-08-24 (MIS bulk document export): lightweight id+display-name pairs for every Borrower
+   * whose `createdAt` falls within `[from, to]`, no joins - avoids materializing full `Borrower`
+   * domain objects (income detail, addresses, etc.) for a job that may touch thousands of rows. */
+  findManyCreatedBetween(from: Date, to: Date, branchId: string | undefined, ctx?: TransactionContext): Promise<{ id: string; displayName: string }[]>;
+  /** Earliest `createdAt` across all Borrowers, or `null` if there are none - used to compute the
+   * bulk-export date-range picker's default start date (first day of that month). */
+  findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null>;
 }

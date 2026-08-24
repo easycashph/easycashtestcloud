@@ -18,6 +18,7 @@ import {
   FileCheck2,
   Globe2,
   Info,
+  Loader2,
   Mail,
   MessageSquareText,
   Lock,
@@ -1106,6 +1107,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // are drag-to-reorder - each staff member's own arrangement, saved per-user like the sidebar
   // collapse preference (AppLayout.tsx), so one officer's preferred layout doesn't affect anyone
   // else logged into the same machine.
+  // 2026-08-20 (MIS bulk-document-download, user request): every attachment, generated document,
+  // and signed document for this loan account as a single organized ZIP.
+  const [downloadingAllDocuments, setDownloadingAllDocuments] = React.useState(false);
+  const [downloadAllDocumentsError, setDownloadAllDocumentsError] = React.useState<string | null>(null);
+  const handleDownloadAllDocuments = async () => {
+    setDownloadAllDocumentsError(null);
+    setDownloadingAllDocuments(true);
+    try {
+      await downloadFile(`/loan-accounts/${loanId}/documents/download-all`, 'documents.zip');
+    } catch {
+      setDownloadAllDocumentsError('Could not download this loan account’s documents. Please try again.');
+    } finally {
+      setDownloadingAllDocuments(false);
+    }
+  };
   const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
     try {
@@ -2424,6 +2440,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <LoanStatusBadge status={loan.status} isMatured={loan.isMatured} />
+          {currentAccount.roles.includes('MIS') && (
+            <Button variant="outline" size="sm" disabled={downloadingAllDocuments} onClick={() => void handleDownloadAllDocuments()}>
+              {downloadingAllDocuments ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
+              {downloadingAllDocuments ? 'Preparing ZIP…' : 'Download All Documents'}
+            </Button>
+          )}
           {/* 2026-07-24 (UI polish, user-confirmed): at most one solid/primary button per view -
               whichever action is THE next expected step for this status (Record Payment while
               ACTIVE, Disburse Loan while APPROVED, Approve Loan Account while PENDING_APPROVAL). Every
@@ -2491,6 +2513,13 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           })()}
         </div>
       </div>
+
+      {downloadAllDocumentsError && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{downloadAllDocumentsError}</span>
+        </div>
+      )}
 
       {actionError && !confirmAction && !reverseTarget && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
