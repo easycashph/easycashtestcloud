@@ -1,9 +1,11 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ValidationError } from '@shared/errors/DomainError';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
+import { streamZipResponse } from '@shared/http/streamZipResponse';
 import type { UploadAttachmentUseCase } from '../../application/use-cases/UploadAttachmentUseCase';
 import type { ListAttachmentsForOwnerUseCase } from '../../application/use-cases/ListAttachmentsForOwnerUseCase';
 import type { DownloadAttachmentUseCase } from '../../application/use-cases/DownloadAttachmentUseCase';
+import type { DownloadAllBorrowerDocumentsUseCase } from '../../application/use-cases/DownloadAllBorrowerDocumentsUseCase';
 import { attachmentOwnerTypeSchema, uploadAttachmentBodySchema } from './documentSchemas';
 import { presentAttachment } from './presenters/AttachmentPresenter';
 
@@ -28,6 +30,7 @@ export interface DocumentControllerDeps {
   uploadAttachmentUseCase: UploadAttachmentUseCase;
   listAttachmentsForOwnerUseCase: ListAttachmentsForOwnerUseCase;
   downloadAttachmentUseCase: DownloadAttachmentUseCase;
+  downloadAllBorrowerDocumentsUseCase: DownloadAllBorrowerDocumentsUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -74,6 +77,15 @@ export class DocumentController {
       res.setHeader('Content-Type', resolveContentType(record.fileType));
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.fileName)}"`);
       res.status(200).send(data);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  downloadAllForBorrower = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { zipFileName, entries } = await this.deps.downloadAllBorrowerDocumentsUseCase.execute(req.params.id as string);
+      streamZipResponse(res, zipFileName, entries);
     } catch (error) {
       next(error);
     }

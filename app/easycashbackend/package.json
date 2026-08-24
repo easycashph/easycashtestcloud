@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
+    "archiver": "^8.0.0",
     "bcrypt": "^6.0.0",
     "bson": "^7.3.1",
     "compression": "^1.8.1",
@@ -54,6 +55,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/bcrypt": "^5.0.2",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.7",

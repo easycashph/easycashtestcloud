@@ -3,6 +3,7 @@ import type { ITokenService } from '@modules/identity/application/ports/ITokenSe
 import { validateBody } from '@shared/middleware/validate';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
 import { requirePermission } from '@shared/middleware/requirePermission';
+import { requireRole } from '@shared/middleware/requireRole';
 import { LoanDocumentController, type LoanDocumentControllerDeps } from './loanDocumentController';
 import { generateLoanDocumentSchema } from './loanDocumentSchemas';
 
@@ -29,6 +30,11 @@ export function createLoanDocumentRouter(deps: LoanDocumentControllerDeps, token
   );
   router.get('/loan-accounts/:id/documents', requireAuth, controller.list);
   router.get('/loan-accounts/:id/documents/:generatedDocumentId/download', requireAuth, controller.download);
+
+  // 2026-08-20 (user request): MIS-only bulk export - every attachment, generated document, and
+  // signed document for one loan account as a single organized ZIP. `requireRole('MIS')` rather
+  // than `requirePermission`, matching every other hard-restricted-to-MIS route in this codebase.
+  router.get('/loan-accounts/:id/documents/download-all', requireAuth, requireRole('MIS'), controller.downloadAll);
 
   return router;
 }

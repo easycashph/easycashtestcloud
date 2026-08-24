@@ -240,6 +240,7 @@ import { OllamaVisionModelClient } from '@modules/ai-extraction/infrastructure/O
 import { UploadAttachmentUseCase } from '@modules/document/application/use-cases/UploadAttachmentUseCase';
 import { ListAttachmentsForOwnerUseCase } from '@modules/document/application/use-cases/ListAttachmentsForOwnerUseCase';
 import { DownloadAttachmentUseCase } from '@modules/document/application/use-cases/DownloadAttachmentUseCase';
+import { DownloadAllBorrowerDocumentsUseCase } from '@modules/document/application/use-cases/DownloadAllBorrowerDocumentsUseCase';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
 import { PrismaProfileNoteRepository } from '@modules/profile-note/infrastructure/PrismaProfileNoteRepository';
 import { CreateProfileNoteUseCase } from '@modules/profile-note/application/use-cases/CreateProfileNoteUseCase';
@@ -331,6 +332,7 @@ import { createLoanDocumentRouter } from '@modules/loan-document/interface/http/
 import { GenerateLoanDocumentUseCase } from '@modules/loan-document/application/use-cases/GenerateLoanDocumentUseCase';
 import { ListLoanDocumentsUseCase } from '@modules/loan-document/application/use-cases/ListLoanDocumentsUseCase';
 import { GetGeneratedLoanDocumentFileUseCase } from '@modules/loan-document/application/use-cases/GetGeneratedLoanDocumentFileUseCase';
+import { DownloadAllLoanAccountDocumentsUseCase } from '@modules/loan-document/application/use-cases/DownloadAllLoanAccountDocumentsUseCase';
 import { createDocumentTemplateAdminRouter } from '@modules/loan-document/interface/http/documentTemplateAdminRouter';
 import { ListDocumentTemplatesForAdminUseCase } from '@modules/loan-document/application/use-cases/ListDocumentTemplatesForAdminUseCase';
 import { UpdateDocumentTemplateRequiredUseCase } from '@modules/loan-document/application/use-cases/UpdateDocumentTemplateRequiredUseCase';
@@ -980,6 +982,19 @@ export function createApp(): Express {
   });
   const documentFiller = new DocxtemplaterDocumentFiller();
   const docxToPdfConverter = new LibreOfficeDocxToPdfConverter(env.LIBREOFFICE_BINARY_PATH);
+  // 2026-08-20 (MIS bulk-document-download, user request): dedicated local instances, since
+  // attachmentRepository/loanSigningSessionRepository proper aren't declared until later in this
+  // file (same "dedicated local repository instance" precedent as the Quit Claim mergeDataResolver
+  // just above).
+  const downloadAllLoanAccountDocumentsUseCase = new DownloadAllLoanAccountDocumentsUseCase({
+    loanAccountRepository,
+    attachmentRepository: new PrismaAttachmentRepository(),
+    generatedLoanDocumentRepository,
+    documentTemplateRepository,
+    loanSigningSessionRepository: new PrismaLoanSigningSessionRepository(),
+    attachmentFileStorage: new LocalFileStorage(),
+    loanDocumentFileStorage,
+  });
   const loanDocumentRouter = createLoanDocumentRouter(
     {
       generateLoanDocumentUseCase: new GenerateLoanDocumentUseCase({
@@ -1003,6 +1018,7 @@ export function createApp(): Express {
         documentTemplateRepository,
         fileStorage: loanDocumentFileStorage,
       }),
+      downloadAllLoanAccountDocumentsUseCase,
       getLoanAccountUseCase,
       idempotencyKeyStore,
     },
@@ -1530,6 +1546,7 @@ export function createApp(): Express {
       uploadAttachmentUseCase: new UploadAttachmentUseCase({ attachmentRepository, fileStorage, profileActivityLogService }),
       listAttachmentsForOwnerUseCase: new ListAttachmentsForOwnerUseCase({ attachmentRepository }),
       downloadAttachmentUseCase: new DownloadAttachmentUseCase({ attachmentRepository, fileStorage }),
+      downloadAllBorrowerDocumentsUseCase: new DownloadAllBorrowerDocumentsUseCase({ borrowerRepository, attachmentRepository, fileStorage }),
     },
     tokenService,
   );
