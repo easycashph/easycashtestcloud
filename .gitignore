@@ -63,6 +63,12 @@ legacy/MongoDB dump/
 # for the UI preview is tracked.
 legacy/sdevtech/
 
+# Mambu (pre-SDevTech, pre-2023) MySQL export — real client names/addresses/loan data, same PII
+# class as the SDevTech dumps above. 2026-08-24: source for migrate-mambu-notes.ts's collector-note
+# recovery. Covers both the original .zip and its one-time extracted .sql.
+legacy/Easycash-*.zip
+legacy/mambu/
+
 # Legacy Excel exports (real client names/balances: Clients.xlsx, Loan Accounts Details.xlsx,
 # Daily Collection Report.xlsx, etc.) — untracked going forward, 2026-07-06 verification pass.
 # Deliberately does NOT cover legacy/reports/201 Loan Docs Generator/ — that subfolder is the
