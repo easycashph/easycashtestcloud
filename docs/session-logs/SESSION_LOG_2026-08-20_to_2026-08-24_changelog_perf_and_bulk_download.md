@@ -242,6 +242,47 @@ silently skipped; worth a follow-up if this module sees further changes.
 
 Commit `fe46b63`.
 
+## 6. MIS database export (pg_dump) + consolidated Exports hub (2026-08-24)
+
+Follow-up request right after item 5: add a full-database `pg_dump` export (zipped), MIS-only,
+triggered from a button on `/admin/system`, and move the client/loan-account attachment export
+triggers off the List pages onto this same dedicated Exports page. Clarified up front (three
+AskUserQuestion): MIS role only (no extra re-auth step), same background-job-plus-notification
+pattern as item 5, and consolidate (remove from List pages, keep only on the Exports page).
+
+**Backend**: extended `BulkExportType` with `DATABASE_DUMP` (migration
+`20260824023321_add_database_dump_export_type`) - `startDate`/`endDate` are unused for this type (no
+date-range concept for a whole-database dump). `ProcessBulkExportJobUseCase` refactored into
+`runAttachmentExport`/`runDatabaseDump` private methods sharing the same success/failure-notification
+wrapper. The dump branch spawns `pg_dump` (via `node:child_process`) with the app's own `DATABASE_URL`,
+piping its stdout straight into the same `archiver` ZIP-to-disk stream used for attachments - `
+backend.Dockerfile` now installs `postgresql16-client` so the binary exists inside the container.
+
+**Frontend**: `BulkExportsPage.tsx` restyled from "My Exports" into an "Exports" hub - a "Start a New
+Export" card with all three triggers (`BulkExportDialog` x2 + new `DatabaseExportButton.tsx`, a
+simpler confirm-only dialog with no date picker) sits above the existing history table. `SystemPage.tsx`
+gained an "Exports" button in its header linking to `/exports`. `ClientListPage.tsx`/`LoanListPage.tsx`
+had their `BulkExportDialog`/"My Exports" link removed entirely (also cleaned up the now-unused
+`currentAccount` destructure and imports left behind).
+
+**Bugs found and fixed during live verification** (same "test against real behavior, not just a green
+build" discipline as item 5):
+1. First live test failed instantly: `pg_dump: error: invalid URI query parameter: "schema"` - pg_dump's
+   own URI parser doesn't understand Prisma's `?schema=public` suffix on `DATABASE_URL`. Confirmed no
+   crash this time (the item-5 stream-error-listener fix held - the job correctly went to `FAILED` with
+   a readable error message instead of taking down the process). Fixed by parsing the URL, stripping
+   the `schema` query param, and passing it via pg_dump's own `-n <schema>` flag instead.
+2. Re-tested after the fix: job completed in ~25s, produced a 52.9MB (compressed) / 53.5MB (raw dump)
+   file. Verified genuineness by extracting the ZIP and checking the dump file's magic header bytes
+   (`PGDMP`, the real PostgreSQL custom-format signature) - `pg_restore --list` itself couldn't be run
+   cleanly from this Windows/Git-Bash environment (Docker path-mangling on `docker cp`/`docker exec`
+   with Windows paths, unrelated to the feature itself), so the magic-header check was the practical
+   substitute for "is this a real, valid dump."
+
+Cleaned up all test job rows/files from the shared dev database afterward, same as item 5.
+
+Commit `53c5d0f`.
+
 ## Current state / follow-ups
 
 - All five pieces of work above are committed and pushed to `main`, pushed under the user's personal
