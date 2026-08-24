@@ -121,9 +121,23 @@ export class ProcessBulkExportJobUseCase {
     archive.pipe(writeStream);
 
     const ownerType = job.exportType === 'BORROWER_ATTACHMENTS' ? 'BORROWER' : 'LOAN_ACCOUNT';
+    // Loan accounts: `displayName` is the loan code, already unique on its own - no disambiguator
+    // needed. Borrowers: two different clients can share the exact same name, so track how many
+    // times each name has been seen and only append a plain " (2)", " (3)", ... the same way
+    // buildUniqueZipEntryPath resolves a same-name file collision - readable by default (just the
+    // name), instead of a permanent, always-on random ID fragment on every folder regardless of
+    // whether a collision could even happen (confirmed 2026-08-25: MIS found the ID fragment
+    // confusing on an already-unique loan code folder).
+    const folderNameOccurrences = new Map<string, number>();
     for (const record of records) {
       const attachments = await this.deps.attachmentRepository.listByOwner(ownerType, record.id);
-      const recordFolder = `${record.displayName} (${record.id.slice(0, 8)})`.replace(/[\\/:*?"<>|]/g, '-');
+      let recordFolder = record.displayName;
+      if (job.exportType === 'BORROWER_ATTACHMENTS') {
+        const seenCount = (folderNameOccurrences.get(record.displayName) ?? 0) + 1;
+        folderNameOccurrences.set(record.displayName, seenCount);
+        recordFolder = seenCount > 1 ? `${record.displayName} (${seenCount})` : record.displayName;
+      }
+      recordFolder = recordFolder.replace(/[\\/:*?"<>|]/g, '-');
       for (const attachment of attachments) {
         // Read each attachment fully into a Buffer (not `createReadStream`) - individual
         // attachments are capped at 10MB (small, safe to buffer one at a time; nothing here holds
