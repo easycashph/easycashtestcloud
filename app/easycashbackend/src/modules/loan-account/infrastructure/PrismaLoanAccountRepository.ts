@@ -409,14 +409,14 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     to: Date,
     branchId: string | undefined,
     ctx?: TransactionContext,
-  ): Promise<{ id: string; loanCode: string }[]> {
+  ): Promise<{ id: string; loanCode: string; borrowerName: string }[]> {
     const client = resolveClient(ctx);
     const rows = await client.loanAccount.findMany({
       where: { createdAt: { gte: from, lte: to }, ...(branchId ? { branchId } : {}) },
-      select: { id: true, loanCode: true },
+      select: { id: true, loanCode: true, borrower: { select: { firstName: true, lastName: true } } },
       orderBy: { createdAt: 'asc' },
     });
-    return rows;
+    return rows.map((row) => ({ id: row.id, loanCode: row.loanCode, borrowerName: `${row.borrower.firstName} ${row.borrower.lastName}` }));
   }
 
   async findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null> {

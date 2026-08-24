@@ -75,8 +75,15 @@ export interface ILoanAccountRepository {
   delete(id: string, ctx?: TransactionContext): Promise<void>;
   /** 2026-08-24 (MIS bulk document export): lightweight id+loanCode pairs for every LoanAccount
    * whose `createdAt` falls within `[from, to]`, no joins - mirrors
-   * `IBorrowerRepository.findManyCreatedBetween`'s identical reasoning. */
-  findManyCreatedBetween(from: Date, to: Date, branchId: string | undefined, ctx?: TransactionContext): Promise<{ id: string; loanCode: string }[]>;
+   * `IBorrowerRepository.findManyCreatedBetween`'s identical reasoning. Includes the borrower's
+   * name (2026-08-25 user request) so a bulk export's per-loan folder can show whose loan it is,
+   * not just the loan code. */
+  findManyCreatedBetween(
+    from: Date,
+    to: Date,
+    branchId: string | undefined,
+    ctx?: TransactionContext,
+  ): Promise<{ id: string; loanCode: string; borrowerName: string }[]>;
   /** Earliest `createdAt` across all LoanAccounts, or `null` if there are none - used to compute the
    * bulk-export date-range picker's default start date. */
   findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null>;

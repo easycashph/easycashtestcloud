@@ -101,7 +101,8 @@ export class ProcessBulkExportJobUseCase {
       job.exportType === 'BORROWER_ATTACHMENTS'
         ? await this.deps.borrowerRepository.findManyCreatedBetween(job.startDate, job.endDate, job.branchId ?? undefined)
         : (await this.deps.loanAccountRepository.findManyCreatedBetween(job.startDate, job.endDate, job.branchId ?? undefined)).map(
-            (r) => ({ id: r.id, displayName: r.loanCode }),
+            // 2026-08-25 user request: show whose loan it is in the folder name, not just the code.
+            (r) => ({ id: r.id, displayName: `${r.loanCode} - ${r.borrowerName}` }),
           );
 
     job.markProcessing(records.length);
