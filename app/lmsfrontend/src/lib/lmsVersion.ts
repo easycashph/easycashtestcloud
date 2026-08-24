@@ -79,6 +79,43 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.9.37',
+    date: 'August 24, 2026',
+    highlights: [
+      'New MIS-only "Download All Documents" on a client or loan account\'s own page - packages every attachment (and, for a loan account, its generated and signed documents too) into one ZIP instead of downloading each file one at a time.',
+      'New Exports hub (Administration > System > Exports): MIS can now bulk-download every client\'s or every loan account\'s attachments for a chosen date range, or export a full database snapshot - all as background jobs that notify MIS when ready.',
+    ],
+  },
+  {
+    version: '0.9.36',
+    date: 'August 23, 2026',
+    highlights: [
+      'The client Portal is now installable as an app (PWA) with offline app-shell caching, so it keeps working (for already-visited pages) even with a spotty connection.',
+      "Fixed the Portal sometimes trying to reach a developer's local server instead of the live backend.",
+    ],
+  },
+  {
+    version: '0.9.35',
+    date: 'August 22, 2026',
+    highlights: [
+      'Loan Application detail page gained "Print Application" - generates a PDF, opens a preview, and auto-saves it to that application\'s Attachments.',
+      'New Portal Accounts report.',
+      'Report access is now controlled per report instead of one blanket permission, so MIS can grant a role access to specific reports only.',
+      'LMS sidebar header now shows the full Easycash wordmark logo (light/dark theme aware) instead of just the icon mark.',
+      "Fixed the peso sign (₱) breaking PDF generation on some documents - now uses a plain \"PHP\" prefix.",
+    ],
+  },
+  {
+    version: '0.9.34',
+    date: 'August 21, 2026',
+    highlights: [
+      'Statement of Account gained an on-screen, per-installment penalty computation table, and fixed a mismatch between that table\'s totals and the penalty actually charged.',
+      "Fixed the penalty rate threshold in Statement of Account to compute against the whole loan's balance, not a smaller partial figure.",
+      'Payment History now shows which staff member recorded each transaction.',
+      'Portal gained a Product dropdown in the top navigation, and had a stale eligibility note and public bank-account card removed from a page where they no longer applied.',
+    ],
+  },
+  {
     version: '0.9.33',
     date: 'August 20, 2026',
     highlights: [
@@ -86,13 +123,6 @@ export const LMS_CHANGELOG: LmsChangelogEntry[] = [
       "Portal's own version renumbered from 1.x to 0.x, to correctly reflect that real Easycash borrowers aren't using the live site yet.",
       "Fixed the About page showing its own \"Internal Preview Build\" disclosure note twice (once from the page's own content, once from the app-wide footer already shown on every page).",
       "The founding engineer's credit on the Developer Team card is now a permanent record, kept even if they leave the current staff roster listed alongside it.",
-    ],
-  },
-  {
-    version: '0.9.32',
-    date: 'August 19, 2026',
-    highlights: [
-      'Removed the standalone "Founding Development Credits" card from the About page - redundant with the Developer Team card, which already credits the founding engineer under Easycash Dev.',
     ],
   },
   {
@@ -547,6 +577,16 @@ export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.date;
  * `PORTAL_VERSION`/`PORTAL_UPDATED_ON` below are derived the same way, from `PORTAL_CHANGELOG[0]`.
  */
 export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    version: '0.7.0',
+    date: 'August 21-23, 2026',
+    highlights: [
+      'The Portal is now installable as an app (PWA) with offline app-shell caching, so it keeps working (for already-visited pages) even with a spotty connection.',
+      'New Product dropdown added to the top navigation.',
+      'Fixed the Portal sometimes trying to reach a developer\'s local server instead of the live backend.',
+      'Removed a stale Personal Loan eligibility note and a public bank-account card from a page where they no longer applied.',
+    ],
+  },
   {
     // 2026-08-20 (user-corrected): renumbered the whole Portal changelog from 1.x down to 0.x -
     // the site is technically live and reachable, but real Easycash borrowers are not using it
