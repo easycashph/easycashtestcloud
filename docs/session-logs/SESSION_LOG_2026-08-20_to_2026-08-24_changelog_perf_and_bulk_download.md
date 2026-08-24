@@ -147,12 +147,114 @@ consider disabling the Download button client-side for these rows.
 
 Commit `9cb9856`.
 
+## 5. MIS bulk document export by date range - background job (2026-08-24)
+
+**Request:** after item 4 shipped (single-client/single-loan "Download All Documents"), user asked
+for a bigger version: on the *List of Clients* and *List of Loan Accounts* pages, let MIS download
+every attachment for **every** client/loan account, configurable by date range (default: first day
+of the oldest record's month through end of the current month). Clarified up front (AskUserQuestion)
+rather than guessing: date range is user-configurable, the job runs in the background and notifies
+MIS when ready (not a synchronous download - could take minutes), completed ZIPs are retained 7 days,
+and a "My Exports" history page is wanted alongside the Notification bell.
+
+### Why this needed new infrastructure
+
+Investigated first (read-only) rather than assuming: this codebase has **no job queue** (no Bull/
+BullMQ/Redis - only `node-cron` for fixed-interval scheduled tasks, e.g. `misPostRotationScheduler.ts`),
+**no async-job-with-status-tracking pattern** anywhere (every existing "slow" operation, like PDF
+generation, runs synchronously in the request), the `Notification` model has **no attachment/file
+field** (plain text + a generic `entityType`/`entityId` pointer), and `IFileStorage` was **buffer-only**
+(`save(key, Buffer)`/`read(key): Buffer` - unsafe for a potential multi-GB export). Presented this
+gap back to the user with a concrete design before writing code, per CLAUDE.md's "analyze, design,
+explain reasoning" discipline given the size of what was being proposed (new DB table, new streaming
+I/O, new scheduler, new frontend page) - confirmed: in-process fire-and-forget job (no paid queue
+infra), 7-day retention, and yes to the history page.
+
+### What was built
+
+- **`BulkExportJob` Prisma model** (migration `20260824015342_add_bulk_export_jobs`) - id, requester,
+  optional branch scope, export type (`BORROWER_ATTACHMENTS` | `LOAN_ACCOUNT_ATTACHMENTS`), date
+  range, status (`PENDING`→`PROCESSING`→`COMPLETED`/`FAILED`), record/file counts, result storage
+  key + size, error message. New `Notification.type` value `BULK_EXPORT_READY`.
+- **`IFileStorage` extended** with `createReadStream`/`createWriteStream`/`delete` (both the shared
+  and module-local `LocalFileStorage` implementations) - the ZIP itself streams straight to disk via
+  `archiver`'s `ZipArchive` piped into `createWriteStream`, never buffered whole.
+- **`ProcessBulkExportJobUseCase`** - the actual worker, invoked fire-and-forget (`void processor
+  .execute(jobId)`, not awaited) from `CreateBulkExportJobUseCase` so the HTTP POST returns
+  immediately. Queries lightweight id+display-name pairs (new `findManyCreatedBetween`/
+  `findEarliestCreatedAt` repository methods on `IBorrowerRepository`/`ILoanAccountRepository` -
+  avoid materializing full domain objects with their joins for what can be thousands of rows), then
+  for each record lists its attachments and appends them into the growing archive, organized as
+  `<Record Name> (<id prefix>)/<Category>/<fileName>`.
+- **New routes** (all `requireRole('MIS')`, same hard-restriction pattern as every other MIS-only
+  route): `GET /bulk-exports/default-range?exportType=...`, `POST /bulk-exports`, `GET /bulk-exports`
+  (mine), `GET /bulk-exports/:id/download`.
+- **`BulkExportCleanupScheduler.ts`** - daily cron (03:00 Asia/Manila), prunes `COMPLETED` jobs older
+  than 7 days (row + file).
+- **Frontend**: `BulkExportDialog.tsx` (shared date-range picker + submit, reused by both list
+  pages), `BulkExportsPage.tsx` ("My Exports" history at `/exports`, polls every 10s while any job is
+  PENDING/PROCESSING), `NotificationBell.tsx` taught to link a `BulkExportJob` notification to
+  `/exports`.
+
+### Bug found and fixed during live verification (process-crashing, not just per-job)
+
+Same `legacy-unmigrated:`-prefixed placeholder `storageKey` gap from item 4 (~21k rows with no real
+file behind them, see the follow-up task `task_fb684ef4` from that item) surfaced again here - but in
+a much worse form. The first implementation used `fileStorage.createReadStream()` per attachment and
+piped it straight into `archive.append()`. A `Readable` stream's `ENOENT` (file doesn't exist) fires
+*asynchronously* as an `'error'` event, not a synchronous throw - the `try/catch` around
+`createReadStream()` itself did nothing, and because no listener was attached to that specific stream
+before handing it to `archiver`, Node's default behavior for an unhandled `'error'` event is to
+**crash the whole process**. Confirmed via Docker logs: `Unhandled 'error' event`, immediately
+followed by the backend's request-id counter resetting to 1 (proof the container's restart policy
+silently relaunched it) - meaning every in-flight request in the whole application, not just the
+export job, would have been dropped in production.
+
+**Fix**: read each attachment fully into a `Buffer` via `fileStorage.read()` (awaited, so a missing
+file rejects the promise - synchronously catchable by the surrounding `try/catch`) instead of
+streaming it, since individual attachments are capped at 10MB (safe to hold one at a time - nothing
+here holds more than one simultaneously). Kept the *growing ZIP itself* streaming straight to disk,
+since that's the part that actually needs to avoid buffering at scale. Re-verified against the same
+loan account that crashed the server before the fix (`SL-REG_00116`, 7 legacy-unmigrated attachments)
+- confirmed each one now logs `[ProcessBulkExportJobUseCase] skipping unreadable attachment` and the
+job completes successfully with `/health` still responding immediately after, instead of crashing.
+
+Also fixed a smaller display bug caught during the same verification pass: the date-range dialog
+built `Date` objects from local time (`new Date('2026-07-01T00:00:00')`), which under Asia/Manila
+(UTC+8) shifted the stored/displayed date back to `2026-06-30`. Fixed by appending an explicit `Z`
+(UTC) to both boundary timestamps so the typed date, the stored date, and the "My Exports" display
+all agree.
+
+### Verification
+
+`npx tsc --noEmit` clean on both apps, `npm run build` green on both, Docker rebuild + `/health` OK.
+Live end-to-end: created a `BORROWER_ATTACHMENTS` job via the browser (date-range dialog prefilled
+correctly), watched it complete against 4,606 real borrower records; created a `LOAN_ACCOUNT_
+ATTACHMENTS` job via direct API calls (browser click automation was unreliable for this one, verified
+via `curl` with a real token instead) against the crash-triggering loan account, confirmed the fix
+holds. Cleaned up all test job rows/files from the shared dev database afterward (`DELETE FROM
+bulk_export_jobs`, removed the test `.zip` files from the container's storage volume) so no test
+artifacts linger.
+
+**Known gap**: no automated test coverage was written for the new `bulk-export` module (the crash
+bug above was only caught by live/manual verification, not a test) - flagged here rather than
+silently skipped; worth a follow-up if this module sees further changes.
+
+Commit `fe46b63`.
+
 ## Current state / follow-ups
 
-- All four pieces of work above are committed and pushed to `main`, pushed under the user's personal
+- All five pieces of work above are committed and pushed to `main`, pushed under the user's personal
   GitHub account per item 2.
 - Follow-up task `task_fb684ef4` (fix the pre-existing single-file-download 500 for legacy-unmigrated
   attachments) is pending, not yet started — flagged but intentionally left for the user to pick up
-  separately since it's a distinct bug from the feature that surfaced it.
+  separately since it's a distinct bug from the feature that surfaced it. The bulk-export crash fix
+  in item 5 does NOT fix this - it only fixed the bulk-export code path's own use of the same gap.
+- Follow-up task `task_23b8ba40` (25 failing `StatementOfAccountCalculator` tests, pre-existing,
+  discovered incidentally while running the full test suite for item 5) is pending, not yet started.
 - Larger performance items from the item-3 audit (Recharts swap, applicant photo compression,
   LoanDetailPage list virtualization) remain undone by design — flagged to the user, not requested.
+- The live/production server (behind the Cloudflare tunnel, self-hosted separately from this device)
+  still needs `git pull` + `docker compose up -d --build easycashbackend lmsfrontend` to pick up
+  everything in this log - confirmed via a live 404 earlier in this session that the live server was
+  running stale code; unknown whether it has since been updated.
