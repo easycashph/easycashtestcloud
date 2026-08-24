@@ -23,10 +23,13 @@ export class DownloadBulkExportJobUseCase {
       throw new ValidationError('This export is not ready for download yet.');
     }
 
-    const typeLabel = job.exportType === 'BORROWER_ATTACHMENTS' ? 'Clients' : 'Loan-Accounts';
     const dateSuffix = job.createdAt.toISOString().slice(0, 10);
+    const fileName =
+      job.exportType === 'DATABASE_DUMP'
+        ? `Database-Export-${dateSuffix}.zip`
+        : `${job.exportType === 'BORROWER_ATTACHMENTS' ? 'Clients' : 'Loan-Accounts'}-Attachments-${dateSuffix}.zip`;
     return {
-      fileName: `${typeLabel}-Attachments-${dateSuffix}.zip`,
+      fileName,
       fileSize: job.resultFileSize,
       stream: this.deps.fileStorage.createReadStream(job.resultStorageKey),
     };

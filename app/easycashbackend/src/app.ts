@@ -1830,8 +1830,8 @@ export function createApp(): Express {
   app.use('/api/v1', profileActivityLogRouter);
 
   // --- bulk-export module wiring (2026-08-24 user request): MIS "download all client/loan account
-  // attachments in a date range" background export. Reuses attachmentRepository/fileStorage from
-  // the document module wiring above. ---
+  // attachments in a date range" background export, plus a full-database `pg_dump` export. Reuses
+  // attachmentRepository/fileStorage from the document module wiring above. ---
   const bulkExportJobRepository = new PrismaBulkExportJobRepository();
   const processBulkExportJobUseCase = new ProcessBulkExportJobUseCase({
     bulkExportJobRepository,
@@ -1841,6 +1841,7 @@ export function createApp(): Express {
     userRepository,
     fileStorage,
     notificationService,
+    databaseUrl: env.DATABASE_URL,
   });
   const bulkExportRouter = createBulkExportRouter(
     {

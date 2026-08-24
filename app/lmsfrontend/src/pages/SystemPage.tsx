@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Lock } from 'lucide-react';
+import { AlertCircle, FolderDown, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -342,9 +343,16 @@ export function SystemPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight">System</h2>
-        <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">System</h2>
+          <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link to="/exports">
+            <FolderDown className="mr-1.5 h-3.5 w-3.5" /> Exports
+          </Link>
+        </Button>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>

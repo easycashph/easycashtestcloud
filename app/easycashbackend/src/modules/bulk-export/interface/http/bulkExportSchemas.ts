@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const bulkExportTypeSchema = z.enum(['BORROWER_ATTACHMENTS', 'LOAN_ACCOUNT_ATTACHMENTS']);
+export const bulkExportTypeSchema = z.enum(['BORROWER_ATTACHMENTS', 'LOAN_ACCOUNT_ATTACHMENTS', 'DATABASE_DUMP']);
 
 export const createBulkExportJobSchema = z.object({
   exportType: bulkExportTypeSchema,

@@ -4,12 +4,20 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, Download, Loader2, PackageOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { BulkExportDialog } from '@/components/BulkExportDialog';
+import { DatabaseExportButton } from '@/components/DatabaseExportButton';
 import { apiClient, downloadFile } from '@/lib/apiClient';
 import { useRole } from '@/lib/roleContext';
-import type { BulkExportJob, BulkExportStatus } from '@/lib/bulkExportApiTypes';
+import type { BulkExportJob, BulkExportStatus, BulkExportType } from '@/lib/bulkExportApiTypes';
 import { formatDateTime } from '@/lib/utils';
+
+const EXPORT_TYPE_LABEL: Record<BulkExportType, string> = {
+  BORROWER_ATTACHMENTS: 'Clients',
+  LOAN_ACCOUNT_ATTACHMENTS: 'Loan Accounts',
+  DATABASE_DUMP: 'Database',
+};
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -27,10 +35,12 @@ function StatusBadge({ status }: { status: BulkExportStatus }) {
 }
 
 /**
- * "My Exports" history (2026-08-24 user request): a completed export stays findable/re-downloadable
- * here even if its Notification bell entry was already missed or cleared. Polls while any job is
- * still PENDING/PROCESSING so the status updates without a manual refresh; stops polling once
- * everything visible has settled.
+ * MIS Exports hub (2026-08-24 user request): every bulk export MIS can run - client attachments,
+ * loan account attachments, and a full database dump - lives here, reachable from
+ * Administration > System. A completed export stays findable/re-downloadable here even if its
+ * Notification bell entry was already missed or cleared. Polls while any job is still PENDING/
+ * PROCESSING so the status updates without a manual refresh; stops polling once everything visible
+ * has settled.
  */
 export function BulkExportsPage() {
   const navigate = useNavigate();
@@ -81,8 +91,20 @@ export function BulkExportsPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Start a New Export</CardTitle>
+          <CardDescription>Every export runs in the background and shows up below when ready.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <BulkExportDialog exportType="BORROWER_ATTACHMENTS" label="Download All Clients" />
+          <BulkExportDialog exportType="LOAN_ACCOUNT_ATTACHMENTS" label="Download All Loan Accounts" />
+          <DatabaseExportButton />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <PackageOpen className="h-4 w-4 text-muted-foreground" /> My Exports
+            <PackageOpen className="h-4 w-4 text-muted-foreground" /> Export History
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -95,9 +117,7 @@ export function BulkExportsPage() {
           {jobsQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No exports requested yet - use "Download All Clients"/"Download All Loan Accounts" from the list pages to start one.
-            </p>
+            <p className="text-sm text-muted-foreground">No exports requested yet - use one of the buttons above to start one.</p>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <Table>
@@ -115,9 +135,9 @@ export function BulkExportsPage() {
                 <TableBody>
                   {items.map((job) => (
                     <TableRow key={job.id}>
-                      <TableCell>{job.exportType === 'BORROWER_ATTACHMENTS' ? 'Clients' : 'Loan Accounts'}</TableCell>
+                      <TableCell>{EXPORT_TYPE_LABEL[job.exportType]}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {job.startDate.slice(0, 10)} – {job.endDate.slice(0, 10)}
+                        {job.exportType === 'DATABASE_DUMP' ? '—' : `${job.startDate.slice(0, 10)} – ${job.endDate.slice(0, 10)}`}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={job.status} />
@@ -126,7 +146,7 @@ export function BulkExportsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {job.recordCount ?? '—'} / {job.fileCount ?? '—'}
+                        {job.exportType === 'DATABASE_DUMP' ? '—' : `${job.recordCount ?? '—'} / ${job.fileCount ?? '—'}`}
                       </TableCell>
                       <TableCell className="text-xs">{job.resultFileSize !== null ? formatFileSize(job.resultFileSize) : '—'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(job.createdAt)}</TableCell>

@@ -2331,6 +2331,10 @@ model Notification {
 enum BulkExportType {
   BORROWER_ATTACHMENTS
   LOAN_ACCOUNT_ATTACHMENTS
+  /// 2026-08-24 (MIS "Export Database" feature, user request): a full `pg_dump` of the production
+  /// database, zipped. `startDate`/`endDate` are unused for this type (no date-range concept applies
+  /// to a whole-database dump) - both simply get set to the moment the job was requested.
+  DATABASE_DUMP
 }
 
 enum BulkExportStatus {

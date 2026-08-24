@@ -1,4 +1,4 @@
-export type BulkExportType = 'BORROWER_ATTACHMENTS' | 'LOAN_ACCOUNT_ATTACHMENTS';
+export type BulkExportType = 'BORROWER_ATTACHMENTS' | 'LOAN_ACCOUNT_ATTACHMENTS' | 'DATABASE_DUMP';
 export type BulkExportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export interface BulkExportJob {
