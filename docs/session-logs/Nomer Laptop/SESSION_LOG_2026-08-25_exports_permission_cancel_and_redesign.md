@@ -134,6 +134,27 @@ type/list and renders `<BulkExportsPage embedded />` for it, removed the header 
 The standalone `/exports` route was left in place (used by the notification bell's deep link when
 an export completes). Commit `4146567`.
 
+## 6. Tabs component: missing hover state (shared component fix)
+
+User pointed out that hovering over the System page's tab row gave no visual feedback at all —
+couldn't tell which tab the cursor was over before clicking. Traced to `components/ui/tabs.tsx`'s
+`TabsTrigger`: it styled `data-[state=active]` only, with no `hover:` state whatsoever. Added
+`hover:bg-background/60 hover:text-foreground` (plus `data-[state=active]:hover:bg-background` so
+the active tab doesn't visually dim on hover). This is the shared Tabs primitive used across the
+whole app, not just System, so the fix applies everywhere tabs are used. Not yet committed as of
+this log entry.
+
+## 7. SOA Collection Fee — second correction (accrued interest was still missing)
+
+User re-checked the same Excel sample (`PENALTY AND ACCRUED SAMPLE COMPUTATION FOR SOA.xlsx`)
+after the §1 fix shipped and found the sheet's own Collection Fee cell is actually
+`=(F9+F12)*C17` — F9 is "TOTAL PAST DUE + PENALTY", but **F12 (Accrued Interest) is also part of
+the base**, which the §1 fix had omitted. Corrected `LoanDetailPage.tsx`'s `collectionFeeAmount`
+to `(totalPastDue + accruedInterest) * (collectionFeePercent / 100)`, and the on-page hint text to
+say "Past Due Amount + Penalty + Accrued Interest". Verified against the sheet's own numbers with
+a standalone arithmetic check: 10% × (₱70,682.14 + ₱210,255.79) = ₱28,093.79 ✓, matching the
+Excel's computed result exactly. Not yet committed as of this log entry.
+
 ## Current state / follow-ups for next session
 
 - **`migrate-mambu-notes.ts --apply` not yet run anywhere** — dry-run confirmed (9,232 notes),
@@ -146,6 +167,8 @@ an export completes). Commit `4146567`.
   pushed to `main`. Office Server PC needs `git pull` + rebuild of `easycashbackend` (for the
   Cancel Export backend + `CANCELLED` migration — remember to check
   `prisma migrate status`/`migrate deploy` after rebuilding) and `lmsfrontend` (all four parts).
+- **Not yet committed** (rebuilt and verified on this laptop only): the Tabs hover-state fix (§6)
+  and the second Collection Fee correction (§7, adds Accrued Interest to the base).
 - Carried over, still untouched: the ₱19.3M post-maturity-penalty correction (user "thinking it
   over"), and accrued interest on long-defaulted accounts (flagged as likely significant, never
   examined).
