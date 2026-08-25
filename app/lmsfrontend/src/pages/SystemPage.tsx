@@ -1,9 +1,8 @@
 import * as React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, FolderDown, Lock } from 'lucide-react';
+import { AlertCircle, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import type { AuditLog } from '@/lib/auditLogApiTypes';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +18,7 @@ import { LoanProductsPage } from '@/pages/LoanProductsPage';
 import { ActivityLogPage } from '@/pages/ActivityLogPage';
 import { DocumentTemplatesTab } from '@/pages/DocumentTemplatesTab';
 import { AnnouncementsTab } from '@/pages/AnnouncementsTab';
+import { BulkExportsPage } from '@/pages/BulkExportsPage';
 
 /** 2026-07-18: temporarily prevented anyone from accidentally toggling these switches on via the
  * UI while content/test sends were still being verified. 2026-07-23 (user request): unlocked -
@@ -29,8 +29,16 @@ import { AnnouncementsTab } from '@/pages/AnnouncementsTab';
  * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
 const REMINDER_TOGGLES_LOCKED = true;
 
-type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'announcements' | 'activity-logs';
-const SYSTEM_TABS: SystemTab[] = ['reminders', 'members', 'products', 'documents', 'announcements', 'activity-logs'];
+type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'announcements' | 'activity-logs' | 'exports';
+const SYSTEM_TABS: SystemTab[] = [
+  'reminders',
+  'members',
+  'products',
+  'documents',
+  'announcements',
+  'activity-logs',
+  'exports',
+];
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -343,26 +351,20 @@ export function SystemPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight">System</h2>
-          <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link to="/exports">
-            <FolderDown className="mr-1.5 h-3.5 w-3.5" /> Exports
-          </Link>
-        </Button>
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">System</h2>
+        <p className="text-sm text-muted-foreground">Platform-wide switches, staff accounts, loan products, and the audit trail.</p>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-7">
           <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
           <TabsTrigger value="members">User Accounts</TabsTrigger>
           <TabsTrigger value="products">Loan Products</TabsTrigger>
           <TabsTrigger value="documents">Document Templates</TabsTrigger>
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
+          <TabsTrigger value="exports">Exports</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -377,6 +379,7 @@ export function SystemPage() {
       {tab === 'documents' && <DocumentTemplatesTab />}
       {tab === 'announcements' && <AnnouncementsTab />}
       {tab === 'activity-logs' && <ActivityLogPage />}
+      {tab === 'exports' && <BulkExportsPage embedded />}
     </div>
   );
 }

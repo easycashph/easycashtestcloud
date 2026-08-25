@@ -74,7 +74,7 @@ function StatusPill({ status }: { status: BulkExportStatus }) {
  * PROCESSING so the status updates without a manual refresh; stops polling once everything visible
  * has settled.
  */
-export function BulkExportsPage() {
+export function BulkExportsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canUseBulkExport } = useRole();
@@ -124,9 +124,11 @@ export function BulkExportsPage() {
   if (!canUseBulkExport) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back
-        </Button>
+        {!embedded && (
+          <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
+          </Button>
+        )}
         <p className="text-sm text-muted-foreground">You don't have access to Exports.</p>
       </div>
     );
@@ -139,9 +141,11 @@ export function BulkExportsPage() {
 
   return (
     <div className="space-y-4">
-      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
-        <ArrowLeft className="mr-2 h-4 w-4" /> Back
-      </Button>
+      {!embedded && (
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
