@@ -2151,3 +2151,87 @@ no seed-affecting changes, no further action needed.
   not just a Docker rebuild - the rebuild alone does not apply new seed data to an already-initialized
   database. No automated reminder exists for this yet; relying on remembering to check `seed.ts` in the
   diff of every pulled commit.
+
+## §46 - Recovered 1,040 missing borrower addresses from the original Mambu database (2026-08-21/25)
+
+User asked to investigate why so many active loan accounts had no address on file. Found: 1,106 of
+1,268 ACTIVE/ACTIVE_IN_ARREARS loan accounts (≈87%) had a borrower with zero rows in `addresses` -
+all 1,106 were migrated/legacy borrowers, zero native ones. Traced `migrate-legacy-data.ts`'s address
+logic - it correctly pulls whatever the legacy `addresses` collection has, so this was a genuine
+SDevTech-side source-data gap, not a migration bug on its own (that part of the investigation was
+correct - the actual bug turned out to be elsewhere, see below).
+
+**User pointed at the ORIGINAL Mambu database** (`legacy/Easycash-20231115T012529Z-001.zip`, later
+moved to `legacy/Mambu/` per user request - a real 1.1GB Mambu MySQL 8.0 export, the system SDevTech's
+own data ultimately migrated from) as a possible recovery source, and asked to check it thoroughly.
+Loaded into a throwaway `mambu-scratch` Docker MySQL 8 container (never touched the live stack).
+Confirmed `loanaccount.ID` in Mambu matches this system's `loan_accounts.loanCode` EXACTLY (both
+legacy numeric-style and current `PREFIX_XXXXX`-style codes) - a reliable join key, no fuzzy name
+matching needed. Address data lives in Mambu custom fields (`customfieldvalue`/`customfield`), not
+Mambu's own built-in `address` table (only ever 14 branch/office rows).
+
+Two recovery passes, per the user's explicit "suriin mo LAHAT" follow-up after an initial partial
+check:
+1. **"Present Address" fields** (`hm_addr_pre_unit`/`_brgy`/`_city`/`_zip`/`_full`) - 559 of 1,151
+   missing accounts recovered.
+2. **User asked directly "na suri mo na lahat?"** - honestly answered no (only Present Address had
+   been checked); user said to continue. Found a SECOND, separate "generic" field group (no pre/per
+   prefix: `hm_addr_unit`/`_street`/`_brgy`/`_city`/`_zipcode`, this one with a genuine separate
+   `street` field) covering 481 MORE clients. ("Permanent Address" was also checked as a third
+   fallback - only 1 additional client, not worth its own pass.)
+
+**Total recovered: 1,040 of 1,106 (≈94%)** via two `npx tsx` one-off backfill scripts (created, run,
+deleted same turn each, per this repo's convention) reading TSV exports from the scratch DB into
+`local/mambu-recovered-addresses*.tsv` (gitignored - real client PII, never committed). Both
+conservative: re-verify no existing address before inserting (never overwrite), no fabricated
+parsing beyond what Mambu's own structured fields provide. Remaining 68 loanCodes genuinely don't
+exist in Mambu at all - confirmed these are newer accounts originated directly in SDevTech after the
+Mambu era (e.g. `BL-SPEC_00028`, the account from §38/§41's earlier investigation - consistent with
+that account's later origination date), not a recovery gap.
+
+**A second, more serious bug found while answering the user's own follow-up question** ("kapag nag
+re-migrate ba ako... mananatili ang mga address na na-recover natin?"): `migrate-legacy-data.ts`
+unconditionally `deleteMany`-then-recreated EVERY borrower's addresses on EVERY migration run, sourced
+straight from SDevTech's own `addresses` collection - the exact same "resync back to source, silently
+destroying a correction" pattern already fixed for loan-account balances on 2026-08-04
+(`hasAccountLevelBalanceData`). Since SDevTech's source has NOTHING for these 1,040 clients (that's
+why they were missing to begin with), the very next re-migration would have deleted every recovered
+row and found nothing to recreate it with - silently destroying the whole recovery. Fixed the same
+way as the balance precedent: only touch a borrower's addresses when the SDevTech source actually has
+something for them; otherwise leave whatever's already there (Mambu recovery, staff edit, or nothing)
+untouched. Type-checked clean, committed and pushed (`0a17dd8`).
+
+Cleaned up fully per the user's explicit ask, once satisfied nothing more was recoverable: removed
+`mambu-scratch` (`docker rm -f`), the extracted 1.1GB SQL file, all intermediate TSV/SQL scratch
+files, and separately the `mysql:8.0` base image itself (another 1.1GB on disk, unrelated to any live
+container) once the user asked about it directly.
+
+**Housekeeping woven through this same stretch** (several `git pull`s from concurrent sessions,
+each followed by the usual type-check/rebuild/verify routine):
+- Pulled and synced a `bulk_export.use` permission conversion (Exports hub moved off `requireRole`
+  onto the DB-backed permission system) - same "seed.ts changed, must re-run it" lesson from §45
+  applied again; `npx tsx prisma/seed.ts` run after the rebuild, confirmed the new permission exists.
+- Hit real Docker build trouble mid-session: `docker compose up -d --build` failed repeatedly with
+  `DeadlineExceeded`/`NotFound: forwarding Ping` errors - not the usual "exits 0 without redeploying"
+  transient crash, but the buildx/buildkit backend itself genuinely hung (confirmed via `docker buildx
+  ls` itself timing out). `docker buildx rm`/`use` did not fix it; a full Docker Desktop restart (done
+  by the user directly) did - all containers survived the restart intact (`restart: unless-stopped`),
+  and the rebuild succeeded on the next attempt after one more transient "frontend grpc server closed
+  unexpectedly" retry.
+- Later in the session this machine's Bash tool environment itself lost most of its PATH (git, docker,
+  and even core Unix utilities like `wc`/`ls` stopped resolving) - worked around by prefixing commands
+  with an explicit `PATH=...` export pointing at Git/Docker's real install paths, and falling back to
+  the Read/Edit tools directly (no shell dependency) for this log update itself. Not yet root-caused;
+  flag for the user if it recurs.
+
+### Current state / follow-ups
+
+- 1,040 of 1,106 missing borrower addresses are recovered and permanently protected from the next
+  re-migration. The remaining 68 genuinely have no source anywhere (Mambu or SDevTech) - real gaps,
+  not a recovery-script limitation. User was offered an export of this final 68 for staff follow-up;
+  not yet generated as of this log entry.
+- `local/mambu-recovered-addresses*.tsv` were used as the backfill scripts' input and can be deleted
+  once the user confirms no further reference is needed (gitignored either way, so no repo-hygiene
+  risk either way).
+- The Bash tool's broken PATH is an open, unexplained item - worth a fresh terminal/session if it
+  recurs, since the workaround (explicit PATH export per command) is functional but easy to forget.
