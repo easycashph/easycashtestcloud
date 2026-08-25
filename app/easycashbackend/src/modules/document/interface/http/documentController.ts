@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { ValidationError } from '@shared/errors/DomainError';
 import { getCurrentUser } from '@shared/middleware/requireAuth';
 import { streamZipResponse } from '@shared/http/streamZipResponse';
+import { resolveAttachmentFileName } from '../../application/resolveAttachmentFileName';
 import type { UploadAttachmentUseCase } from '../../application/use-cases/UploadAttachmentUseCase';
 import type { ListAttachmentsForOwnerUseCase } from '../../application/use-cases/ListAttachmentsForOwnerUseCase';
 import type { DownloadAttachmentUseCase } from '../../application/use-cases/DownloadAttachmentUseCase';
@@ -74,8 +75,9 @@ export class DocumentController {
   download = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { record, data } = await this.deps.downloadAttachmentUseCase.execute(req.params.id as string);
+      const fileName = resolveAttachmentFileName(record.fileName, record.fileType);
       res.setHeader('Content-Type', resolveContentType(record.fileType));
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(record.fileName)}"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
       res.status(200).send(data);
     } catch (error) {
       next(error);

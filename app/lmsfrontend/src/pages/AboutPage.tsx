@@ -168,19 +168,23 @@ export function AboutPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           {LMS_CHANGELOG.map((entry, index) => (
-            <div key={entry.version} className="space-y-2">
+            <div key={entry.version} className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">Version {entry.version}</span>
                 {index === 0 && <Badge variant="success">Current</Badge>}
-                <span className="text-xs text-muted-foreground">{entry.date}</span>
               </div>
-              <ul className="space-y-1.5 border-l-2 border-border pl-4">
-                {entry.highlights.map((h) => (
-                  <li key={h} className="text-sm text-muted-foreground">
-                    {h}
-                  </li>
-                ))}
-              </ul>
+              {entry.days.map((day) => (
+                <div key={day.date} className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground">{day.date}</span>
+                  <ul className="space-y-1.5 border-l-2 border-border pl-4">
+                    {day.highlights.map((h) => (
+                      <li key={h} className="text-sm text-muted-foreground">
+                        {h}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           ))}
         </CardContent>
@@ -200,19 +204,23 @@ export function AboutPage() {
         <CardContent className="space-y-6">
           <p className="text-xs text-muted-foreground">Last updated {PORTAL_UPDATED_ON}.</p>
           {PORTAL_CHANGELOG.map((entry, index) => (
-            <div key={entry.version} className="space-y-2">
+            <div key={entry.version} className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">Version {entry.version}</span>
                 {index === 0 && <Badge variant="success">Current</Badge>}
-                <span className="text-xs text-muted-foreground">{entry.date}</span>
               </div>
-              <ul className="space-y-1.5 border-l-2 border-border pl-4">
-                {entry.highlights.map((h) => (
-                  <li key={h} className="text-sm text-muted-foreground">
-                    {h}
-                  </li>
-                ))}
-              </ul>
+              {entry.days.map((day) => (
+                <div key={day.date} className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground">{day.date}</span>
+                  <ul className="space-y-1.5 border-l-2 border-border pl-4">
+                    {day.highlights.map((h) => (
+                      <li key={h} className="text-sm text-muted-foreground">
+                        {h}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           ))}
         </CardContent>

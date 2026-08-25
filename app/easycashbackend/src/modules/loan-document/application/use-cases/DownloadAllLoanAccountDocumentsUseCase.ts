@@ -3,6 +3,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import type { IAttachmentRepository } from '@modules/document/application/ports/IAttachmentRepository';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import { documentCategoryLabel } from '@modules/document/application/documentCategoryLabel';
+import { resolveAttachmentFileName } from '@modules/document/application/resolveAttachmentFileName';
 import type { ILoanSigningSessionRepository } from '@modules/loan-signing/application/ports/ILoanSigningSessionRepository';
 import { buildUniqueZipEntryPath } from '@shared/application/buildUniqueZipEntryPath';
 import type { IGeneratedLoanDocumentRepository } from '../ports/IGeneratedLoanDocumentRepository';
@@ -50,7 +51,7 @@ export class DownloadAllLoanAccountDocumentsUseCase {
         const path = buildUniqueZipEntryPath(
           usedPaths,
           `Uploaded Attachments/${documentCategoryLabel(attachment.documentCategory)}`,
-          attachment.fileName,
+          resolveAttachmentFileName(attachment.fileName, attachment.fileType),
         );
         entries.push({ path, data });
       } catch (error) {
