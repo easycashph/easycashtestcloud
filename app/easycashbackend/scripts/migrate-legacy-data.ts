@@ -317,23 +317,38 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
         });
       }
 
-      await prisma.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
-      for (const addr of addressesByParent.get(String(c._id)) ?? []) {
-        await prisma.address.create({
-          data: {
-            ownerType: 'BORROWER',
-            ownerId: borrower.id,
-            addressType: addr.address_type || null,
-            houseUnitNumber: addr.house_unit_number || null,
-            street: addr.street || null,
-            barangay: addr.barangay || null,
-            cityMunicipality: addr.city_municipality || null,
-            province: addr.province || null,
-            zipCode: addr.zip_code || null,
-            lengthOfStayMonths: addr.length_of_stay != null ? Number(addr.length_of_stay) : null,
-            ownershipStatus: addr.status || null,
-          },
-        });
+      // 2026-08-25 bug fix (user-reported, found while investigating 1,151 borrowers with no address
+      // on file): this used to unconditionally deleteMany-then-recreate on EVERY migration run, same
+      // "resyncing loans' balance fields back to source ?? 0, silently destroying a correction"
+      // pattern already fixed for loan-account balances (see the `hasAccountLevelBalanceData` comment
+      // above in this same file, 2026-08-04). 559 of those 1,151 were recovered from the ORIGINAL
+      // Mambu database (`legacy/Mambu/`, the system SDevTech's own data ultimately migrated from -
+      // SDevTech's `addresses` collection simply never had these clients' addresses at all) and
+      // backfilled directly into this system. Without this guard, the very next re-migration would
+      // delete every one of those 559 recovered rows and find nothing in `addressesByParent` to
+      // recreate them with - silently destroying the recovery. Only touch this borrower's addresses
+      // when the SDevTech source actually has something for them; otherwise leave whatever is
+      // already here (a Mambu recovery, a staff manual edit, or nothing) untouched.
+      const sourceAddresses = addressesByParent.get(String(c._id)) ?? [];
+      if (sourceAddresses.length > 0) {
+        await prisma.address.deleteMany({ where: { ownerType: 'BORROWER', ownerId: borrower.id } });
+        for (const addr of sourceAddresses) {
+          await prisma.address.create({
+            data: {
+              ownerType: 'BORROWER',
+              ownerId: borrower.id,
+              addressType: addr.address_type || null,
+              houseUnitNumber: addr.house_unit_number || null,
+              street: addr.street || null,
+              barangay: addr.barangay || null,
+              cityMunicipality: addr.city_municipality || null,
+              province: addr.province || null,
+              zipCode: addr.zip_code || null,
+              lengthOfStayMonths: addr.length_of_stay != null ? Number(addr.length_of_stay) : null,
+              ownershipStatus: addr.status || null,
+            },
+          });
+        }
       }
 
       await prisma.identificationDocument.deleteMany({ where: { borrowerId: borrower.id } });
