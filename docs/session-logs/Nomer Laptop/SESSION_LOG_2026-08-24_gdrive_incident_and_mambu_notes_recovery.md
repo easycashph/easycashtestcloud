@@ -129,6 +129,43 @@ inventing a new pattern — this is the same class of work, just a second, earli
   entirely. Left untouched; noted to the user rather than silently dropped, per this project's
   standing rule against destructive actions on unfamiliar state.
 
+## 6. Moved Exports onto the permission system, and fixed a real hidden-permission bug (`c3e8ed9`)
+
+User asked to add the LMS Exports feature (client/loan attachments, DB dump — landed earlier today
+from the office server, `bulk-export` module) to the Roles & Permissions system, toggled ON for MIS
+only. It had shipped hard-restricted via `requireRole('MIS')`, with an explicit doc comment arguing
+that was deliberate ("not something MIS should be able to reconfigure"). Implemented the requested
+change anyway — the user is the one who gets to decide that, not a prior comment — and recorded the
+change plainly in the new code rather than silently overwriting the old reasoning.
+
+- New permission code `bulk_export.use` (`seed.ts`), not added to any role's default grant except
+  MIS (which gets `permissionCodes` — every code — automatically as the super-user role), so
+  behavior is unchanged today; configurable from Roles & Permissions going forward.
+- Backend `bulkExportRouter.ts`: `requireRole('MIS')` → `requirePermission('bulk_export.use')` on
+  all four routes.
+- Frontend `BulkExportsPage.tsx`: hardcoded `currentAccount.roles.includes('MIS')` →
+  `canUseBulkExport` (new boolean on `roleContext.tsx`, same pattern as every other `can*` flag).
+- **Found while wiring this up, not asked for but fixed in the same pass**: `RolesPermissionsTab`'s
+  module-grouping logic silently dropped any permission whose code prefix had no `MODULE_META`
+  entry — `moduleLabel()` falls back to `'Other'`, but `MODULE_ORDER` never listed `'Other'`, so
+  `.filter(g => g.permissions.length > 0)` discarded the group entirely. `bulk_export.use` would
+  have hit this immediately; `system_announcement.manage` and `chat_canned_response.manage` (both
+  from earlier office-server work) were already silently invisible the same way — real, toggleable
+  permissions with no way to see or toggle them in the UI. Added an `Exports` group, folded the
+  other two into `Administration`, and added `'Other'` as a catch-all with a `Lock` fallback icon
+  (the grouping code assumed every `MODULE_ORDER` label mapped back to a real `MODULE_META` entry —
+  fixed that assumption too, not just the missing label, so a future ungrouped permission fails
+  visibly instead of silently again).
+- Needed `npm install` + `npx prisma generate` on this laptop before any of this would even
+  typecheck — the `bulk-export` module's own dependencies (`archiver`) and Prisma model
+  (`BulkExportJob`) had landed via `git pull` but never been installed/regenerated here. Also found
+  `npx prisma db seed` doesn't work *inside* the Docker container (production image ships compiled
+  `dist/` only, no `tsx`/dev deps) — ran the seed from the host against the exposed Postgres port
+  instead, same as every other one-off script this session.
+- Verified end to end: `bulk_export.use` confirmed granted to MIS only via direct SQL query, both
+  containers healthy after two rebuild cycles (backend for the router, frontend for the page +
+  the grouping fix).
+
 ## Verification
 
 - `npx tsc --noEmit` clean after `npx prisma generate` (needed first — the Prisma Client was stale
@@ -142,6 +179,9 @@ inventing a new pattern — this is the same class of work, just a second, earli
 - Google Drive incident: every claim (scheduled task target, folder contents, selection boundary)
   was verified against either a live system query or a user-confirmed screenshot detail before
   acting — no destructive action taken on unverified information.
+- §6: `npx tsc --noEmit` clean on both apps after the dependency/Prisma-client fixes; new
+  permission's grant confirmed with a direct `psql` query (`bulk_export.use` → `MIS` only); both
+  Docker rebuilds confirmed healthy (`/health` 200, frontend 200) before pushing.
 
 ## Open
 
