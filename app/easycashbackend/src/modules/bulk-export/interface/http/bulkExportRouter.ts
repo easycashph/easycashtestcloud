@@ -1,25 +1,25 @@
 import { Router } from 'express';
 import type { ITokenService } from '@modules/identity/application/ports/ITokenService';
 import { createRequireAuth } from '@shared/middleware/requireAuth';
-import { requireRole } from '@shared/middleware/requireRole';
+import { requirePermission } from '@shared/middleware/requirePermission';
 import { validateBody } from '@shared/middleware/validate';
 import { BulkExportController, type BulkExportControllerDeps } from './bulkExportController';
 import { createBulkExportJobSchema } from './bulkExportSchemas';
 
-/** MIS bulk document export (2026-08-24 user request) - every route here is MIS-only
- * (`requireRole('MIS')`), same pattern as every other hard-restricted-to-MIS route in this
- * codebase (not the DB-backed `requirePermission` - this is a deliberate hard restriction, not
- * something MIS should be able to reconfigure via the Roles & Permissions screen). */
+/** MIS bulk document export (2026-08-24, moved onto the DB-backed permission system 2026-08-24
+ * follow-up per user request) - gated by `bulk_export.use`, not a hardcoded `requireRole('MIS')`.
+ * MIS is the only role granted it by default (seed.ts) - same effective restriction as before, but
+ * now configurable from the Roles & Permissions screen instead of requiring a code change. */
 export function createBulkExportRouter(deps: BulkExportControllerDeps, tokenService: ITokenService): Router {
   const router = Router();
   const controller = new BulkExportController(deps);
   const requireAuth = createRequireAuth(tokenService);
-  const misOnly = requireRole('MIS');
+  const canExport = requirePermission('bulk_export.use');
 
-  router.get('/bulk-exports/default-range', requireAuth, misOnly, controller.defaultRange);
-  router.get('/bulk-exports', requireAuth, misOnly, controller.listMine);
-  router.post('/bulk-exports', requireAuth, misOnly, validateBody(createBulkExportJobSchema), controller.create);
-  router.get('/bulk-exports/:id/download', requireAuth, misOnly, controller.download);
+  router.get('/bulk-exports/default-range', requireAuth, canExport, controller.defaultRange);
+  router.get('/bulk-exports', requireAuth, canExport, controller.listMine);
+  router.post('/bulk-exports', requireAuth, canExport, validateBody(createBulkExportJobSchema), controller.create);
+  router.get('/bulk-exports/:id/download', requireAuth, canExport, controller.download);
 
   return router;
 }

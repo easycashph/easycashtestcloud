@@ -35,16 +35,18 @@ function StatusBadge({ status }: { status: BulkExportStatus }) {
 }
 
 /**
- * MIS Exports hub (2026-08-24 user request): every bulk export MIS can run - client attachments,
- * loan account attachments, and a full database dump - lives here, reachable from
- * Administration > System. A completed export stays findable/re-downloadable here even if its
+ * Exports hub (2026-08-24 user request): every bulk export - client attachments, loan account
+ * attachments, and a full database dump - lives here, reachable from Administration > System.
+ * Gated on `bulk_export.use` (2026-08-24 follow-up: moved off a hardcoded MIS-only check onto the
+ * DB-backed permission system) - MIS only by default, configurable from Roles & Permissions.
+ * A completed export stays findable/re-downloadable here even if its
  * Notification bell entry was already missed or cleared. Polls while any job is still PENDING/
  * PROCESSING so the status updates without a manual refresh; stops polling once everything visible
  * has settled.
  */
 export function BulkExportsPage() {
   const navigate = useNavigate();
-  const { currentAccount } = useRole();
+  const { canUseBulkExport } = useRole();
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
 
@@ -70,13 +72,13 @@ export function BulkExportsPage() {
     }
   };
 
-  if (!currentAccount.roles.includes('MIS')) {
+  if (!canUseBulkExport) {
     return (
       <div className="space-y-4">
         <Button variant="ghost" size="sm" className="-ml-2" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <p className="text-sm text-muted-foreground">This page is only available to MIS.</p>
+        <p className="text-sm text-muted-foreground">You don't have access to Exports.</p>
       </div>
     );
   }

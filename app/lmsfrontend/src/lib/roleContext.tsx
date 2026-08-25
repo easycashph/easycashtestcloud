@@ -76,7 +76,8 @@ export type PermissionCode =
   | 'audit_log.read'
   | 'reminder_settings.manage'
   | 'profile_activity_log.manage'
-  | 'chat_canned_response.manage';
+  | 'chat_canned_response.manage'
+  | 'bulk_export.use';
 
 interface RoleContextValue {
   currentAccount: AuthenticatedAccount;
@@ -148,6 +149,9 @@ interface RoleContextValue {
    * conditional status and per-product mapping - narrow, MIS-only-by-default admin permission,
    * distinct from `canGenerateDocuments` (any staff generating a document for a specific loan). */
   canManageDocumentTemplates: boolean;
+  /** 2026-08-24: the Exports hub (client/loan attachments, database dump) - MIS-only by default,
+   * now configurable from the Roles & Permissions screen instead of a hardcoded role check. */
+  canUseBulkExport: boolean;
   /** True if the signed-in user's role currently has the given permission code granted - the
    * general-purpose escape hatch for a check that doesn't already have its own named `can*`
    * boolean above. */
@@ -341,6 +345,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canManageClients: hasPermission('borrower.write'),
     canManageLoanProducts: hasPermission('loan_product.write'),
     canManageDocumentTemplates: hasPermission('document_template.manage'),
+    canUseBulkExport: hasPermission('bulk_export.use'),
     hasPermission,
     refreshCurrentUser,
   };

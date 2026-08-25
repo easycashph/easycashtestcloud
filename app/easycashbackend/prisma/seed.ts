@@ -121,6 +121,12 @@ async function main() {
     'profile_activity_log.manage': 'View and manage profile activity logs',
     'system_announcement.manage': 'Post and manage system-wide announcements (maintenance/news popups)',
     'chat_canned_response.manage': 'Create, edit, and delete shared chat canned/quick responses',
+    // 2026-08-24 (user request): the Exports hub (client attachments, loan attachments, database
+    // dump) was hard-restricted to MIS via requireRole('MIS') - moved into the DB-backed permission
+    // system instead so it's configurable from the Roles & Permissions screen. Not added to any
+    // other role's default grant below, so behavior is unchanged today (MIS-only) until MIS
+    // explicitly extends it.
+    'bulk_export.use': 'Export borrower/loan attachments and database dumps in bulk',
   };
   const permissionCodes = Object.keys(permissionDescriptions);
 

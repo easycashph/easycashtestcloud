@@ -6,6 +6,7 @@ import {
   Bot,
   FileCheck2,
   FileText,
+  FolderDown,
   Landmark,
   Lock,
   PenLine,
@@ -46,6 +47,9 @@ const MODULE_META: Record<string, { label: string; icon: React.ComponentType<{ c
   audit_log: { label: 'Administration', icon: ShieldCheck },
   reminder_settings: { label: 'Administration', icon: ShieldCheck },
   profile_activity_log: { label: 'Administration', icon: ShieldCheck },
+  system_announcement: { label: 'Administration', icon: ShieldCheck },
+  chat_canned_response: { label: 'Administration', icon: ShieldCheck },
+  bulk_export: { label: 'Exports', icon: FolderDown },
 };
 const MODULE_ORDER = [
   'Loan Applications',
@@ -58,7 +62,13 @@ const MODULE_ORDER = [
   'AI Tools',
   'Collection',
   'Reports',
+  'Exports',
   'Administration',
+  // Catch-all so a future permission code with no MODULE_META entry still shows up somewhere,
+  // instead of being silently dropped (found 2026-08-24: bulk_export.use, system_announcement.manage,
+  // and chat_canned_response.manage were all in the DB and toggleable via the API, but invisible
+  // here - moduleLabel() falls back to 'Other', which this list never included).
+  'Other',
 ];
 
 function modulePrefix(code: string): string {
@@ -77,9 +87,10 @@ function groupPermissions(permissions: Permission[], filter: string) {
     list.push(p);
     byModule.set(label, list);
   }
-  return MODULE_ORDER.map((label) => ({ label, icon: MODULE_META[Object.keys(MODULE_META).find((k) => MODULE_META[k]!.label === label)!]!.icon, permissions: byModule.get(label) ?? [] })).filter(
-    (g) => g.permissions.length > 0,
-  );
+  return MODULE_ORDER.map((label) => {
+    const metaKey = Object.keys(MODULE_META).find((k) => MODULE_META[k]!.label === label);
+    return { label, icon: metaKey ? MODULE_META[metaKey]!.icon : Lock, permissions: byModule.get(label) ?? [] };
+  }).filter((g) => g.permissions.length > 0);
 }
 
 function moduleLabel(code: string): string {
