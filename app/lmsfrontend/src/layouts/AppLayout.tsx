@@ -286,7 +286,12 @@ export function AppLayout() {
     // Windows taskbar at some zoom/DPI combos, making the last bit of a long page unreachable. If
     // that resurfaces, it needs a different fix (it's an OS/browser viewport-unit accuracy issue,
     // not a reason to go back to shared document scroll) - flag it rather than reverting this.
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+    //
+    // 2026-08-25 (user-reported resurfacing): switched `h-dvh` -> `h-svh` - `dvh` (dynamic
+    // viewport height) is the one that over-reports at some Windows zoom/DPI/taskbar combos; `svh`
+    // (small viewport height) is defined to always be less than or equal to the actually-visible
+    // area, so it can't make the same mistake. Same isolated-scroll architecture, just a safer unit.
+    <div className="flex h-svh flex-col overflow-hidden bg-background">
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
