@@ -12,7 +12,7 @@ import type { BulkExportJob } from '@/lib/bulkExportApiTypes';
  * step, since this is by far the most sensitive export on this page (every borrower's PII, every
  * loan's financial detail, not scoped to a date window at all).
  */
-export function DatabaseExportButton() {
+export function DatabaseExportButton({ triggerClassName }: { triggerClassName?: string } = {}) {
   const [open, setOpen] = React.useState(false);
   const queryClient = useQueryClient();
 
@@ -36,7 +36,7 @@ export function DatabaseExportButton() {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className={triggerClassName}>
           <DatabaseZap className="mr-1.5 h-3.5 w-3.5" /> Export Database
         </Button>
       </DialogTrigger>

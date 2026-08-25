@@ -19,7 +19,15 @@ function toDateInputValue(iso: string): string {
  * (the Notification bell also fires once it's ready) rather than blocking on the result here -
  * a wide date range can take minutes to prepare.
  */
-export function BulkExportDialog({ exportType, label }: { exportType: BulkExportType; label: string }) {
+export function BulkExportDialog({
+  exportType,
+  label,
+  triggerClassName,
+}: {
+  exportType: BulkExportType;
+  label: string;
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = React.useState(false);
   const [startDate, setStartDate] = React.useState('');
   const [endDate, setEndDate] = React.useState('');
@@ -66,7 +74,7 @@ export function BulkExportDialog({ exportType, label }: { exportType: BulkExport
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className={triggerClassName}>
           <Download className="mr-1.5 h-3.5 w-3.5" /> {label}
         </Button>
       </DialogTrigger>
