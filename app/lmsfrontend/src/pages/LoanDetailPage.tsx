@@ -2050,9 +2050,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     };
 
     // 2026-08-21 (user request): Collection Fee is staff-entered as a PERCENTAGE, not a peso
-    // amount - Collection Fee amount = Accrued interest amount x this percent.
+    // amount.
+    // 2026-08-25 correction (user-confirmed against legacy/reports/PENALTY AND ACCRUED SAMPLE
+    // COMPUTATION FOR SOA.xlsx): Collection Fee amount = this percent x (Past Due Amount + Past
+    // Due Penalty) - i.e. `totalPastDue` (= pastDuePrincipal + pastDueInterest + pastDuePenalty,
+    // the sample's "TOTAL PAST DUE + PENALTY" row) - NOT Accrued Interest, which the previous
+    // version of this formula multiplied against instead.
     const collectionFeePercent = Number.parseFloat(soaCollectionFeePercent) || 0;
-    const collectionFeeAmount = Math.round(accruedInterest * (collectionFeePercent / 100) * 100) / 100;
+    const collectionFeeAmount = Math.round(totalPastDue * (collectionFeePercent / 100) * 100) / 100;
 
     const totalAmountDue = currentAmortizationDue + totalPastDue + accruedInterest + collectionFeeAmount + (Number.parseFloat(soaOtherFee) || 0);
 
@@ -3710,7 +3715,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   onChange={(e) => setSoaCollectionFeePercent(e.target.value)}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {soaCollectionFeePercent || 0}% of accrued interest = {formatPeso(soaPreview.collectionFeeAmount)}
+                  {soaCollectionFeePercent || 0}% of Past Due Amount + Penalty ({formatPeso(soaPreview.totalPastDue)}) ={' '}
+                  {formatPeso(soaPreview.collectionFeeAmount)}
                 </p>
               </div>
               <div>
