@@ -247,6 +247,8 @@ import { CreateBulkExportJobUseCase } from '@modules/bulk-export/application/use
 import { ListMyBulkExportJobsUseCase } from '@modules/bulk-export/application/use-cases/ListMyBulkExportJobsUseCase';
 import { DownloadBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/DownloadBulkExportJobUseCase';
 import { GetBulkExportDefaultRangeUseCase } from '@modules/bulk-export/application/use-cases/GetBulkExportDefaultRangeUseCase';
+import { CancelBulkExportJobUseCase } from '@modules/bulk-export/application/use-cases/CancelBulkExportJobUseCase';
+import { BulkExportCancellationRegistry } from '@modules/bulk-export/infrastructure/BulkExportCancellationRegistry';
 import { createBulkExportRouter } from '@modules/bulk-export/interface/http/bulkExportRouter';
 import { PrismaAttachmentRepository } from '@modules/document/infrastructure/PrismaAttachmentRepository';
 import { PrismaProfileNoteRepository } from '@modules/profile-note/infrastructure/PrismaProfileNoteRepository';
@@ -1833,6 +1835,9 @@ export function createApp(): Express {
   // attachments in a date range" background export, plus a full-database `pg_dump` export. Reuses
   // attachmentRepository/fileStorage from the document module wiring above. ---
   const bulkExportJobRepository = new PrismaBulkExportJobRepository();
+  // 2026-08-25 (Cancel Export, user request): one instance for the whole app - shared between the
+  // job runner (registers/unregisters as jobs start/finish) and the cancel use case (signals it).
+  const bulkExportCancellationRegistry = new BulkExportCancellationRegistry();
   const processBulkExportJobUseCase = new ProcessBulkExportJobUseCase({
     bulkExportJobRepository,
     borrowerRepository,
@@ -1842,6 +1847,7 @@ export function createApp(): Express {
     fileStorage,
     notificationService,
     databaseUrl: env.DATABASE_URL,
+    cancellationRegistry: bulkExportCancellationRegistry,
   });
   const bulkExportRouter = createBulkExportRouter(
     {
@@ -1849,6 +1855,7 @@ export function createApp(): Express {
       listMyBulkExportJobsUseCase: new ListMyBulkExportJobsUseCase({ bulkExportJobRepository }),
       downloadBulkExportJobUseCase: new DownloadBulkExportJobUseCase({ bulkExportJobRepository, fileStorage }),
       getBulkExportDefaultRangeUseCase: new GetBulkExportDefaultRangeUseCase({ borrowerRepository, loanAccountRepository }),
+      cancelBulkExportJobUseCase: new CancelBulkExportJobUseCase({ bulkExportJobRepository, cancellationRegistry: bulkExportCancellationRegistry }),
     },
     tokenService,
   );

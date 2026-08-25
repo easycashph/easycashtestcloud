@@ -20,6 +20,7 @@ export function createBulkExportRouter(deps: BulkExportControllerDeps, tokenServ
   router.get('/bulk-exports', requireAuth, canExport, controller.listMine);
   router.post('/bulk-exports', requireAuth, canExport, validateBody(createBulkExportJobSchema), controller.create);
   router.get('/bulk-exports/:id/download', requireAuth, canExport, controller.download);
+  router.post('/bulk-exports/:id/cancel', requireAuth, canExport, controller.cancel);
 
   return router;
 }

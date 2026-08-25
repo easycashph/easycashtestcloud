@@ -12,6 +12,7 @@ import type { NotificationService } from '@modules/notification/application/Noti
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
 import type { BulkExportJob } from '../../domain/BulkExportJob';
 import type { IBulkExportJobRepository } from '../ports/IBulkExportJobRepository';
+import type { BulkExportCancellationRegistry } from '../../infrastructure/BulkExportCancellationRegistry';
 
 export interface ProcessBulkExportJobUseCaseDeps {
   bulkExportJobRepository: IBulkExportJobRepository;
@@ -25,6 +26,18 @@ export interface ProcessBulkExportJobUseCaseDeps {
    * feature) - the same `DATABASE_URL` the app itself connects with. `pg_dump` must be on PATH
    * (see `backend.Dockerfile`'s `postgresql16-client` package). */
   databaseUrl: string;
+  /** 2026-08-25 (Cancel Export, user request): shared with `CancelBulkExportJobUseCase` - one
+   * instance for the whole app, wired once in app.ts, same as any other singleton repository. */
+  cancellationRegistry: BulkExportCancellationRegistry;
+}
+
+/** Thrown internally when a cancellation signal is observed mid-job - caught once in `execute()`
+ * to route to `job.markCancelled()` instead of `job.markFailed()`. Never escapes this file. */
+class BulkExportCancelledError extends Error {
+  constructor() {
+    super('Export cancelled by staff');
+    this.name = 'BulkExportCancelledError';
+  }
 }
 
 const EXPORT_TYPE_LABEL: Record<BulkExportJob['exportType'], string> = {
@@ -64,9 +77,12 @@ export class ProcessBulkExportJobUseCase {
       return;
     }
 
+    const controller = this.deps.cancellationRegistry.register(jobId);
     try {
       const { recordCount, fileCount } =
-        job.exportType === 'DATABASE_DUMP' ? await this.runDatabaseDump(job) : await this.runAttachmentExport(job);
+        job.exportType === 'DATABASE_DUMP'
+          ? await this.runDatabaseDump(job, controller.signal)
+          : await this.runAttachmentExport(job, controller.signal);
 
       await this.deps.notificationService.notifyUser({
         userId: job.requestedByUserId,
@@ -81,6 +97,14 @@ export class ProcessBulkExportJobUseCase {
         entityId: job.id,
       });
     } catch (error) {
+      if (error instanceof BulkExportCancelledError) {
+        logger.info({ jobId }, '[ProcessBulkExportJobUseCase] job cancelled');
+        job.markCancelled();
+        await this.deps.bulkExportJobRepository.save(job);
+        // No notification - the staff member who cancelled it already knows; unlike a failure,
+        // there's nothing here they need to be alerted to.
+        return;
+      }
       logger.error({ jobId, error }, '[ProcessBulkExportJobUseCase] job failed');
       job.markFailed(error instanceof Error ? error.message : 'Unknown error');
       await this.deps.bulkExportJobRepository.save(job);
@@ -93,10 +117,12 @@ export class ProcessBulkExportJobUseCase {
         entityType: 'BulkExportJob',
         entityId: job.id,
       });
+    } finally {
+      this.deps.cancellationRegistry.unregister(jobId);
     }
   }
 
-  private async runAttachmentExport(job: BulkExportJob): Promise<{ recordCount: number; fileCount: number }> {
+  private async runAttachmentExport(job: BulkExportJob, signal: AbortSignal): Promise<{ recordCount: number; fileCount: number }> {
     const records =
       job.exportType === 'BORROWER_ATTACHMENTS'
         ? await this.deps.borrowerRepository.findManyCreatedBetween(job.startDate, job.endDate, job.branchId ?? undefined)
@@ -131,6 +157,16 @@ export class ProcessBulkExportJobUseCase {
     // confusing on an already-unique loan code folder).
     const folderNameOccurrences = new Map<string, number>();
     for (const record of records) {
+      // Checked once per record (not per attachment) - a cancel signal doesn't need to interrupt
+      // mid-record, just stop starting new ones, so this never fires mid-write of a single record's
+      // files.
+      if (signal.aborted) {
+        writeStream.destroy();
+        await this.deps.fileStorage.delete(resultStorageKey).catch((err) => {
+          logger.warn({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] could not clean up partial export file after cancel');
+        });
+        throw new BulkExportCancelledError();
+      }
       const attachments = await this.deps.attachmentRepository.listByOwner(ownerType, record.id);
       let recordFolder = record.displayName;
       if (job.exportType === 'BORROWER_ATTACHMENTS') {
@@ -173,9 +209,11 @@ export class ProcessBulkExportJobUseCase {
     return { recordCount: records.length, fileCount };
   }
 
-  private async runDatabaseDump(job: BulkExportJob): Promise<{ recordCount: number; fileCount: number }> {
+  private async runDatabaseDump(job: BulkExportJob, signal: AbortSignal): Promise<{ recordCount: number; fileCount: number }> {
     job.markProcessing(1);
     await this.deps.bulkExportJobRepository.save(job);
+
+    if (signal.aborted) throw new BulkExportCancelledError();
 
     const resultStorageKey = `bulk-exports/${job.id}.zip`;
     const writeStream = this.deps.fileStorage.createWriteStream(resultStorageKey);
@@ -208,15 +246,32 @@ export class ProcessBulkExportJobUseCase {
     pgDump.stdout.on('error', (err) => logger.error({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] pg_dump stdout error'));
     archive.append(pgDump.stdout, { name: dumpFileName });
 
+    // 2026-08-25 (Cancel Export): a dump has no natural checkpoint to poll like the attachment
+    // loop's per-record check above - the only way to stop mid-dump is to kill the child process
+    // outright. `signal.aborted` (checked in dumpExit's rejection below) is what tells the
+    // resulting non-zero exit code apart from a genuine pg_dump failure.
+    signal.addEventListener('abort', () => pgDump.kill());
+
     const dumpExit = new Promise<void>((resolvePromise, rejectPromise) => {
       pgDump.on('error', (err) => rejectPromise(err)); // e.g. pg_dump binary missing
       pgDump.on('close', (code) => {
         if (code === 0) resolvePromise();
+        else if (signal.aborted) rejectPromise(new BulkExportCancelledError());
         else rejectPromise(new Error(`pg_dump exited with code ${code}: ${stderrOutput.slice(0, 500)}`));
       });
     });
 
-    await Promise.all([dumpExit, archive.finalize().then(() => archiveDone)]);
+    try {
+      await Promise.all([dumpExit, archive.finalize().then(() => archiveDone)]);
+    } catch (error) {
+      if (error instanceof BulkExportCancelledError) {
+        writeStream.destroy();
+        await this.deps.fileStorage.delete(resultStorageKey).catch((err) => {
+          logger.warn({ jobId: job.id, err }, '[ProcessBulkExportJobUseCase] could not clean up partial export file after cancel');
+        });
+      }
+      throw error;
+    }
 
     job.markCompleted({ resultStorageKey, resultFileSize: archive.pointer(), fileCount: 1 });
     await this.deps.bulkExportJobRepository.save(job);

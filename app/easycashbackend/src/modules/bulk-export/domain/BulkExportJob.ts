@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 export type BulkExportType = 'BORROWER_ATTACHMENTS' | 'LOAN_ACCOUNT_ATTACHMENTS' | 'DATABASE_DUMP';
-export type BulkExportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type BulkExportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 export interface BulkExportJobProps {
   id: string;
@@ -78,6 +78,22 @@ export class BulkExportJob {
     this.props.status = 'FAILED';
     this.props.errorMessage = errorMessage;
     this.props.completedAt = new Date();
+  }
+
+  /** 2026-08-25 (Cancel Export, user request): staff explicitly stopped this job - either before
+   * it started running (still PENDING) or mid-run (PROCESSING, signalled via
+   * `BulkExportCancellationRegistry`). Distinct from `markFailed` so the UI can read "stopped on
+   * purpose" rather than "something went wrong." */
+  markCancelled(): void {
+    this.props.status = 'CANCELLED';
+    this.props.errorMessage = 'Cancelled by staff';
+    this.props.completedAt = new Date();
+  }
+
+  /** Only a job that's still running (or about to) can be stopped - a finished job has nothing
+   * left to interrupt. */
+  get isCancellable(): boolean {
+    return this.props.status === 'PENDING' || this.props.status === 'PROCESSING';
   }
 
   get id(): string {

@@ -6,6 +6,7 @@ import type { CreateBulkExportJobUseCase } from '../../application/use-cases/Cre
 import type { ListMyBulkExportJobsUseCase } from '../../application/use-cases/ListMyBulkExportJobsUseCase';
 import type { DownloadBulkExportJobUseCase } from '../../application/use-cases/DownloadBulkExportJobUseCase';
 import type { GetBulkExportDefaultRangeUseCase } from '../../application/use-cases/GetBulkExportDefaultRangeUseCase';
+import type { CancelBulkExportJobUseCase } from '../../application/use-cases/CancelBulkExportJobUseCase';
 import { bulkExportTypeSchema, type CreateBulkExportJobRequestBody } from './bulkExportSchemas';
 import { presentBulkExportJob } from './presenters/BulkExportJobPresenter';
 
@@ -14,6 +15,7 @@ export interface BulkExportControllerDeps {
   listMyBulkExportJobsUseCase: ListMyBulkExportJobsUseCase;
   downloadBulkExportJobUseCase: DownloadBulkExportJobUseCase;
   getBulkExportDefaultRangeUseCase: GetBulkExportDefaultRangeUseCase;
+  cancelBulkExportJobUseCase: CancelBulkExportJobUseCase;
 }
 
 /** Thin controllers only — no business logic here (CLAUDE.md §Architecture). */
@@ -53,6 +55,16 @@ export class BulkExportController {
       const currentUser = getCurrentUser(req);
       const jobs = await this.deps.listMyBulkExportJobsUseCase.execute(currentUser.sub);
       res.status(200).json({ items: jobs.map(presentBulkExportJob) });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cancel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const currentUser = getCurrentUser(req);
+      await this.deps.cancelBulkExportJobUseCase.execute(req.params.id as string, currentUser.sub);
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

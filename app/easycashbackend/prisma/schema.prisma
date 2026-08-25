@@ -2342,6 +2342,9 @@ enum BulkExportStatus {
   PROCESSING
   COMPLETED
   FAILED
+  /// 2026-08-25 (Cancel Export, user request): staff-initiated stop, distinct from FAILED (an
+  /// error) - the job's own errorMessage still records why, but the status reads intentional.
+  CANCELLED
 }
 
 /// MIS bulk document export (2026-08-24 user request): "download all client attachments" / "download
