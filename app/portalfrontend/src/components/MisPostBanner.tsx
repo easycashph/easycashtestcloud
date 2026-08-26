@@ -46,14 +46,25 @@ export function MisPostBanner() {
 }
 
 function MisPostCard({ post }: { post: MisPostView }) {
+  // 2026-08-25 (user-reported: too small, cropped, sometimes broken): image moved from a tiny
+  // 64-96px side square to a full-width banner with a fixed aspect ratio - big enough to actually
+  // read, and consistent across every post regardless of what resolution/aspect ratio MIS
+  // originally uploaded (uploads have no dimension restriction - see CreateManualMisPostUseCase).
+  // `onError` hides a genuinely missing/broken image instead of leaving the browser's default
+  // broken-image icon on screen.
+  const [imageFailed, setImageFailed] = React.useState(false);
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-      <img
-        src={`${API_BASE_URL}${post.imageUrl}`}
-        alt=""
-        className="h-16 w-16 shrink-0 rounded-lg object-cover sm:h-20 sm:w-20"
-      />
-      <div className="min-w-0">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {!imageFailed && (
+        <img
+          src={`${API_BASE_URL}${post.imageUrl}`}
+          alt=""
+          onError={() => setImageFailed(true)}
+          className="aspect-[16/9] w-full object-cover"
+        />
+      )}
+      <div className="p-3">
         <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-primary">
           <Megaphone className="h-3 w-3" />
           {post.type === 'MANUAL' ? 'Announcement' : 'Easycash'}

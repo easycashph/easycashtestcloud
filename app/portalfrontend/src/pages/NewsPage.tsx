@@ -145,10 +145,23 @@ function CategoryChip({
 }
 
 function MisPostFeedCard({ post }: { post: MisPostView }) {
+  // 2026-08-25 (user-reported: too small, cropped, sometimes broken) - same fix as
+  // MisPostBanner.tsx's own MisPostCard: full-width fixed-aspect-ratio image instead of a tiny
+  // side square, and `onError` hides a genuinely broken image instead of a browser default icon.
+  const [imageFailed, setImageFailed] = React.useState(false);
+
   return (
-    <div className="flex gap-4 rounded-2xl border border-primary/30 bg-card p-4">
-      <img src={`${API_BASE_URL}${post.imageUrl}`} alt="" loading="lazy" className="h-20 w-20 shrink-0 rounded-xl object-cover sm:h-24 sm:w-24" />
-      <div className="min-w-0">
+    <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card">
+      {!imageFailed && (
+        <img
+          src={`${API_BASE_URL}${post.imageUrl}`}
+          alt=""
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+          className="aspect-[16/9] w-full object-cover"
+        />
+      )}
+      <div className="p-4">
         <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-primary">
           <Megaphone className="h-3 w-3" />
           {post.type === 'MANUAL' ? 'Announcement' : 'Easycash'}
