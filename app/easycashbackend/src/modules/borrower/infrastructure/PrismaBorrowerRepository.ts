@@ -198,7 +198,7 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
     const rows = await client.borrower.findMany({
       where,
       include: BORROWER_INCLUDE,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: options.sortDirection ?? 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });

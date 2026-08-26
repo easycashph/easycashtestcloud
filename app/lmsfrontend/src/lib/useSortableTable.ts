@@ -16,26 +16,12 @@ export interface SortState {
  * first time that column is clicked, AND should be given as `initial` so
  * the table opens already sorted that way, not only after a click.
  */
-export function useSortableTable<T>(rows: T[], getValue: (row: T, key: string) => string | number | Date | null | undefined, initial: SortState) {
+/** Just the `{ sort, toggleSort }` half of `useSortableTable`, split out so a page can read the
+ * current sort BEFORE it has its rows in hand - e.g. to feed a column's direction into a
+ * server-side query param (see `ClientListPage.tsx`'s "Date Created" column, sorted server-side
+ * across every page rather than per-page like every other column here). */
+export function useSortState(initial: SortState) {
   const [sort, setSort] = React.useState<SortState>(initial);
-
-  const sorted = React.useMemo(() => {
-    if (!sort.key) return rows;
-    const key = sort.key;
-    const withIndex = rows.map((row, index) => ({ row, index }));
-    withIndex.sort((a, b) => {
-      const av = getValue(a.row, key);
-      const bv = getValue(b.row, key);
-      const cmp = compareValues(av, bv);
-      // Stable sort: fall back to original order on a tie, since
-      // Array.prototype.sort's stability guarantee alone doesn't help
-      // once we've boxed rows with their index (defensive, not strictly
-      // needed on modern JS engines, but explicit is cheap here).
-      if (cmp !== 0) return sort.direction === 'asc' ? cmp : -cmp;
-      return a.index - b.index;
-    });
-    return withIndex.map((entry) => entry.row);
-  }, [rows, sort, getValue]);
 
   const toggleSort = React.useCallback((key: string, isDateColumn = false) => {
     setSort((prev) => {
@@ -48,6 +34,32 @@ export function useSortableTable<T>(rows: T[], getValue: (row: T, key: string) =
     });
   }, []);
 
+  return { sort, toggleSort };
+}
+
+/** The `rows`-dependent half of `useSortableTable` - given rows and an already-known sort state,
+ * returns the reordered array. Exported separately for the same reason as `useSortState` above. */
+export function sortRows<T>(rows: T[], getValue: (row: T, key: string) => string | number | Date | null | undefined, sort: SortState): T[] {
+  if (!sort.key) return rows;
+  const key = sort.key;
+  const withIndex = rows.map((row, index) => ({ row, index }));
+  withIndex.sort((a, b) => {
+    const av = getValue(a.row, key);
+    const bv = getValue(b.row, key);
+    const cmp = compareValues(av, bv);
+    // Stable sort: fall back to original order on a tie, since
+    // Array.prototype.sort's stability guarantee alone doesn't help
+    // once we've boxed rows with their index (defensive, not strictly
+    // needed on modern JS engines, but explicit is cheap here).
+    if (cmp !== 0) return sort.direction === 'asc' ? cmp : -cmp;
+    return a.index - b.index;
+  });
+  return withIndex.map((entry) => entry.row);
+}
+
+export function useSortableTable<T>(rows: T[], getValue: (row: T, key: string) => string | number | Date | null | undefined, initial: SortState) {
+  const { sort, toggleSort } = useSortState(initial);
+  const sorted = React.useMemo(() => sortRows(rows, getValue, sort), [rows, sort, getValue]);
   return { sorted, sort, toggleSort };
 }
 

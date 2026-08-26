@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
@@ -407,13 +407,15 @@ export function TransactionReportPage() {
                 </TableRow>
               )}
             </TableBody>
-            <TableFooter className="sticky bottom-0 z-10">
-              <TableRow>
-                <TableCell colSpan={4}>Total ({transactions.length} entries)</TableCell>
-                <TableCell className="text-right">{formatPeso(total)}</TableCell>
-                <TableCell colSpan={9} />
-              </TableRow>
-            </TableFooter>
+            {transactions.length > 0 && (
+              <tfoot className="sticky bottom-0 z-10 bg-background">
+                <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                  <TableCell colSpan={4}>Total ({transactions.length} entries)</TableCell>
+                  <TableCell className="text-right">{formatPeso(total)}</TableCell>
+                  <TableCell colSpan={9} />
+                </TableRow>
+              </tfoot>
+            )}
           </Table>
           </div>
           {rowsBelowFold > 0 && (

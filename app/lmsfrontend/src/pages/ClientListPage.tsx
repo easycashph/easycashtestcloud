@@ -14,12 +14,12 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { useSortableTable } from '@/lib/useSortableTable';
+import { sortRows, useSortState } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { fetchAllPages } from '@/lib/apiClient';
 import type { Borrower, LoanAccount, LoanAccountStatus } from '@/lib/loanApiTypes';
-import { formatMobileNumber } from '@/lib/utils';
+import { formatDate, formatMobileNumber } from '@/lib/utils';
 
 const PAGE_SIZE = 25;
 
@@ -49,6 +49,7 @@ interface ClientRow {
   position: string;
   loanCount: number;
   hasActiveLoan: boolean;
+  createdAt: string;
 }
 
 function getSortValue(c: ClientRow, key: string): string | number | Date | null | undefined {
@@ -61,6 +62,8 @@ function getSortValue(c: ClientRow, key: string): string | number | Date | null 
       return c.employer;
     case 'loans':
       return c.loanCount;
+    case 'createdAt':
+      return new Date(c.createdAt);
     default:
       return undefined;
   }
@@ -87,6 +90,10 @@ export function ClientListPage() {
   const [search, setSearch] = React.useState('');
   const debouncedSearch = useDebouncedValue(search);
   const [loanPresence, setLoanPresence] = React.useState<LoanPresenceFilter>('ALL');
+  // "Date Created" is sorted server-side (spans every matching client, not just the current page,
+  // unlike every other column here - see useSortableTable.ts's `useSortState`/`sortRows` split) -
+  // read before useCursorPagination below so its direction can be passed as a query param.
+  const { sort, toggleSort } = useSortState({ key: null, direction: 'asc' });
 
   const {
     items: borrowers,
@@ -99,7 +106,11 @@ export function ClientListPage() {
   } = useCursorPagination<Borrower>(
     ['borrowers'],
     '/borrowers',
-    { search: debouncedSearch, loanPresence: loanPresence === 'ALL' ? undefined : loanPresence },
+    {
+      search: debouncedSearch,
+      loanPresence: loanPresence === 'ALL' ? undefined : loanPresence,
+      sortDirection: sort.key === 'createdAt' ? sort.direction : undefined,
+    },
     PAGE_SIZE,
   );
 
@@ -135,13 +146,16 @@ export function ClientListPage() {
           position: b.incomeDetail?.position ?? '-',
           loanCount: loans.length,
           hasActiveLoan: loans.some((l) => REAL_ACTIVE_LOAN_STATUSES.includes(l.status)),
+          createdAt: b.createdAt,
         };
       }),
     [borrowers, loansByBorrowerId],
   );
 
-  // loanPresence is already server-filtered above (via useCursorPagination's extraParams).
-  const { sorted, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: null, direction: 'asc' });
+  // loanPresence is already server-filtered above (via useCursorPagination's extraParams); when
+  // sort.key is 'createdAt', `rows` already arrives in that order from the server too, so this is
+  // a no-op re-sort for that column and does the real work only for the other, per-page columns.
+  const sorted = React.useMemo(() => sortRows(rows, getSortValue, sort), [rows, sort]);
 
   return (
     <div className="space-y-6">
@@ -202,6 +216,9 @@ export function ClientListPage() {
                 <SortableTableHead sortKey="employer" currentSort={sort} onSort={toggleSort}>
                   Employer
                 </SortableTableHead>
+                <SortableTableHead sortKey="createdAt" currentSort={sort} onSort={toggleSort} isDateColumn>
+                  Date Created
+                </SortableTableHead>
                 <SortableTableHead sortKey="loans" currentSort={sort} onSort={toggleSort} className="text-right">
                   Loans
                 </SortableTableHead>
@@ -230,6 +247,7 @@ export function ClientListPage() {
                     <p>{c.employer}</p>
                     <p className="text-xs text-muted-foreground">{c.position}</p>
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{formatDate(c.createdAt)}</TableCell>
                   <TableCell className="text-right">
                     <Badge variant="outline">{c.loanCount}</Badge>
                   </TableCell>
@@ -237,14 +255,14 @@ export function ClientListPage() {
               ))}
               {!isLoading && sorted.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     No clients match your search.
                   </TableCell>
                 </TableRow>
               )}
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     Loading clients…
                   </TableCell>
                 </TableRow>

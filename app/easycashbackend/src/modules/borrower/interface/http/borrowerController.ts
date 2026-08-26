@@ -83,12 +83,14 @@ export class BorrowerController {
         req.query.loanPresence === 'WITH_ACTIVE' || req.query.loanPresence === 'WITH_HISTORY' || req.query.loanPresence === 'NONE'
           ? req.query.loanPresence
           : undefined;
+      const sortDirection = req.query.sortDirection === 'asc' || req.query.sortDirection === 'desc' ? req.query.sortDirection : undefined;
       const borrowers = await this.deps.listBorrowersUseCase.execute({
         limit,
         cursor,
         branchId: resolveBranchFilter(scope),
         search,
         loanPresence,
+        sortDirection,
       });
       res.status(200).json(toPaginatedResponse(borrowers.map(presentBorrower), limit, (item) => item.id));
     } catch (error) {

@@ -12,6 +12,7 @@ export interface ListBorrowersInput {
   branchId?: string;
   search?: string;
   loanPresence?: 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
+  sortDirection?: 'asc' | 'desc';
 }
 
 export class ListBorrowersUseCase {

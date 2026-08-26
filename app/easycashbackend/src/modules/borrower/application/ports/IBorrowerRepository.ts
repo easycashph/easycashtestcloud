@@ -21,6 +21,11 @@ export interface FindManyBorrowersOptions {
    * none. Pushed server-side so a filtered view shows a full page of matches instead of narrowing
    * whatever page had already been fetched. */
   loanPresence?: 'WITH_ACTIVE' | 'WITH_HISTORY' | 'NONE';
+  /** 2026-08-26 (List of Clients "Date Created" sort): server-side so the ordering spans every
+   * matching borrower, not just whichever page happened to already be fetched - the client-side
+   * `useSortableTable` used elsewhere only reorders the current page. Defaults to `'desc'`
+   * (existing behavior, newest first) when omitted. */
+  sortDirection?: 'asc' | 'desc';
 }
 
 export interface IBorrowerRepository {
