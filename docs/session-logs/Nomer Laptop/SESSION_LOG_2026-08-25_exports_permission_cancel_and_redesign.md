@@ -141,8 +141,7 @@ couldn't tell which tab the cursor was over before clicking. Traced to `componen
 `TabsTrigger`: it styled `data-[state=active]` only, with no `hover:` state whatsoever. Added
 `hover:bg-background/60 hover:text-foreground` (plus `data-[state=active]:hover:bg-background` so
 the active tab doesn't visually dim on hover). This is the shared Tabs primitive used across the
-whole app, not just System, so the fix applies everywhere tabs are used. Not yet committed as of
-this log entry.
+whole app, not just System, so the fix applies everywhere tabs are used. Commit `c1bb69a`.
 
 ## 7. SOA Collection Fee — second correction (accrued interest was still missing)
 
@@ -153,7 +152,71 @@ the base**, which the §1 fix had omitted. Corrected `LoanDetailPage.tsx`'s `col
 to `(totalPastDue + accruedInterest) * (collectionFeePercent / 100)`, and the on-page hint text to
 say "Past Due Amount + Penalty + Accrued Interest". Verified against the sheet's own numbers with
 a standalone arithmetic check: 10% × (₱70,682.14 + ₱210,255.79) = ₱28,093.79 ✓, matching the
-Excel's computed result exactly. Not yet committed as of this log entry.
+Excel's computed result exactly. Commit `c1bb69a`.
+
+## 8. Attachments: show who uploaded, and flag legacy-migrated rows
+
+User asked whether attachments could show who uploaded them, and whether a migrated attachment
+could be flagged as coming from Mambu or SDevTech. Investigation: `uploadedByName` was already
+returned by the API and already rendered in `AttachmentsPanel.tsx` (this was already working,
+just not something the user had noticed) - free win, no code needed for that half. For the
+source system: skipped a dedicated Mambu-vs-SDevTech field since only SDevTech attachments were
+ever migrated (Mambu's own documents were never recovered, only its loan notes were, per §4 of the
+prior day's log) - so `legacyId != null` already means "from SDevTech" unambiguously.
+
+Added a new `isLegacyMigrated` boolean threaded through the whole chain -
+`IAttachmentRepository.AttachmentRecord` → `PrismaAttachmentRepository.toRecord` (`row.legacyId !==
+null`) → `AttachmentPresenter` → frontend `Attachment` type → `AttachmentsPanel.tsx`, which now
+shows "Migrated from legacy system" instead of "Unknown" when `uploadedByName` is null but the row
+is legacy-migrated. Commit `2c32422`.
+
+Same pass: removed the "Download All Documents" button from `ClientProfilePage.tsx` (per user
+request) - same reasoning as the earlier Loan Account page removal, redundant with the dedicated
+Exports feature. Commit `2c32422`.
+
+## 9. Notifications: overdue-loan alerts now include the borrower's name
+
+User asked to add the client's name to overdue-loan notifications (previously just "Loan
+{loanCode} is overdue"). `NotificationService.syncOverdueNotifications` now reads a
+`borrowerName` field added to `findOverdueLoanAccounts`'s raw SQL (joined `borrowers b ON b.id =
+la."borrowerId"`, `(b."firstName" || ' ' || b."lastName") AS "borrowerName"` - safe, `loan_accounts.
+borrowerId` is non-nullable), and the title is now `Loan {loanCode} ({borrowerName}) is overdue`.
+**Only affects newly-created notifications going forward** - existing rows in the DB keep their old
+title text (not retroactively rewritten), and since there's a 24-hour resync window per loan
+(`OVERDUE_RESYNC_WINDOW_HOURS`), the first notification with the new format for any given
+already-overdue loan may not appear until that window elapses. Commit `2c32422`.
+
+## 10. Settings page whole-document scroll bug — real root cause found and fixed
+
+Third occurrence this week of "the whole page scrolls instead of just the content," this time
+user-confirmed to be **Settings-page-specific, not global** - every other page scrolled correctly.
+That ruled out the §3 (2026-08-25) `h-dvh`→`h-svh` swap as ever having been a real fix: `dvh`,
+`svh`, and plain `vh` are all identical on desktop Chrome (the distinction between them is a
+mobile-only feature - toolbar show/hide - which doesn't exist on desktop), so that swap changed
+nothing and the underlying bug was never actually addressed, just coincidentally not reproducing
+for a while.
+
+Diagnosed live via the user's own DevTools console (three rounds of guided diagnostics, since no
+login credentials are available in this dev environment for me to reproduce it directly):
+- `document.body.scrollHeight` matched `window.innerHeight` (730 = 730), but
+  `document.documentElement.scrollHeight` was 949 - confirmed real document-level overflow, ~219px.
+- `getComputedStyle` showed `overflow: visible` on both `html` and `body` despite a CSS rule of
+  `html, body, #root { height: 100%; overflow: hidden; }` having been added and deployed - the
+  build's CSS minifier was silently dropping `overflow: hidden` from that rule entirely (confirmed
+  by grepping the actual compiled CSS in the running container: only `height:100%` survived).
+  Rewriting it as three separate single-selector rules (`html {...}`, `body {...}`, `#root {...}`)
+  instead of one comma-separated selector list fixed the minifier's stripping and immediately
+  resolved the scroll bug (re-verified via a DOM walk finding zero elements exceeding
+  `window.innerHeight`).
+
+Net fix: `html`/`body`/`#root` in `index.css` now carry explicit `height: 100%; overflow: hidden;`
+(as three separate rules, not one combined selector), and `AppLayout.tsx`'s outer shell changed
+from `h-svh` to `h-full` - height is now anchored to the box model instead of a recalculated
+viewport unit, which is what was actually susceptible to whatever measurement quirk was inflating
+`documentElement.scrollHeight` by ~219px in the first place. This is a more durable fix than either
+of the two prior same-bug-class fixes (`h-dvh`→`h-svh` on 2026-08-25, the original document-scroll→
+independent-scroll-panes redesign referenced in `AppLayout.tsx`'s own older comment) since it no
+longer depends on any `*vh` unit's accuracy at all. Commit `2c32422`.
 
 ## Current state / follow-ups for next session
 
@@ -167,8 +230,9 @@ Excel's computed result exactly. Not yet committed as of this log entry.
   pushed to `main`. Office Server PC needs `git pull` + rebuild of `easycashbackend` (for the
   Cancel Export backend + `CANCELLED` migration — remember to check
   `prisma migrate status`/`migrate deploy` after rebuilding) and `lmsfrontend` (all four parts).
-- **Not yet committed** (rebuilt and verified on this laptop only): the Tabs hover-state fix (§6)
-  and the second Collection Fee correction (§7, adds Accrued Interest to the base).
+- Everything through §10 is now committed and pushed to `main` (`c1bb69a`, `2c32422`). Office
+  Server PC needs `git pull` + rebuild of both `easycashbackend` and `lmsfrontend` for §6-§10 —
+  no new Prisma migration in this batch, so no `migrate deploy` needed for these specifically.
 - Carried over, still untouched: the ₱19.3M post-maturity-penalty correction (user "thinking it
   over"), and accrued interest on long-defaulted accounts (flagged as likely significant, never
   examined).
