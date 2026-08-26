@@ -82,11 +82,12 @@ export class PrismaNotificationRepository implements INotificationRepository {
    * owed, matching `RepaymentInstallment.status`'s own `LATE` definition. Deliberately not shared
    * code with the dashboard module (that function is module-private) - a ~15-line raw query
    * duplicated here is a smaller cost than a cross-module coupling for one query. */
-  async findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string }[]> {
-    return prisma.$queryRaw<{ id: string; branchId: string; loanCode: string }[]>(Prisma.sql`
-      SELECT DISTINCT la.id, la."branchId", la."loanCode"
+  async findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]> {
+    return prisma.$queryRaw<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]>(Prisma.sql`
+      SELECT DISTINCT la.id, la."branchId", la."loanCode", (b."firstName" || ' ' || b."lastName") AS "borrowerName"
       FROM repayment_schedules rs
       JOIN loan_accounts la ON la.id = rs."loanAccountId"
+      JOIN borrowers b ON b.id = la."borrowerId"
       WHERE rs."dueDate" < ${asOf}
         AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
             < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")

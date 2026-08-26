@@ -54,6 +54,7 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
     uploadedByUserId: string | null;
     uploadedBy: { firstName: string; lastName: string } | null;
     uploadedAt: Date;
+    legacyId: string | null;
   }): AttachmentRecord {
     return {
       id: row.id,
@@ -67,6 +68,7 @@ export class PrismaAttachmentRepository implements IAttachmentRepository {
       uploadedByUserId: row.uploadedByUserId,
       uploadedByName: row.uploadedBy ? `${row.uploadedBy.firstName} ${row.uploadedBy.lastName}` : null,
       uploadedAt: row.uploadedAt,
+      isLegacyMigrated: row.legacyId !== null,
     };
   }
 }

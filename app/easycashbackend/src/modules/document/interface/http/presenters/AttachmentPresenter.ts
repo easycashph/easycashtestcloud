@@ -11,6 +11,7 @@ export interface AttachmentResponse {
   uploadedByUserId: string | null;
   uploadedByName: string | null;
   uploadedAt: string;
+  isLegacyMigrated: boolean;
 }
 
 export function presentAttachment(record: AttachmentRecord): AttachmentResponse {
@@ -25,5 +26,6 @@ export function presentAttachment(record: AttachmentRecord): AttachmentResponse 
     uploadedByUserId: record.uploadedByUserId,
     uploadedByName: record.uploadedByName,
     uploadedAt: record.uploadedAt.toISOString(),
+    isLegacyMigrated: record.isLegacyMigrated,
   };
 }

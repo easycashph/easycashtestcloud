@@ -23,5 +23,5 @@ export interface INotificationRepository {
    * `overdueAccounts` figure - `PrismaDashboardRepository.findOverdueLoanAccounts`), used only by
    * `NotificationService.syncOverdueNotifications`. Lives here rather than a separate port since
    * it exists purely to feed notification creation, not as a general-purpose loan account query. */
-  findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string }[]>;
+  findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]>;
 }

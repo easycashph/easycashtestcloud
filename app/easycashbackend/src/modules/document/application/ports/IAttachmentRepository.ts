@@ -25,6 +25,10 @@ export interface AttachmentRecord {
   uploadedByUserId: string | null;
   uploadedByName: string | null;
   uploadedAt: Date;
+  /** True when this row came from `migrate-legacy-data.ts` (has a `legacyId`) rather than being
+   * uploaded through the app - the only source migrated so far is SDevTech (Mambu's own documents
+   * were never recovered, only its loan notes were, via `migrate-mambu-notes.ts`). */
+  isLegacyMigrated: boolean;
 }
 
 export interface CreateAttachmentInput {

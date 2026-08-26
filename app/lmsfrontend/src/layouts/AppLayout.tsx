@@ -287,11 +287,18 @@ export function AppLayout() {
     // that resurfaces, it needs a different fix (it's an OS/browser viewport-unit accuracy issue,
     // not a reason to go back to shared document scroll) - flag it rather than reverting this.
     //
-    // 2026-08-25 (user-reported resurfacing): switched `h-dvh` -> `h-svh` - `dvh` (dynamic
-    // viewport height) is the one that over-reports at some Windows zoom/DPI/taskbar combos; `svh`
-    // (small viewport height) is defined to always be less than or equal to the actually-visible
-    // area, so it can't make the same mistake. Same isolated-scroll architecture, just a safer unit.
-    <div className="flex h-svh flex-col overflow-hidden bg-background">
+    // 2026-08-25 (user-reported resurfacing): switched `h-dvh` -> `h-svh`, on the theory that
+    // `dvh` over-reports at some Windows zoom/DPI/taskbar combos while `svh` is guaranteed <= the
+    // visible area. That theory was wrong: `dvh`/`svh`/plain `vh` are IDENTICAL on desktop Chrome
+    // (the dvh-vs-svh split only matters for a mobile browser's show/hide toolbar), so the swap
+    // changed nothing, and the bug resurfaced again 2026-08-26 on Settings.
+    //
+    // 2026-08-26 real fix: dropped viewport units here entirely - `h-full`, now that
+    // `html`/`body`/`#root` carry an explicit `height: 100%` (index.css), anchors this shell's
+    // height to the actual computed layout box instead of a `*vh` recalculation, which is what was
+    // susceptible to Windows zoom/DPI rounding in the first place. Same isolated-scroll
+    // architecture as before - only the height source changed.
+    <div className="flex h-full flex-col overflow-hidden bg-background">
       <div className="flex min-h-0 flex-1">
         <Sidebar open={sidebarOpen} collapsed={collapsed} />
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}

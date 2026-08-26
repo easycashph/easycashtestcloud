@@ -225,6 +225,34 @@
   * {
     @apply border-border;
   }
+  /* 2026-08-26 (user-reported resurfacing, again, on Settings this time): `html`/`body`/`#root`
+     previously had no explicit height at all - AppLayout's `h-*vh` shell was the ONLY thing
+     establishing height anywhere in the chain, a purely viewport-unit-based approach. `dvh`,
+     `svh`, and plain `vh` are all IDENTICAL on desktop Chrome (the dvh-vs-svh distinction is a
+     mobile-only feature, toolbar show/hide - there is no dynamic toolbar on desktop), so the
+     2026-08-25 dvh->svh swap in AppLayout.tsx changed nothing here; the underlying Windows
+     zoom/DPI viewport-unit rounding bug it was meant to fix was never actually addressed. Anchor
+     height via the box model instead - `height: 100%` chains off real computed layout, which
+     doesn't get recalculated (and rounded) from scratch the way a `*vh` unit does, sidestepping
+     this whole bug class rather than swapping within the same vulnerable unit family again.
+     `height: 100%` alone wasn't enough on its own (still reproduced right after that change) -
+     a percentage height is a sizing hint, not a clamp, so any child taller than that (rounding,
+     a stray portal, anything) still overflows the box outward and the document scrolls to reach
+     it. Pairing it with `overflow: hidden` here removes that escape hatch entirely - document-
+     level scroll is now structurally impossible, so scrolling can only ever happen inside
+     `<main>`/the sidebar, which already own their own `overflow-y-auto`. */
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
   body {
     @apply bg-background text-foreground antialiased;
   }

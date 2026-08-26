@@ -42,6 +42,8 @@ export interface Attachment {
   uploadedByUserId: string | null;
   uploadedByName: string | null;
   uploadedAt: string;
+  /** True when this row came from the SDevTech migration rather than an upload through the app. */
+  isLegacyMigrated: boolean;
 }
 
 /** Shared with the Loan Application create form's categorized document slots - same whitelist and

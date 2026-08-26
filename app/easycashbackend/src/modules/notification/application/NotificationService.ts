@@ -104,7 +104,7 @@ export class NotificationService {
         roleNames: OVERDUE_NOTIFICATION_ROLES,
         branchId: account.branchId,
         type: 'LOAN_OVERDUE',
-        title: `Loan ${account.loanCode} is overdue`,
+        title: `Loan ${account.loanCode} (${account.borrowerName}) is overdue`,
         body: 'At least one installment is past due and not fully paid.',
         entityType: 'LoanAccount',
         entityId: account.id,

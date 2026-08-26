@@ -169,7 +169,8 @@ export function AttachmentsPanel({
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {formatFileSize(a.fileSize)} · {a.uploadedByName ?? 'Unknown'} · {formatDateTime(a.uploadedAt)}
+                    {formatFileSize(a.fileSize)} · {a.uploadedByName ?? (a.isLegacyMigrated ? 'Migrated from legacy system' : 'Unknown')} ·{' '}
+                    {formatDateTime(a.uploadedAt)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
