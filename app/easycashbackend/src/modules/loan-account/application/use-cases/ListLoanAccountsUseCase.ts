@@ -15,6 +15,7 @@ export interface ListLoanAccountsInput {
   borrowerId?: string;
   status?: LoanAccountStatus | 'MATURED';
   loanProductVersionIds?: string[];
+  sortDirection?: 'asc' | 'desc';
 }
 
 export class ListLoanAccountsUseCase {

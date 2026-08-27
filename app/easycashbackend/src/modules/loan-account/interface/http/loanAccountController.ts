@@ -128,6 +128,7 @@ export class LoanAccountController {
         typeof req.query.loanProductVersionIds === 'string' && req.query.loanProductVersionIds.length > 0
           ? req.query.loanProductVersionIds.split(',')
           : undefined;
+      const sortDirection = req.query.sortDirection === 'asc' ? 'asc' : req.query.sortDirection === 'desc' ? 'desc' : undefined;
       const loanAccounts = await this.deps.listLoanAccountsUseCase.execute({
         limit,
         cursor,
@@ -136,6 +137,7 @@ export class LoanAccountController {
         borrowerId,
         status,
         loanProductVersionIds,
+        sortDirection,
       });
       const maturedIds = await this.deps.listMaturedLoanAccountIdsUseCase.execute(loanAccounts.map((l) => l.id));
       res.status(200).json(
