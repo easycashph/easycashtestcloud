@@ -281,6 +281,19 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
           email: c.email_address ? String(c.email_address) : null,
           status: status as never,
           loanCycle: Number(c.loan_cycle ?? 0),
+          // 2026-08-27 bug fix (user-reported): without this, Prisma's `@default(now())` recorded
+          // the migration run's own timestamp as "created" for EVERY borrower, not the real
+          // SDevTech client creation date - same bug class as the 2026-07-17 LoanAccount.createdAt
+          // fix (`backfill-legacy-loan-created-dates.ts`), just never applied here. Confirmed
+          // empirically: all 4,607 already-migrated borrowers shared one single createdAt date (the
+          // 2026-08-19 migration run), instead of being spread across the company's real 2018-2026
+          // client history. Source field is `creation_date` - a "MM-DD-YYYY" string for the ~74% of
+          // records still on the legacy string format (verified via an "is either number ever >12"
+          // check: the SECOND number exceeds 12 in ~60% of records, the FIRST never does - proving
+          // month-first, not day-first, despite the visual DD-MM resemblance), or a real BSON Date
+          // for the rest - `toDate()` already handles both shapes correctly as-is (JS's default
+          // string-Date parsing already assumes MM-DD-YYYY for this exact shape).
+          createdAt: toDate(c.creation_date) ?? undefined,
           legacyId: uid,
         },
       });
