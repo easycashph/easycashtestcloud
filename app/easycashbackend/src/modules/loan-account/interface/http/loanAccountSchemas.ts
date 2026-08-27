@@ -167,9 +167,6 @@ export const restructureLoanSchema = z.object({
    * that default (a restructure may only lower these, not raise them). */
   negotiatedNewPrincipal: decimalStringSchema.optional(),
   negotiatedInterestRate: decimalStringSchema.optional(),
-  /** 2026-08-27 (user-confirmed): required only when the old loan's product uses FLAT interest -
-   * see RestructureLoanUseCase's `manualFlatInterestDue` doc comment for why. */
-  manualFlatInterestDue: decimalStringSchema.optional(),
 });
 
 export type RestructureLoanRequestBody = z.infer<typeof restructureLoanSchema>;
