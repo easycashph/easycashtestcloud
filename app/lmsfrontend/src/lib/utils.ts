@@ -138,10 +138,17 @@ export function pesoTooltipFormatter(value: unknown): string {
 }
 
 /**
- * Groups an 11-digit PH mobile number for readability, e.g. "09171234567" → "0917 123 4567".
- * Numbers are stored as plain digit strings with no formatting (see `loanApiTypes.ts`/
- * `loanApplicationApiTypes.ts`) - this is display-only, never applied to stored/submitted values.
- * Anything that isn't exactly 11 digits (missing, partial, or already-formatted input) is returned
+ * Groups a PH mobile number for readability with the "+63" country code, e.g. "09171234567" →
+ * "+63 917 123 4567". Numbers are stored as plain digit strings with no formatting (see
+ * `loanApiTypes.ts`/`loanApplicationApiTypes.ts`) - this is display-only, never applied to
+ * stored/submitted values.
+ *
+ * 2026-08-27: legacy SDevTech data stores this field in several inconsistent shapes (own-DB
+ * survey: 11-digit "0917...", 12-digit "63917..." with no "+", and a 10-digit local number with
+ * neither prefix - "917...") - normalizes all three to the same 10-digit local number before
+ * formatting. Every genuine PH mobile number's local part starts with "9"; anything that doesn't
+ * reduce to that (missing, partial, or corrupted source data - e.g. a handful of legacy records
+ * that are literally malformed Excel scientific-notation strings like "0.999804316") is returned
  * as-is rather than guessing a grouping.
  */
 export function formatMobileNumber(value: string | null | undefined): string {
@@ -149,8 +156,11 @@ export function formatMobileNumber(value: string | null | undefined): string {
   // `string | null` param type is compile-time only, not enforced at runtime.
   if (!value || typeof value !== 'string') return value ? String(value) : '-';
   const digits = value.replace(/\D/g, '');
-  if (digits.length !== 11) return value;
-  return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  let local = digits;
+  if (digits.length === 12 && digits.startsWith('63')) local = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith('0')) local = digits.slice(1);
+  if (local.length !== 10 || !local.startsWith('9')) return value;
+  return `+63 ${local.slice(0, 3)} ${local.slice(3, 6)} ${local.slice(6)}`;
 }
 
 // Matches a standalone Roman numeral token (I, II, III, IV ... up to a few thousand) - used to

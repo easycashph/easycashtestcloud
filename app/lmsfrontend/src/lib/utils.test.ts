@@ -8,12 +8,24 @@ describe('formatPeso', () => {
 });
 
 describe('formatMobileNumber', () => {
-  it('groups an 11-digit PH mobile number', () => {
-    expect(formatMobileNumber('09171234567')).toBe('0917 123 4567');
+  it('groups an 11-digit PH mobile number (leading 0) with the +63 country code', () => {
+    expect(formatMobileNumber('09171234567')).toBe('+63 917 123 4567');
   });
 
-  it('returns non-11-digit input unchanged', () => {
+  it('groups a 12-digit PH mobile number (63 prefix, no +) with the +63 country code', () => {
+    expect(formatMobileNumber('639171234567')).toBe('+63 917 123 4567');
+  });
+
+  it('groups a 10-digit PH mobile number (no prefix) with the +63 country code', () => {
+    expect(formatMobileNumber('9171234567')).toBe('+63 917 123 4567');
+  });
+
+  it('returns unparseable input unchanged', () => {
     expect(formatMobileNumber('123')).toBe('123');
+  });
+
+  it('returns malformed legacy data unchanged rather than guessing', () => {
+    expect(formatMobileNumber('0.999804316')).toBe('0.999804316');
   });
 
   it('returns "-" for null/undefined', () => {

@@ -1,4 +1,4 @@
-# Session Log: 2026-08-27 (Nomer Laptop) — full legacy re-migration, Borrower.createdAt bug (deduped with Office Server PC), stale-snapshot extraction bug fix
+# Session Log: 2026-08-27 (Nomer Laptop) — full legacy re-migration, Borrower.createdAt bug (deduped with Office Server PC), stale-snapshot extraction bug fix, Client Profile/Length-of-Stay additions, FLAT-restructure radio-choice feature
 
 Continues `docs/session-logs/Nomer Laptop/SESSION_LOG_2026-08-26_reminder_dryrun_clients_sort_and_footer_fix.md`.
 
@@ -205,6 +205,136 @@ account has 2) would silently lose every address past the first the next time so
 to their profile. Needs its own design decision (which address is "the" edited one, or expose all
 of them) - out of scope for this session's fix.
 
+## 8. UI polish batch: Tabs hover, attachment provenance, download button, Settings scroll bug
+
+Several small, independent fixes/additions in one stretch:
+
+- **Tabs hover state**: the shared `TabsTrigger` component (`components/ui/tabs.tsx`) had no hover
+  style at all - fixed by adding `hover:bg-background/60 hover:text-foreground` plus an active-tab
+  hover variant.
+- **Attachment "who uploaded it" / legacy provenance**: `uploadedByName` already worked correctly;
+  added a new `isLegacyMigrated` boolean end-to-end (domain repo -> presenter -> frontend types ->
+  `AttachmentsPanel.tsx`), derived from `legacyId !== null`, so a legacy-migrated attachment shows
+  "Migrated from legacy system" instead of a bare "Unknown" uploader.
+- **Removed "Download All Documents"** button from the Client Profile page (redundant with the
+  existing Exports feature) and its now-unused imports.
+- **Settings page "whole page scrolls" bug** - a real, genuinely obscure CSS build bug, diagnosed
+  live with the user via DevTools (`document.body.scrollHeight`, `getComputedStyle`, grepping the
+  compiled CSS inside the running container). Root cause: the CSS minifier silently dropped
+  `overflow: hidden` when it was part of a comma-separated selector list (`html, body, #root {
+  ... }`) - only `height: 100%` survived minification. Fixed by splitting into three separate
+  single-selector rules, and switched `AppLayout.tsx` from `h-svh` to `h-full`.
+- **Exports feature moved** from a standalone header button into the System page's own tab row
+  (mockup-approved first).
+- **Overdue-loan notifications** now include the borrower's name; explained to the user that the
+  24-hour resync window means already-sent notifications won't retroactively pick up the new format.
+- **Transaction Report footer** restyled to match Expected Collection Report's convention
+  (`border-t-2 font-semibold`) - this exact footer pattern became the template reused again in §11
+  below for the Restructure dialog's own Total rows.
+
+## 9. Client Profile: more summary-card fields + icons, and address-coverage check
+
+Added Age, Civil Status, Nationality, Place of Birth, Gender, Home Ownership, SSS Number, and TIN
+Number to the Client Profile summary card (user picked this exact field set via AskUserQuestion),
+each with a matching icon (`Heart`, `Calendar`, `Cake`, `VenusAndMars`, `DoorOpen`, `Flag`,
+`MapPin`, `IdCard`, `Receipt`) after a mockup was shown and approved - `toProperCase()` applied so
+the raw uppercase DB values (see §7 above) still display nicely. Separately checked and answered:
+139 of 4,610 clients (3%) still have no address at all as of that point in the session (later
+raised to 4,471/4,610 by the Mambu recovery in §5 above).
+
+## 10. Loan Application + Client Profile: "Length of Stay" at current address
+
+User asked for a new field capturing how long a client/applicant has lived at their present
+address, on both the Loan Application form and the Client Profile. Required a new column
+(`LoanApplication.presentAddressLengthOfStayMonths`, migration
+`20260827063839_add_present_address_length_of_stay`) threaded through the full backend stack (DTO,
+domain, Prisma repo, Zod schema, presenter) and ~8 frontend files (`LoanApplicationCreatePage.tsx`,
+`LoanApplicationDetailPage.tsx`'s create-client dialog and read-only view, `ClientProfilePage.tsx`).
+Entered/stored as separate Years + Months inputs, combined into one months-integer on save. While
+touching these forms, also fixed an unrelated Home Ownership dropdown taxonomy inconsistency
+(`"Renting"`/`"Living with Family"` etc.) across `ClientCreatePage.tsx` and
+`LoanApplicationCreatePage.tsx` to match the canonical 4 values fixed in §7.
+
+## 11. FLAT-interest loan Restructure: from a blocked action to a user-chosen path, with mockups at each step
+
+A live-site error was blocking "Restructure loan" for any FLAT-interest-product loan, citing
+`CALCULATION_ENGINE_SPEC.md §4 UNRESOLVED for FLAT`. Explained to the user this is a deliberate
+guard, not a bug: `AmortizationScheduleGenerator` is the only implemented (declining-balance)
+interest engine, and the spec explicitly documents FLAT as unresolved with no verified formula -
+per this project's core rule (CLAUDE.md: never fabricate financial logic), the system refuses to
+guess rather than silently apply the wrong math.
+
+**First attempt** (user-approved via mockup): a manual-entry-with-confirmation-checkbox escape
+hatch, single installment only, staff types the interest themselves with an explicit "I confirm
+this is mine to enter, not system-calculated" checkbox. Implemented, committed (`13aa743`).
+
+**User then explicitly reverted this** ("revert mo ulit pabalik") and proposed a better design:
+let staff choose between "Declining Balance" (recommended, system-computed, verified formula) or
+"Flat Rate" (manual entry, same escape hatch as before) *per restructure*, rather than forcing
+manual entry unconditionally. Reverted via `git revert --no-edit 13aa743` (commit `2932910`),
+pushed, rebuilt to restore the pre-feature state. Built a new mockup for the radio-choice design,
+translated its copy to English per the user's request, got final approval ("ok na").
+
+Implemented the radio-choice version:
+- `RestructureLoanUseCase.ts`: new optional `restructureInterestMethod: 'DECLINING_BALANCE' |
+  'FLAT'` input (only meaningful when the old loan's product is FLAT; ignored otherwise, defaults
+  to `'DECLINING_BALANCE'`). When `'FLAT'` is chosen, requires `manualFlatInterestDue` and rejects
+  any `installmentCount !== 1` - a FLAT restructure is always a single manually-entered installment.
+- `loanAccountSchemas.ts` / `loanAccountController.ts`: threaded the two new fields through the
+  Zod schema and controller.
+- `LoanDetailPage.tsx`: loads all `LoanProduct[]` (via `fetchAllPages`) to resolve the loan's
+  `interestCalculationMethod`; when it's FLAT, shows the radio choice UI (Declining Balance
+  recommended-badged, Flat Rate with a warning about no verified formula) instead of silently
+  blocking the action.
+- **Mid-implementation addition** (user request while work was in progress): even when Flat Rate
+  is chosen, pre-fill its manual interest field with what Declining Balance *would have* computed
+  for a single installment (via `previewLoanSchedule(...)`), so staff edits a real number instead
+  of starting from blank. Implemented in the same commit.
+
+Committed and pushed (`14cf999`). Verified on localhost using genuinely-eligible FLAT loans (the
+user's first example, `BL-SPEC_00028`, turned out to be `CLOSED` in this laptop's DB snapshot -
+unrelated to the feature, just a different state than the live site the user was looking at, e.g.
+`2134`, `2174`, `2089`, `2230`, `14000430` were suggested as working test cases instead).
+
+## 12. Restructure schedule tables: Total row, then three follow-up polish fixes
+
+User asked for a Total row (Principal/Interest/Payment) below both Restructure schedule tables
+(Declining Balance's multi-row preview and Flat Rate's single manual row), "single row fit" -
+mockup approved, implemented for both using the same `tfoot`/`border-t-2 font-semibold` convention
+from §8's Transaction Report footer fix. Committed (`451fc82`).
+
+User then reported "wala akong makita" for the Declining Balance table specifically. Verified via
+`grep` that the Total row markup genuinely was present in `LoanDetailPage.tsx` (line ~4819) and,
+after the user still reported no change, verified directly inside the running container that the
+deployed JS bundle also contained it and the container had been recreated recently - ruling out
+"code not written" and "stale build" as explanations. Root cause turned out to be **three separate,
+smaller display bugs**, found and fixed one at a time as the user kept reporting the table still
+looked wrong even after each rebuild:
+
+1. **Due Date wrapping onto 2-3 lines** - neither the header nor data `TableCell` for Due Date had
+   `whitespace-nowrap`, so on the dialog's narrow width the date text wrapped, breaking the
+   "single row per installment" look the user actually meant. This existed independently of the
+   already-landed Total row, in both the Declining Balance and Flat Rate tables.
+2. **User asked to also shrink/auto-fit the whole table** - added `text-xs` + tighter
+   `[&_td]:px-2 [&_td]:py-1.5` padding (reusing the exact utility pattern already used elsewhere in
+   this file, e.g. line ~2747) and wrapped each `<Table>` in an `overflow-x-auto rounded-md border`
+   container, so an overflow scrolls horizontally inside its own box instead of breaking the dialog.
+3. **Flat Rate warning banner text unreadable** - `text-warning-foreground` (a color meant for use
+   on a *solid* `--warning` background) was used on a `bg-warning/10` (10%-tint) container, making
+   the warning text nearly invisible. Every other warning banner in this same file correctly uses
+   `text-warning` on the same tint background; fixed to match.
+
+Each fix was typechecked (`npx tsc --noEmit`, clean every time) and rebuilt
+(`docker compose up -d --build lmsfrontend`) individually as the user reported each issue.
+Committed and pushed together as one commit (`ed79fea`) once all three were confirmed.
+
+**Not changed, by user's own choice**: user asked to make "New term (installments)" editable for
+Flat Rate restructures. Flagged that this is locked to exactly 1 by explicit backend design (the
+`RestructureLoanUseCase.ts` guard added in §11 - a FLAT restructure is deliberately always a single
+manually-entered installment) and that making it truly editable would need a much bigger change
+(multi-row manual schedule entry + a backend guard rewrite). Asked via AskUserQuestion; user chose
+to keep the existing 1-installment-only rule as-is.
+
 ## Current state / follow-ups for next session
 
 - Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
@@ -214,10 +344,14 @@ of them) - out of scope for this session's fix.
   Office Server PC live DB (§48)"), and also landed unrelated MIS Post pool work this same window.
   Nothing more needed there for the address recovery specifically.
 - **Office Server PC still needs**: `git pull` + rebuild for today's other code fixes (the `.bat`
-  extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, and now the
-  gender/civil-status/home-ownership fix `44e643f`). The `Borrower.createdAt` backfill script should
-  also be run there directly (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been
-  already - additive/corrective, does not require a full reset.
+  extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, the
+  gender/civil-status/home-ownership fix `44e643f`, the Length of Stay migration + feature
+  (§10, needs `npx prisma migrate deploy` for `20260827063839_add_present_address_length_of_stay`
+  before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), and the
+  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`). The
+  `Borrower.createdAt` backfill script should also be run there directly
+  (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been already -
+  additive/corrective, does not require a full reset.
 - **Do not run a full `prisma migrate reset --force` against the Office Server PC casually** - it's
   live/production, unlike this laptop's disposable dev copy. Advised the user to check that
   machine's own migration log for a stale "Dump directory:" first, and only consider a full
