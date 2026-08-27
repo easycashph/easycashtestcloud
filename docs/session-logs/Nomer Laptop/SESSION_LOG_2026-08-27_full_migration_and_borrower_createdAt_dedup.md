@@ -400,6 +400,57 @@ manually-entered installment) and that making it truly editable would need a muc
 (multi-row manual schedule entry + a backend guard rewrite). Asked via AskUserQuestion; user chose
 to keep the existing 1-installment-only rule as-is.
 
+## 15. Mambu notes recovery run, LoanAccount.createdAt verified, and server-side sort added for "Created"
+
+**Mambu (pre-SDevTech) collector/loan-officer notes**: user asked to pull notes from
+`legacy/Mambu/easycash.sql` (Mambu's own MySQL dump, pre-2023) into the LMS. A ready-made,
+previously-written script already existed for this (`migrate-mambu-notes.ts`, flagged as
+"carried over, untouched" in earlier session logs) - never actually run before now. Dry run first
+choked with `JavaScript heap out of memory` parsing the 1.1 GB dump's 20,707-row `comment` table
+with Node's default heap limit; re-ran via `node node_modules/tsx/dist/cli.mjs` (the `tsx` bin
+shell-script wrapper doesn't accept `NODE_OPTIONS` cleanly on Windows) with
+`NODE_OPTIONS=--max-old-space-size=8192`, which completed cleanly. Confirmed the counts with the
+user before applying: of 20,707 Mambu comments, 9,232 attach to one of 1,190 Mambu loan codes that
+still exist in this database today (the rest are skipped, not guessed at - either the comment's
+parent isn't a loan account at all, or that loan never carried forward past Mambu into SDevTech).
+Ran `--apply`; verified via a direct DB count that all 9,232 landed in `profile_notes` with
+`legacyId LIKE 'mambu:%'`, attached as `LOAN_ACCOUNT`-owned notes visible on each loan's own detail
+page.
+
+**LoanAccount.createdAt spot-check**: user asked to verify the loan-account creation dates pulled
+from SDevTech are actually correct (same verification instinct as the earlier Borrower.createdAt
+check this session). Confirmed via three independent checks: (1) the 1,810 migrated loans' created
+dates spread naturally from 2009 to 2026 rather than clustering on any one date, (2) zero loans
+show today's migration-run date as their `createdAt` (the exact symptom the already-documented
+2026-07-17 bug fix + backfill script exists to prevent), and (3) two randomly-sampled loans'
+`createdAt` in Postgres matched their raw `creationDate` field in the SDevTech BSON dump exactly,
+down to the second (read directly via the `bson` package against
+`legacy/mongodb/extracted/20260827_080304/db-easycash/loan_accounts.bson`). All correct - no fix
+needed here, this was pure verification.
+
+**Loan list "Created" column - made it a real sort**: follow-on request after the above. The
+column's header was already clickable (`SortableTableHead`), but `LoanListPage.tsx` used
+`useSortableTable`, which is deliberately client-side-only - it re-orders whatever's already on the
+*current* server-paginated page (25 rows), so clicking "Created" ascending could never actually
+surface the truly oldest loans across the ~100k+-loan dataset, only the oldest of that one page.
+`ClientListPage.tsx`'s "Date Created" column already solved this exact problem for the client list
+(via `useSortableTable.ts`'s `useSortState`/`sortRows` split, letting a page read the sort
+direction *before* it has rows in hand, so it can feed it into a server query param) - applied the
+identical pattern here rather than inventing a new one:
+- `ILoanAccountRepository.FindManyLoanAccountsOptions` / `ListLoanAccountsUseCase` /
+  `PrismaLoanAccountRepository.findMany` (`orderBy: { createdAt: options.sortDirection ?? 'desc' }`)
+  / `loanAccountController.list` (new `sortDirection` query param, `'asc' | 'desc' | undefined`) -
+  threaded through the whole backend stack for `GET /loan-accounts`.
+- `LoanListPage.tsx`: swapped `useSortableTable` for the same `useSortState` + `sortRows` split,
+  passing `sortDirection: sort.key === 'createdAt' ? sort.direction : undefined` into
+  `useCursorPagination`'s extraParams (which already resets pagination to page 1 on any param
+  change). Every other column (Product, Status, Principal, Collections Balance) is unchanged -
+  still a page-local client-side sort, since only "Created" was asked about and only that column
+  needed to span the full dataset.
+
+Backend + frontend typechecked clean, both containers rebuilt and confirmed healthy. Committed and
+pushed (`4d8da16`).
+
 ## Current state / follow-ups for next session
 
 - Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
@@ -408,14 +459,20 @@ to keep the existing 1-installment-only rule as-is.
   address recovery directly against the live database (`7bfb767`, "log full address recovery on
   Office Server PC live DB (§48)"), and also landed unrelated MIS Post pool work this same window.
   Nothing more needed there for the address recovery specifically.
+- **§15's Mambu notes recovery (`migrate-mambu-notes.ts --apply`) still needs to be run directly
+  against the Office Server PC's live database** - this is a data-import action, not a code deploy,
+  so pulling/rebuilding alone won't bring the 9,232 notes over. Needs the Mambu SQL dump present at
+  `legacy/mambu/easycash.sql` on that machine first, and the same `NODE_OPTIONS=--max-old-space-size=8192`
+  workaround for the heap-limit crash (see §15).
 - **Office Server PC still needs**: `git pull` + rebuild for today's other code fixes (the `.bat`
   extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, the
   gender/civil-status/home-ownership fix `44e643f`, the Length of Stay migration + feature
   (§10, needs `npx prisma migrate deploy` for `20260827063839_add_present_address_length_of_stay`
   before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), the
   Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`), the
-  Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`), and the Edit Client Details
-  Birth Date/PhoneInput fixes (`942ca27`). The
+  Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`), the Edit Client Details
+  Birth Date/PhoneInput fixes (`942ca27`), and the loan-list server-side "Created" sort (`4d8da16`,
+  backend + frontend). The
   `Borrower.createdAt` backfill script should also be run there directly
   (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been already -
   additive/corrective, does not require a full reset.
