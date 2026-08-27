@@ -390,8 +390,8 @@ Follow-on bugs found while the user re-tested the §13 changes on `YNA MAE SADIC
   fields in `LoanDetailPage.tsx`/`LoanApplicationDetailPage.tsx` (reference contacts, not
   `PhoneInput`) untouched, they were never in scope.
 
-Each fix typechecked clean and was rebuilt individually as it was found; not yet committed as of
-this log entry - see next session or a following commit for the exact hash.
+Each fix typechecked clean and was rebuilt individually as it was found. Committed and pushed
+together (`942ca27`).
 
 **Not changed, by user's own choice**: user asked to make "New term (installments)" editable for
 Flat Rate restructures. Flagged that this is locked to exactly 1 by explicit backend design (the
@@ -402,10 +402,6 @@ to keep the existing 1-installment-only rule as-is.
 
 ## Current state / follow-ups for next session
 
-- **§14's three Edit Client Details fixes (Birth Date, PhoneInput "+63") are implemented and
-  rebuilt on this laptop but not yet committed/pushed** - do that first thing next session (or
-  later this same session if picked back up), then add the resulting commit hash to §14 above and
-  to the Office Server PC list below.
 - Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
   and the gender/civil-status/home-ownership fixes are all live and correct on this laptop.
 - **Office Server PC has already pulled ahead independently** - its own session ran the Mambu
@@ -417,8 +413,9 @@ to keep the existing 1-installment-only rule as-is.
   gender/civil-status/home-ownership fix `44e643f`, the Length of Stay migration + feature
   (§10, needs `npx prisma migrate deploy` for `20260827063839_add_present_address_length_of_stay`
   before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), the
-  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`), and
-  the Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`). The
+  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`), the
+  Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`), and the Edit Client Details
+  Birth Date/PhoneInput fixes (`942ca27`). The
   `Borrower.createdAt` backfill script should also be run there directly
   (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been already -
   additive/corrective, does not require a full reset.
