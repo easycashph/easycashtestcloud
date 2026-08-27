@@ -80,10 +80,25 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     birthDate: borrower.birthDate ?? '',
     placeOfBirth: borrower.placeOfBirth ?? '',
     nationality: borrower.nationality ?? '',
-    homeOwnership: borrower.homeOwnership ?? '',
     mobilePhone1: borrower.mobilePhone1 ?? '',
     email: borrower.email ?? '',
-    civilStatus: borrower.civilStatus ?? '',
+    // 2026-08-27 (user-reported: "Home Ownership" always blank for legacy-migrated clients):
+    // `Borrower.homeOwnership` IS real and used - populated from a LoanApplication's own intake
+    // field for natively-created clients (see CreateBorrowerUseCase) - but SDevTech's own
+    // client_accounts export never captured an equivalent concept, so every one of the ~4,610
+    // legacy-migrated borrowers has it blank. Their actual home-ownership data lives instead on the
+    // address record (`Address.ownershipStatus`, "Owned"/"Rented"/"Owned by Parents"/"Owned by
+    // Relatives" - 700 addresses have it, from SDevTech's own `addresses.status` field). Falls back
+    // to that when the Borrower-level field is empty, so neither population ever sees this field
+    // wrongly blank; save writes both fields in sync (see the mutationFn below).
+    homeOwnership: borrower.homeOwnership || existing?.ownershipStatus || '',
+    // 2026-08-27 (user-reported: civil status showing blank in the edit form despite having real
+    // data): a handful of legacy-migrated records (7, per direct DB check) have the same "divorced
+    // or separated" status spelled in reverse word order ("SEPARATED/DIVORCED" instead of the
+    // canonical "DIVORCED/SEPARATED") - same status, just an inconsistent legacy spelling. Normalize
+    // it here so the dropdown shows the match instead of appearing empty; saving the form corrects
+    // the record's spelling going forward.
+    civilStatus: borrower.civilStatus === 'SEPARATED/DIVORCED' ? 'DIVORCED/SEPARATED' : (borrower.civilStatus ?? ''),
     occupation: borrower.incomeDetail?.position ?? '',
     employer: borrower.incomeDetail?.employerName ?? '',
     monthlyIncome: borrower.incomeDetail?.monthlyIncome != null ? String(borrower.incomeDetail.monthlyIncome) : '',
@@ -229,6 +244,7 @@ function RealEditClientDialog({
                   cityMunicipality: draft.address.cityMunicipality || undefined,
                   province: draft.address.province || undefined,
                   zipCode: draft.address.zipCode || undefined,
+                  ownershipStatus: draft.homeOwnership || undefined,
                 },
               ],
             }
@@ -364,10 +380,10 @@ function RealEditClientDialog({
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Single">Single</SelectItem>
-                <SelectItem value="Married">Married</SelectItem>
-                <SelectItem value="Widowed">Widowed</SelectItem>
-                <SelectItem value="Separated">Separated</SelectItem>
+                <SelectItem value="SINGLE">Single</SelectItem>
+                <SelectItem value="MARRIED">Married</SelectItem>
+                <SelectItem value="WIDOWED">Widowed</SelectItem>
+                <SelectItem value="DIVORCED/SEPARATED">Divorced/Separated</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -383,8 +399,8 @@ function RealEditClientDialog({
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Female">Female</SelectItem>
-                <SelectItem value="Male">Male</SelectItem>
+                <SelectItem value="FEMALE">Female</SelectItem>
+                <SelectItem value="MALE">Male</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -434,13 +450,16 @@ function RealEditClientDialog({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label className="flex items-center gap-1">
-                Home Ownership <FieldTooltip text="Client's home ownership status." />
+                Home Ownership <FieldTooltip text="Client's home ownership status - stored on their address record." />
               </Label>
               <FieldLockToggle unlocked={unlocked.homeOwnership} onToggle={() => toggleUnlock('homeOwnership')} />
             </div>
             <Select
               value={draft.homeOwnership}
-              onValueChange={(v) => setDraft({ ...draft, homeOwnership: v })}
+              onValueChange={(v) => {
+                setAddressTouched(true);
+                setDraft({ ...draft, homeOwnership: v });
+              }}
               disabled={!unlocked.homeOwnership}
             >
               <SelectTrigger>
@@ -448,8 +467,9 @@ function RealEditClientDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Owned">Owned</SelectItem>
-                <SelectItem value="Renting">Renting</SelectItem>
-                <SelectItem value="Living with family">Living with family</SelectItem>
+                <SelectItem value="Rented">Rented</SelectItem>
+                <SelectItem value="Owned by Parents">Owned by Parents</SelectItem>
+                <SelectItem value="Owned by Relatives">Owned by Relatives</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -296,7 +296,6 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <MisPostBanner />
       <NewsFlashTicker />
       <MobileApplyBar sentinelRef={heroEndRef} />
 
@@ -331,7 +330,11 @@ export function LandingPage() {
             {/* Trust strip (2026-07-29) - regulatory disclosure lives in the footer, but a first-time
                 visitor decides whether to trust the site before ever scrolling that far. Placed right
                 under the CTA, the exact moment reassurance matters most. Values come from
-                companyInfo.ts, same single source of truth as the footer - never hardcode these. */}
+                companyInfo.ts, same single source of truth as the footer - never hardcode these.
+                2026-08-27 (user request, "mas mukhang malinis"): the SEC Reg./CA disclosure and the
+                disbursement-method notice used to each get their own stacked paragraph beneath this
+                row - collapsed into one compact block so the hero doesn't end in three separate
+                small-print lines. */}
             <motion.div
               variants={fadeUp}
               className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground"
@@ -349,21 +352,8 @@ export function LandingPage() {
                 {t.landing.trustDataProtected}
               </span>
             </motion.div>
-            {/* 2026-07-30 (user request, "polish like a trusted PH lending site"): the SEC Reg./CA
-                numbers themselves, not just a "SEC Registered" claim - trusted PH lenders
-                (Cashalo, Digido) surface these directly on the landing page, not just buried in
-                the footer's regulatory disclosure. Same verified constant the footer already
-                uses - never a second, divergent source of truth for these numbers. */}
-            <motion.p variants={fadeUp} className="mt-2 text-[11px] text-muted-foreground/80">
-              {REGULATORY_DISCLOSURE}
-            </motion.p>
-            {/* 2026-08-14 (user request): disbursement-method disclosure, same anti-scam reasoning
-                as the trust strip above - a client should know Easycash only ever releases loan
-                proceeds via Bank Cheque (companyInfo.ts's DISBURSEMENT_METHOD - not interpolated
-                here since this string is translated; keep the two in sync if that value changes),
-                never cash/GCash/bank transfer, so they can spot a scam claiming otherwise. */}
-            <motion.p variants={fadeUp} className="mt-1 text-[11px] text-muted-foreground/80">
-              {t.landing.disbursementNotice}
+            <motion.p variants={fadeUp} className="mt-2 text-[11px] leading-relaxed text-muted-foreground/80">
+              {REGULATORY_DISCLOSURE} &middot; {t.landing.disbursementNotice}
             </motion.p>
           </motion.div>
 
@@ -400,6 +390,11 @@ export function LandingPage() {
             the hero (and its own Apply button) has scrolled out of view. */}
         <div ref={heroEndRef} aria-hidden="true" />
       </section>
+
+      {/* 2026-08-27 (user request, "mas mukhang malinis"): moved below the hero instead of sitting
+          above it - the ad-style banner competed with the hero for the very first thing a visitor
+          sees, before the site's own branding/CTA had a chance to land. */}
+      <MisPostBanner />
 
       {/* Mission */}
       <section className="py-16 sm:py-20">
