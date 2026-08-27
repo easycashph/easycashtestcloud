@@ -104,6 +104,8 @@ export const updateBorrowerSchema = z.object({
   occupation: z.string().min(1).optional(),
   employer: z.string().min(1).optional(),
   monthlyIncome: z.coerce.number().nonnegative().optional(),
+  tinNumber: z.string().min(1).optional(),
+  sssNumber: z.string().min(1).optional(),
   addresses: z.array(addressSchema).optional(),
 });
 

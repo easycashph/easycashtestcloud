@@ -77,6 +77,8 @@ interface RealEditDraft {
   occupation: string;
   employer: string;
   monthlyIncome: string;
+  tinNumber: string;
+  sssNumber: string;
   address: AddressDraft;
   // 2026-08-27 (user request): same Years/Months split convention as ClientCreatePage.tsx - not
   // part of `AddressDraft` for the same reason `homeOwnership` above isn't (see that field's doc
@@ -119,6 +121,8 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     occupation: borrower.incomeDetail?.position ?? '',
     employer: borrower.incomeDetail?.employerName ?? '',
     monthlyIncome: borrower.incomeDetail?.monthlyIncome != null ? String(borrower.incomeDetail.monthlyIncome) : '',
+    tinNumber: borrower.governmentId?.tinNumber ?? '',
+    sssNumber: borrower.governmentId?.sssNumber ?? '',
     address: existing
       ? {
           houseUnitNumber: existing.houseUnitNumber ?? '',
@@ -167,6 +171,8 @@ function RealEditClientDialog({
     occupation: false,
     employer: false,
     monthlyIncome: false,
+    tinNumber: false,
+    sssNumber: false,
     address: false,
   });
   const toggleUnlock = (field: keyof typeof unlocked) => setUnlocked((u) => ({ ...u, [field]: !u[field] }));
@@ -220,6 +226,8 @@ function RealEditClientDialog({
         occupation: false,
         employer: false,
         monthlyIncome: false,
+        tinNumber: false,
+        sssNumber: false,
         address: false,
       });
     }
@@ -251,6 +259,8 @@ function RealEditClientDialog({
         occupation: draft.occupation || undefined,
         employer: draft.employer || undefined,
         monthlyIncome: draft.monthlyIncome.trim() ? Number(draft.monthlyIncome) : undefined,
+        tinNumber: draft.tinNumber || undefined,
+        sssNumber: draft.sssNumber || undefined,
         ...(addressTouched
           ? {
               addresses: [
@@ -565,6 +575,32 @@ function RealEditClientDialog({
               value={draft.monthlyIncome}
               onChange={(e) => setDraft({ ...draft, monthlyIncome: e.target.value })}
               disabled={!unlocked.monthlyIncome}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                TIN <FieldTooltip text="Client's Tax Identification Number." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.tinNumber} onToggle={() => toggleUnlock('tinNumber')} />
+            </div>
+            <Input
+              value={draft.tinNumber}
+              onChange={(e) => setDraft({ ...draft, tinNumber: e.target.value })}
+              disabled={!unlocked.tinNumber}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                SSS <FieldTooltip text="Client's Social Security System number." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.sssNumber} onToggle={() => toggleUnlock('sssNumber')} />
+            </div>
+            <Input
+              value={draft.sssNumber}
+              onChange={(e) => setDraft({ ...draft, sssNumber: e.target.value })}
+              disabled={!unlocked.sssNumber}
             />
           </div>
         </div>

@@ -2351,3 +2351,118 @@ back to, the bug could not have caused a wrong-data migration on this machine hi
 - Not yet done (carried over from Nomer Laptop's log): wiring this script as an actual step inside
   the "Run Full Legacy Migration" `.bat` files themselves - deliberately left manual since the Mambu
   SQL dump isn't guaranteed present on every machine.
+
+## §49 — 2026-08-27: Loan attachment gap checked, 590 real files recovered from Mambu staff backup
+
+User asked to run `scripts/Backfill SDevTech Attachments.bat` to check for any missing attachment
+files. Dry run (read-only, safe by design) found only 2 loans with a placeholder Attachment row
+still missing its file (`SML-REG_00308`, `SL-REG_00079`) - and both were confirmed MISSING on the
+SDevTech SFTP server itself, not an LMS-side gap. Checked both against the Mambu database
+(`legacy/mambu/easycash.sql`) too - neither loan code exists there at all (both created 2025-2026,
+long after the Mambu era ended) - genuinely nothing left to recover for these two specifically.
+
+User then asked the broader question: for ALL loans with no attachment (not just the 2 placeholder
+rows above), can anything be recovered from `legacy/Mambu/Mambu Attachement/2023/` (8 monthly `.zip`
+backups + one `October 2023.rar`, staff-organized manual backups of uploaded loan documents, one
+folder per loan named `<LoanCode>-<Client Name> <month>`)? A whole-table check found **621 loan
+accounts with ZERO Attachment rows at all** (not just missing bytes on an existing placeholder - no
+row whatsoever) - a much bigger gap than the "Backfill SDevTech Attachments.bat" tool covers, since
+that tool only ever looks at loans that already have a placeholder row from the original SDevTech
+metadata migration.
+
+Investigated the archive contents (`7z l -slt`, since `unzip` can't read `.rar` - confirmed 7-Zip
+already installed at `C:\Program Files\7-Zip\7z.exe`) and matched folder names against the 621
+missing loan codes. Numeric legacy loan codes (e.g. "20100169") were excluded from matching - too
+short, collide with dates/sizes as substrings - only alphabetic-prefixed codes (`BL-`, `SL-`,
+`SML-`, `PFL-`, `OTH-`, `SP-`) were trusted. Result: **15 loans had a genuine matching folder**
+(590 files total) - confirmed not false positives by inspecting each match's actual file listing
+(e.g. `BL-REG_B1X4F` initially looked like 557 files via a naive substring search, but a nested
+co-borrower sub-loan folder inside it - `SML-Co-Borrower_A5H3L` - was incorrectly included; fixed by
+only trusting a match when the loan code appears in a file's IMMEDIATE parent folder, which
+correctly attributes nested sub-loan files to their own loan code instead of the parent's, cutting
+the real count to 22).
+
+Also cross-checked the Mambu database's own `document` table (51,641 rows, linked via
+`DOCUMENTHOLDERKEY`->`loanaccount.ENCODEDKEY`->`loanaccount.ID`==LMS `loanCode`): 94 of the 621
+missing-attachment loans have a Mambu document METADATA record (name, filesize) - proving a
+document existed historically - but the actual file bytes live in Mambu's own original cloud
+document storage (referenced by a `LOCATION` hash), which was never part of any backup we possess;
+confirmed by searching for a sample `LOCATION` hash across all 9 archives and finding nothing. These
+~79 (94 minus the 15 already recoverable via the zip/rar route) are a genuine, permanent gap -
+we know a document once existed but cannot recover its bytes.
+
+Wrote `backfill-mambu-loan-attachments.ts` as a **permanent, re-runnable** script (mirroring
+`backfill-mambu-customfield-addresses.ts`'s own conventions) rather than a one-off - lists every
+archive via `7z l -slt`, applies the boundary-matching rule above, and for `--apply` extracts each
+matched file directly to memory via `7z x -so` (no temp directory needed, works uniformly for both
+`.zip` and `.rar`) before writing it through `LocalFileStorage` and creating its `Attachment` row.
+Naturally idempotent - only ever considers a loan with zero existing Attachment rows, so a second
+run skips everything already recovered.
+
+Dry run confirmed 15 loans / 590 files (matching the manual investigation exactly). User confirmed
+via AskUserQuestion before writing to the live database. Applied successfully: all 15 loans updated,
+590 files written to the backend's storage volume and 590 new `Attachment` rows created (`uploadedAt`
+set to each file's original archive-recorded modified date, not the recovery run's own timestamp -
+consistent with how `createdAt` was handled in the borrower-date bugs from §46-48). Spot-verified via
+`docker exec` into `easycash-easycashbackend-1`'s storage volume - byte sizes on disk match the
+`Attachment.fileSize` values recorded in the database.
+
+Final loan-attachment coverage: **1,198/1,804 loans (66.4%) have at least one attachment**, up from
+1,183/1,804 before this session (606 loans remain with zero attachments - ~79 with a known-but-
+unrecoverable Mambu document record, ~527 with no record anywhere). Separately confirmed
+BORROWER-owned attachments are simply not used anywhere in this system (0 of 4,607 borrowers have
+any) - not a bug, just means client-level documents are filed under the loan account instead.
+
+### Current state / follow-ups
+
+- `backfill-mambu-loan-attachments.ts` is now a permanent tool for recovering loan attachments from
+  this specific staff backup folder - safe to re-run any time (e.g. if the `2023` folder ever gains
+  more archives, or after a future full migration reset wipes live Attachment rows again).
+- The 606 remaining attachment-less loans are a real, mostly-permanent gap: ~79 confirmed to have
+  existed in Mambu but with no recoverable bytes anywhere, ~527 with no trace in either Mambu or
+  SDevTech - both categories need manual staff re-upload if the documents still exist on paper or on
+  someone's machine.
+- Not yet done: exporting the full list of 606 (or the higher-priority 79-with-known-history subset)
+  for staff follow-up - offered, not yet requested.
+
+## §50 — 2026-08-27: MIS Post pool seeded, TIN/SSS added to Edit Client Details
+
+**MIS Post pool**: user asked to find and analyze `seed-mis-post-pool.ts` for runnability here. Dry
+run confirmed all 17 source images present (`scripts/seed-data/mis-post-pool/`, checked into git per
+the script's own 2026-08-27 update) and 0 existing pool items live - the Portal's daily rotating post
+feature had never been seeded on this machine (same root cause the Nomer Laptop session diagnosed:
+this pool was previously only ever seeded on one developer's local machine). Applied with user
+confirmation (blocked once already by the auto-mode classifier as a live-DB write, approved this
+time): 17 `MisPost` rows created, `mis_posts` table now at 18 rows total (17 new + 1 pre-existing),
+first pool item lit up as the live post automatically.
+
+**TIN/SSS in Edit Client Details**: user asked whether Civil Status, Gender, Place of Birth,
+Nationality, Home Ownership, Monthly Income, TIN, and SSS were all editable on the real Client
+Profile edit form. First six were already wired; TIN/SSS were not - but investigating
+`Borrower.ts`/`UpdateBorrowerUseCase.ts` found the *entire* domain-through-presenter chain
+(`governmentId.tinNumber`/`sssNumber`, `updateGovernmentId()`) already existed, built 2026-07-31 for
+the Portal's own "My Profile" page - so **no new Prisma migration was needed**. The only real gaps
+were `updateBorrowerSchema` (LMS staff-side Zod validation, silently missing these two fields even
+though the use case beneath it already accepted them) and the `ClientProfilePage.tsx` edit dialog
+itself. Added both - `tinNumber`/`sssNumber` to the schema, and matching draft state/unlock-toggle/
+input fields in the dialog, following the exact lock-per-field pattern every other field there uses.
+Type-checked clean on both sides; rebuilt `easycashbackend` and `lmsfrontend` (fresh, healthy).
+Committed and pushed (`51e572d`).
+
+**Also this session**: user noticed Nomer Laptop's own address-recovery log reported 139 addressless
+borrowers vs. this machine's 142 (and 4,610 vs. 4,607 total borrowers). Explained the 3-borrower gap
+as a snapshot-freshness difference, not a data bug - the laptop ran its full migration against the
+newest 2026-08-27 MongoDB snapshot (after fixing the stale-snapshot `.bat` bug there), while this
+machine still has only the older 2026-08-19 extracted snapshot (`legacy/mongodb/extracted/
+192026_184828`) - 3 clients were added to SDevTech in that window and simply aren't migrated here
+yet. User chose not to re-sync for now ("huwag muna") - left as-is, no action taken.
+
+### Current state / follow-ups
+
+- MIS Post daily rotation is now live on this machine, matching the laptop.
+- TIN/SSS are now editable in Edit Client Details, matching what the Portal's "My Profile" already
+  supported.
+- This machine's live database is ~8 days behind the newest SDevTech snapshot (142 vs. 139
+  addressless borrowers, 4,607 vs. 4,610 total) - a known, small, currently-accepted gap. Re-running
+  the full migration here (once a fresher `legacy/mongodb/*.zip` is available) would close it, but
+  the user explicitly deferred this.
