@@ -1,4 +1,4 @@
-# Session Log: 2026-08-27 (Nomer Laptop) — full legacy re-migration, Borrower.createdAt bug (deduped with Office Server PC)
+# Session Log: 2026-08-27 (Nomer Laptop) — full legacy re-migration, Borrower.createdAt bug (deduped with Office Server PC), stale-snapshot extraction bug fix
 
 Continues `docs/session-logs/Nomer Laptop/SESSION_LOG_2026-08-26_reminder_dryrun_clients_sort_and_footer_fix.md`.
 
@@ -58,13 +58,99 @@ Committed and pushed separately: the auto-regenerated `docs/Architecture/CP12-mi
 loans.md` (routine output of step 8/18 in the full migration, reflecting the newest SDevTech
 snapshot - one loan's flag resolved, one loan's status changed since the last report).
 
+## 3. The 6 skipped role-permission grants — checked, not a real problem
+
+Followed up on §1's flagged item. `report.view` was intentionally split into 13 granular per-report
+permission codes on 2026-08-22 (`report.loan_origination.view`, `report.transactions.view`, etc.) -
+`report.view` itself no longer exists, so the backup's stale grants referencing it were correctly
+skipped by the restore step, not a bug. Confirmed directly against the database that all 6 affected
+roles (MIS, Loan Operation Manager, CRM, Finance, Collection Officer, Accounting) already carry all
+13 granular report permissions - `seed.ts`'s own `defaultRolePermissions` grants these automatically
+on every fresh reset, so no report access was actually lost.
+
+## 4. Found and fixed: the migration script was silently using a STALE MongoDB snapshot
+
+User asked "ito ba ang na-migrate mo, 20260827_080304.zip?" (the newest one) - checking confirmed
+**no**: `legacy\mongodb\extracted\` had no `20260827_080304` folder at all, and the §1 migration run
+had actually read from `extracted\20260818_101701\db-easycash` (9 days stale) despite the script
+printing "Gagamitin: 20260827_080304.zip".
+
+Root cause: `Run Full Legacy Migration (Office Server PC).bat`'s extraction step is
+`if exist "%TARGET_DIR%\db-easycash" if exist "%TARGET_DIR%\db-address-api" (X) else (Y)` - a classic
+Windows batch gotcha where `else` binds only to the SECOND chained `if`, not the whole pair. When
+the target folder doesn't exist yet at all (the normal case for a brand-new zip - `db-easycash`
+doesn't exist, so the first `if` is false), the entire two-if chain is a silent no-op and NEITHER
+branch runs - extraction never happens, and no error is raised either. `migrate-legacy-data.ts`'s
+`legacyDbEasycashDir()` helper then transparently fell back to whichever OLDER extracted folder had
+the newest modification time, with nothing in the log to flag the mismatch. The Mac counterpart
+(`legacy/Run Full Legacy Migration.command`, plain bash `if [ -d A ] && [ -d B ]; then ... else ...
+fi`) does not have this bug - bash's `if`/`&&` binds the `else` to the whole condition correctly.
+
+Fixed by computing a single `NEED_EXTRACT` flag first, then branching on that alone - sidesteps the
+chained-if/else binding gotcha entirely rather than trying to nest the conditions more carefully.
+Also created `Run Full Legacy Migration (Nomer Laptop).bat` - an identical copy (nothing in either
+script is actually machine-specific) purely so it's obvious at a glance which machine ran which
+migration, matching the per-machine session-log naming already in use. Both files must be kept in
+sync if either changes again.
+
+Re-ran the full migration after the fix, confirmed via the log this time ("Dump directory:
+...\extracted\20260827_080304\db-easycash") that the correct, current snapshot was used - 4,610
+borrowers this time (vs. 4,607/4,632 in the earlier, stale-data runs), all 18 steps clean, 9/9 user
+accounts restored again. Re-ran `backfill-legacy-borrower-created-dates.ts --apply` against the
+fresh data (4,610/4,610 updated, oldest record 2009-12-25) since it's a from-scratch reset.
+
+**This bug likely also affected past Office Server PC migration runs** - flagged for the user to
+pass along, since any full re-migration there using the un-fixed `.bat` would have silently reused
+whatever was already extracted instead of a genuinely newer snapshot, with no error to notice.
+
+## 5. "Hindi ba nawala ang mga attachment/address?" — attachments fine, addresses genuinely gone, now permanently recovered
+
+User's own follow-up caution after two full resets today, checked both:
+
+- **Attachments**: none lost. Only 20 native (non-legacy) attachments exist at all, all
+  `LOAN_APPLICATION`-owned, all covered by the existing backup/restore scripts and confirmed present
+  in the DB; spot-checked the physical files on the backend container's storage volume too (which a
+  Postgres reset never touches) - byte sizes match the DB rows exactly.
+- **Addresses**: genuinely gone, and worse than expected. A prior session (2026-08-21/25, see
+  `docs/session-logs/Office Server PC/SESSION_LOG_2026-08-14_...md` §46) had recovered **1,040**
+  addresses directly from the Mambu database for borrowers SDevTech's own export never had address
+  data for - but that recovery ran through a throwaway MySQL container with one-off scripts deleted
+  the same turn, per this repo's usual convention. There was no permanent record of *how* to redo
+  it, and `prisma migrate reset --force` doesn't care that data came from a manual recovery - it
+  wipes everything.
+
+Re-derived the whole recovery from scratch by reading the same `legacy/mambu/easycash.sql` dump
+directly (no throwaway container needed - this repo's existing buffer-based mysqldump parser,
+already proven by `migrate-mambu-notes.ts`, handles it fine). Confirmed via the prior session log
+that the real source was never Mambu's own `address` table (only ever 14 branch rows, verified
+again independently) but two `CLIENT_INFO` custom-field groups: "Present Address"
+(`hm_addr_pre_unit/_brgy/_city/_zip/_full`) and a second unprefixed group
+(`hm_addr_unit/_street/_brgy/_city/_zipcode`, note the genuine source typo `brngy` not `brgy`).
+
+Wrote `backfill-mambu-customfield-addresses.ts` as a **permanent, re-runnable** script this time
+(the actual fix for the underlying problem, not just a one-time patch) - conservative by the same
+rule as the original recovery: only ever inserts for a borrower with zero existing `addresses` rows,
+so it's naturally idempotent and safe to run again after any future reset. Dry run surfaced a scope
+question: it found **4,130** recoverable addresses, not 1,040, because the original recovery was
+scoped only to borrowers with an ACTIVE/ACTIVE_IN_ARREARS loan (1,106 of 1,268), while this script
+checks every legacy borrower regardless of loan status. Asked the user, who chose the broader scope
+("Lahat ng 4,130 - Recommended"). Applied: **4,471 of 4,610 legacy borrowers (97%) now have an
+address**, up from 341 (7.4%) right after the resets.
+
 ## Current state / follow-ups for next session
 
-- Full migration + Borrower.createdAt fix both live and correct on this laptop as of this session.
-  Nothing further needed here for either.
-- Follow-up not investigated this session: the 6 skipped role-permission grants (`report.view` not
-  found post-migration) from the restore step - worth checking whether that permission code still
-  exists in `seed.ts` or was renamed/removed, next time someone's touching Roles & Permissions.
+- Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, and the address recovery
+  are all live and correct on this laptop as of this session. Nothing further needed here for any
+  of them.
+- **Office Server PC should pull `946affd`** and be aware that any of its own past full-migration
+  runs may have silently used a stale snapshot due to the same extraction bug - worth a spot-check
+  next time someone's there. It should also run the new `backfill-mambu-customfield-addresses.ts`
+  itself if it ever does a from-scratch reset (needs its own `legacy/mambu/easycash.sql` present
+  first).
+- Not yet done: wiring the new address-recovery script (or `migrate-mambu-notes.ts`) as an actual
+  step in the "Run Full Legacy Migration" `.bat` files - deliberately left manual for now since the
+  Mambu SQL dump isn't guaranteed to be present on every machine, and a missing-file error mid-batch
+  would be worse than a documented manual step.
 - Carried over, still untouched: `migrate-mambu-notes.ts --apply` (needs the Mambu zip on the
   Office Server PC), Google Drive Trash/credential rotation, the ₱19.3M post-maturity-penalty
   correction, accrued interest on long-defaulted accounts.
