@@ -1,8 +1,8 @@
 # CP12 Follow-up — Loans Flagged for Missing Balance Data
 
-Generated 2026-08-19T13:49:57.874Z by `scripts/flag-missing-balance-loans.ts`.
+Generated 2026-08-27T00:39:58.973Z by `scripts/flag-missing-balance-loans.ts`.
 
-627 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
+626 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
 no principal/interest/fees/penalty balance snapshot at all (not zero — absent). All balance
 columns on these rows read 0.00 but do NOT mean the loan is settled; each requires manual
 reconciliation against other records (e.g. the loan's own transaction history's running
@@ -12,7 +12,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 
 | Status | Count |
 |---|---|
-| CLOSED | 444 |
+| CLOSED | 443 |
 | ACTIVE_IN_ARREARS | 55 |
 | ACTIVE | 124 |
 | APPROVED | 1 |
@@ -148,7 +148,6 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-CORP_00123 | ACTIVE |
 | SL-CORP_00124 | ACTIVE |
 | SL-CORP_00127 | ACTIVE |
-| SL-CORP_00128 | ACTIVE |
 | SL-LAZ_00001 | ACTIVE |
 | SL-LAZ_00004 | ACTIVE |
 | SL-LAZ_00004-LEGACY2 | CLOSED |
@@ -566,7 +565,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SML-REG_00309 | CLOSED |
 | SML-REG_00314 | CLOSED |
 | SML-REG_00317 | CLOSED |
-| SML-REG_00318 | CLOSED |
+| SML-REG_00318 | ACTIVE |
 | SML-REG_00320 | CLOSED |
 | SML-REG_00321 | CLOSED |
 | SML-REG_00322 | ACTIVE |
