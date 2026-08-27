@@ -4717,55 +4717,57 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           {isFlatInterestLoan && restructureInterestMethod === 'FLAT' ? (
             <div>
               <p className="mb-2 text-sm font-medium">Manual schedule (Flat Rate)</p>
-              <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning-foreground">
+              <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
                   The system has no verified formula for Flat Rate (CALCULATION_ENGINE_SPEC.md §4). Pre-filled with what Declining
                   Balance would compute - edit if it should be different.
                 </span>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>1</TableCell>
-                    <TableCell>{restructureFirstRepaymentDate ? formatDate(restructureFirstRepaymentDate) : '-'}</TableCell>
-                    <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="ml-auto h-8 w-32 text-right"
-                        value={restructureManualFlatInterest}
-                        onChange={(e) => setRestructureManualFlatInterest(e.target.value)}
-                        disabled={restructureMutation.isPending}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-                <tfoot className="bg-background">
-                  <TableRow className="border-t-2 font-semibold hover:bg-transparent">
-                    <TableCell colSpan={2}>Total</TableCell>
-                    <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
-                    <TableCell className="text-right">{formatPeso(Number(restructureManualFlatInterest) || 0)}</TableCell>
-                    <TableCell className="text-right">
-                      {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
-                    </TableCell>
-                  </TableRow>
-                </tfoot>
-              </Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>1</TableCell>
+                      <TableCell>{restructureFirstRepaymentDate ? formatDate(restructureFirstRepaymentDate) : '-'}</TableCell>
+                      <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="ml-auto h-7 w-28 text-right text-xs"
+                          value={restructureManualFlatInterest}
+                          onChange={(e) => setRestructureManualFlatInterest(e.target.value)}
+                          disabled={restructureMutation.isPending}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                  <tfoot className="bg-background">
+                    <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                      <TableCell colSpan={2}>Total</TableCell>
+                      <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
+                      <TableCell className="text-right">{formatPeso(Number(restructureManualFlatInterest) || 0)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
+                      </TableCell>
+                    </TableRow>
+                  </tfoot>
+                </Table>
+              </div>
               <label className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs">
                 <input
                   type="checkbox"
@@ -4791,45 +4793,47 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     Preview only - final schedule is generated by the server on submit. Monthly payment:{' '}
                     <span className="font-semibold text-foreground">{formatPeso(restructurePreview.monthlyPayment)}</span>
                   </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                        <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {restructurePreview.schedule.map((entry) => (
-                        <TableRow key={entry.installmentNumber}>
-                          <TableCell>{entry.installmentNumber}</TableCell>
-                          <TableCell>{formatDate(entry.dueDate)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
+                      <TableHeader>
+                        <TableRow>
+                          <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                          <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                    <tfoot className="bg-background">
-                      <TableRow className="border-t-2 font-semibold hover:bg-transparent">
-                        <TableCell colSpan={2}>Total ({restructurePreview.schedule.length} installment{restructurePreview.schedule.length === 1 ? '' : 's'})</TableCell>
-                        <TableCell className="text-right">
-                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.principalPortion, 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.interestPortion, 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.payment, 0))}
-                        </TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </tfoot>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {restructurePreview.schedule.map((entry) => (
+                          <TableRow key={entry.installmentNumber}>
+                            <TableCell>{entry.installmentNumber}</TableCell>
+                            <TableCell>{formatDate(entry.dueDate)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
+                            <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <tfoot className="bg-background">
+                        <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                          <TableCell colSpan={2}>Total ({restructurePreview.schedule.length} installment{restructurePreview.schedule.length === 1 ? '' : 's'})</TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.principalPortion, 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.interestPortion, 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.payment, 0))}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </tfoot>
+                    </Table>
+                  </div>
                 </>
               )}
             </div>
