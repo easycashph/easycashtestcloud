@@ -35,7 +35,7 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   type AttachmentDocumentCategory,
 } from '@/lib/documentApiTypes';
-import { formatPeso } from '@/lib/utils';
+import { formatPeso, toProperCase } from '@/lib/utils';
 
 const AI_EXTRACTION_ACCEPTED_TYPES = '.pdf,.jpg,.jpeg,.png,.docx';
 const AI_EXTRACTION_ACCEPTED_MIME = new Set([
@@ -120,8 +120,12 @@ const LOAN_TYPE_OPTIONS = [
 const LOAN_TERM_MONTHS_OPTIONS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Others'];
-const GENDER_OPTIONS = ['Female', 'Male'];
-const CIVIL_STATUS_OPTIONS = ['Single', 'Married', 'Widower', 'Separated'];
+// 2026-08-27 (user-reported: civil status/gender showing blank on existing client records):
+// matches the canonical uppercase values Borrower.gender/civilStatus are actually stored as (see
+// ClientProfilePage.tsx's own fix) - a Title Case value here would show correctly on creation but
+// then appear blank the moment that same application/client is opened for editing elsewhere.
+const GENDER_OPTIONS = ['FEMALE', 'MALE'];
+const CIVIL_STATUS_OPTIONS = ['SINGLE', 'MARRIED', 'WIDOWED', 'DIVORCED/SEPARATED'];
 
 interface DependantRow {
   name: string;
@@ -966,7 +970,7 @@ export function LoanApplicationForm({
               <SelectContent>
                 {GENDER_OPTIONS.map((o) => (
                   <SelectItem key={o} value={o}>
-                    {o}
+                    {toProperCase(o)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -980,7 +984,7 @@ export function LoanApplicationForm({
               <SelectContent>
                 {CIVIL_STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o} value={o}>
-                    {o}
+                    {toProperCase(o)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1127,7 +1131,7 @@ export function LoanApplicationForm({
         </div>
       </SectionCard>
 
-      {civilStatus === 'Married' && (
+      {civilStatus === 'MARRIED' && (
         <SectionCard
           number="6"
           title="Spouse Personal & Employment Information"

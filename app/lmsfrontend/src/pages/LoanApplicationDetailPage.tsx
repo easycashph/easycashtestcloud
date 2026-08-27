@@ -363,8 +363,8 @@ function CreateClientProfileDialog({
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Male">Male</SelectItem>
-                <SelectItem value="Female">Female</SelectItem>
+                <SelectItem value="MALE">Male</SelectItem>
+                <SelectItem value="FEMALE">Female</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -375,10 +375,10 @@ function CreateClientProfileDialog({
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Single">Single</SelectItem>
-                <SelectItem value="Married">Married</SelectItem>
-                <SelectItem value="Widowed">Widowed</SelectItem>
-                <SelectItem value="Separated">Separated</SelectItem>
+                <SelectItem value="SINGLE">Single</SelectItem>
+                <SelectItem value="MARRIED">Married</SelectItem>
+                <SelectItem value="WIDOWED">Widowed</SelectItem>
+                <SelectItem value="DIVORCED/SEPARATED">Divorced/Separated</SelectItem>
               </SelectContent>
             </Select>
           </div>
