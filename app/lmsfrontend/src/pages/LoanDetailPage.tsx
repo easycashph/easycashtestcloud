@@ -4755,6 +4755,16 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     </TableCell>
                   </TableRow>
                 </TableBody>
+                <tfoot className="bg-background">
+                  <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                    <TableCell colSpan={2}>Total</TableCell>
+                    <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
+                    <TableCell className="text-right">{formatPeso(Number(restructureManualFlatInterest) || 0)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
+                    </TableCell>
+                  </TableRow>
+                </tfoot>
               </Table>
               <label className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs">
                 <input
@@ -4804,6 +4814,21 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                         </TableRow>
                       ))}
                     </TableBody>
+                    <tfoot className="bg-background">
+                      <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                        <TableCell colSpan={2}>Total ({restructurePreview.schedule.length} installment{restructurePreview.schedule.length === 1 ? '' : 's'})</TableCell>
+                        <TableCell className="text-right">
+                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.principalPortion, 0))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.interestPortion, 0))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.payment, 0))}
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
+                    </tfoot>
                   </Table>
                 </>
               )}
