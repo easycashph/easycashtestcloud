@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Briefcase,
   Cake,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -166,6 +167,16 @@ function CreateClientProfileDialog({
     province: application.province ?? '',
     zipCode: application.zipCode ?? '',
   });
+  // 2026-08-27 (user request): captured as separate Years/Months inputs (matching
+  // ClientCreatePage.tsx's own convention), combined into total months on submit - not part of the
+  // shared `AddressDraft` type since, like `homeOwnership` above, it's a top-level field here rather
+  // than a PSGC-address concern.
+  const [presentStayYears, setPresentStayYears] = React.useState(
+    application.presentAddressLengthOfStayMonths != null ? String(Math.floor(application.presentAddressLengthOfStayMonths / 12)) : '',
+  );
+  const [presentStayMonths, setPresentStayMonths] = React.useState(
+    application.presentAddressLengthOfStayMonths != null ? String(application.presentAddressLengthOfStayMonths % 12) : '',
+  );
   const [tinNumber, setTinNumber] = React.useState(application.tinNumber ?? '');
   const [sssNumber, setSssNumber] = React.useState(application.sssNumber ?? '');
   const [dependants, setDependants] = React.useState(application.dependants);
@@ -216,6 +227,10 @@ function CreateClientProfileDialog({
     setPlaceOfBirth(application.placeOfBirth ?? '');
     setNationality(application.nationality ?? '');
     setHomeOwnership(application.homeOwnership ?? '');
+    setPresentStayYears(
+      application.presentAddressLengthOfStayMonths != null ? String(Math.floor(application.presentAddressLengthOfStayMonths / 12)) : '',
+    );
+    setPresentStayMonths(application.presentAddressLengthOfStayMonths != null ? String(application.presentAddressLengthOfStayMonths % 12) : '');
     setMobilePhone1(application.mobilePhone ?? '');
     setEmail(application.email ?? '');
     setEmployer(application.employer ?? '');
@@ -296,7 +311,19 @@ function CreateClientProfileDialog({
         governmentId:
           tinNumber.trim() || sssNumber.trim() ? { tinNumber: tinNumber.trim() || undefined, sssNumber: sssNumber.trim() || undefined } : undefined,
         characterReferences: references.length > 0 ? references : undefined,
-        addresses: Object.values(addressDraft).some((v) => v.trim()) ? [addressDraft] : undefined,
+        addresses:
+          Object.values(addressDraft).some((v) => v.trim()) || homeOwnership || presentStayYears.trim() || presentStayMonths.trim()
+            ? [
+                {
+                  ...addressDraft,
+                  ownershipStatus: homeOwnership || undefined,
+                  lengthOfStayMonths:
+                    presentStayYears.trim() || presentStayMonths.trim()
+                      ? (Number.parseInt(presentStayYears, 10) || 0) * 12 + (Number.parseInt(presentStayMonths, 10) || 0)
+                      : undefined,
+                },
+              ]
+            : undefined,
       });
 
       // Best-effort: capturing the co-borrower is a separate write from creating the client
@@ -404,9 +431,18 @@ function CreateClientProfileDialog({
               <SelectContent>
                 <SelectItem value="Owned">Owned</SelectItem>
                 <SelectItem value="Rented">Rented</SelectItem>
-                <SelectItem value="Others">Others</SelectItem>
+                <SelectItem value="Owned by Parents">Owned by Parents</SelectItem>
+                <SelectItem value="Owned by Relatives">Owned by Relatives</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Length of Stay (Years)</Label>
+            <Input type="number" min="0" value={presentStayYears} onChange={(e) => setPresentStayYears(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Length of Stay (Months)</Label>
+            <Input type="number" min="0" max="11" value={presentStayMonths} onChange={(e) => setPresentStayMonths(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>Contact Number</Label>
@@ -2462,6 +2498,12 @@ export function LoanApplicationDetailPage() {
             <dd className="text-right font-medium">{application.nationality ?? '-'}</dd>
             <IconDt icon={Home}>Home Ownership</IconDt>
             <dd className="text-right font-medium">{application.homeOwnership ?? '-'}</dd>
+            <IconDt icon={Calendar}>Length of Stay</IconDt>
+            <dd className="text-right font-medium">
+              {application.presentAddressLengthOfStayMonths != null
+                ? `${Math.floor(application.presentAddressLengthOfStayMonths / 12)} yr${Math.floor(application.presentAddressLengthOfStayMonths / 12) === 1 ? '' : 's'} ${application.presentAddressLengthOfStayMonths % 12} mo`
+                : '-'}
+            </dd>
             <IconDt icon={Briefcase}>Occupation</IconDt>
             <dd className="text-right font-medium">{application.occupation ?? '-'}</dd>
             <IconDt icon={MapPin}>Office Address</IconDt>

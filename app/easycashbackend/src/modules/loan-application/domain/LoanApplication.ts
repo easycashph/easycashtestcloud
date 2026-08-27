@@ -139,6 +139,8 @@ export interface LoanApplicationProps {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  /** 2026-08-27 (user request) - present address only, matches the paper form's own scope. */
+  presentAddressLengthOfStayMonths?: number;
   /** 2026-07-22 - captured only at intake (create form), like the present-address fields above;
    * never edited afterward. Defaults true - most applicants haven't moved. When false, the
    * `previous*` fields below hold a distinct address, same flat-field shape as present address. */
@@ -228,6 +230,7 @@ export interface CreateLoanApplicationProps {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  presentAddressLengthOfStayMonths?: number;
   previousAddressSameAsPresent?: boolean;
   previousAddress?: string;
   previousHouseUnitNumber?: string;
@@ -309,6 +312,7 @@ export class LoanApplication {
       cityMunicipality: input.cityMunicipality,
       province: input.province,
       zipCode: input.zipCode,
+      presentAddressLengthOfStayMonths: input.presentAddressLengthOfStayMonths,
       previousAddressSameAsPresent: input.previousAddressSameAsPresent ?? true,
       previousAddress: input.previousAddress,
       previousHouseUnitNumber: input.previousHouseUnitNumber,

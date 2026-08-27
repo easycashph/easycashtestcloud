@@ -21,6 +21,7 @@ export interface CreateLoanApplicationInput {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  presentAddressLengthOfStayMonths?: number;
   monthlyIncome?: number;
   employer?: string;
   occupation?: string;

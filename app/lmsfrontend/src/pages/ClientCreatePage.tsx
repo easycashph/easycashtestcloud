@@ -362,8 +362,9 @@ export function ClientCreatePage() {
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Owned">Owned</SelectItem>
-                  <SelectItem value="Renting">Renting</SelectItem>
-                  <SelectItem value="Living with Family">Living with Family</SelectItem>
+                  <SelectItem value="Rented">Rented</SelectItem>
+                  <SelectItem value="Owned by Parents">Owned by Parents</SelectItem>
+                  <SelectItem value="Owned by Relatives">Owned by Relatives</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

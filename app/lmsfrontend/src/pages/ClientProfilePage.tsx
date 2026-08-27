@@ -4,18 +4,28 @@ import {
   AlertCircle,
   ArrowLeft,
   Briefcase,
+  Cake,
+  Calendar,
+  Clock,
   Copy,
+  DoorOpen,
   FilePlus2,
+  Flag,
+  Heart,
   Home,
+  IdCard,
   KeyRound,
   Landmark,
   Link2,
   Mail,
+  MapPin,
   Pencil,
   Phone,
   Plus,
+  Receipt,
   ShieldCheck,
   Users,
+  VenusAndMars,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -68,6 +78,11 @@ interface RealEditDraft {
   employer: string;
   monthlyIncome: string;
   address: AddressDraft;
+  // 2026-08-27 (user request): same Years/Months split convention as ClientCreatePage.tsx - not
+  // part of `AddressDraft` for the same reason `homeOwnership` above isn't (see that field's doc
+  // comment), just written into `addresses[0].lengthOfStayMonths` on save.
+  lengthOfStayYears: string;
+  lengthOfStayMonths: string;
 }
 
 function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
@@ -92,6 +107,8 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     // to that when the Borrower-level field is empty, so neither population ever sees this field
     // wrongly blank; save writes both fields in sync (see the mutationFn below).
     homeOwnership: borrower.homeOwnership || existing?.ownershipStatus || '',
+    lengthOfStayYears: existing?.lengthOfStayMonths != null ? String(Math.floor(existing.lengthOfStayMonths / 12)) : '',
+    lengthOfStayMonths: existing?.lengthOfStayMonths != null ? String(existing.lengthOfStayMonths % 12) : '',
     // 2026-08-27 (user-reported: civil status showing blank in the edit form despite having real
     // data): a handful of legacy-migrated records (7, per direct DB check) have the same "divorced
     // or separated" status spelled in reverse word order ("SEPARATED/DIVORCED" instead of the
@@ -245,6 +262,10 @@ function RealEditClientDialog({
                   province: draft.address.province || undefined,
                   zipCode: draft.address.zipCode || undefined,
                   ownershipStatus: draft.homeOwnership || undefined,
+                  lengthOfStayMonths:
+                    draft.lengthOfStayYears.trim() || draft.lengthOfStayMonths.trim()
+                      ? (Number.parseInt(draft.lengthOfStayYears, 10) || 0) * 12 + (Number.parseInt(draft.lengthOfStayMonths, 10) || 0)
+                      : undefined,
                 },
               ],
             }
@@ -472,6 +493,39 @@ function RealEditClientDialog({
                 <SelectItem value="Owned by Relatives">Owned by Relatives</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Length of Stay <FieldTooltip text="How long the client has lived at their current address." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.homeOwnership} onToggle={() => toggleUnlock('homeOwnership')} />
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min="0"
+                placeholder="Years"
+                value={draft.lengthOfStayYears}
+                onChange={(e) => {
+                  setAddressTouched(true);
+                  setDraft({ ...draft, lengthOfStayYears: e.target.value });
+                }}
+                disabled={!unlocked.homeOwnership}
+              />
+              <Input
+                type="number"
+                min="0"
+                max="11"
+                placeholder="Months"
+                value={draft.lengthOfStayMonths}
+                onChange={(e) => {
+                  setAddressTouched(true);
+                  setDraft({ ...draft, lengthOfStayMonths: e.target.value });
+                }}
+                disabled={!unlocked.homeOwnership}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -1294,17 +1348,62 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
               <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               {borrower.incomeDetail?.position ?? '-'}, {borrower.incomeDetail?.employerName ?? '-'}
             </div>
-            <div>
+            <div className="flex items-center gap-1.5">
+              <Landmark className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="text-muted-foreground">Income: </span>
               {borrower.incomeDetail?.monthlyIncome != null ? formatPeso(borrower.incomeDetail.monthlyIncome) : '-'}
             </div>
-            <div>
+            <div className="flex items-center gap-1.5">
+              <Heart className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="text-muted-foreground">Civil status: </span>
-              {borrower.civilStatus ?? '-'}
+              {toProperCase(borrower.civilStatus) || '-'}
             </div>
-            <div>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="text-muted-foreground">DOB: </span>
               {borrower.birthDate ? formatDate(borrower.birthDate) : '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Cake className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Age: </span>
+              {computeAge(borrower.birthDate) ?? '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <VenusAndMars className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Gender: </span>
+              {toProperCase(borrower.gender) || '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <DoorOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Home ownership: </span>
+              {borrower.homeOwnership || borrower.addresses[0]?.ownershipStatus || '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Length of stay: </span>
+              {borrower.addresses[0]?.lengthOfStayMonths != null
+                ? `${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12)} yr${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12) === 1 ? '' : 's'} ${borrower.addresses[0].lengthOfStayMonths % 12} mo`
+                : '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Flag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Nationality: </span>
+              {toProperCase(borrower.nationality) || '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Place of birth: </span>
+              {toProperCase(borrower.placeOfBirth) || '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">SSS: </span>
+              {borrower.governmentId?.sssNumber || '-'}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">TIN: </span>
+              {borrower.governmentId?.tinNumber || '-'}
             </div>
           </dl>
         </CardContent>

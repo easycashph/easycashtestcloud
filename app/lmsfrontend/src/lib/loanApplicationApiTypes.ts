@@ -174,6 +174,7 @@ export interface LoanApplication {
   cityMunicipality: string | null;
   province: string | null;
   zipCode: string | null;
+  presentAddressLengthOfStayMonths: number | null;
   previousAddressSameAsPresent: boolean;
   previousAddress: string | null;
   previousHouseUnitNumber: string | null;
@@ -261,6 +262,7 @@ export interface CreateLoanApplicationRequest {
   cityMunicipality?: string;
   province?: string;
   zipCode?: string;
+  presentAddressLengthOfStayMonths?: number;
   previousAddressSameAsPresent?: boolean;
   previousAddress?: string;
   previousHouseUnitNumber?: string;

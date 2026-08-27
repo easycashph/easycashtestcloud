@@ -119,7 +119,7 @@ const LOAN_TYPE_OPTIONS = [
 
 const LOAN_TERM_MONTHS_OPTIONS = Array.from({ length: 24 }, (_, i) => i + 1);
 
-const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Others'];
+const HOME_OWNERSHIP_OPTIONS = ['Owned', 'Rented', 'Owned by Parents', 'Owned by Relatives'];
 // 2026-08-27 (user-reported: civil status/gender showing blank on existing client records):
 // matches the canonical uppercase values Borrower.gender/civilStatus are actually stored as (see
 // ClientProfilePage.tsx's own fix) - a Title Case value here would show correctly on creation but
@@ -408,6 +408,10 @@ export function LoanApplicationForm({
   const [sameAsPresentAddress, setSameAsPresentAddress] = React.useState(true);
   const [previousAddressDraft, setPreviousAddressDraft] = React.useState<AddressDraft>(emptyAddressDraft());
   const [homeOwnership, setHomeOwnership] = React.useState(prefillFrom?.homeOwnership ?? '');
+  // 2026-08-27 (user request): present address only, matches the paper form's own scope - same
+  // Years/Months split convention as ClientCreatePage.tsx.
+  const [presentStayYears, setPresentStayYears] = React.useState('');
+  const [presentStayMonths, setPresentStayMonths] = React.useState('');
   const [mobileNo, setMobileNo] = React.useState(prefillFrom?.mobilePhone ?? '');
   const [email, setEmail] = React.useState(prefillFrom?.email ?? '');
   // §4 - employment
@@ -652,6 +656,10 @@ export function LoanApplicationForm({
         placeOfBirth: placeOfBirth.trim() || undefined,
         nationality: nationality.trim() || undefined,
         homeOwnership: homeOwnership || undefined,
+        presentAddressLengthOfStayMonths:
+          presentStayYears.trim() || presentStayMonths.trim()
+            ? (Number.parseInt(presentStayYears, 10) || 0) * 12 + (Number.parseInt(presentStayMonths, 10) || 0)
+            : undefined,
         address: presentAddress.trim() || undefined,
         houseUnitNumber: addressDraft.houseUnitNumber.trim() || undefined,
         street: addressDraft.street.trim() || undefined,
@@ -1054,6 +1062,12 @@ export function LoanApplicationForm({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+          <Field label="Length of stay (years)" tooltip="How long the applicant has lived at their present address.">
+            <Input type="number" min="0" value={presentStayYears} onChange={(e) => setPresentStayYears(e.target.value)} />
+          </Field>
+          <Field label="Length of stay (months)">
+            <Input type="number" min="0" max="11" value={presentStayMonths} onChange={(e) => setPresentStayMonths(e.target.value)} />
           </Field>
         </div>
       </SectionCard>

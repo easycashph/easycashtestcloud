@@ -20,6 +20,7 @@ export const createLoanApplicationSchema = z.object({
   cityMunicipality: z.string().min(1).optional(),
   province: z.string().min(1).optional(),
   zipCode: z.string().min(1).optional(),
+  presentAddressLengthOfStayMonths: z.coerce.number().int().min(0).optional(),
   previousAddressSameAsPresent: z.boolean().optional(),
   previousAddress: z.string().min(1).optional(),
   previousHouseUnitNumber: z.string().min(1).optional(),

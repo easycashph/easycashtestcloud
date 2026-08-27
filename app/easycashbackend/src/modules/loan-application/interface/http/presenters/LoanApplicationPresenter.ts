@@ -37,6 +37,7 @@ export function presentLoanApplication(application: LoanApplication, breakdown?:
     cityMunicipality: p.cityMunicipality ?? null,
     province: p.province ?? null,
     zipCode: p.zipCode ?? null,
+    presentAddressLengthOfStayMonths: p.presentAddressLengthOfStayMonths ?? null,
     previousAddressSameAsPresent: p.previousAddressSameAsPresent,
     previousAddress: p.previousAddress ?? null,
     previousHouseUnitNumber: p.previousHouseUnitNumber ?? null,

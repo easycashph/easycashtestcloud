@@ -2611,6 +2611,10 @@ model LoanApplication {
   cityMunicipality             String?
   province                     String?
   zipCode                      String?
+  /// 2026-08-27 (user request): captured only at intake, like the fields above - "Create Client
+  /// Profile" copies it into the new Address row's own `lengthOfStayMonths` field. Present address
+  /// only, not previous - matches the paper form's own scope.
+  presentAddressLengthOfStayMonths Int?
   /// 2026-07-22 - captured only at intake (create form), like the fields above; never edited
   /// afterward. Defaults true - most applicants haven't moved. When false, the previous* fields
   /// below hold a distinct address, same flat-field shape as the present address above.
