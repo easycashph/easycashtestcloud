@@ -2351,3 +2351,76 @@ back to, the bug could not have caused a wrong-data migration on this machine hi
 - Not yet done (carried over from Nomer Laptop's log): wiring this script as an actual step inside
   the "Run Full Legacy Migration" `.bat` files themselves - deliberately left manual since the Mambu
   SQL dump isn't guaranteed present on every machine.
+
+## §49 — 2026-08-27: Loan attachment gap checked, 590 real files recovered from Mambu staff backup
+
+User asked to run `scripts/Backfill SDevTech Attachments.bat` to check for any missing attachment
+files. Dry run (read-only, safe by design) found only 2 loans with a placeholder Attachment row
+still missing its file (`SML-REG_00308`, `SL-REG_00079`) - and both were confirmed MISSING on the
+SDevTech SFTP server itself, not an LMS-side gap. Checked both against the Mambu database
+(`legacy/mambu/easycash.sql`) too - neither loan code exists there at all (both created 2025-2026,
+long after the Mambu era ended) - genuinely nothing left to recover for these two specifically.
+
+User then asked the broader question: for ALL loans with no attachment (not just the 2 placeholder
+rows above), can anything be recovered from `legacy/Mambu/Mambu Attachement/2023/` (8 monthly `.zip`
+backups + one `October 2023.rar`, staff-organized manual backups of uploaded loan documents, one
+folder per loan named `<LoanCode>-<Client Name> <month>`)? A whole-table check found **621 loan
+accounts with ZERO Attachment rows at all** (not just missing bytes on an existing placeholder - no
+row whatsoever) - a much bigger gap than the "Backfill SDevTech Attachments.bat" tool covers, since
+that tool only ever looks at loans that already have a placeholder row from the original SDevTech
+metadata migration.
+
+Investigated the archive contents (`7z l -slt`, since `unzip` can't read `.rar` - confirmed 7-Zip
+already installed at `C:\Program Files\7-Zip\7z.exe`) and matched folder names against the 621
+missing loan codes. Numeric legacy loan codes (e.g. "20100169") were excluded from matching - too
+short, collide with dates/sizes as substrings - only alphabetic-prefixed codes (`BL-`, `SL-`,
+`SML-`, `PFL-`, `OTH-`, `SP-`) were trusted. Result: **15 loans had a genuine matching folder**
+(590 files total) - confirmed not false positives by inspecting each match's actual file listing
+(e.g. `BL-REG_B1X4F` initially looked like 557 files via a naive substring search, but a nested
+co-borrower sub-loan folder inside it - `SML-Co-Borrower_A5H3L` - was incorrectly included; fixed by
+only trusting a match when the loan code appears in a file's IMMEDIATE parent folder, which
+correctly attributes nested sub-loan files to their own loan code instead of the parent's, cutting
+the real count to 22).
+
+Also cross-checked the Mambu database's own `document` table (51,641 rows, linked via
+`DOCUMENTHOLDERKEY`->`loanaccount.ENCODEDKEY`->`loanaccount.ID`==LMS `loanCode`): 94 of the 621
+missing-attachment loans have a Mambu document METADATA record (name, filesize) - proving a
+document existed historically - but the actual file bytes live in Mambu's own original cloud
+document storage (referenced by a `LOCATION` hash), which was never part of any backup we possess;
+confirmed by searching for a sample `LOCATION` hash across all 9 archives and finding nothing. These
+~79 (94 minus the 15 already recoverable via the zip/rar route) are a genuine, permanent gap -
+we know a document once existed but cannot recover its bytes.
+
+Wrote `backfill-mambu-loan-attachments.ts` as a **permanent, re-runnable** script (mirroring
+`backfill-mambu-customfield-addresses.ts`'s own conventions) rather than a one-off - lists every
+archive via `7z l -slt`, applies the boundary-matching rule above, and for `--apply` extracts each
+matched file directly to memory via `7z x -so` (no temp directory needed, works uniformly for both
+`.zip` and `.rar`) before writing it through `LocalFileStorage` and creating its `Attachment` row.
+Naturally idempotent - only ever considers a loan with zero existing Attachment rows, so a second
+run skips everything already recovered.
+
+Dry run confirmed 15 loans / 590 files (matching the manual investigation exactly). User confirmed
+via AskUserQuestion before writing to the live database. Applied successfully: all 15 loans updated,
+590 files written to the backend's storage volume and 590 new `Attachment` rows created (`uploadedAt`
+set to each file's original archive-recorded modified date, not the recovery run's own timestamp -
+consistent with how `createdAt` was handled in the borrower-date bugs from §46-48). Spot-verified via
+`docker exec` into `easycash-easycashbackend-1`'s storage volume - byte sizes on disk match the
+`Attachment.fileSize` values recorded in the database.
+
+Final loan-attachment coverage: **1,198/1,804 loans (66.4%) have at least one attachment**, up from
+1,183/1,804 before this session (606 loans remain with zero attachments - ~79 with a known-but-
+unrecoverable Mambu document record, ~527 with no record anywhere). Separately confirmed
+BORROWER-owned attachments are simply not used anywhere in this system (0 of 4,607 borrowers have
+any) - not a bug, just means client-level documents are filed under the loan account instead.
+
+### Current state / follow-ups
+
+- `backfill-mambu-loan-attachments.ts` is now a permanent tool for recovering loan attachments from
+  this specific staff backup folder - safe to re-run any time (e.g. if the `2023` folder ever gains
+  more archives, or after a future full migration reset wipes live Attachment rows again).
+- The 606 remaining attachment-less loans are a real, mostly-permanent gap: ~79 confirmed to have
+  existed in Mambu but with no recoverable bytes anywhere, ~527 with no trace in either Mambu or
+  SDevTech - both categories need manual staff re-upload if the documents still exist on paper or on
+  someone's machine.
+- Not yet done: exporting the full list of 606 (or the higher-priority 79-with-known-history subset)
+  for staff follow-up - offered, not yet requested.
