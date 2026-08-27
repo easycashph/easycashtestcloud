@@ -2424,3 +2424,45 @@ any) - not a bug, just means client-level documents are filed under the loan acc
   someone's machine.
 - Not yet done: exporting the full list of 606 (or the higher-priority 79-with-known-history subset)
   for staff follow-up - offered, not yet requested.
+
+## §50 — 2026-08-27: MIS Post pool seeded, TIN/SSS added to Edit Client Details
+
+**MIS Post pool**: user asked to find and analyze `seed-mis-post-pool.ts` for runnability here. Dry
+run confirmed all 17 source images present (`scripts/seed-data/mis-post-pool/`, checked into git per
+the script's own 2026-08-27 update) and 0 existing pool items live - the Portal's daily rotating post
+feature had never been seeded on this machine (same root cause the Nomer Laptop session diagnosed:
+this pool was previously only ever seeded on one developer's local machine). Applied with user
+confirmation (blocked once already by the auto-mode classifier as a live-DB write, approved this
+time): 17 `MisPost` rows created, `mis_posts` table now at 18 rows total (17 new + 1 pre-existing),
+first pool item lit up as the live post automatically.
+
+**TIN/SSS in Edit Client Details**: user asked whether Civil Status, Gender, Place of Birth,
+Nationality, Home Ownership, Monthly Income, TIN, and SSS were all editable on the real Client
+Profile edit form. First six were already wired; TIN/SSS were not - but investigating
+`Borrower.ts`/`UpdateBorrowerUseCase.ts` found the *entire* domain-through-presenter chain
+(`governmentId.tinNumber`/`sssNumber`, `updateGovernmentId()`) already existed, built 2026-07-31 for
+the Portal's own "My Profile" page - so **no new Prisma migration was needed**. The only real gaps
+were `updateBorrowerSchema` (LMS staff-side Zod validation, silently missing these two fields even
+though the use case beneath it already accepted them) and the `ClientProfilePage.tsx` edit dialog
+itself. Added both - `tinNumber`/`sssNumber` to the schema, and matching draft state/unlock-toggle/
+input fields in the dialog, following the exact lock-per-field pattern every other field there uses.
+Type-checked clean on both sides; rebuilt `easycashbackend` and `lmsfrontend` (fresh, healthy).
+Committed and pushed (`51e572d`).
+
+**Also this session**: user noticed Nomer Laptop's own address-recovery log reported 139 addressless
+borrowers vs. this machine's 142 (and 4,610 vs. 4,607 total borrowers). Explained the 3-borrower gap
+as a snapshot-freshness difference, not a data bug - the laptop ran its full migration against the
+newest 2026-08-27 MongoDB snapshot (after fixing the stale-snapshot `.bat` bug there), while this
+machine still has only the older 2026-08-19 extracted snapshot (`legacy/mongodb/extracted/
+192026_184828`) - 3 clients were added to SDevTech in that window and simply aren't migrated here
+yet. User chose not to re-sync for now ("huwag muna") - left as-is, no action taken.
+
+### Current state / follow-ups
+
+- MIS Post daily rotation is now live on this machine, matching the laptop.
+- TIN/SSS are now editable in Edit Client Details, matching what the Portal's "My Profile" already
+  supported.
+- This machine's live database is ~8 days behind the newest SDevTech snapshot (142 vs. 139
+  addressless borrowers, 4,607 vs. 4,610 total) - a known, small, currently-accepted gap. Re-running
+  the full migration here (once a fresher `legacy/mongodb/*.zip` is available) would close it, but
+  the user explicitly deferred this.
