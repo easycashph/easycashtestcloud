@@ -34,9 +34,13 @@ export function MisPostBanner() {
   const posts = [...data.manualPosts, ...(data.autoPost ? [data.autoPost] : [])];
   if (posts.length === 0) return null;
 
+  // 2026-08-27 (user request): a single post should sit centered, not stretched across a whole
+  // grid column - only once a second post/announcement appears should they line up side by side.
   return (
     <div className="border-b border-border bg-secondary/30">
-      <div className="container grid gap-3 py-3 sm:grid-cols-2">
+      <div
+        className={`container flex flex-wrap gap-3 py-3 ${posts.length === 1 ? 'justify-center' : 'justify-start'}`}
+      >
         {posts.map((post) => (
           <MisPostCard key={post.id} post={post} />
         ))}
@@ -52,16 +56,19 @@ function MisPostCard({ post }: { post: MisPostView }) {
   // originally uploaded (uploads have no dimension restriction - see CreateManualMisPostUseCase).
   // `onError` hides a genuinely missing/broken image instead of leaving the browser's default
   // broken-image icon on screen.
+  // 2026-08-27 (user request): `object-contain` on a neutral-filled aspect box instead of
+  // `object-cover` - the previous crop was cutting off important parts of the image; letterboxing
+  // (empty bars top/bottom or side/side) is preferred over losing content.
   const [imageFailed, setImageFailed] = React.useState(false);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className="w-full max-w-sm flex-1 basis-72 overflow-hidden rounded-xl border border-border bg-card sm:flex-none">
       {!imageFailed && (
         <img
           src={`${API_BASE_URL}${post.imageUrl}`}
           alt=""
           onError={() => setImageFailed(true)}
-          className="aspect-[16/9] w-full object-cover"
+          className="aspect-[16/9] w-full bg-muted object-contain"
         />
       )}
       <div className="p-3">

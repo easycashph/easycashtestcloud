@@ -57,7 +57,9 @@ export function NewsPage() {
   return (
     <PublicPageLayout title={t.news.title} intro={t.news.intro}>
       {misPostsInOrder.length > 0 && (
-        <div className="mb-10 grid gap-4 sm:grid-cols-2">
+        <div
+          className={`mb-10 flex flex-wrap gap-4 ${misPostsInOrder.length === 1 ? 'justify-center' : 'justify-start'}`}
+        >
           {misPostsInOrder.map((post) => (
             <MisPostFeedCard key={post.id} post={post} />
           ))}
@@ -148,17 +150,20 @@ function MisPostFeedCard({ post }: { post: MisPostView }) {
   // 2026-08-25 (user-reported: too small, cropped, sometimes broken) - same fix as
   // MisPostBanner.tsx's own MisPostCard: full-width fixed-aspect-ratio image instead of a tiny
   // side square, and `onError` hides a genuinely broken image instead of a browser default icon.
+  // 2026-08-27 (user request): `object-contain` instead of `object-cover` so nothing gets
+  // cropped, and the card no longer stretches full-width when it's the only post (see NewsPage's
+  // flex-wrap container above).
   const [imageFailed, setImageFailed] = React.useState(false);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card">
+    <div className="w-full max-w-sm flex-1 basis-72 overflow-hidden rounded-2xl border border-primary/30 bg-card sm:flex-none">
       {!imageFailed && (
         <img
           src={`${API_BASE_URL}${post.imageUrl}`}
           alt=""
           loading="lazy"
           onError={() => setImageFailed(true)}
-          className="aspect-[16/9] w-full object-cover"
+          className="aspect-[16/9] w-full bg-muted object-contain"
         />
       )}
       <div className="p-4">
