@@ -93,7 +93,10 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     lastName: borrower.lastName,
     middleName: borrower.middleName ?? '',
     gender: borrower.gender ?? '',
-    birthDate: borrower.birthDate ?? '',
+    // `borrower.birthDate` is a full ISO datetime string ("...T00:00:00.000Z") from the API, but
+    // `<input type="date">` only accepts an exact "YYYY-MM-DD" value - anything else renders blank
+    // even though real data exists underneath.
+    birthDate: borrower.birthDate ? borrower.birthDate.slice(0, 10) : '',
     placeOfBirth: borrower.placeOfBirth ?? '',
     nationality: borrower.nationality ?? '',
     mobilePhone1: borrower.mobilePhone1 ?? '',
@@ -381,7 +384,7 @@ function RealEditClientDialog({
             <PhoneInput
               value={draft.mobilePhone1}
               onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })}
-              placeholder="09XX XXX XXXX"
+              placeholder="917 XXX XXXX"
               disabled={!unlocked.mobilePhone1}
             />
           </div>
@@ -986,7 +989,7 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
               <PhoneInput
                 value={draft.phoneNumber}
                 onChange={(e) => setDraft((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                placeholder="09XX XXX XXXX"
+                placeholder="917 XXX XXXX"
               />
             </div>
             <div className="space-y-1.5">

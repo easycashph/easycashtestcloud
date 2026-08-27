@@ -328,6 +328,71 @@ Each fix was typechecked (`npx tsc --noEmit`, clean every time) and rebuilt
 (`docker compose up -d --build lmsfrontend`) individually as the user reported each issue.
 Committed and pushed together as one commit (`ed79fea`) once all three were confirmed.
 
+## 13. Client Profile card: Length of Stay placement + PH mobile numbers now shown with "+63"
+
+User pointed out that "Length of stay: 0 yrs 8 mo" on the summary card gave no indication it was
+about the *address* rather than the person - it sat inside the personal-info grid next to Civil
+Status/Gender/Age with no distinguishing label. Mockup-approved fix: moved "Length of stay" and
+"Home ownership" out of that grid entirely into a single line directly under the Address row -
+"At this address for 0 yrs 8 mo · Rented" - since both describe the address, not the person. This
+also removed the `DoorOpen` icon (now unused) and left the grid a clean 2-column layout.
+
+Same turn, user asked to also show phone numbers with the "+63" country code (mockup-approved
+first). First implementation only handled the exactly-11-digit-with-leading-0 shape
+(`formatMobileNumber()`) - user reported it still wasn't showing "+63" on the same test account.
+Investigated directly against the database and found **legacy SDevTech phone data is stored in at
+least four different shapes**, confirmed by a live count over `borrowers."mobilePhone1"`:
+11-digit `"0917..."` (correct shape, 25 records), 12-digit `"639171234567"` with no `+` (the
+majority - 3,775 records), a bare 10-digit local number with neither prefix (`"9171234567"`, 296+
+records), and a handful of genuinely corrupted legacy values that are literal Excel
+scientific-notation strings (`"0.999804316"`, ~25 records) - the test account itself
+(`YNA MAE SADICON REPIA`) turned out to be the 10-digit-no-prefix case.
+
+Rewrote `formatMobileNumber()` to normalize all three valid shapes down to the same 10-digit local
+number (stripping a leading `63` or `0` as appropriate) before formatting, on the invariant that
+every genuine PH mobile local number starts with `9` - anything that doesn't reduce to that
+(missing, partial, or the corrupted Excel-notation records) is returned unchanged rather than
+guessed, per this project's "never fabricate" rule. Added test cases for all three valid shapes
+plus the malformed-data pass-through. This is a shared helper (`utils.ts`), so the fix applies
+everywhere a PH mobile number displays app-wide (Client Profile, Loan Application detail, Client
+List), not just the one card. Committed and pushed together (`cdbf68b`).
+
+## 14. Edit Client Details: Birth Date blank, Length of Stay false alarm, PhoneInput missing "+63"
+
+Follow-on bugs found while the user re-tested the §13 changes on `YNA MAE SADICON REPIA`:
+
+- **Birth Date blank in the edit form** - real bug. `BorrowerPresenter.ts` serializes
+  `birthDate` as a full ISO datetime string (`"1992-11-21T00:00:00.000Z"` via `.toISOString()`),
+  but `<input type="date">` only accepts an exact `"YYYY-MM-DD"` value - anything else (including
+  a technically-correct ISO datetime) renders blank even though real data exists underneath.
+  `LoanApplicationDetailPage.tsx`'s equivalent field already guarded against this
+  (`application.birthDate.slice(0, 10)`); `ClientProfilePage.tsx`'s `draftFromBorrower()` did not.
+  Fixed by slicing the same way.
+- **Length of Stay "missing"** - false alarm, not a bug. Checked the database directly: this
+  borrower has (unusually) two duplicate `addresses` rows, both correctly carrying
+  `lengthOfStayMonths = 8`, and `draftFromBorrower()`'s computation was already correct. The
+  Years/Months inputs are disabled-by-default behind the same `FieldLockToggle` pattern as every
+  other field on this form - user confirmed after asking that the value (`0` / `8`) was there once
+  unlocked, just easy to miss on a disabled/greyed-out number input.
+- **PhoneInput missing "+63" in the edit form** - real bug, and the actual root cause behind why
+  §13's `formatMobileNumber()` fix didn't seem to carry into the edit dialog: `PhoneInput.tsx` is a
+  *separate*, self-contained live-typing formatter (its own `formatPhone()` helper) that never
+  called `formatMobileNumber()` at all - it only understood the exactly-11-digit-with-leading-0
+  shape and had no country-code concept. Rewrote it to mirror the same normalization introduced in
+  §13 (`toLocal10()`, handling all three legacy digit shapes), display a fixed "+63" prefix outside
+  the editable field (avoids reimplementing cursor-position math around a prefix embedded in the
+  input's own text), and always emit the canonical `"0" + local10digits` shape to the parent on
+  change - so freshly-edited numbers self-heal into the clean shape going forward regardless of how
+  the original legacy value was stored. Updated all 8 `PhoneInput` call-site placeholders
+  (`"09XX XXX XXXX"` -> `"917 XXX XXXX"`, since the country code is no longer part of the editable
+  text) across `ClientCreatePage.tsx`, `ClientProfilePage.tsx`, `LoanApplicationCreatePage.tsx`,
+  `LoanApplicationDetailPage.tsx`, and `SettingsPage.tsx` - left the two *plain* `Input`-based phone
+  fields in `LoanDetailPage.tsx`/`LoanApplicationDetailPage.tsx` (reference contacts, not
+  `PhoneInput`) untouched, they were never in scope.
+
+Each fix typechecked clean and was rebuilt individually as it was found; not yet committed as of
+this log entry - see next session or a following commit for the exact hash.
+
 **Not changed, by user's own choice**: user asked to make "New term (installments)" editable for
 Flat Rate restructures. Flagged that this is locked to exactly 1 by explicit backend design (the
 `RestructureLoanUseCase.ts` guard added in §11 - a FLAT restructure is deliberately always a single
@@ -337,6 +402,10 @@ to keep the existing 1-installment-only rule as-is.
 
 ## Current state / follow-ups for next session
 
+- **§14's three Edit Client Details fixes (Birth Date, PhoneInput "+63") are implemented and
+  rebuilt on this laptop but not yet committed/pushed** - do that first thing next session (or
+  later this same session if picked back up), then add the resulting commit hash to §14 above and
+  to the Office Server PC list below.
 - Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
   and the gender/civil-status/home-ownership fixes are all live and correct on this laptop.
 - **Office Server PC has already pulled ahead independently** - its own session ran the Mambu
@@ -347,8 +416,9 @@ to keep the existing 1-installment-only rule as-is.
   extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, the
   gender/civil-status/home-ownership fix `44e643f`, the Length of Stay migration + feature
   (§10, needs `npx prisma migrate deploy` for `20260827063839_add_present_address_length_of_stay`
-  before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), and the
-  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`). The
+  before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), the
+  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`), and
+  the Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`). The
   `Borrower.createdAt` backfill script should also be run there directly
   (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been already -
   additive/corrective, does not require a full reset.

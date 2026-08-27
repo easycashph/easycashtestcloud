@@ -1008,7 +1008,7 @@ export function LoanApplicationForm({
             <Input value={nationality} onChange={(e) => setNationality(e.target.value)} />
           </Field>
           <Field label="Contact Number" tooltip="Applicant's active mobile number for SMS/call follow-ups.">
-            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="917 XXX XXXX" />
           </Field>
           <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -1211,7 +1211,7 @@ export function LoanApplicationForm({
                 <Input placeholder="e.g. Spouse" value={coBorrowerRelationship} onChange={(e) => setCoBorrowerRelationship(e.target.value)} />
               </Field>
               <Field label="Co-borrower contact number" tooltip="Co-borrower's active mobile number.">
-                <PhoneInput value={coBorrowerContactNumber} onChange={(e) => setCoBorrowerContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+                <PhoneInput value={coBorrowerContactNumber} onChange={(e) => setCoBorrowerContactNumber(e.target.value)} placeholder="917 XXX XXXX" />
               </Field>
               <Field label="Co-borrower email address" tooltip="Co-borrower's email, if available.">
                 <Input type="email" value={coBorrowerEmail} onChange={(e) => setCoBorrowerEmail(e.target.value)} />
@@ -1230,13 +1230,13 @@ export function LoanApplicationForm({
             <Input value={reference1.name} onChange={(e) => setReference1((r) => ({ ...r, name: e.target.value.toUpperCase() }))} />
           </Field>
           <Field label="1st reference - contact number" tooltip="This reference's mobile number.">
-            <PhoneInput value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference1.mobile} onChange={(e) => setReference1((r) => ({ ...r, mobile: e.target.value }))} placeholder="917 XXX XXXX" />
           </Field>
           <Field label="2nd reference - full name" tooltip="A second character reference, different from the first.">
             <Input value={reference2.name} onChange={(e) => setReference2((r) => ({ ...r, name: e.target.value.toUpperCase() }))} />
           </Field>
           <Field label="2nd reference - contact number" tooltip="This reference's mobile number.">
-            <PhoneInput value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={reference2.mobile} onChange={(e) => setReference2((r) => ({ ...r, mobile: e.target.value }))} placeholder="917 XXX XXXX" />
           </Field>
         </div>
       </SectionCard>

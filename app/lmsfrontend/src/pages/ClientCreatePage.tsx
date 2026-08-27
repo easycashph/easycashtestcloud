@@ -336,10 +336,10 @@ export function ClientCreatePage() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Mobile Number 1">
-            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="917 XXX XXXX" />
           </Field>
           <Field label="Mobile Number 2">
-            <PhoneInput value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobilePhone2} onChange={(e) => setMobilePhone2(e.target.value)} placeholder="917 XXX XXXX" />
           </Field>
           <Field label="Email">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
