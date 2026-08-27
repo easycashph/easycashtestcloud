@@ -1,4 +1,4 @@
-import { NotFoundError } from '@shared/errors/DomainError';
+import { NotFoundError, ValidationError } from '@shared/errors/DomainError';
 import { env } from '@shared/config/env';
 import { Money } from '@shared/domain/Money';
 import type { Percentage } from '@shared/domain/Percentage';
@@ -48,6 +48,22 @@ export interface RestructureLoanInput {
    * RestructureNegotiatedOverrideExceedsCeilingError's own doc comment for the ceiling rule. */
   negotiatedNewPrincipal?: Money;
   negotiatedInterestRate?: Percentage;
+  /** 2026-08-27 (user-confirmed): only meaningful when the old loan's product uses FLAT interest -
+   * FLAT has no verified calculation formula (`CALCULATION_ENGINE_SPEC.md` §4, `STATUS:
+   * UNRESOLVED`), so restructuring one of these special accounts now offers staff an explicit
+   * choice for the NEW (restructured) loan's schedule: `'DECLINING_BALANCE'` (recommended -
+   * computed automatically, the same verified formula every other product uses) or `'FLAT'` (keeps
+   * the same type, but staff enters the interest manually since the system can't compute it).
+   * Defaults to `'DECLINING_BALANCE'` when omitted - ignored entirely for a non-FLAT old loan,
+   * which always uses the normal computed path regardless. The new loan's `LoanProductVersion`
+   * reference is unchanged either way - this only affects how THIS restructure's schedule is
+   * computed, not the product's own definition. */
+  restructureInterestMethod?: 'DECLINING_BALANCE' | 'FLAT';
+  /** Required, and only accepted, when `restructureInterestMethod === 'FLAT'` - the single
+   * installment's interest amount, entered by staff since the engine cannot compute it. Only ever
+   * used for a single-installment restructure - the special FLAT accounts this exists for are
+   * user-confirmed to always restructure to exactly one term. */
+  manualFlatInterestDue?: Money;
 }
 
 /** Mirrors `ActivateLoanUseCase`'s identical, non-exported helper — ADR-045: calendar-month
@@ -137,8 +153,15 @@ export class RestructureLoanUseCase {
     if (!loanProductVersion) {
       throw new NotFoundError('LoanProductVersion', oldLoanAccount.loanProductVersionId);
     }
-    if (loanProductVersion.interestCalculationMethod === 'FLAT') {
-      throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
+    const isFlatProduct = loanProductVersion.interestCalculationMethod === 'FLAT';
+    const useManualFlatSchedule = isFlatProduct && input.restructureInterestMethod === 'FLAT';
+    if (useManualFlatSchedule) {
+      if (!input.manualFlatInterestDue) {
+        throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
+      }
+      if (input.installmentCount !== 1) {
+        throw new ValidationError('A FLAT-interest restructure only supports a single installment - staff enters the schedule manually.');
+      }
     }
 
     // 2026-07-24 (user-confirmed, follow-up after the Accrued Interest feature shipped): new
@@ -199,20 +222,37 @@ export class RestructureLoanUseCase {
     });
     newLoanAccount.approve(input.restructuredByUserId);
 
-    const { schedule } = AmortizationScheduleGenerator.generate(newPrincipalAmount, newLoanAccount.interestRate, input.installmentCount);
+    // useManualFlatSchedule: AmortizationScheduleGenerator is declining-balance-only (see
+    // isFlatProduct's doc comment above) - the whole schedule is just the one manually-entered
+    // installment instead. Otherwise unchanged - this also covers a FLAT product where staff chose
+    // 'DECLINING_BALANCE' (the default), which simply uses the normal computed path below.
     const principalDue = newPrincipalAmount;
-    const interestDue = schedule.reduce((total, entry) => total.add(entry.interestPortion), Money.ZERO);
+    let interestDue: Money;
+    let newInstallments: RepaymentInstallment[];
+    if (useManualFlatSchedule) {
+      interestDue = input.manualFlatInterestDue!;
+      newInstallments = [
+        RepaymentInstallment.create({
+          loanAccountId: newLoanAccount.id,
+          installmentNumber: 1,
+          dueDate: input.firstRepaymentDate,
+          due: InstallmentAmounts.of({ principal: principalDue, interest: interestDue }),
+        }),
+      ];
+    } else {
+      const { schedule } = AmortizationScheduleGenerator.generate(newPrincipalAmount, newLoanAccount.interestRate, input.installmentCount);
+      interestDue = schedule.reduce((total, entry) => total.add(entry.interestPortion), Money.ZERO);
+      newInstallments = schedule.map((entry) =>
+        RepaymentInstallment.create({
+          loanAccountId: newLoanAccount.id,
+          installmentNumber: entry.installmentNumber,
+          dueDate: addMonths(input.firstRepaymentDate, entry.installmentNumber - 1),
+          due: InstallmentAmounts.of({ principal: entry.principalPortion, interest: entry.interestPortion }),
+        }),
+      );
+    }
     const activatedAt = new Date();
     newLoanAccount.activate({ principalDue, interestDue, activatedAt });
-
-    const newInstallments = schedule.map((entry) =>
-      RepaymentInstallment.create({
-        loanAccountId: newLoanAccount.id,
-        installmentNumber: entry.installmentNumber,
-        dueDate: addMonths(input.firstRepaymentDate, entry.installmentNumber - 1),
-        due: InstallmentAmounts.of({ principal: entry.principalPortion, interest: entry.interestPortion }),
-      }),
-    );
 
     const disbursementTransaction = LoanTransaction.create({
       loanAccountId: newLoanAccount.id,
