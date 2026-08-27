@@ -137,16 +137,93 @@ checks every legacy borrower regardless of loan status. Asked the user, who chos
 ("Lahat ng 4,130 - Recommended"). Applied: **4,471 of 4,610 legacy borrowers (97%) now have an
 address**, up from 341 (7.4%) right after the resets.
 
+## 6. Attachments/addresses sanity check after the resets - attachments fine, prompted the address recovery above
+
+User asked directly whether attachments were lost from the two full resets. Checked and confirmed
+none were: only 20 native (non-legacy) attachments exist at all, all `LOAN_APPLICATION`-owned, all
+covered by the existing backup/restore scripts and confirmed present in the DB - spot-checked the
+physical files on the backend container's storage volume too (a Postgres reset never touches it;
+byte sizes matched the DB rows exactly). Addresses were a different story - see §5 above, which
+this question directly prompted.
+
+## 7. Civil Status / Gender showing blank in Edit Client Details - real bug, found and fixed
+
+User asked to check why Civil Status, Gender, and Place of Birth were blank on a specific account
+(`SL-CORP_00134`, Yna Mae Sadicon Repia) despite presumably having real data. Checked the database
+directly: `gender = 'FEMALE'` and `civilStatus = 'MARRIED'` were both genuinely populated -
+`placeOfBirth` was the only one actually empty (a real source-data gap, not a bug).
+
+Root cause for the other two: every `Select` dropdown across the app (`ClientProfilePage.tsx`,
+`ClientCreatePage.tsx`, `LoanApplicationDetailPage.tsx`, `LoanApplicationCreatePage.tsx`) used
+Title Case option values ("Male", "Married", etc.), but legacy-migrated `Borrower` records store
+these fields as uppercase (`MALE`/`FEMALE`, `SINGLE`/`MARRIED`/`WIDOWED`/`DIVORCED/SEPARATED`) -
+Radix Select only shows a selection when the value exactly matches one of its `SelectItem`s, so the
+field silently rendered as blank/placeholder despite real data existing underneath. Confirmed the
+scale before fixing: 4,487 borrowers have a `gender` value, 3,192 have a `civilStatus` value - all
+of them were affected.
+
+Normalized every dropdown to the real uppercase values (including a two-word "Divorced/Separated"
+category found in 77 records, 7 of them with a reversed word order - normalized on load rather than
+left unmatched). Fixed `LoanApplicationCreatePage.tsx`'s `civilStatus === 'Married'` spouse-section
+gate to match the new value, and switched its dropdown labels to render via `toProperCase()` instead
+of the raw option value. Commit `44e643f`.
+
+User then asked to check the other Edit Client Details fields for the same class of bug:
+Homeownership/Status, Monthly Income, SSS, TIN, Zip Code, Nationality, Place of Birth. Checked each
+against the live database and the raw SDevTech source docs:
+- **Homeownership/Status**: genuinely a real bug too, but a different one - see below.
+- **Monthly Income, Nationality, Place of Birth**: 100% blank across all 4,610 borrowers - confirmed
+  directly against the raw SDevTech `client_accounts`/`client_income_details` source documents that
+  neither concept was ever captured there at all. Not a bug, nothing recoverable.
+- **SSS**: has real data for many borrowers and displays correctly (plain text input, no dropdown
+  involved).
+- **TIN**: has data, but a lot of it is source-side junk (150 borrowers with literal `"0"`, 38 with
+  `"1111"`, 38 with `"321"`) - genuine bad data entry in SDevTech itself, not something to "fix"
+  without fabricating a real value.
+- **Zip Code**: 3,341 of 4,830 addresses are blank, mostly among the just-recovered Mambu addresses
+  (§5) whose zip custom field wasn't always filled in Mambu either - real source sparsity, faithfully
+  carried through rather than invented.
+
+**Homeownership/Status turned out to be a second, different real bug**, caught by the user
+specifically suspecting the source used a different field name ("baka Status ang nakalagay").
+`Borrower.homeOwnership` is a real, actively-used field for natively-created clients (populated
+from a `LoanApplication`'s own intake field, per `CreateBorrowerUseCase`) - but SDevTech's own
+`client_accounts` export never captured an equivalent concept, so every legacy-migrated borrower has
+it blank. The actual legacy data lives on the address record instead - `Address.ownershipStatus`
+("Owned"/"Rented"/"Owned by Parents"/"Owned by Relatives"), present on 700 addresses via SDevTech's
+own `addresses.status` field, and already fully wired end-to-end on the backend (domain, DTO, Zod
+schema, Prisma repository) but never surfaced in this form. Fixed `ClientProfilePage.tsx` to fall
+back to the address field when the Borrower field is empty, and to write both in sync on save so
+neither the native-client nor the legacy-client population regresses. Also corrected the dropdown's
+option values to match the real data ("Rented" not "Renting"; added the two missing "Owned by
+Parents"/"Owned by Relatives" categories). Commit `44e643f`.
+
+**Flagged, not fixed this session**: `UpdateBorrowerUseCase`'s `replaceAddresses` always replaces a
+borrower's ENTIRE address list with whatever the edit form sends - and the edit form only ever
+loads/sends `borrower.addresses[0]`. A borrower with 2+ addresses (not rare - this exact example
+account has 2) would silently lose every address past the first the next time someone saves an edit
+to their profile. Needs its own design decision (which address is "the" edited one, or expose all
+of them) - out of scope for this session's fix.
+
 ## Current state / follow-ups for next session
 
-- Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, and the address recovery
-  are all live and correct on this laptop as of this session. Nothing further needed here for any
-  of them.
-- **Office Server PC should pull `946affd`** and be aware that any of its own past full-migration
-  runs may have silently used a stale snapshot due to the same extraction bug - worth a spot-check
-  next time someone's there. It should also run the new `backfill-mambu-customfield-addresses.ts`
-  itself if it ever does a from-scratch reset (needs its own `legacy/mambu/easycash.sql` present
-  first).
+- Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
+  and the gender/civil-status/home-ownership fixes are all live and correct on this laptop.
+- **Office Server PC has already pulled ahead independently** - its own session ran the Mambu
+  address recovery directly against the live database (`7bfb767`, "log full address recovery on
+  Office Server PC live DB (§48)"), and also landed unrelated MIS Post pool work this same window.
+  Nothing more needed there for the address recovery specifically.
+- **Office Server PC still needs**: `git pull` + rebuild for today's other code fixes (the `.bat`
+  extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, and now the
+  gender/civil-status/home-ownership fix `44e643f`). The `Borrower.createdAt` backfill script should
+  also be run there directly (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been
+  already - additive/corrective, does not require a full reset.
+- **Do not run a full `prisma migrate reset --force` against the Office Server PC casually** - it's
+  live/production, unlike this laptop's disposable dev copy. Advised the user to check that
+  machine's own migration log for a stale "Dump directory:" first, and only consider a full
+  re-migration there with explicit confirmation if it's actually affected.
+- Address-list overwrite risk (multi-address borrowers silently losing addresses past the first on
+  edit-save) - flagged, not yet fixed.
 - Not yet done: wiring the new address-recovery script (or `migrate-mambu-notes.ts`) as an actual
   step in the "Run Full Legacy Migration" `.bat` files - deliberately left manual for now since the
   Mambu SQL dump isn't guaranteed to be present on every machine, and a missing-file error mid-batch
