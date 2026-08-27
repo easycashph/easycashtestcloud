@@ -392,6 +392,7 @@ export class LoanAccountController {
           restructuredByUserId: currentUser.sub,
           negotiatedNewPrincipal: body.negotiatedNewPrincipal ? Money.of(body.negotiatedNewPrincipal) : undefined,
           negotiatedInterestRate: body.negotiatedInterestRate ? Percentage.of(body.negotiatedInterestRate) : undefined,
+          manualFlatInterestDue: body.manualFlatInterestDue ? Money.of(body.manualFlatInterestDue) : undefined,
         });
         return {
           statusCode: 200,
