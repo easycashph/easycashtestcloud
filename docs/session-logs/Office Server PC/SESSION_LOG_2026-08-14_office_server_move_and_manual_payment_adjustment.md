@@ -2235,3 +2235,66 @@ each followed by the usual type-check/rebuild/verify routine):
   risk either way).
 - The Bash tool's broken PATH is an open, unexplained item - worth a fresh terminal/session if it
   recurs, since the workaround (explicit PATH export per command) is functional but easy to forget.
+
+## §47 - Every migrated Borrower had the wrong "Date Created" - found, root-caused, fixed, backfilled (2026-08-25 to 2026-08-27)
+
+**Housekeeping stretch first** (several `git pull`s from concurrent sessions between §46 and this
+fix, each with the usual type-check/rebuild/verify routine): synced a Cancel Export status addition
+to the Bulk Export module - this one included an actual pending Prisma migration
+(`20260825032854_add_bulk_export_cancelled_status`) that `npx prisma migrate status` caught before it
+silently broke anything (`npx prisma migrate deploy` + `prisma generate` cleared a real
+`BulkExportStatus` type error). The Bash tool's PATH broke again mid-stretch (`git`/`docker`/even
+`wc`/`ls` stopped resolving) - same open, unexplained issue from §46 - worked around the same way
+(explicit `PATH=...` export per command); it recovered on its own by the next `git pull`, still not
+root-caused. Also removed the leftover `mysql:8.0` base image (1.1GB, unrelated to any live
+container) once the user asked about it directly - the `mambu-scratch` container itself was already
+gone since §46.
+
+**The actual bug**: user asked directly whether "Client Data Created" for migrated clients was
+correct in the LMS. Checked live data first rather than assuming: `SELECT DATE(createdAt), COUNT(*)
+FROM borrowers WHERE legacyId IS NOT NULL GROUP BY 1` showed **all 4,607 migrated borrowers sharing
+one single createdAt date** - 2026-08-19, the last full migration run, not their real 2009-2026
+client history. Root cause: `migrateBorrowers()` in `migrate-legacy-data.ts` never set `createdAt` on
+the `Borrower` it creates at all, so Prisma's `@default(now())` silently took over - the exact same
+bug class as the 2026-07-17 `LoanAccount.createdAt` fix (`backfill-legacy-loan-created-dates.ts`),
+just never applied to `Borrower`.
+
+Traced the real source field by reading actual BSON records directly (`client_accounts.creation_date`)
+rather than guessing, via a throwaway `npx tsx` script reusing `migrate-legacy-data.ts`'s own
+`iterDocs`/BSON-parsing helpers. Found it stored as a `"MM-DD-YYYY"` string for most records (a real
+BSON `Date` for the rest). **Got the digit order wrong on the first pass** - eyeballing two sample
+records against their `approved_date` looked like `DD-MM-YYYY` - then caught the mistake before
+writing any fix by testing properly: comparing `creation_date` against `activation_date`/
+`approved_date` across the whole collection turned out to be a weak signal (client-profile-creation
+and first-loan-approval are genuinely different, not-necessarily-same-day events, so "consistent with
+DD-MM" vs "consistent with MM-DD" split roughly down the middle - not conclusive either way). The
+actually decisive test: across 3,409 string-format records, the SECOND number exceeds 12 in ~60% of
+them while the FIRST number is NEVER above 12 - which is only possible if the first number is always
+the month. Format is `MM-DD-YYYY`, confirmed unambiguously, and it turns out JS's default
+`new Date(string)` parsing already assumes exactly that shape for this pattern - so the existing
+`toDate()` helper needed no new custom parsing logic at all, just a call site.
+
+Fixed `migrate-legacy-data.ts` (`createdAt: toDate(c.creation_date) ?? undefined` in the `create`
+block only, never in the `update` resync - same placement convention as the `LoanAccount` fix) and
+wrote `backfill-legacy-borrower-created-dates.ts` (a new PERMANENT script, mirroring
+`backfill-legacy-loan-created-dates.ts`'s own kept-not-deleted precedent, not a `tmp-` one-off).
+Ran it against the live database: **all 4,607 borrowers corrected, zero skipped**. Verified via
+`DATE_TRUNC('year', "createdAt")` grouping - now spreads naturally across 2009 through 2026 (1 in
+2009, climbing to a 2018 peak of 865, tapering down to 2026) instead of clustering on one day.
+Type-checked clean throughout. Committed and pushed (`78a4473`).
+
+### Current state / follow-ups
+
+- Every migrated Borrower's "Date Created" is now correct and will stay correct on future
+  re-migrations (the fix lives in the create path, and `update: {}` was already never touching
+  `createdAt` for existing rows).
+- Worth keeping in mind for any FUTURE "which legacy date field is this and what order are its
+  digits in" question: don't trust a same-day comparison against an unrelated lifecycle event as
+  proof of digit order (creation vs. approval dates coincide often enough to look confirming while
+  actually being coincidental) - the reliable test is finding values that are IMPOSSIBLE under one
+  ordering (a number over 12 in the month position) across the full population, not eyeballing a
+  couple of samples.
+- The Bash tool's intermittent PATH loss (first noted §46, recurred here) remains unexplained and
+  unfixed at the root - still just worked around per-command. Flag to the user again if this becomes
+  frequent enough to be worth a deeper look (e.g. a Windows environment-variable or terminal-profile
+  issue rather than something in this session's control).
