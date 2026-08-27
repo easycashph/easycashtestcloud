@@ -2,11 +2,13 @@
 setlocal EnableDelayedExpansion
 
 REM ===============================
-REM Easycash LMS - Full Legacy Migration (Windows / Office Server PC)
+REM Easycash LMS - Full Legacy Migration (Windows / Nomer Laptop)
 REM ===============================
-REM Windows counterpart of legacy\Run Full Legacy Migration.command (Mac) - same 18 steps, same
-REM order, same scripts. Turnkey re-run of the entire CP12 migration + every follow-up backfill
-REM script, against whichever legacy\mongodb\*.zip backup is newest.
+REM Identical to "Run Full Legacy Migration (Office Server PC).bat" - nothing in that script is
+REM actually Office-Server-specific (every path is %~dp0.. relative), this is just a per-machine
+REM named copy so it's obvious at a glance which machine a session log entry was about. Keep both
+REM files in sync if either one changes - see that file's own header/comments for the full 18-step
+REM breakdown and the 2026-08-27 extraction if/else bug fix.
 REM
 REM WARNING: this runs "prisma migrate reset --force", which ERASES the local Postgres database
 REM COMPLETELY (schema + all data) before rebuilding it fresh from the legacy backup. Local-only -

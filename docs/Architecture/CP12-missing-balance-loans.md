@@ -1,8 +1,8 @@
 # CP12 Follow-up — Loans Flagged for Missing Balance Data
 
-Generated 2026-08-27T00:39:58.973Z by `scripts/flag-missing-balance-loans.ts`.
+Generated 2026-08-27T01:23:09.663Z by `scripts/flag-missing-balance-loans.ts`.
 
-626 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
+633 loan accounts have `legacyBalanceDataMissing = true` — their legacy record had
 no principal/interest/fees/penalty balance snapshot at all (not zero — absent). All balance
 columns on these rows read 0.00 but do NOT mean the loan is settled; each requires manual
 reconciliation against other records (e.g. the loan's own transaction history's running
@@ -12,9 +12,9 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 
 | Status | Count |
 |---|---|
-| CLOSED | 443 |
-| ACTIVE_IN_ARREARS | 55 |
-| ACTIVE | 124 |
+| CLOSED | 447 |
+| ACTIVE_IN_ARREARS | 60 |
+| ACTIVE | 122 |
 | APPROVED | 1 |
 | PENDING_APPROVAL | 3 |
 
@@ -56,7 +56,8 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | BL-SPEC_00022 | CLOSED |
 | BL-SPEC_00023 | CLOSED |
 | BL-SPEC_00027 | CLOSED |
-| BL-SPEC_00028 | ACTIVE |
+| BL-SPEC_00028 | CLOSED |
+| BL-SPEC_00030 | ACTIVE |
 | OTH-COMP_00001 | ACTIVE |
 | OTH-COMP_00002 | ACTIVE |
 | PFL-GAD_00001 | ACTIVE_IN_ARREARS |
@@ -70,7 +71,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | PFL-GAD_00011 | CLOSED |
 | PFL-GAD_00013 | CLOSED |
 | PFL-GAD_00015 | CLOSED |
-| PFL-GAD_00016 | ACTIVE |
+| PFL-GAD_00016 | ACTIVE_IN_ARREARS |
 | PFL-GADG_00002 | CLOSED |
 | PFL-GADG_00005 | CLOSED |
 | REL-REG_00001 | PENDING_APPROVAL |
@@ -126,15 +127,15 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-CORP_00078 | ACTIVE_IN_ARREARS |
 | SL-CORP_00086 | CLOSED |
 | SL-CORP_00087 | ACTIVE_IN_ARREARS |
-| SL-CORP_00090 | ACTIVE_IN_ARREARS |
+| SL-CORP_00090 | ACTIVE |
 | SL-CORP_00093 | ACTIVE_IN_ARREARS |
 | SL-CORP_00094 | ACTIVE_IN_ARREARS |
 | SL-CORP_00095 | ACTIVE |
 | SL-CORP_00096 | CLOSED |
 | SL-CORP_00097 | ACTIVE_IN_ARREARS |
 | SL-CORP_00099 | ACTIVE |
-| SL-CORP_00100 | ACTIVE |
-| SL-CORP_00103 | ACTIVE |
+| SL-CORP_00100 | ACTIVE_IN_ARREARS |
+| SL-CORP_00103 | ACTIVE_IN_ARREARS |
 | SL-CORP_00105 | ACTIVE |
 | SL-CORP_00106 | ACTIVE |
 | SL-CORP_00109 | ACTIVE |
@@ -148,6 +149,10 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-CORP_00123 | ACTIVE |
 | SL-CORP_00124 | ACTIVE |
 | SL-CORP_00127 | ACTIVE |
+| SL-CORP_00128 | ACTIVE |
+| SL-CORP_00129 | ACTIVE |
+| SL-CORP_00130 | ACTIVE |
+| SL-CORP_00134 | ACTIVE |
 | SL-LAZ_00001 | ACTIVE |
 | SL-LAZ_00004 | ACTIVE |
 | SL-LAZ_00004-LEGACY2 | CLOSED |
@@ -217,7 +222,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-REG_00069 | CLOSED |
 | SL-REG_00070 | ACTIVE |
 | SL-REG_00071 | ACTIVE |
-| SL-REG_00077 | ACTIVE |
+| SL-REG_00077 | ACTIVE_IN_ARREARS |
 | SL-REG_00078 | CLOSED |
 | SL-REG_00079 | CLOSED |
 | SL-REG_00080 | ACTIVE_IN_ARREARS |
@@ -240,8 +245,8 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SL-REG_00109 | ACTIVE |
 | SL-REG_00114 | ACTIVE |
 | SL-REG_00115 | ACTIVE |
-| SL-REG_00116 | ACTIVE |
-| SL-REG_00117 | ACTIVE |
+| SL-REG_00116 | ACTIVE_IN_ARREARS |
+| SL-REG_00117 | ACTIVE_IN_ARREARS |
 | SL-REG_00119 | ACTIVE |
 | SL-REG_00121 | ACTIVE |
 | SML-Co-Borrower_00025 | CLOSED |
@@ -523,7 +528,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SML-REG_00249 | CLOSED |
 | SML-REG_00250 | CLOSED |
 | SML-REG_00251 | CLOSED |
-| SML-REG_00252 | ACTIVE_IN_ARREARS |
+| SML-REG_00252 | CLOSED |
 | SML-REG_00253 | CLOSED |
 | SML-REG_00254 | CLOSED |
 | SML-REG_00258 | CLOSED |
@@ -565,10 +570,10 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SML-REG_00309 | CLOSED |
 | SML-REG_00314 | CLOSED |
 | SML-REG_00317 | CLOSED |
-| SML-REG_00318 | ACTIVE |
+| SML-REG_00318 | CLOSED |
 | SML-REG_00320 | CLOSED |
 | SML-REG_00321 | CLOSED |
-| SML-REG_00322 | ACTIVE |
+| SML-REG_00322 | CLOSED |
 | SML-REG_00323 | ACTIVE_IN_ARREARS |
 | SML-REG_00325 | CLOSED |
 | SML-REG_00329 | CLOSED |
@@ -598,7 +603,7 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SML-REG_00363 | ACTIVE |
 | SML-REG_00364 | ACTIVE |
 | SML-REG_00365 | ACTIVE |
-| SML-REG_00366 | ACTIVE |
+| SML-REG_00366 | ACTIVE_IN_ARREARS |
 | SML-REG_00367 | ACTIVE |
 | SML-REG_00369 | ACTIVE |
 | SML-REG_00370 | CLOSED |
@@ -608,6 +613,8 @@ reconciliation against other records (e.g. the loan's own transaction history's 
 | SML-REG_00377 | ACTIVE |
 | SML-REG_00378 | ACTIVE |
 | SML-REG_00380 | ACTIVE |
+| SML-REG_00382 | ACTIVE |
+| SML-REG_00385 | ACTIVE |
 | SML-Seacon_00001 | CLOSED |
 | SML-Self_00014 | CLOSED |
 | SML-Self_00015 | CLOSED |
