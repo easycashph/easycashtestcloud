@@ -2298,3 +2298,56 @@ Type-checked clean throughout. Committed and pushed (`78a4473`).
   unfixed at the root - still just worked around per-command. Flag to the user again if this becomes
   frequent enough to be worth a deeper look (e.g. a Windows environment-variable or terminal-profile
   issue rather than something in this session's control).
+
+## §48 — 2026-08-27: Client address completeness re-checked, full recovery applied (broader scope than §46), stale-snapshot .bat bug confirmed not applicable here
+
+User asked "kumpleto na ba ang mga client address dito sa lms system?". Answered honestly with the
+§46 numbers first (1,040/1,106 recovered, but scoped only to ACTIVE/ACTIVE_IN_ARREARS loan accounts)
+- then a fresh whole-table check revealed the real picture was worse: only **1,372 of 4,607 (30%)**
+borrowers system-wide had any address at all, since §46's recovery never covered clients with no
+active loan (closed loans, no loan yet, etc.).
+
+`git pull` immediately after brought in a same-day parallel discovery from the Nomer Laptop session
+(`946affd`, `docs/session-logs/Nomer Laptop/SESSION_LOG_2026-08-27_full_migration_and_borrower_createdAt_dedup.md`):
+during a full local migration reset there, they found §46's original recovery had no permanent
+script behind it (ran through a since-deleted throwaway MySQL container) and was silently wiped by
+`prisma migrate reset --force` - then rebuilt it properly as `backfill-mambu-customfield-addresses.ts`,
+a permanent, idempotent, re-runnable script (only ever inserts for a borrower with zero existing
+`addresses` rows - never overwrites). Their dry run also found the true recoverable scope was far
+bigger than §46's 1,040: **4,130 addresses**, because §46 was scoped to active-loan borrowers only,
+while this script checks every legacy borrower regardless of loan status. They applied it against
+their own (freshly-reset) local DB and reached 4,471/4,610 (97%).
+
+Ran the same script here against the OFFICE SERVER PC's LIVE production database (confirmed
+`legacy/mambu/easycash.sql` already present). Dry run first, then user confirmed via AskUserQuestion
+("Oo, i-apply na") before writing to live data - safe by the script's own design (additive-only,
+same rule as §46). Result:
+
+- Before: 1,372/4,607 borrowers (30%) had an address.
+- Recovered: 3,093 more (2,278 from the "Present Address" custom-field group, 815 from the second
+  "generic" `hm_addr_*` group).
+- After: **4,465/4,607 borrowers (96.9%) now have an address.**
+- **142 borrowers remain with genuinely no recoverable source** in either Mambu or SDevTech - a
+  real, permanent data gap requiring manual staff entry via the existing Client Profile edit UI.
+
+Also checked whether this machine's own past full-migration runs were affected by the stale-snapshot
+`.bat` bug the Nomer Laptop session found and fixed in the same pull (`if exist A if exist B (X) else
+(Y)` batch else-binding gotcha causing silent reuse of an older extracted MongoDB snapshot instead of
+the newest zip). Confirmed NOT applicable here: `legacy/mongodb/extracted/` on this machine has only
+ONE folder ever extracted (`192026_184828`, 2026-08-19) - with no older snapshot to silently fall
+back to, the bug could not have caused a wrong-data migration on this machine historically. The fixed
+`.bat` (already pulled, `946affd`) is in place for any future run regardless.
+
+### Current state / follow-ups
+
+- Client addresses are now 96.9% complete system-wide (4,465/4,607) - a very different and much
+  better number than the 1,040/1,106-scoped-to-active-loans figure quoted in §46.
+- The 142 borrowers with no recoverable address anywhere are a permanent gap, not a script
+  limitation - offered to export this list for staff manual follow-up, not yet done pending user
+  confirmation.
+- `backfill-mambu-customfield-addresses.ts` is now the permanent, safe-to-re-run replacement for
+  §46's one-off throwaway-container approach - re-run it after any future `prisma migrate reset
+  --force` on this machine (needs `legacy/mambu/easycash.sql` present, which it is).
+- Not yet done (carried over from Nomer Laptop's log): wiring this script as an actual step inside
+  the "Run Full Legacy Migration" `.bat` files themselves - deliberately left manual since the Mambu
+  SQL dump isn't guaranteed present on every machine.
