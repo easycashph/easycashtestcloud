@@ -459,23 +459,13 @@ pushed (`4d8da16`).
   address recovery directly against the live database (`7bfb767`, "log full address recovery on
   Office Server PC live DB (§48)"), and also landed unrelated MIS Post pool work this same window.
   Nothing more needed there for the address recovery specifically.
-- **§15's Mambu notes recovery (`migrate-mambu-notes.ts --apply`) still needs to be run directly
-  against the Office Server PC's live database** - this is a data-import action, not a code deploy,
-  so pulling/rebuilding alone won't bring the 9,232 notes over. Needs the Mambu SQL dump present at
-  `legacy/mambu/easycash.sql` on that machine first, and the same `NODE_OPTIONS=--max-old-space-size=8192`
-  workaround for the heap-limit crash (see §15).
-- **Office Server PC still needs**: `git pull` + rebuild for today's other code fixes (the `.bat`
-  extraction bug `946affd`, the Borrower.createdAt fix path via `78a4473`/`946affd`, the
-  gender/civil-status/home-ownership fix `44e643f`, the Length of Stay migration + feature
-  (§10, needs `npx prisma migrate deploy` for `20260827063839_add_present_address_length_of_stay`
-  before/with the rebuild), the FLAT-restructure radio-choice feature (`14cf999`), the
-  Restructure schedule-table Total-row + readability/compactness fixes (`451fc82`, `ed79fea`), the
-  Length-of-Stay-placement + "+63" phone formatting fix (`cdbf68b`), the Edit Client Details
-  Birth Date/PhoneInput fixes (`942ca27`), and the loan-list server-side "Created" sort (`4d8da16`,
-  backend + frontend). The
-  `Borrower.createdAt` backfill script should also be run there directly
-  (`backfill-legacy-borrower-created-dates.ts --apply`) if it hasn't been already -
-  additive/corrective, does not require a full reset.
+- **Office Server PC is now caught up** - user confirmed (2026-08-27, same day) that all of the
+  above was applied there with no errors: `git pull` through `4d8da16`, the Prisma migration for
+  Length of Stay, both containers rebuilt, the `Borrower.createdAt` backfill re-run, and §15's
+  Mambu notes recovery (`migrate-mambu-notes.ts --apply`) run directly against its live database.
+  Exact reconciliation counts from that run weren't captured in this laptop's session (it ran on
+  the other machine) - if verification is needed later, check that machine's own terminal output
+  or add a note to `docs/session-logs/Office Server PC/` from that side.
 - **Do not run a full `prisma migrate reset --force` against the Office Server PC casually** - it's
   live/production, unlike this laptop's disposable dev copy. Advised the user to check that
   machine's own migration log for a stale "Dump directory:" first, and only consider a full
