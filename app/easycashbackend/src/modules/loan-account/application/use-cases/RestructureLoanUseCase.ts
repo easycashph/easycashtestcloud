@@ -48,17 +48,21 @@ export interface RestructureLoanInput {
    * RestructureNegotiatedOverrideExceedsCeilingError's own doc comment for the ceiling rule. */
   negotiatedNewPrincipal?: Money;
   negotiatedInterestRate?: Percentage;
-  /** 2026-08-27 (user-confirmed): required, and only accepted, when the old loan's product uses
-   * FLAT interest - no verified calculation formula exists for FLAT
-   * (`CALCULATION_ENGINE_SPEC.md` §4, `STATUS: UNRESOLVED`), so `AmortizationScheduleGenerator`
-   * (declining-balance) cannot be trusted to compute this installment's interest. Staff enters it
-   * directly instead, explicitly acknowledging (via the frontend's required confirmation) that the
-   * system did not compute it. The principal portion still comes from the normal computed/negotiated
-   * `newPrincipalAmount` above - that figure (unpaid principal + interest + penalty + accrued
-   * interest + fees) is independent of interest-calculation method, only the schedule's per-
-   * installment interest split is declining-balance-specific. Only ever used for a single-
-   * installment restructure - the special FLAT accounts this exists for are user-confirmed to
-   * always restructure to exactly one term. */
+  /** 2026-08-27 (user-confirmed): only meaningful when the old loan's product uses FLAT interest -
+   * FLAT has no verified calculation formula (`CALCULATION_ENGINE_SPEC.md` §4, `STATUS:
+   * UNRESOLVED`), so restructuring one of these special accounts now offers staff an explicit
+   * choice for the NEW (restructured) loan's schedule: `'DECLINING_BALANCE'` (recommended -
+   * computed automatically, the same verified formula every other product uses) or `'FLAT'` (keeps
+   * the same type, but staff enters the interest manually since the system can't compute it).
+   * Defaults to `'DECLINING_BALANCE'` when omitted - ignored entirely for a non-FLAT old loan,
+   * which always uses the normal computed path regardless. The new loan's `LoanProductVersion`
+   * reference is unchanged either way - this only affects how THIS restructure's schedule is
+   * computed, not the product's own definition. */
+  restructureInterestMethod?: 'DECLINING_BALANCE' | 'FLAT';
+  /** Required, and only accepted, when `restructureInterestMethod === 'FLAT'` - the single
+   * installment's interest amount, entered by staff since the engine cannot compute it. Only ever
+   * used for a single-installment restructure - the special FLAT accounts this exists for are
+   * user-confirmed to always restructure to exactly one term. */
   manualFlatInterestDue?: Money;
 }
 
@@ -149,12 +153,15 @@ export class RestructureLoanUseCase {
     if (!loanProductVersion) {
       throw new NotFoundError('LoanProductVersion', oldLoanAccount.loanProductVersionId);
     }
-    const isFlatInterest = loanProductVersion.interestCalculationMethod === 'FLAT';
-    if (isFlatInterest && !input.manualFlatInterestDue) {
-      throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
-    }
-    if (isFlatInterest && input.installmentCount !== 1) {
-      throw new ValidationError('A FLAT-interest restructure only supports a single installment - staff enters the schedule manually.');
+    const isFlatProduct = loanProductVersion.interestCalculationMethod === 'FLAT';
+    const useManualFlatSchedule = isFlatProduct && input.restructureInterestMethod === 'FLAT';
+    if (useManualFlatSchedule) {
+      if (!input.manualFlatInterestDue) {
+        throw new UnsupportedInterestCalculationMethodError(loanProductVersion.interestCalculationMethod);
+      }
+      if (input.installmentCount !== 1) {
+        throw new ValidationError('A FLAT-interest restructure only supports a single installment - staff enters the schedule manually.');
+      }
     }
 
     // 2026-07-24 (user-confirmed, follow-up after the Accrued Interest feature shipped): new
@@ -215,12 +222,14 @@ export class RestructureLoanUseCase {
     });
     newLoanAccount.approve(input.restructuredByUserId);
 
-    // FLAT: AmortizationScheduleGenerator is declining-balance-only (see isFlatInterest's doc
-    // comment above) - the whole schedule is just the one manually-entered installment instead.
+    // useManualFlatSchedule: AmortizationScheduleGenerator is declining-balance-only (see
+    // isFlatProduct's doc comment above) - the whole schedule is just the one manually-entered
+    // installment instead. Otherwise unchanged - this also covers a FLAT product where staff chose
+    // 'DECLINING_BALANCE' (the default), which simply uses the normal computed path below.
     const principalDue = newPrincipalAmount;
     let interestDue: Money;
     let newInstallments: RepaymentInstallment[];
-    if (isFlatInterest) {
+    if (useManualFlatSchedule) {
       interestDue = input.manualFlatInterestDue!;
       newInstallments = [
         RepaymentInstallment.create({

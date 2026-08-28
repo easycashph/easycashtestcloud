@@ -14,7 +14,7 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
-import { useSortableTable } from '@/lib/useSortableTable';
+import { sortRows, useSortState } from '@/lib/useSortableTable';
 import { useCursorPagination } from '@/lib/useCursorPagination';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { formatDate, formatPeso } from '@/lib/utils';
@@ -110,6 +110,11 @@ export function LoanListPage() {
   const [productType, setProductType] = React.useState<string>('ALL');
   const [product, setProduct] = React.useState<string>('ALL');
   const productTypeLabelsQuery = useProductTypeLabels();
+  // "Created" is sorted server-side (spans every matching loan, not just the current page, unlike
+  // every other column here - see useSortableTable.ts's `useSortState`/`sortRows` split, same
+  // pattern as ClientListPage.tsx's "Date Created") - read before useCursorPagination below so its
+  // direction can be passed as a query param.
+  const { sort, toggleSort } = useSortState({ key: 'createdAt', direction: 'desc' });
 
   const productsQuery = useQuery({
     // Deliberately NOT ['loan-products', 'all'] - that key is shared by pages caching the plain
@@ -189,6 +194,7 @@ export function LoanListPage() {
       search: debouncedSearch,
       status: status === 'ALL' ? undefined : status,
       loanProductVersionIds: selectedProductVersionIds && selectedProductVersionIds.length > 0 ? selectedProductVersionIds.join(',') : undefined,
+      sortDirection: sort.key === 'createdAt' ? sort.direction : undefined,
     },
     PAGE_SIZE,
     // Waits for the product catalog to load before the first fetch whenever a product/product-type
@@ -231,8 +237,11 @@ export function LoanListPage() {
     });
   }, [loans, borrowerById, productsQuery.data]);
 
-  // status, product type, and product are already server-filtered above (via useCursorPagination's extraParams).
-  const { sorted, sort, toggleSort } = useSortableTable(rows, getSortValue, { key: 'createdAt', direction: 'desc' });
+  // status, product type, and product are already server-filtered above (via useCursorPagination's
+  // extraParams); when sort.key is 'createdAt', `rows` already arrives in that order from the
+  // server too, so this is a no-op re-sort for that column and does the real work only for the
+  // other, per-page columns.
+  const sorted = React.useMemo(() => sortRows(rows, getSortValue, sort), [rows, sort]);
 
   return (
     <div className="space-y-6">

@@ -1192,9 +1192,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // behavior). Never allowed to exceed that default - see RestructureLoanUseCase's own doc comment.
   const [restructureNegotiatedPrincipal, setRestructureNegotiatedPrincipal] = React.useState('');
   const [restructureNegotiatedRate, setRestructureNegotiatedRate] = React.useState('');
-  // 2026-08-27 (user-confirmed, FLAT-interest restructure override): FLAT has no verified
-  // calculation formula (CALCULATION_ENGINE_SPEC.md §4), so the normal computed-schedule preview
-  // is replaced by a manual single-installment entry + explicit confirmation for these accounts.
+  // 2026-08-27 (user-confirmed, FLAT-interest restructure choice): FLAT has no verified calculation
+  // formula (CALCULATION_ENGINE_SPEC.md §4), so restructuring one of these special accounts offers
+  // an explicit choice for the new loan's schedule - Declining Balance (recommended, computed
+  // automatically) or Flat Rate (manual single-installment entry + confirmation). Defaults to
+  // Declining Balance.
+  const [restructureInterestMethod, setRestructureInterestMethod] = React.useState<'DECLINING_BALANCE' | 'FLAT'>('DECLINING_BALANCE');
   const [restructureManualFlatInterest, setRestructureManualFlatInterest] = React.useState('');
   const [restructureManualFlatConfirmed, setRestructureManualFlatConfirmed] = React.useState(false);
   const adjustIdempotencyKeyRef = React.useRef<string | null>(null);
@@ -1244,10 +1247,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   });
   const loan = loanQuery.data;
 
-  // 2026-08-27 (Restructure FLAT-interest override, user request): need this loan's own
-  // interestCalculationMethod to know whether the Restructure dialog should show the manual
-  // interest-entry path instead of the normal computed schedule preview - see
-  // RestructureLoanUseCase's `manualFlatInterestDue` doc comment for why FLAT needs this.
+  // 2026-08-27 (Restructure FLAT-interest choice, user request): need this loan's own
+  // interestCalculationMethod to know whether the Restructure dialog should offer the Declining
+  // Balance / Flat Rate choice at all - see RestructureLoanUseCase's `restructureInterestMethod`
+  // doc comment for why FLAT needs this.
   const loanProductsForRestructureQuery = useQuery({
     queryKey: ['loan-products', 'all', 'loanDetailPageRestructure'],
     queryFn: () => fetchAllPages<LoanProduct>('/loan-products'),
@@ -1630,12 +1633,15 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       return apiClient.post<{ oldLoanAccount: LoanAccount; newLoanAccount: LoanAccount }>(
         `/loan-accounts/${loanId}/restructure`,
         {
-          installmentCount: isFlatInterestLoan ? 1 : Number.parseInt(restructureInstallmentCount, 10),
+          installmentCount:
+            isFlatInterestLoan && restructureInterestMethod === 'FLAT' ? 1 : Number.parseInt(restructureInstallmentCount, 10),
           firstRepaymentDate: restructureFirstRepaymentDate,
           reason: restructureReason.trim() || undefined,
           negotiatedNewPrincipal: restructureNegotiatedPrincipal.trim() || undefined,
           negotiatedInterestRate: restructureNegotiatedRate.trim() || undefined,
-          manualFlatInterestDue: isFlatInterestLoan ? restructureManualFlatInterest.trim() || undefined : undefined,
+          restructureInterestMethod: isFlatInterestLoan ? restructureInterestMethod : undefined,
+          manualFlatInterestDue:
+            isFlatInterestLoan && restructureInterestMethod === 'FLAT' ? restructureManualFlatInterest.trim() || undefined : undefined,
         },
         { 'Idempotency-Key': restructureIdempotencyKeyRef.current },
       );
@@ -1644,6 +1650,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       restructureIdempotencyKeyRef.current = null;
       setRestructureOpen(false);
       setRestructureReason('');
+      setRestructureInterestMethod('DECLINING_BALANCE');
       setRestructureManualFlatInterest('');
       setRestructureManualFlatConfirmed(false);
       void queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
@@ -2251,6 +2258,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   const restructurePreview =
     restructureOpen && restructureFirstRepaymentDate
       ? previewLoanSchedule(restructureEffectivePrincipalNum, restructureEffectiveRateNum, restructureInstallmentCountNum, new Date(restructureFirstRepaymentDate))
+      : null;
+  // 2026-08-27 (user request, FLAT-interest restructure): the Flat Rate manual-entry field starts
+  // pre-filled with what Declining Balance would have computed for a single installment - staff
+  // edits it from there instead of typing from scratch. Always computed at installmentCount=1
+  // regardless of the "New term" field's current value, since a FLAT restructure is always one term.
+  const restructureDecliningBalanceOneInstallmentPreview =
+    restructureOpen && restructureFirstRepaymentDate
+      ? previewLoanSchedule(restructureEffectivePrincipalNum, restructureEffectiveRateNum, 1, new Date(restructureFirstRepaymentDate))
       : null;
   // 2026-07-24 (Loan Adjustment feature): same client-side preview convention as Restructure -
   // principal, rate, and term are all copied verbatim from this loan, only the date changes.
@@ -4606,6 +4621,60 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
           </div>
           <p className="text-xs text-muted-foreground">Product: same as {loan.loanCode}.</p>
 
+          {isFlatInterestLoan && (
+            <div className="space-y-1.5">
+              <Label>Interest calculation for the new (restructured) loan</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label
+                  className={`relative cursor-pointer rounded-md border p-3 text-left transition-colors ${
+                    restructureInterestMethod === 'DECLINING_BALANCE' ? 'border-primary bg-primary/5' : 'border-input'
+                  }`}
+                >
+                  <span className="absolute -top-2 right-2.5 rounded-full bg-success px-1.5 py-0 text-[10px] font-bold text-success-foreground">
+                    RECOMMENDED
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={restructureInterestMethod === 'DECLINING_BALANCE'}
+                      onChange={() => setRestructureInterestMethod('DECLINING_BALANCE')}
+                      disabled={restructureMutation.isPending}
+                    />
+                    <span className="text-sm font-semibold">Declining Balance</span>
+                  </div>
+                  <p className="mt-1 pl-5 text-xs text-muted-foreground">
+                    Computed automatically by the system - a verified formula, same as every other loan product.
+                  </p>
+                </label>
+                <label
+                  className={`relative cursor-pointer rounded-md border p-3 text-left transition-colors ${
+                    restructureInterestMethod === 'FLAT' ? 'border-primary bg-primary/5' : 'border-input'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={restructureInterestMethod === 'FLAT'}
+                      onChange={() => {
+                        setRestructureInterestMethod('FLAT');
+                        if (!restructureManualFlatInterest && restructureDecliningBalanceOneInstallmentPreview) {
+                          setRestructureManualFlatInterest(
+                            restructureDecliningBalanceOneInstallmentPreview.schedule[0]!.interestPortion.toFixed(2),
+                          );
+                        }
+                      }}
+                      disabled={restructureMutation.isPending}
+                    />
+                    <span className="text-sm font-semibold">Flat Rate</span>
+                  </div>
+                  <p className="mt-1 pl-5 text-xs text-muted-foreground">
+                    Keeps the same type this product used before - you enter the interest yourself, no verified formula in the system.
+                  </p>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="restructure-installment-count">New term (installments)</Label>
@@ -4614,11 +4683,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 type="number"
                 min="1"
                 step="1"
-                value={isFlatInterestLoan ? '1' : restructureInstallmentCount}
+                value={isFlatInterestLoan && restructureInterestMethod === 'FLAT' ? '1' : restructureInstallmentCount}
                 onChange={(e) => setRestructureInstallmentCount(e.target.value)}
-                disabled={restructureMutation.isPending || isFlatInterestLoan}
+                disabled={restructureMutation.isPending || (isFlatInterestLoan && restructureInterestMethod === 'FLAT')}
               />
-              {isFlatInterestLoan && (
+              {isFlatInterestLoan && restructureInterestMethod === 'FLAT' && (
                 <p className="text-xs text-muted-foreground">FLAT-interest restructures are always a single installment.</p>
               )}
             </div>
@@ -4645,48 +4714,60 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             />
           </div>
 
-          {isFlatInterestLoan ? (
+          {isFlatInterestLoan && restructureInterestMethod === 'FLAT' ? (
             <div>
-              <p className="mb-2 text-sm font-medium">Manual schedule (FLAT interest)</p>
-              <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning-foreground">
+              <p className="mb-2 text-sm font-medium">Manual schedule (Flat Rate)</p>
+              <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs text-warning">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
-                  <strong>FLAT interest</strong> has no verified formula in this system (CALCULATION_ENGINE_SPEC.md §4) - it is not
-                  computed automatically. Enter this single installment's interest amount yourself.
+                  The system has no verified formula for Flat Rate (CALCULATION_ENGINE_SPEC.md §4). Pre-filled with what Declining
+                  Balance would compute - edit if it should be different.
                 </span>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                    <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
-                    <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>1</TableCell>
-                    <TableCell>{restructureFirstRepaymentDate ? formatDate(restructureFirstRepaymentDate) : '-'}</TableCell>
-                    <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="ml-auto h-8 w-32 text-right"
-                        value={restructureManualFlatInterest}
-                        onChange={(e) => setRestructureManualFlatInterest(e.target.value)}
-                        disabled={restructureMutation.isPending}
-                      />
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto rounded-md border">
+                <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
+                  <TableHeader>
+                    <TableRow>
+                      <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                      <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                      <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>1</TableCell>
+                      <TableCell>{restructureFirstRepaymentDate ? formatDate(restructureFirstRepaymentDate) : '-'}</TableCell>
+                      <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="ml-auto h-7 w-28 text-right text-xs"
+                          value={restructureManualFlatInterest}
+                          onChange={(e) => setRestructureManualFlatInterest(e.target.value)}
+                          disabled={restructureMutation.isPending}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                  <tfoot className="bg-background">
+                    <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                      <TableCell colSpan={2}>Total</TableCell>
+                      <TableCell className="text-right">{formatPeso(restructureEffectivePrincipalNum)}</TableCell>
+                      <TableCell className="text-right">{formatPeso(Number(restructureManualFlatInterest) || 0)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatPeso(restructureEffectivePrincipalNum + (Number(restructureManualFlatInterest) || 0))}
+                      </TableCell>
+                    </TableRow>
+                  </tfoot>
+                </Table>
+              </div>
               <label className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-2.5 text-xs">
                 <input
                   type="checkbox"
@@ -4696,8 +4777,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   disabled={restructureMutation.isPending}
                 />
                 <span>
-                  <strong>Kumpirmado ko na ako mismo ang naglagay ng tamang interest sa itaas</strong> - hindi ito kinalkula ng system
-                  dahil walang verified na FLAT formula. Ako ang mananagot sa katumpakan nito.
+                  <strong>I confirm the interest amount above is mine to enter/edit</strong> - it was not calculated by the system. I am
+                  responsible for its accuracy.
                 </span>
               </label>
             </div>
@@ -4712,30 +4793,47 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                     Preview only - final schedule is generated by the server on submit. Monthly payment:{' '}
                     <span className="font-semibold text-foreground">{formatPeso(restructurePreview.monthlyPayment)}</span>
                   </p>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableCell className="font-medium text-muted-foreground">#</TableCell>
-                        <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
-                        <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {restructurePreview.schedule.map((entry) => (
-                        <TableRow key={entry.installmentNumber}>
-                          <TableCell>{entry.installmentNumber}</TableCell>
-                          <TableCell>{formatDate(entry.dueDate)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
-                          <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
-                          <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table className="text-xs [&_td]:whitespace-nowrap [&_td]:px-2 [&_td]:py-1.5">
+                      <TableHeader>
+                        <TableRow>
+                          <TableCell className="font-medium text-muted-foreground">#</TableCell>
+                          <TableCell className="font-medium text-muted-foreground">Due Date</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Principal</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Interest</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Payment</TableCell>
+                          <TableCell className="text-right font-medium text-muted-foreground">Balance</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {restructurePreview.schedule.map((entry) => (
+                          <TableRow key={entry.installmentNumber}>
+                            <TableCell>{entry.installmentNumber}</TableCell>
+                            <TableCell>{formatDate(entry.dueDate)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(entry.principalPortion)}</TableCell>
+                            <TableCell className="text-right">{formatPeso(entry.interestPortion)}</TableCell>
+                            <TableCell className="text-right font-semibold">{formatPeso(entry.payment)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatPeso(entry.endingPrincipal)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                      <tfoot className="bg-background">
+                        <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                          <TableCell colSpan={2}>Total ({restructurePreview.schedule.length} installment{restructurePreview.schedule.length === 1 ? '' : 's'})</TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.principalPortion, 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.interestPortion, 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatPeso(restructurePreview.schedule.reduce((sum, e) => sum + e.payment, 0))}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </tfoot>
+                    </Table>
+                  </div>
                 </>
               )}
             </div>
@@ -4755,12 +4853,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               onClick={() => restructureMutation.mutate()}
               disabled={
                 restructureMutation.isPending ||
-                (!isFlatInterestLoan && (!restructureInstallmentCount.trim() || Number.parseInt(restructureInstallmentCount, 10) <= 0)) ||
+                (!(isFlatInterestLoan && restructureInterestMethod === 'FLAT') &&
+                  (!restructureInstallmentCount.trim() || Number.parseInt(restructureInstallmentCount, 10) <= 0)) ||
                 !restructureFirstRepaymentDate ||
                 (restructureNegotiatedPrincipalNum !== null && restructureNegotiatedPrincipalNum <= 0) ||
                 (restructureNegotiatedRateNum !== null && restructureNegotiatedRateNum < 0) ||
                 (restructureReasonRequired && !restructureReason.trim()) ||
                 (isFlatInterestLoan &&
+                  restructureInterestMethod === 'FLAT' &&
                   (!restructureManualFlatInterest.trim() || Number(restructureManualFlatInterest) < 0 || !restructureManualFlatConfirmed))
               }
             >

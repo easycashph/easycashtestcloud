@@ -8,7 +8,6 @@ import {
   Calendar,
   Clock,
   Copy,
-  DoorOpen,
   FilePlus2,
   Flag,
   Heart,
@@ -94,7 +93,10 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     lastName: borrower.lastName,
     middleName: borrower.middleName ?? '',
     gender: borrower.gender ?? '',
-    birthDate: borrower.birthDate ?? '',
+    // `borrower.birthDate` is a full ISO datetime string ("...T00:00:00.000Z") from the API, but
+    // `<input type="date">` only accepts an exact "YYYY-MM-DD" value - anything else renders blank
+    // even though real data exists underneath.
+    birthDate: borrower.birthDate ? borrower.birthDate.slice(0, 10) : '',
     placeOfBirth: borrower.placeOfBirth ?? '',
     nationality: borrower.nationality ?? '',
     mobilePhone1: borrower.mobilePhone1 ?? '',
@@ -382,7 +384,7 @@ function RealEditClientDialog({
             <PhoneInput
               value={draft.mobilePhone1}
               onChange={(e) => setDraft({ ...draft, mobilePhone1: e.target.value })}
-              placeholder="09XX XXX XXXX"
+              placeholder="917 XXX XXXX"
               disabled={!unlocked.mobilePhone1}
             />
           </div>
@@ -987,7 +989,7 @@ function CoBorrowersCard({ borrowerId }: { borrowerId: string }) {
               <PhoneInput
                 value={draft.phoneNumber}
                 onChange={(e) => setDraft((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                placeholder="09XX XXX XXXX"
+                placeholder="917 XXX XXXX"
               />
             </div>
             <div className="space-y-1.5">
@@ -1380,6 +1382,17 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
             <div className="col-span-2 flex items-center gap-1.5">
               <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {addressLine}
             </div>
+            {(borrower.addresses[0]?.lengthOfStayMonths != null || borrower.homeOwnership || borrower.addresses[0]?.ownershipStatus) && (
+              <div className="col-span-2 -mt-1 flex items-center gap-1.5 pl-5 text-muted-foreground">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                {borrower.addresses[0]?.lengthOfStayMonths != null
+                  ? `At this address for ${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12)} yr${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12) === 1 ? '' : 's'} ${borrower.addresses[0].lengthOfStayMonths % 12} mo`
+                  : 'At this address'}
+                {(borrower.homeOwnership || borrower.addresses[0]?.ownershipStatus) && (
+                  <> · {borrower.homeOwnership || borrower.addresses[0]?.ownershipStatus}</>
+                )}
+              </div>
+            )}
             <div className="col-span-2 flex items-center gap-1.5">
               <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               {borrower.incomeDetail?.position ?? '-'}, {borrower.incomeDetail?.employerName ?? '-'}
@@ -1408,18 +1421,6 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
               <VenusAndMars className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="text-muted-foreground">Gender: </span>
               {toProperCase(borrower.gender) || '-'}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <DoorOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="text-muted-foreground">Home ownership: </span>
-              {borrower.homeOwnership || borrower.addresses[0]?.ownershipStatus || '-'}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="text-muted-foreground">Length of stay: </span>
-              {borrower.addresses[0]?.lengthOfStayMonths != null
-                ? `${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12)} yr${Math.floor(borrower.addresses[0].lengthOfStayMonths / 12) === 1 ? '' : 's'} ${borrower.addresses[0].lengthOfStayMonths % 12} mo`
-                : '-'}
             </div>
             <div className="flex items-center gap-1.5">
               <Flag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

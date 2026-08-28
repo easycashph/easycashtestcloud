@@ -214,7 +214,7 @@ function UserProfileTab() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="profile-contact">Contact Number</Label>
-              <PhoneInput id="profile-contact" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+              <PhoneInput id="profile-contact" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="917 XXX XXXX" />
             </div>
             <div className="space-y-1.5">
               <Label>Address</Label>

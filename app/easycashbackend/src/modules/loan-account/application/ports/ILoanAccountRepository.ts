@@ -22,6 +22,9 @@ export interface FindManyLoanAccountsOptions {
    * `LoanProductVersion` ids (a product can have several versions over time) and filters by that
    * set - avoids needing a product-name join here. */
   loanProductVersionIds?: string[];
+  /** 2026-08-27 (user request: surface old legacy-migrated loans): sorts by createdAt. Defaults to
+   * 'desc' (newest first, the pre-existing behavior) when omitted. */
+  sortDirection?: 'asc' | 'desc';
 }
 
 export interface ILoanAccountRepository {

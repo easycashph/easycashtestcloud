@@ -331,7 +331,7 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     const rows = await client.loanAccount.findMany({
       where,
       include: LOAN_ACCOUNT_INCLUDE,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: options.sortDirection ?? 'desc' },
       take: options.limit,
       ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
     });

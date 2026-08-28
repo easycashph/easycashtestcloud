@@ -446,7 +446,7 @@ function CreateClientProfileDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Contact Number</Label>
-            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="09XX XXX XXXX" />
+            <PhoneInput value={mobilePhone1} onChange={(e) => setMobilePhone1(e.target.value)} placeholder="917 XXX XXXX" />
           </div>
           <div className="space-y-1.5">
             <Label>Email</Label>
@@ -569,7 +569,7 @@ function CreateClientProfileDialog({
                 </div>
                 <div className="space-y-1.5">
                   <Label>Co-Borrower Phone Number</Label>
-                  <PhoneInput value={coBorrowerPhoneNumber} onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)} placeholder="09XX XXX XXXX" />
+                  <PhoneInput value={coBorrowerPhoneNumber} onChange={(e) => setCoBorrowerPhoneNumber(e.target.value)} placeholder="917 XXX XXXX" />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Co-Borrower Email</Label>
