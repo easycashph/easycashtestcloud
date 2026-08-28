@@ -2593,3 +2593,61 @@ involved. Type-checked clean, rebuilt `lmsfrontend` only, verified fresh and run
 - 1,167 of 4,607 migrated borrowers now have `facebookLink` populated from the legacy source (3,440
   genuinely never had one on file).
 - No new gaps or bugs surfaced this pass - routine sync work only.
+
+## §54 — 2026-08-28: "Remember this device" explained, new "Require 2FA for all users" admin feature built
+
+**"Remember this device for 30 days" explained**: user asked whether this login-screen checkbox
+actually does anything. Traced it end to end: real backend logic (`VerifyLoginOtpUseCase.ts`,
+`TRUSTED_DEVICE_TTL_MS = 30 days`), but only reachable through the 2FA/OTP step -
+`LoginUseCase.ts`'s plain `onLogin()` path never even accepts a `rememberDevice` value. So for an
+account WITHOUT 2FA enabled, the checkbox currently does nothing (no OTP step is ever reached to
+consume it) - working as designed, just narrower in scope than the label alone suggests.
+
+**Follow-up question**: whether an admin could bulk-enable 2FA for every user directly. Confirmed
+no - `/users/me/two-factor/setup` and `/confirm` are self-service only (userId always comes from
+`req.authUser.sub`), deliberately un-force-able (`RequestTwoFactorSetupUseCase`'s own doc comment:
+never flips `twoFactorEnabled` without proof the OTP was actually received, so a typo'd phone/email
+can never lock an account into a broken 2FA state).
+
+**Built instead, with user approval after a short design discussion** (three AskUserQuestion
+choices: global toggle for all users, hard-block login until setup, either channel user's choice):
+a new **"Require 2FA for all users"** MIS-only admin feature. Design deliberately does NOT touch
+token issuance or invent a new pre-authentication flow (rejected as unnecessary attack surface -
+would need new unauthenticated challenge-purpose endpoints an attacker could otherwise abuse to
+OTP-bomb arbitrary accounts) - instead:
+
+- New `SecuritySettings` singleton table/module (`app/easycashbackend/src/modules/security-settings/`),
+  mirroring `ReminderSettings`'s exact shape/pattern but kept as its own table - `ReminderSettings`'s
+  own doc comments already explicitly declare staff 2FA out of scope for that table. New permission
+  `two_factor_enforcement.manage`, granted to MIS by default (ran `seed.ts` against the live DB per
+  the established gotcha - a migration alone doesn't grant new permissions to existing role rows).
+- `LoginUseCase`, `VerifyLoginOtpUseCase`, and `GetCurrentUserUseCase` (i.e. every path that returns
+  an `AuthenticatedUserView`) now compute `twoFactorSetupRequired = enforceTwoFactorForAllUsers &&
+  !user.twoFactorEnabled`. Computing it in `GetCurrentUserUseCase` (backing `/auth/me`, re-fetched on
+  every app load/refetch) is what makes this catch ALREADY-signed-in sessions too, not just fresh
+  logins - turning enforcement on doesn't require waiting for someone's session to expire first.
+- Frontend: `RoleProvider` (`roleContext.tsx`) renders a new `ForceTwoFactorSetupModal` component
+  INSTEAD OF the whole app whenever `twoFactorSetupRequired` is true - a real session/token already
+  exists at this point (nothing about token issuance changed), so the modal just reuses the exact
+  same self-service `/users/me/two-factor/setup`/`/confirm` endpoints Settings > Security already
+  uses (channel picker -> OTP -> confirm). Non-dismissible except a "log out" escape hatch (never
+  traps an account with literally no way out). New System > Security tab (`SystemPage.tsx`,
+  `TwoFactorEnforcementCard`) is where MIS flips the global switch - mirrors `ReminderSettingsCard`'s
+  structure exactly.
+- Explored `prisma migrate dev --create-only` first to scaffold the migration but it hung
+  (interactive/shadow-DB check) - killed it (`TaskStop`) and hand-wrote `migration.sql` instead,
+  matching this repo's established non-interactive `migrate deploy` workflow. The killed command left
+  behind one stray, harmless EMPTY migration folder (`20260828075720_..._enforce_2fa`) that Prisma had
+  already recorded as applied by the time it was stopped - kept as-is (no-op, safe) rather than risk a
+  migration-history mismatch by deleting an already-applied migration from disk.
+- Type-checked clean on both sides, rebuilt `easycashbackend`/`lmsfrontend`, committed and pushed
+  (`b299a39`).
+
+### Current state / follow-ups
+
+- MIS can now turn on "Require 2FA for all users" from System > Security - currently OFF by default,
+  not yet turned on live (a deliberate, real policy decision the user hasn't made yet, separate from
+  this feature simply existing and being ready).
+- Not yet manually tested end-to-end in a browser (enable the setting, confirm a non-2FA account gets
+  blocked into the modal, complete setup, confirm access restored) - recommended before relying on
+  this in production, especially since it's new, security-sensitive code.
