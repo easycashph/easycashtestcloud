@@ -2570,3 +2570,26 @@ notes/history section for any loan with Mambu-era history.
   `backfill-mambu-loan-attachments.ts`, `backfill-201files-loan-attachments.ts`) plus
   `migrate-mambu-notes.ts` must all be manually re-run after any future full migration reset on this
   machine - none are wired into the `.bat` files (deliberately, per each script's own doc comment).
+
+## §53 — 2026-08-28: Facebook links backfilled, routine syncs (LoginPage/ClientProfilePage updates)
+
+Verified `https://easycash-lms.pages.dev/` loads correctly (login page rendering fine, no errors) -
+a quick health check, no changes made.
+
+`git pull` brought in a new migration (`20260828021859_add_loan_application_facebook_link`) and a new
+permanent script, `backfill-legacy-borrower-facebook-links.ts` (pulls `client_accounts.facebook_link`
+from the SDevTech dump into `Borrower.facebookLink` for already-migrated clients; safe to re-run,
+only fills a currently-NULL field, never overwrites staff-entered data). Applied the standard
+routine: `prisma migrate deploy` + `generate`, dry run (1,167 of 4,607 addressless-of-Facebook-link
+borrowers eligible), type-checked, applied (`--apply`: 1,167 updated), rebuilt
+`easycashbackend`/`lmsfrontend`, verified healthy.
+
+A second `git pull` right after brought in frontend-only changes (`LoginPage.tsx` redesign,
+`ClientProfilePage.tsx` additions, `tailwind.config.ts`, `index.html`) - no backend/migration
+involved. Type-checked clean, rebuilt `lmsfrontend` only, verified fresh and running.
+
+### Current state / follow-ups
+
+- 1,167 of 4,607 migrated borrowers now have `facebookLink` populated from the legacy source (3,440
+  genuinely never had one on file).
+- No new gaps or bugs surfaced this pass - routine sync work only.
