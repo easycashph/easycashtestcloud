@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { AlertCircle, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, CheckCircle2, Moon, ShieldCheck, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
+import { useTheme } from '@/components/theme-provider';
 import { COMPANY_INFO } from '@/lib/staticConfig';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { LoginResponse } from '@/lib/authTypes';
@@ -136,6 +137,7 @@ function BrandPanel() {
  * machine, handlers, or endpoints below - see `Screen` and each `handle*` function, all unchanged.
  */
 export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
+  const { theme, toggleTheme } = useTheme();
   const [screen, setScreen] = React.useState<Screen>('login');
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -244,7 +246,15 @@ export function LoginPage({ onLogin, onVerifyOtp }: LoginPageProps) {
     <div className="grid min-h-screen bg-background lg:grid-cols-[1.05fr_1fr]">
       <BrandPanel />
 
-      <div className="flex items-center justify-center px-5 py-10 sm:px-8">
+      <div className="relative flex items-center justify-center px-5 py-10 sm:px-8">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
         <div className="w-full max-w-[380px]">
           {/* Compact brand header, shown only when the split panel is hidden (below `lg`). */}
           <div className="mb-8 flex flex-col items-center text-center lg:hidden">
