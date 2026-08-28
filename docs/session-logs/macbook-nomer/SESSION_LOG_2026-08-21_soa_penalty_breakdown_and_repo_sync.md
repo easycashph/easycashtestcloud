@@ -809,13 +809,84 @@ http://192.168.1.25:5199/` returns 200 and the built JS bundle now bakes in
 `` `http://${window.location.hostname}:4000/api/v1` `` instead of the old hardcoded localhost
 string.
 
+## 22. Restored the 9 real staff accounts (+ role assignments) from a Postgres dump into this Mac's local database
+
+User pointed at `legacy/mongodb/easycash-database-2026-08-28.dump` and asked whether it contained
+user accounts. Inspected it first rather than assuming - despite the folder name and `.dump`
+extension suggesting a MongoDB export, `file` identified it as a **PostgreSQL custom-format dump**
+(`pg_dump -Fc`), i.e. a snapshot of the LMS's own Postgres database, not legacy Mongo/SDevTech data.
+Confirmed via a throwaway scratch database (`pg_restore` isn't on the host, so this ran inside the
+`easycash-postgres-1` container) that it held real data: 9 rows in `users` (staff LMS accounts -
+Nomer Perez, Rosan Cinco, Kyla Lozabia, Liezel Pentecostes, Alfred Ogana, Irene Elicano, Lyka
+Zipagan, Howell Hay, Jomer Biason), 6 rows in `portal_accounts`, and the same 6 `roles` this Mac
+already had (MIS, Loan Operation Manager, CRM, Finance, Accounting, Collection Officer).
+
+User asked to bring these into this Mac's actual running database - directly relevant, since **this
+Mac's local `users` table had exactly one row (Nomer's own account) all session**, which is the
+concrete reason every feature since §14 could only be backend-verified, never click-tested in a
+real logged-in browser session.
+
+Confirmed scope with the user before touching the live database (per the "confirm before
+destructive/hard-to-reverse actions" rule - this is the machine's actual working dev database, not
+a throwaway):
+- **Users table only** (not `portal_accounts`, `branches`, or anything else) - just the 9 staff
+  accounts and their role assignments (`user_roles`), since a staff account with no role assigned
+  would be functionally useless.
+- **Overwrite on email conflict** - if a row already existed with the same email (true for Nomer's
+  own account), replace its fields with the dump's version rather than skip it.
+
+Implementation - id/name mapping had to happen by hand rather than a blind table copy, because the
+dump and this Mac's live schema have diverged (different `branches`/`role_classes`/`roles` primary
+keys for the same real-world entities, and a `companies` table that existed in the dump's era but
+has since been dropped from the schema entirely):
+1. Restored the dump into a throwaway scratch database (`dump_check2`, full schema + data, dropped
+   afterward) to read from cleanly.
+2. Manually matched the dump's `branches`/`role_classes`/`roles` rows to this Mac's live rows **by
+   name**, not by id (only one branch, "Head Office", exists in both - so every user maps to it).
+   One gap found: dump has an "Admin" `role_classes` row (used by `howell@easycash.ph`) that no
+   longer exists under that name in the live schema - left `roleClassId` `NULL` for that one user
+   rather than guessing a substitute; he still gets his `MIS` role via `user_roles`, just no
+   specific role-class label.
+3. Generated `INSERT ... ON CONFLICT (email) DO UPDATE` SQL for all 9 users (SQL-generating-SQL via
+   `quote_literal`/`CASE` in a query against the scratch db), and `INSERT ... ON CONFLICT DO
+   NOTHING` for their `user_roles` rows, using the hand-verified id mappings from step 2. Ran both
+   inside one transaction (`BEGIN`/`COMMIT`) against the live `easycash` database.
+4. Verified Nomer's own account kept its existing `id` (`07d3620c-e123-441f-ba95-4fed9f6b6939`) -
+   critical, since this id is already referenced by test data created earlier this session (e.g.
+   §19's e-signature verification script) - the upsert matched by email and only updated fields,
+   never touched the row's `id`.
+
+Result (`email | status | role | role_class`):
+
+| Email | Status | Role | Role class |
+|---|---|---|---|
+| nomer.perez@easycash.ph | ACTIVE | MIS | MIS Manager |
+| jomer.biason@easycash.ph | INACTIVE | MIS | MIS Assistant |
+| rosan.cinco@easycash.ph | ACTIVE | Collection Officer | Accounts Recovery Officer |
+| kyla.lozabia@easycash.ph | ACTIVE | Accounting | Accounting |
+| liezel.pentecostes@easycash.ph | ACTIVE | Loan Operation Manager | LOM |
+| alfred.ogana@easycash.ph | ACTIVE | Collection Officer | Field Collector |
+| irene.elicano@easycash.ph | INACTIVE | Collection Officer | Collection Manager |
+| lyka.zipagan@easycash.ph | ACTIVE | Accounting | Accounting |
+| howell@easycash.ph | ACTIVE | MIS | *(none - see the "Admin" gap above)* |
+
+Password hashes were copied as-is from the dump (bcrypt, untouched) - these are each person's real
+production password, not reset or regenerated. Cleaned up: dropped the scratch database, removed
+the copied dump file and generated SQL from both the container and host `/tmp`.
+
+**Not yet done**: no actual login was attempted with any of these restored accounts this session
+(would require knowing each person's real password) - next session should try logging in as one of
+the non-Nomer accounts (e.g. `rosan.cinco@easycash.ph`, a Collection Officer, or
+`liezel.pentecostes@easycash.ph`, an LOM) to finally click-test the features flagged since §14 as
+"backend-verified only" under a role other than MIS.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-21 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-22 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§21) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§22) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
@@ -831,16 +902,18 @@ here - see that section's own cross-link. Everything else below (§14-§21) is n
   Server PC's is), has every pending migration applied, has a complete Roles & Permissions seed
   (now including the 13 new per-report codes from §18), and its `.env`/LAN IP config is current as
   of this session's end.
-- **Everything added from §14 onward is backend-verified only, never click-tested in a real
-  browser** - this Mac had no staff login credentials available anywhere in this session. Each of
+- **Everything added from §14 through §21 was backend-verified only, never click-tested in a real
+  browser** - this Mac had no staff login credentials available for most of this session. Each of
   those sections used one-off scripts (created, run, deleted) to exercise the real use case/
   repository code directly against the local dev database instead, which caught one real bug
-  (§15's peso-sign PDF-encoding crash) before it would have reached a user. Next session with
-  actual LMS credentials should click through: the "Recorded by" column (§14), Print Application +
-  its Attachments auto-attach (§15/§16), the Portal Accounts report (§17), the new per-report
-  Roles & Permissions toggles (§18), the sidebar logo swap in both light and dark mode (§20), and
-  the Portal's new install-as-app prompt on a real phone (§21 - blocked from verifying in this
-  Mac's own Browser-pane tool, see that section's caveat).
+  (§15's peso-sign PDF-encoding crash) before it would have reached a user. **§22 (end of session)
+  restored 9 real staff accounts into this Mac's local database, so this limitation no longer
+  applies going forward** - next session should log in as one of them (passwords are each person's
+  real production password, not known/reset here) and click through: the "Recorded by" column
+  (§14), Print Application + its Attachments auto-attach (§15/§16), the Portal Accounts report
+  (§17), the new per-report Roles & Permissions toggles (§18), the sidebar logo swap in both light
+  and dark mode (§20), and the Portal's new install-as-app prompt on a real phone (§21 - blocked
+  from verifying in this Mac's own Browser-pane tool, see that section's caveat).
 
 ## Known follow-up work
 
