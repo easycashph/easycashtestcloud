@@ -76,6 +76,9 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // 2026-08-28 (Login page redesign): loaded via index.html's Google Fonts <link> - used
+        // only on the sign-in screen (LoginPage.tsx) for its headings, not the app's default font.
+        display: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
       },
       keyframes: {
         'accordion-down': { from: { height: '0' }, to: { height: 'var(--radix-accordion-content-height)' } },
