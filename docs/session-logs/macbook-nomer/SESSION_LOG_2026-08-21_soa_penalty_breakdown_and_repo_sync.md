@@ -880,13 +880,42 @@ the non-Nomer accounts (e.g. `rosan.cinco@easycash.ph`, a Collection Officer, or
 `liezel.pentecostes@easycash.ph`, an LOM) to finally click-test the features flagged since §14 as
 "backend-verified only" under a role other than MIS.
 
+## 23. Added the missing Mac counterpart of "Run Full Legacy Migration (Office Server PC).bat" for this machine
+
+User asked for an equivalent of `scripts/Run Full Legacy Migration (Office Server PC).bat` for this
+Mac. Checked first rather than assuming one didn't exist: `legacy/Run Full Legacy Migration.command`
+already existed as a generic Mac `.command`, but it was **stale** - written before the
+`app/backend` -> `app/easycashbackend` folder rename (still `cd`s into the old path) and missing
+five backup/restore-native-* steps plus the optional Mambu recovery step that the current Windows
+`.bat` scripts have (all added 2026-08-19 through 2026-08-27, after that `.command` file was last
+touched). Confirmed the two Windows `.bat` siblings (Office Server PC / Nomer Laptop) are byte-for-
+byte identical aside from a header comment - "nothing... is actually machine-specific, this is just
+a per-machine named copy so it's obvious at a glance which machine a session log entry was about"
+(per the Nomer Laptop version's own comment) - so the right fix was a fresh, up-to-date, per-machine
+`.command` file for this Mac, not patching the old shared one (which stays in `legacy/` as-is,
+unmaintained, since nothing currently points at it as the canonical version).
+
+Created `scripts/Run Full Legacy Migration (Macbook-Nomer).command` - ported the full current
+18-step sequence + all 5 `backup-native-*.ts`/`restore-native-*.ts` steps (user accounts, Roles &
+Permissions, native loan applications, other system settings, Portal accounts) + the guarded
+optional Mambu notes/address recovery step from the Windows `.bat`, translated to bash/Mac paths
+(`app/easycashbackend`, not `app/backend`). Verified: `chmod +x`'d, `bash -n` syntax check passed,
+and cross-checked all 31 `.ts` scripts referenced in the file actually exist under
+`app/easycashbackend/scripts/` (they do - no typos/renamed scripts missed in the port).
+
+**Not run this session** - this is a destructive, `prisma migrate reset --force`-based rebuild of
+the entire local database; per the same reasoning documented in the Windows `.bat` header, only run
+it when Nomer actually wants a from-scratch rebuild, not as part of routine dev work. §22's restored
+staff accounts (this same session) would be backed up and automatically restored by this script's
+own `backup-native-users.ts`/`restore-native-users.ts` steps if it's ever run.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-22 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-23 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§22) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§23) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
