@@ -2466,3 +2466,45 @@ yet. User chose not to re-sync for now ("huwag muna") - left as-is, no action ta
   addressless borrowers, 4,607 vs. 4,610 total) - a known, small, currently-accepted gap. Re-running
   the full migration here (once a fresher `legacy/mongodb/*.zip` is available) would close it, but
   the user explicitly deferred this.
+
+## §51 — 2026-08-27: 79 more loan attachments recovered from E:\201_Files (office's own 201-file archive)
+
+User asked to check `E:\201_Files` (this machine's local drive, NOT part of the git repo - the
+office's long-running client-document archive, organized by year 2011-2026 then month, ~75,000
+files) for anything recoverable for loans still missing an attachment after §49's Mambu recovery.
+
+Wrote `backfill-201files-loan-attachments.ts` as a sibling to `backfill-mambu-loan-attachments.ts` -
+identical matching rule (alphabetic-prefixed loan codes only, file attributed to a loan only when
+the code appears in its file's IMMEDIATE parent folder) but scanning a plain filesystem directory
+recursively instead of zip/rar archives. `SOURCE_DIR` deliberately NOT repo-relative (`E:\201_Files`
+is a machine-local path, overridable via `TWO_OH_ONE_FILES_DIR` env var) since this archive is not
+checked into git (huge, real client PII, actively growing) and may not exist at all on another
+machine.
+
+Dry run found 4 loans / 79 files recoverable (`SML-PDC_00030` 16, `SML-REG_00276` 24, `SL-CORP_00115`
+13, `SML-REG_00372` 26) - notably from 2025-2026 folders, i.e. genuinely recent gaps, not Mambu-era
+ones. A looser manual bash substring check had initially suggested a 5th loan (`SML-Self_C2Z8V`), but
+the script's stricter immediate-parent-folder rule correctly excluded it - that loan code appeared
+only in file NAMES inside a `BALDOMAR` folder, not in the folder name itself, so attributing those
+files to it would have been a guess rather than a confirmed match. User approved applying to the live
+database; all 4 loans recovered successfully, verified via `docker exec` attachment counts matching
+exactly.
+
+User asked directly whether this survives a future full migration reset - answered honestly: no, a
+`prisma migrate reset --force` would wipe these rows same as any other Attachment, since none of them
+come from the MongoDB legacy source `migrate-legacy-data.ts` reads. Recovery is cheap to redo though
+(idempotent, permanent script) - documented as a required manual step after any future reset on this
+machine, alongside the two Mambu-sourced backfill scripts from §46-49.
+
+### Current state / follow-ups
+
+- Loan-attachment coverage now **1,202/1,804 (66.6%)**, up from 1,198 after §49.
+- After any future `prisma migrate reset --force` on this machine, three backfill scripts need a
+  manual re-run (none are wired into the `.bat` files, deliberately, per each script's own doc
+  comment): `backfill-mambu-customfield-addresses.ts --apply`,
+  `backfill-mambu-loan-attachments.ts --apply`, `backfill-201files-loan-attachments.ts --apply`.
+- `E:\201_Files` is a much larger archive than what's been fully exploited here - only
+  alphabetic-prefixed loan codes with an exact immediate-parent-folder match were attempted this
+  session. Numeric legacy codes and fuzzier name-based matching were explicitly left unexplored
+  (same conservative-match philosophy as the Mambu recovery) - worth a follow-up pass if the
+  remaining ~600 attachment-less loans' business impact justifies the extra investigation time.
