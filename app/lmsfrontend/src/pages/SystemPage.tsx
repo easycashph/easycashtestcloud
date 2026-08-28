@@ -12,6 +12,7 @@ import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { apiClient, ApiError } from '@/lib/apiClient';
 import type { ReminderSettings } from '@/lib/reminderSettingsApiTypes';
+import type { SecuritySettings } from '@/lib/securitySettingsApiTypes';
 import { cn } from '@/lib/utils';
 import { MemberListPage } from '@/pages/MemberListPage';
 import { LoanProductsPage } from '@/pages/LoanProductsPage';
@@ -29,7 +30,7 @@ import { BulkExportsPage } from '@/pages/BulkExportsPage';
  * channel is in right now is untouched by this - it only blocks further clicks via the UI. */
 const REMINDER_TOGGLES_LOCKED = true;
 
-type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'announcements' | 'activity-logs' | 'exports';
+type SystemTab = 'reminders' | 'members' | 'products' | 'documents' | 'announcements' | 'activity-logs' | 'exports' | 'security';
 const SYSTEM_TABS: SystemTab[] = [
   'reminders',
   'members',
@@ -38,6 +39,7 @@ const SYSTEM_TABS: SystemTab[] = [
   'announcements',
   'activity-logs',
   'exports',
+  'security',
 ];
 
 function formatRelativeTime(dateString: string): string {
@@ -309,6 +311,86 @@ function ReminderSettingsCard() {
 }
 
 /**
+ * System > Security (2026-08-28 user request) - a single MIS-only switch: "Require 2FA for all
+ * users". Turning it on doesn't touch any account directly (never force-flips `twoFactorEnabled`
+ * for anyone) - `RoleProvider` blocks any account without 2FA behind `ForceTwoFactorSetupModal` the
+ * next time it loads or refetches `/auth/me`, and only their own successful OTP confirmation ever
+ * turns their `twoFactorEnabled` on. Mirrors `ReminderSettingsCard`'s own structure exactly.
+ */
+function TwoFactorEnforcementCard() {
+  const { canEnforceTwoFactor, currentAccount } = useRole();
+  const queryClient = useQueryClient();
+  const [error, setError] = React.useState<string | null>(null);
+
+  const settingsQuery = useQuery({
+    queryKey: ['security-settings'],
+    queryFn: () => apiClient.get<SecuritySettings>('/security-settings'),
+    enabled: canEnforceTwoFactor,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (body: { enforceTwoFactorForAllUsers: boolean }) => apiClient.patch<SecuritySettings>('/security-settings', body),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['security-settings'], settings);
+      setError(null);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not update security settings.'),
+  });
+
+  if (!canEnforceTwoFactor) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+          <Lock className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">Restricted to MIS accounts</p>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{currentAccount.name}</span> ({currentAccount.role}).
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const settings = settingsQuery.data;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Two-Factor Authentication</CardTitle>
+        <CardDescription>Control platform-wide security requirements for every staff account.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-1 divide-y rounded-md border">
+        {error && (
+          <div className="flex items-center gap-2 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 p-3">
+          <div>
+            <p className="text-sm font-medium">Require 2FA for all users</p>
+            <p className="text-xs text-muted-foreground">
+              Any account without two-factor authentication enabled will be required to set it up (their own choice of email or SMS)
+              before they can use the LMS again.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant={settings?.enforceTwoFactorForAllUsers ? 'success' : 'warning'}>
+              {settings?.enforceTwoFactorForAllUsers ? 'On' : 'Off'}
+            </Badge>
+            <Switch
+              checked={settings?.enforceTwoFactorForAllUsers ?? false}
+              disabled={settingsQuery.isLoading || updateMutation.isPending}
+              onCheckedChange={(checked) => updateMutation.mutate({ enforceTwoFactorForAllUsers: checked })}
+              aria-label="Toggle require 2FA for all users"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Administration > System (2026-07-20 user request): a single Administration hub page, folding in
  * what used to be three separate top-level Administration entries - User Accounts, Loan Products,
  * and Activity Logs - as tabs alongside the Payment reminders switches (moved here earlier the same
@@ -357,7 +439,7 @@ export function SystemPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SystemTab)}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-8">
           <TabsTrigger value="reminders">Messaging & Alerts</TabsTrigger>
           <TabsTrigger value="members">User Accounts</TabsTrigger>
           <TabsTrigger value="products">Loan Products</TabsTrigger>
@@ -365,6 +447,7 @@ export function SystemPage() {
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="activity-logs">Activity Logs</TabsTrigger>
           <TabsTrigger value="exports">Exports</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -380,6 +463,7 @@ export function SystemPage() {
       {tab === 'announcements' && <AnnouncementsTab />}
       {tab === 'activity-logs' && <ActivityLogPage />}
       {tab === 'exports' && <BulkExportsPage embedded />}
+      {tab === 'security' && <TwoFactorEnforcementCard />}
     </div>
   );
 }

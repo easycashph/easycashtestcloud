@@ -2,10 +2,12 @@ import type { IUserRepository } from '../ports/IUserRepository';
 import type { IPermissionCodesRepository } from '../ports/IPermissionCodesRepository';
 import type { AuthenticatedUserView, GetCurrentUserInput } from '../dtos/AuthDtos';
 import { UserNotFoundError, UserInactiveError } from '../errors/AuthErrors';
+import type { ISecuritySettingsRepository } from '@modules/security-settings/application/ports/ISecuritySettingsRepository';
 
 export interface GetCurrentUserUseCaseDeps {
   userRepository: IUserRepository;
   permissionCodesRepository: IPermissionCodesRepository;
+  securitySettingsRepository: ISecuritySettingsRepository;
 }
 
 /**
@@ -27,6 +29,7 @@ export class GetCurrentUserUseCase {
     }
 
     const permissionCodes = await this.deps.permissionCodesRepository.getGrantedPermissionCodes(user.roles);
+    const securitySettings = await this.deps.securitySettingsRepository.get();
 
     return {
       id: user.id,
@@ -41,6 +44,7 @@ export class GetCurrentUserUseCase {
       birthday: user.birthday ? user.birthday.toISOString() : null,
       twoFactorEnabled: user.twoFactorEnabled,
       twoFactorChannel: user.twoFactorChannel,
+      twoFactorSetupRequired: securitySettings.enforceTwoFactorForAllUsers && !user.twoFactorEnabled,
       permissionCodes,
     };
   }

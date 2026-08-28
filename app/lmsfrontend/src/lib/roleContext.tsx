@@ -5,6 +5,7 @@ import { useTheme } from '@/components/theme-provider';
 import { useDashboardLayout } from '@/components/dashboard-layout-provider';
 import type { LmsRole } from './staticConfig';
 import { LoginPage } from '@/pages/LoginPage';
+import { ForceTwoFactorSetupModal } from '@/components/ForceTwoFactorSetupModal';
 
 /** Authenticated account shape every existing page already consumes (`currentAccount.id/name/role`) - unchanged from the mock era, now sourced from the real backend. */
 export interface AuthenticatedAccount {
@@ -75,6 +76,7 @@ export type PermissionCode =
   | 'user.manage'
   | 'audit_log.read'
   | 'reminder_settings.manage'
+  | 'two_factor_enforcement.manage'
   | 'profile_activity_log.manage'
   | 'chat_canned_response.manage'
   | 'bulk_export.use';
@@ -112,6 +114,8 @@ interface RoleContextValue {
   canApproveLoanApplication: boolean;
   /** MIS-only (2026-07-18 user request) - the Settings page's SMS/Email reminder master switches. */
   canManageReminderSettings: boolean;
+  /** MIS-only (2026-08-28 user request) - the System > Security "Require 2FA for all users" toggle. */
+  canEnforceTwoFactor: boolean;
   /** Generate a loan document (e.g. Loan Agreement, Disclosure Statement) - previously unrestricted
    * beyond authentication (ADR-051 §5), configurable per role since 2026-08-06. */
   canGenerateDocuments: boolean;
@@ -312,6 +316,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return <LoginPage onLogin={login} onVerifyOtp={verifyLoginOtp} />;
   }
 
+  // "Require 2FA for all users" (2026-08-28) - a real session already exists at this point
+  // (token issuance is unaffected by this setting), but nothing under AppLayout is reachable
+  // until 2FA setup completes. Re-evaluated on every `/auth/me` refetch (see `refreshCurrentUser`
+  // below, called on setup completion), so turning enforcement on catches already-signed-in
+  // sessions too, not just fresh logins.
+  if (user.twoFactorSetupRequired) {
+    return <ForceTwoFactorSetupModal onCompleted={refreshCurrentUser} userEmail={user.email} onLogout={logout} />;
+  }
+
   const currentAccount = toAccount(user);
   const grantedCodes = new Set(user.permissionCodes);
   const hasPermission = (code: PermissionCode) => grantedCodes.has(code);
@@ -330,6 +343,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     canReviewLoanApplication: hasPermission('loan_application.manage'),
     canApproveLoanApplication: hasPermission('loan_application.final_approve'),
     canManageReminderSettings: hasPermission('reminder_settings.manage'),
+    canEnforceTwoFactor: hasPermission('two_factor_enforcement.manage'),
     canGenerateDocuments: hasPermission('document.generate'),
     canGenerateStatementOfAccount: hasPermission('statement_of_account.generate'),
     canManageESignature: hasPermission('esignature.manage'),

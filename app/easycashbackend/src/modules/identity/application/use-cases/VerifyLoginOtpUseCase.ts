@@ -6,6 +6,7 @@ import type { ITwoFactorChallengeRepository } from '../ports/ITwoFactorChallenge
 import type { ITrustedDeviceRepository } from '../ports/ITrustedDeviceRepository';
 import type { LoginOutput, VerifyLoginOtpInput } from '../dtos/AuthDtos';
 import type { IPermissionCodesRepository } from '../ports/IPermissionCodesRepository';
+import type { ISecuritySettingsRepository } from '@modules/security-settings/application/ports/ISecuritySettingsRepository';
 import { InvalidOtpError, TooManyOtpAttemptsError, UserInactiveError } from '../errors/AuthErrors';
 import { issueTokenPair } from '../authTokenIssuance';
 
@@ -22,6 +23,7 @@ export interface VerifyLoginOtpUseCaseDeps {
   twoFactorChallengeRepository: ITwoFactorChallengeRepository;
   trustedDeviceRepository: ITrustedDeviceRepository;
   permissionCodesRepository: IPermissionCodesRepository;
+  securitySettingsRepository: ISecuritySettingsRepository;
   refreshTokenTtlMs?: number;
 }
 
@@ -43,6 +45,7 @@ export class VerifyLoginOtpUseCase {
       twoFactorChallengeRepository,
       trustedDeviceRepository,
       permissionCodesRepository,
+      securitySettingsRepository,
     } = this.deps;
 
     const challenge = await twoFactorChallengeRepository.findById(input.challengeId);
@@ -95,6 +98,7 @@ export class VerifyLoginOtpUseCase {
       : undefined;
 
     const permissionCodes = await permissionCodesRepository.getGrantedPermissionCodes(user.roles);
+    const securitySettings = await securitySettingsRepository.get();
 
     return {
       ...tokens,
@@ -112,6 +116,7 @@ export class VerifyLoginOtpUseCase {
         birthday: user.birthday ? user.birthday.toISOString() : null,
         twoFactorEnabled: user.twoFactorEnabled,
         twoFactorChannel: user.twoFactorChannel,
+        twoFactorSetupRequired: securitySettings.enforceTwoFactorForAllUsers && !user.twoFactorEnabled,
         permissionCodes,
       },
     };

@@ -118,6 +118,7 @@ async function main() {
     'user.manage': 'Manage staff user accounts and roles',
     'audit_log.read': 'View the audit log',
     'reminder_settings.manage': 'Manage SMS/email reminder settings',
+    'two_factor_enforcement.manage': 'Manage the "Require 2FA for all users" security setting',
     'profile_activity_log.manage': 'View and manage profile activity logs',
     'system_announcement.manage': 'Post and manage system-wide announcements (maintenance/news popups)',
     'chat_canned_response.manage': 'Create, edit, and delete shared chat canned/quick responses',
