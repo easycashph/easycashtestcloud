@@ -2508,3 +2508,65 @@ machine, alongside the two Mambu-sourced backfill scripts from §46-49.
   session. Numeric legacy codes and fuzzier name-based matching were explicitly left unexplored
   (same conservative-match philosophy as the Mambu recovery) - worth a follow-up pass if the
   remaining ~600 attachment-less loans' business impact justifies the extra investigation time.
+
+## §52 — 2026-08-27/28: TIN/SSS in Edit Client Details, MIS Post pool seeded, Mambu loan notes migrated
+
+**TIN/SSS in Edit Client Details**: user asked whether Civil Status, Gender, Place of Birth,
+Nationality, Home Ownership, Monthly Income, TIN, and SSS were all editable on the real Client
+Profile edit form. Investigating found the domain/use-case/presenter chain
+(`Borrower.governmentId.tinNumber`/`sssNumber`, `updateGovernmentId()`) already fully existed - built
+2026-07-31 for the Portal's own "My Profile" - so no new migration was needed. Only
+`updateBorrowerSchema` (LMS staff-side Zod validation) and `ClientProfilePage.tsx`'s edit dialog were
+missing them; added both, following the same per-field lock/unlock pattern already used everywhere
+else in that dialog. Type-checked clean, rebuilt `easycashbackend`/`lmsfrontend`, committed and
+pushed (`51e572d`).
+
+**MIS Post pool seeded**: user asked to analyze `seed-mis-post-pool.ts`'s runnability here. Dry run
+confirmed all 17 source images present and 0 pool items live (this feature had never been seeded on
+this machine - same gap the Nomer Laptop session diagnosed for its own machine). Applied with user
+confirmation (a live-DB write, previously declined once earlier this session): 17 `MisPost` rows
+created, `mis_posts` now at 18 rows, first item auto-lit as the live post.
+
+**Nomer Laptop address-count discrepancy explained**: user noticed the laptop's own session log
+reported 139 addressless borrowers vs. this machine's 142 (4,610 vs. 4,607 total borrowers).
+Explained as a snapshot-freshness gap, not a bug - the laptop ran its full migration against the
+newest 2026-08-27 MongoDB snapshot after fixing the stale-snapshot `.bat` bug there, while this
+machine's live data is still built from the older 2026-08-19 extraction. User chose not to re-sync
+("huwag muna") - deferred, no action taken.
+
+**4 more loan attachments recovered from `E:\201_Files`**: user asked to check this machine's local
+201-file archive (`E:\201_Files`, NOT in git - ~75,000 files, 2011-2026, actively maintained by
+staff) for anything recoverable for loans still missing attachments after §49's Mambu recovery.
+Wrote `backfill-201files-loan-attachments.ts`, a sibling of `backfill-mambu-loan-attachments.ts` with
+the identical conservative matching rule (alphabetic-prefixed codes, immediate-parent-folder
+attribution only) but scanning a plain filesystem tree instead of zip/rar archives. Dry run found 4
+loans / 79 files (`SML-PDC_00030`, `SML-REG_00276`, `SL-CORP_00115`, `SML-REG_00372` - notably from
+2025-2026, i.e. recent gaps, not Mambu-era). A looser manual bash check had suggested a 5th loan
+(`SML-Self_C2Z8V`), but the script's stricter rule correctly excluded it - the code only appeared in
+file NAMES inside an unrelated `BALDOMAR` folder, not the folder name itself. Applied with user
+confirmation; all 4 loans recovered, verified via DB attachment counts. User asked directly whether
+this survives a future full migration reset - answered honestly (no - none of these three backfill
+scripts' data comes from the MongoDB legacy source, so a reset wipes them same as any Attachment row)
+and documented the required manual re-run as a follow-up. Committed and pushed (`47867c9`).
+
+**Mambu loan notes/comments migrated**: ran `migrate-mambu-notes.ts` (flagged as carried-over,
+not-yet-done in §49's own follow-ups) with `NODE_OPTIONS=--max-old-space-size=8192` (the 20,707-row
+`comment` table parse needs more heap than Node's default). Dry run: 9,232 of 20,707 Mambu comments
+migratable (1,904 skipped - parent isn't a loan account; 9,479 skipped - loan never carried forward
+past Mambu; 92 skipped - empty text after HTML stripping). Applied with user confirmation - writes to
+`ProfileNote` (NOT a `loan_notes` table, which exists but is unrelated/unused here - confirmed by
+reading the script's own prisma calls after an initial wrong-table check came back empty). Verified:
+`profile_notes` at 20,290 total rows post-migration. These now surface in the Loan Detail page's
+notes/history section for any loan with Mambu-era history.
+
+### Current state / follow-ups
+
+- TIN/SSS editable in Edit Client Details; MIS Post daily rotation live; loan-attachment coverage at
+  1,202/1,804 (66.6%, 602 remaining - see §51 for the breakdown); 9,232 Mambu loan notes now visible
+  on affected loans' detail pages.
+- This machine's live data remains ~8-9 days behind the newest SDevTech snapshot (deferred by user
+  choice, not yet a problem reported by staff).
+- Three backfill scripts (`backfill-mambu-customfield-addresses.ts`,
+  `backfill-mambu-loan-attachments.ts`, `backfill-201files-loan-attachments.ts`) plus
+  `migrate-mambu-notes.ts` must all be manually re-run after any future full migration reset on this
+  machine - none are wired into the `.bat` files (deliberately, per each script's own doc comment).
