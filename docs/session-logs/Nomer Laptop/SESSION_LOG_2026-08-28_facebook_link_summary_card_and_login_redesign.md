@@ -112,13 +112,13 @@ React's effect that persists to `localStorage` runs after the click handler's st
 synchronously within it - a `document.querySelector(...).click()` read back immediately still shows
 the pre-toggle state).
 
-Typechecked clean, rebuilt, committed and pushed (`<pending - see next commit>`).
+Typechecked clean, rebuilt, committed and pushed (`62a7986`).
 
 ## Current state / follow-ups for next session
 
-- Facebook Link (form fields, backend, legacy backfill, `.bat` wiring, summary card display) and
-  the login page redesign are both live and correct on this laptop.
-- **Office Server PC still needs**, in order: `git pull` (through `9a7eaa1`); `npx prisma migrate
+- Facebook Link (form fields, backend, legacy backfill, `.bat` wiring, summary card display), the
+  login page redesign, and its light/dark toggle button are all live and correct on this laptop.
+- **Office Server PC still needs**, in order: `git pull` (through `62a7986`); `npx prisma migrate
   deploy` for `20260828021859_add_loan_application_facebook_link`; `docker compose up -d --build
   easycashbackend lmsfrontend`; then `npx tsx scripts/backfill-legacy-borrower-facebook-links.ts
   --apply` (one-time, additive, safe to re-run) to backfill the ~1,171 existing legacy clients'
