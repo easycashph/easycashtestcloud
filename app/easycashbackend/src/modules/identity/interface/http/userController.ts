@@ -9,6 +9,8 @@ import type { ChangeOwnPasswordUseCase } from '../../application/use-cases/Chang
 import type { RequestTwoFactorSetupUseCase } from '../../application/use-cases/RequestTwoFactorSetupUseCase';
 import type { ConfirmTwoFactorSetupUseCase } from '../../application/use-cases/ConfirmTwoFactorSetupUseCase';
 import type { DisableTwoFactorUseCase } from '../../application/use-cases/DisableTwoFactorUseCase';
+import type { ListSessionsUseCase } from '../../application/use-cases/ListSessionsUseCase';
+import type { RevokeSessionUseCase } from '../../application/use-cases/RevokeSessionUseCase';
 import type {
   ChangeOwnPasswordRequestBody,
   ConfirmTwoFactorSetupRequestBody,
@@ -29,6 +31,13 @@ export interface UserControllerDeps {
   requestTwoFactorSetupUseCase: RequestTwoFactorSetupUseCase;
   confirmTwoFactorSetupUseCase: ConfirmTwoFactorSetupUseCase;
   disableTwoFactorUseCase: DisableTwoFactorUseCase;
+  /** 2026-08-28 (user request): Member Details > Active Sessions - lets anyone with `user.manage`
+   * view and force sign-out ANY staff member's logged-in devices, not just their own. Reuses the
+   * exact same use cases Settings > Security > Active Sessions already uses for self-service -
+   * both are already scoped by `userId`, so the only difference here is which id the controller
+   * passes in (the target member's, from the URL, instead of the caller's own). */
+  listSessionsUseCase: ListSessionsUseCase;
+  revokeSessionUseCase: RevokeSessionUseCase;
 }
 
 /** Thin controller only — no business logic here (CLAUDE.md §Architecture), matching every other module's controller shape. */
@@ -63,6 +72,26 @@ export class UserController {
       const currentUser = getCurrentUser(req);
       const user = await this.deps.updateUserUseCase.execute(req.params.id as string, body, currentUser.sub);
       res.status(200).json(presentUser(user));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  listSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // No `currentSessionId` to mark - this is the admin viewing SOMEONE ELSE's device list, not
+      // their own, so no row should ever show "This device".
+      const items = await this.deps.listSessionsUseCase.execute({ userId: req.params.id as string, currentSessionId: '' });
+      res.status(200).json({ items });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revokeSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await this.deps.revokeSessionUseCase.execute({ userId: req.params.id as string, sessionId: req.params.sessionId as string });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }

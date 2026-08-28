@@ -50,5 +50,12 @@ export function createUserRouter(deps: UserControllerDeps, tokenService: ITokenS
 
   router.patch('/users/:id', requireAuth, requireMemberManagement, validateBody(updateUserSchema), controller.update);
 
+  // Member Details > Active Sessions (2026-08-28 user request) - same `user.manage` gate as
+  // Add/Edit Member. Registered after `/users/:id` on purpose; Express matches these more-specific
+  // paths first regardless of declaration order here, but keeping them visually grouped with the
+  // single-user routes above.
+  router.get('/users/:id/sessions', requireAuth, requireMemberManagement, controller.listSessions);
+  router.delete('/users/:id/sessions/:sessionId', requireAuth, requireMemberManagement, controller.revokeSession);
+
   return router;
 }

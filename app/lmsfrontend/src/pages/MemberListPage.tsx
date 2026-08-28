@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Eye, EyeOff, Lock, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Laptop, Lock, LogOut, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,8 @@ import { apiClient } from '@/lib/apiClient';
 import type { CreateUserRequest, UpdateUserRequest, User, UserStatus } from '@/lib/userApiTypes';
 import type { ListRoleClassesResponse, RoleClass, RoleType } from '@/lib/roleClassApiTypes';
 import type { LmsRole } from '@/lib/staticConfig';
-import { cn, formatDate } from '@/lib/utils';
+import type { SessionView } from '@/lib/authTypes';
+import { cn, describeUserAgent, formatDate, formatDateTime } from '@/lib/utils';
 import { avatarColorClasses } from '@/lib/avatarColor';
 
 const LMS_ROLES: LmsRole[] = ['MIS', 'Loan Operation Manager', 'CRM', 'Finance', 'Accounting', 'Collection Officer'];
@@ -219,6 +220,87 @@ function MemberForm({
 interface RoleClassDraft {
   roleId: string;
   name: string;
+}
+
+/**
+ * Member Details > Active Sessions (2026-08-28 user request) - lets MIS/anyone with `user.manage`
+ * view and force sign-out ANY staff member's logged-in devices, not just their own. Mirrors
+ * SettingsPage.tsx's self-service `SessionsCard` (same `GET .../sessions` shape, same
+ * describeUserAgent/formatDateTime helpers), but scoped to `GET/DELETE /users/:userId/sessions...`
+ * instead of `/auth/sessions...` - no `isCurrent` row here, since the admin is never viewing their
+ * own list through this path.
+ */
+function MemberActiveSessions({ userId }: { userId: string }) {
+  const queryClient = useQueryClient();
+  const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [revokingAll, setRevokingAll] = React.useState(false);
+
+  const sessionsQuery = useQuery({
+    queryKey: ['user-sessions', userId],
+    queryFn: () => apiClient.get<{ items: SessionView[] }>(`/users/${userId}/sessions`),
+  });
+  const sessions = sessionsQuery.data?.items ?? [];
+
+  const revokeMutation = useMutation({
+    mutationFn: (sessionId: string) => apiClient.delete(`/users/${userId}/sessions/${sessionId}`),
+    onMutate: (sessionId) => setRevokingId(sessionId),
+    onSettled: () => {
+      setRevokingId(null);
+      queryClient.invalidateQueries({ queryKey: ['user-sessions', userId] });
+    },
+  });
+
+  const revokeAll = async () => {
+    setRevokingAll(true);
+    try {
+      await Promise.all(sessions.map((s) => apiClient.delete(`/users/${userId}/sessions/${s.id}`)));
+    } finally {
+      setRevokingAll(false);
+      queryClient.invalidateQueries({ queryKey: ['user-sessions', userId] });
+    }
+  };
+
+  return (
+    <div className="space-y-1.5 sm:col-span-2">
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <Laptop className="h-3.5 w-3.5" /> Active Sessions
+        </p>
+        {sessions.length > 0 && (
+          <Button type="button" variant="outline" size="sm" disabled={revokingAll} onClick={revokeAll}>
+            <LogOut className="mr-1.5 h-3.5 w-3.5" /> {revokingAll ? 'Signing out…' : 'Sign out all devices'}
+          </Button>
+        )}
+      </div>
+      {sessionsQuery.isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : sessions.length === 0 ? (
+        <p className="rounded-md border py-4 text-center text-sm text-muted-foreground">No active sessions.</p>
+      ) : (
+        <div className="divide-y rounded-md border">
+          {sessions.map((session) => (
+            <div key={session.id} className="flex items-center justify-between gap-3 p-3">
+              <div className="min-w-0">
+                <span className="text-sm font-medium">{describeUserAgent(session.userAgent)}</span>
+                <p className="text-xs text-muted-foreground">
+                  {session.ipAddress ?? 'Unknown IP'} · Signed in {formatDateTime(session.createdAt)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={revokeMutation.isPending && revokingId === session.id}
+                onClick={() => revokeMutation.mutate(session.id)}
+              >
+                {revokeMutation.isPending && revokingId === session.id ? 'Signing out…' : 'Sign out'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -780,6 +862,7 @@ export function MemberListPage() {
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Account Created</p>
                 <p className="text-sm">{formatDate(viewingUser.createdAt)}</p>
               </div>
+              {canManageMembers && <MemberActiveSessions userId={viewingUser.id} />}
             </div>
           )}
           <DialogFooter className="sm:justify-between">

@@ -571,6 +571,11 @@ export function createApp(): Express {
       requestTwoFactorSetupUseCase: new RequestTwoFactorSetupUseCase({ userRepository, twoFactorChallengeRepository, otpSender }),
       confirmTwoFactorSetupUseCase: new ConfirmTwoFactorSetupUseCase({ userRepository, twoFactorChallengeRepository }),
       disableTwoFactorUseCase: new DisableTwoFactorUseCase({ userRepository, passwordHasher }),
+      // Member Details > Active Sessions (2026-08-28) - same instances the auth router above
+      // already uses for self-service; both use cases are generic over whichever userId they're
+      // given, so no new wiring is needed beyond reusing them here.
+      listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
+      revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
     },
     tokenService,
   );
