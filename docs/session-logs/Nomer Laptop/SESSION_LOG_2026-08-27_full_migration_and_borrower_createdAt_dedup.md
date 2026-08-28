@@ -451,6 +451,82 @@ identical pattern here rather than inventing a new one:
 Backend + frontend typechecked clean, both containers rebuilt and confirmed healthy. Committed and
 pushed (`4d8da16`).
 
+## 16. New feature: Facebook Link (Loan Application + Client Profile), backfilled from SDevTech; wired backfills into the migration .bat files
+
+User asked to add a Facebook Link field to the LMS's application form, and to first check whether
+SDevTech actually captures it. Verified directly against the raw legacy BSON dump before touching
+any code: `client_accounts.facebook_link` exists and is populated for **1,175 of 4,635 clients
+(25%)** with real URLs (`facebook.com/...`, some `m.me/...` Messenger links). No equivalent exists
+at the loan-application level in SDevTech - there's no `loan_applications` collection in this
+system's dump at all, so the source is always per-client, never per-application.
+
+Also found `Borrower.facebookLink` already existed in the schema and was wired into
+`ClientCreatePage.tsx` from an earlier session, but was never migrated from legacy data, never
+shown in **Edit Client Details** (`ClientProfilePage.tsx`), and had no equivalent field on
+`LoanApplication` at all. Mockup-approved, then implemented in full:
+
+- **`LoanApplication.facebookLink`** (new `String?` column, migration
+  `20260828021859_add_loan_application_facebook_link`) threaded through the whole backend stack
+  (DTO, domain `LoanApplication.ts` incl. the `updateStaffIntake`/`updateSelfServiceIntake` patch
+  union type, `PrismaLoanApplicationRepository.ts`, `loanApplicationSchemas.ts`,
+  `LoanApplicationPresenter.ts`) and the frontend (`loanApplicationApiTypes.ts`,
+  `LoanApplicationCreatePage.tsx`'s shared `LoanApplicationForm` component - covers both the
+  standalone Create form and the `/applications/:id/edit` page, since `LoanApplicationEditPage`
+  just renders the same component with `prefillFrom`/`editApplicationId`). Field placed
+  immediately after Email, matching the mockup.
+- **`LoanApplicationDetailPage.tsx`'s `CreateClientProfileDialog`** (application -> new Borrower
+  conversion) also got the field, both to read/edit and to carry the value into the new
+  `POST /borrowers` payload - so a Facebook link entered at application intake isn't lost when the
+  applicant becomes a client.
+- **`ClientProfilePage.tsx`** (Edit Client Details): added to `RealEditDraft`, `draftFromBorrower`,
+  the `unlocked` field-lock state (both the initial `useState` and the dialog-open reset effect),
+  the save payload, and the UI - same `FieldLockToggle` pattern as every other field on this form.
+  Backend's `borrowerSchemas.ts` already accepted `facebookLink` on both create and update, no
+  schema change needed there.
+- **`migrateBorrowers()`** in `migrate-legacy-data.ts`: added `facebookLink: c.facebook_link ? ... :
+  null` to the `Borrower` create block, so every future full migration/reset picks this up
+  automatically for newly-created borrowers (upsert's `update: {}` means this alone doesn't reach
+  already-migrated borrowers).
+- **New `backfill-legacy-borrower-facebook-links.ts`** (mirrors
+  `backfill-legacy-borrower-created-dates.ts`'s exact dry-run/`--apply` pattern): fills
+  `Borrower.facebookLink` for already-migrated borrowers whose value is currently `NULL`, never
+  overwrites a manually-entered one. Dry run confirmed 1,171 borrowers would update (a handful
+  fewer than the raw 1,175 BSON count, from a `.trim()`-empty edge case); applied cleanly, verified
+  via a direct DB count.
+
+**User follow-up question** ("hindi ba mawawala ang Facebook link kapag nag-update/nag-remigrate
+ako?"): explained the three scenarios - a plain `git pull` + rebuild never touches existing data
+(safe); an *incremental* re-migration (`migrate-legacy-data.ts --apply` without a reset) picks up
+the fix automatically only for brand-new borrowers, not already-migrated ones (needs the backfill
+script re-run for those); a full `prisma migrate reset --force` is safe too, since the fix is now
+baked into the create path, but still requires re-running the Mambu-sourced scripts separately
+(different data source entirely, not touched by MongoDB re-migration).
+
+**Follow-up design discussion**, prompted by that question: user asked whether the Mambu notes
+script (§15) and other backfill scripts should be wired into the automated migration `.bat` flow
+instead of staying manual-only. Recommended, and implemented, a split by dependency:
+- Scripts that only need the SDevTech MongoDB dump (already guaranteed present at that point in
+  any migration run) - **safe to wire in as real, numbered, failure-stops-the-script steps**. Added
+  to `Update Database From SDevTech.bat` (the incremental, non-destructive sync script) as new
+  steps `[6/10]` (Facebook Link backfill) and `[7/10]` (Borrower creation-date backfill),
+  renumbering the file from 8 to 10 steps; also fixed a stale `[7/7]` reference at the bottom of
+  that file left over from an earlier renumbering. Not added to the two "Run Full Legacy Migration"
+  `.bat` files (Nomer Laptop/Office Server PC) - unnecessary there, since a fresh full
+  reset+migrate already gets both fields correctly via `migrateBorrowers()`'s create path.
+- Scripts that need a DIFFERENT external file not guaranteed present on every machine (Mambu's
+  `legacy/mambu/easycash.sql`) - **wired in as a guarded, optional, non-failing step** instead of
+  either a hard requirement or staying fully manual: `if exist ... (run) else (skip with a
+  message)`. Added identically to all three `.bat` files (`Update Database From SDevTech.bat` and
+  both "Run Full Legacy Migration" copies, kept in sync per that file's own header convention) -
+  runs both `migrate-mambu-notes.ts --apply` and `backfill-mambu-customfield-addresses.ts --apply`
+  together under one `NODE_OPTIONS=--max-old-space-size=8192` (works around the real
+  out-of-memory crash found in §15 parsing the large Mambu `comment` table), reset back to empty
+  afterward. Both underlying scripts are already idempotent, so this is safe to leave in
+  permanently and re-run on every migration/sync once the Mambu dump exists on a machine.
+
+Backend + frontend typechecked clean, both containers rebuilt and confirmed healthy. Not yet
+committed/pushed as of this log entry.
+
 ## Current state / follow-ups for next session
 
 - Full migration (correct 2026-08-27 snapshot), Borrower.createdAt fix, the local address recovery,
@@ -472,10 +548,12 @@ pushed (`4d8da16`).
   re-migration there with explicit confirmation if it's actually affected.
 - Address-list overwrite risk (multi-address borrowers silently losing addresses past the first on
   edit-save) - flagged, not yet fixed.
-- Not yet done: wiring the new address-recovery script (or `migrate-mambu-notes.ts`) as an actual
-  step in the "Run Full Legacy Migration" `.bat` files - deliberately left manual for now since the
-  Mambu SQL dump isn't guaranteed to be present on every machine, and a missing-file error mid-batch
-  would be worse than a documented manual step.
-- Carried over, still untouched: `migrate-mambu-notes.ts --apply` (needs the Mambu zip on the
-  Office Server PC), Google Drive Trash/credential rotation, the ₱19.3M post-maturity-penalty
-  correction, accrued interest on long-defaulted accounts.
+- **§16 done this session**: the address-recovery/Mambu-notes "wire into the `.bat` flow" item
+  above is resolved - both scripts now run automatically (guarded, skips cleanly if the Mambu dump
+  isn't present) in all three `.bat` files. §16's Facebook Link feature + the two new SDevTech-only
+  backfill steps are implemented, typechecked, and rebuilt on this laptop, but **not yet
+  committed/pushed** - do that next, then apply the same `git pull` + rebuild + backend migration
+  (`npx prisma migrate deploy` for `20260828021859_add_loan_application_facebook_link`) +
+  `backfill-legacy-borrower-facebook-links.ts --apply` sequence on the Office Server PC.
+- Carried over, still untouched: Google Drive Trash/credential rotation, the ₱19.3M
+  post-maturity-penalty correction, accrued interest on long-defaulted accounts.

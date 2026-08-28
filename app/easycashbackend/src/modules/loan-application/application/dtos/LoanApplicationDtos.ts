@@ -40,6 +40,7 @@ export interface CreateLoanApplicationInput {
   coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: DependantEntry[];
   reference1Name?: string;
   reference1Mobile?: string;

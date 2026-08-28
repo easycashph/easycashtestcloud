@@ -2648,6 +2648,9 @@ model LoanApplication {
   coBorrowerAddress            String?
   mobilePhone                  String?
   email                        String?
+  /// 2026-08-27 (user request): applicant's Facebook profile/page URL - same field
+  /// `Borrower.facebookLink` already models for an existing client, mirrored here for intake.
+  facebookLink                 String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
   dependants                   Json?

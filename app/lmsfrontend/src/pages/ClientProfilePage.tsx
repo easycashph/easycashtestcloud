@@ -72,6 +72,7 @@ interface RealEditDraft {
   homeOwnership: string;
   mobilePhone1: string;
   email: string;
+  facebookLink: string;
   civilStatus: string;
   occupation: string;
   employer: string;
@@ -101,6 +102,7 @@ function draftFromBorrower(borrower: RealBorrower): RealEditDraft {
     nationality: borrower.nationality ?? '',
     mobilePhone1: borrower.mobilePhone1 ?? '',
     email: borrower.email ?? '',
+    facebookLink: borrower.facebookLink ?? '',
     // 2026-08-27 (user-reported: "Home Ownership" always blank for legacy-migrated clients):
     // `Borrower.homeOwnership` IS real and used - populated from a LoanApplication's own intake
     // field for natively-created clients (see CreateBorrowerUseCase) - but SDevTech's own
@@ -169,6 +171,7 @@ function RealEditClientDialog({
     homeOwnership: false,
     mobilePhone1: false,
     email: false,
+    facebookLink: false,
     civilStatus: false,
     occupation: false,
     employer: false,
@@ -224,6 +227,7 @@ function RealEditClientDialog({
         homeOwnership: false,
         mobilePhone1: false,
         email: false,
+        facebookLink: false,
         civilStatus: false,
         occupation: false,
         employer: false,
@@ -257,6 +261,7 @@ function RealEditClientDialog({
         homeOwnership: draft.homeOwnership || undefined,
         mobilePhone1: draft.mobilePhone1 || undefined,
         email: draft.email || undefined,
+        facebookLink: draft.facebookLink || undefined,
         civilStatus: draft.civilStatus || undefined,
         occupation: draft.occupation || undefined,
         employer: draft.employer || undefined,
@@ -396,6 +401,20 @@ function RealEditClientDialog({
               <FieldLockToggle unlocked={unlocked.email} onToggle={() => toggleUnlock('email')} />
             </div>
             <Input value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} disabled={!unlocked.email} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Facebook Link <FieldTooltip text="Client's Facebook profile/page URL, if available." />
+              </Label>
+              <FieldLockToggle unlocked={unlocked.facebookLink} onToggle={() => toggleUnlock('facebookLink')} />
+            </div>
+            <Input
+              value={draft.facebookLink}
+              onChange={(e) => setDraft({ ...draft, facebookLink: e.target.value })}
+              placeholder="https://facebook.com/username"
+              disabled={!unlocked.facebookLink}
+            />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

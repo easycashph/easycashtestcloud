@@ -64,6 +64,7 @@ export function presentLoanApplication(application: LoanApplication, breakdown?:
     coBorrowerAddress: p.coBorrowerAddress ?? null,
     mobilePhone: p.mobilePhone ?? null,
     email: p.email ?? null,
+    facebookLink: p.facebookLink ?? null,
     dependants: p.dependants ?? [],
     reference1Name: p.reference1Name ?? null,
     reference1Mobile: p.reference1Mobile ?? null,

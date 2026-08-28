@@ -279,6 +279,9 @@ async function migrateBorrowers(hqBranchId: string): Promise<{ rec: Reconciliati
           mobilePhone1: c.mobile_phone_1 != null ? String(c.mobile_phone_1) : null,
           mobilePhone2: c.mobile_phone_2 != null ? String(c.mobile_phone_2) : null,
           email: c.email_address ? String(c.email_address) : null,
+          // 2026-08-27 (user request): source is `client_accounts.facebook_link` - confirmed
+          // present for 1,175 of 4,635 legacy clients via a direct BSON survey.
+          facebookLink: c.facebook_link ? String(c.facebook_link) : null,
           status: status as never,
           loanCycle: Number(c.loan_cycle ?? 0),
           // 2026-08-27 bug fix (user-reported): without this, Prisma's `@default(now())` recorded

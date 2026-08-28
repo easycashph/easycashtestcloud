@@ -414,6 +414,7 @@ export function LoanApplicationForm({
   const [presentStayMonths, setPresentStayMonths] = React.useState('');
   const [mobileNo, setMobileNo] = React.useState(prefillFrom?.mobilePhone ?? '');
   const [email, setEmail] = React.useState(prefillFrom?.email ?? '');
+  const [facebookLink, setFacebookLink] = React.useState(prefillFrom?.facebookLink ?? '');
   // §4 - employment
   const [employer, setEmployer] = React.useState(prefillFrom?.employer ?? '');
   const [occupation, setOccupation] = React.useState(prefillFrom?.occupation ?? '');
@@ -687,6 +688,7 @@ export function LoanApplicationForm({
         sssNumber: sss.trim() || undefined,
         mobilePhone: mobileNo.trim() || undefined,
         email: email.trim() || undefined,
+        facebookLink: facebookLink.trim() || undefined,
         dependants: dependants
           .filter((d) => d.name.trim())
           .map((d) => ({ name: d.name.trim(), age: d.age.trim() || undefined, relationship: d.relationship.trim() || undefined })),
@@ -1012,6 +1014,9 @@ export function LoanApplicationForm({
           </Field>
           <Field label="Email address" tooltip="Applicant's email, if available - used for document copies or notices.">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Facebook Link" tooltip="Applicant's Facebook profile/page URL, if available - for verification/contact purposes.">
+            <Input value={facebookLink} onChange={(e) => setFacebookLink(e.target.value)} placeholder="https://facebook.com/username" />
           </Field>
         </div>
         <div className="mt-3 space-y-3">

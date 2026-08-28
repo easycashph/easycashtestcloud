@@ -317,6 +317,27 @@ pushd "%BACKEND_DIR%"
 call npx tsx scripts\restore-native-portal-accounts.ts
 popd
 
+REM 2026-08-27 (user request): Mambu (pre-SDevTech) notes/address recovery is a completely
+REM separate data source from MongoDB (a `prisma migrate reset --force` above wipes it too, same as
+REM everything else) - needs its own MySQL dump (legacy\mambu\easycash.sql), which isn't guaranteed
+REM to exist on every machine. Guarded, not a hard step: skips cleanly with a message if the file
+REM isn't there. Both scripts are idempotent (upsert on a legacyId, or "only fill a currently-empty
+REM field") - safe to run every time. The larger heap limit works around a real out-of-memory crash
+REM parsing the ~20K-row Mambu `comment` table on Node's default heap.
+echo.
+if exist "%ROOT_DIR%legacy\mambu\easycash.sql" (
+  echo [OPTIONAL] Mambu notes/address recovery - dump found, ina-apply...
+  pushd "%BACKEND_DIR%"
+  set NODE_OPTIONS=--max-old-space-size=8192
+  call npx tsx scripts\migrate-mambu-notes.ts --apply
+  call npx tsx scripts\backfill-mambu-customfield-addresses.ts --apply
+  set NODE_OPTIONS=
+  popd
+) else (
+  echo [OPTIONAL] Mambu notes/address recovery - walang nahanap na
+  echo            legacy\mambu\easycash.sql, lalaktawan.
+)
+
 echo.
 echo ============================================
 echo   Tapos na ang buong migration.

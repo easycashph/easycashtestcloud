@@ -201,6 +201,7 @@ export interface LoanApplication {
   coBorrowerAddress: string | null;
   mobilePhone: string | null;
   email: string | null;
+  facebookLink: string | null;
   dependants: LoanApplicationDependant[];
   reference1Name: string | null;
   reference1Mobile: string | null;
@@ -289,6 +290,7 @@ export interface CreateLoanApplicationRequest {
   coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: LoanApplicationDependant[];
   reference1Name?: string;
   reference1Mobile?: string;

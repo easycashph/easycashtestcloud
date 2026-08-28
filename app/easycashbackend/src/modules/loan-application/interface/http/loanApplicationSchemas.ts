@@ -47,6 +47,7 @@ export const createLoanApplicationSchema = z.object({
   coBorrowerAddress: z.string().min(1).optional(),
   mobilePhone: z.string().min(1).optional(),
   email: z.string().email().optional(),
+  facebookLink: z.string().min(1).optional(),
   dependants: z.array(z.object({ name: z.string(), age: z.string().optional(), relationship: z.string().optional() })).optional(),
   reference1Name: z.string().min(1).optional(),
   reference1Mobile: z.string().min(1).optional(),

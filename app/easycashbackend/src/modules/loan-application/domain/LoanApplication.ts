@@ -170,6 +170,7 @@ export interface LoanApplicationProps {
   coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: DependantEntry[];
   reference1Name?: string;
   reference1Mobile?: string;
@@ -257,6 +258,7 @@ export interface CreateLoanApplicationProps {
   coBorrowerAddress?: string;
   mobilePhone?: string;
   email?: string;
+  facebookLink?: string;
   dependants?: DependantEntry[];
   reference1Name?: string;
   reference1Mobile?: string;
@@ -339,6 +341,7 @@ export class LoanApplication {
       coBorrowerAddress: input.coBorrowerAddress,
       mobilePhone: input.mobilePhone,
       email: input.email,
+      facebookLink: input.facebookLink,
       dependants: input.dependants,
       reference1Name: input.reference1Name,
       reference1Mobile: input.reference1Mobile,
@@ -489,6 +492,7 @@ export class LoanApplication {
         | 'coBorrowerAddress'
         | 'mobilePhone'
         | 'email'
+        | 'facebookLink'
         | 'dependants'
         | 'reference1Name'
         | 'reference1Mobile'

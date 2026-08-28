@@ -155,6 +155,7 @@ function CreateClientProfileDialog({
   const [homeOwnership, setHomeOwnership] = React.useState(application.homeOwnership ?? '');
   const [mobilePhone1, setMobilePhone1] = React.useState(application.mobilePhone ?? '');
   const [email, setEmail] = React.useState(application.email ?? '');
+  const [facebookLink, setFacebookLink] = React.useState(application.facebookLink ?? '');
   const [employer, setEmployer] = React.useState(application.employer ?? '');
   const [occupation, setOccupation] = React.useState(application.occupation ?? '');
   const [officeAddress, setOfficeAddress] = React.useState(application.officeAddress ?? '');
@@ -233,6 +234,7 @@ function CreateClientProfileDialog({
     setPresentStayMonths(application.presentAddressLengthOfStayMonths != null ? String(application.presentAddressLengthOfStayMonths % 12) : '');
     setMobilePhone1(application.mobilePhone ?? '');
     setEmail(application.email ?? '');
+    setFacebookLink(application.facebookLink ?? '');
     setEmployer(application.employer ?? '');
     setOccupation(application.occupation ?? '');
     setOfficeAddress(application.officeAddress ?? '');
@@ -297,6 +299,7 @@ function CreateClientProfileDialog({
         homeOwnership: homeOwnership || undefined,
         mobilePhone1: mobilePhone1.trim() || undefined,
         email: email.trim() || undefined,
+        facebookLink: facebookLink.trim() || undefined,
         dependants: dependants && dependants.length > 0 ? dependants : undefined,
         note: note.trim() || undefined,
         incomeDetail:
@@ -451,6 +454,10 @@ function CreateClientProfileDialog({
           <div className="space-y-1.5">
             <Label>Email</Label>
             <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Facebook Link</Label>
+            <Input value={facebookLink} onChange={(e) => setFacebookLink(e.target.value)} placeholder="https://facebook.com/username" />
           </div>
         </div>
 
