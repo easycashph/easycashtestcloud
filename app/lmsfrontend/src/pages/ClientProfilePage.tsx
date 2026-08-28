@@ -1398,6 +1398,20 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
             <div className="flex items-center gap-1.5">
               <Mail className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {borrower.email ?? '-'}
             </div>
+            {borrower.facebookLink && (
+              <div className="col-span-2 flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <a
+                  href={/^https?:\/\//.test(borrower.facebookLink) ? borrower.facebookLink : `https://${borrower.facebookLink}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate text-primary hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {borrower.facebookLink}
+                </a>
+              </div>
+            )}
             <div className="col-span-2 flex items-center gap-1.5">
               <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> {addressLine}
             </div>
