@@ -308,6 +308,10 @@ import { PrismaMisPostRepository } from '@modules/mis-post/infrastructure/Prisma
 import { GetReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/GetReminderSettingsUseCase';
 import { UpdateReminderSettingsUseCase } from '@modules/reminder-settings/application/use-cases/UpdateReminderSettingsUseCase';
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
+import { createSecuritySettingsRouter } from '@modules/security-settings/interface/http/securitySettingsRouter';
+import { GetSecuritySettingsUseCase } from '@modules/security-settings/application/use-cases/GetSecuritySettingsUseCase';
+import { UpdateSecuritySettingsUseCase } from '@modules/security-settings/application/use-cases/UpdateSecuritySettingsUseCase';
+import { PrismaSecuritySettingsRepository } from '@modules/security-settings/infrastructure/PrismaSecuritySettingsRepository';
 import { createInterestRateChartRouter } from '@modules/interest-rate-chart/interface/http/interestRateChartRouter';
 import { ListInterestRateChartUseCase } from '@modules/interest-rate-chart/application/use-cases/ListInterestRateChartUseCase';
 import { PrismaInterestRateChartRepository } from '@modules/interest-rate-chart/infrastructure/PrismaInterestRateChartRepository';
@@ -509,6 +513,7 @@ export function createApp(): Express {
   // env.ts) is now actually threaded through, instead of the use cases'
   // internal hardcoded fallback constants silently taking over.
   const permissionCodesRepository = new PrismaPermissionCodesRepository();
+  const securitySettingsRepository = new PrismaSecuritySettingsRepository();
   const authRouter = createAuthRouter(
     {
       loginUseCase: new LoginUseCase({
@@ -521,6 +526,7 @@ export function createApp(): Express {
         trustedDeviceRepository,
         otpSender,
         permissionCodesRepository,
+        securitySettingsRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       refreshTokenUseCase: new RefreshTokenUseCase({
@@ -531,7 +537,7 @@ export function createApp(): Express {
       }),
       logoutUseCase: new LogoutUseCase({ refreshTokenRepository }),
       logoutAllUseCase: new LogoutAllUseCase({ refreshTokenRepository }),
-      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository, permissionCodesRepository }),
+      getCurrentUserUseCase: new GetCurrentUserUseCase({ userRepository, permissionCodesRepository, securitySettingsRepository }),
       listSessionsUseCase: new ListSessionsUseCase({ refreshTokenRepository }),
       revokeSessionUseCase: new RevokeSessionUseCase({ refreshTokenRepository }),
       verifyLoginOtpUseCase: new VerifyLoginOtpUseCase({
@@ -542,6 +548,7 @@ export function createApp(): Express {
         twoFactorChallengeRepository,
         trustedDeviceRepository,
         permissionCodesRepository,
+        securitySettingsRepository,
         refreshTokenTtlMs: env.JWT_REFRESH_TTL_MS,
       }),
       requestPasswordResetUseCase: new StaffRequestPasswordResetUseCase({
@@ -1490,6 +1497,21 @@ export function createApp(): Express {
     tokenService,
   );
   app.use('/api/v1', reminderSettingsRouter);
+
+  // --- security-settings module wiring (2026-08-28 user request): MIS-only "Require 2FA for all
+  // users" toggle, checked by LoginUseCase/VerifyLoginOtpUseCase/GetCurrentUserUseCase above
+  // (shares the same securitySettingsRepository instance) ---
+  const securitySettingsRouter = createSecuritySettingsRouter(
+    {
+      getSecuritySettingsUseCase: new GetSecuritySettingsUseCase({ securitySettingsRepository }),
+      updateSecuritySettingsUseCase: new UpdateSecuritySettingsUseCase({
+        securitySettingsRepository,
+        auditLogger,
+      }),
+    },
+    tokenService,
+  );
+  app.use('/api/v1', securitySettingsRouter);
 
   // --- system-announcement module wiring (2026-08-14 user request): MIS-authored maintenance/news
   // popups shown to LMS staff and/or Portal clients. One repository instance shared by the

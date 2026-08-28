@@ -320,6 +320,7 @@ model User {
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
   notificationsReceived                Notification[]
   reminderSettingsUpdated              ReminderSettings[]
+  securitySettingsUpdated              SecuritySettings[]
   systemAnnouncementsCreated           SystemAnnouncement[]
   misPostsCreated                      MisPost[]
   chatAgentPresence                    ChatAgentPresence?
@@ -2802,6 +2803,30 @@ model ReminderSettings {
   updatedBy           User?    @relation(fields: [updatedByUserId], references: [id])
 
   @@map("reminder_settings")
+}
+
+/// 2026-08-28 (user request) - MIS-wide security policy toggles, singleton row same shape/reasoning
+/// as ReminderSettings above (self-healing upsert-on-read, one row for the whole platform). Kept as
+/// its OWN table rather than a new field on ReminderSettings - ReminderSettings' own doc comments
+/// already explicitly declare staff 2FA out of scope for that table, and this is a security policy,
+/// not a messaging channel toggle.
+model SecuritySettings {
+  id String @id @default("singleton")
+
+  /// "Require 2FA for all users" - when true, any staff account without `User.twoFactorEnabled`
+  /// is blocked (LoginUseCase/GetCurrentUserUseCase computing `twoFactorSetupRequired`) into a
+  /// mandatory setup flow before they can use any part of the LMS. Does NOT auto-enable 2FA for
+  /// anyone - the account still proves receipt of a real OTP on their own chosen channel before
+  /// `twoFactorEnabled` ever flips true (same ConfirmTwoFactorSetupUseCase every self-service
+  /// setup already goes through), so this can never lock an account into a broken state the way a
+  /// direct force-flip would.
+  enforceTwoFactorForAllUsers Boolean @default(false)
+
+  updatedAt       DateTime @updatedAt
+  updatedByUserId String?
+  updatedBy       User?    @relation(fields: [updatedByUserId], references: [id])
+
+  @@map("security_settings")
 }
 
 /// Automated PH Lending/Finance News + Road/Weather Advisory feed (2026-08-06 user request) -

@@ -23,6 +23,12 @@ export interface AuthenticatedUserView {
   /** Settings > Security > Two-Factor Authentication (2026-07-22). */
   twoFactorEnabled: boolean;
   twoFactorChannel: 'EMAIL' | 'SMS' | null;
+  /** 2026-08-28 ("Require 2FA for all users" admin setting) - true when `SecuritySettings.
+   * enforceTwoFactorForAllUsers` is on AND this account hasn't completed 2FA setup yet. The
+   * frontend blocks the whole app behind a mandatory setup modal while this is true - re-checked
+   * on every `/auth/me` call, not just at login, so turning enforcement on catches already-signed-in
+   * sessions too. Never true once `twoFactorEnabled` is true, by construction. */
+  twoFactorSetupRequired: boolean;
   /** 2026-08-06 (Roles & Permissions feature): the union of every `Permission.code` granted to
    * any of `roles` above, right now — lets the frontend hide (not just have the backend reject)
    * an action the signed-in user's role doesn't currently have. Always re-computed from the DB on
