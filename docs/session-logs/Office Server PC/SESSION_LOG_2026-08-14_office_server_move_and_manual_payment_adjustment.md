@@ -2838,3 +2838,43 @@ The 52 transactions belonging to the 8 genuinely NEW loan accounts were delibera
   container via `pg_restore`, never touching the live stack) is a clean, reusable way to get an exact
   "before" comparison for any future live-data investigation - worth remembering as a general pattern,
   not just for this incident.
+
+## §58 — 2026-08-29: Loan Releases Report - exclude Restructure/Adjustment/Compromise by default, add Origin filter
+
+User asked whether the Loan Releases Report should exclude Restructure/Adjustment/Compromise loans,
+or offer a multi-select filter instead - recommended (and implemented) both: correct default
+behavior plus opt-in flexibility, rather than picking one over the other.
+
+**Root cause of the report's overcounting**: `getLoanReleasesReport` only ever checked
+`activatedAt IS NOT NULL` - but a Restructure, Adjustment, and Compromise Settlement each create a
+brand-new `LoanAccount` to carry an old loan's balance forward under new terms (`LoanRestructure`/
+`LoanAdjustment`/`LoanCompromiseSettlement.newLoanAccountId`) - no new money actually goes out, so
+counting these as "releases" alongside genuine new disbursements overstated real released amounts.
+
+**Implementation**: added `LoanReleaseReportRow.origin` (`'ORIGINATION' | 'RESTRUCTURE' |
+'ADJUSTMENT' | 'COMPROMISE'`, derived by checking which of the three linking tables' own
+`newLoanAccountId` a loan matches) and an `origins` filter parameter (defaults to
+`['ORIGINATION']` when omitted) threaded through
+`IReportingRepository`/`GetLoanReleasesReportUseCase`/`PrismaReportingRepository`/
+`reportingController` (both the JSON and `.xlsx` endpoints, `origin` as a repeated query param,
+same `parseMultiValueFilter` helper Transaction Report's `type`/`channel` filters already use) down
+to `LoanReleasesReportPage.tsx`'s new multi-select dropdown (same UX pattern as Transaction Report's
+type filter) plus an optional "Origin" column in the existing column picker. The legacy-matching
+`.xlsx` writer's column set was deliberately left untouched (its own doc comment says it mirrors the
+legacy spreadsheet exactly) - `origin` is JSON/on-screen only.
+
+Could not verify visually in a browser - no login credentials available in this session for the live
+staff account. Verified instead by calling `PrismaReportingRepository.getLoanReleasesReport`
+directly against the live database via a one-off `tmp-*.ts` script (deleted after use): default
+(ORIGINATION-only) returned 1,010 rows; requesting all four origins returned 1,030 (1,010 + 19
+RESTRUCTURE + 1 COMPROMISE, 0 ADJUSTMENT so far); a RESTRUCTURE-only filter correctly isolated
+exactly those 19 loans. Type-checked clean both sides, rebuilt `easycashbackend`/`lmsfrontend`,
+verified healthy. Committed and pushed (`6c1d023`).
+
+### Current state / follow-ups
+
+- Loan Releases Report now defaults to genuine new-money disbursements only; MIS can broaden to
+  Restructured/Adjusted/Compromised via the new Origin filter when a fuller view is needed.
+- Not yet done: an actual in-browser click-through of the new filter (blocked on missing live
+  credentials this session) - worth a quick manual check next time someone's logged in, though the
+  direct-repository-call verification already confirms the underlying data/logic is correct.
