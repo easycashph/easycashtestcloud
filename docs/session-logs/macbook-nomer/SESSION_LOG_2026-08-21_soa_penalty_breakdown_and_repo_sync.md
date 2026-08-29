@@ -1204,13 +1204,88 @@ safe to try again.
 Confirms the script is genuinely one-click-safe on this Mac. Still not yet run on Office Server PC
 or Laptop Nomer - next use of either machine should try their own `.bat` copy for the first time.
 
+## 29. Replaced this Mac's local database with a full restore of the live Office Server PC snapshot
+
+User asked to run the full destructive "Run Full Legacy Migration" (`prisma migrate reset --force`),
+restoring native user/settings/portal-account data afterward so login would keep working. Before
+starting, paused to check the actual `--` per-machine confirmation and, mid-conversation, asked a
+better question instead: could `legacy/mongodb/easycash-database-2026-08-28.dump` (the file §22
+turned out to be a real Postgres dump, not MongoDB - already used there to restore just the `users`
+table) be restored WHOLESALE instead of doing the lossy SDevTech-reconstruction migration?
+
+Investigated before committing to either path: `pg_restore --list` on the dump showed **74 tables**
+with data - not a partial export, essentially the entire schema (`loan_accounts`,
+`loan_transactions`, `repayment_schedules`, `loan_restructures`, `security_settings`,
+`_prisma_migrations`, everything). A scratch-database dry run confirmed 0 restore errors and
+substantial, real row counts (1,805 loan accounts, 280,284 transactions, 4,607 borrowers, 108
+applied migrations) - user confirmed by hand this dump is a direct snapshot **from the Office Server
+PC** ("dahil ito yung pinaka main"). Recommended restoring this instead of the SDevTech
+reconstruction - real, already-correct production data beats re-deriving/guessing it - user agreed.
+
+**Execution** (all against this Mac's local Docker Postgres only - never touches the actual Office
+Server PC or GitHub):
+1. Stopped `easycashbackend` (avoid writes mid-restore).
+2. Terminated connections to `easycash`, `DROP DATABASE` + `CREATE DATABASE` (clean slate), then
+   `pg_restore --no-owner --no-privileges` the full dump - 1 harmless "schema public already
+   exists" warning (expected on a fresh database), otherwise clean. Verified row counts match the
+   scratch-db dry run exactly.
+3. `npx prisma migrate deploy` - applied exactly the ONE migration missing from the dump's own 108
+   (today's `20260829001841_add_loan_compromise_settlement`, §24) - confirms this Mac's code is
+   only one migration ahead of the live snapshot.
+4. `npx prisma generate` + `npx prisma db seed`.
+5. Restarted `easycashbackend`, confirmed healthy.
+
+**User asked the obvious follow-up**: since the restore already makes this Mac's data identical to
+live, why re-run `migrate-legacy-data.ts --apply` on top of it? Answered directly: the restored data
+is only identical to live's CURRENT state - which itself doesn't have today's `closureReason`
+status-mapping fix (§24) applied yet, since that fix is code that exists only on this Mac and hasn't
+reached Office Server PC. Re-running it applies an improvement that goes BEYOND matching live, not
+back toward it. **User asked to proceed anyway** rather than leave the Mac merely identical to live.
+
+Ran `migrate-legacy-data.ts --apply` again (525k transactions, ~10 min) against the restored data -
+correctly protected every real, live-recorded transaction via the existing "locked loan"/"possible
+duplicate of a native REPAYMENT" guards (14 such duplicates correctly skipped, confirming staff's
+real recorded payments on live were never at risk of being overwritten or double-counted). Result:
+`BL-REG_00021`, `SML-REG_00215`, and the other 17 SDevTech-Reschedule loans correctly flipped from
+plain `CLOSED` to `CLOSED_RESTRUCTURED` - but **`BL-SPEC_00028` itself was untouched, exactly as
+designed**, because it already carries a REAL, live-recorded `LoanRestructure` row
+(`closedReason: 'Restructured'`, reason `"Loan Extension"`) - and this is where the session's very
+first BL-SPEC_00028 investigation (way back near the start) got its final, definitive answer:
+
+**The real new loan is `BL-SPEC_00029`, not `BL-SPEC_00030`** - the "next loan chronologically for
+the same borrower" heuristic `backfill-loan-restructure-compromise.ts` uses (the only signal
+SDevTech's own data provides) guessed wrong for this specific loan. Proof: after re-running
+`recompute-active-loan-balances-from-schedule.ts` (198 -> fresh balances again, same "loans changed
+from CLOSED to CLOSED_RESTRUCTURED need a fresh recompute" gap as §24/§25's own fix) and cleaning up
++ re-running the backfill script (same "stale 0.00-balance rows from before the recompute" cleanup
+pattern as before - deleted the 18 SDevTech-derived rows, kept the one real live row, re-ran), the
+script correctly **no-op'd** on `BL-SPEC_00028` (its `oldLoanAccountId` unique constraint already
+satisfied by the real row) rather than creating a conflicting/wrong second entry pointing at
+`BL-SPEC_00030`. This is exactly the safety property `update: {}` in the upsert was designed to
+provide, now proven against a real conflicting case, not just reasoned about in the abstract.
+
+Final state verified: 19 `loan_restructures` (18 SDevTech-derived + the 1 real live one, correctly
+undisturbed), 8 `loan_compromise_settlements`, 9 `users`. `easycashbackend` restarted, healthy,
+confirmed via live request logs that Nomer's own staff session kept working uninterrupted throughout
+(JWT still valid, `/chat/queue`/`/notifications` polling succeeding) - the whole sequence above ran
+without ever requiring a fresh login.
+
+**Mid-conversation tangent**: user realized Office Server PC and Laptop Nomer need their own
+`git pull` to receive today's code (this whole session's work, including the very
+`closureReason`/`LoanCompromiseSettlement` fix just described) - pointed them at §28's new
+`Sync After Pull (Office Server PC).bat`/`(Nomer Laptop).bat` as the one-click way to do that, then
+suggested the same `migrate-legacy-data.ts --apply` + `backfill-loan-restructure-compromise.ts
+--apply` sequence be run there too once pulled, so the live database itself gets the same
+`closureReason` improvement this Mac now has - not done this session, flagged as the natural
+next step.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-28 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§28) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
@@ -1241,6 +1316,17 @@ here - see that section's own cross-link. Everything else below (§14-§28) is n
 
 ## Known follow-up work
 
+- **Highest priority**: §29's `closureReason` status-mapping improvement (§24/§25) only exists on
+  this Mac's local database - Office Server PC's actual live database still shows plain `CLOSED`
+  for all 18 SDevTech-sourced Reschedule/Compromise Agreement loans (everything except
+  `BL-SPEC_00028`, which has its own real in-app restructure record). Next session on Office Server
+  PC should: run its own `Sync After Pull (Office Server PC).bat` (§28) to pull today's code, then
+  `npx prisma migrate deploy`/`npx prisma db seed` (covered by that script), then
+  `npx tsx scripts/migrate-legacy-data.ts --apply` ->
+  `npx tsx scripts/recompute-active-loan-balances-from-schedule.ts` ->
+  `npx tsx scripts/backfill-loan-restructure-compromise.ts --apply`, in that exact order (recompute
+  MUST run before the backfill, same ordering bug fixed twice this session already) - so the actual
+  production database gets this improvement, not just this Mac's local copy of it.
 - Portal on the phone still shows Chrome's address bar even after "Add to Home screen" - this is
   expected until the Portal is served over HTTPS (Chrome requires HTTPS or `localhost` for a true
   standalone PWA window). Deferred (§21a) - needs Tailscale installed + signed in on this Mac, a
