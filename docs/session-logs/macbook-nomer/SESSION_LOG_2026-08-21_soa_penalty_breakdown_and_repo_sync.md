@@ -1135,13 +1135,59 @@ Same one-off-script pattern as §18's `remove-report-view-permission.ts`: wrote
 `role_permissions.permissionId` cleaned up MIS's 12 stale grants automatically). Data-only change -
 nothing to commit besides this log entry.
 
+## 27a. Follow-up: the reverse gap - one permission MISSING here that the live site already has
+
+User compared this Mac's now-cleaned-up "Other" category (2 items) against a screenshot of the live
+Office Server PC's own "Other" category (3 items) and asked why this Mac was missing
+`two_factor_enforcement.manage` ("Manage the 'Require 2FA for all users' security setting"). Found
+it already defined in `seed.ts` (line 121, part of the Security Settings feature pulled in via
+§9-26's big `git pull` earlier this session) but never actually seeded into this Mac's local
+database - `npx prisma db seed` (or a full migration run, which also seeds) hadn't been re-run since
+that pull landed. Ran `npx prisma db seed` directly - purely additive/idempotent, safe to re-run
+any time (same property that made §27's stale rows possible to accumulate in the first place, cuts
+both ways: it also means a genuinely NEW permission from a pull sits unseeded until someone re-runs
+it). Confirmed `two_factor_enforcement.manage` now exists and is granted to MIS, matching live.
+Purely a seed-timing gap, not a real code difference between the two machines - both already had the
+Security Settings feature's code from the same pull, only this Mac's database was stale.
+
+## 28. New "Sync After Pull" scripts for all 3 machines - the general fix for §27a's whole problem class
+
+User then reported the SAME class of gap on Office Server PC and Laptop Nomer - "hindi nakukuha ang
+mga bagong update... nag git pull naman ako." Root cause explained: `git pull` only ever updates
+code on disk - it never applies new Prisma migrations, never re-seeds new permissions/roles/
+reference data, never installs new npm dependencies, and never rebuilds the running Docker
+containers. Every one of this session's own "repo sync recovery" entries (§1) already followed a
+manual version of this exact checklist after every pull - the problem was that discipline living
+only in this log and this session's own habits, never in a script anyone else could just run.
+
+User asked how to know WHICH steps are needed after a given pull - answered directly: you don't
+need to know, every step here is safe to run unconditionally (`npm install` no-ops if
+`package.json` didn't change, `prisma migrate deploy` skips already-applied migrations, `prisma db
+seed` only ever upserts, `docker compose --build` only rebuilds what actually changed) - so the fix
+is a single script that always runs the full sequence, removing the guesswork entirely rather than
+trying to teach a diagnostic.
+
+Created `scripts/Sync After Pull (Macbook-Nomer).command` (bash) and
+`scripts/Sync After Pull (Office Server PC).bat` / `scripts/Sync After Pull (Nomer Laptop).bat`
+(the latter two identical apart from the header comment, same per-machine-named-copy convention as
+every other multi-machine script in this repo) - 8 steps: git pull, ensure Docker/Postgres running,
+backend `npm install`, `prisma migrate deploy`, `prisma generate`, `prisma db seed`, frontend(s)
+`npm install`, Docker rebuild of `easycashbackend`+`lmsfrontend`+`portalfrontend`. Verified: `chmod
++x`'d the `.command` file, `bash -n` syntax check passed; the two `.bat` siblings diff identically
+to the same "only the header differs" pattern already established by every other per-machine script
+pair in this repo.
+
+Not run on this Mac this session - every step it performs was already done individually earlier
+this session (pull, seed, rebuild); this is purely a convenience/discipline tool for future pulls,
+on this machine and the other two.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-27 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-28 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§27) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§28) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
