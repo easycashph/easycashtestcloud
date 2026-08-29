@@ -2926,3 +2926,38 @@ no-op for anything not newly eligible).
   hands-off for every future SDevTech sync, not just protected by an imperfect dedup heuristic.
 - No manual "duplicate cleanup" step should ever be needed again after a routine "Update Database From
   SDevTech" run, for this specific failure mode.
+
+## §60 — 2026-08-29: BL-SPEC_00030 (Marlon Ricalde) duplicate loan account removed
+
+User asked to remove `BL-SPEC_00030` (Marlon Almanzor Ricalde) - one of §58's 8 newly-migrated loan
+accounts. Investigated before touching anything: this borrower already had a NATIVE loan
+(`BL-SPEC_00029`, no `legacyId`, staff-created directly in the LMS 2026-08-28) with the identical
+principal (₱103,500.00) - the same real loan recorded twice through two different paths, only
+possible because §59's lock-based protection hadn't landed yet when this borrower's data first came
+through. `BL-SPEC_00030` was also confirmed as the restructure-chain continuation of the borrower's
+earlier `BL-SPEC_00028` (per `backfill-loan-restructure-compromise.ts`'s own dry-run output from
+§57/§58), further confirming these are the same underlying loan.
+
+User's own plan (asked as a question, confirmed correct): delete `BL-SPEC_00030` entirely, then
+rename the native `BL-SPEC_00029` to take over the "BL-SPEC_00030" loan code, since that's the code
+the borrower's real, still-active native loan should carry.
+
+`schema.prisma` has no `ON DELETE CASCADE` from `LoanAccount` to any of its 10 `loanAccountId`-keyed
+child tables - wrote a scoped one-off script that checked every one of them (`LoanTransaction`,
+`RepaymentSchedule`, `LoanNote`, `AppliedFee`, `GeneratedLoanDocument`, `LoanSigningSession`,
+`SigningNotificationLog`, `GeneratedStatementOfAccount`, `SmsReminderLog`, `EmailReminderLog`,
+`LoanAccountCoBorrower`) plus the polymorphic `Attachment` table, dry-ran it (found exactly 1
+transaction, 1 repayment schedule row, 5 attachments - nothing else), then applied in a single
+`$transaction`: delete every related row, delete the loan account, then rename
+`BL-SPEC_00029` -> `BL-SPEC_00030`. Verified after: exactly one `BL-SPEC_00030` remains (native, no
+`legacyId`, ACTIVE, ₱103,500.00), total loan account count dropped 1813 -> 1812 as expected.
+
+### Current state / follow-ups
+
+- Marlon Ricalde's loan chain is now clean: `BL-SPEC_00018 -> 00022 -> 00023 -> 00027 -> 00028`
+  (all `CLOSED_RESTRUCTURED`) -> `BL-SPEC_00030` (native, ACTIVE) - a single coherent history with no
+  duplicate branch.
+- This specific duplicate predates §59's fix (this borrower's data was synced before the lock-based
+  transaction-skip existed) - not expected to recur for this or any other loan going forward, but if
+  another pre-§59 duplicate loan account (not just duplicate transactions) turns up, the same
+  investigate-then-scoped-delete approach applies.
