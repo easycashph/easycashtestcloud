@@ -2878,3 +2878,51 @@ verified healthy. Committed and pushed (`6c1d023`).
 - Not yet done: an actual in-browser click-through of the new filter (blocked on missing live
   credentials this session) - worth a quick manual check next time someone's logged in, though the
   direct-repository-call verification already confirms the underlying data/logic is correct.
+
+## §59 — 2026-08-29: real fix for §57's duplicate-transaction bug - locked loans now skip SDevTech transaction import entirely
+
+Follow-up to §57 (23+4+60 duplicate/unwanted transactions found and manually cleaned up). User asked
+whether a dedicated "clients and loan accounts only" `.bat` file would prevent this recurring -
+recommended a more surgical fix instead: a separate bat skipping ALL transaction-related steps would
+break the initial repayment schedule/balance data any genuinely NEW loan account needs, so the real
+problem was narrower than "never touch transactions" - it was specifically "never touch transactions
+for a loan already locked (has a native transaction)".
+
+**Root cause, precisely**: `migrateLoanTransactions()`'s only duplicate guard
+(`loadNativeRepaymentSignatures`, added 2026-08-15) checked a candidate SDevTech `REPAYMENT` against
+native transactions by exact `loanAccountId|amount|Manila-calendar-day` match only. It missed
+anything one day off (SDevTech's own entry date vs. this LMS's) or split across SDevTech's separate
+principal/penalty/fee rows against this system's one combined `REPAYMENT` (TXN-1 design) - exactly
+the shape of every duplicate found in §57. It also never applied to non-REPAYMENT types at all
+(`PENALTY_APPLIED`/`FEE_CHARGED`/`ADJUSTMENT`), which made up most of §57's second cleanup pass.
+
+**Fix**: removed `loadNativeRepaymentSignatures` and its per-row signature check entirely, replaced
+with `loadLockedLoanAccountIds()` (the exact same query `migrateLoanAccounts`'s own
+`lockedLoanAccountIds` already runs) and one unconditional check at the top of the per-transaction
+loop: if the transaction's loan account is locked, skip it outright - no de-duplication attempt, no
+partial import. An unlocked loan (brand new, or never natively touched) is completely unaffected and
+still gets its full transaction history imported normally, which a first-time-migrated loan needs for
+its schedule/balance to be correct at all. Also removed the now-unused `manilaDayRange` import.
+
+**Verified live** (dry run couldn't prove this - see below): re-ran `migrate-legacy-data.ts --apply`
+against the same already-synced SDevTech snapshot. New reconciliation line appeared: `skipped (loan
+account is locked...): 4,222` (up from the old dedup logic's much narrower catch). Directly queried
+afterward for any migrated transaction created in this run's timestamp window belonging to one of the
+32 currently-locked loans: zero. The 4,129 pre-existing migrated transactions still attached to locked
+loans are untouched legitimate history from before each loan became locked - correctly left alone, not
+purged.
+
+**Dry-run gotcha discovered along the way**: a dry run's `loanAccountIdByLegacyKey` map values are
+placeholder strings (`dry-run:${legacyId}`), never real UUIDs (no DB writes happen to look them up
+from) - so a lock check keyed on the real `loanAccount.id` can never fire during `migrate-legacy-
+data.ts`'s own dry-run mode, only under `--apply`. Worth remembering for any future check added to
+this script: dry-run reconciliation cannot validate ID-based logic like this, only `--apply` can (safe
+here specifically because `--apply` reruns against already-synced data are naturally idempotent/
+no-op for anything not newly eligible).
+
+### Current state / follow-ups
+
+- The exact bug class from §57 cannot recur - a locked loan's transaction ledger is now permanently
+  hands-off for every future SDevTech sync, not just protected by an imperfect dedup heuristic.
+- No manual "duplicate cleanup" step should ever be needed again after a routine "Update Database From
+  SDevTech" run, for this specific failure mode.
