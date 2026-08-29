@@ -102,13 +102,22 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-repayment-schedules.ts); then
 fi
 
 echo
-echo "[7/9] Kinukumpleto ang balance ng bagong loans na walang"
+echo "[7/10] Kinukumpleto ang balance ng bagong loans na walang"
 echo "      account-level snapshot mula sa SDevTech (kinukuha mula sa"
 echo "      kanya-kanyang repayment schedule)..."
 (cd "$BACKEND_DIR" && npx tsx scripts/recompute-active-loan-balances-from-schedule.ts)
 
+# 2026-08-29 (bug fix, ported from Update Database From SDevTech.bat): this step was entirely
+# MISSING, even though legacy/Run Full Legacy Migration.command's full-reset counterpart has
+# always had it. Without it, a newly-migrated loan's netProceeds column stays at its schema
+# default (0.00) forever - surfaced as a blank/zero Total Net Amount on the Loan Releases Report.
 echo
-echo "[8/9] Ina-link ang mga na-reschedule/compromise-settle na loan"
+echo "[8/10] Kinukumpleto ang Net Proceeds (principal minus origination"
+echo "      fees) ng mga bagong loans..."
+(cd "$BACKEND_DIR" && npx tsx scripts/backfill-net-proceeds.ts)
+
+echo
+echo "[9/10] Ina-link ang mga na-reschedule/compromise-settle na loan"
 echo "      (2026-08-29) sa bago nilang account, para malinaw sa LMS"
 echo "      kung bakit sila na-close - kailangan munang tumakbo ang"
 echo "      balance recompute sa itaas, kaya nandito ito pagkatapos."
@@ -122,7 +131,7 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-restructure-compromise.
 fi
 
 echo
-echo "[9/9] Huling spot-check - tinitignan kung may loan na"
+echo "[10/10] Huling spot-check - tinitignan kung may loan na"
 echo "      kailangan pa ng manual na atensyon..."
 (cd "$BACKEND_DIR" && npx tsx scripts/check-legacy-balance-integrity.ts)
 
@@ -136,7 +145,7 @@ echo "dito, metadata lang muna ang na-dagdag - patakbuhin pa ang"
 echo "\"Backfill SDevTech Attachments.command\" kung gusto mong makuha"
 echo "rin ang totoong files nila."
 echo
-echo "Kung may lumabas na loan(s) sa [9/9] sa itaas, i-check muna ang"
+echo "Kung may lumabas na loan(s) sa [10/10] sa itaas, i-check muna ang"
 echo "mga iyon (tingnan ang comment sa loob ng"
 echo "check-legacy-balance-integrity.ts para sa susunod na hakbang)"
 echo "bago ipalagay na kumpleto ang update."

@@ -22,7 +22,7 @@ echo sa LMS mismo (hindi galing SDevTech) ay awtomatikong nilalaktawan
 echo - protektado sila, hindi na sila ino-overwrite ng SDevTech.
 echo.
 
-echo [1/11] Hinahanap ang pinaka-bagong .zip sa "%MONGO_DIR%"...
+echo [1/12] Hinahanap ang pinaka-bagong .zip sa "%MONGO_DIR%"...
 set "LATEST_ZIP="
 for /f "delims=" %%F in ('dir /b /o-d "%MONGO_DIR%\*.zip" 2^>nul') do (
   if not defined LATEST_ZIP set "LATEST_ZIP=%%F"
@@ -42,9 +42,9 @@ set "ZIP_BASENAME=!LATEST_ZIP:.zip=!"
 set "TARGET_DIR=%EXTRACTED_DIR%\!ZIP_BASENAME!"
 
 if exist "%TARGET_DIR%\db-easycash" (
-  echo [2/11] Na-extract na dati ang backup na ito - lalaktawan ang extraction.
+  echo [2/12] Na-extract na dati ang backup na ito - lalaktawan ang extraction.
 ) else (
-  echo [2/11] Ina-extract ang "!LATEST_ZIP!" ^(maaaring tumagal ng ilang minuto^)...
+  echo [2/12] Ina-extract ang "!LATEST_ZIP!" ^(maaaring tumagal ng ilang minuto^)...
   powershell -NoProfile -Command "Expand-Archive -Path '%MONGO_DIR%\!LATEST_ZIP!' -DestinationPath '%TARGET_DIR%' -Force"
   if errorlevel 1 (
     echo       FAILED ang extraction. Suriin ang error sa itaas.
@@ -55,7 +55,7 @@ if exist "%TARGET_DIR%\db-easycash" (
 )
 echo.
 
-echo [3/11] Chinicheck kung tumatakbo ang Postgres...
+echo [3/12] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
 if errorlevel 1 (
   echo       Hindi tumatakbo ang Postgres. Sinisimulan ang docker compose stack...
@@ -66,7 +66,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [4/11] Dry run muna - tinitignan kung ano ang mga BAGONG record...
+echo [4/12] Dry run muna - tinitignan kung ano ang mga BAGONG record...
 echo       ^(walang isusulat pa sa database sa hakbang na ito^)
 echo.
 pushd "%BACKEND_DIR%"
@@ -83,7 +83,7 @@ if /I not "%CONFIRM%"=="Y" (
 )
 
 echo.
-echo [5/11] Ina-apply ang mga bagong record sa database...
+echo [5/12] Ina-apply ang mga bagong record sa database...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\migrate-legacy-data.ts --apply
 if errorlevel 1 (
@@ -97,13 +97,13 @@ if errorlevel 1 (
 popd
 
 REM 2026-08-27 (user request): migrateBorrowers() already sets facebookLink/createdAt correctly
-REM for BRAND-NEW borrowers created in step [5/11] above, but its upsert's `update: {}` is a no-op
+REM for BRAND-NEW borrowers created in step [5/12] above, but its upsert's `update: {}` is a no-op
 REM for borrowers already migrated in an earlier run - so a client whose Facebook link or creation
 REM date was added to SDevTech after they were first migrated here would never pick it up without
 REM these. Both scripts are additive/idempotent - safe to run every time, they only ever fill a
 REM currently-blank field, never overwrite one a staff member edited manually.
 echo.
-echo [6/11] Facebook Link backfill (SDevTech-sourced, existing clients)...
+echo [6/12] Facebook Link backfill (SDevTech-sourced, existing clients)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-legacy-borrower-facebook-links.ts --apply
 if errorlevel 1 (
@@ -117,7 +117,7 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [7/11] Client creation-date backfill (SDevTech-sourced, existing clients)...
+echo [7/12] Client creation-date backfill (SDevTech-sourced, existing clients)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-legacy-borrower-created-dates.ts --apply
 if errorlevel 1 (
@@ -131,7 +131,7 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [8/11] Ina-update ang repayment schedules (kung magkano na ang
+echo [8/12] Ina-update ang repayment schedules (kung magkano na ang
 echo       nabayaran kada installment) mula sa SDevTech...
 REM 2026-08-14 (bug fix): this step was MISSING from this .bat entirely, even though
 REM "legacy/Run Full Legacy Migration.command" has always had it as its step [7/18], BETWEEN the
@@ -140,7 +140,7 @@ REM new SDevTech payments as `loan_transactions` rows but never updated the matc
 REM `repayment_schedules` paid amounts - so a loan could show a real payment in its transaction
 REM history while its installments still read unpaid. Found 2026-08-14 on SML-PDC_00035 (Rafael
 REM Alarcon Baguio): a real 7,000.00 payment (5,309.86 principal + 1,690.14 interest) existed as a
-REM transaction but installment #4 still showed 0.00 principal paid. Worse, step [9/11] below
+REM transaction but installment #4 still showed 0.00 principal paid. Worse, step [9/12] below
 REM recomputes loan balances FROM this schedule - so a stale schedule quietly propagated the error
 REM into the account-level balances too. Order matters: this must run BEFORE that recompute.
 pushd "%BACKEND_DIR%"
@@ -156,15 +156,28 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [9/11] Kinukumpleto ang balance ng bagong loans na walang
+echo [9/12] Kinukumpleto ang balance ng bagong loans na walang
 echo       account-level snapshot mula sa SDevTech (kinukuha mula sa
 echo       kanya-kanyang repayment schedule)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\recompute-active-loan-balances-from-schedule.ts
 popd
 
+REM 2026-08-29 (user-reported: Loan Releases Report showing blank/zero Total Net Amount for
+REM freshly-migrated loans): this step was entirely MISSING from this .bat, even though
+REM "legacy/Run Full Legacy Migration.command"'s full-reset counterpart has always had it. Without
+REM it, a newly-migrated loan's netProceeds column stays at its schema default (0.00) forever -
+REM never silently wrong for existing loans (idempotent, only touches rows that don't match the
+REM recomputed value), just never applied to brand-new ones by this incremental sync.
 echo.
-echo [10/11] Ina-link ang mga na-reschedule/compromise-settle na loan
+echo [10/12] Kinukumpleto ang Net Proceeds (principal minus origination
+echo        fees) ng mga bagong loans...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\backfill-net-proceeds.ts
+popd
+
+echo.
+echo [11/12] Ina-link ang mga na-reschedule/compromise-settle na loan
 echo        (2026-08-29) sa bago nilang account, para malinaw sa LMS
 echo        kung bakit sila na-close - kailangan munang tumakbo ang
 echo        balance recompute sa itaas, kaya nandito ito pagkatapos.
@@ -182,7 +195,7 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [11/11] Huling spot-check - tinitignan kung may loan na
+echo [12/12] Huling spot-check - tinitignan kung may loan na
 echo       kailangan pa ng manual na atensyon...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\check-legacy-balance-integrity.ts
@@ -220,7 +233,7 @@ echo dito, metadata lang muna ang na-dagdag - patakbuhin pa ang SFTP
 echo backfill script (scripts\backfill-legacy-attachments.ts) kung
 echo gusto mong makuha rin ang totoong files nila.
 echo.
-echo Kung may lumabas na loan(s) sa [11/11] sa itaas, i-check muna ang
+echo Kung may lumabas na loan(s) sa [12/12] sa itaas, i-check muna ang
 echo mga iyon (tingnan ang comment sa loob ng
 echo check-legacy-balance-integrity.ts para sa susunod na hakbang)
 echo bago ipalagay na kumpleto ang update.
