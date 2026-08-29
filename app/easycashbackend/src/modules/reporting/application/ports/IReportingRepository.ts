@@ -117,7 +117,17 @@ export interface LoanReleaseReportRow {
   notarial: string;
   webFee: string;
   totalNetAmount: string;
+  /** 2026-08-29 (user request): distinguishes a genuine new-money disbursement from a loan account
+   * that only exists to carry forward an old loan's balance under new terms - a Restructure,
+   * Adjustment, or Compromise Settlement all create a fresh `LoanAccount` (see
+   * `LoanRestructure`/`LoanAdjustment`/`LoanCompromiseSettlement.newLoanAccountId`), which
+   * previously counted as a "release" here even though no new funds went out. Defaults to
+   * `ORIGINATION`-only when the caller doesn't filter by origin - see
+   * `PrismaReportingRepository.getLoanReleasesReport`'s own doc comment. */
+  origin: 'ORIGINATION' | 'RESTRUCTURE' | 'ADJUSTMENT' | 'COMPROMISE';
 }
+
+export type LoanReleaseOrigin = LoanReleaseReportRow['origin'];
 
 /**
  * 2026-07-17: the remaining 8 legacy reports (`docs/SESSION_LOG_2026-07-15.md`'s Report Generation
@@ -285,7 +295,9 @@ export interface IReportingRepository {
   listTransactions(options: ListReportTransactionsOptions): Promise<TransactionReportRow[]>;
   /** Distinct `paymentMethod` values currently in use, each paired with its display label — powers the Transaction Report's channel filter dropdown. */
   listDistinctChannels(): Promise<ChannelOption[]>;
-  getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]>;
+  /** `origins` unfiltered (undefined/empty) defaults to `['ORIGINATION']` - see
+   * `LoanReleaseReportRow.origin`'s own doc comment for why. */
+  getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string; origins?: LoanReleaseOrigin[] }): Promise<LoanReleaseReportRow[]>;
   getAgingReport(filter: { branchId?: string }): Promise<AgingReportRow[]>;
   getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]>;
   getAccountsWithPastDueReport(filter: DateRangeFilter & { branchId?: string }): Promise<AccountsWithPastDueReportRow[]>;

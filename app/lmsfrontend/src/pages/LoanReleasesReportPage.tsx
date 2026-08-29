@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Columns3, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, Columns3, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -16,8 +17,24 @@ import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
 import { useLogPageView } from '@/lib/activityLog';
 import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
-import type { LoanReleaseReportRow } from '@/lib/reportApiTypes';
+import type { LoanReleaseOrigin, LoanReleaseReportRow } from '@/lib/reportApiTypes';
 import { formatDate, formatPeso, isoDate } from '@/lib/utils';
+
+/**
+ * 2026-08-29 (user request): a Restructure/Adjustment/Compromise Settlement each create a fresh
+ * loan account to carry an old loan's balance forward under new terms - no new money actually goes
+ * out, so counting them as "releases" overstated real disbursements. Defaults to "New/Renew" only
+ * (a genuine origination); the other three origins are available to tick on for a broader view
+ * (e.g. auditing all account activity in the period), same multi-select convention as Transaction
+ * Report's type/channel filters.
+ */
+const ORIGIN_OPTIONS: { value: LoanReleaseOrigin; label: string }[] = [
+  { value: 'ORIGINATION', label: 'New / Renew' },
+  { value: 'RESTRUCTURE', label: 'Restructured' },
+  { value: 'ADJUSTMENT', label: 'Adjusted' },
+  { value: 'COMPROMISE', label: 'Compromised' },
+];
+const DEFAULT_ORIGINS: LoanReleaseOrigin[] = ['ORIGINATION'];
 
 /**
  * 2026-08-17 (user request): the remaining 22 of 28 columns, hidden by default - Client Name/
@@ -49,6 +66,7 @@ const OPTIONAL_COLUMNS = [
   { key: 'insurance', label: 'Insurance' },
   { key: 'notarial', label: 'Notarial' },
   { key: 'webFee', label: 'Web Fee' },
+  { key: 'origin', label: 'Origin' },
 ] as const;
 
 type OptionalColumnKey = (typeof OPTIONAL_COLUMNS)[number]['key'];
@@ -87,6 +105,7 @@ function optionalCellValue(row: LoanReleaseReportRow, key: OptionalColumnKey): R
   if (DATE_COLUMN_KEYS.has(key)) return formatDate(value as string);
   if (MONEY_COLUMN_KEYS.has(key)) return formatPeso(Number(value));
   if (PERCENT_COLUMN_KEYS.has(key)) return `${value}%`;
+  if (key === 'origin') return ORIGIN_OPTIONS.find((o) => o.value === value)?.label ?? String(value);
   return String(value);
 }
 
@@ -95,7 +114,9 @@ function optionalCellValue(row: LoanReleaseReportRow, key: OptionalColumnKey): R
  * `.xlsx` export). On-screen table mirrors Transaction Report's shape (scrollable body, sticky
  * total row) - the `.xlsx` download always includes every column regardless of what's toggled
  * visible here (user-confirmed 2026-08-17): the column picker is a display preference, not a
- * report-scope filter.
+ * report-scope filter. The Origin filter (2026-08-29), by contrast, IS a report-scope filter -
+ * it's sent to the server as `origin` query params, same as Transaction Report's type/channel
+ * filters, since it changes which loans are actually included, not just which columns show.
  */
 export function LoanReleasesReportPage() {
   useLogPageView('Loan Releases Report');
@@ -107,21 +128,31 @@ export function LoanReleasesReportPage() {
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
   const [visibleColumns, setVisibleColumns] = React.useState<Record<OptionalColumnKey, boolean>>(loadColumnVisibility);
+  const [origins, setOrigins] = React.useState<LoanReleaseOrigin[]>(DEFAULT_ORIGINS);
   React.useEffect(() => {
     window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [visibleColumns]);
   const toggleColumn = (key: OptionalColumnKey) => setVisibleColumns((prev) => ({ ...prev, [key]: !prev[key] }));
   const visibleOptionalColumns = OPTIONAL_COLUMNS.filter((c) => visibleColumns[c.key]);
+  const toggleOrigin = (origin: LoanReleaseOrigin) =>
+    setOrigins((prev) => (prev.includes(origin) ? prev.filter((x) => x !== origin) : [...prev, origin]));
+  const originFilterLabel =
+    origins.length === 0
+      ? 'All origins'
+      : origins.length === 1
+        ? (ORIGIN_OPTIONS.find((o) => o.value === origins[0])?.label ?? origins[0])
+        : `${origins.length} origins selected`;
 
   const buildParams = React.useCallback(() => {
     const params = new URLSearchParams();
     if (range.from) params.set('from', range.from);
     if (range.to) params.set('to', range.to);
+    for (const origin of origins) params.append('origin', origin);
     return params;
-  }, [range.from, range.to]);
+  }, [range.from, range.to, origins]);
 
   const releasesQuery = useQuery({
-    queryKey: ['reports', 'loan-releases', range.from, range.to],
+    queryKey: ['reports', 'loan-releases', range.from, range.to, origins],
     queryFn: () => apiClient.get<{ items: LoanReleaseReportRow[] }>(`/reports/loan-releases?${buildParams().toString()}`),
   });
   const releases = releasesQuery.data?.items ?? [];
@@ -154,7 +185,9 @@ export function LoanReleasesReportPage() {
         <h2 className="text-2xl font-semibold tracking-tight">Loan Releases Report</h2>
         <p className="text-sm text-muted-foreground">
           Every loan disbursed in the selected date range, one row per loan - a like-for-like replacement of the legacy Monthly
-          Loan Releases spreadsheet.
+          Loan Releases spreadsheet. Defaults to genuine new-money disbursements only (New/Renew) - a Restructure, Adjustment,
+          or Compromise Settlement only carries an old loan's balance forward under new terms, no new funds released, so those
+          are excluded unless ticked on in the Origin filter below.
         </p>
       </div>
 
@@ -168,11 +201,36 @@ export function LoanReleasesReportPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>Date range filters on Disbursement Date. Defaults to the current month.</CardDescription>
+          <CardDescription>Date range filters on Disbursement Date. Defaults to the current month, New/Renew loans only.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <DateRangeFilter value={range} onChange={setRange} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-52 justify-between font-normal">
+                  <span className="truncate">{originFilterLabel}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Checkbox items keep the menu open on select, same as Transaction Report's type
+                  filter, so several origins can be ticked in one go. */}
+              <DropdownMenuContent align="start" className="w-52">
+                <DropdownMenuItem onSelect={() => setOrigins(DEFAULT_ORIGINS)}>New/Renew only (default)</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setOrigins(ORIGIN_OPTIONS.map((o) => o.value))}>All origins</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {ORIGIN_OPTIONS.map((o) => (
+                  <DropdownMenuCheckboxItem
+                    key={o.value}
+                    checked={origins.includes(o.value)}
+                    onCheckedChange={() => toggleOrigin(o.value)}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {o.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline">

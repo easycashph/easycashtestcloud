@@ -17,7 +17,7 @@ import type { GetDailyCollectionReportUseCase } from '../../application/use-case
 import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
 import type { GetPortalAccountsReportUseCase } from '../../application/use-cases/GetPortalAccountsReportUseCase';
 import type { ListDistinctChannelsUseCase } from '../../application/use-cases/ListDistinctChannelsUseCase';
-import type { ReportGranularity } from '../../application/ports/IReportingRepository';
+import type { LoanReleaseOrigin, ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
 import {
   writeAccountsWithPastDueReportXlsx,
@@ -177,7 +177,8 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const origins = parseMultiValueFilter(req.query.origin) as LoanReleaseOrigin[] | undefined;
+      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope), origins });
       res.status(200).json({ items: rows.map(presentLoanReleaseReportRow) });
     } catch (error) {
       next(error);
@@ -189,7 +190,8 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const from = parseDate(req.query.from, 'from', 'start');
       const to = parseDate(req.query.to, 'to', 'end');
-      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope) });
+      const origins = parseMultiValueFilter(req.query.origin) as LoanReleaseOrigin[] | undefined;
+      const rows = await this.deps.getLoanReleasesReportUseCase.execute({ from, to, branchId: resolveBranchFilter(scope), origins });
       const buffer = await this.deps.loanReleasesReportWriter.write(rows);
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

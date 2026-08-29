@@ -85,6 +85,7 @@ export interface LoanReleaseReportResponse {
   notarial: string;
   webFee: string;
   totalNetAmount: string;
+  origin: 'ORIGINATION' | 'RESTRUCTURE' | 'ADJUSTMENT' | 'COMPROMISE';
 }
 
 export function presentLoanReleaseReportRow(row: LoanReleaseReportRow): LoanReleaseReportResponse {

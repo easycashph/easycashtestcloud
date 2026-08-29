@@ -21,6 +21,7 @@ import type {
   FullyPaidAccountsReportRow,
   IReportingRepository,
   ListReportTransactionsOptions,
+  LoanReleaseOrigin,
   LoanReleaseReportRow,
   OriginationReportRow,
   PortalAccountReportRow,
@@ -433,8 +434,40 @@ export class PrismaReportingRepository implements IReportingRepository {
     return [...valuesByLabel.entries()].map(([label, values]) => ({ label, values })).sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  async getLoanReleasesReport(filter: DateRangeFilter & { branchId?: string }): Promise<LoanReleaseReportRow[]> {
-    const loans = await prisma.loanAccount.findMany({
+  /**
+   * 2026-08-29 (user request): a Restructure/Adjustment/Compromise Settlement each create a fresh
+   * `LoanAccount` to carry an old loan's balance forward under new terms - no new money actually
+   * goes out, so counting them as "releases" (their default behavior before this change)
+   * overstated real disbursements. `origins` (default `['ORIGINATION']`) lets the caller choose
+   * which of the four origin types to include; multiple selected origins are unioned together.
+   */
+  async getLoanReleasesReport(
+    filter: DateRangeFilter & { branchId?: string; origins?: LoanReleaseOrigin[] },
+  ): Promise<LoanReleaseReportRow[]> {
+    const origins = filter.origins && filter.origins.length > 0 ? filter.origins : (['ORIGINATION'] as LoanReleaseOrigin[]);
+
+    const [restructures, adjustments, compromises] = await Promise.all([
+      prisma.loanRestructure.findMany({ select: { newLoanAccountId: true } }),
+      prisma.loanAdjustment.findMany({ select: { newLoanAccountId: true } }),
+      prisma.loanCompromiseSettlement.findMany({ select: { newLoanAccountId: true } }),
+    ]);
+    const restructureIds = new Set(restructures.map((r) => r.newLoanAccountId));
+    const adjustmentIds = new Set(adjustments.map((a) => a.newLoanAccountId));
+    const compromiseIds = new Set(compromises.map((c) => c.newLoanAccountId));
+
+    function originOf(loanAccountId: string): LoanReleaseOrigin {
+      if (restructureIds.has(loanAccountId)) return 'RESTRUCTURE';
+      if (adjustmentIds.has(loanAccountId)) return 'ADJUSTMENT';
+      if (compromiseIds.has(loanAccountId)) return 'COMPROMISE';
+      return 'ORIGINATION';
+    }
+
+    const includeOrigination = origins.includes('ORIGINATION');
+    const includeRestructure = origins.includes('RESTRUCTURE');
+    const includeAdjustment = origins.includes('ADJUSTMENT');
+    const includeCompromise = origins.includes('COMPROMISE');
+
+    const allLoans = await prisma.loanAccount.findMany({
       where: {
         activatedAt: { not: null, ...entryDateFilter(filter) },
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
@@ -444,6 +477,13 @@ export class PrismaReportingRepository implements IReportingRepository {
         loanProductVersion: { include: { loanProduct: true } },
       },
       orderBy: { activatedAt: 'desc' },
+    });
+    const loans = allLoans.filter((loan) => {
+      const origin = originOf(loan.id);
+      if (origin === 'RESTRUCTURE') return includeRestructure;
+      if (origin === 'ADJUSTMENT') return includeAdjustment;
+      if (origin === 'COMPROMISE') return includeCompromise;
+      return includeOrigination;
     });
     if (loans.length === 0) return [];
 
@@ -507,6 +547,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         notarial: loan.notarialFee.toString(),
         webFee: loan.webFee.toString(),
         totalNetAmount: loan.netProceeds.toString(),
+        origin: originOf(loan.id),
       };
     });
   }

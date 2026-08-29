@@ -81,7 +81,13 @@ export interface LoanReleaseReportRow {
   notarial: string;
   webFee: string;
   totalNetAmount: string;
+  /** 2026-08-29 (user request): distinguishes a genuine new-money disbursement from a loan account
+   * that only exists to carry an old loan's balance forward (Restructure/Adjustment/Compromise
+   * Settlement each create a fresh LoanAccount, previously miscounted as a release). */
+  origin: LoanReleaseOrigin;
 }
+
+export type LoanReleaseOrigin = 'ORIGINATION' | 'RESTRUCTURE' | 'ADJUSTMENT' | 'COMPROMISE';
 
 /** 2026-08-19 (user request): JSON counterpart of the backend's ExpectedCollectionReportResponse. */
 export interface ExpectedCollectionReportRow {
