@@ -1347,13 +1347,93 @@ total back to exactly 1,805 (matching live), status breakdown: `ACTIVE` 122 + `A
 1,141 = **1,263**, exact match. Cleaned up: dropped `live_check2`, removed the cached `/tmp/dump.bin`
 from the container and all this session's leftover `/tmp/*.log` scratch files on the host.
 
+## 29c. §29b's fix was too aggressive - a real live report proved 6 of the 8 deleted loans were genuine, restored them (loan/borrower data only, no transactions)
+
+User separately noticed the Loan Releases Report (New/Renew, Aug 1-29 2026) showed too few rows on
+this Mac and asked to check it against `easycash-database-2026-08-28.dump`. Investigated the dump
+itself first, rather than assuming this Mac was simply behind: the dump ALSO only has 6 loans
+activated in August (matching what this Mac had after §29b's cleanup) - so the dump was not the
+source of truth the user expected either. User then supplied a screenshot of the actual live New/
+Renew report straight from Office Server PC: **11 loans**, Aug 7-27. Cross-referencing that
+screenshot's 11 account codes against this Mac found exactly **6 missing**: `SL-CORP_00129`/`00130`/
+`00134`/`00135`, `SML-REG_00382`, `SML-REG_00385` - **all 6 are among the 8 loans §29b deleted**
+(only `BL-SPEC_00030`, excluded from this report for unrelated reasons, and `SML-REG_00387`, not yet
+disbursed at snapshot time, are absent from the live report's own list - consistent, not a further
+gap).
+
+This directly disproves §29b's core assumption: the Aug 28 Postgres dump is not actually current
+with live anymore (Office Server PC's real, currently-running database has moved past its own
+3-day-old snapshot, same as the local SDevTech extract already had). Deleting those 8 loans to
+"match live" §29b's own definition of "live" was matching a stale snapshot, not the actual live
+system - concretely proven by an on-the-spot report pull from Office Server PC itself, the most
+authoritative source available.
+
+**User's explicit scope for the fix this time**: loan accounts and borrower/client records only -
+**no transactions**. Re-ran `migrate-legacy-data.ts --apply` (same SDevTech source already on disk,
+no need to re-copy anything) but killed it deliberately once its own log showed Phase 3/6 (Loan
+Accounts + Co-Borrowers) had completed and Phase 4/6 (Loan Transactions, the 525k-row phase) had
+only just started (~6,000 rows in) - each phase commits its own upserts independently as it goes, so
+stopping between phases leaves no partial/inconsistent state. Verified precisely: `loan_transactions`
+count unchanged at 280,284 (zero leaked in from the interrupted Phase 4), `loan_accounts` back to
+1,813, `borrowers` 4,611 (+4 new applicants for these loans), all 6 previously-missing loans present
+and `ACTIVE`. Confirmed all 11 of the live report's own account codes now exist and are `ACTIVE` on
+this Mac.
+
+**Deliberately left as-is, per the user's own follow-up** ("balance na kasi ang loan transaction
+report, kaya wala nang kailangan idagdag dito"): the 6 restored loans' `principalBalance`/
+`netProceeds`/`processingFee` all still read `0.00` (`legacyBalanceDataMissing=true`, since these
+loans have no account-level balance snapshot in the raw SDevTech dump, and no repayment-schedule- or
+origination-fee-backfill was run against them this round) - not a further gap for right now, since
+this specific report (New/Renew, loan+client identity and dates) doesn't depend on those figures;
+would need `recompute-active-loan-balances-from-schedule.ts`/the origination-fee and net-proceeds
+backfills if a report that DOES read those figures for these 6 loans is checked next.
+
+## 29d. Follow-up: ran the origination-fee/interest-rate/net-proceeds backfills after all - 100% match against the live screenshot's Total Net Amount column
+
+User asked to run the 5 backfill scripts §29c's own comment flagged as needed for figures this
+report DOES read (`backfill-loan-origination-fees.ts`, `-mongo.ts`, `-inferred.ts` ->
+`backfill-loan-interest-rates.ts` -> `backfill-net-proceeds.ts`, same order and dependency chain
+`Update Database From SDevTech`'s own steps 10-14 already encode). Ran all 5 in sequence:
+Excel-snapshot fees (0 changed - none of the 6 restored loans are in that older snapshot),
+MongoDB-source fees (658 updates, includes these 6), inferred-stragglers (0 - already covered by the
+Mongo pass), interest rates (8 backfilled, contractualInterestRate copied for the same 8), net
+proceeds (660 corrected).
+
+Verified the 6 restored loans' `netProceeds` against every one of the live screenshot's own "Total
+Net Amount" values, one by one: `SL-CORP_00135` ₱11,953.19, `SL-CORP_00134` ₱30,000.00,
+`SML-REG_00385` ₱118,858.00, `SML-REG_00382` ₱63,753.01, `SL-CORP_00129` ₱50,000.00, `SL-CORP_00130`
+₱38,429.00 - **all 6 exact matches**, no discrepancy. This Mac's Loan Releases Report for
+August 2026 (New/Renew filter) now genuinely matches the live Office Server PC report the user
+originally screenshotted, both in row count (11) and in every figure checked.
+
+## 29e. Follow-up: Maturity Date/Amortization/Total Interest columns were still blank for the 6 restored loans - one more table, not covered by §29d's backfills
+
+User spotted a further gap in the same report: Maturity Date, Amortization, and Total Interest still
+missing for the 6 loans §29c restored. Traced in `PrismaReportingRepository.ts` before acting: all
+three are derived from `RepaymentSchedule` rows (`maturityDate` = last installment's `dueDate`,
+`amortization` = first installment's principal+interest due, `totalInterest` = sum of every
+installment's `interestDue`) - a completely different table from `loan_transactions` (the payment
+ledger §29c was told to skip) and from the origination-fee/net-proceeds fields §29d just backfilled.
+Confirmed via direct query: all 6 loans had exactly `0` `repayment_schedules` rows.
+
+`RepaymentSchedule` is the installment PLAN (due dates, amounts due), not a payment-received ledger -
+populated by `migrate-repayment-schedules.ts` from the legacy `repayments.bson` collection, a
+different source entirely from `loan_transactions`'s `payments.bson`-adjacent phase. Confirmed this
+doesn't conflict with §29c's "no transactions" scope before running it. Ran it globally (idempotent,
+upserts on `legacyId`, safe to re-run against all 1,811 already-covered loans, not just these 6) -
+8,890 installments upserted overall. Verified the 6 loans directly: all now have real installment
+counts (1 to 12, matching each loan's own term) and a real maturity date derived from them
+(`SML-REG_00385`: 1 installment, matures 2026-10-04; `SL-CORP_00129`: 12 installments, matures
+2027-09-04; etc.) - Maturity Date, Amortization, and Total Interest should all now render correctly
+in the Loan Releases Report.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29b (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29e (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29b) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29e) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
