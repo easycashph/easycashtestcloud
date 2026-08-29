@@ -1181,6 +1181,29 @@ Not run on this Mac this session - every step it performs was already done indiv
 this session (pull, seed, rebuild); this is purely a convenience/discipline tool for future pulls,
 on this machine and the other two.
 
+## 28a. Follow-up: actually test-ran "Sync After Pull (Macbook-Nomer).command" end to end - clean pass
+
+User asked to try running it for real right after §28 landed. Executed live (working tree was
+already clean, nothing uncommitted to worry about): `[1/8]` git pull -> "Already up to date" (as
+expected, this Mac had just pushed everything itself); `[2/8]` confirmed Postgres already running;
+`[3/8]`-`[6/8]` backend `npm install`/`prisma migrate deploy`/`prisma generate`/`prisma db seed` all
+completed clean (no-ops, since nothing new since the manual run minutes earlier); `[7/8]` frontend
+`npm install`s clean; `[8/8]` Docker rebuilt all three app containers (`easycashbackend`,
+`lmsfrontend`, `portalfrontend`) in one pass - previously this session's own manual routine only
+ever rebuilt one or two containers at a time per change, this is the first time all three got
+rebuilt together via a single script invocation. Exit code 0. Verified after: `docker ps` shows all
+four containers (`postgres`, `easycashbackend`, `lmsfrontend`, `portalfrontend`) "Up", `/health`
+returns `{"status":"ok",...}`, both frontends return HTTP 200.
+
+Mid-run, user asked whether they could double-click the same `.command` file themselves while this
+run was still in progress - answered no, explained why (two concurrent `npm install`/`prisma
+migrate deploy`/Docker build runs against the same project/database risk corrupting `node_modules`
+or racing on the database) - waited for the single run to finish cleanly before confirming it was
+safe to try again.
+
+Confirms the script is genuinely one-click-safe on this Mac. Still not yet run on Office Server PC
+or Laptop Nomer - next use of either machine should try their own `.bat` copy for the first time.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
