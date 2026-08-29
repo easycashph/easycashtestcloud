@@ -1108,13 +1108,40 @@ each of those features' own DB-backed toggles (`reminder_settings.emailEnabled`,
 `signingEmailEnabled`, `portalEmailEnabled`) still independently gate whether THEY fire, same as
 before - only the env-level dry-run switch flipped.
 
+## 27. Cleaned up 12 stale colon-scheme permissions found via the newly-working staff login
+
+With §26's real login working, user asked what the Roles & Permissions page's "Other" category
+items meant, then asked why this Mac's list looked different from the Office Server PC's live one.
+Investigated rather than guessing: 12 of the 14 "Other" items (`audit_log:read`, `borrower:read`/
+`write`, `loan_account:approve`/`close`/`disburse`/`read`, `loan_product:read`/`write`,
+`repayment:post`/`read`, `user:manage`) use an old `module:action` **colon** scheme, superseded long
+ago by the current `module.action` **dot** scheme everything else in the app uses (`loan_account
+.restructure`, `report.portal_accounts.view`, etc.) - confirmed via `grep` that **zero**
+`requirePermission(...)` call sites anywhere in `src/` reference any of the 12 colon-style codes.
+Only granted to MIS, which already holds the real dot-scheme equivalents - deleting them changes no
+one's actual access. The remaining 2 "Other" items (`fee.charge`, `document_template.manage`) ARE
+real, actively-checked dot-scheme permissions - just fall into "Other" because their module prefix
+("fee", "document_template") has no entry in the frontend's `MODULE_META` category map, a cosmetic
+gap, not staleness - left untouched.
+
+Root cause of the Mac-vs-live difference: `seed.ts` is purely additive (documented earlier this
+session, §18) - never deletes a stale row on its own, so these 12 dead rows just sat here since
+whatever earlier seed run first introduced them, while the Office Server PC's database either never
+had them or already got its own cleanup pass.
+
+Same one-off-script pattern as §18's `remove-report-view-permission.ts`: wrote
+`scripts/remove-stale-colon-permissions.ts` (dry-run listing each code + its granted roles, then
+`--apply`), ran it, confirmed `0` colon-containing codes remain, deleted the script (FK cascade on
+`role_permissions.permissionId` cleaned up MIS's 12 stale grants automatically). Data-only change -
+nothing to commit besides this log entry.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-26 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-27 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§26) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§27) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
