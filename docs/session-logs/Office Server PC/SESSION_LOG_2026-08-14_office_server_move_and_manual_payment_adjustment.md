@@ -3051,7 +3051,24 @@ platform scripts, not touched today (out of scope for this specific report bug),
 
 - Loan Releases Report's Total Net Amount is now correct for every currently-migrated loan; every
   future incremental sync (both platforms) will keep it that way automatically.
-- Not yet done: `Update Database From SDevTech.command` (Mac) is still missing the Facebook Link and
-  client creation-date backfill steps the `.bat` (Windows) has - worth a follow-up pass to bring both
-  files back into full parity, since whichever machine runs the Mac version currently gets a narrower
-  sync than Windows does.
+- ~~Not yet done: `.command` missing two steps~~ - fixed same session, see below.
+
+## §63 — 2026-08-29: Update Database From SDevTech.command brought to full parity with .bat
+
+Follow-up to §62's flagged gap. Added the two steps `Update Database From SDevTech.command` (Mac)
+was missing relative to the Windows `.bat` - Facebook Link backfill
+(`backfill-legacy-borrower-facebook-links.ts --apply`) and client creation-date backfill
+(`backfill-legacy-borrower-created-dates.ts --apply`) - inserted in the same position both scripts
+now share (right after the core migration `--apply`, before the repayment-schedule sync).
+Renumbered the whole file's step counters (9/10 mixed numbering -> a clean 12 steps throughout,
+matching the `.bat` exactly). Verified with `bash -n` (syntax-only check, no execution - this
+machine is Windows, can't actually run a `.command` file to test it end to end).
+
+### Current state / follow-ups
+
+- Both `Update Database From SDevTech.bat` and `.command` are now 12 steps each, identical order:
+  migrate -> Facebook Link -> creation-date -> repayment schedules -> balance recompute -> Net
+  Proceeds -> restructure/compromise link -> integrity spot-check. Whichever machine (Windows or Mac)
+  runs an incremental SDevTech sync now gets the exact same result.
+- Not verified by actually running the `.command` file (Windows machine, can't execute it) - worth a
+  live end-to-end check next time someone runs it on Macbook Nomer.
