@@ -2651,3 +2651,60 @@ OTP-bomb arbitrary accounts) - instead:
 - Not yet manually tested end-to-end in a browser (enable the setting, confirm a non-2FA account gets
   blocked into the modal, complete setup, confirm access restored) - recommended before relying on
   this in production, especially since it's new, security-sensitive code.
+
+## §55 — 2026-08-29: git pull sync (Loan Compromise Settlement, new "Sync After Pull" scripts), npm vulnerability audit and safe fixes
+
+`git pull` brought in a large change: a new Loan Compromise Settlement feature (new migration,
+`LoanCompromiseSettlement` domain/use-cases/repository, `MemberListPage.tsx`/`ClientProfilePage.tsx`/
+`LoanDetailPage.tsx` UI), a few new maintenance scripts (`attach-drive-staged-documents.ts`,
+`backfill-loan-restructure-compromise.ts`, `remove-test-client-accounts.ts`), and - notably - new
+**"Sync After Pull (\<machine\>).bat/.command"** scripts for every machine. That script's own doc
+comment cites this session's own §54 incident almost verbatim ("another machine ended up missing a
+real permission (`two_factor_enforcement.manage`) that had already been pulled into seed.ts days
+earlier") - i.e. the Nomer Laptop/other session hit exactly the gap we deliberately worked around
+here by manually re-running `seed.ts` right after building the 2FA feature, and turned it into a
+proper one-command automation (git pull -> docker postgres up -> backend npm install -> migrate
+deploy -> generate -> db seed -> frontend/portal npm install -> docker rebuild all three) covering
+every step a plain `git pull` skips.
+
+Ran the equivalent steps manually (backend/frontend npm install, migrate deploy, generate, db seed,
+type-check, docker rebuild all three services) rather than the interactive `.bat` itself. All clean,
+containers came back fresh and healthy.
+
+**Vulnerability audit** (prompted by the user's own question about what "vulnerability testing"
+means): ran `npm audit` across all three projects. Investigated production impact before fixing
+anything - confirmed via each Dockerfile that `vite`/`vitest`/`esbuild` (the CRITICAL/HIGH-severity
+findings) are dev-only tooling never present in the actual running containers:
+`backend.Dockerfile`'s runtime stage explicitly runs `npm install --omit=dev`, and both frontends'
+Dockerfiles only use Vite to produce static files in a `build` stage before switching to a plain
+nginx runtime image that never executes Node/Vite at all - so those findings, despite the alarming
+severity label, carry effectively zero real-world risk here.
+
+Ran the safe half (`npm audit fix`, no `--force`) across all three projects - fixed `js-yaml` (high,
+quadratic CPU/DoS) and `nanoid` (high, infinite loop) in the backend with no breaking changes:
+9 -> 7 vulnerabilities backend, 8 -> 7 lmsfrontend, portalfrontend at 4. Left two categories
+deliberately unfixed pending real testing:
+- `uuid` (backend, via `exceljs`, moderate) - a genuine production dependency (Excel export feature),
+  needs an `exceljs` major-version bump and a manual Excel-export smoke test before it's safe.
+- `react-router`/`react-router-dom` (both frontends, moderate - open redirect + arbitrary constructor
+  injection) - currently pinned to `^6.26.2`, the fix jumps to `7.18.3`, a genuine v6->v7 breaking
+  major upgrade across this app's whole routing layer. This is the one REAL remaining production risk
+  (react-router-dom ships in the actual bundled JS, unlike vite/vitest) - flagged to the user as
+  worth a dedicated, tested upgrade pass, not done today.
+
+Type-checked clean across all three projects after the safe fixes, rebuilt all three Docker services,
+verified healthy.
+
+### Current state / follow-ups
+
+- Backend: 7 vulnerabilities remaining (6 dev-tooling/zero-risk, 1 real - `uuid`/`exceljs`).
+- lmsfrontend/portalfrontend: 7/4 remaining respectively (dev-tooling zero-risk + `react-router`, the
+  one real one).
+- Recommended next security follow-up (not done today, needs dedicated testing time): a
+  `react-router-dom` v6->v7 upgrade pass on a separate branch, full route-by-route smoke test before
+  merging - open redirect + constructor injection are real, exploitable-sounding CVEs even if this
+  app isn't SSR (the open-redirect half doesn't require SSR).
+- Also worth a follow-up: `exceljs` major upgrade + Excel export smoke test, lower urgency than
+  react-router (uuid's actual vulnerability - a missing buffer bounds check - requires a caller to
+  pass an attacker-controlled buffer into uuid's parse functions, a narrower real-world trigger than
+  the open-redirect issue).
