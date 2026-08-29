@@ -31,6 +31,7 @@ export type LoanAccountStatus =
   | 'CLOSED_REJECTED'
   | 'CLOSED_RESTRUCTURED'
   | 'CLOSED_ADJUSTED'
+  | 'CLOSED_COMPROMISED'
   | 'CLOSED_UNDONE';
 
 /** 2026-07-24 (Loan Restructure feature) - mirrors `LoanRestructurePresenter`'s output. Fetched via
@@ -63,6 +64,27 @@ export interface LoanAdjustmentView {
   adjustedByUserId: string;
   adjustedByName: string | null;
   createdAt: string;
+}
+
+/** 2026-08-29 (Compromise Settlement feature) - mirrors `LoanCompromiseSettlementPresenter`'s
+ * output. Fetched via `GET /loan-accounts/:id/compromise-settlement`, null unless this loan
+ * account was either side of one. */
+export interface LoanCompromiseSettlementView {
+  id: string;
+  newLoanAccountId: string;
+  newLoanCode: string;
+  totalPreviousBalance: string;
+  settlementAmount: string;
+  reason: string | null;
+  settledByUserId: string;
+  settledByName: string | null;
+  createdAt: string;
+  items: {
+    id: string;
+    oldLoanAccountId: string;
+    oldLoanCode: string;
+    previousCollectionsBalance: string;
+  }[];
 }
 
 /** 2026-07-24 (user-confirmed) - mirrors `AccruedInterestPresenter`'s output. Fetched via

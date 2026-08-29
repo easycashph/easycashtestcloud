@@ -43,6 +43,7 @@ import type {
   LoanProduct,
   LoanRestructureView,
   LoanAdjustmentView,
+  LoanCompromiseSettlementView,
   LoanTransaction,
   PaginatedResponse,
   PaymentAllocationDetail,
@@ -1788,6 +1789,14 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     queryFn: () => apiClient.get<LoanRestructureView | null>(`/loan-accounts/${loanId}/restructure`),
   });
 
+  // 2026-08-29 (Compromise Settlement feature): null unless this loan account was either side of a
+  // settlement - drives the banner showing which loan(s) it links to. No button here to gate -
+  // triggering happens from the Client Profile page (multi-loan selection), not this page.
+  const compromiseSettlementQuery = useQuery({
+    queryKey: ['loan-compromise-settlement', loanId],
+    queryFn: () => apiClient.get<LoanCompromiseSettlementView | null>(`/loan-accounts/${loanId}/compromise-settlement`),
+  });
+
   // 2026-07-24 (Loan Adjustment feature): null unless this loan account was either side of an
   // adjustment - gates the "Loan Adjustment" button (already-old-side -> disabled, "isang beses
   // lang") and drives the banner showing which loan it links to.
@@ -2582,6 +2591,38 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                 {restructureQuery.data.oldLoanCode}
               </Link>
               {' '}on {formatDate(restructureQuery.data.createdAt)} ({formatPeso(num(restructureQuery.data.previousCollectionsBalance))} prior balance).
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 2026-08-29 (Compromise Settlement feature): this loan participated in a settlement, on
+          either side - old side may be one of several old loans, so list every sibling too. */}
+      {compromiseSettlementQuery.data && (
+        <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-2.5 text-xs text-primary">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {compromiseSettlementQuery.data.newLoanAccountId === loan.id ? (
+            <span>
+              This loan consolidates{' '}
+              {compromiseSettlementQuery.data.items.map((item, i) => (
+                <React.Fragment key={item.id}>
+                  {i > 0 && ', '}
+                  <Link to={`/loans/${item.oldLoanAccountId}`} className="underline underline-offset-2">
+                    {item.oldLoanCode}
+                  </Link>
+                </React.Fragment>
+              ))}
+              {' '}via a compromise settlement on {formatDate(compromiseSettlementQuery.data.createdAt)}
+              {' '}({formatPeso(num(compromiseSettlementQuery.data.totalPreviousBalance))} total prior balance,
+              {' '}settled at {formatPeso(num(compromiseSettlementQuery.data.settlementAmount))}).
+            </span>
+          ) : (
+            <span>
+              This loan was folded into{' '}
+              <Link to={`/loans/${compromiseSettlementQuery.data.newLoanAccountId}`} className="underline underline-offset-2">
+                {compromiseSettlementQuery.data.newLoanCode}
+              </Link>
+              {' '}via a compromise settlement on {formatDate(compromiseSettlementQuery.data.createdAt)}.
             </span>
           )}
         </div>

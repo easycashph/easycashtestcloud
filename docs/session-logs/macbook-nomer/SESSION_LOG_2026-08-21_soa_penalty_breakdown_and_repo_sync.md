@@ -1002,13 +1002,87 @@ in-app "Compromise Settlement" feature (button + use-case on the Loan Detail pag
 existing Restructure/Adjustment features, so staff can trigger a real consolidation from within the
 LMS itself rather than only via migration backfill.
 
+## 25. Built the in-app Compromise Settlement feature (the §24 follow-up, same session)
+
+User confirmed wanting the in-app feature right after §24 landed. Design questions asked and
+answered (CLAUDE.md "never invent business rules") via `AskUserQuestion` before writing any code:
+
+- **Selection**: staff multi-selects old loans via checkboxes on the **Client Profile** page (not
+  Loan Detail) - matches how the real SDevTech data actually looked (multiple loans, one borrower).
+- **Eligibility**: `ACTIVE`/`ACTIVE_IN_ARREARS` only - deliberately NO "must be past due" requirement
+  (unlike Restructure) since a compromise is a negotiated settlement, not necessarily
+  delinquency-triggered.
+- **Settlement amount**: staff types the exact negotiated figure directly - **never computed**,
+  unlike Restructure's computed-then-optionally-overridden principal (a compromise is the result of
+  an off-system negotiation; only staff knows the real agreed number).
+- **New loan's product/interest rate/grace period/term**: all staff-entered too (unlike Restructure,
+  which copies the old loan's own product) - a compromise may deliberately move the borrower onto a
+  different product.
+- **Activation**: one click straight to ACTIVE, no approval step - same posture as Restructure.
+- **Permission**: reuses `loan_account.restructure` - no new permission code.
+
+**Backend** (mirrors `RestructureLoanUseCase`'s exact shape throughout):
+- New domain entity [LoanCompromiseSettlement.ts](../../../app/easycashbackend/src/modules/loan-account/domain/LoanCompromiseSettlement.ts)
+  (aggregate holding its `items` array directly, unlike `LoanRestructure`'s 1:1 shape).
+- `LoanAccount.compromiseClose()` + `CLOSED_COMPROMISED` added to `ALLOWED_TRANSITIONS` (was
+  present in the enum since §24 but had NO outbound path from ACTIVE/ACTIVE_IN_ARREARS yet - §24's
+  migration-only writes bypassed the domain entity entirely via raw Prisma, so this gap didn't
+  surface until the in-app use case actually needed to call `transitionTo()`).
+- 3 new domain errors: `LoanNotEligibleForCompromiseSettlementError`,
+  `LoanAlreadyInCompromiseSettlementError`, `CompromiseSettlementRequiresSameBorrowerError` (the new
+  loan has one borrower - every folded-in old loan must match).
+- [CompromiseSettleLoanUseCase.ts](../../../app/easycashbackend/src/modules/loan-account/application/use-cases/CompromiseSettleLoanUseCase.ts) -
+  validates every old loan (exists, eligible status, not already settled, same borrower), builds the
+  new loan via the same `AmortizationScheduleGenerator` mechanism Restructure uses (turning a payoff
+  figure into a real amortized schedule), closes every old loan, writes one
+  `LoanCompromiseSettlement` + N `LoanCompromiseSettlementItem` rows, all in one
+  `unitOfWork.run()` transaction.
+- `ILoanCompromiseSettlementRepository`/`PrismaLoanCompromiseSettlementRepository` +
+  `GetLoanCompromiseSettlementUseCase` (read-side, mirrors `GetLoanRestructureUseCase`) +
+  `LoanCompromiseSettlementPresenter`.
+- New route `POST /loan-accounts/compromise-settle` (deliberately no `:id` - creates a new loan from
+  multiple old ones, no single anchor) and `GET /loan-accounts/:id/compromise-settlement`, both
+  wired into `loanAccountRouter.ts`/`loanAccountController.ts`/`app.ts`.
+
+**Frontend** - mockup built and approved (`mcp__visualize`, per the standing "mockup before UI
+changes" rule) before any code:
+- [ClientProfilePage.tsx](../../../app/lmsfrontend/src/pages/ClientProfilePage.tsx): checkbox
+  column on the loans table (only enabled for ACTIVE/ACTIVE_IN_ARREARS rows, gated behind
+  `canRestructureLoan`), a "Compromise Settlement (N selected)" button, and a new
+  `CompromiseSettlementDialog` component (product select, interest rate/term/first-repayment-date/
+  settlement-amount inputs, reason textarea) - posts with the same `Idempotency-Key` header pattern
+  `RestructureLoanUseCase`'s own frontend mutation uses.
+- [LoanDetailPage.tsx](../../../app/lmsfrontend/src/pages/LoanDetailPage.tsx): new
+  `compromiseSettlementQuery` + banner mirroring the existing Restructure/Adjustment banners - the
+  NEW loan's banner lists every OLD loan folded into it (plural-aware, unlike Restructure's single
+  link), each old loan's banner links to the one new loan.
+- `CLOSED_COMPROMISED` added to `LoanStatusBadge` ("Compromised" badge) and the frontend
+  `LoanAccountStatus` type.
+
+Verified: `npx tsc --noEmit` clean on both apps throughout. Backend test suite re-run after the full
+feature landed: still 28 failed / 943 passed / 7 skipped, identical failure set to §24's own run -
+confirmed no regression from the domain/use-case/router changes. Docker `easycashbackend`+
+`lmsfrontend` rebuilt, both healthy (`/health` OK, frontend 200). Smoke-tested the new routes
+without auth - both correctly return 401 (confirms `requireAuth`/`requirePermission` wiring reached
+the router, without touching any real data).
+
+**Not functionally tested this session** - creating an actual settlement permanently closes real
+loan accounts with **no undo feature** (unlike Restructure/Adjustment, which both got Undo features
+in earlier sessions) - deliberately did not exercise this against real migrated SDevTech loans, and
+this Mac still has no staff login credentials to click-test through the UI regardless (same
+limitation noted since §14, partially resolved by §22's restored accounts but their real passwords
+remain unknown). Next session with real credentials should: create 2-3 disposable test loan
+accounts specifically for this purpose (never real migrated data), exercise the full Client Profile
+-> select loans -> Compromise Settlement dialog -> Loan Detail banner flow end to end, and consider
+whether an Undo Compromise Settlement feature is worth building to match its two siblings.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-24 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-25 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§24) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§25) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times

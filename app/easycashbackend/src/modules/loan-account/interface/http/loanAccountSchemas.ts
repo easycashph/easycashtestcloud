@@ -187,3 +187,23 @@ export const adjustLoanSchema = z.object({
 });
 
 export type AdjustLoanRequestBody = z.infer<typeof adjustLoanSchema>;
+
+/**
+ * 2026-08-29 (Compromise Settlement feature, user-confirmed): POST /loan-accounts/compromise-settle
+ * request body - no `:id` in the route since this isn't scoped to one existing loan, it CREATES a
+ * new one from `oldLoanAccountIds`. Unlike Restructure, `loanProductVersionId`/`interestRate`/
+ * `gracePeriodDays`/`settlementAmount` are ALL staff-entered - see CompromiseSettleLoanUseCase's
+ * own doc comment for why each one can't be defaulted/computed here.
+ */
+export const compromiseSettleLoanSchema = z.object({
+  oldLoanAccountIds: z.array(z.string().min(1)).min(1),
+  loanProductVersionId: z.string().min(1),
+  installmentCount: z.coerce.number().int().positive(),
+  firstRepaymentDate: z.coerce.date(),
+  settlementAmount: decimalStringSchema,
+  interestRate: decimalStringSchema,
+  gracePeriodDays: z.coerce.number().int().nonnegative(),
+  reason: z.string().trim().min(1).optional(),
+});
+
+export type CompromiseSettleLoanRequestBody = z.infer<typeof compromiseSettleLoanSchema>;

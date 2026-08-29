@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { PhoneInput } from '@/components/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/FieldTooltip';
@@ -59,7 +60,7 @@ import { LoanApplicationForm } from '@/pages/LoanApplicationCreatePage';
 import { LoanAccountForm } from '@/pages/LoanAccountCreatePage';
 import type { BorrowerRiskSummary, RiskLevel } from '@/lib/riskAssessmentApiTypes';
 import type { MitigationDetails } from '@/lib/loanApplicationApiTypes';
-import { formatDate, formatMobileNumber, formatPeso, toProperCase } from '@/lib/utils';
+import { formatDate, formatMobileNumber, formatPeso, generateUuid, toProperCase } from '@/lib/utils';
 
 interface RealEditDraft {
   firstName: string;
@@ -1246,10 +1247,15 @@ function PortalAccountPanel({ borrowerId, hasEmail }: { borrowerId: string; hasE
 function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canAccessLoanApplications, canManageMembers, currentAccount } = useRole();
+  const { canAccessLoanApplications, canManageMembers, canRestructureLoan, currentAccount } = useRole();
   const [editOpen, setEditOpen] = React.useState(false);
   const [createApplicationOpen, setCreateApplicationOpen] = React.useState(false);
   const [createLoanAccountOpen, setCreateLoanAccountOpen] = React.useState(false);
+  // 2026-08-29 (Compromise Settlement feature, user-confirmed): staff selects loans to fold into a
+  // settlement from this table's own checkbox column - a fresh selection on every visit, not
+  // persisted, same as every other page-local dialog-trigger state here.
+  const [compromiseSelection, setCompromiseSelection] = React.useState<Set<string>>(new Set());
+  const [compromiseSettlementOpen, setCompromiseSettlementOpen] = React.useState(false);
   const [cardOrder, setCardOrder] = React.useState<string[]>(() => {
     if (typeof window === 'undefined') return DEFAULT_CARD_ORDER;
     try {
@@ -1585,15 +1591,23 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                     : 'This client has no Approved loan application awaiting a loan account.'}
             </CardDescription>
           </div>
-          <Button size="sm" disabled={!canCreateLoanAccountNow} onClick={() => setCreateLoanAccountOpen(true)}>
-            <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
-          </Button>
+          <div className="flex items-center gap-2">
+            {canRestructureLoan && compromiseSelection.size > 0 && (
+              <Button size="sm" variant="secondary" onClick={() => setCompromiseSettlementOpen(true)}>
+                Compromise Settlement ({compromiseSelection.size} selected)
+              </Button>
+            )}
+            <Button size="sm" disabled={!canCreateLoanAccountNow} onClick={() => setCreateLoanAccountOpen(true)}>
+              <Landmark className="mr-1.5 h-3.5 w-3.5" /> Create Loan Account
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="p-4 pt-0">
           <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
+                {canRestructureLoan && <TableCell className="w-8"></TableCell>}
                 <TableCell className="font-medium text-muted-foreground">Loan Code</TableCell>
                 <TableCell className="font-medium text-muted-foreground">Product</TableCell>
                 <TableCell className="font-medium text-muted-foreground">Status</TableCell>
@@ -1605,8 +1619,31 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loans.map((loan) => (
+              {loans.map((loan) => {
+                // 2026-08-29 (Compromise Settlement feature, user-confirmed): only an ACTIVE/
+                // ACTIVE_IN_ARREARS loan may be folded into a settlement - mirrors
+                // CompromiseSettleLoanUseCase's own eligibility check.
+                const eligibleForCompromise = loan.status === 'ACTIVE' || loan.status === 'ACTIVE_IN_ARREARS';
+                return (
                 <TableRow key={loan.id} className="cursor-pointer" onClick={() => navigate(`/loans/${loan.id}`)}>
+                  {canRestructureLoan && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 rounded border-input disabled:cursor-not-allowed disabled:opacity-40"
+                        checked={compromiseSelection.has(loan.id)}
+                        disabled={!eligibleForCompromise}
+                        onChange={(e) => {
+                          setCompromiseSelection((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(loan.id);
+                            else next.delete(loan.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-mono text-xs">{loan.loanCode}</TableCell>
                   <TableCell>{versionToProductName.get(loan.loanProductVersionId) ?? '-'}</TableCell>
                   <TableCell>
@@ -1630,17 +1667,18 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
                     );
                   })()}
                 </TableRow>
-              ))}
+                );
+              })}
               {loansQuery.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={canRestructureLoan ? 9 : 8} className="py-6 text-center text-sm text-muted-foreground">
                     Loading loans…
                   </TableCell>
                 </TableRow>
               )}
               {!loansQuery.isLoading && loans.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-6 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={canRestructureLoan ? 9 : 8} className="py-6 text-center text-sm text-muted-foreground">
                     No loans on record for this client.
                   </TableCell>
                 </TableRow>
@@ -1749,7 +1787,203 @@ function RealClientProfileView({ borrowerId }: { borrowerId: string }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {compromiseSettlementOpen && (
+        <CompromiseSettlementDialog
+          open={compromiseSettlementOpen}
+          onOpenChange={setCompromiseSettlementOpen}
+          oldLoans={loans.filter((l) => compromiseSelection.has(l.id))}
+          products={rawProductsQuery.data ?? []}
+          onSettled={(newLoan) => {
+            setCompromiseSettlementOpen(false);
+            setCompromiseSelection(new Set());
+            queryClient.invalidateQueries({ queryKey: ['loan-accounts', 'all'] });
+            navigate(`/loans/${newLoan.id}`);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * 2026-08-29 (Compromise Settlement feature, user-confirmed - mockup approved): folds the selected
+ * old loans into ONE new consolidated loan at a staff-entered, negotiated settlement amount. Every
+ * field (product, interest rate, term, first repayment date, settlement amount) is staff-entered -
+ * see `CompromiseSettleLoanUseCase`'s own doc comment for why none of these are computed here.
+ */
+function CompromiseSettlementDialog({
+  open,
+  onOpenChange,
+  oldLoans,
+  products,
+  onSettled,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  oldLoans: LoanAccount[];
+  products: LoanProduct[];
+  onSettled: (newLoan: LoanAccount) => void;
+}) {
+  const num = (v: string) => Number.parseFloat(v) || 0;
+  const totalPreviousBalance = oldLoans.reduce((sum, l) => sum + num(l.collectionsBalance), 0);
+
+  const [loanProductVersionId, setLoanProductVersionId] = React.useState('');
+  const [settlementAmount, setSettlementAmount] = React.useState('');
+  const [interestRate, setInterestRate] = React.useState('');
+  const [installmentCount, setInstallmentCount] = React.useState('12');
+  const [gracePeriodDays, setGracePeriodDays] = React.useState('0');
+  const [firstRepaymentDate, setFirstRepaymentDate] = React.useState(() => {
+    const d = new Date();
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [reason, setReason] = React.useState('');
+  const idempotencyKeyRef = React.useRef<string | null>(null);
+
+  const selectedVersion = products.flatMap((p) => p.versions).find((v) => v.id === loanProductVersionId);
+
+  const onProductVersionChange = (versionId: string) => {
+    setLoanProductVersionId(versionId);
+    const version = products.flatMap((p) => p.versions).find((v) => v.id === versionId);
+    if (version) {
+      if (version.defaultInterestRate) setInterestRate(version.defaultInterestRate);
+      setGracePeriodDays(String(version.gracePeriodDefaultDays));
+    }
+  };
+
+  const settleMutation = useMutation({
+    mutationFn: () => {
+      if (!idempotencyKeyRef.current) idempotencyKeyRef.current = generateUuid();
+      return apiClient.post<{ oldLoanAccounts: LoanAccount[]; newLoanAccount: LoanAccount }>(
+        '/loan-accounts/compromise-settle',
+        {
+          oldLoanAccountIds: oldLoans.map((l) => l.id),
+          loanProductVersionId,
+          installmentCount: Number(installmentCount),
+          firstRepaymentDate,
+          settlementAmount,
+          interestRate,
+          gracePeriodDays: Number(gracePeriodDays),
+          reason: reason.trim() || undefined,
+        },
+        { 'Idempotency-Key': idempotencyKeyRef.current },
+      );
+    },
+    onSuccess: (result) => {
+      idempotencyKeyRef.current = null;
+      onSettled(result.newLoanAccount);
+    },
+  });
+
+  const canSubmit =
+    !!loanProductVersionId &&
+    num(settlementAmount) > 0 &&
+    num(interestRate) >= 0 &&
+    Number(installmentCount) > 0 &&
+    !!firstRepaymentDate &&
+    !settleMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !settleMutation.isPending && onOpenChange(next)}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Compromise settlement</DialogTitle>
+          <DialogDescription>Folding {oldLoans.length} loan{oldLoans.length === 1 ? '' : 's'} into one new consolidated loan.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-md bg-secondary/40 p-3 text-xs">
+            {oldLoans.map((loan) => (
+              <div key={loan.id} className="flex justify-between py-0.5">
+                <span className="font-mono">{loan.loanCode}</span>
+                <span>{formatPeso(num(loan.collectionsBalance))}</span>
+              </div>
+            ))}
+            <div className="mt-1 flex justify-between border-t pt-1 font-medium">
+              <span>Total previous balance</span>
+              <span>{formatPeso(totalPreviousBalance)}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="compromise-settlement-amount">Settlement amount (negotiated)</Label>
+            <NumberInput
+              id="compromise-settlement-amount"
+              value={settlementAmount}
+              onChange={(e) => setSettlementAmount(e.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="compromise-product">New loan product</Label>
+            <Select value={loanProductVersionId} onValueChange={onProductVersionChange}>
+              <SelectTrigger id="compromise-product">
+                <SelectValue placeholder="Select a product" />
+              </SelectTrigger>
+              <SelectContent>
+                {products.map((product) => {
+                  const activeVersion = product.versions.find((v) => v.isActive);
+                  if (!activeVersion) return null;
+                  return (
+                    <SelectItem key={product.id} value={activeVersion.id}>
+                      {product.name}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="compromise-interest-rate">Interest rate (%)</Label>
+              <NumberInput id="compromise-interest-rate" value={interestRate} onChange={(e) => setInterestRate(e.target.value)} placeholder="0.00" />
+              {selectedVersion?.minInterestRate && (
+                <p className="text-xs text-muted-foreground">
+                  Range: {selectedVersion.minInterestRate}%{selectedVersion.maxInterestRate ? `–${selectedVersion.maxInterestRate}%` : '+'}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="compromise-term">Term (installments)</Label>
+              <NumberInput id="compromise-term" value={installmentCount} onChange={(e) => setInstallmentCount(e.target.value)} placeholder="12" maxDecimals={0} />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="compromise-first-repayment">First repayment date</Label>
+            <Input
+              id="compromise-first-repayment"
+              type="date"
+              value={firstRepaymentDate}
+              onChange={(e) => setFirstRepaymentDate(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="compromise-reason">Reason (optional)</Label>
+            <Textarea id="compromise-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+          </div>
+
+          {settleMutation.isError && (
+            <p className="text-xs text-destructive">
+              {settleMutation.error instanceof ApiError ? settleMutation.error.message : 'Failed to create the settlement.'}
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={settleMutation.isPending}>
+            Cancel
+          </Button>
+          <Button onClick={() => settleMutation.mutate()} disabled={!canSubmit}>
+            {settleMutation.isPending ? 'Creating…' : 'Create settlement'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

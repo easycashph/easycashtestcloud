@@ -215,3 +215,55 @@ export class UnsupportedInterestCalculationMethodError extends DomainError {
     this.name = 'UnsupportedInterestCalculationMethodError';
   }
 }
+
+/**
+ * 2026-08-29 (Compromise Settlement feature, user-confirmed): only an ACTIVE/ACTIVE_IN_ARREARS
+ * loan may be folded into a settlement - same base eligibility as Restructure, but WITHOUT
+ * Restructure's additional "must be past due or matured" requirement (a compromise is a
+ * negotiated write-down agreed with the borrower, not necessarily triggered by delinquency).
+ */
+export class LoanNotEligibleForCompromiseSettlementError extends DomainError {
+  constructor(loanAccountId: string, reason: string) {
+    super(
+      'LOAN_NOT_ELIGIBLE_FOR_COMPROMISE_SETTLEMENT',
+      `LoanAccount ${loanAccountId} is not eligible for a compromise settlement: ${reason}.`,
+      undefined,
+      400,
+    );
+    this.name = 'LoanNotEligibleForCompromiseSettlementError';
+  }
+}
+
+/**
+ * 2026-08-29 (Compromise Settlement feature, user-confirmed): "isang beses lang" - same
+ * one-time-only posture as LoanAlreadyRestructuredError, enforced both here (fast pre-transaction
+ * check) and by LoanCompromiseSettlementItem.oldLoanAccountId's unique constraint.
+ */
+export class LoanAlreadyInCompromiseSettlementError extends DomainError {
+  constructor(loanAccountId: string) {
+    super(
+      'LOAN_ALREADY_IN_COMPROMISE_SETTLEMENT',
+      `LoanAccount ${loanAccountId} has already been folded into a compromise settlement once.`,
+      undefined,
+      409,
+    );
+    this.name = 'LoanAlreadyInCompromiseSettlementError';
+  }
+}
+
+/**
+ * 2026-08-29 (Compromise Settlement feature, user-confirmed): the new consolidated loan has ONE
+ * borrower - every old loan folded into it must belong to that same borrower, otherwise the new
+ * loan's principal would represent a debt that isn't really theirs.
+ */
+export class CompromiseSettlementRequiresSameBorrowerError extends DomainError {
+  constructor() {
+    super(
+      'COMPROMISE_SETTLEMENT_REQUIRES_SAME_BORROWER',
+      'All loan accounts folded into a compromise settlement must belong to the same borrower.',
+      undefined,
+      400,
+    );
+    this.name = 'CompromiseSettlementRequiresSameBorrowerError';
+  }
+}

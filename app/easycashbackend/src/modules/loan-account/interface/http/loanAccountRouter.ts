@@ -6,6 +6,7 @@ import { requirePermission } from '@shared/middleware/requirePermission';
 import { LoanAccountController, type LoanAccountControllerDeps } from './loanAccountController';
 import {
   adjustLoanSchema,
+  compromiseSettleLoanSchema,
   createLoanAccountSchema,
   manualPaymentAdjustmentSchema,
   processPaymentSchema,
@@ -128,6 +129,18 @@ export function createLoanAccountRouter(deps: LoanAccountControllerDeps, tokenSe
   // UndoRestructureLoanUseCase, not this router.
   router.post('/loan-accounts/:id/undo-restructure', requireAuth, requirePermission('loan_account.undo_restructure'), controller.undoRestructure);
   router.get('/loan-accounts/:id/accrued-interest', requireAuth, controller.accruedInterest);
+
+  // 2026-08-29 (Compromise Settlement feature, user-confirmed): same permission as Restructure
+  // ('loan_account.restructure') - no separate permission code. No `:id` here - see
+  // compromiseSettleLoanSchema's own comment for why (creates a new loan from multiple old ones).
+  router.post(
+    '/loan-accounts/compromise-settle',
+    requireAuth,
+    requirePermission('loan_account.restructure'),
+    validateBody(compromiseSettleLoanSchema),
+    controller.compromiseSettle,
+  );
+  router.get('/loan-accounts/:id/compromise-settlement', requireAuth, controller.getCompromiseSettlement);
 
   // 2026-07-24 (Loan Adjustment feature, user-confirmed): offered only for a zero-payment ACTIVE
   // loan before its first installment's due date, exactly once - eligibility enforced by

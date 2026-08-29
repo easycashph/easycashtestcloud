@@ -85,8 +85,8 @@ export type RepaymentPeriodUnit = 'MONTHS';
 const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   PENDING_APPROVAL: ['APPROVED', 'CLOSED_REJECTED'],
   APPROVED: ['ACTIVE', 'PENDING_APPROVAL'],
-  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED', 'APPROVED'],
-  ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED'],
+  ACTIVE: ['ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED', 'CLOSED_COMPROMISED', 'APPROVED'],
+  ACTIVE_IN_ARREARS: ['ACTIVE', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_COMPROMISED'],
   // CLOSED -> ACTIVE only: `reopen()` (Reverse Payment feature) needs it when reversing the
   // payment that auto-closed this loan leaves it no longer fully paid. Never reachable from
   // CLOSED_WRITTEN_OFF/CLOSED_REJECTED/CLOSED_RESTRUCTURED/CLOSED_ADJUSTED - those aren't "fully
@@ -98,9 +98,8 @@ const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   // comment above for the full undo design.
   CLOSED_ADJUSTED: ['ACTIVE'],
   CLOSED_RESTRUCTURED: ['ACTIVE'],
-  // Written only by the SDevTech migration mapping (no in-app "Compromise Settlement" use-case/
-  // undo feature yet, per the data-model-only scope this was built under) - no outbound
-  // transitions until that feature exists.
+  // 2026-08-29 (Compromise Settlement feature): no undo feature yet (unlike Restructure/
+  // Adjustment) - no outbound transitions until one is built.
   CLOSED_COMPROMISED: [],
   // Deprecated terminal state (see LoanAccountStatus's own doc comment) - no outbound transitions,
   // never reached by current code.
@@ -718,6 +717,21 @@ export class LoanAccount {
     this.transitionTo('CLOSED_ADJUSTED');
     this.props.closedAt = new Date();
     this.props.closedReason = 'Adjusted';
+  }
+
+  /**
+   * 2026-08-29 (Compromise Settlement feature, user-confirmed): marks an ACTIVE or
+   * ACTIVE_IN_ARREARS loan CLOSED_COMPROMISED — mechanical transition only, mirroring
+   * `restructureClose()`. The use-case layer (`CompromiseSettleLoanUseCase`) decides eligibility
+   * (not already in a settlement) and creates the new `LoanAccount` + `LoanCompromiseSettlement`/
+   * `LoanCompromiseSettlementItem` audit rows; this entity has no schedule/audit-trail access and
+   * cannot check either itself. Balances are deliberately left untouched (frozen as of the moment
+   * of settlement) — same reasoning as `restructureClose()`.
+   */
+  compromiseClose(): void {
+    this.transitionTo('CLOSED_COMPROMISED');
+    this.props.closedAt = new Date();
+    this.props.closedReason = 'Compromise Settlement';
   }
 
   /**

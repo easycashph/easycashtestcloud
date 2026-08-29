@@ -167,6 +167,8 @@ import { ManualPaymentAdjustmentUseCase } from '@modules/loan-account/applicatio
 import { GetLoanRiskAssessmentUseCase } from '@modules/loan-account/application/use-cases/GetLoanRiskAssessmentUseCase';
 import { RestructureLoanUseCase } from '@modules/loan-account/application/use-cases/RestructureLoanUseCase';
 import { UndoRestructureLoanUseCase } from '@modules/loan-account/application/use-cases/UndoRestructureLoanUseCase';
+import { CompromiseSettleLoanUseCase } from '@modules/loan-account/application/use-cases/CompromiseSettleLoanUseCase';
+import { GetLoanCompromiseSettlementUseCase } from '@modules/loan-account/application/use-cases/GetLoanCompromiseSettlementUseCase';
 import { UndoAdjustLoanUseCase } from '@modules/loan-account/application/use-cases/UndoAdjustLoanUseCase';
 import { GetLoanRestructureUseCase } from '@modules/loan-account/application/use-cases/GetLoanRestructureUseCase';
 import { AdjustLoanUseCase } from '@modules/loan-account/application/use-cases/AdjustLoanUseCase';
@@ -175,6 +177,7 @@ import { GetAccruedInterestUseCase } from '@modules/loan-account/application/use
 import { LoanRiskAssessmentService } from '@modules/loan-account/application/services/LoanRiskAssessmentService';
 import { PrismaLoanAccountRepository } from '@modules/loan-account/infrastructure/PrismaLoanAccountRepository';
 import { PrismaLoanRestructureRepository } from '@modules/loan-account/infrastructure/PrismaLoanRestructureRepository';
+import { PrismaLoanCompromiseSettlementRepository } from '@modules/loan-account/infrastructure/PrismaLoanCompromiseSettlementRepository';
 import { PrismaLoanAdjustmentRepository } from '@modules/loan-account/infrastructure/PrismaLoanAdjustmentRepository';
 import { createLedgerRouter } from '@modules/ledger/interface/http/ledgerRouter';
 import { ListLoanTransactionsForAccountUseCase } from '@modules/ledger/application/use-cases/ListLoanTransactionsForAccountUseCase';
@@ -824,6 +827,8 @@ export function createApp(): Express {
   const loanRestructureRepository = new PrismaLoanRestructureRepository();
   // 2026-07-24 (Loan Adjustment feature)
   const loanAdjustmentRepository = new PrismaLoanAdjustmentRepository();
+  // 2026-08-29 (Compromise Settlement feature)
+  const loanCompromiseSettlementRepository = new PrismaLoanCompromiseSettlementRepository();
   const loanAccountRouter = createLoanAccountRouter(
     {
       createLoanAccountUseCase: new CreateLoanAccountUseCase({ loanAccountRepository, loanProductRepository }),
@@ -963,6 +968,19 @@ export function createApp(): Express {
         profileActivityLogService,
       }),
       getAccruedInterestUseCase: new GetAccruedInterestUseCase({ loanAccountRepository, repaymentInstallmentRepository, loanProductRepository }),
+      // 2026-08-29 (Compromise Settlement feature, user-confirmed): same local-repository-instance
+      // precedent as restructureLoanUseCase above.
+      compromiseSettleLoanUseCase: new CompromiseSettleLoanUseCase({
+        loanAccountRepository,
+        loanProductRepository,
+        repaymentInstallmentRepository,
+        loanTransactionRepository,
+        loanCompromiseSettlementRepository,
+        financialAuditLogger,
+        unitOfWork,
+        profileActivityLogService,
+      }),
+      getLoanCompromiseSettlementUseCase: new GetLoanCompromiseSettlementUseCase({ loanCompromiseSettlementRepository }),
       idempotencyKeyStore,
     },
     tokenService,

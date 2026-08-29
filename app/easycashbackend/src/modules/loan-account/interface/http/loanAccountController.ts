@@ -24,6 +24,8 @@ import type { GetLoanRiskAssessmentUseCase } from '../../application/use-cases/G
 import type { RestructureLoanUseCase } from '../../application/use-cases/RestructureLoanUseCase';
 import type { GetLoanRestructureUseCase } from '../../application/use-cases/GetLoanRestructureUseCase';
 import type { UndoRestructureLoanUseCase } from '../../application/use-cases/UndoRestructureLoanUseCase';
+import type { CompromiseSettleLoanUseCase } from '../../application/use-cases/CompromiseSettleLoanUseCase';
+import type { GetLoanCompromiseSettlementUseCase } from '../../application/use-cases/GetLoanCompromiseSettlementUseCase';
 import type { AdjustLoanUseCase } from '../../application/use-cases/AdjustLoanUseCase';
 import type { GetLoanAdjustmentUseCase } from '../../application/use-cases/GetLoanAdjustmentUseCase';
 import type { UndoAdjustLoanUseCase } from '../../application/use-cases/UndoAdjustLoanUseCase';
@@ -31,6 +33,7 @@ import type { GetAccruedInterestUseCase } from '../../application/use-cases/GetA
 import { presentAccruedInterest } from './presenters/AccruedInterestPresenter';
 import type {
   AdjustLoanRequestBody,
+  CompromiseSettleLoanRequestBody,
   CreateLoanAccountRequestBody,
   ManualPaymentAdjustmentRequestBody,
   ProcessPaymentRequestBody,
@@ -42,6 +45,7 @@ import type {
 import { presentLoanAccount } from './presenters/LoanAccountPresenter';
 import { presentLoanRestructure } from './presenters/LoanRestructurePresenter';
 import { presentLoanAdjustment } from './presenters/LoanAdjustmentPresenter';
+import { presentLoanCompromiseSettlement } from './presenters/LoanCompromiseSettlementPresenter';
 
 export interface LoanAccountControllerDeps {
   createLoanAccountUseCase: CreateLoanAccountUseCase;
@@ -64,6 +68,8 @@ export interface LoanAccountControllerDeps {
   adjustLoanUseCase: AdjustLoanUseCase;
   getLoanAdjustmentUseCase: GetLoanAdjustmentUseCase;
   undoAdjustLoanUseCase: UndoAdjustLoanUseCase;
+  compromiseSettleLoanUseCase: CompromiseSettleLoanUseCase;
+  getLoanCompromiseSettlementUseCase: GetLoanCompromiseSettlementUseCase;
   getAccruedInterestUseCase: GetAccruedInterestUseCase;
   idempotencyKeyStore: IIdempotencyKeyStore;
 }
@@ -485,6 +491,59 @@ export class LoanAccountController {
       await this.deps.undoAdjustLoanUseCase.execute(req.params.id as string, currentUser.sub);
       const loanAccount = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
       res.status(200).json(presentLoanAccount(loanAccount));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-29 (Compromise Settlement feature, user-confirmed): MIS/Accounting-only (same
+   * permission as restructure), same idempotency-guarded shape - a financially consequential,
+   * one-time-only action. No `:id` in the route (see `compromiseSettleLoanSchema`'s own comment) -
+   * branch access is checked against every selected old loan individually, not a single anchor. */
+  compromiseSettle = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const endpoint = 'POST /loan-accounts/compromise-settle';
+      const scope = resolveBranchScope(req);
+      const currentUser = getCurrentUser(req);
+      const body = req.body as CompromiseSettleLoanRequestBody;
+      for (const id of body.oldLoanAccountIds) {
+        const existing = await this.deps.getLoanAccountUseCase.execute(id);
+        assertBranchAccess(scope, existing.branchId);
+      }
+
+      await withIdempotency(this.deps.idempotencyKeyStore, req, res, endpoint, currentUser.sub, async () => {
+        const { oldLoanAccounts, newLoanAccount } = await this.deps.compromiseSettleLoanUseCase.execute({
+          oldLoanAccountIds: body.oldLoanAccountIds,
+          loanProductVersionId: body.loanProductVersionId,
+          installmentCount: body.installmentCount,
+          firstRepaymentDate: body.firstRepaymentDate,
+          settlementAmount: Money.of(body.settlementAmount),
+          interestRate: Percentage.of(body.interestRate),
+          gracePeriodDays: body.gracePeriodDays,
+          reason: body.reason,
+          settledByUserId: currentUser.sub,
+        });
+        return {
+          statusCode: 200,
+          body: {
+            oldLoanAccounts: oldLoanAccounts.map((loan) => presentLoanAccount(loan)),
+            newLoanAccount: presentLoanAccount(newLoanAccount),
+          },
+        };
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** 2026-08-29 (Compromise Settlement feature) — null unless this loan account was either side of a settlement. */
+  getCompromiseSettlement = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scope = resolveBranchScope(req);
+      const existing = await this.deps.getLoanAccountUseCase.execute(req.params.id as string);
+      assertBranchAccess(scope, existing.branchId);
+      const view = await this.deps.getLoanCompromiseSettlementUseCase.execute(req.params.id as string);
+      res.status(200).json(view ? presentLoanCompromiseSettlement(view) : null);
     } catch (error) {
       next(error);
     }
