@@ -2759,3 +2759,82 @@ rebuilt `easycashbackend`, committed and pushed (`5505569`).
   forward. If MIS suspects an OLDER customization (before 2026-08-25) was silently reverted at some
   point in the past and never re-applied, `audit_logs`' `GRANT_ROLE_PERMISSION`/
   `REVOKE_ROLE_PERMISSION` history is the place to check what was actually configured historically.
+
+## §57 — 2026-08-29: SDevTech sync brought in duplicate/unwanted transactions - found, root-caused, and fully cleaned up
+
+User asked to pull the newest SDevTech snapshot (`legacy/mongodb/20260829_155704.zip`) to add new
+clients/loan accounts only, explicitly reasoning that payments are now encoded natively in this LMS
+so SDevTech's own transaction history should no longer matter going forward. Ran the full 11-step
+"Update Database From SDevTech" routine manually (extract, `migrate-legacy-data.ts --apply`,
+Facebook/creation-date backfills, `migrate-repayment-schedules.ts`,
+`recompute-active-loan-balances-from-schedule.ts`, `backfill-loan-restructure-compromise.ts`,
+`check-legacy-balance-integrity.ts`) - clean run, 4 new borrowers (4607->4611), 8 new loan accounts
+(1805->1813), zero integrity issues.
+
+**The problem**: user immediately flagged the Transaction Report's "this month" total jumped from
+1,698,935.35 to 2,009,694.63 - the exact same number reported as correct on Macbook Nomer (not yet
+synced to this snapshot). Investigated methodically:
+
+1. Confirmed the Transaction Report's exact query (`TransactionReportPage.tsx` defaults: current
+   month, `PAYMENT_TYPES` = REPAYMENT/FEE_REPAYMENT/PENALTY_REPAYMENT, `DEFAULT_CHANNEL_LABELS`
+   excluding Loan Deduct/Adjustment/Suspense Account/etc.) and reproduced the exact total via raw SQL
+   - confirmed the number itself wasn't a display bug.
+2. User's own correction ("dahil naka manual encode na ang mga payment... balanse na ito kanina")
+   pointed straight at the real cause: `migrate-legacy-data.ts --apply` re-imports a loan's ENTIRE
+   SDevTech transaction history on every run (not just new records), and the existing
+   same-day-exact-amount duplicate check only catches duplicates that match perfectly - it missed
+   real duplicates that were off by one calendar day (SDevTech's own entry date vs. this LMS's) or
+   split into SDevTech's separate principal/penalty/fee component rows against this system's single
+   combined `REPAYMENT` (TXN-1 design). Manually verified 23 such pairs loan-by-loan (e.g.
+   `BL-REG_00053`: native 43,713.64 on Aug 28 == migrated 39,739.64 + 3,974.00 on Aug 27) before
+   writing any deletion - every single one matched exactly once components were summed.
+3. User then found and shared `legacy/mongodb/easycash-database-2026-08-28.dump` - a real pg_dump
+   backup of THIS machine's own database taken the day before this sync (also the exact snapshot
+   used to update Macbook Nomer). Restored it into a fully isolated throwaway Docker container
+   (`easycash-scratch-restore`, never touching the live stack) via `pg_restore`, and used it to get
+   an exact, verifiable "before" state instead of reconstructing it from timestamps/heuristics -
+   confirmed its Transaction Report total was EXACTLY 1,698,935.35, and that every native transaction
+   in the report window was byte-for-byte identical old vs. new (proving native data was never at
+   risk). A precise `legacyId`-based diff against the old dump found 4 more genuine duplicates missed
+   by the first pass (all dated exactly 2026-08-19 - apparently captured too late in that day for the
+   OLD 2026-08-19 snapshot's own export, but present once the fuller 2026-08-29 export re-scanned
+   that whole day).
+4. Beyond the Transaction Report's own date window, also found (and, per user's explicit broader
+   directive, removed) 60 more migrated rows the same sync added to 31 other pre-existing loans -
+   mostly `PENALTY_APPLIED`/`FEE_CHARGED` assessment entries and `$0` `ADJUSTMENT` audit markers, not
+   real duplicate payments, but still SDevTech-sourced ledger noise on loans that should be
+   exclusively native-managed now.
+
+**Verified before any deletion, and again after**: `LoanAccount.principalBalance`/`penaltyBalance`/
+`interestBalance` were NEVER at risk regardless - `migrate-legacy-data.ts`'s own
+`lockedLoanAccountIds` mechanism (`update: isLocked ? {} : resyncSnapshot`) already no-ops the whole
+balance-resync for any loan with an existing native transaction, confirmed by direct before/after
+comparison against the restored Aug 28 dump for several affected loans (byte-for-byte identical).
+Only the standalone transaction-ledger rows themselves needed removing - never any balance
+correction.
+
+**Cleanup applied in three passes** (each dry-run reviewed before `--apply`, using one-off
+`tmp-*.ts` scripts per this repo's convention, deleted immediately after use): 23 exact-duplicate
+payments (₱195,454.45), 4 late-Aug-19 entries (₱115,304.83, brought the Transaction Report to
+EXACTLY 1,698,935.35), then 60 more non-payment assessment/adjustment rows on old loans
+(₱66,003.26, no report-total impact but cleaned per the broader "SDevTech data on old loans" policy).
+The 52 transactions belonging to the 8 genuinely NEW loan accounts were deliberately kept throughout
+- their only source of history.
+
+### Current state / follow-ups
+
+- Transaction Report ("this month") now reads exactly 1,698,935.35, matching Macbook Nomer.
+- 4,611 borrowers / 1,813 loan accounts - the 4 new clients / 8 new loans this sync was actually meant
+  to deliver are intact and correct.
+- **Real, unresolved gap in `migrate-legacy-data.ts` itself**: its duplicate-detection for
+  already-natively-paid loans only catches an exact same-day, same-component-amount match - it does
+  NOT catch a payment recorded a different calendar day, or one whose component breakdown differs
+  from a straight sum. Every future "Update Database From SDevTech" run on an already-actively-used
+  loan risks reintroducing this same class of duplicate. Worth a proper fix (e.g. skip transaction
+  import entirely for any loan already in `lockedLoanAccountIds`, not just de-duplicate what gets
+  imported) rather than relying on manual review each time - flagged for a future session, not fixed
+  today since the immediate live-data problem took priority.
+- The `easycash-database-2026-08-28.dump` technique (restore into a disposable, unconnected Docker
+  container via `pg_restore`, never touching the live stack) is a clean, reusable way to get an exact
+  "before" comparison for any future live-data investigation - worth remembering as a general pattern,
+  not just for this incident.
