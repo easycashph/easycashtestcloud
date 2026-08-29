@@ -18,6 +18,14 @@ export type LoanAccountStatus =
   | 'CLOSED_RESTRUCTURED'
   | 'CLOSED_ADJUSTED'
   /**
+   * 2026-08-29 (SDevTech migration finding, user-confirmed): a defaulted loan closed because it
+   * was folded, with the borrower's other defaulted loans, into ONE new consolidated LoanAccount
+   * at a negotiated write-down amount. See the LoanCompromiseSettlement/
+   * LoanCompromiseSettlementItem models - distinct from CLOSED_RESTRUCTURED (many-to-one instead
+   * of one-to-one, negotiated settlement figure instead of a straight balance carry-forward).
+   */
+  | 'CLOSED_COMPROMISED'
+  /**
    * 2026-08-07..08 (Undo Restructure / Undo Adjustment): DEPRECATED - kept only because the
    * database enum still carries this value (Postgres can't drop an enum value without recreating
    * the type) and this type must stay assignable from it. The "retire, don't delete" undo design
@@ -90,6 +98,10 @@ const ALLOWED_TRANSITIONS: Record<LoanAccountStatus, LoanAccountStatus[]> = {
   // comment above for the full undo design.
   CLOSED_ADJUSTED: ['ACTIVE'],
   CLOSED_RESTRUCTURED: ['ACTIVE'],
+  // Written only by the SDevTech migration mapping (no in-app "Compromise Settlement" use-case/
+  // undo feature yet, per the data-model-only scope this was built under) - no outbound
+  // transitions until that feature exists.
+  CLOSED_COMPROMISED: [],
   // Deprecated terminal state (see LoanAccountStatus's own doc comment) - no outbound transitions,
   // never reached by current code.
   CLOSED_UNDONE: [],

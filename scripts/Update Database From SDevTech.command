@@ -20,7 +20,7 @@ echo "sa LMS mismo (hindi galing SDevTech) ay awtomatikong nilalaktawan"
 echo "- protektado sila, hindi na sila ino-overwrite ng SDevTech."
 echo
 
-echo "[1/8] Hinahanap ang pinaka-bagong .zip sa \"$MONGO_DIR\"..."
+echo "[1/9] Hinahanap ang pinaka-bagong .zip sa \"$MONGO_DIR\"..."
 LATEST_ZIP="$(ls -t "$MONGO_DIR"/*.zip 2>/dev/null | head -1)"
 
 if [ -z "$LATEST_ZIP" ]; then
@@ -37,9 +37,9 @@ echo
 TARGET_DIR="$EXTRACTED_DIR/$ZIP_BASENAME"
 
 if [ -d "$TARGET_DIR/db-easycash" ]; then
-  echo "[2/8] Na-extract na dati ang backup na ito - lalaktawan ang extraction."
+  echo "[2/9] Na-extract na dati ang backup na ito - lalaktawan ang extraction."
 else
-  echo "[2/8] Ina-extract ang \"$(basename "$LATEST_ZIP")\" (maaaring tumagal ng ilang minuto)..."
+  echo "[2/9] Ina-extract ang \"$(basename "$LATEST_ZIP")\" (maaaring tumagal ng ilang minuto)..."
   mkdir -p "$TARGET_DIR"
   if ! unzip -q -o "$LATEST_ZIP" -d "$TARGET_DIR"; then
     echo "      FAILED ang extraction. Suriin ang error sa itaas."
@@ -50,7 +50,7 @@ else
 fi
 echo
 
-echo "[3/8] Chinicheck kung tumatakbo ang Postgres..."
+echo "[3/9] Chinicheck kung tumatakbo ang Postgres..."
 if ! docker inspect -f '{{.State.Running}}' easycash-postgres-1 >/dev/null 2>&1; then
   echo "      Hindi tumatakbo ang Postgres. Sinisimulan ang docker compose stack..."
   (cd "$ROOT_DIR/app/docker" && docker compose up -d postgres)
@@ -58,7 +58,7 @@ if ! docker inspect -f '{{.State.Running}}' easycash-postgres-1 >/dev/null 2>&1;
 fi
 echo
 
-echo "[4/8] Dry run muna - tinitignan kung ano ang mga BAGONG record..."
+echo "[4/9] Dry run muna - tinitignan kung ano ang mga BAGONG record..."
 echo "      (walang isusulat pa sa database sa hakbang na ito)"
 echo
 (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts)
@@ -73,7 +73,7 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 echo
-echo "[5/8] Ina-apply ang mga bagong record sa database..."
+echo "[5/9] Ina-apply ang mga bagong record sa database..."
 if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts --apply); then
   echo
   echo "      May error sa migration - suriin ang error sa itaas bago ulitin."
@@ -83,7 +83,7 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts --apply); then
 fi
 
 echo
-echo "[6/8] Ina-update ang repayment schedules (kung magkano na ang"
+echo "[6/9] Ina-update ang repayment schedules (kung magkano na ang"
 echo "      nabayaran kada installment) mula sa SDevTech..."
 # 2026-08-14 (bug fix, ported from Update Database From SDevTech.bat): this step was MISSING
 # entirely, even though legacy/Run Full Legacy Migration.command has always had it as its step
@@ -102,13 +102,27 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-repayment-schedules.ts); then
 fi
 
 echo
-echo "[7/8] Kinukumpleto ang balance ng bagong loans na walang"
+echo "[7/9] Kinukumpleto ang balance ng bagong loans na walang"
 echo "      account-level snapshot mula sa SDevTech (kinukuha mula sa"
 echo "      kanya-kanyang repayment schedule)..."
 (cd "$BACKEND_DIR" && npx tsx scripts/recompute-active-loan-balances-from-schedule.ts)
 
 echo
-echo "[8/8] Huling spot-check - tinitignan kung may loan na"
+echo "[8/9] Ina-link ang mga na-reschedule/compromise-settle na loan"
+echo "      (2026-08-29) sa bago nilang account, para malinaw sa LMS"
+echo "      kung bakit sila na-close - kailangan munang tumakbo ang"
+echo "      balance recompute sa itaas, kaya nandito ito pagkatapos."
+if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-restructure-compromise.ts --apply); then
+  echo
+  echo "      May error sa restructure/compromise backfill - suriin ang"
+  echo "      error sa itaas."
+  echo
+  read -n 1 -s -r -p "Pindutin ang kahit anong key para lumabas..."
+  exit 1
+fi
+
+echo
+echo "[9/9] Huling spot-check - tinitignan kung may loan na"
 echo "      kailangan pa ng manual na atensyon..."
 (cd "$BACKEND_DIR" && npx tsx scripts/check-legacy-balance-integrity.ts)
 
@@ -122,7 +136,7 @@ echo "dito, metadata lang muna ang na-dagdag - patakbuhin pa ang"
 echo "\"Backfill SDevTech Attachments.command\" kung gusto mong makuha"
 echo "rin ang totoong files nila."
 echo
-echo "Kung may lumabas na loan(s) sa [8/8] sa itaas, i-check muna ang"
+echo "Kung may lumabas na loan(s) sa [9/9] sa itaas, i-check muna ang"
 echo "mga iyon (tingnan ang comment sa loob ng"
 echo "check-legacy-balance-integrity.ts para sa susunod na hakbang)"
 echo "bago ipalagay na kumpleto ang update."

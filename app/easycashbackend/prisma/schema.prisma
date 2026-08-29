@@ -164,6 +164,13 @@ enum LoanAccountStatus {
   /// the LoanAdjustment model). Distinct from CLOSED_RESTRUCTURED - no balance/principal change at
   /// all here, purely a due-date correction.
   CLOSED_ADJUSTED
+  /// 2026-08-29 (SDevTech migration finding, user-confirmed): a defaulted loan closed because it
+  /// was folded, together with the borrower's other defaulted loans, into ONE new consolidated
+  /// LoanAccount at a negotiated write-down amount (see the LoanCompromiseSettlement/
+  /// LoanCompromiseSettlementItem models). Distinct from CLOSED_RESTRUCTURED - many-to-one instead
+  /// of one-to-one, and the new principal is a negotiated settlement figure, not a straight balance
+  /// carry-forward.
+  CLOSED_COMPROMISED
   /// 2026-08-07..08 (Undo Restructure / Undo Adjustment feature): DEPRECATED, unused going forward
   /// - kept only because Postgres cannot drop an enum value without recreating the type. The
   /// original "retire, don't delete" undo design that produced this status was revised the same
@@ -318,6 +325,7 @@ model User {
   paymentAdjustmentsMade               PaymentAdjustment[]
   loanRestructuresMade                 LoanRestructure[]             @relation("LoanRestructureBy")
   loanAdjustmentsMade                  LoanAdjustment[]              @relation("LoanAdjustmentBy")
+  loanCompromiseSettlementsMade        LoanCompromiseSettlement[]    @relation("LoanCompromiseSettlementBy")
   notificationsReceived                Notification[]
   reminderSettingsUpdated              ReminderSettings[]
   securitySettingsUpdated              SecuritySettings[]
@@ -1408,6 +1416,11 @@ model LoanAccount {
   adjustedFromRecord           LoanAdjustment?               @relation("OldLoanAdjustment")
   /// 2026-07-24 (Loan Adjustment) — set on the NEW account created by an adjustment.
   adjustedIntoRecord           LoanAdjustment?               @relation("NewLoanAdjustment")
+  /// 2026-08-29 (Compromise Settlement) — set on an OLD account when it was folded into a
+  /// settlement (one of possibly several old loans for the same settlement).
+  compromisedFromRecord        LoanCompromiseSettlementItem? @relation("OldLoanCompromiseSettlement")
+  /// 2026-08-29 (Compromise Settlement) — set on the ONE NEW account a settlement created.
+  compromisedIntoRecord        LoanCompromiseSettlement?     @relation("NewLoanCompromiseSettlement")
 
   /// Schema Review SR-10: branch dashboards and Loan Officer Performance
   /// reports (PROJECT_RULES.md §Reports) were previously unindexed.
@@ -1704,6 +1717,62 @@ model LoanAdjustment {
   createdAt        DateTime @default(now())
 
   @@map("loan_adjustments")
+}
+
+/// 2026-08-29 (SDevTech migration finding, user-confirmed): "Compromise Agreement" is a legacy
+/// closure reason distinct from Restructure - MULTIPLE old, defaulted loans (same borrower) get
+/// consolidated into ONE new loan at a negotiated, reduced settlement amount (a real write-down,
+/// not a straight balance carry-forward - confirmed against SDevTech data where the sum of the old
+/// loans' balances was ~4.6x the new loan's principal). `LoanRestructure` can't represent this
+/// (its `oldLoanAccountId` is 1:1) - this is the N-to-1 header row; see `LoanCompromiseSettlementItem`
+/// for the per-old-loan detail rows. Same "historical record, never edited" posture as its siblings.
+model LoanCompromiseSettlement {
+  id String @id @default(uuid())
+
+  newLoanAccountId String      @unique
+  newLoanAccount   LoanAccount @relation("NewLoanCompromiseSettlement", fields: [newLoanAccountId], references: [id])
+
+  /// Sum of every included old loan's Collections Balance at settlement time (= sum of this
+  /// settlement's items' previousCollectionsBalance) - kept as its own column, not re-derived, for
+  /// the same reason as LoanRestructure.newPrincipalAmount: an at-a-glance audit figure that
+  /// doesn't require re-summing the child rows.
+  totalPreviousBalance Decimal @db.Decimal(14, 2)
+  /// The negotiated amount actually owed going forward = newLoanAccount.principalAmount at
+  /// creation. Almost always less than totalPreviousBalance (the write-down); kept as an explicit
+  /// snapshot for the same LA-4-style reason as LoanRestructure.newPrincipalAmount.
+  settlementAmount     Decimal @db.Decimal(14, 2)
+
+  reason String?
+
+  settledByUserId String
+  settledBy       User     @relation("LoanCompromiseSettlementBy", fields: [settledByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  items LoanCompromiseSettlementItem[]
+
+  @@map("loan_compromise_settlements")
+}
+
+/// One row per OLD loan folded into a LoanCompromiseSettlement - see that model's own comment for
+/// why this can't be a single LoanRestructure row. A loan account can be consolidated into at most
+/// one settlement ever (@@unique on oldLoanAccountId, same "closed once, stays closed" invariant as
+/// LoanRestructure/LoanAdjustment's oldLoanAccountId).
+model LoanCompromiseSettlementItem {
+  id String @id @default(uuid())
+
+  settlementId String
+  settlement   LoanCompromiseSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  oldLoanAccountId String      @unique
+  oldLoanAccount   LoanAccount @relation("OldLoanCompromiseSettlement", fields: [oldLoanAccountId], references: [id])
+
+  /// This specific old loan's own Collections Balance at the moment it was folded into the
+  /// settlement - same "frozen as of closedAt, don't re-read later" reasoning as
+  /// LoanRestructure.previousCollectionsBalance, just scoped per-loan instead of per-restructure
+  /// since there are multiple old loans here.
+  previousCollectionsBalance Decimal @db.Decimal(14, 2)
+
+  @@map("loan_compromise_settlement_items")
 }
 
 /// 2026-07-15 (Adjust Fees feature) — one immutable row per adjustment action, same posture as
@@ -2594,24 +2663,24 @@ model LoanApplication {
   portalAccountId String?
   portalAccount   PortalAccount? @relation(fields: [portalAccountId], references: [id])
 
-  applicantName                String
-  age                          Int?
-  gender                       String?
-  civilStatus                  String?
-  birthDate                    DateTime?
-  placeOfBirth                 String?
-  nationality                  String?
-  homeOwnership                String?
+  applicantName                    String
+  age                              Int?
+  gender                           String?
+  civilStatus                      String?
+  birthDate                        DateTime?
+  placeOfBirth                     String?
+  nationality                      String?
+  homeOwnership                    String?
   /// Flattened, human-readable join of the structured fields below - kept for existing display
   /// code/history. The structured fields are what "Create Client Profile" copies into a real
   /// `Address` row - parsing this flattened string back apart would be lossy/ambiguous.
-  address                      String?
-  houseUnitNumber              String?
-  street                       String?
-  barangay                     String?
-  cityMunicipality             String?
-  province                     String?
-  zipCode                      String?
+  address                          String?
+  houseUnitNumber                  String?
+  street                           String?
+  barangay                         String?
+  cityMunicipality                 String?
+  province                         String?
+  zipCode                          String?
   /// 2026-08-27 (user request): captured only at intake, like the fields above - "Create Client
   /// Profile" copies it into the new Address row's own `lengthOfStayMonths` field. Present address
   /// only, not previous - matches the paper form's own scope.
@@ -2619,49 +2688,49 @@ model LoanApplication {
   /// 2026-07-22 - captured only at intake (create form), like the fields above; never edited
   /// afterward. Defaults true - most applicants haven't moved. When false, the previous* fields
   /// below hold a distinct address, same flat-field shape as the present address above.
-  previousAddressSameAsPresent Boolean   @default(true)
-  previousAddress              String?
-  previousHouseUnitNumber      String?
-  previousStreet               String?
-  previousBarangay             String?
-  previousCityMunicipality     String?
-  previousProvince             String?
-  previousZipCode              String?
-  monthlyIncome                Decimal?  @db.Decimal(14, 2)
-  employer                     String?
-  occupation                   String?
-  officeAddress                String?
-  tinNumber                    String?
-  sssNumber                    String?
-  propertiesOwned              String[]  @default([])
-  creditScore                  Int?
+  previousAddressSameAsPresent     Boolean   @default(true)
+  previousAddress                  String?
+  previousHouseUnitNumber          String?
+  previousStreet                   String?
+  previousBarangay                 String?
+  previousCityMunicipality         String?
+  previousProvince                 String?
+  previousZipCode                  String?
+  monthlyIncome                    Decimal?  @db.Decimal(14, 2)
+  employer                         String?
+  occupation                       String?
+  officeAddress                    String?
+  tinNumber                        String?
+  sssNumber                        String?
+  propertiesOwned                  String[]  @default([])
+  creditScore                      Int?
   /// 2026-07-25: superseded by the structured coBorrowerFirstName/MiddleName/LastName fields below
   /// for new intake - kept read-only for older applications that only ever had this single
   /// combined "Name (relationship)" string, since re-parsing it apart is lossy/ambiguous (see
   /// splitApplicantName's own doc comment on the frontend). Never written to by new intake.
-  coBorrowerName               String?
-  coBorrowerFirstName          String?
-  coBorrowerMiddleName         String?
-  coBorrowerLastName           String?
-  coBorrowerEmployer           String?
-  coBorrowerContactNumber      String?
-  coBorrowerEmail              String?
-  coBorrowerAddress            String?
-  mobilePhone                  String?
-  email                        String?
+  coBorrowerName                   String?
+  coBorrowerFirstName              String?
+  coBorrowerMiddleName             String?
+  coBorrowerLastName               String?
+  coBorrowerEmployer               String?
+  coBorrowerContactNumber          String?
+  coBorrowerEmail                  String?
+  coBorrowerAddress                String?
+  mobilePhone                      String?
+  email                            String?
   /// 2026-08-27 (user request): applicant's Facebook profile/page URL - same field
   /// `Borrower.facebookLink` already models for an existing client, mirrored here for intake.
-  facebookLink                 String?
+  facebookLink                     String?
   /// {name, age, relationship}[] - display/reference only, no independent query need (mirrors
   /// `propertiesOwned`'s "small list, no relational value" reasoning).
-  dependants                   Json?
-  reference1Name               String?
-  reference1Mobile             String?
-  reference2Name               String?
-  reference2Mobile             String?
+  dependants                       Json?
+  reference1Name                   String?
+  reference1Mobile                 String?
+  reference2Name                   String?
+  reference2Mobile                 String?
   /// Free-text catch-all for anything staff wants to note at intake that doesn't have its own
   /// field - carried over as-is into the Client Profile's own `note` field on creation.
-  note                         String?
+  note                             String?
 
   referralSource      String?
   accountType         LoanApplicationAccountType?

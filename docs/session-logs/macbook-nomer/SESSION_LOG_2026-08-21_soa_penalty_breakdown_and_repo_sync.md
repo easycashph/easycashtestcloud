@@ -909,13 +909,106 @@ it when Nomer actually wants a from-scratch rebuild, not as part of routine dev 
 staff accounts (this same session) would be backed up and automatically restored by this script's
 own `backup-native-users.ts`/`restore-native-users.ts` steps if it's ever run.
 
+## 24. New LoanCompromiseSettlement model + real Reschedule/Compromise Agreement migration mapping (grew out of the BL-SPEC_00028 investigation above)
+
+User asked to analyze `legacy/mongodb/easycash-database-2026-08-28.dump` (turned out to be a
+**Postgres**, not MongoDB, dump - a full DB snapshot) and confirmed it held real `users`/
+`portal_accounts`/`roles` data. Separately - not from that dump, from the live SDevTech Aug-28
+snapshot already synced via §-none-of-this-session's own "Update Database" run - asked why
+**BL-SPEC_00028 (MARLON ALMANZOR RICALDE)** was CLOSED despite a non-zero balance. Investigated the
+raw legacy `loan_accounts.bson`: `closureReason: "Reschedule"` - the loan's remaining balance moved
+to a brand new loan (`BL-SPEC_00030`). Explored the full scope: **20 loans** with
+`closureReason: "Reschedule"` across the whole dump, plus a second, previously-unknown closure
+reason - **8 loans** with `closureReason: "Compromise Agreement"` (multiple old, defaulted loans
+for ONE borrower consolidated into ONE new loan at a negotiated write-down - confirmed the sum of
+the 8 old loans' balances was ~4.6x the new consolidated loan's principal).
+
+User confirmed both should be represented properly in the LMS (not silently mapped to plain
+`CLOSED`, which was the design doc's original, now-disproven assumption: "no write-off accounts
+exist"), and asked for a design. Reschedule already had a home - `CLOSED_RESTRUCTURED` +
+`LoanRestructure`, built weeks ago for the in-app Loan Restructure feature but never wired into the
+*migration's* status mapping. Compromise Agreement had no home - its N-old-loans-to-1-new-loan shape
+doesn't fit `LoanRestructure`'s 1:1 `@unique` `oldLoanAccountId`. Presented a design (new
+`LoanCompromiseSettlement` header row + `LoanCompromiseSettlementItem` per old loan, new
+`CLOSED_COMPROMISED` status) - user approved, scoped explicitly to **data model + migration mapping
+only** (no in-app "Compromise Settlement" button/use-case yet - user separately confirmed that's a
+real future want, to be built in a later session).
+
+**Schema** (`prisma/schema.prisma`, migration `20260829001841_add_loan_compromise_settlement`):
+- `LoanAccountStatus` enum: added `CLOSED_COMPROMISED`.
+- New `LoanCompromiseSettlement` model: `newLoanAccountId` (`@unique`), `totalPreviousBalance`,
+  `settlementAmount`, `reason`, `settledByUserId`, `items` relation.
+- New `LoanCompromiseSettlementItem` model: `settlementId`, `oldLoanAccountId` (`@unique`),
+  `previousCollectionsBalance`.
+- Mirrored the domain-layer `LoanAccountStatus` type/`ALLOWED_TRANSITIONS` in
+  [LoanAccount.ts](../../../app/easycashbackend/src/modules/loan-account/domain/LoanAccount.ts) (no
+  outbound transitions yet - no undo feature exists for this migration-only status).
+
+**Migration mapping** ([migrate-legacy-data.ts](../../../app/easycashbackend/scripts/migrate-legacy-data.ts)):
+`resolveLoanStatus()` now checks `closureReason` for CLOSED loans - `"Reschedule"` ->
+`CLOSED_RESTRUCTURED`, `"Compromise Agreement"` -> `CLOSED_COMPROMISED`, everything else stays plain
+`CLOSED`. Also fixed a related, previously-unnoticed gap while in this code: **`closedReason` was
+never written at all**, regardless of closure type - every closed loan showed no explanation in the
+LMS. Now carried straight through from `la.closureReason`.
+
+**New script** [backfill-loan-restructure-compromise.ts](../../../app/easycashbackend/scripts/backfill-loan-restructure-compromise.ts) -
+populates the actual `LoanRestructure`/`LoanCompromiseSettlement` link rows (writing the status
+alone doesn't say WHICH new loan a closed one became). Pairing heuristic: for a given borrower, the
+chronologically next loan account created after the closed one - the only signal SDevTech has, no
+explicit old->new link field exists. Verified against the full dataset: found a next loan for every
+single one of the 20 Reschedule + 8 Compromise Agreement loans (20/20, 8/8), but the remaining
+balance only matched the next loan's opening principal exactly for **11/20** Reschedule pairs - the
+other 9 (mostly older `SML-*` chains) are flagged `MISMATCH-review` in the row's own `reason` text
+rather than silently trusted, so a human can spot-check them later.
+
+**Bug found and fixed mid-implementation**: the balance-matching numbers were initially all `0.00`
+for every Reschedule loan except BL-SPEC_00028 - traced to
+[recompute-active-loan-balances-from-schedule.ts](../../../app/easycashbackend/scripts/recompute-active-loan-balances-from-schedule.ts)
+being scoped to `ACTIVE`/`ACTIVE_IN_ARREARS` only (2026-07-09 design decision: "a CLOSED loan
+reading 0.00 remains plausible - paid off"). That assumption is wrong for `CLOSED_RESTRUCTURED`/
+`CLOSED_COMPROMISED` specifically - the whole point of those closures is the loan was NOT paid off.
+Extended the status filter to include both. BL-SPEC_00028 itself had a real (non-zero) balance only
+by coincidence - it happened to still be `ACTIVE`/`ACTIVE_IN_ARREARS` earlier in this same session,
+before an intervening `migrate-legacy-data.ts` re-run flipped it to `CLOSED_RESTRUCTURED`.
+
+**Second bug found**: the backfill script's `upsert(... update: {})` pattern (correct for a true
+one-time historical record) meant the FIRST, pre-fix run's wrong `0.00`-derived numbers got
+permanently frozen once written, immune to the later recompute fix. Cleaned up by deleting all 27
+rows this session had created (19 `loan_restructures` + 8 `loan_compromise_settlements` + their 8
+items - confirmed safe: all created this session, no real staff data at risk) and re-running the
+backfill cleanly against the corrected balances.
+
+**Wired into all migration entry points** so this isn't a manual step to remember:
+`"Update Database From SDevTech.command"`/`.bat` (new step, after the balance recompute, before the
+final integrity check - 8→9 / 10→11 steps) and all three `"Run Full Legacy Migration"` scripts
+(Macbook-Nomer/Office Server PC/Nomer Laptop - new step after the balance recompute, 18→19 steps).
+Placement matters: must run AFTER the balance recompute (needs real Collections Balance figures,
+not the raw dump's often-absent account-level snapshot).
+
+Final state (this Mac, current DB): 19 `LoanRestructure` rows (1 of 20 skipped - its new loan,
+`SML-Self_00042`, has an unresolved borrower per the core migration's own reconciliation, so isn't
+migrated yet), 8 `LoanCompromiseSettlement` rows / 8 items - all 8 old Compromise loans and their
+one shared new loan (`OTH-COMP_00001`) resolved cleanly.
+
+Verified: `npx tsc --noEmit` clean throughout. Backend test suite: 28 failed / 943 passed / 7
+skipped - all 28 failures are the same pre-existing categories already logged earlier this session
+(PrismaBorrowerRepository mocks, client-portal mocks, AccruedInterestCalculator/
+RepaymentInstallmentPresenter/StatementOfAccountCalculator penalty-rate date-sensitivity) - none
+touch LoanAccount/LoanRestructure/LoanCompromiseSettlement, confirmed unrelated to this section's
+changes.
+
+**Known follow-up** (user-confirmed want, not built this session - data-model-only scope): an
+in-app "Compromise Settlement" feature (button + use-case on the Loan Detail page), mirroring the
+existing Restructure/Adjustment features, so staff can trigger a real consolidation from within the
+LMS itself rather than only via migration backfill.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-23 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-24 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§23) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§24) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times

@@ -14,6 +14,14 @@
  * loans `flag-missing-balance-loans.ts` identified) — a CLOSED loan reading 0.00 remains
  * plausible (paid off) and is left untouched.
  *
+ * 2026-08-29 (user-confirmed, found investigating BL-SPEC_00028): that "CLOSED = paid off, 0.00
+ * is plausible" assumption is wrong for CLOSED_RESTRUCTURED/CLOSED_COMPROMISED specifically - the
+ * whole point of those closures is the loan was NOT paid off, its remaining balance moved to a
+ * new loan (see LoanRestructure/LoanCompromiseSettlement). Included them here too so
+ * `backfill-loan-restructure-compromise.ts` (which reads this same balance) has a real number
+ * instead of a false 0.00. Still excludes plain CLOSED/CLOSED_WRITTEN_OFF/CLOSED_REJECTED - those
+ * really are supposed to be 0 (or an intentionally-set write-off figure), not recomputed.
+ *
  * balances = SUM(due) - SUM(paid) per component, across that loan's RepaymentSchedule rows.
  * Does NOT clear `legacyBalanceDataMissing` (documents provenance: reconstructed, not sourced
  * directly from an account-level legacy snapshot).
@@ -35,11 +43,11 @@ async function main(): Promise<void> {
   const affected = await prisma.loanAccount.findMany({
     where: {
       legacyBalanceDataMissing: true,
-      status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] },
+      status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS', 'CLOSED_RESTRUCTURED', 'CLOSED_COMPROMISED'] },
     },
     include: { repaymentSchedule: true },
   });
-  console.log(`Active/ActiveInArrears loans flagged with missing balance data: ${affected.length}`);
+  console.log(`Active/ActiveInArrears/Restructured/Compromised loans flagged with missing balance data: ${affected.length}`);
 
   let updated = 0, noSchedule = 0;
 

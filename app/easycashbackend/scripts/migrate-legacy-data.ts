@@ -416,10 +416,34 @@ const LOAN_STATUS_MAP: Record<string, string> = {
   APPROVED: 'APPROVED',
   ACTIVE: 'ACTIVE',
   ACTIVE_IN_ARREARS: 'ACTIVE_IN_ARREARS',
-  // Design doc §5 point 3: confirmed by the MIS Manager — no write-off accounts exist;
-  // every legacy CLOSED loan is a normal settled/paid-off closure.
-  CLOSED: 'CLOSED',
 };
+
+/**
+ * 2026-08-29 (SDevTech migration finding, user-confirmed): the design doc's original claim ("no
+ * write-off accounts exist; every legacy CLOSED loan is a normal settled/paid-off closure") turned
+ * out to be wrong for two `closureReason` values, found while investigating a specific closed loan
+ * (BL-SPEC_00028) at the user's request:
+ *   - "Reschedule" (20 loans): the old loan's remaining balance moved to ONE brand new loan -
+ *     maps to CLOSED_RESTRUCTURED, same status the in-app Loan Restructure feature already writes.
+ *   - "Compromise Agreement" (8 loans): MULTIPLE old loans (same borrower) consolidated into ONE
+ *     new loan at a negotiated write-down amount - maps to CLOSED_COMPROMISED (see
+ *     LoanCompromiseSettlement/LoanCompromiseSettlementItem in schema.prisma).
+ * Every other `closureReason` (blank, ~517 loans) is still a genuine settled/paid-off closure -
+ * plain CLOSED. This function only decides the *status*; the LoanRestructure/
+ * LoanCompromiseSettlement audit rows themselves are populated by the separate, idempotent
+ * `backfill-loan-restructure-compromise.ts` (run AFTER this script, once both the old and new
+ * loan on each side have been migrated - matching old->new pairs mid-migration isn't reliable since
+ * insertion order isn't guaranteed).
+ */
+function resolveLoanStatus(la: any): string | undefined {
+  const base = LOAN_STATUS_MAP[String(la.accountState)];
+  if (base) return base;
+  if (String(la.accountState) !== 'CLOSED') return undefined;
+  const reason = String(la.closureReason ?? '').trim();
+  if (reason === 'Reschedule') return 'CLOSED_RESTRUCTURED';
+  if (reason === 'Compromise Agreement') return 'CLOSED_COMPROMISED';
+  return 'CLOSED';
+}
 
 async function migrateLoanAccounts(
   hqBranchId: string,
@@ -493,7 +517,7 @@ async function migrateLoanAccounts(
 
   for (const la of loans) {
     const legacyId = String(la.uid ?? la._id);
-    const status = LOAN_STATUS_MAP[String(la.accountState)];
+    const status = resolveLoanStatus(la);
     if (!status) {
       recordSkip(rec, `unmapped accountState=${la.accountState}`);
       continue;
@@ -564,16 +588,23 @@ async function migrateLoanAccounts(
         penaltyPaid: toDecimalString(la.penaltyPaid ?? 0),
         penaltyDue: toDecimalString(la.penaltyDue ?? 0),
       };
+      // 2026-08-29 (user-reported): closedReason was never written at all - every CLOSED loan
+      // showed no explanation in the LMS regardless of what SDevTech's own closureReason said.
+      // Carried straight through for every closure type (not just Reschedule/Compromise Agreement)
+      // so a plain fully-paid closure's reason - typically blank in the source - stays blank
+      // rather than being fabricated.
+      const closedReason = la.closureReason ? String(la.closureReason) : null;
       const financialSnapshot = {
         status: status as never,
         ...balanceFields,
         approvedAt: toDate(la.approvedDate),
         activatedAt,
         closedAt: toDate(la.closedDate),
+        closedReason,
       };
       const resyncSnapshot = hasAccountLevelBalanceData
         ? financialSnapshot
-        : { status: status as never, approvedAt: toDate(la.approvedDate), activatedAt, closedAt: toDate(la.closedDate) };
+        : { status: status as never, approvedAt: toDate(la.approvedDate), activatedAt, closedAt: toDate(la.closedDate), closedReason };
 
       const existing = await prisma.loanAccount.findUnique({ where: { legacyId }, select: { id: true } });
       const isLocked = existing ? lockedLoanAccountIds.has(existing.id) : false;
