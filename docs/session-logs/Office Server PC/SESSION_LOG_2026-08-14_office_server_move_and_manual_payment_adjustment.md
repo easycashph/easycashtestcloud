@@ -2961,3 +2961,65 @@ transaction, 1 repayment schedule row, 5 attachments - nothing else), then appli
   transaction-skip existed) - not expected to recur for this or any other loan going forward, but if
   another pre-§59 duplicate loan account (not just duplicate transactions) turns up, the same
   investigate-then-scoped-delete approach applies.
+
+## §61 — 2026-08-29: "Loan Adjustment" renamed to "Reschedule"; SDevTech Reschedule mapping split by principal change
+
+Follow-up to §60's Ricalde investigation. User asked whether Ricalde's `CLOSED_RESTRUCTURED` status
+was correct, or should have been `CLOSED_ADJUSTED` ("Reschedule" vs "Loan Adjustment"). Investigated
+by reading the raw SDevTech `closureReason` field directly (not the LMS's own interpretation) for all
+5 loans in Ricalde's chain - all 5 say exactly `"Reschedule"`, confirming `CLOSED_RESTRUCTURED` (which
+`migrate-legacy-data.ts` maps `"Reschedule"` to) was correctly applied at the time.
+
+User's follow-up then reframed the real question: SDevTech's own vocabulary only has two non-blank
+closure reasons EVER (confirmed by scanning the entire `loan_accounts` collection: `"Reschedule"`: 20,
+`"Compromise Agreement"`: 8, blank: 1,799) - no third value exists corresponding to this LMS's
+"Loan Adjustment" feature (same principal/rate/term, only first repayment date moves) at all. Checked
+whether "Reschedule" was being used for two different real-world events under one label by comparing,
+for every resolvable pair, whether the new loan's principal actually differed from the old loan's
+collections balance: found a clean split - all 10 EXACT-match pairs are `BL-*` (Business Loan) codes,
+all 8 MISMATCH pairs are `SML-*` (Salary Loan) codes. This is a genuine product-line difference in how
+staff used SDevTech's single closure workflow, not a coincidence - Business Loan staff apparently only
+ever used "Reschedule" for pure due-date moves (matching "Loan Adjustment"'s exact definition),
+Salary Loan staff used it for real renegotiations (matching "Restructure").
+
+**Decision** (user-confirmed, after flagging and resolving a naming collision - "Restructure" itself
+was NOT renamed, avoiding two features both called "Reschedule"): rename "Loan Adjustment" to
+"Reschedule" everywhere in the UI (display text only - `LoanAdjustment` model, `loan_account.adjust`
+permission, `CLOSED_ADJUSTED` enum value, and the `/loan-accounts/:id/adjust` route all keep their
+existing code-level names, per the user's explicit "labels lang" scope), and fix
+`backfill-loan-restructure-compromise.ts` to classify each SDevTech "Reschedule" pair by whether the
+principal actually changed rather than blanket-mapping every one to Restructure.
+
+**Implementation**: `backfill-loan-restructure-compromise.ts`'s Reschedule branch now writes a
+`LoanAdjustment` record (+ corrects the old loan's status from `migrate-legacy-data.ts`'s default
+`CLOSED_RESTRUCTURED` to `CLOSED_ADJUSTED`) for an EXACT balance match, or the previous
+`LoanRestructure` record for a MISMATCH - also deletes any stale `LoanRestructure` row left over from
+before this split existed, for a pair now reclassified. Applied live: 10 `LoanAdjustment` + 8
+`LoanRestructure` written, all 10 stale `LoanRestructure` rows for the reclassified BL-* pairs
+removed, statuses corrected. Frontend: renamed every "Loan Adjustment"/"Adjusting…"/"Adjusted" string
+to "Reschedule"/"Rescheduling…"/"Rescheduled" across `LoanDetailPage.tsx`'s menu item, undo menu item,
+dialog title/description, confirm-dialog body text, and submit button; `StatusBadge.tsx`'s
+`CLOSED_ADJUSTED` label; `LoanListPage.tsx`'s status filter; and `LoanReleasesReportPage.tsx`'s
+Origin filter (§58's own feature, same day). Type-checked clean both sides, rebuilt
+`easycashbackend`/`lmsfrontend`, verified healthy, committed and pushed (`3ac3279`).
+
+User also asked directly whether Ricalde's OWN live restructure action (BL-SPEC_00028 -> BL-SPEC_00030,
+done through the app's real "Restructure" feature yesterday, NOT touched by this backfill since one
+side had no `legacyId` at the time) was correctly classified. Checked the real numbers:
+`BL-SPEC_00028`'s original principal was ₱200,000, but its balance at the moment of restructure had
+already paid down to ₱103,983 (real amortization), and the new loan's principal was set to ₱103,500 -
+a genuine (if small, ~₱483) negotiated write-down on top of the paid-down balance. Confirmed this
+correctly stays `CLOSED_RESTRUCTURED`/"Restructure" - a real principal change happened, unlike the
+pure EXACT-match Reschedule/Adjustment hops earlier in the same chain.
+
+### Current state / follow-ups
+
+- "Reschedule" is now this LMS's only user-facing name for the same-principal/rate/term,
+  different-first-repayment-date feature; "Restructure" is unaffected and still means a genuine
+  renegotiated principal.
+- Every future SDevTech sync's Reschedule-labeled closures will now automatically classify correctly
+  (EXACT balance match -> Reschedule, MISMATCH -> Restructure) via `backfill-loan-restructure-
+  compromise.ts` - no more blanket "every Reschedule becomes Restructure" assumption.
+- Not yet manually verified in a browser (same missing-credentials limitation as §58) - the button/
+  dialog/status-badge text changes were verified by direct code read and the backend data changes by
+  direct DB query, not by an actual click-through.
