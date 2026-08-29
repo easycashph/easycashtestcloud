@@ -131,8 +131,18 @@ async function main() {
   };
   const permissionCodes = Object.keys(permissionDescriptions);
 
+  // 2026-08-29 (user-reported bug: "bakit nagbabago ang permission na sinetup ko sa bawat roles?
+  // na i-save ko naman" - Roles & Permissions customizations kept reverting): tracked here so the
+  // defaultRolePermissions loop below can tell a permission code THIS seed run is creating for the
+  // very first time (safe to auto-grant its defaults - e.g. a brand-new feature's permission) apart
+  // from one that already existed (never touch its role grants again - MIS may have deliberately
+  // customized, including REMOVING, a role's access to it via the live UI, and that decision must
+  // survive every future seed run, not just the first one).
+  const isNewPermission: Record<string, boolean> = {};
   const permissions: Record<string, { id: string }> = {};
   for (const code of permissionCodes) {
+    const existing = await prisma.permission.findUnique({ where: { code } });
+    isNewPermission[code] = existing === null;
     permissions[code] = await prisma.permission.upsert({
       where: { code },
       update: { description: permissionDescriptions[code] },
@@ -233,6 +243,10 @@ async function main() {
   for (const [roleName, codes] of Object.entries(defaultRolePermissions)) {
     const role = roles[roleName];
     for (const code of codes) {
+      // Only ever auto-grant a permission code THIS run just created for the first time - see
+      // isNewPermission's own doc comment above. A pre-existing code's role grants are exclusively
+      // MIS's to configure from here on (Roles & Permissions screen), never re-asserted by seed.
+      if (!isNewPermission[code]) continue;
       await prisma.rolePermission.upsert({
         where: { roleId_permissionId: { roleId: role.id, permissionId: permissions[code].id } },
         update: {},
