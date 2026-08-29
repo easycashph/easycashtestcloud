@@ -1309,13 +1309,51 @@ Server PC's live database, while still carrying the `closureReason` status-mappi
 (§29) that neither database originally had. Same underlying gap as §29's own "Office Server PC
 needs its own SDevTech sync" follow-up - once that happens there, both machines converge for real.
 
+## 29b. Follow-up: Total Active Loans dashboard stat also differed (1270 here vs 1263 live) - same root cause, same fix, closed the BL-SPEC_00030 loose thread for good
+
+User next noticed the Dashboard's "Total Active Loans" card (`status IN ('ACTIVE',
+'ACTIVE_IN_ARREARS')`, confirmed in [PrismaDashboardRepository.ts](../../../app/easycashbackend/src/modules/dashboard/infrastructure/PrismaDashboardRepository.ts))
+also disagreed - 1270 on this Mac vs 1263 on live, the mirror image of §29a's transaction-count gap
+(there, this Mac had MORE recent activity than live had synced; here, this Mac had 7 more ACTIVE
+loans than live). Investigated the same way: restored the still-cached `/tmp/dump.bin` into a second
+scratch database (`live_check2`), exported both databases' `loan_accounts.legacyId` sets to text
+files, and diffed them (`comm -13`) rather than guessing - found exactly **8** legacy IDs present on
+this Mac that don't exist in the live dump at all: `BL-SPEC_00030`, `SML-REG_00382`, `SL-CORP_00129`/
+`00130`/`00134`/`00135`, `SML-REG_00385`, `SML-REG_00387` - all genuinely NEW loans (created
+2026-08-20 through 2026-08-27, principal amounts real and specific) that §29's `migrate-legacy-data.ts
+--apply` re-run inserted from SDevTech because they simply didn't exist yet when Office Server PC's
+Postgres was last dumped (Aug 28) - same "SDevTech is ahead of the last live sync" root cause as
+§29a's 139 transactions, this time manifesting as brand-new loan ROWS instead of new transactions on
+existing loans. 7 of the 8 are `ACTIVE` (1 is `APPROVED`, not counted in this stat) -
+`1263 + 7 = 1270`, exact match confirmed.
+
+**Resolves the session's original open thread for good**: `BL-SPEC_00030` - the "next loan
+chronologically for the same borrower" guess `backfill-loan-restructure-compromise.ts`'s heuristic
+made for `BL-SPEC_00028`'s restructure (proven wrong in §29, since the REAL live-recorded new loan
+is `BL-SPEC_00029`) - is confirmed here to be a genuinely unrelated, brand-new loan for that same
+borrower that happens to not exist in live's own database yet at all. Not a mis-migrated version of
+the same event, not connected to the restructure in any way - just an ordinary coincidence of timing
+for the same person taking out another loan shortly after.
+
+Same user decision as §29a (consistency, not silently running ahead of the authoritative production
+snapshot on precise per-record counts): remove these 8 too. Checked every `RESTRICT`-constrained
+child table first (`loan_transactions`, `repayment_schedules`, `applied_fees`,
+`loan_restructures`/`loan_compromise_settlement_items` on either side, `generated_statements_of_
+account`, `generated_loan_documents`, `loan_notes`) - all zero, because these loans' own
+`DISBURSEMENT` transactions were already among the 139 rows §29a had just deleted (`loan_account_co_
+borrowers` had 3 rows, but that FK is `ON DELETE CASCADE`, cleans up on its own). Deleted all 8
+`loan_accounts` rows directly - no orphaned RESTRICT-blocked children left behind. `loan_accounts`
+total back to exactly 1,805 (matching live), status breakdown: `ACTIVE` 122 + `ACTIVE_IN_ARREARS`
+1,141 = **1,263**, exact match. Cleaned up: dropped `live_check2`, removed the cached `/tmp/dump.bin`
+from the container and all this session's leftover `/tmp/*.log` scratch files on the host.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29a (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29b (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29a) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29b) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
