@@ -1406,13 +1406,34 @@ Net Amount" values, one by one: `SL-CORP_00135` ₱11,953.19, `SL-CORP_00134` �
 August 2026 (New/Renew filter) now genuinely matches the live Office Server PC report the user
 originally screenshotted, both in row count (11) and in every figure checked.
 
+## 29e. Follow-up: Maturity Date/Amortization/Total Interest columns were still blank for the 6 restored loans - one more table, not covered by §29d's backfills
+
+User spotted a further gap in the same report: Maturity Date, Amortization, and Total Interest still
+missing for the 6 loans §29c restored. Traced in `PrismaReportingRepository.ts` before acting: all
+three are derived from `RepaymentSchedule` rows (`maturityDate` = last installment's `dueDate`,
+`amortization` = first installment's principal+interest due, `totalInterest` = sum of every
+installment's `interestDue`) - a completely different table from `loan_transactions` (the payment
+ledger §29c was told to skip) and from the origination-fee/net-proceeds fields §29d just backfilled.
+Confirmed via direct query: all 6 loans had exactly `0` `repayment_schedules` rows.
+
+`RepaymentSchedule` is the installment PLAN (due dates, amounts due), not a payment-received ledger -
+populated by `migrate-repayment-schedules.ts` from the legacy `repayments.bson` collection, a
+different source entirely from `loan_transactions`'s `payments.bson`-adjacent phase. Confirmed this
+doesn't conflict with §29c's "no transactions" scope before running it. Ran it globally (idempotent,
+upserts on `legacyId`, safe to re-run against all 1,811 already-covered loans, not just these 6) -
+8,890 installments upserted overall. Verified the 6 loans directly: all now have real installment
+counts (1 to 12, matching each loan's own term) and a real maturity date derived from them
+(`SML-REG_00385`: 1 installment, matures 2026-10-04; `SL-CORP_00129`: 12 installments, matures
+2027-09-04; etc.) - Maturity Date, Amortization, and Total Interest should all now render correctly
+in the Loan Releases Report.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29d (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29e (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29d) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29e) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
