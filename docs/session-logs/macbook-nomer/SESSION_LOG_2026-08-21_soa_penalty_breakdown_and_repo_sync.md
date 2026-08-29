@@ -1279,13 +1279,43 @@ suggested the same `migrate-legacy-data.ts --apply` + `backfill-loan-restructure
 `closureReason` improvement this Mac now has - not done this session, flagged as the natural
 next step.
 
+## 29a. Follow-up: user noticed the Transaction Report totals differ between this Mac and Office Server PC - traced and surgically fixed
+
+User asked why. Investigated rather than guessing: `loan_transactions` on this Mac had **280,423**
+rows vs the live dump's original **280,284** - a gap of 139, all created in this same session (`WHERE
+"createdAt" > '2026-08-29 02:00:00'`). Cause: §29's `migrate-legacy-data.ts --apply` re-run (done to
+apply the `closureReason` status-mapping fix onto loan_accounts) also re-syncs Phase 4
+(`loan_transactions`) unconditionally - the two phases aren't independently toggleable. The SDevTech
+source had 139 genuinely real, recently-dated (2026-08-19 to 2026-08-28) transactions - FEE_CHARGED,
+PENALTY_APPLIED, ADJUSTMENT, REPAYMENT, DISBURSEMENT, FEE_REPAYMENT, PENALTY_REPAYMENT - that simply
+hadn't reached the Office Server PC's own Postgres database yet as of its Aug 28 dump (i.e. genuinely
+new activity, not an error or duplicate).
+
+User's call, once informed these were real and not garbage: still remove them, to keep this Mac's
+transaction ledger an exact match for live's current state (rather than silently running ahead of
+the authoritative production database on a table this precise). Confirmed all 139 had zero dependent
+rows in `payment_allocations`/`fee_charges`/`payment_adjustments` (all three are `ON DELETE
+RESTRICT` - would have blocked the delete otherwise, and would have signaled these weren't safe to
+remove in isolation) - clean to delete outright. `DELETE FROM loan_transactions WHERE "createdAt" >
+'2026-08-29 02:00:00'` - 139 rows removed, count back to exactly 280,284. Confirmed this doesn't
+touch `repayment_schedules` (a separate table, only ever written by `migrate-repayment-schedules.ts`,
+not re-run this session) or `loan_accounts.balances` (sourced from the raw dump / the schedule-based
+recompute, neither of which reads `loan_transactions` directly) - a genuinely surgical fix, nothing
+else this session's work touched needed re-doing. `loan_restructures` (19), `loan_compromise_
+settlements` (8), and `users` (9) all confirmed unchanged.
+
+Net effect: this Mac's `loan_transactions` table is now byte-for-byte count-identical to Office
+Server PC's live database, while still carrying the `closureReason` status-mapping improvement
+(§29) that neither database originally had. Same underlying gap as §29's own "Office Server PC
+needs its own SDevTech sync" follow-up - once that happens there, both machines converge for real.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29a (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29a) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
