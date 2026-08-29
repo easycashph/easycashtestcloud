@@ -3115,3 +3115,17 @@ Committed and pushed (`3296022`).
 - Worth double-checking Macbook Nomer's/Nomer Laptop's own live databases for the same 658-loan-scale
   origination-fee gap next time someone's there, since this was apparently a long-standing condition
   on THIS machine, not something introduced only today.
+
+User asked to check Macbook Nomer/Nomer Laptop's own databases directly from here - confirmed (same
+as earlier in this session, §54-adjacent) this session has no direct access to those machines, no
+cross-machine remote-query mechanism exists (`backup-remote-postgres.ps1` only pulls FROM the office
+server TO another machine, the opposite direction, and those devices were previously confirmed off
+the office LAN anyway). Wrote a self-contained, copy-pasteable message (dry-run commands, the
+correct apply order, and full context) for the user to hand to a Claude session running on each of
+those machines directly, since a fresh session there has none of this conversation's context.
+
+### Follow-up for other machines
+
+- Not yet done: Macbook Nomer and Nomer Laptop's own databases haven't been checked for the same
+  origination-fee/interest-rate/net-proceeds gap - message prepared and handed to the user, actual
+  check depends on them running it there.
