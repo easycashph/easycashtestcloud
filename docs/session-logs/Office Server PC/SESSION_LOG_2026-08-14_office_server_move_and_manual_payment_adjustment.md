@@ -3072,3 +3072,46 @@ machine is Windows, can't actually run a `.command` file to test it end to end).
   runs an incremental SDevTech sync now gets the exact same result.
 - Not verified by actually running the `.command` file (Windows machine, can't execute it) - worth a
   live end-to-end check next time someone runs it on Macbook Nomer.
+
+## §64 — 2026-08-29: Loan Releases Report - blank Add-on/Contractual rate + a real 658-loan Net Proceeds bug found while fixing it
+
+User asked why some Loan Releases Report rows had no Add-on/Contractual Interest Rate. Traced to
+`backfill-loan-interest-rates.ts` (2026-07-15 - `addOnInterestRate` from legacy `addOnRate`,
+`contractualInterestRate` copied from the already-correct `interestRate`) - same missing-from-
+incremental-sync pattern as §62's Net Proceeds bug. Dry run found 7 loans needing it (the same
+recently-migrated set as every previous incidence of this pattern this session). Applied.
+
+**While checking for the same gap in origination fees** (processing fee, advance interest fee,
+etc. - also display-only fields, also absent from the incremental sync), found something much
+bigger: **658 loans**, not 7, needed `backfill-loan-origination-fees-mongo.ts` (the widest-coverage
+of the three origination-fee scripts) - this backfill had apparently never been comprehensively
+applied on this machine's live database at all, far beyond just today's freshly-migrated set. Asked
+the user before applying given the much larger blast radius; confirmed to proceed. Applied all three
+origination-fee scripts (Excel snapshot: 0 new, MongoDB source: 658, inferred stragglers: 0 new).
+
+**Caught a real ordering bug of our own before it could cause harm**: `netProceeds = principalAmount
+- originationFees.total()` - since §62's Net Proceeds fix had already run earlier this session
+BEFORE these origination-fee backfills existed in the applied history, re-checking
+`backfill-net-proceeds.ts` afterward found **658 loans now had a WRONG (too-high) netProceeds**,
+computed back when their fees were still zero. Re-ran the Net Proceeds backfill immediately -
+corrected all 658 (e.g. `SML-MAX_K3O1E`: ₱80,000.00 -> the true ₱68,664.00). Confirmed a second
+dry run afterward found 0 remaining discrepancies.
+
+**Fixed the real gap**, not just today's live data: added all four missing steps (three
+origination-fee variants + interest rates) to BOTH `Update Database From SDevTech.bat` and
+`.command`, positioned - critically - BEFORE the Net Proceeds step (the exact ordering dependency
+that caused the 658-loan bug above), so this specific failure mode can never recur. Both files are
+now 16 steps each (up from 12), renumbered throughout, syntax-checked (`bash -n` for the `.command`).
+Committed and pushed (`3296022`).
+
+### Current state / follow-ups
+
+- Origination fees, Add-on/Contractual Interest Rate, and Net Proceeds are now correct for every
+  currently-migrated loan on this machine - 658 loans corrected across the board, not just the 7
+  from today's fresh sync.
+- The Net Proceeds-before-fees ordering bug this session itself nearly baked into the incremental
+  sync scripts (§62 alone, without today's follow-up) is now impossible - fees always run first in
+  both platform scripts.
+- Worth double-checking Macbook Nomer's/Nomer Laptop's own live databases for the same 658-loan-scale
+  origination-fee gap next time someone's there, since this was apparently a long-standing condition
+  on THIS machine, not something introduced only today.
