@@ -1388,13 +1388,31 @@ this specific report (New/Renew, loan+client identity and dates) doesn't depend 
 would need `recompute-active-loan-balances-from-schedule.ts`/the origination-fee and net-proceeds
 backfills if a report that DOES read those figures for these 6 loans is checked next.
 
+## 29d. Follow-up: ran the origination-fee/interest-rate/net-proceeds backfills after all - 100% match against the live screenshot's Total Net Amount column
+
+User asked to run the 5 backfill scripts §29c's own comment flagged as needed for figures this
+report DOES read (`backfill-loan-origination-fees.ts`, `-mongo.ts`, `-inferred.ts` ->
+`backfill-loan-interest-rates.ts` -> `backfill-net-proceeds.ts`, same order and dependency chain
+`Update Database From SDevTech`'s own steps 10-14 already encode). Ran all 5 in sequence:
+Excel-snapshot fees (0 changed - none of the 6 restored loans are in that older snapshot),
+MongoDB-source fees (658 updates, includes these 6), inferred-stragglers (0 - already covered by the
+Mongo pass), interest rates (8 backfilled, contractualInterestRate copied for the same 8), net
+proceeds (660 corrected).
+
+Verified the 6 restored loans' `netProceeds` against every one of the live screenshot's own "Total
+Net Amount" values, one by one: `SL-CORP_00135` ₱11,953.19, `SL-CORP_00134` ₱30,000.00,
+`SML-REG_00385` ₱118,858.00, `SML-REG_00382` ₱63,753.01, `SL-CORP_00129` ₱50,000.00, `SL-CORP_00130`
+₱38,429.00 - **all 6 exact matches**, no discrepancy. This Mac's Loan Releases Report for
+August 2026 (New/Renew filter) now genuinely matches the live Office Server PC report the user
+originally screenshotted, both in row count (11) and in every figure checked.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29c (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29d (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29c) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29d) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
