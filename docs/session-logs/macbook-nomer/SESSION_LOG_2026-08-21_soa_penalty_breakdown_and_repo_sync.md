@@ -1347,13 +1347,54 @@ total back to exactly 1,805 (matching live), status breakdown: `ACTIVE` 122 + `A
 1,141 = **1,263**, exact match. Cleaned up: dropped `live_check2`, removed the cached `/tmp/dump.bin`
 from the container and all this session's leftover `/tmp/*.log` scratch files on the host.
 
+## 29c. §29b's fix was too aggressive - a real live report proved 6 of the 8 deleted loans were genuine, restored them (loan/borrower data only, no transactions)
+
+User separately noticed the Loan Releases Report (New/Renew, Aug 1-29 2026) showed too few rows on
+this Mac and asked to check it against `easycash-database-2026-08-28.dump`. Investigated the dump
+itself first, rather than assuming this Mac was simply behind: the dump ALSO only has 6 loans
+activated in August (matching what this Mac had after §29b's cleanup) - so the dump was not the
+source of truth the user expected either. User then supplied a screenshot of the actual live New/
+Renew report straight from Office Server PC: **11 loans**, Aug 7-27. Cross-referencing that
+screenshot's 11 account codes against this Mac found exactly **6 missing**: `SL-CORP_00129`/`00130`/
+`00134`/`00135`, `SML-REG_00382`, `SML-REG_00385` - **all 6 are among the 8 loans §29b deleted**
+(only `BL-SPEC_00030`, excluded from this report for unrelated reasons, and `SML-REG_00387`, not yet
+disbursed at snapshot time, are absent from the live report's own list - consistent, not a further
+gap).
+
+This directly disproves §29b's core assumption: the Aug 28 Postgres dump is not actually current
+with live anymore (Office Server PC's real, currently-running database has moved past its own
+3-day-old snapshot, same as the local SDevTech extract already had). Deleting those 8 loans to
+"match live" §29b's own definition of "live" was matching a stale snapshot, not the actual live
+system - concretely proven by an on-the-spot report pull from Office Server PC itself, the most
+authoritative source available.
+
+**User's explicit scope for the fix this time**: loan accounts and borrower/client records only -
+**no transactions**. Re-ran `migrate-legacy-data.ts --apply` (same SDevTech source already on disk,
+no need to re-copy anything) but killed it deliberately once its own log showed Phase 3/6 (Loan
+Accounts + Co-Borrowers) had completed and Phase 4/6 (Loan Transactions, the 525k-row phase) had
+only just started (~6,000 rows in) - each phase commits its own upserts independently as it goes, so
+stopping between phases leaves no partial/inconsistent state. Verified precisely: `loan_transactions`
+count unchanged at 280,284 (zero leaked in from the interrupted Phase 4), `loan_accounts` back to
+1,813, `borrowers` 4,611 (+4 new applicants for these loans), all 6 previously-missing loans present
+and `ACTIVE`. Confirmed all 11 of the live report's own account codes now exist and are `ACTIVE` on
+this Mac.
+
+**Deliberately left as-is, per the user's own follow-up** ("balance na kasi ang loan transaction
+report, kaya wala nang kailangan idagdag dito"): the 6 restored loans' `principalBalance`/
+`netProceeds`/`processingFee` all still read `0.00` (`legacyBalanceDataMissing=true`, since these
+loans have no account-level balance snapshot in the raw SDevTech dump, and no repayment-schedule- or
+origination-fee-backfill was run against them this round) - not a further gap for right now, since
+this specific report (New/Renew, loan+client identity and dates) doesn't depend on those figures;
+would need `recompute-active-loan-balances-from-schedule.ts`/the origination-fee and net-proceeds
+backfills if a report that DOES read those figures for these 6 loans is checked next.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29b (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29c (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29b) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29c) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
