@@ -2708,3 +2708,54 @@ verified healthy.
   react-router (uuid's actual vulnerability - a missing buffer bounds check - requires a caller to
   pass an attacker-controlled buffer into uuid's parse functions, a narrower real-world trigger than
   the open-redirect issue).
+
+## §56 — 2026-08-29: real bug found and fixed - Roles & Permissions customizations silently reverted by seed.ts
+
+User asked directly: "bakit nagbabago ang permission na sinetup ko sa bawat roles? na i-save ko
+naman." Read `seed.ts`'s `defaultRolePermissions` loop and `UpdateRolePermissionsUseCase`/
+`PrismaAccessControlRepository.setRolePermissions` (the Roles & Permissions save path) side by side -
+confirmed a real bug, not user error:
+
+- Saving Roles & Permissions in the UI is correct - `setRolePermissions` does a full
+  delete-then-recreate of a role's `role_permissions` rows, so a deliberate revocation genuinely
+  removes that row from the database.
+- But `seed.ts`'s per-role default-grant loop (`for code of defaultRolePermissions[roleName]:
+  upsert(...)`) unconditionally re-creates any of THOSE hardcoded default rows that are missing -
+  with no way to tell "this role never had this permission" apart from "MIS deliberately removed
+  it." Every time `seed.ts` runs (part of `prisma migrate deploy`'s companion `db seed` step, and
+  now the new "Sync After Pull" script's step 6, both run repeatedly this session and by other
+  machines) any revoked-but-still-hardcoded-default permission got silently restored.
+
+Confirmed real, recent impact via `audit_logs` (`REVOKE_ROLE_PERMISSION` entries): several
+deliberate revocations on Loan Operation Manager/Collection Officer/Accounting between 2026-08-25
+and 2026-08-29 (this same morning, 07:29-07:32) - `loan_account.activate`, `loan_account.adjust`,
+`report.portal_accounts.view`, `loan_product.write`, `payment.record`, `esignature.manage`,
+`document.generate`. These specific ones happened to postdate the session's last seed run so
+weren't yet re-reverted at the moment of checking, but the mechanism itself is real and would have
+silently undone any of these (and past ones) on the next seed run - exactly the pattern the user
+described experiencing repeatedly.
+
+**Fix**: track which permission `code`s `seed.ts` is creating for the FIRST time this run (didn't
+exist in the DB before, via `prisma.permission.findUnique` immediately before each upsert) versus
+already-existing ones. The default-role-grant loop now only ever auto-grants a `(role, code)` pair
+when that code is brand new - an existing permission code's role assignments become exclusively
+MIS's to configure via the live UI from that point on, never re-asserted by seed again. This
+preserves both things that must keep working: a fresh `prisma migrate reset --force` still applies
+full defaults (every code is "new" against an empty DB), and a genuinely NEW feature's permission
+(e.g. this session's own `two_factor_enforcement.manage`, §54) still auto-grants to MIS/whichever
+roles list it in `defaultRolePermissions` the first time that code is ever seeded.
+
+Verified directly against the live database: re-ran the fixed `seed.ts`, confirmed the 07:29-07:32
+revocations above stayed revoked (0 rows) instead of being silently restored. Type-checked clean,
+rebuilt `easycashbackend`, committed and pushed (`5505569`).
+
+### Current state / follow-ups
+
+- Roles & Permissions customizations (including deliberate revocations of a role's default access)
+  now survive every future `prisma migrate deploy`/`db seed` run - the exact bug the user reported is
+  fixed and verified.
+- No repair needed for currently-live data - the specific revocations checked were already correctly
+  in effect (not yet re-reverted) at fix time; the fix only prevents this from happening going
+  forward. If MIS suspects an OLDER customization (before 2026-08-25) was silently reverted at some
+  point in the past and never re-applied, `audit_logs`' `GRANT_ROLE_PERMISSION`/
+  `REVOKE_ROLE_PERMISSION` history is the place to check what was actually configured historically.
