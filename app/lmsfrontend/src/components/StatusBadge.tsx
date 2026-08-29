@@ -10,7 +10,7 @@ const LOAN_STATUS_STYLE: Record<LoanAccountStatus, { label: string; variant: 'de
   CLOSED_WRITTEN_OFF: { label: 'Written Off', variant: 'destructive' },
   CLOSED_REJECTED: { label: 'Rejected', variant: 'secondary' },
   CLOSED_RESTRUCTURED: { label: 'Restructured', variant: 'secondary' },
-  CLOSED_ADJUSTED: { label: 'Adjusted', variant: 'secondary' },
+  CLOSED_ADJUSTED: { label: 'Rescheduled', variant: 'secondary' },
   CLOSED_COMPROMISED: { label: 'Compromised', variant: 'secondary' },
   CLOSED_UNDONE: { label: 'Undone', variant: 'secondary' },
 };

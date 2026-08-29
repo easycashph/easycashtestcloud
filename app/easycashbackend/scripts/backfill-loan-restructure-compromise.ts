@@ -5,8 +5,13 @@
  * leaves the LMS unable to say WHICH new loan a closed one turned into - exactly the "hindi ko alam
  * ang reason kung bakit closed" gap the user reported (investigating BL-SPEC_00028, which turned
  * out to be a Reschedule). This script populates the actual link rows:
- *   - Reschedule (old:new is always 1:1) -> one `LoanRestructure` row per pair, same model/status
- *     the in-app Loan Restructure feature already writes.
+ *   - Reschedule (old:new is always 1:1) -> either a `LoanRestructure` row (principal genuinely
+ *     changed - a real renegotiation) or a `LoanAdjustment` row (principal unchanged - just the
+ *     schedule moved, this system's "Reschedule" feature, formerly labeled "Loan Adjustment" -
+ *     2026-08-29 user-confirmed split, see the EXACT/MISMATCH branch below for the evidence). Also
+ *     corrects the old loan's status from `migrate-legacy-data.ts`'s default CLOSED_RESTRUCTURED to
+ *     CLOSED_ADJUSTED for the EXACT-match case, since that status can only be known here (needs
+ *     both sides already migrated to compare balances).
  *   - Compromise Agreement (multiple old loans -> ONE new loan, at a negotiated write-down) -> one
  *     `LoanCompromiseSettlement` header row per distinct new loan + one
  *     `LoanCompromiseSettlementItem` per old loan folded into it.
@@ -135,6 +140,7 @@ async function main(): Promise<void> {
       interestBalance: true,
       feesBalance: true,
       penaltyBalance: true,
+      firstRepaymentDate: true,
     },
   });
   const postgresIdByLegacyId = new Map(migrated.map((m) => [m.legacyId as string, m.id]));
@@ -146,6 +152,7 @@ async function main(): Promise<void> {
     ]),
   );
   const principalAmountByLegacyId = new Map(migrated.map((m) => [m.legacyId as string, Number(m.principalAmount)]));
+  const firstRepaymentDateByLegacyId = new Map(migrated.map((m) => [m.legacyId as string, m.firstRepaymentDate]));
   const collectionsBalanceOf = (la: LegacyLoanAccount): number => collectionsBalanceByLegacyId.get(legacyIdOf(la)) ?? 0;
   const principalAmountOf = (la: LegacyLoanAccount): number =>
     principalAmountByLegacyId.get(legacyIdOf(la)) ?? toNumber(la.loanAmount ?? la.principalBalance);
@@ -158,7 +165,9 @@ async function main(): Promise<void> {
   let restructureSkippedNoNext = 0;
   let restructureSkippedUnresolved = 0;
 
-  console.log(`\n--- Reschedule -> LoanRestructure (${rescheduleLoans.length} candidates) ---`);
+  let adjustmentWritten = 0;
+
+  console.log(`\n--- Reschedule -> LoanRestructure or LoanAdjustment (${rescheduleLoans.length} candidates) ---`);
   for (const oldLa of rescheduleLoans) {
     const holder = String(oldLa.accountHolderKey ?? '');
     const siblings = byHolder.get(holder) ?? [];
@@ -180,26 +189,66 @@ async function main(): Promise<void> {
     }
     const previousBalance = collectionsBalanceOf(oldLa);
     const newPrincipal = principalAmountOf(newLa);
-    const confidence = Math.abs(previousBalance - newPrincipal) <= BALANCE_MATCH_TOLERANCE ? 'EXACT' : 'MISMATCH-review';
+    // 2026-08-29 (user-confirmed, evidence-based): SDevTech's single "Reschedule" reason was used
+    // for two genuinely different real-world events, distinguishable by whether the principal
+    // actually changed - an EXACT match means nothing but the schedule moved (this system's
+    // "Reschedule" feature, formerly "Loan Adjustment"), a MISMATCH means a real renegotiated
+    // amount (this system's "Restructure" feature). Verified across all 18 resolvable pairs in the
+    // 2026-08-29 snapshot: the split correlates cleanly with product line (all 10 EXACT pairs are
+    // BL-*, all 8 MISMATCH pairs are SML-*) - not a coincidence, a genuine difference in how each
+    // product line's staff used SDevTech's own closure workflow.
+    const isExactMatch = Math.abs(previousBalance - newPrincipal) <= BALANCE_MATCH_TOLERANCE;
+    const confidence = isExactMatch ? 'EXACT' : 'MISMATCH-review';
     console.log(
       `  ${loanCodeByLegacyId.get(legacyIdOf(oldLa))} -> ${loanCodeByLegacyId.get(legacyIdOf(newLa))}  ` +
-        `oldBalance=${previousBalance.toFixed(2)} newPrincipal=${newPrincipal.toFixed(2)}  [${confidence}]`,
+        `oldBalance=${previousBalance.toFixed(2)} newPrincipal=${newPrincipal.toFixed(2)}  [${confidence}] -> ` +
+        `${isExactMatch ? 'LoanAdjustment (Reschedule)' : 'LoanRestructure'}`,
     );
     if (APPLY) {
-      await prisma.loanRestructure.upsert({
-        where: { oldLoanAccountId: oldPgId },
-        update: {},
-        create: {
-          oldLoanAccountId: oldPgId,
-          newLoanAccountId: newPgId,
-          previousCollectionsBalance: previousBalance.toFixed(2),
-          newPrincipalAmount: newPrincipal.toFixed(2),
-          reason: `Migrated from SDevTech (closureReason: Reschedule) - balance match: ${confidence}`,
-          restructuredByUserId: attributionUserId,
-        },
-      });
+      if (isExactMatch) {
+        const previousFirstRepaymentDate = firstRepaymentDateByLegacyId.get(legacyIdOf(oldLa));
+        const newFirstRepaymentDate = firstRepaymentDateByLegacyId.get(legacyIdOf(newLa));
+        await prisma.$transaction([
+          // A previous run of this script (before this EXACT/MISMATCH split existed) may have
+          // already written a LoanRestructure row for this exact pair, unconditionally - clear it
+          // first so an old loan never ends up with both a stale LoanRestructure AND the correct
+          // LoanAdjustment pointing at the same new loan.
+          prisma.loanRestructure.deleteMany({ where: { oldLoanAccountId: oldPgId } }),
+          prisma.loanAdjustment.upsert({
+            where: { oldLoanAccountId: oldPgId },
+            update: {},
+            create: {
+              oldLoanAccountId: oldPgId,
+              newLoanAccountId: newPgId,
+              previousFirstRepaymentDate: previousFirstRepaymentDate ?? new Date(),
+              newFirstRepaymentDate: newFirstRepaymentDate ?? previousFirstRepaymentDate ?? new Date(),
+              reason: 'Migrated from SDevTech (closureReason: Reschedule) - principal unchanged, schedule-only move',
+              adjustedByUserId: attributionUserId,
+            },
+          }),
+          // migrate-legacy-data.ts's own resolveLoanStatus already set this loan to
+          // CLOSED_RESTRUCTURED (its safe default for any "Reschedule" reason, computed before this
+          // script can compare balances) - corrected here now that we know the principal never
+          // changed.
+          prisma.loanAccount.update({ where: { id: oldPgId }, data: { status: 'CLOSED_ADJUSTED' } }),
+        ]);
+      } else {
+        await prisma.loanRestructure.upsert({
+          where: { oldLoanAccountId: oldPgId },
+          update: {},
+          create: {
+            oldLoanAccountId: oldPgId,
+            newLoanAccountId: newPgId,
+            previousCollectionsBalance: previousBalance.toFixed(2),
+            newPrincipalAmount: newPrincipal.toFixed(2),
+            reason: `Migrated from SDevTech (closureReason: Reschedule) - balance match: ${confidence}`,
+            restructuredByUserId: attributionUserId,
+          },
+        });
+      }
     }
-    restructureWritten++;
+    if (isExactMatch) adjustmentWritten++;
+    else restructureWritten++;
   }
 
   // --- Compromise Agreement: N old -> 1 new ---
@@ -285,8 +334,8 @@ async function main(): Promise<void> {
 
   console.log('\n=== Summary ===');
   console.log(
-    `LoanRestructure: ${restructureWritten} written, ${restructureSkippedNoNext} skipped (no next loan), ` +
-      `${restructureSkippedUnresolved} skipped (side not migrated yet)`,
+    `LoanRestructure: ${restructureWritten} written, LoanAdjustment (Reschedule): ${adjustmentWritten} written, ` +
+      `${restructureSkippedNoNext} skipped (no next loan), ${restructureSkippedUnresolved} skipped (side not migrated yet)`,
   );
   console.log(
     `LoanCompromiseSettlement: ${settlementsWritten} settlement(s) / ${settlementItemsWritten} item(s) written, ` +

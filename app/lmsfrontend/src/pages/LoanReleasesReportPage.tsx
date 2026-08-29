@@ -31,7 +31,7 @@ import { formatDate, formatPeso, isoDate } from '@/lib/utils';
 const ORIGIN_OPTIONS: { value: LoanReleaseOrigin; label: string }[] = [
   { value: 'ORIGINATION', label: 'New / Renew' },
   { value: 'RESTRUCTURE', label: 'Restructured' },
-  { value: 'ADJUSTMENT', label: 'Adjusted' },
+  { value: 'ADJUSTMENT', label: 'Rescheduled' },
   { value: 'COMPROMISE', label: 'Compromised' },
 ];
 const DEFAULT_ORIGINS: LoanReleaseOrigin[] = ['ORIGINATION'];

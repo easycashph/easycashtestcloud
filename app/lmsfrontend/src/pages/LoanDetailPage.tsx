@@ -2539,9 +2539,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                   {canUndoRestructure && (
                     <DropdownMenuItem onSelect={() => openConfirm('UNDO_RESTRUCTURE')}>Undo Restructure</DropdownMenuItem>
                   )}
-                  {canUndoAdjust && <DropdownMenuItem onSelect={() => openConfirm('UNDO_ADJUST')}>Undo Loan Adjustment</DropdownMenuItem>}
+                  {canUndoAdjust && <DropdownMenuItem onSelect={() => openConfirm('UNDO_ADJUST')}>Undo Reschedule</DropdownMenuItem>}
                   {canRestructure && <DropdownMenuItem onSelect={openRestructureConfirm}>Restructure</DropdownMenuItem>}
-                  {canAdjust && <DropdownMenuItem onSelect={openAdjustConfirm}>Loan Adjustment</DropdownMenuItem>}
+                  {canAdjust && <DropdownMenuItem onSelect={openAdjustConfirm}>Reschedule</DropdownMenuItem>}
                 </DropdownMenuContent>
               </DropdownMenu>
             );
@@ -4081,7 +4081,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               {confirmAction === 'UNDO_RESTRUCTURE' &&
                 `This will move ${loan.loanCode} back to Active and permanently delete the loan it was restructured into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this restructure record will be gone for good.`}
               {confirmAction === 'UNDO_ADJUST' &&
-                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was adjusted into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this adjustment record will be gone for good.`}
+                `This will move ${loan.loanCode} back to Active and permanently delete the loan it was rescheduled into. Only allowed while the new loan has no payment or penalty/fee adjustment recorded yet. This cannot be undone — the deleted loan and this reschedule record will be gone for good.`}
             </DialogDescription>
           </DialogHeader>
           {confirmAction === 'ACTIVATE' && (
@@ -4914,11 +4914,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       <Dialog open={adjustOpen} onOpenChange={(open) => !open && !adjustMutation.isPending && setAdjustOpen(false)}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Loan Adjustment</DialogTitle>
+            <DialogTitle>Reschedule</DialogTitle>
             <DialogDescription>
               Creates a brand new loan account with the same principal, interest rate, term, and product as this loan - only the
-              first repayment date changes. This loan closes as Adjusted. Only allowed before this loan's first installment is due,
-              and only while no payments have been made. Can only be done once per loan account.
+              first repayment date changes. This loan closes as Rescheduled. Only allowed before this loan's first installment is
+              due, and only while no payments have been made. Can only be done once per loan account.
             </DialogDescription>
           </DialogHeader>
 
@@ -5013,7 +5013,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
               Cancel
             </Button>
             <Button onClick={() => adjustMutation.mutate()} disabled={adjustMutation.isPending || !adjustFirstRepaymentDate}>
-              {adjustMutation.isPending ? 'Adjusting…' : 'Adjust loan'}
+              {adjustMutation.isPending ? 'Rescheduling…' : 'Reschedule loan'}
             </Button>
           </DialogFooter>
         </DialogContent>
