@@ -29,7 +29,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BSON } from 'bson';
 import { prisma } from '../src/shared/database/prismaClient';
-import { manilaDayRange } from '../src/shared/domain/manilaTime';
 import { legacyDbEasycashDir } from './lib/legacyDumpPath';
 
 const APPLY = process.argv.includes('--apply');
@@ -783,37 +782,32 @@ function loadTransactionEnrichment(): TransactionEnrichment {
 }
 
 /**
- * 2026-08-15 (automated duplicate guard, user-confirmed): closes the same real-world gap
- * `PossibleDuplicatePaymentError` guards on the Payment Recording side — a payment recorded
- * natively in the LMS, then pulled in again by a later `Update Database From SDevTech.bat` run,
- * because staff (necessarily) still also record it in SDevTech during the changeover. Found via a
- * scan on 2026-08-15: 15 such collisions already live, ₱214,719.90 total (since reversed), all
- * created within minutes-to-a-day of each other around a migration run.
- *
- * Preloaded once (not per-row) into a lookup keyed by loan account + amount + Asia/Manila calendar
- * day - the same exact-match signature `ProcessPaymentUseCase.findPossibleMigratedDuplicate` uses,
- * so a genuinely different payment (different amount, or the same amount on a different day - e.g.
- * a recurring installment amortization) is never held back.
+ * 2026-08-29 (user-reported, real incident): superseded the old per-transaction "same loan/amount/
+ * Manila day" duplicate guard, which only caught an exact-match collision and missed real
+ * duplicates that landed on a different calendar day (SDevTech's own entry date vs. this LMS's) or
+ * were split across SDevTech's separate principal/penalty/fee rows against this system's one
+ * combined `REPAYMENT` - 27 such duplicates found and manually cleaned up live on 2026-08-29 before
+ * this fix (see the session log). Same "once a loan has any native transaction, this system is the
+ * source of truth for it" rule `migrateLoanAccounts`'s own `lockedLoanAccountIds` already applies to
+ * balance/status resync - now applied here too, and more strictly: a locked loan's transaction
+ * import is skipped ENTIRELY, not de-duplicated row by row. An unlocked (brand-new or never
+ * natively-touched) loan is unaffected - it still gets its full transaction history imported
+ * normally, which a first-time migrated loan needs for its schedule/balance to be correct at all.
  */
-async function loadNativeRepaymentSignatures(): Promise<Set<string>> {
-  const natives = await prisma.loanTransaction.findMany({
-    where: { type: 'REPAYMENT', legacyId: null },
-    select: { loanAccountId: true, amount: true, entryDate: true },
+async function loadLockedLoanAccountIds(): Promise<Set<string>> {
+  const rows = await prisma.loanTransaction.findMany({
+    where: { legacyId: null, loanAccount: { legacyId: { not: null } } },
+    select: { loanAccountId: true },
+    distinct: ['loanAccountId'],
   });
-  const signatures = new Set<string>();
-  for (const n of natives) {
-    const { start } = manilaDayRange(n.entryDate);
-    signatures.add(`${n.loanAccountId}|${n.amount.toString()}|${start.toISOString()}`);
-  }
-  return signatures;
+  return new Set(rows.map((r) => r.loanAccountId));
 }
 
 async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacyKey: Map<string, string>): Promise<Reconciliation> {
   const file = path.join(DUMP_DIR, 'loan_transactions.bson');
   const rec = newReconciliation('loan_transactions', 0);
   const enrichment = loadTransactionEnrichment();
-  const nativeRepaymentSignatures = await loadNativeRepaymentSignatures();
-  const existingLegacyIds = new Set((await prisma.loanTransaction.findMany({ where: { legacyId: { not: null } }, select: { legacyId: true } })).map((r) => r.legacyId!));
+  const lockedLoanAccountIds = await loadLockedLoanAccountIds();
   let batch: any[] = [];
 
   async function flush(): Promise<void> {
@@ -857,6 +851,10 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
       recordSkip(rec, 'unresolved loan account');
       continue;
     }
+    if (lockedLoanAccountIds.has(loanAccountId)) {
+      recordSkip(rec, 'loan account is locked (has a native transaction) - never imports SDevTech transactions again');
+      continue;
+    }
     const entryDate = toDate(tx.entry_date ?? tx.creation_date);
     if (!entryDate) {
       recordSkip(rec, 'missing entry date');
@@ -868,20 +866,6 @@ async function migrateLoanTransactions(hqBranchId: string, loanAccountIdByLegacy
       ? enrichment.channelNameByDetailsUid.get(String(tx.details_encoded_oid))
       : undefined;
     const amount = toDecimalString(tx.amount ?? 0);
-
-    // 2026-08-15 (automated duplicate guard): only checked for a transaction genuinely new to this
-    // database (not already migrated in a prior run - re-running against a newer snapshot must
-    // still be able to backfill an existing row's OR/AR/channel below, same as before this guard),
-    // and only for the type this system's own Payment Recording flow can natively produce
-    // (REPAYMENT) - FEE_CHARGED/PENALTY_APPLIED/etc. never collide with a staff-entered payment.
-    if (mappedType === 'REPAYMENT' && !existingLegacyIds.has(txUid)) {
-      const { start } = manilaDayRange(entryDate);
-      const signature = `${loanAccountId}|${amount}|${start.toISOString()}`;
-      if (nativeRepaymentSignatures.has(signature)) {
-        recordSkip(rec, `possible duplicate of a native REPAYMENT (same loan, amount ${amount}, same Manila day) — legacy _id ${txUid}`);
-        continue;
-      }
-    }
 
     batch.push({
       loanAccountId,
