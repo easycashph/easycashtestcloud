@@ -1076,13 +1076,45 @@ accounts specifically for this purpose (never real migrated data), exercise the 
 -> select loans -> Compromise Settlement dialog -> Loan Detail banner flow end to end, and consider
 whether an Undo Compromise Settlement feature is worth building to match its two siblings.
 
+## 26. Diagnosed a missing 2FA login email, enabled real EMAIL_ENABLED - first confirmed real staff login this session
+
+User (logged into the LMS on the LAN IP, `nomer.perez@easycash.ph`) reported never receiving the
+2FA verification code email. Traced it to the same dry-run pattern already documented elsewhere in
+this log (§19's `signingEmailEnabled`/etc.) but with its own, separate flag pair: login OTP goes
+through [OtpSender.ts](../../../app/easycashbackend/src/modules/identity/infrastructure/OtpSender.ts),
+gated by `SMS_ENABLED`/`EMAIL_ENABLED` env vars (not the `reminder_settings` DB table's own
+`emailEnabled`/`smsEnabled` columns, which are read-modeled from the Settings UI and gate a
+different code path - Payment Reminders/Signing/Portal - entirely). Both env flags were `false` in
+this Mac's `.env`, despite real SMTP/M360 credentials already being present there - the code was
+being generated correctly and logged (`DRY-RUN: OTP email not actually sent`), never lost, just
+never sent as a real email. Read the pending code straight from the container's own logs
+(`nomer.perez@easycash.ph -> 083093`) to unblock the login immediately, then per the user's
+explicit confirmation, flipped `EMAIL_ENABLED=false` -> `true` in `app/easycashbackend/.env` (the
+comment line above it happened to be byte-identical to the real setting line except for a trailing
+`\r`, which is why a first `sed` pass silently no-opped - fixed by targeting the exact line number).
+`SMS_ENABLED` deliberately left `false` - not asked about, not touched.
+
+Restarted `easycashbackend` (`docker compose up -d --force-recreate`) to pick up the new env value;
+confirmed healthy via `/health` and, in the same restart's request logs, confirmed Nomer's own
+staff account was by then already logged in and actively using the LMS (audit-logs/users/roles-
+permissions/chat-queue requests all succeeding with a valid JWT) - the first real, non-scripted
+staff login this Mac has seen all session (every feature since §14 had been backend-verified only,
+for exactly this "no working login" reason).
+
+**Consequence going forward, told to the user directly**: this Mac's backend now sends REAL email
+for every feature gated by `EMAIL_ENABLED` - 2FA login codes, Payment Reminders, e-signature
+notifications, Portal notifications - not just OTP. Nothing else was changed to accommodate this;
+each of those features' own DB-backed toggles (`reminder_settings.emailEnabled`,
+`signingEmailEnabled`, `portalEmailEnabled`) still independently gate whether THEY fire, same as
+before - only the env-level dry-run switch flipped.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-25 (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-26 (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§25) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§26) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
