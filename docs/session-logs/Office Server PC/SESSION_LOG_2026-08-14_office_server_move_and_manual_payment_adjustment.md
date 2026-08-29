@@ -3023,3 +3023,35 @@ pure EXACT-match Reschedule/Adjustment hops earlier in the same chain.
 - Not yet manually verified in a browser (same missing-credentials limitation as §58) - the button/
   dialog/status-badge text changes were verified by direct code read and the backend data changes by
   direct DB query, not by an actual click-through.
+
+## §62 — 2026-08-29: Loan Releases Report's blank Total Net Amount - missing sync step found and fixed
+
+User asked why some Loan Releases Report rows had no Total Net Amount. Traced the field
+(`totalNetAmount` <- `LoanAccount.netProceeds`, `@default(0)`, never null) to `backfill-net-
+proceeds.ts` (2026-07-14, computes `principalAmount - originationFees.total()` for any row whose
+stored value doesn't match). Found exactly 7 activated loans stuck at `netProceeds = 0.00` - all
+recently-migrated (`createdAt` Aug 24-27), all still holding the schema default.
+
+Root cause: `backfill-net-proceeds.ts` was never wired into "Update Database From SDevTech" (the
+incremental sync used all session) - only the full-reset "Run Full Legacy Migration" had it. Every
+loan added via an incremental sync (exactly what's been happening this whole session, §58/§60/§61)
+never got this backfill applied at all.
+
+Applied the fix live (`npx tsx scripts/backfill-net-proceeds.ts`, idempotent by construction):
+corrected all 7 loans (e.g. `SML-REG_00385`: 0.00 -> ₱137,661.80). Then closed the actual gap so it
+can't recur: added a new step to both `Update Database From SDevTech.bat` (Windows) and its `.command`
+(Mac) counterpart, positioned between the balance recompute and the restructure/compromise backfill,
+renumbering each file's step counters (`.bat`: 11 -> 12 steps; `.command`: 9 -> 10 steps).
+
+**Also noticed in passing**: the `.command` counterpart is missing two OTHER steps the `.bat` already
+has (Facebook Link backfill, client creation-date backfill) - a pre-existing drift between the two
+platform scripts, not touched today (out of scope for this specific report bug), flagged below.
+
+### Current state / follow-ups
+
+- Loan Releases Report's Total Net Amount is now correct for every currently-migrated loan; every
+  future incremental sync (both platforms) will keep it that way automatically.
+- Not yet done: `Update Database From SDevTech.command` (Mac) is still missing the Facebook Link and
+  client creation-date backfill steps the `.bat` (Windows) has - worth a follow-up pass to bring both
+  files back into full parity, since whichever machine runs the Mac version currently gets a narrower
+  sync than Windows does.
