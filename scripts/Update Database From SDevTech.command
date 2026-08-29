@@ -20,7 +20,7 @@ echo "sa LMS mismo (hindi galing SDevTech) ay awtomatikong nilalaktawan"
 echo "- protektado sila, hindi na sila ino-overwrite ng SDevTech."
 echo
 
-echo "[1/12] Hinahanap ang pinaka-bagong .zip sa \"$MONGO_DIR\"..."
+echo "[1/16] Hinahanap ang pinaka-bagong .zip sa \"$MONGO_DIR\"..."
 LATEST_ZIP="$(ls -t "$MONGO_DIR"/*.zip 2>/dev/null | head -1)"
 
 if [ -z "$LATEST_ZIP" ]; then
@@ -37,9 +37,9 @@ echo
 TARGET_DIR="$EXTRACTED_DIR/$ZIP_BASENAME"
 
 if [ -d "$TARGET_DIR/db-easycash" ]; then
-  echo "[2/12] Na-extract na dati ang backup na ito - lalaktawan ang extraction."
+  echo "[2/16] Na-extract na dati ang backup na ito - lalaktawan ang extraction."
 else
-  echo "[2/12] Ina-extract ang \"$(basename "$LATEST_ZIP")\" (maaaring tumagal ng ilang minuto)..."
+  echo "[2/16] Ina-extract ang \"$(basename "$LATEST_ZIP")\" (maaaring tumagal ng ilang minuto)..."
   mkdir -p "$TARGET_DIR"
   if ! unzip -q -o "$LATEST_ZIP" -d "$TARGET_DIR"; then
     echo "      FAILED ang extraction. Suriin ang error sa itaas."
@@ -50,7 +50,7 @@ else
 fi
 echo
 
-echo "[3/12] Chinicheck kung tumatakbo ang Postgres..."
+echo "[3/16] Chinicheck kung tumatakbo ang Postgres..."
 if ! docker inspect -f '{{.State.Running}}' easycash-postgres-1 >/dev/null 2>&1; then
   echo "      Hindi tumatakbo ang Postgres. Sinisimulan ang docker compose stack..."
   (cd "$ROOT_DIR/app/docker" && docker compose up -d postgres)
@@ -58,7 +58,7 @@ if ! docker inspect -f '{{.State.Running}}' easycash-postgres-1 >/dev/null 2>&1;
 fi
 echo
 
-echo "[4/12] Dry run muna - tinitignan kung ano ang mga BAGONG record..."
+echo "[4/16] Dry run muna - tinitignan kung ano ang mga BAGONG record..."
 echo "      (walang isusulat pa sa database sa hakbang na ito)"
 echo
 (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts)
@@ -73,7 +73,7 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 echo
-echo "[5/12] Ina-apply ang mga bagong record sa database..."
+echo "[5/16] Ina-apply ang mga bagong record sa database..."
 if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts --apply); then
   echo
   echo "      May error sa migration - suriin ang error sa itaas bago ulitin."
@@ -83,14 +83,14 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-legacy-data.ts --apply); then
 fi
 
 # 2026-08-27 (user request, ported from Update Database From SDevTech.bat): migrateBorrowers()
-# already sets facebookLink/createdAt correctly for BRAND-NEW borrowers created in step [5/12]
+# already sets facebookLink/createdAt correctly for BRAND-NEW borrowers created in step [5/16]
 # above, but its upsert's update: {} is a no-op for borrowers already migrated in an earlier run -
 # so a client whose Facebook link or creation date was added to SDevTech after they were first
 # migrated here would never pick it up without these. Both scripts are additive/idempotent - safe
 # to run every time, they only ever fill a currently-blank field, never overwrite one a staff
 # member edited manually.
 echo
-echo "[6/12] Facebook Link backfill (SDevTech-sourced, existing clients)..."
+echo "[6/16] Facebook Link backfill (SDevTech-sourced, existing clients)..."
 if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-legacy-borrower-facebook-links.ts --apply); then
   echo
   echo "      May error sa Facebook Link backfill - suriin ang error sa itaas."
@@ -100,7 +100,7 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-legacy-borrower-facebook-lin
 fi
 
 echo
-echo "[7/12] Client creation-date backfill (SDevTech-sourced, existing clients)..."
+echo "[7/16] Client creation-date backfill (SDevTech-sourced, existing clients)..."
 if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-legacy-borrower-created-dates.ts --apply); then
   echo
   echo "      May error sa creation-date backfill - suriin ang error sa itaas."
@@ -110,7 +110,7 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-legacy-borrower-created-date
 fi
 
 echo
-echo "[8/12] Ina-update ang repayment schedules (kung magkano na ang"
+echo "[8/16] Ina-update ang repayment schedules (kung magkano na ang"
 echo "      nabayaran kada installment) mula sa SDevTech..."
 # 2026-08-14 (bug fix, ported from Update Database From SDevTech.bat): this step was MISSING
 # entirely, even though legacy/Run Full Legacy Migration.command has always had it as its step
@@ -129,22 +129,40 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/migrate-repayment-schedules.ts); then
 fi
 
 echo
-echo "[9/12] Kinukumpleto ang balance ng bagong loans na walang"
+echo "[9/16] Kinukumpleto ang balance ng bagong loans na walang"
 echo "      account-level snapshot mula sa SDevTech (kinukuha mula sa"
 echo "      kanya-kanyang repayment schedule)..."
 (cd "$BACKEND_DIR" && npx tsx scripts/recompute-active-loan-balances-from-schedule.ts)
 
-# 2026-08-29 (bug fix, ported from Update Database From SDevTech.bat): this step was entirely
-# MISSING, even though legacy/Run Full Legacy Migration.command's full-reset counterpart has
-# always had it. Without it, a newly-migrated loan's netProceeds column stays at its schema
-# default (0.00) forever - surfaced as a blank/zero Total Net Amount on the Loan Releases Report.
+# 2026-08-29 (bug fix, ported from Update Database From SDevTech.bat): these three origination-fee
+# steps and the interest-rate step below were entirely MISSING, even though the full-reset
+# counterpart has always had them, in this exact order. MUST run before Net Proceeds below -
+# netProceeds = principal - origination fees, so computing it before fees exist silently produces
+# a wrong (too-high) value. Found via a real incident: this gap had already left 658 loans'
+# netProceeds wrong until both were backfilled and Net Proceeds was re-run.
 echo
-echo "[10/12] Kinukumpleto ang Net Proceeds (principal minus origination"
+echo "[10/16] Origination fees (Excel snapshot, no .xlsm needed)..."
+(cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-origination-fees.ts --apply)
+
+echo
+echo "[11/16] Origination fees (MongoDB source, wider coverage)..."
+(cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-origination-fees-mongo.ts --apply)
+
+echo
+echo "[12/16] Origination fees (inferred stragglers)..."
+(cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-origination-fees-inferred.ts --apply)
+
+echo
+echo "[13/16] Add-on / contractual interest rates..."
+(cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-interest-rates.ts --apply)
+
+echo
+echo "[14/16] Kinukumpleto ang Net Proceeds (principal minus origination"
 echo "      fees) ng mga bagong loans..."
 (cd "$BACKEND_DIR" && npx tsx scripts/backfill-net-proceeds.ts)
 
 echo
-echo "[11/12] Ina-link ang mga na-reschedule/compromise-settle na loan"
+echo "[15/16] Ina-link ang mga na-reschedule/compromise-settle na loan"
 echo "      (2026-08-29) sa bago nilang account, para malinaw sa LMS"
 echo "      kung bakit sila na-close - kailangan munang tumakbo ang"
 echo "      balance recompute sa itaas, kaya nandito ito pagkatapos."
@@ -158,7 +176,7 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-restructure-compromise.
 fi
 
 echo
-echo "[12/12] Huling spot-check - tinitignan kung may loan na"
+echo "[16/16] Huling spot-check - tinitignan kung may loan na"
 echo "      kailangan pa ng manual na atensyon..."
 (cd "$BACKEND_DIR" && npx tsx scripts/check-legacy-balance-integrity.ts)
 
@@ -172,7 +190,7 @@ echo "dito, metadata lang muna ang na-dagdag - patakbuhin pa ang"
 echo "\"Backfill SDevTech Attachments.command\" kung gusto mong makuha"
 echo "rin ang totoong files nila."
 echo
-echo "Kung may lumabas na loan(s) sa [12/12] sa itaas, i-check muna ang"
+echo "Kung may lumabas na loan(s) sa [16/16] sa itaas, i-check muna ang"
 echo "mga iyon (tingnan ang comment sa loob ng"
 echo "check-legacy-balance-integrity.ts para sa susunod na hakbang)"
 echo "bago ipalagay na kumpleto ang update."
