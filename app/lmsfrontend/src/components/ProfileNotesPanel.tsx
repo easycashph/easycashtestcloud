@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, MessageSquareText } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -9,6 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/apiClient';
 import type { ProfileNote, ProfileNoteOwnerType } from '@/lib/profileNoteApiTypes';
 import { formatDateTime } from '@/lib/utils';
+
+/** 2026-08-29 (user request): a migrated note's true author was never carried over (this codebase
+ * never migrated legacy staff accounts into `User`), so `authorName` stays honestly "Unknown" - but
+ * `source` (derived from the note's `legacyId` shape) at least says WHICH legacy system it came
+ * from, so "we don't know who" isn't confused with "we don't know anything about this note". Not
+ * shown for a native (non-migrated) note - those already have a real author name. */
+const SOURCE_LABEL: Record<'SDEVTECH' | 'MAMBU', string> = { SDEVTECH: 'SDevTech', MAMBU: 'Mambu' };
 
 /**
  * Real, persisted running log (`POST/GET /profile-notes`) - built generically against
@@ -79,7 +87,14 @@ export function ProfileNotesPanel({ ownerType, ownerId }: { ownerType: ProfileNo
             {notes.map((note) => (
               <li key={note.id} className="rounded-md border p-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{note.authorName ?? 'Unknown'}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium">{note.authorName ?? 'Unknown'}</p>
+                    {note.source !== 'NATIVE' && (
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        {SOURCE_LABEL[note.source]}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{formatDateTime(note.createdAt)}</p>
                 </div>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{note.text}</p>

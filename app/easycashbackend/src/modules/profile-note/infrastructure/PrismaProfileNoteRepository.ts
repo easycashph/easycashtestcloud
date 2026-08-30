@@ -4,7 +4,13 @@ import type {
   IProfileNoteRepository,
   ProfileNoteOwnerType,
   ProfileNoteRecord,
+  ProfileNoteSource,
 } from '../application/ports/IProfileNoteRepository';
+
+function sourceOf(legacyId: string | null): ProfileNoteSource {
+  if (!legacyId) return 'NATIVE';
+  return legacyId.startsWith('mambu:') ? 'MAMBU' : 'SDEVTECH';
+}
 
 export class PrismaProfileNoteRepository implements IProfileNoteRepository {
   async create(input: CreateProfileNoteInput): Promise<ProfileNoteRecord> {
@@ -36,6 +42,7 @@ export class PrismaProfileNoteRepository implements IProfileNoteRepository {
     text: string;
     authorUserId: string | null;
     author: { firstName: string; lastName: string } | null;
+    legacyId?: string | null;
     createdAt: Date;
   }): ProfileNoteRecord {
     return {
@@ -45,6 +52,7 @@ export class PrismaProfileNoteRepository implements IProfileNoteRepository {
       text: row.text,
       authorUserId: row.authorUserId,
       authorName: row.author ? `${row.author.firstName} ${row.author.lastName}` : null,
+      source: sourceOf(row.legacyId ?? null),
       createdAt: row.createdAt,
     };
   }

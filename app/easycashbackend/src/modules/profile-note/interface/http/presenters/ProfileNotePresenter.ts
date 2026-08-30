@@ -1,4 +1,4 @@
-import type { ProfileNoteRecord } from '../../../application/ports/IProfileNoteRepository';
+import type { ProfileNoteRecord, ProfileNoteSource } from '../../../application/ports/IProfileNoteRepository';
 
 export interface ProfileNoteResponse {
   id: string;
@@ -7,6 +7,7 @@ export interface ProfileNoteResponse {
   text: string;
   authorUserId: string | null;
   authorName: string | null;
+  source: ProfileNoteSource;
   createdAt: string;
 }
 
@@ -18,6 +19,7 @@ export function presentProfileNote(record: ProfileNoteRecord): ProfileNoteRespon
     text: record.text,
     authorUserId: record.authorUserId,
     authorName: record.authorName,
+    source: record.source,
     createdAt: record.createdAt.toISOString(),
   };
 }

@@ -3115,3 +3115,53 @@ Committed and pushed (`3296022`).
 - Worth double-checking Macbook Nomer's/Nomer Laptop's own live databases for the same 658-loan-scale
   origination-fee gap next time someone's there, since this was apparently a long-standing condition
   on THIS machine, not something introduced only today.
+
+User asked to check Macbook Nomer/Nomer Laptop's own databases directly from here - confirmed (same
+as earlier in this session, §54-adjacent) this session has no direct access to those machines, no
+cross-machine remote-query mechanism exists (`backup-remote-postgres.ps1` only pulls FROM the office
+server TO another machine, the opposite direction, and those devices were previously confirmed off
+the office LAN anyway). Wrote a self-contained, copy-pasteable message (dry-run commands, the
+correct apply order, and full context) for the user to hand to a Claude session running on each of
+those machines directly, since a fresh session there has none of this conversation's context.
+
+### Follow-up for other machines
+
+- Not yet done: Macbook Nomer and Nomer Laptop's own databases haven't been checked for the same
+  origination-fee/interest-rate/net-proceeds gap - message prepared and handed to the user, actual
+  check depends on them running it there.
+
+## §65 — 2026-08-29: Profile Notes "Unknown" author - added a Source (SDevTech/Mambu) badge
+
+User asked why some Profile Notes show "Unknown" as the author. Root cause: legacy staff accounts
+were never migrated into the app's `User` table (only borrowers/loans/transactions were), so a
+note migrated from SDevTech's "comments" collection or from Mambu has no `User` to attribute to -
+"Unknown" is correct, not a bug. Native (app-created) notes always have a real author and were
+never affected.
+
+User asked whether we should either (a) try to recover/display the actual legacy name, or (b) at
+least show which system the note came from (Mambu vs SDevTech). Recommended (b): the legacy
+"comments" data doesn't reliably carry a parseable staff name, so guessing one risks fabricating an
+attribution; the note's `legacyId` already unambiguously encodes its origin
+(`migrate-mambu-notes.ts` prefixes rows `mambu:<encodedkey>`, `migrate-legacy-data.ts`'s SDevTech
+migration stores the raw Mongo id with no prefix, a native note has `legacyId = null`), so a
+source badge is a derived, non-fabricated fact. User confirmed ("oo").
+
+**Implementation** (backend `profile-note` module + frontend):
+- `IProfileNoteRepository.ts` / `PrismaProfileNoteRepository.ts`: added `ProfileNoteSource =
+  'SDEVTECH' | 'MAMBU' | 'NATIVE'` and a `sourceOf(legacyId)` helper deriving it from the
+  `legacyId` prefix; wired into `ProfileNoteRecord`/`toRecord()`.
+- `ProfileNotePresenter.ts`: added `source` to the API response shape.
+- Frontend `profileNoteApiTypes.ts` / `ProfileNotesPanel.tsx`: mirrored the type; note list now
+  shows a small "SDevTech"/"Mambu" badge next to the author name when `source !== 'NATIVE'` (no
+  badge for native notes, which already show a real name).
+
+**Verification**: both sides type-checked clean, `easycashbackend`/`lmsfrontend` containers
+rebuilt fresh and healthy (`/health` OK), and a direct grouped SQL query against the live DB
+confirmed the derivation matches reality: `MAMBU: 9,232`, `SDEVTECH: 11,060` notes (totals line up
+with this session's earlier Mambu-notes migration work). Committed and pushed (`eb4558f`).
+
+### Current state / follow-ups
+
+- Feature is live end-to-end on Office Server PC. No further action needed unless the user wants
+  the same badge surfaced elsewhere (e.g. a notes export/report).
+- Still outstanding from §64: Macbook Nomer / Nomer Laptop origination-fee gap check (see above).
