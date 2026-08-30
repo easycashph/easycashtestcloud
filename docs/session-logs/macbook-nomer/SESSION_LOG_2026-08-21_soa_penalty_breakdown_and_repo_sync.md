@@ -1631,17 +1631,44 @@ being reported. `getCicMonthlyReportData` now filters out any loan whose `activa
 falls before 2019-01-01, applied after the existing ACTIVE/ACTIVE_IN_ARREARS/closed-this-month
 scope. `npx tsc --noEmit` clean, backend Docker rebuilt and reverified healthy.
 
+## 30c. Follow-up: resolved most of the remaining domain-code gaps by reading the official manual
+
+2026-08-30, same day. User pointed at the official `Manual_CIC_Philippines_Submission_v.1.7.pdf`
+(228 pages - extracted to text via `pypdf` since `pdftotext`/poppler wasn't installed) and asked
+whether a December 2025 CIC-provided sample workbook had also been checked (it had - confirmed it's
+CIC's own generic tutorial data under a placeholder provider code, useful only for confirming field
+positions already verified, not for Easycash-specific product mapping). The manual's own §7.1
+domain tables resolved most of what §30a left blank:
+
+- **Civil Status** (§7.1.4): 1=Single, 2=Married, 3=Divorced/Separated, 4=Widow - mapped from `Borrower.civilStatus` free text.
+- **Occupation Status** (§7.1.11): only `BorrowerIncomeDetail.employmentType`'s 'Self Employed' value maps confidently (-> 5) - the far more common 'Employed' value doesn't distinguish permanent/temporary or private/government sector, so it stays blank (not guessed).
+- **Identification Type**: turned out to be TWO separate domains sharing one source field (`IdentificationDocument.documentType`) - `IdentificationTypeDomain` (§7.1.6: TIN/SSS/GSIS/Philhealth/UMID/business-registration) and `IDTypeDomain` (§7.1.7: government photo IDs - Driver's License/Passport/Voter's ID/etc). Classified by normalizing the real spelling variants on file (`Tin ID` vs `Tax Identification Number` vs `TIN`, etc).
+- **Contract Type**: not in the manual itself - found in the CIC field-spec Excel's own "CI - Installment Contract" domain sheet (12=Personal Loan, 20=Salary Loan, 22=Business Loan, matches the real July file's dominant values). User confirmed a prefix-based mapping from this system's 42 `LoanProduct` codes: `SL-` -> 20, `BL-` -> 22, `PL-`/`PFL-`/`SML` -> 12, `CL-` -> 12. Every other prefix (`OFW`, `CM-Car`, `OTH-COMP`, `REL-REG`, `SP-Easy`, `SP-Flash`, etc) stays unmapped - not covered by what the user confirmed, not guessed.
+- **Purpose of Credit**: only set to '32' (Loans to Individual for other purposes - the real July file's dominant value, 765/1,312) when Contract Type is '12' or '20' (the two "Individual" contract types) - left blank for Business Loan ('22'), since no confirmed purpose code fits without guessing between several SME/corporate options.
+- **PSIC/PSOC** (industry/occupation classification) remain unmapped - this system has no coded equivalent to map from at all, free text only (`position`/`natureOfBusiness`).
+
+Re-verified against the real July data after implementing: Civil Status populated for 460/488
+individuals (94%), Contract Type for 465/491 contracts (95%), Purpose of Credit follows correctly
+(blank for Business Loan contracts, populated for Personal/Salary Loan ones - spot-checked
+`BL-REG_00046`, a Business Loan, has Contract Type '22' and a correctly blank Purpose of Credit).
+Occupation Status (5/488) and Identification (33/488) low-but-correct, matching how little of that
+data qualifies for a confident mapping. `npx tsc --noEmit` clean, backend Docker rebuilt and
+reverified healthy.
+
 ## Known follow-up work (CIC report, next session)
 
 - **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
   (609/1,313 vs 3,834/4,625). Worth a closer look at why (loosen the amount/installment/date
   tolerance? Restructured/compromised loans changing shape after their historical CIC submission?)
   before treating loan-level coverage as complete.
-- Civil Status / Identification Type / Employment Status / PSIC / PSOC / Contract Type / Purpose of
-  Credit domain-code mappings are still unresolved - each needs either a confirmed lookup table
-  from the CIC manual (`Manual_CIC_Philippines_Submission_v.1.7.pdf`, not yet read) correlated to
-  this system's own free-text equivalents / `LoanProduct`s, or an explicit user decision to leave
-  them blank permanently. Left blank for now, not guessed.
+- Resolved in §30c: Civil Status, Occupation Status (partial - only 'Self Employed'), Identification
+  Type, Contract Type (for the 6 confirmed product prefixes), Purpose of Credit (for Personal/Salary
+  Loan contracts only). Still genuinely unmapped: PSIC/PSOC (no coded source field exists at all),
+  Contract Type/Purpose of Credit for any `LoanProduct` prefix outside the 6 confirmed
+  (`OFW`, `CM-Car`, `OTH-COMP`, `REL-REG`, `SP-Easy`, `SP-Flash`, etc - worth asking the user about
+  these specifically, several have an obvious-looking match, e.g. `CM-Car` -> Vehicle Loan '17',
+  `REL-REG` -> Mortgage/Real Estate '13', but not yet confirmed so left blank), and Occupation
+  Status for the 'Employed' (non-self-employed) case.
 - NE (Negative Events) and BD (Business borrower) record types remain out of scope per the
   original user-confirmed scoping decision in §30 - revisit only if actually needed.
 - No UI yet for staff to trigger/download the report or to review `skippedMissingSubjectNo` before

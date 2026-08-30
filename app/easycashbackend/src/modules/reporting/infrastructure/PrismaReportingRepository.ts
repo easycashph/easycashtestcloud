@@ -222,6 +222,85 @@ function formatFullName(borrower: { firstName: string; middleName: string | null
   return [borrower.firstName, borrower.middleName, borrower.lastName].filter(Boolean).join(' ');
 }
 
+/** CivilStatusDomain (2026-08-30, from the official CIC submission manual §7.1.4) - covers the
+ * variants actually stored in `Borrower.civilStatus` (free text). Blank for anything unrecognized,
+ * never guessed. */
+function cicCivilStatusCode(civilStatus: string | null): string {
+  const v = (civilStatus ?? '').trim().toUpperCase();
+  if (v === 'SINGLE') return '1';
+  if (v === 'MARRIED') return '2';
+  if (v === 'DIVORCED' || v === 'SEPARATED' || v === 'DIVORCED/SEPARATED') return '3';
+  if (v === 'WIDOW' || v === 'WIDOWED') return '4';
+  return '';
+}
+
+/** OccupationStatusDomain (manual §7.1.11). Only 'Self Employed' maps confidently - see
+ * `CicIndividualRow.occupationStatusCode`'s own doc comment for why plain 'Employed' doesn't. */
+function cicOccupationStatusCode(employmentType: string | null): string {
+  const v = (employmentType ?? '').trim().toUpperCase();
+  if (v === 'SELF EMPLOYED' || v === 'SELF-EMPLOYED') return '5';
+  return '';
+}
+
+/** IdentificationTypeDomain (§7.1.6, TIN/SSS/GSIS/Philhealth/UMID/business-registration) and
+ * IDTypeDomain (§7.1.7, government photo IDs) both draw from the same
+ * `IdentificationDocument.documentType` free-text field in this system - classified into whichever
+ * CIC domain it actually belongs to. Normalizes the real variants found in this system's data
+ * (`Tin ID` vs `Tax Identification Number` vs `TIN`, etc). Unrecognized values are left blank. */
+function cicIdentificationType(documentType: string | null): { domain: 'IDENTIFICATION' | 'ID' | ''; code: string } {
+  const v = (documentType ?? '').trim().toUpperCase();
+  const identification: Record<string, string> = {
+    TIN: '10',
+    'TIN ID': '10',
+    'TAX IDENTIFICATION NUMBER': '10',
+    SSS: '11',
+    'SSS CARD': '11',
+    'SOCIAL SECURITY SYSTEM': '11',
+    GSIS: '12',
+    PHILHEALTH: '13',
+    'PHILHEALTH CARD': '13',
+    'SENIOR CITIZEN': '14',
+    'SENIOR CITIZEN CARD': '14',
+    UMID: '15',
+    'UNIFIED MULTI-PURPOSE CARD': '15',
+  };
+  if (identification[v]) return { domain: 'IDENTIFICATION', code: identification[v] };
+
+  const idType: Record<string, string> = {
+    "DRIVER'S LICENSE": '10',
+    'DRIVERS LICENSE': '10',
+    "VOTER'S ID": '11',
+    "VOTER'S": '11',
+    VOTERS: '11',
+    'VOTERS ID': '11',
+    PASSPORT: '12',
+    'PRC ID': '13',
+    'PROFESSIONAL REGULATION COMMISSION': '13',
+    NBI: '14',
+    'POSTAL ID': '16',
+    POSTAL: '16',
+    'POSTAL IDENTITY CARD': '16',
+    'SEAMANS BOOK': '20',
+    "SEAMAN'S BOOK": '20',
+    'NATIONAL ID': '32',
+  };
+  if (idType[v]) return { domain: 'ID', code: idType[v] };
+
+  return { domain: '', code: '' };
+}
+
+/** InstallmentContractTypeDomain (CIC field-spec Excel's own "CI - Installment Contract" domain
+ * sheet). Prefix-based, user-confirmed 2026-08-30 - see `CicContractRow.contractTypeCode`'s own
+ * doc comment for the exact mapping and which prefixes are still unmapped. */
+function cicContractTypeCode(productCode: string): string {
+  const v = productCode.toUpperCase();
+  if (v.startsWith('SL-')) return '20'; // Salary Loan
+  if (v.startsWith('BL-')) return '22'; // Business Loan
+  if (v.startsWith('PL-') || v.startsWith('PFL-') || v.startsWith('SML')) return '12'; // Personal Loan
+  if (v.startsWith('CL-')) return '12'; // Personal Loan
+  return '';
+}
+
 function groupByLoanId<T extends { loanAccountId: string }>(rows: T[]): Map<string, T[]> {
   const map = new Map<string, T[]>();
   for (const row of rows) {
@@ -1203,7 +1282,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         OR: [{ status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] } }, { closedAt: { gte: monthStart, lte: monthEnd } }],
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
-      include: { borrower: true },
+      include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } },
       orderBy: { loanCode: 'asc' },
     });
 
@@ -1255,6 +1334,11 @@ export class PrismaReportingRepository implements IReportingRepository {
           mobile: borrower.mobilePhone1 ?? borrower.mobilePhone2 ?? '',
           email: borrower.email ?? '',
           employerName: '', // filled below once income detail is fetched
+          civilStatusCode: cicCivilStatusCode(borrower.civilStatus),
+          identificationTypeCode: '', // filled below once identification docs are fetched
+          identificationDomain: '',
+          identificationNumber: '',
+          occupationStatusCode: '', // filled below once income detail is fetched
         });
       }
 
@@ -1279,10 +1363,13 @@ export class PrismaReportingRepository implements IReportingRepository {
         ? Math.max(0, Math.round((referenceDate.getTime() - earliestOverdue.dueDate.getTime()) / 86_400_000))
         : 0;
 
+      const contractTypeCode = cicContractTypeCode(loan.loanProductVersion.loanProduct.code);
       contracts.push({
         providerSubjectNo: subjectNo,
         providerContractNo: loan.cicProviderContractNo,
         loanCode: loan.loanCode,
+        contractTypeCode,
+        purposeOfCreditCode: contractTypeCode === '12' || contractTypeCode === '20' ? '32' : '',
         contractPhase: loan.status.startsWith('CLOSED') ? 'CL' : 'AC',
         contractStartDate: loan.activatedAt ?? loan.createdAt,
         contractRequestDate: loan.createdAt,
@@ -1306,17 +1393,35 @@ export class PrismaReportingRepository implements IReportingRepository {
       });
     }
 
-    // Employer name (BorrowerIncomeDetail is a separate 1-to-1 table, not included above to keep
-    // the main loan query lean - same reasoning as Address's separate bulk-fetch pattern elsewhere
-    // in this file).
+    // Employer name + occupation status (BorrowerIncomeDetail) and identification type/number
+    // (IdentificationDocument, first on file) - separate 1-to-1/1-to-many tables, not included
+    // above to keep the main loan query lean, same reasoning as Address's separate bulk-fetch
+    // pattern elsewhere in this file.
     const borrowerIds = [...new Set(loans.map((l) => l.borrowerId))];
     if (borrowerIds.length > 0) {
-      const incomeDetails = await prisma.borrowerIncomeDetail.findMany({ where: { borrowerId: { in: borrowerIds } } });
-      const employerByBorrowerId = new Map(incomeDetails.map((d) => [d.borrowerId, d.employerName ?? '']));
+      const [incomeDetails, identificationDocs] = await Promise.all([
+        prisma.borrowerIncomeDetail.findMany({ where: { borrowerId: { in: borrowerIds } } }),
+        prisma.identificationDocument.findMany({ where: { borrowerId: { in: borrowerIds } } }),
+      ]);
+      const incomeByBorrowerId = new Map(incomeDetails.map((d) => [d.borrowerId, d]));
+      const firstIdDocByBorrowerId = new Map<string, (typeof identificationDocs)[number]>();
+      for (const doc of identificationDocs) {
+        if (!firstIdDocByBorrowerId.has(doc.borrowerId)) firstIdDocByBorrowerId.set(doc.borrowerId, doc);
+      }
       for (const loan of loans) {
         if (!loan.borrower.cicProviderSubjectNo) continue;
         const row = individualsBySubjectNo.get(loan.borrower.cicProviderSubjectNo);
-        if (row) row.employerName = employerByBorrowerId.get(loan.borrowerId) ?? '';
+        if (!row) continue;
+        const income = incomeByBorrowerId.get(loan.borrowerId);
+        row.employerName = income?.employerName ?? '';
+        row.occupationStatusCode = cicOccupationStatusCode(income?.employmentType ?? null);
+        const idDoc = firstIdDocByBorrowerId.get(loan.borrowerId);
+        if (idDoc) {
+          const { domain, code } = cicIdentificationType(idDoc.documentType);
+          row.identificationDomain = domain;
+          row.identificationTypeCode = code;
+          row.identificationNumber = code ? idDoc.documentNumber : '';
+        }
       }
     }
 

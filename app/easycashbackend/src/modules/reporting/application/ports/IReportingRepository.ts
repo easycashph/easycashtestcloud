@@ -297,10 +297,11 @@ export interface PortalAccountReportRow {
  * (`legacy/CIC /07 2026 July/PF017290_CSDF_20260811105959.csv`) - `CicCsdfReportWriter` is what
  * actually renders these into the pipe-delimited file.
  *
- * Fields intentionally left unmapped in this version (flagged, never guessed): civil status code,
- * identification type code, employment/occupation status code, PSIC/PSOC industry/occupation
- * codes - none of these have a confirmed CIC domain-code mapping from this system's free-text
- * equivalents yet. `CicCsdfReportWriter` renders them as blank positions.
+ * Domain-code mappings below were confirmed 2026-08-30 by reading the official
+ * `Manual_CIC_Philippines_Submission_v.1.7.pdf` (civil status, identification type, occupation
+ * status codes) and the CIC field-spec Excel's own "CI - Installment Contract" domain sheet
+ * (contract type codes) - never guessed. PSIC/PSOC (industry/occupation classification) remain
+ * unmapped - this system has no coded equivalent field to map from at all (free text only).
  */
 export interface CicIndividualRow {
   /** Permanent CIC identifier - `Borrower.cicProviderSubjectNo`. Every row here is guaranteed to have one (rows without it are excluded upstream, never fabricated - see `getCicMonthlyReportData`'s own doc comment). */
@@ -318,6 +319,19 @@ export interface CicIndividualRow {
   mobile: string;
   email: string;
   employerName: string;
+  /** CivilStatusDomain code (1=Single, 2=Married, 3=Divorced/Separated, 4=Widow) mapped from
+   * `Borrower.civilStatus` free text. Blank if the stored text doesn't match a known variant. */
+  civilStatusCode: string;
+  /** IdentificationTypeDomain (TIN/SSS/GSIS/Philhealth/UMID/business-registration codes) OR
+   * IDTypeDomain (Driver's License/Passport/Voter's ID/etc government photo IDs) code, mapped from
+   * the borrower's first `IdentificationDocument.documentType`. Blank if unrecognized. */
+  identificationTypeCode: string;
+  /** Which domain `identificationTypeCode` belongs to - CicCsdfReportWriter places it in the
+   * correct field group accordingly (they're two different field groups in the CSDF layout). */
+  identificationDomain: 'IDENTIFICATION' | 'ID' | '';
+  identificationNumber: string;
+  /** OccupationStatusDomain code. Only 'Self Employed' maps confidently (-> 5) - `BorrowerIncomeDetail.employmentType`'s other stored value, plain 'Employed', doesn't distinguish permanent/temporary or private/government sector, so it's left blank rather than guessed. */
+  occupationStatusCode: string;
 }
 
 export interface CicContractRow {
@@ -326,6 +340,17 @@ export interface CicContractRow {
   /** This loan's own permanent identifier (`LoanAccount.cicProviderContractNo`) - NOT the same as `loanCode`, which is this system's internal code and has no relationship to CIC's historical numbering (see `backfill-cic-provider-contract-no.ts`'s own doc comment). */
   providerContractNo: string;
   loanCode: string;
+  /** InstallmentContractTypeDomain code, derived from the loan's product code prefix
+   * (user-confirmed 2026-08-30): SL- -> '20' (Salary Loan), BL- -> '22' (Business Loan),
+   * PL-, PFL-, SML -> '12' (Personal Loan), CL- -> '12' (Personal Loan). Blank for any other
+   * product prefix (not yet confirmed). */
+  contractTypeCode: string;
+  /** CreditPurposeDomain code. '32' (Loans to Individual for other purposes) when
+   * `contractTypeCode` is '12' or '20' - the only code that fits an "Individual" purpose
+   * description, matching this being this system's dominant real code (765/1,312 in the real July
+   * submission). Blank for '22' (Business Loan) - no confirmed purpose code fits a business
+   * borrower without guessing between the several SME/corporate options. */
+  purposeOfCreditCode: string;
   /** 'AC' (Active) or 'CL' (Closed) - from `LoanAccount.status`/`closedAt`. */
   contractPhase: 'AC' | 'CL';
   contractStartDate: Date;

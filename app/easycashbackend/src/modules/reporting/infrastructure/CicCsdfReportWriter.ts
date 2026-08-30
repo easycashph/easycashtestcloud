@@ -65,6 +65,15 @@ export class CicCsdfReportWriter {
           15: 'PH',
           16: person.nationality || 'PH',
           17: '1',
+          18: person.civilStatusCode,
+          // "Identification N" (TIN/SSS/GSIS/Philhealth/UMID/business-registration) and "ID N"
+          // (government photo ID) are two different field groups in the CSDF layout even though
+          // both come from the same `IdentificationDocument.documentType` in this system -
+          // `identificationDomain` says which group this document actually belongs to.
+          53: person.identificationDomain === 'IDENTIFICATION' ? person.identificationTypeCode : '',
+          54: person.identificationDomain === 'IDENTIFICATION' ? person.identificationNumber : '',
+          59: person.identificationDomain === 'ID' ? person.identificationTypeCode : '',
+          60: person.identificationDomain === 'ID' ? person.identificationNumber : '',
           77: person.mobile ? '3' : '',
           78: person.mobile,
           79: person.email ? '7' : '',
@@ -72,6 +81,7 @@ export class CicCsdfReportWriter {
           81: person.employerName,
           86: 'M',
           87: 'PHP',
+          88: person.occupationStatusCode,
         }),
       );
     }
@@ -85,6 +95,7 @@ export class CicCsdfReportWriter {
           4: contract.providerSubjectNo,
           5: 'B',
           6: contract.providerContractNo,
+          7: contract.contractTypeCode,
           8: contract.contractPhase,
           10: 'PHP',
           11: 'PHP',
@@ -95,6 +106,7 @@ export class CicCsdfReportWriter {
           16: ddmmyyyy(contract.lastPaymentDate),
           19: contract.financedAmount,
           20: String(contract.installmentsNumber),
+          22: contract.purposeOfCreditCode,
           23: 'M',
           25: contract.monthlyPaymentAmount,
           26: ddmmyyyy(contract.firstPaymentDate),
