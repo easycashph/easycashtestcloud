@@ -1259,12 +1259,22 @@ export class PrismaReportingRepository implements IReportingRepository {
     // the DB query bound below, never for display.
     const referenceDate = new Date(Date.UTC(filter.year, filter.month, 0));
 
-    // Scope (2026-08-30, user-confirmed CI-only first version): every loan currently open, PLUS
-    // any loan that closed during this reporting month (CIC needs to be told about a closure once,
-    // in the period it happened, even though it won't appear in every future month's file).
+    // Scope (2026-08-30, user-confirmed fix - found via the user's own real July file showing 30
+    // CL contracts where this had 0): this report is generated LATER than the month it covers
+    // (e.g. run in August for July), so a loan's CURRENT `status` doesn't tell you whether it was
+    // still open AS OF the reporting month's end - a loan closed in August no longer reads ACTIVE
+    // today, but it absolutely still belongs in July's file (as 'AC', since it hadn't closed yet
+    // as of July 31st). Reconstructed instead from `closedAt` relative to `monthEnd`: still open
+    // today (`closedAt: null`), OR closed on/after this month started (was open through at least
+    // part of it) - `resolveContractPhase`/`resolveContractEndActualDate` below do the same
+    // month-relative recomputation for the actual CI record fields. Excludes loans that never
+    // reached a real disbursed contract at all (PENDING_APPROVAL/APPROVED/CLOSED_REJECTED/
+    // CLOSED_UNDONE).
+    const NEVER_DISBURSED_STATUSES = ['PENDING_APPROVAL', 'APPROVED', 'CLOSED_REJECTED', 'CLOSED_UNDONE'] as const;
     const allCandidateLoans = await prisma.loanAccount.findMany({
       where: {
-        OR: [{ status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] } }, { closedAt: { gte: monthStart, lte: monthEnd } }],
+        status: { notIn: [...NEVER_DISBURSED_STATUSES] },
+        OR: [{ closedAt: null }, { closedAt: { gte: monthStart } }],
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
       include: { borrower: true, loanProductVersion: { include: { loanProduct: true } } },
@@ -1295,12 +1305,28 @@ export class PrismaReportingRepository implements IReportingRepository {
     function resolveContractStartDate(loan: (typeof allCandidateLoans)[number]): Date {
       return earliestDisbursementByLoanId.get(loan.id) ?? loan.activatedAt ?? loan.createdAt;
     }
+    // A loan only counts as closed FOR THIS REPORTING MONTH if its real closedAt falls on or
+    // before this month's end - a loan closed the following month (or later, relative to when this
+    // report happens to be generated) was still open as of this period, per resolveContractPhase's
+    // own doc comment above.
+    function wasClosedAsOf(loan: (typeof allCandidateLoans)[number]): boolean {
+      return loan.closedAt !== null && loan.closedAt.getTime() <= monthEnd.getTime();
+    }
 
     // 2026-08-30 (user-confirmed): CIC reporting only started in 2019 - a loan whose contract
     // predates that was never in scope for CIC submission and never will be, regardless of the
     // reporting month.
+    // 2026-08-30 (user-confirmed, found via a real July-vs-current count mismatch: this report was
+    // over-counting because it only checked the LOWER bound - a loan that started AFTER this
+    // reporting month (e.g. an August-originated loan showing up in a July report run today) still
+    // has `resolveContractStartDate(loan) >= CIC_REPORTING_START_DATE` trivially true, since that
+    // only compares against 2019, not against `monthEnd`). A loan must have actually STARTED by the
+    // reporting month's end to belong in that month's file at all.
     const CIC_REPORTING_START_DATE = new Date(Date.UTC(2019, 0, 1));
-    const loans = allCandidateLoans.filter((loan) => resolveContractStartDate(loan) >= CIC_REPORTING_START_DATE);
+    const loans = allCandidateLoans.filter((loan) => {
+      const start = resolveContractStartDate(loan);
+      return start >= CIC_REPORTING_START_DATE && start <= monthEnd;
+    });
 
     const loanIds = loans.map((loan) => loan.id);
     const scheduleRows =
@@ -1309,11 +1335,36 @@ export class PrismaReportingRepository implements IReportingRepository {
         : [];
     const scheduleByLoanId = groupByLoanId(scheduleRows);
 
+    // 2026-08-30 (user-confirmed, major scoping correction): the real monthly submission is NOT a
+    // full-portfolio snapshot - only loans that CHANGED that month are included. User-confirmed
+    // "changed" means ANY of: had a transaction that month (covers new disbursements, payments,
+    // adjustments - a fresh LoanAccount's own DISBURSEMENT transaction lands here too), closed that
+    // month, or is currently overdue (days-overdue increases every month a delinquent loan stays
+    // unpaid, even with zero payment activity - still a real change CIC needs reported).
+    const transactionsThisMonth =
+      loanIds.length > 0
+        ? await prisma.loanTransaction.findMany({
+            where: { loanAccountId: { in: loanIds }, entryDate: { gte: monthStart, lte: monthEnd } },
+            select: { loanAccountId: true },
+          })
+        : [];
+    const loanIdsWithTransactionThisMonth = new Set(transactionsThisMonth.map((t) => t.loanAccountId));
+    function changedThisMonth(loan: (typeof loans)[number]): boolean {
+      if (loanIdsWithTransactionThisMonth.has(loan.id)) return true;
+      if (loan.closedAt !== null && loan.closedAt.getTime() >= monthStart.getTime() && loan.closedAt.getTime() <= monthEnd.getTime()) return true;
+      const schedule = scheduleByLoanId.get(loan.id) ?? [];
+      const isUnpaid = (i: (typeof schedule)[number]) =>
+        Number(i.principalPaid) < Number(i.principalDue) || Number(i.interestPaid) < Number(i.interestDue);
+      return schedule.some((i) => isUnpaid(i) && i.dueDate.getTime() < referenceDate.getTime());
+    }
+
     const individualsBySubjectNo = new Map<string, CicIndividualRow>();
     const contracts: CicContractRow[] = [];
     const skippedMissingSubjectNo: { loanCode: string; borrowerName: string; reason: 'MISSING_SUBJECT_NO' | 'MISSING_CONTRACT_NO' }[] = [];
 
     for (const loan of loans) {
+      if (!changedThisMonth(loan)) continue;
+
       const borrower = loan.borrower;
       if (!borrower.cicProviderSubjectNo) {
         skippedMissingSubjectNo.push({ loanCode: loan.loanCode, borrowerName: formatFullName(borrower), reason: 'MISSING_SUBJECT_NO' });
@@ -1386,11 +1437,11 @@ export class PrismaReportingRepository implements IReportingRepository {
         loanCode: loan.loanCode,
         contractTypeCode,
         purposeOfCreditCode: contractTypeCode === '12' || contractTypeCode === '20' ? '32' : '',
-        contractPhase: loan.status.startsWith('CLOSED') ? 'CL' : 'AC',
+        contractPhase: wasClosedAsOf(loan) ? 'CL' : 'AC',
         contractStartDate: resolveContractStartDate(loan),
         contractRequestDate: loan.createdAt,
         contractEndPlannedDate: schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null,
-        contractEndActualDate: loan.status.startsWith('CLOSED') ? loan.closedAt : null,
+        contractEndActualDate: wasClosedAsOf(loan) ? loan.closedAt : null,
         financedAmount: loan.principalAmount.toString(),
         installmentsNumber: loan.installmentCount,
         monthlyPaymentAmount: firstInstallment

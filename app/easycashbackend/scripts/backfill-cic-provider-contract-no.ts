@@ -6,11 +6,19 @@
  * needed at all: `ACCOUNT ID` there doesn't correspond to any ID this LMS stores, verified against
  * the current SDevTech MongoDB dump and this system's own `LoanAccount.legacyId`).
  *
- * Matching strategy: the sheet's own "Macro Provided ID" column already links each loan to its
+ * Matching strategy: both sources' own subject-identifier column already links each loan to its
  * borrower - so first resolve the Borrower via `cicProviderSubjectNo` (must already be backfilled -
  * run backfill-cic-provider-subject-no.ts first), then among THAT borrower's loans, match by
  * principal amount + installment count + activation date, each only accepted when it resolves to
  * exactly ONE LoanAccount. Never overwrites an existing value, never guesses an ambiguous match.
+ *
+ * Two source sheets, merged (2026-08-30, user-provided second source):
+ * 1. "Loan Accounts Details" (July's own prep workbook) - a broader loan-detail tracker, but the
+ *    "ACCOUNT ID" here isn't necessarily what was actually submitted.
+ * 2. "CSV Export" from the REVISED July workbook - the literal CI rows of what was actually
+ *    submitted to CIC that month (same CSDF field positions as the real accepted file - Provider
+ *    Subject No at index 4, Provider Contract No at index 6, Financed Amount at 19, Installments
+ *    Number at 20). Authoritative where it has a row - tried first.
  *
  * Usage:
  *   npx tsx scripts/backfill-cic-provider-contract-no.ts          # dry run - reports only
@@ -23,9 +31,13 @@ import { prisma } from '../src/shared/database/prismaClient';
 
 const APPLY = process.argv.includes('--apply');
 
-const SOURCE_FILE = path.resolve(
+const LOAN_DETAILS_FILE = path.resolve(
   __dirname,
   '../../../legacy/CIC /07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
+);
+const CSV_EXPORT_FILE = path.resolve(
+  __dirname,
+  '../../../legacy/CIC /07 2026 July/[Revised] [July 2026] Fields in Google Spreadsheet.xlsx',
 );
 
 interface LoanDetailRow {
@@ -41,11 +53,11 @@ function toDateOnly(v: unknown): Date | null {
   return null;
 }
 
-async function loadLoanDetails(): Promise<LoanDetailRow[]> {
+async function loadLoanAccountsDetails(): Promise<LoanDetailRow[]> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(SOURCE_FILE);
+  await workbook.xlsx.readFile(LOAN_DETAILS_FILE);
   const sheet = workbook.getWorksheet('Loan Accounts Details');
-  if (!sheet) throw new Error(`"Loan Accounts Details" sheet not found in ${SOURCE_FILE}`);
+  if (!sheet) throw new Error(`"Loan Accounts Details" sheet not found in ${LOAN_DETAILS_FILE}`);
 
   const rows: LoanDetailRow[] = [];
   sheet.eachRow((row, rowNumber) => {
@@ -66,9 +78,62 @@ async function loadLoanDetails(): Promise<LoanDetailRow[]> {
   return rows;
 }
 
+/** This sheet's cells are live Google Sheets formulas (IMPORTRANGE/FILTER) - ExcelJS returns
+ * `{ formula, result }` instead of a plain value for those, unlike a normal static cell. */
+function cellResult(value: unknown): unknown {
+  if (value !== null && typeof value === 'object' && 'result' in (value as Record<string, unknown>)) {
+    return (value as { result: unknown }).result;
+  }
+  return value;
+}
+
+async function loadCsvExport(): Promise<LoanDetailRow[]> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(CSV_EXPORT_FILE);
+  const sheet = workbook.getWorksheet('CSV Export');
+  if (!sheet) throw new Error(`"CSV Export" sheet not found in ${CSV_EXPORT_FILE}`);
+
+  const rows: LoanDetailRow[] = [];
+  sheet.eachRow((row) => {
+    const get = (col: number) => cellResult(row.getCell(col).value); // 1-indexed, same as the field position + 1
+    if (get(1) !== 'CI') return; // only Installment Contract rows
+    const macroProvidedId = String(get(5) ?? '').trim(); // field[4] Provider Subject No
+    const accountId = String(get(7) ?? '').trim(); // field[6] Provider Contract No
+    if (!accountId || !macroProvidedId) return;
+
+    const rawAmount = get(20); // field[19] Financed Amount
+    const rawInstallments = get(21); // field[20] Installments Number
+    rows.push({
+      accountId,
+      macroProvidedId,
+      loanAmount: typeof rawAmount === 'number' ? rawAmount : null,
+      installments: typeof rawInstallments === 'number' ? rawInstallments : null,
+      activationDate: null, // CSV Export has no separate activation-date column - amount/installments alone still constrain the match well
+    });
+  });
+  return rows;
+}
+
+async function loadLoanDetails(): Promise<LoanDetailRow[]> {
+  const [csvExportRows, loanDetailRows] = await Promise.all([loadCsvExport(), loadLoanAccountsDetails()]);
+  // CSV Export first (authoritative - what was literally submitted), Loan Accounts Details as a
+  // supplementary source for loans CSV Export doesn't cover. Dedup by accountId - the matching loop
+  // below only needs one attempt per real contract number, and CSV Export's own value should win.
+  const seenAccountIds = new Set<string>();
+  const merged: LoanDetailRow[] = [];
+  for (const row of [...csvExportRows, ...loanDetailRows]) {
+    if (seenAccountIds.has(row.accountId)) continue;
+    seenAccountIds.add(row.accountId);
+    merged.push(row);
+  }
+  console.log(`  (${csvExportRows.length} from CSV Export, ${loanDetailRows.length} from Loan Accounts Details, ${merged.length} unique after merge)`);
+  return merged;
+}
+
 async function main(): Promise<void> {
   console.log(`=== CIC Provider Contract No backfill (${APPLY ? 'APPLY' : 'dry run'}) ===`);
-  console.log(`Source: ${SOURCE_FILE}`);
+  console.log(`Sources: ${CSV_EXPORT_FILE}`);
+  console.log(`         ${LOAN_DETAILS_FILE}`);
 
   const loanDetailRows = await loadLoanDetails();
   console.log(`Loaded ${loanDetailRows.length} Loan Accounts Details row(s).`);
