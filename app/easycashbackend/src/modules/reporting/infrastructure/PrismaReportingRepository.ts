@@ -1350,6 +1350,10 @@ export class PrismaReportingRepository implements IReportingRepository {
           })
         : [];
     const loanIdsWithTransactionThisMonth = new Set(transactionsThisMonth.map((t) => t.loanAccountId));
+    // 2026-08-30 (user-confirmed): a loan only counts as "newly disbursed" if it actually has a
+    // real DISBURSEMENT transaction - `activatedAt` alone isn't enough, since a loan can be marked
+    // activated before funds actually go out. Reusing `earliestDisbursementByLoanId` (already built
+    // above for resolveContractStartDate) rather than re-deriving it.
     function changedThisMonth(loan: (typeof loans)[number]): boolean {
       if (loanIdsWithTransactionThisMonth.has(loan.id)) return true;
       if (loan.closedAt !== null && loan.closedAt.getTime() >= monthStart.getTime() && loan.closedAt.getTime() <= monthEnd.getTime()) return true;
