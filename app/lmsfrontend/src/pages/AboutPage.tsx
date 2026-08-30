@@ -1,8 +1,10 @@
-import { CheckCircle2, Code2, Smartphone, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { CheckCircle2, Code2, GitCommitHorizontal, Smartphone, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useLogPageView } from '@/lib/activityLog';
+import { fetchBackendBuildInfo, fetchFrontendBuildInfo, type BuildInfo } from '@/lib/buildInfo';
 import {
   LMS_ABOUT_FACTS,
   LMS_ABOUT_SECTIONS,
@@ -120,6 +122,9 @@ export function AboutPage() {
         </CardContent>
       </Card>
 
+      {/* Build Info - which commit is actually running on this machine's frontend/backend */}
+      <BuildInfoCard />
+
       {/* Developer team */}
       <Card>
         <CardHeader className="flex flex-row items-center gap-2 space-y-0">
@@ -230,6 +235,74 @@ export function AboutPage() {
           the one AppLayout.tsx already renders after every page's <Outlet /> - the "Internal
           Preview Build..." disclosure was showing twice in a row on this page specifically.
           AppLayout's copy already covers this page; nothing else needed here. */}
+    </div>
+  );
+}
+
+/**
+ * 2026-08-30 (user request, "may sanity check ba tayo?"): this platform runs as three separate,
+ * independently-deployed Docker stacks (Office Server PC, Macbook Nomer, Laptop Nomer) - so a
+ * dashboard number can look "wrong" on one machine simply because that machine is running older
+ * code, not because its data is wrong. This card surfaces exactly which commit each half (frontend
+ * bundle, backend server) is actually running, right on this machine, so that question can be
+ * answered by looking at a screen instead of by re-deriving the figure from raw SQL. See
+ * `buildInfo.ts` / `PrismaDashboardRepository`'s sibling `shared/config/buildInfo.ts` for how the
+ * commit is captured (`scripts/write-build-info.ps1`/`.sh`, run right before every Docker rebuild).
+ */
+function BuildInfoCard() {
+  const frontendQuery = useQuery({ queryKey: ['build-info', 'frontend'], queryFn: fetchFrontendBuildInfo, staleTime: 60_000 });
+  const backendQuery = useQuery({ queryKey: ['build-info', 'backend'], queryFn: fetchBackendBuildInfo, staleTime: 60_000 });
+
+  const frontend = frontendQuery.data;
+  const backend = backendQuery.data;
+  const isLoading = frontendQuery.isLoading || backendQuery.isLoading;
+  const matches = !isLoading && !!frontend && !!backend && frontend.commit !== 'unknown' && frontend.commit === backend.commit;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <div className="flex items-center gap-2">
+          <GitCommitHorizontal className="h-4 w-4 text-primary" />
+          <CardTitle>Build Info</CardTitle>
+        </div>
+        {!isLoading && (
+          <Badge variant={matches ? 'success' : 'warning'}>{matches ? 'Frontend/backend in sync' : 'Version mismatch'}</Badge>
+        )}
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4 text-sm text-muted-foreground">
+          What&apos;s actually running on <span className="font-medium text-foreground">{backend?.hostname ?? 'this machine'}</span> right
+          now - useful when a figure on this machine looks different from another one, to rule out a stale deployment before suspecting the
+          data itself.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <BuildInfoColumn label="Frontend (this browser session)" info={frontend} isLoading={frontendQuery.isLoading} />
+          <BuildInfoColumn label="Backend" info={backend} isLoading={backendQuery.isLoading} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BuildInfoColumn({ label, info, isLoading }: { label: string; info: BuildInfo | Omit<BuildInfo, 'hostname'> | undefined; isLoading: boolean }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      {isLoading ? (
+        <p className="mt-1.5 text-sm text-muted-foreground">Loading…</p>
+      ) : !info || info.commit === 'unknown' ? (
+        <p className="mt-1.5 text-sm text-muted-foreground">Not available (build-info.json not generated for this deployment).</p>
+      ) : (
+        <div className="mt-1.5 space-y-1">
+          <p className="font-mono text-sm font-semibold">{info.commit}</p>
+          {info.commitMessage && <p className="text-xs text-muted-foreground">{info.commitMessage}</p>}
+          {info.builtAt && (
+            <p className="text-xs text-muted-foreground">
+              Built {new Date(info.builtAt).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

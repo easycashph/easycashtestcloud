@@ -9,6 +9,7 @@ import { env } from '@shared/config/env';
 import { logger } from '@shared/logger/logger';
 import { errorHandler } from '@shared/middleware/errorHandler';
 import { parseTrustProxy } from '@shared/config/trustProxy';
+import { getBuildInfo } from '@shared/config/buildInfo';
 import { createAuthRouter } from '@modules/identity/interface/http/authRouter';
 import { LoginUseCase } from '@modules/identity/application/use-cases/LoginUseCase';
 import { RefreshTokenUseCase } from '@modules/identity/application/use-cases/RefreshTokenUseCase';
@@ -469,6 +470,12 @@ export function createApp(): Express {
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'easycash-backend', timestamp: new Date().toISOString() });
+  });
+
+  // Unauthenticated, same reasoning as /health above - see buildInfo.ts's doc comment for why this
+  // exists (cross-machine version drift detection).
+  app.get('/api/v1/build-info', (_req, res) => {
+    res.json(getBuildInfo());
   });
 
   // --- identity module wiring (Milestone 6: Authentication) ---

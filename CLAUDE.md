@@ -341,6 +341,12 @@ code change, rebuild and restart the affected Docker container(s) automatically
 the container comes back healthy (`docker ps`, a `/health` check) before considering the change
 done.
 
+Before rebuilding `easycashbackend`/`lmsfrontend`, run `scripts/write-build-info.ps1` (Windows) or
+`scripts/write-build-info.sh` (Mac/Linux) so the resulting image knows which commit it was built
+from — this platform runs as separate, independently-deployed stacks on multiple machines (Office
+Server PC, Macbook Nomer, Laptop Nomer), and the About page's Build Info card uses this to catch a
+stale deployment before anyone has to suspect the data itself.
+
 ---
 
 # Git Workflow

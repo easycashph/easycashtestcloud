@@ -29,6 +29,7 @@ RUN npm install --omit=dev
 RUN npx prisma generate
 COPY --from=build /app/dist ./dist
 COPY templates ./templates
+COPY build-info.json ./build-info.json
 RUN mkdir -p /app/storage
 EXPOSE 4000
 CMD ["node", "dist/server.js"]
