@@ -1783,8 +1783,51 @@ each fix:
 
 `npx tsc --noEmit` clean throughout, backend Docker rebuilt and reverified healthy after each fix.
 
+## 30h. Follow-up: user reviewed the Excel workbook directly, found two more real bugs + a new UI loading animation
+
+2026-08-30, same day. User asked to make the report page's loading state "high-end" with a
+progress-bar animation - built a mockup first (per standing house rule) via the visualize tool,
+user approved, then implemented `ReportLoadingProgress` in `CicMonthlyReportPage.tsx`: three named
+stages (Fetching loans in scope / Resolving CIC identifiers / Computing balances and overdue
+figures) that step forward every 900ms while the request is in flight, each showing a spin ->
+check transition, plus a progress bar - genuinely reflects the report's real three-phase shape
+without overclaiming granularity from a single backend request. Stat tiles redesigned too (from
+inline text to a 3-tile grid). `npx tsc --noEmit` clean, `lmsfrontend` Docker rebuilt.
+
+Two more real bugs found from the user reading the generated Excel workbook row-by-row:
+
+1. **SP-Easy/SP-Flash Contract Type still blank** - two of the six unconfirmed `LoanProduct`
+   prefixes from §30c/§30g's follow-up list. Asked the user directly rather than guess: confirmed
+   both -> Salary Loan (`20`), same as `SL-`. `cicContractTypeCode()` updated.
+2. **"SEPARATED/DIVORCED" Civil Status variant** (word order reversed from the already-handled
+   `DIVORCED/SEPARATED`) wasn't matched - affects a small number of borrowers (7 in
+   `borrower.civilStatus`) whose Civil Status Code came out blank despite having real data on file.
+   `cicCivilStatusCode()` now checks both orderings.
+
+User then spotted a specific loan, `SL-REG_00114` (their own client profile, NOMER PEREZ), excluded
+with "Borrower missing permanent CIC ID" and asked why. Investigation found the real cause: this
+LMS has **two** borrowers sharing the exact mobile number `9158223552` - the real "NOMER PEREZ" and
+a stray "EASYCASH ACCOUNT" record (has a `legacyId`, created 2019-09-26, no email - looks like an
+old internal/test account from the SDevTech era, not a real client). The backfill script's
+mobile-match strategy correctly refused to guess between them and flagged it ambiguous (working as
+designed - not a bug). Manually resolved just this one case: `Borrower(8fa9efa9...)`'s
+`cicProviderSubjectNo` set directly to the Client Master List's confirmed value
+(`ELCI03000175140503`) via SQL, since the identity was independently confirmed (name, mobile, and
+birthdate - 1972-09-19 in the sheet vs this system's 1972-09-18T16:30Z, which is the same calendar
+day once shifted to Manila time). His loan already had `cicProviderContractNo` from the earlier
+loanCode fallback (`SL-REG_00114` itself).
+
+`npx tsc --noEmit` clean throughout, backend Docker rebuilt and reverified healthy after each fix.
+
 ## Known follow-up work (CIC report, next session)
 
+- **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
+  a `legacyId`-bearing, no-email record from 2019 that shares NOMER PEREZ's real mobile number,
+  causing an ambiguous match. Likely an old internal/test account from the SDevTech era, not a real
+  client - worth a cleanup pass, and worth checking whether other borrowers in the 59-strong
+  "ambiguous" bucket from `backfill-cic-provider-subject-no.ts` have the same root cause (a stray
+  non-client record sharing a real client's contact info) rather than a genuine multi-person
+  collision.
 - Superseded by §30g: the loan-level contract-ID gap is effectively closed (497 -> 1) via the
   loanCode fallback - the original "improve the matching tolerance" idea is no longer needed.
 - **§30g's remaining count gap (650 vs the real 730, and CL undercounting 1 vs 30)** - the
