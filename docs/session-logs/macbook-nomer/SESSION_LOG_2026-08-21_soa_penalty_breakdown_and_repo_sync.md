@@ -1878,6 +1878,24 @@ the same `ELCS`/`ELCC` auto-generation scheme this system already uses for brand
 borrowers/loans (see §30/§30g), applied retroactively to this specific, now-verified set. Result:
 **48 loans resolved, August 2026 report went from 654 to 702 contracts, 49 to 1 excluded.**
 
+## 30k. Follow-up: resolved the last 2 loans, August 2026 report now has zero exclusions
+
+2026-08-30, same day. Down to 1 excluded loan (`SL-LAZ_00004`, CHARLYN TORRES NASTOR,
+`MISSING_CONTRACT_NO`). Investigated: a DIFFERENT, unrelated closed loan
+(`SL-LAZ_00004-LEGACY2`, borrower TEODOCIO III) already holds `cicProviderContractNo =
+'SL-LAZ_00004'` - a renaming-collision artifact from an earlier loan-code-dedup/migration event
+(same pattern as this session's earlier BL-SPEC_00029/00030 saga), not a real identity ambiguity.
+Assigned Charlyn's loan a fresh `ELCC` auto-generated code instead of reusing the taken value.
+
+While there, also checked the other collision flagged back in §30g's fallback-script run
+(`SML-REG_00229`) even though it wasn't blocking August's report (no activity this month, so not
+currently in scope) - found `SML-REG_00244` already holds that value. Unlike Charlyn's case, both
+loan codes belong to the SAME real borrower (IRENE GADIA - two loan cycles), so there was no way to
+tell from the data alone which one is her real historical Account ID. User's call: don't
+investigate further, just assign `SML-REG_00229` a fresh `ELCC` code too - done.
+
+**Result: August 2026 report now has zero exclusions - 703 contracts, 694 individuals, 0 skipped.**
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
