@@ -1896,6 +1896,29 @@ investigate further, just assign `SML-REG_00229` a fresh `ELCC` code too - done.
 
 **Result: August 2026 report now has zero exclusions - 703 contracts, 694 individuals, 0 skipped.**
 
+## 30l. Follow-up: "no activity this month" question - found 6 loans activated but never actually disbursed
+
+2026-08-30, same day. With August 2026's report at zero exclusions, user asked whether any
+currently-open loans have NO activity at all this month and are therefore correctly left out of
+the report. Found 13: 1,269 total open loans, 13 with no transaction and not overdue this month.
+User asked for the list to review; broke into two groups on inspection:
+
+- 7 (Ronald Lugtu et al) - real loans disbursed in June/July, correctly excluded from August (no
+  August activity - they'd have appeared in their own origination month's report).
+- 6 (Aldwin Maniwang, SL-CORP_00129/130/134/135, Nelson Malinao) - `activatedAt` set
+  Aug 24-27, but **zero transactions of any kind**, not even a `DISBURSEMENT` row.
+
+User initially asked to include the 6 as "new loans", then immediately corrected: a loan must have
+an actual DISBURSEMENT transaction to count as newly disbursed - `activatedAt` alone isn't proof
+the funds actually moved. Implemented then reverted a fallback-to-`activatedAt` fix within the same
+exchange once the correction landed - `changedThisMonth()` ends this session unchanged in behavior
+from §30g/§30k (only documented more clearly why `activatedAt` alone is deliberately not a trigger).
+
+These 6 loans are worth a look outside CIC scope: `activatedAt` being set with literally no ledger
+entry at all suggests either a genuinely pending disbursement (money not released yet, correctly
+not CIC-reportable) or a real gap where the actual disbursement was never recorded in this LMS -
+worth confirming with whoever processes releases, not something this report can resolve on its own.
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
