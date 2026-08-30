@@ -1198,7 +1198,7 @@ export class PrismaReportingRepository implements IReportingRepository {
     // Scope (2026-08-30, user-confirmed CI-only first version): every loan currently open, PLUS
     // any loan that closed during this reporting month (CIC needs to be told about a closure once,
     // in the period it happened, even though it won't appear in every future month's file).
-    const loans = await prisma.loanAccount.findMany({
+    const allCandidateLoans = await prisma.loanAccount.findMany({
       where: {
         OR: [{ status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] } }, { closedAt: { gte: monthStart, lte: monthEnd } }],
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
@@ -1206,6 +1206,13 @@ export class PrismaReportingRepository implements IReportingRepository {
       include: { borrower: true },
       orderBy: { loanCode: 'asc' },
     });
+
+    // 2026-08-30 (user-confirmed): CIC reporting only started in 2019 - a loan whose contract
+    // predates that was never in scope for CIC submission and never will be, regardless of the
+    // reporting month. `contractStartDate` below uses the same `activatedAt ?? createdAt`
+    // fallback as the actual CI record.
+    const CIC_REPORTING_START_DATE = new Date(Date.UTC(2019, 0, 1));
+    const loans = allCandidateLoans.filter((loan) => (loan.activatedAt ?? loan.createdAt) >= CIC_REPORTING_START_DATE);
 
     const loanIds = loans.map((loan) => loan.id);
     const scheduleRows =

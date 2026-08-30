@@ -1623,6 +1623,14 @@ one enum value (`MONTHS`).
 `npx tsc --noEmit` clean throughout. Backend Docker rebuilt and reverified healthy after every
 schema/code change.
 
+## 30b. Follow-up: scoped out pre-2019 loans (CIC reporting never covered them)
+
+2026-08-30, same day. User clarified: CIC reporting only started in 2019 - a loan whose contract
+predates that was never in scope for submission and never will be, regardless of which month is
+being reported. `getCicMonthlyReportData` now filters out any loan whose `activatedAt ?? createdAt`
+falls before 2019-01-01, applied after the existing ACTIVE/ACTIVE_IN_ARREARS/closed-this-month
+scope. `npx tsc --noEmit` clean, backend Docker rebuilt and reverified healthy.
+
 ## Known follow-up work (CIC report, next session)
 
 - **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
