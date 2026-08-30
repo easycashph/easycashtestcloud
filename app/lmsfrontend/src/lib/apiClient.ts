@@ -361,15 +361,25 @@ interface CursorPage<T> {
  * indefinitely. A genuinely paginated list UI (cursor-driven Next/Previous, not "load everything")
  * is the right fix once a list actually approaches that scale.
  */
-export async function fetchAllPages<T>(basePath: string, pageSize = 200): Promise<T[]> {
+/** `onProgress`, when passed, fires after each page lands with the running item count and page
+ * number so far - lets a caller show real (not simulated) loading progress for a fetch that may
+ * span many pages. Optional and additive - existing callers that don't pass it are unaffected. */
+export async function fetchAllPages<T>(
+  basePath: string,
+  pageSize = 200,
+  onProgress?: (loadedCount: number, pageNumber: number) => void,
+): Promise<T[]> {
   const items: T[] = [];
   let cursor: string | null = null;
+  let pageNumber = 0;
   do {
     const separator = basePath.includes('?') ? '&' : '?';
     const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
     const page: CursorPage<T> = await apiClient.get<CursorPage<T>>(`${basePath}${separator}limit=${pageSize}${cursorParam}`);
     items.push(...page.items);
     cursor = page.nextCursor;
+    pageNumber++;
+    onProgress?.(items.length, pageNumber);
   } while (cursor);
   return items;
 }

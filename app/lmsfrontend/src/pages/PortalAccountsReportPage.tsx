@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
@@ -127,8 +128,8 @@ export function PortalAccountsReportPage() {
                 <TableBody>
                   {reportQuery.isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        Loading…
+                      <TableCell colSpan={6} className="py-6">
+                        <ReportLoadingProgress stages={['Fetching portal accounts', 'Resolving linked clients']} />
                       </TableCell>
                     </TableRow>
                   ) : rows.length === 0 ? (

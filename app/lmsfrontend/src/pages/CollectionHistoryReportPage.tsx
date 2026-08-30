@@ -14,6 +14,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
 import type { CollectionHistoryReportRow } from '@/lib/reportApiTypes';
@@ -185,8 +186,8 @@ export function CollectionHistoryReportPage() {
                 <TableBody>
                   {reportQuery.isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6 + visibleOptionalColumns.length} className="text-center text-muted-foreground">
-                        Loading…
+                      <TableCell colSpan={6 + visibleOptionalColumns.length} className="py-6">
+                        <ReportLoadingProgress stages={['Fetching collection history', 'Computing repayment figures']} />
                       </TableCell>
                     </TableRow>
                   ) : rows.length === 0 ? (

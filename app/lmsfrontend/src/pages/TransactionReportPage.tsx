@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, ChevronDown, Download } from 'lucide-react';
+import { AlertCircle, ChevronDown, Download, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -121,6 +121,32 @@ function textOrDash(value: string): string {
   return value.trim() ? value : '—';
 }
 
+/** Real (not simulated) progress - `fetchAllPages`'s onProgress callback reports the running count
+ * as each page actually lands. No fixed total exists to compute a percentage from, so the bar
+ * slides indefinitely rather than filling to a known point - honest about what it does and doesn't
+ * know, same spirit as the CIC Monthly Report's own loading state. */
+function TransactionLoadingProgress({ progress }: { progress: { count: number; page: number } | null }) {
+  return (
+    <div className="mx-auto flex max-w-sm flex-col items-center gap-2 py-2">
+      <style>{'@keyframes txn-report-slide{0%{left:-33%}50%{left:100%}100%{left:100%}}'}</style>
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+        <span className="text-lg font-semibold tabular-nums">{(progress?.count ?? 0).toLocaleString()}</span>
+        <span className="text-sm text-muted-foreground">transactions loaded</span>
+      </div>
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-border">
+        <div
+          className="absolute h-full w-1/3 rounded-full bg-primary"
+          style={{ animation: 'txn-report-slide 1.1s ease-in-out infinite' }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Fetching page {progress?.page ?? 1} - no fixed total, so this shows steady progress rather than a percentage.
+      </p>
+    </div>
+  );
+}
+
 /**
  * Wired to the real backend (`GET /reports/transactions`).
  *
@@ -159,6 +185,9 @@ export function TransactionReportPage() {
   const [channelLabels, setChannelLabels] = React.useState<string[]>(DEFAULT_CHANNEL_LABELS);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [downloadError, setDownloadError] = React.useState<string | null>(null);
+  /** Real progress (not simulated) - `fetchAllPages` below reports its running count/page as each
+   * page actually lands, since this report has no fixed total to compute a percentage from. */
+  const [loadProgress, setLoadProgress] = React.useState<{ count: number; page: number } | null>(null);
 
   const channelsQuery = useQuery({
     queryKey: ['reports', 'transaction-channels'],
@@ -220,7 +249,10 @@ export function TransactionReportPage() {
     ],
     queryFn: () => {
       const query = buildParams().toString();
-      return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`);
+      setLoadProgress(null);
+      return fetchAllPages<TransactionReportRow>(`/reports/transactions${query ? `?${query}` : ''}`, 200, (count, page) =>
+        setLoadProgress({ count, page }),
+      );
     },
     enabled: channelsQuery.isSuccess,
   });
@@ -401,8 +433,12 @@ export function TransactionReportPage() {
               ))}
               {transactions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={14} className="py-8 text-center text-sm text-muted-foreground">
-                    {transactionsQuery.isLoading ? 'Loading…' : 'No transactions match these filters.'}
+                  <TableCell colSpan={14} className="py-10">
+                    {transactionsQuery.isLoading ? (
+                      <TransactionLoadingProgress progress={loadProgress} />
+                    ) : (
+                      <p className="text-center text-sm text-muted-foreground">No transactions match these filters.</p>
+                    )}
                   </TableCell>
                 </TableRow>
               )}

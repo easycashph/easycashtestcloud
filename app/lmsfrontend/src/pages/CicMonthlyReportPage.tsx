@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Check, CircleDashed, Download, Loader2 } from 'lucide-react';
+import { AlertTriangle, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
 import type { CicMonthlyReportSummary } from '@/lib/reportApiTypes';
@@ -21,52 +22,8 @@ const SKIP_REASON_LABEL: Record<CicMonthlyReportSummary['skippedMissingSubjectNo
   MISSING_CONTRACT_NO: 'Loan missing permanent CIC contract ID',
 };
 
-// One request on the backend, but it genuinely does these three things in sequence - stepping
-// through them while the request is in flight gives an honest sense of progress instead of a bare
-// spinner, without claiming a false level of granularity.
+// One request on the backend, but it genuinely does these three things in sequence.
 const LOADING_STAGES = ['Fetching loans in scope', 'Resolving CIC identifiers', 'Computing balances and overdue figures'];
-
-function ReportLoadingProgress({ isDone }: { isDone: boolean }) {
-  const [stageIndex, setStageIndex] = React.useState(0);
-
-  React.useEffect(() => {
-    if (isDone) return;
-    const interval = setInterval(() => {
-      setStageIndex((i) => Math.min(i + 1, LOADING_STAGES.length - 1));
-    }, 900);
-    return () => clearInterval(interval);
-  }, [isDone]);
-
-  const progressPercent = isDone ? 100 : ((stageIndex + 0.5) / LOADING_STAGES.length) * 100;
-
-  return (
-    <div className="space-y-3 rounded-md border bg-muted/30 p-4">
-      {LOADING_STAGES.map((label, idx) => {
-        const state = isDone || idx < stageIndex ? 'done' : idx === stageIndex ? 'active' : 'pending';
-        return (
-          <div
-            key={label}
-            className={`flex items-center gap-2 text-sm ${
-              state === 'done' ? 'text-emerald-600' : state === 'active' ? 'text-foreground' : 'text-muted-foreground'
-            }`}
-          >
-            {state === 'done' ? (
-              <Check className="h-4 w-4 shrink-0" />
-            ) : state === 'active' ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-            ) : (
-              <CircleDashed className="h-4 w-4 shrink-0" />
-            )}
-            <span>{label}</span>
-          </div>
-        );
-      })}
-      <div className="h-1 overflow-hidden rounded-full bg-border">
-        <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progressPercent}%` }} />
-      </div>
-    </div>
-  );
-}
 
 export function CicMonthlyReportPage() {
   useLogPageView('CIC Monthly Report');
@@ -170,7 +127,9 @@ export function CicMonthlyReportPage() {
           </div>
 
           {reportQuery.isLoading ? (
-            <ReportLoadingProgress isDone={false} />
+            <div className="rounded-md border bg-muted/30 p-4">
+              <ReportLoadingProgress stages={LOADING_STAGES} />
+            </div>
           ) : summary ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div className="rounded-md bg-muted/50 p-4">

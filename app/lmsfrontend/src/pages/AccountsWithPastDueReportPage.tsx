@@ -14,6 +14,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { apiClient, downloadFile, ApiError } from '@/lib/apiClient';
 import type { AccountsWithPastDueReportRow } from '@/lib/reportApiTypes';
@@ -193,8 +194,8 @@ export function AccountsWithPastDueReportPage() {
                 <TableBody>
                   {reportQuery.isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={7 + visibleOptionalColumns.length} className="text-center text-muted-foreground">
-                        Loading…
+                      <TableCell colSpan={7 + visibleOptionalColumns.length} className="py-6">
+                        <ReportLoadingProgress stages={['Fetching past due accounts', 'Computing lateness figures']} />
                       </TableCell>
                     </TableRow>
                   ) : rows.length === 0 ? (

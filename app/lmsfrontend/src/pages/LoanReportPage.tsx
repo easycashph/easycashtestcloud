@@ -8,6 +8,7 @@ import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { useSortableTable } from '@/lib/useSortableTable';
 import { apiClient } from '@/lib/apiClient';
@@ -101,8 +102,12 @@ function DailyLoanReport() {
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
-                {query.isLoading ? 'Loading…' : 'No loans originated in this date range.'}
+              <TableCell colSpan={3} className="py-6">
+                {query.isLoading ? (
+                  <ReportLoadingProgress stages={['Fetching loan originations', 'Grouping by period']} />
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground">No loans originated in this date range.</p>
+                )}
               </TableCell>
             </TableRow>
           )}
@@ -164,8 +169,12 @@ function PeriodLoanReport({ granularity, from }: { granularity: 'MONTHLY' | 'YEA
           ))}
           {rows.length === 0 && (
             <TableRow>
-              <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
-                {query.isLoading ? 'Loading…' : 'No loans originated in this period.'}
+              <TableCell colSpan={3} className="py-6">
+                {query.isLoading ? (
+                  <ReportLoadingProgress stages={['Fetching loan originations', 'Grouping by period']} />
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground">No loans originated in this period.</p>
+                )}
               </TableCell>
             </TableRow>
           )}

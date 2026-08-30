@@ -15,6 +15,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DateRangeFilter, type DateRange } from '@/components/DateRangeFilter';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { apiClient, downloadFile, fetchAllPages, ApiError } from '@/lib/apiClient';
 import type { LoanProduct } from '@/lib/loanApiTypes';
@@ -238,8 +239,8 @@ export function ExpectedCollectionReportPage() {
                 <TableBody>
                   {collectionQuery.isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8 + visibleOptionalColumns.length} className="text-center text-muted-foreground">
-                        Loading…
+                      <TableCell colSpan={8 + visibleOptionalColumns.length} className="py-6">
+                        <ReportLoadingProgress stages={['Fetching expected collections', 'Computing due amounts']} />
                       </TableCell>
                     </TableRow>
                   ) : rows.length === 0 ? (
