@@ -1286,12 +1286,36 @@ export class PrismaReportingRepository implements IReportingRepository {
       orderBy: { loanCode: 'asc' },
     });
 
+    // 2026-08-30 (user-confirmed, found via ALCINDOR ZUELA's loan "2470"): `activatedAt` can be
+    // stale/wrong on old migrated loans - that one reads "2023-01-24" despite its real
+    // DISBURSEMENT transaction being dated 2013-01-25 (confirmed against the real 2024 CIC
+    // submission data on file: this loan appears in NEITHER the "Loan Accounts" tracker nor any
+    // actual submitted CSDF file for that year - it was never in scope, a pre-2019 loan, not a
+    // "missing ID" gap). The earliest real DISBURSEMENT transaction is the true contract start
+    // when one exists; `activatedAt ?? createdAt` is only a fallback for loans with no disbursement
+    // transaction on file at all.
+    const candidateLoanIds = allCandidateLoans.map((loan) => loan.id);
+    const disbursements =
+      candidateLoanIds.length > 0
+        ? await prisma.loanTransaction.findMany({
+            where: { loanAccountId: { in: candidateLoanIds }, type: 'DISBURSEMENT' },
+            select: { loanAccountId: true, entryDate: true },
+            orderBy: { entryDate: 'asc' },
+          })
+        : [];
+    const earliestDisbursementByLoanId = new Map<string, Date>();
+    for (const d of disbursements) {
+      if (!earliestDisbursementByLoanId.has(d.loanAccountId)) earliestDisbursementByLoanId.set(d.loanAccountId, d.entryDate);
+    }
+    function resolveContractStartDate(loan: (typeof allCandidateLoans)[number]): Date {
+      return earliestDisbursementByLoanId.get(loan.id) ?? loan.activatedAt ?? loan.createdAt;
+    }
+
     // 2026-08-30 (user-confirmed): CIC reporting only started in 2019 - a loan whose contract
     // predates that was never in scope for CIC submission and never will be, regardless of the
-    // reporting month. `contractStartDate` below uses the same `activatedAt ?? createdAt`
-    // fallback as the actual CI record.
+    // reporting month.
     const CIC_REPORTING_START_DATE = new Date(Date.UTC(2019, 0, 1));
-    const loans = allCandidateLoans.filter((loan) => (loan.activatedAt ?? loan.createdAt) >= CIC_REPORTING_START_DATE);
+    const loans = allCandidateLoans.filter((loan) => resolveContractStartDate(loan) >= CIC_REPORTING_START_DATE);
 
     const loanIds = loans.map((loan) => loan.id);
     const scheduleRows =
@@ -1371,7 +1395,7 @@ export class PrismaReportingRepository implements IReportingRepository {
         contractTypeCode,
         purposeOfCreditCode: contractTypeCode === '12' || contractTypeCode === '20' ? '32' : '',
         contractPhase: loan.status.startsWith('CLOSED') ? 'CL' : 'AC',
-        contractStartDate: loan.activatedAt ?? loan.createdAt,
+        contractStartDate: resolveContractStartDate(loan),
         contractRequestDate: loan.createdAt,
         contractEndPlannedDate: schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null,
         contractEndActualDate: loan.status.startsWith('CLOSED') ? loan.closedAt : null,
