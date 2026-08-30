@@ -1819,6 +1819,45 @@ loanCode fallback (`SL-REG_00114` itself).
 
 `npx tsc --noEmit` clean throughout, backend Docker rebuilt and reverified healthy after each fix.
 
+## 30i. Follow-up: audited the full "Excluded (missing CIC ID)" list, found and manually resolved 6 more ambiguous-match cases
+
+2026-08-30, same day. User asked to systematically re-check the whole excluded list (not just
+Nomer's case from §30h) for the same stray-account collision pattern. Wrote a one-off audit script:
+for each of the 53 loans excluded for `MISSING_SUBJECT_NO` (August 2026 run), cross-referenced the
+borrower's mobile/email against the Client Master List and separately checked for same-contact
+collisions among this LMS's own borrowers. 47 had no spreadsheet trace at all (genuinely never
+submitted before - correctly excluded, no fix available). 6 had a trace, each a different root
+cause - resolved all 6 by direct SQL `UPDATE`, no code change needed since the underlying data
+gap, not the matching logic, was the issue:
+
+- **BL-REG_00059** (ROMEO MALABAG JOVEN JR) - two legitimate business-registration identities for
+  the same real person ("STEAM BOX CORPORATION" vs "HOT & STEAMY BOX MANUFACTURING CORPORATION"),
+  each with its own real historical Provider Subject No. Resolved by exact business-name match
+  against the spreadsheet row -> `ELCI03000351604`.
+- **SL-OL_Z6T1I** (ALTHEA LOPEZ REGANION) - two DIFFERENT real people share this mobile number in
+  the spreadsheet (twins or a shared-number scenario); disambiguated by exact email match
+  (`thea0517@gmail.com` only appears on one of the two rows) -> `331852912`.
+- **SML-PDC_00035** (RAFAEL BAGUIO) and **SML-REG_00357** (ROSALLIE KABIGTING, NOT the loan's own
+  borrower FULGENCIO III who shares her email) - two DB-side email collisions, same root cause as
+  §30h's Nomer/EASYCASH ACCOUNT case but via email instead of mobile
+  (`rafaelbaguio050708@yahoo.com` shared with JERWIN BAGUIO; `donroserasheed@yahoo.com` shared with
+  FULGENCIO III). Each spreadsheet row's own name+birthdate identifies which real person it belongs
+  to (`Rafael Alarcon Baguio`, DOB matches exactly; `Rosallie Santos Kabigting`, name matches
+  exactly, NOT Fulgencio) -> `838241054` and `ELCI03000234903688` respectively.
+- **SL-CORP_D3H0D** (JOY GONZALES) and **SL-LAZ_M8Q7E** (ROWENA GUTIERREZ) - genuine **duplicate
+  registrations in CIC's own historical data**: the same real person (identical name, birthdate,
+  email) appears TWICE in the Client Master List under two different Provider Subject Numbers, with
+  no way to tell from that sheet alone which is correct. Resolved by cross-checking the separate
+  "Loan Accounts Details" tracker sheet, which references only ONE of the two subject numbers
+  against an `Account ID` that matches this LMS's own loanCode exactly (`SL-CORP_D3H0D` /
+  `SL-LAZ_M8Q7E`) - that's the "live" one actually tied to their real account, so it's the one
+  assigned (`ELCI03000751610713`, `ELCI03000713418446`).
+
+All 6 loans already had `cicProviderContractNo` from §30g's loanCode fallback, so no further loan-
+level fix was needed. Verified: August 2026 report's `skippedMissingSubjectNo` (MISSING_SUBJECT_NO
+reason) dropped from 53 to 47 (leaves the genuinely-unmatched majority untouched, exactly as
+intended).
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
