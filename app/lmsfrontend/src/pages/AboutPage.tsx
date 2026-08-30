@@ -1,9 +1,11 @@
+import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Code2, GitCommitHorizontal, Smartphone, Sparkles } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Code2, GitCommitHorizontal, Smartphone, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useLogPageView } from '@/lib/activityLog';
+import { cn } from '@/lib/utils';
 import { fetchBackendBuildInfo, fetchFrontendBuildInfo, type BuildInfo } from '@/lib/buildInfo';
 import {
   LMS_ABOUT_FACTS,
@@ -19,6 +21,7 @@ import {
   PORTAL_CHANGELOG,
   PORTAL_UPDATED_ON,
   PORTAL_VERSION,
+  type LmsChangelogEntry,
 } from '@/lib/lmsVersion';
 
 // Always includes LMS_PERMANENT_CREDIT first (2026-08-20, Jomer Biason's explicit instruction -
@@ -171,27 +174,8 @@ export function AboutPage() {
           <Sparkles className="h-4 w-4 text-primary" />
           <CardTitle>What&apos;s New - Changelog</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {LMS_CHANGELOG.map((entry, index) => (
-            <div key={entry.version} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">Version {entry.version}</span>
-                {index === 0 && <Badge variant="success">Current</Badge>}
-              </div>
-              {entry.days.map((day) => (
-                <div key={day.date} className="space-y-1.5">
-                  <span className="text-xs text-muted-foreground">{day.date}</span>
-                  <ul className="space-y-1.5 border-l-2 border-border pl-4">
-                    {day.highlights.map((h) => (
-                      <li key={h} className="text-sm text-muted-foreground">
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ))}
+        <CardContent>
+          <ChangelogTimeline entries={LMS_CHANGELOG} />
         </CardContent>
       </Card>
 
@@ -206,28 +190,9 @@ export function AboutPage() {
             <Badge variant="outline">v{PORTAL_VERSION}</Badge>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <p className="text-xs text-muted-foreground">Last updated {PORTAL_UPDATED_ON}.</p>
-          {PORTAL_CHANGELOG.map((entry, index) => (
-            <div key={entry.version} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">Version {entry.version}</span>
-                {index === 0 && <Badge variant="success">Current</Badge>}
-              </div>
-              {entry.days.map((day) => (
-                <div key={day.date} className="space-y-1.5">
-                  <span className="text-xs text-muted-foreground">{day.date}</span>
-                  <ul className="space-y-1.5 border-l-2 border-border pl-4">
-                    {day.highlights.map((h) => (
-                      <li key={h} className="text-sm text-muted-foreground">
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          ))}
+        <CardContent>
+          <p className="mb-3 text-xs text-muted-foreground">Last updated {PORTAL_UPDATED_ON}.</p>
+          <ChangelogTimeline entries={PORTAL_CHANGELOG} />
         </CardContent>
       </Card>
 
@@ -282,6 +247,116 @@ function BuildInfoCard() {
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * 2026-08-30 (user request, "pwede ba natin i simplify ito... high end, advance sophisticated"):
+ * the flat changelog (every release, every highlight, always expanded) had grown to 40+ full
+ * entries and made this page enormous. Redesigned as a collapsed, one-line-per-release timeline -
+ * only the newest release opens automatically, everything else expands on click. Reads straight
+ * from `LMS_CHANGELOG`/`PORTAL_CHANGELOG` exactly as before (nothing hidden or deleted, no new
+ * content authored) - a new changelog entry prepended there still appears here automatically,
+ * open by default as "Current".
+ */
+function ChangelogTimeline({ entries }: { entries: LmsChangelogEntry[] }) {
+  const [openVersions, setOpenVersions] = React.useState<Set<string>>(() => new Set(entries[0] ? [entries[0].version] : []));
+
+  const toggle = (version: string) => {
+    setOpenVersions((prev) => {
+      const next = new Set(prev);
+      if (next.has(version)) next.delete(version);
+      else next.add(version);
+      return next;
+    });
+  };
+
+  let lastMonthLabel = '';
+
+  return (
+    <div>
+      {entries.map((entry, index) => {
+        const firstDate = entry.days[0]?.date;
+        const monthLabel = firstDate ? formatMonthLabel(firstDate) : '';
+        const showMonthHeader = monthLabel !== lastMonthLabel;
+        lastMonthLabel = monthLabel;
+        const isOpen = openVersions.has(entry.version);
+        const isPatch = /\.\d+\.[1-9]\d*$/.test(entry.version);
+        const changeCount = entry.days.reduce((sum, d) => sum + d.highlights.length, 0);
+        const summary = summarizeHighlight(entry.days[0]?.highlights[0] ?? '');
+
+        return (
+          <div key={entry.version}>
+            {showMonthHeader && (
+              <p className={cn('px-1 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground', index !== 0 && 'pt-5')}>
+                {monthLabel}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => toggle(entry.version)}
+              className="group flex w-full items-baseline justify-between gap-4 border-b py-3 text-left last:border-b-0"
+            >
+              <span className="flex min-w-0 items-baseline gap-3">
+                <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{entry.version}</span>
+                {isPatch && <Badge variant="outline" className="shrink-0 text-[10px] font-normal">Patch</Badge>}
+                <span className="truncate text-sm font-semibold transition-colors group-hover:text-primary">
+                  {summary}
+                  <span className="ml-1.5 font-normal text-xs text-muted-foreground">
+                    · {changeCount} change{changeCount === 1 ? '' : 's'}
+                  </span>
+                </span>
+                {index === 0 && <Badge variant="success" className="shrink-0">Current</Badge>}
+              </span>
+              <span className="flex shrink-0 items-center gap-3">
+                <span className="whitespace-nowrap text-xs text-muted-foreground">{firstDate ? formatShortDate(firstDate) : ''}</span>
+                <ChevronRight className={cn('h-4 w-4 text-muted-foreground transition-transform', isOpen && 'rotate-90 text-primary')} />
+              </span>
+            </button>
+            {isOpen && (
+              <ul className="space-y-2 py-3 pl-1 pr-2">
+                {entry.days.flatMap((day) => day.highlights).map((h) => (
+                  <li key={h} className="relative pl-4 text-sm text-muted-foreground">
+                    <span className="absolute left-0 top-[0.6em] h-1 w-1 rounded-full bg-primary/60" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatMonthLabel(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function formatShortDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** Derives a one-line title from a release's first highlight instead of hand-authoring 40+ extra
+ * summaries - cuts at the first " - "/" — " clause (this changelog's own convention for "what,
+ * then why"), else the first sentence, else a hard truncation. Pure text-shortening, not
+ * fabrication - every word shown is copied verbatim from the real highlight. */
+function summarizeHighlight(text: string): string {
+  if (!text) return '';
+  const dashMatch = text.match(/^(.*?)\s[-—]\s/);
+  let candidate = dashMatch ? dashMatch[1]! : text;
+  if (!dashMatch) {
+    const periodIdx = candidate.indexOf('. ');
+    if (periodIdx > 15 && periodIdx < 100) candidate = candidate.slice(0, periodIdx);
+  }
+  candidate = candidate.replace(/^["“]|["”]$/g, '').trim();
+  const MAX = 72;
+  if (candidate.length > MAX) {
+    const cut = candidate.slice(0, MAX);
+    const lastSpace = cut.lastIndexOf(' ');
+    candidate = `${cut.slice(0, lastSpace > 40 ? lastSpace : MAX)}…`;
+  }
+  return candidate;
 }
 
 function BuildInfoColumn({ label, info, isLoading }: { label: string; info: BuildInfo | Omit<BuildInfo, 'hostname'> | undefined; isLoading: boolean }) {
