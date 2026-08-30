@@ -1655,6 +1655,25 @@ Occupation Status (5/488) and Identification (33/488) low-but-correct, matching 
 data qualifies for a confident mapping. `npx tsc --noEmit` clean, backend Docker rebuilt and
 reverified healthy.
 
+## 30d. Follow-up: staff-facing UI for the CIC Monthly Report
+
+2026-08-30, same day. Built the LMS frontend page: `CicMonthlyReportPage.tsx` (month/year picker,
+defaults to last month; summary card with individual/contract counts; a table of loans excluded
+for missing a permanent CIC identifier, with the reason; a "Download CSDF file" button), wired into
+the Reports hub (`ReportsHubPage.tsx`) and router (`App.tsx`) following the exact same pattern as
+every other report page here (`PortalAccountsReportPage.tsx` was the template copied from), gated
+behind a new `report.cic_monthly.view` `PermissionCode` in `roleContext.tsx`. `npx tsc --noEmit`
+clean, `lmsfrontend` Docker rebuilt.
+
+Could not click through it live in the browser - no staff login credentials available to this
+session (real accounts restored from a production dump, no known dev password). Verified instead
+via: production build succeeding (confirms no compile errors), and `curl` against the new endpoint
+returning 401 (confirms the route is registered and auth-gated, not a 404). MIS already has the new
+permission automatically (`seed.ts` grants the super-user `MIS` role every permission code that
+exists - the "no role by default" language in §30a's own doc comments meant no *other* role, this
+was already correct behavior, not a gap). Actual click-through verification is still owed to the
+user directly trying the page.
+
 ## Known follow-up work (CIC report, next session)
 
 - **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
