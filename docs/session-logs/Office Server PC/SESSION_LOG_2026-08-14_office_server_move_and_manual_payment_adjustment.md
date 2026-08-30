@@ -3239,3 +3239,38 @@ flagged to the user as an open item if a visual glitch turns up on first real us
 - Changelog redesign live on Office Server PC (commit `9595013`).
 - Worth a quick visual check by someone with real login access, since this session couldn't
   click through the actual rendered About page.
+
+## §68 — 2026-08-30: Pulled a large concurrent CIC reporting update, applied its migrations, rebuilt
+
+User asked to `git pull`. Pulled a substantial update authored elsewhere while this session was
+working (42 files, +2,540/-27): a brand-new **CIC (Credit Information Corporation) Monthly Report**
+module - `GetCicMonthlyReportUseCase`, `CicCsdfReportWriter`/`CicExcelReportWriter`,
+`CicMonthlyReportPage.tsx`, wired into `reportingRouter`/`ReportsHubPage` - plus two Prisma
+migrations adding permanent `cicProviderSubjectNo` (borrowers) / `cicProviderContractNo` (loan
+accounts) identifiers with backing auto-increment sequences, three CIC backfill scripts, a new
+shared `ReportLoadingProgress` component reused across most report pages, and a
+`backfill-missing-disbursement-transactions.ts` script.
+
+**Applied the two migrations** (`npx prisma migrate deploy` - both purely additive: nullable
+column + unique index + a fresh sequence each, no risk to existing data) and regenerated the
+Prisma Client, which was needed before the backend would type-check (`PrismaReportingRepository.ts`
+referenced the new fields before the client knew about them). Both frontend and backend then
+type-checked clean.
+
+**Rebuilt both containers** (`docker compose up -d --build easycashbackend lmsfrontend`) - first
+attempt failed with a transient Docker Desktop error ("frontend grpc server closed unexpectedly",
+already seen once earlier this session, unrelated to the code), succeeded on retry. Regenerated
+`build-info.json` before each attempt per the now-standard pre-rebuild step (§66); verified
+`/health` and confirmed the running commit (`503defb`) matched on both `/api/v1/build-info` and the
+frontend's `/build-info.json`.
+
+### Current state / follow-ups
+
+- CIC Monthly Report feature (authored elsewhere) is now live on Office Server PC with its
+  migrations applied and both containers rebuilt on the merged commit.
+- This session did not author or review the CIC feature's own logic/correctness - only handled
+  landing it safely on this machine (migrate, regenerate, type-check, rebuild, verify). Worth a
+  substantive review of that module on its own if it hasn't had one yet.
+- Macbook Nomer / Nomer Laptop will need the same `git pull` -> `prisma migrate deploy` -> `prisma
+  generate` -> rebuild sequence whenever someone's next on those machines, on top of the still-
+  outstanding items from §64/§66/§67.
