@@ -229,7 +229,7 @@ function cicCivilStatusCode(civilStatus: string | null): string {
   const v = (civilStatus ?? '').trim().toUpperCase();
   if (v === 'SINGLE') return '1';
   if (v === 'MARRIED') return '2';
-  if (v === 'DIVORCED' || v === 'SEPARATED' || v === 'DIVORCED/SEPARATED') return '3';
+  if (v === 'DIVORCED' || v === 'SEPARATED' || v === 'DIVORCED/SEPARATED' || v === 'SEPARATED/DIVORCED') return '3';
   if (v === 'WIDOW' || v === 'WIDOWED') return '4';
   return '';
 }
