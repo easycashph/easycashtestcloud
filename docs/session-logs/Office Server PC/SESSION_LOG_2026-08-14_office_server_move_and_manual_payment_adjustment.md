@@ -3213,3 +3213,29 @@ running commit (`8ca888a`) matches the merged `origin/main` exactly.
   "unknown." That alone will likely explain (and let us fix) the 96.2% PAR seen on Macbook Nomer
   today - almost certainly a stale build there.
 - Still outstanding from §64: Macbook Nomer / Nomer Laptop origination-fee gap check.
+
+## §67 — 2026-08-30: About page changelog redesigned as a collapsed timeline
+
+User asked to simplify the About page's "What's New" changelog - it had grown to 40+ full release
+entries, always fully expanded, making the page enormous ("high end, advance sophisticated ang
+design" requested). Built a mockup first (collapsed one-line-per-release timeline, grouped by
+month, only the newest release open by default) for user review; approved as-is.
+
+**Implemented** as a new `ChangelogTimeline` component shared by both the LMS and Portal changelog
+cards on `AboutPage.tsx` - reads the exact same `LMS_CHANGELOG`/`PORTAL_CHANGELOG` data as before
+(nothing hidden or deleted; a newly-prepended changelog entry still appears automatically, open by
+default as "Current"). Each collapsed row shows: version (quiet monospace), a one-line summary
+derived by truncating that release's own first highlight at its " - " clause (pure text-shortening
+of real content, not hand-authored or fabricated), a change count, a "Patch" label for x.y.z
+releases where z != 0, and the release date - full highlight list only renders once clicked open.
+
+Type-checked clean, rebuilt, verified live (`/health` ok, frontend `/build-info.json` commit
+matched). No login credentials available this session, so this was verified by code review + type
+-check + confirming the built bundle serves, not by clicking through the actual rendered page -
+flagged to the user as an open item if a visual glitch turns up on first real use.
+
+### Current state / follow-ups
+
+- Changelog redesign live on Office Server PC (commit `9595013`).
+- Worth a quick visual check by someone with real login access, since this session couldn't
+  click through the actual rendered About page.
