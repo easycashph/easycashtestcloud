@@ -221,10 +221,21 @@ if errorlevel 1 (
 popd
 
 echo.
-echo [16/16] Huling spot-check - tinitignan kung may loan na
+echo [16/17] Huling spot-check - tinitignan kung may loan na
 echo       kailangan pa ng manual na atensyon...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\check-legacy-balance-integrity.ts
+popd
+
+REM 2026-08-30 (user request, found via a real Dashboard Portfolio at Risk mismatch against
+REM Office Server PC): catches loans whose balance is stale relative to their own schedule - the
+REM exact bug class this session hit repeatedly when a partial/manual fix skipped the recompute
+REM step above. Read-only - only reports, never writes; exit code 1 if it finds anything.
+echo.
+echo [17/17] Sanity check - tinitignan kung may loan na kailangan pang
+echo       i-recompute ang balance (baka may na-miss na hakbang sa itaas)...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\check-balance-recompute-needed.ts
 popd
 
 REM 2026-08-27 (user request): Mambu (pre-SDevTech) notes/address recovery is a completely
@@ -259,7 +270,7 @@ echo dito, metadata lang muna ang na-dagdag - patakbuhin pa ang SFTP
 echo backfill script (scripts\backfill-legacy-attachments.ts) kung
 echo gusto mong makuha rin ang totoong files nila.
 echo.
-echo Kung may lumabas na loan(s) sa [16/16] sa itaas, i-check muna ang
+echo Kung may lumabas na loan(s) sa [16/17] sa itaas, i-check muna ang
 echo mga iyon (tingnan ang comment sa loob ng
 echo check-legacy-balance-integrity.ts para sa susunod na hakbang)
 echo bago ipalagay na kumpleto ang update.

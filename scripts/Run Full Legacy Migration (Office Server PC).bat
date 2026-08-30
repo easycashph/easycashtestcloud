@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 REM ===============================
 REM Easycash LMS - Full Legacy Migration (Windows / Office Server PC)
 REM ===============================
-REM Windows counterpart of legacy\Run Full Legacy Migration.command (Mac) - same 19 steps, same
+REM Windows counterpart of legacy\Run Full Legacy Migration.command (Mac) - same 20 steps, same
 REM order, same scripts. Turnkey re-run of the entire CP12 migration + every follow-up backfill
 REM script, against whichever legacy\mongodb\*.zip backup is newest.
 REM
@@ -141,7 +141,7 @@ call npx tsx scripts\backup-native-portal-accounts.ts
 popd
 
 echo.
-echo [1/19] Chinicheck kung tumatakbo ang Postgres...
+echo [1/20] Chinicheck kung tumatakbo ang Postgres...
 docker inspect -f "{{.State.Running}}" easycash-postgres-1 >nul 2>&1
 if errorlevel 1 (
   pushd "%ROOT_DIR%app\docker"
@@ -151,145 +151,156 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/19] Resetting database (schema + seed)...
+echo [2/20] Resetting database (schema + seed)...
 pushd "%BACKEND_DIR%"
 call npx prisma migrate reset --force
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [3/19] CP12 core migration (products, borrowers, loans, transactions, attachments)...
+echo [3/20] CP12 core migration (products, borrowers, loans, transactions, attachments)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\migrate-legacy-data.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [4/19] PSGC reference data...
+echo [4/20] PSGC reference data...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\import-psgc-reference-data.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [5/19] Resolve coded addresses (PSGC lookup)...
+echo [5/20] Resolve coded addresses (PSGC lookup)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\fix-coded-addresses.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [6/19] Resolve remaining coded addresses (address-api fallback)...
+echo [6/20] Resolve remaining coded addresses (address-api fallback)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\resolve-address-codes.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [7/19] Repayment schedules...
+echo [7/20] Repayment schedules...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\migrate-repayment-schedules.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [8/19] Flag loans with missing legacy balance data...
+echo [8/20] Flag loans with missing legacy balance data...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\flag-missing-balance-loans.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [9/19] Recompute active-loan balances from schedule...
+echo [9/20] Recompute active-loan balances from schedule...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\recompute-active-loan-balances-from-schedule.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [10/19] Document template mappings (BL)...
+echo [10/20] Document template mappings (BL)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\map-bl-document-templates.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [11/19] Document template mappings (SL)...
+echo [11/20] Document template mappings (SL)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\map-sl-document-templates.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [12/19] Document template mappings (SML)...
+echo [12/20] Document template mappings (SML)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\map-sml-document-templates.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [13/19] Origination fees (Excel snapshot, no .xlsm needed)...
+echo [13/20] Origination fees (Excel snapshot, no .xlsm needed)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-origination-fees.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [13b/19] Origination fees (MongoDB source, wider coverage)...
+echo [13b/20] Origination fees (MongoDB source, wider coverage)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-origination-fees-mongo.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [13c/19] Origination fees (inferred stragglers)...
+echo [13c/20] Origination fees (inferred stragglers)...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-origination-fees-inferred.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [14/19] Add-on / contractual interest rates...
+echo [14/20] Add-on / contractual interest rates...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-interest-rates.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [15/19] Net proceeds recompute...
+echo [15/20] Net proceeds recompute...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-net-proceeds.ts
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [16/19] City/municipality ZIP codes...
+echo [16/20] City/municipality ZIP codes...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\import-ph-zip-codes.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [17/19] NCR barangay-level ZIP codes...
+echo [17/20] NCR barangay-level ZIP codes...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\import-ncr-barangay-zip-codes.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
-REM 2026-08-29: needs step [9/19]'s balance recompute to have already run - old loans without an
+REM 2026-08-29: needs step [9/20]'s balance recompute to have already run - old loans without an
 REM account-level balance snapshot in the source (most Reschedule/Compromise cases) only get a real
 REM Collections Balance figure after that step, not from the raw legacy dump.
 echo.
-echo [18/19] Link rescheduled/compromise-settled loans to their new account...
+echo [18/20] Link rescheduled/compromise-settled loans to their new account...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\backfill-loan-restructure-compromise.ts --apply
 if errorlevel 1 goto :step_failed
 popd
 
 echo.
-echo [19/19] Final verification...
+echo [19/20] Final verification...
 pushd "%BACKEND_DIR%"
 call npx tsx scripts\check-migration-status.ts
+popd
+
+REM 2026-08-30 (user request, found via a real Dashboard Portfolio at Risk mismatch against Office
+REM Server PC): catches loans whose balance is stale relative to their own schedule - the exact bug
+REM class this session hit repeatedly when a partial/manual fix skipped the recompute step above
+REM ([9/20]). Read-only - only reports, never writes; exit code 1 if it finds anything.
+echo.
+echo [20/20] Sanity check - tinitignan kung may loan na kailangan pang
+echo        i-recompute ang balance...
+pushd "%BACKEND_DIR%"
+call npx tsx scripts\check-balance-recompute-needed.ts
 popd
 
 echo.

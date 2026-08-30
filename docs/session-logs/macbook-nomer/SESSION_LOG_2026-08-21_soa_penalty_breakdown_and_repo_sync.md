@@ -1451,13 +1451,53 @@ one loan, one code, no more duplicate/coincidental `BL-SPEC_00030` sitting along
 the `BL-SPEC_00028` investigation's loose thread (first opened at the very start of this session) for
 the last time - the code this Mac's data uses now matches what the user confirmed is correct.
 
+## 29g. Cross-machine verification found ONE more real gap (Portfolio at Risk), then a new sanity-check script + "how do we stop missing this?" fix
+
+The Office Server PC session ran the same live-vs-local comparison approach this Mac had already
+been using all day, this time on the **Dashboard's Portfolio Quality Metrics** - reported
+Delinquency Rate matched (95.8% both machines) but Portfolio at Risk didn't (95.8% live vs 96.2%
+here). Ran the exact SQL query the other session supplied (independently re-derivable from
+`PrismaDashboardRepository.findOverdueLoanAccounts` - same `repayment_schedules`-based "unpaid past
+due" definition already used earlier this session): `total_active` (1,269) and `delinquent_count`
+(1,215) matched exactly, and even `delinquent_outstanding` matched to the peso
+(₱123,478,723.62) - only `total_outstanding` differed (₱128,443,516.77 here vs ₱128,856,481.96
+live, a ₱412,965.19 gap).
+
+Traced immediately to the exact same 6 loans §29c restored (`SL-CORP_00129`/`00130`/`00134`/`00135`,
+`SML-REG_00382`/`00385`): still `legacyBalanceDataMissing: true` with `principalBalance` at `0.00`,
+because §29e populated their `repayment_schedules` but nothing re-ran
+`recompute-active-loan-balances-from-schedule.ts` afterward - the SAME missed-step pattern as §29e
+itself (which fixed the Loan Releases Report's Maturity Date/Amortization/Total Interest gap via the
+identical root cause). Re-ran the recompute script (197 loans recomputed, same population as
+before); the SQL comparison query then matched **exactly** on all four figures
+(`total_active`, `delinquent_count`, `total_outstanding`, `delinquent_outstanding`) - reported back
+to the Office Server PC session as confirmation.
+
+**User asked directly: how do we stop missing this specific step going forward?** Built
+[check-balance-recompute-needed.ts](../../../app/easycashbackend/scripts/check-balance-recompute-needed.ts),
+a read-only sanity check - NOT a re-run of `recompute-active-loan-balances-from-schedule.ts`'s own
+selection filter (that filter alone is useless as a "is this stale" check, since
+`legacyBalanceDataMissing` is deliberately never cleared - every loan that script ever touches would
+match forever, an unconditional false positive). Instead it actually recomputes what each
+candidate's `principalBalance` SHOULD be from its own schedule and flags only loans where the stored
+value disagrees - i.e. only loans that would genuinely change if the real recompute script ran
+again. Verified both directions before wiring it in: ran clean (0 flagged) against the just-fixed
+data, then deliberately corrupted `SL-CORP_00129`'s `principalBalance` to a wrong value, confirmed
+it was correctly flagged (exit code 1) with the exact stored-vs-schedule mismatch shown, then fixed
+it back via the real recompute script and confirmed clean again.
+
+Wired as a new final step into all 5 migration entry points (matching every other fix from this
+session): `Update Database From SDevTech.command`/`.bat` (new `[17/17]`, 16→17 steps) and all three
+`Run Full Legacy Migration` scripts (new `[20/20]`, 19→20 steps) - runs last, after everything else,
+as a pure safety net that reports but never writes. `npx tsc --noEmit` clean.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29f (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29g (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29f) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29g) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
