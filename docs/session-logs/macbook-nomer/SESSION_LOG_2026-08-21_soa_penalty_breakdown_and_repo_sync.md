@@ -1731,12 +1731,70 @@ photo ID) field group it always should have been - TIN/SSS no longer flow throug
 Identification Domain/Type/Number columns removed). `npx tsc --noEmit` clean, backend Docker
 rebuilt and reverified healthy.
 
+## 30g. Follow-up: user spot-checked the report against a real July count (730 CI) and found three real scoping bugs - 1,012 -> 650
+
+2026-08-30, same day. User pointed at the live Google Sheet they use to prepare submissions and
+asked why the generated July report showed 0 CL (closed) contracts and a different total CI count
+than the sheet's 730. Couldn't open the Google Sheet directly (no login available to this session),
+so the user pointed at the equivalent local file instead:
+`legacy/CIC /07 2026 July/[Revised] [July 2026] Fields in Google Spreadsheet.xlsx`'s "CSV Export"
+sheet - the literal CI rows of what was actually submitted that month: 730 total, 700 AC / 30 CL.
+
+Investigated and fixed three real, separate bugs, verified against that 730/700/30 reference after
+each fix:
+
+1. **Zero CL contracts.** Found the one real July closure on file (`BL-SPEC_00027`, closed
+   2026-07-16) was being silently excluded - missing `cicProviderContractNo`, so it went to
+   `skippedMissingSubjectNo` instead of appearing as a `CL` row. Root cause was the loan-level
+   backfill gap described next.
+
+2. **`backfill-cic-provider-contract-no.ts` improved with a second, authoritative source.**
+   User suggested using the same "CSV Export" sheet (the literal real submission) as a matching
+   source, not just "Loan Accounts Details" (a looser prep tracker). Implementing it found a real
+   bug: that sheet's cells are live Google Sheets formulas
+   (`IFERROR(__xludf.DUMMYFUNCTION(...),"result")`) - ExcelJS returns `{ formula, result }` objects
+   for those instead of plain values, so the first pass silently parsed 0 rows. Fixed with a
+   `cellResult()` unwrapper. Result: 134 more loans matched.
+   Separately, the user asked "isn't the loan code itself supposed to be the contract number?" -
+   correct, and already validated (§30/§30b: 609/609 of the confidently-matched loans had
+   `cicProviderContractNo == loanCode`; 835/1,313 real spreadsheet rows already use this LMS's
+   native loanCode format directly). New `backfill-cic-provider-contract-no-fallback.ts` assigns
+   `loanCode` as `cicProviderContractNo` for any loan still missing one after spreadsheet matching -
+   396 more assigned (2 collided with an already-assigned value from a restructure old->new loan
+   pair, left for manual review, not forced). **Missing-contract-ID gap: 497 -> 1.**
+
+3. **The 2019+ date filter only checked the lower bound.** A loan that started AFTER the reporting
+   month (e.g. an August-originated loan appearing in a July report run today, since this report is
+   always generated after the month it covers) passed the filter anyway - `resolveContractStartDate(loan) >= CIC_REPORTING_START_DATE`
+   is trivially true for any date past 2019, regardless of `monthEnd`. Fixed: also require
+   `start <= monthEnd`.
+
+4. **The big one - full-portfolio vs incremental submission.** Even after fixes 1-3, the report
+   still showed ~1,012 contracts against the real 730. Asked the user directly rather than keep
+   guessing: "does the real monthly submission include every active loan, or only ones that
+   changed?" Confirmed: **only loans that changed that month** - and asked to clarify what counts
+   as "changed," user said all of: had a transaction, was newly disbursed, closed, OR is currently
+   overdue (days-overdue increases every month a delinquent loan stays unpaid, even with zero
+   payment activity - still a real change CIC needs told about). Implemented `changedThisMonth()`:
+   true if the loan has any `LoanTransaction` dated within the month, OR `closedAt` falls within the
+   month, OR it has at least one overdue, unpaid installment as of the reporting reference date.
+   Result: **1,012 -> 650 contracts** (target 730, ~89% match) - CL still undercounts (1 of the real
+   30), flagged as unresolved below.
+
+`npx tsc --noEmit` clean throughout, backend Docker rebuilt and reverified healthy after each fix.
+
 ## Known follow-up work (CIC report, next session)
 
-- **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
-  (609/1,313 vs 3,834/4,625). Worth a closer look at why (loosen the amount/installment/date
-  tolerance? Restructured/compromised loans changing shape after their historical CIC submission?)
-  before treating loan-level coverage as complete.
+- Superseded by §30g: the loan-level contract-ID gap is effectively closed (497 -> 1) via the
+  loanCode fallback - the original "improve the matching tolerance" idea is no longer needed.
+- **§30g's remaining count gap (650 vs the real 730, and CL undercounting 1 vs 30)** - the
+  `changedThisMonth()` scoping rule is very likely correct in spirit (user-confirmed) but the
+  CL-phase gap suggests either: some real July closures aren't reflected in this LMS's `closedAt`
+  at all (a migration/data gap, not a report-logic bug), or the "overdue" component of
+  `changedThisMonth()` needs its own review against the real numbers. Worth a dedicated pass
+  comparing the real July file's 30 CL loan codes against what this LMS currently shows for those
+  same loans, once concrete loan-level comparison data is available (no such list was compared this
+  session - only aggregate counts).
 - Resolved in §30c/§30f: Civil Status, Occupation Status (partial - only 'Self Employed'), ID Type
   (government photo ID, non-mandatory), Contract Type (for the 6 confirmed product prefixes),
   Purpose of Credit (for Personal/Salary Loan contracts only), Address (mandatory - 99.8%
