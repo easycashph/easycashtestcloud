@@ -1427,13 +1427,37 @@ counts (1 to 12, matching each loan's own term) and a real maturity date derived
 2027-09-04; etc.) - Maturity Date, Amortization, and Total Interest should all now render correctly
 in the Loan Releases Report.
 
+## 29f. Manually renamed BL-SPEC_00029 -> BL-SPEC_00030, removed the old standalone BL-SPEC_00030 - closes the loose thread for real this time
+
+User's instructions arrived confusingly at first (a circular-sounding "remove 00030, replace it with
+00029, then make it 00030 again") - stopped and asked clarifying questions (`AskUserQuestion`, twice)
+rather than guess and risk deleting real loan data on a misunderstanding, per CLAUDE.md's "never
+guess" rule. Confirmed intent: the standalone, unrelated `BL-SPEC_00030` (the coincidental new loan
+for the same borrower, its whole backstory covered in §29/§29b/§29c) should be deleted outright, and
+the REAL restructure-target loan - currently carrying the code `BL-SPEC_00029`, per the live
+`loan_restructures` row restored in §29 - should be renamed to `BL-SPEC_00030` instead. (Not
+second-guessed why the user wants this specific final code - they may be working from a more current
+view of live than this session has, and the request is unambiguous once clarified.)
+
+Checked dependents on the old `BL-SPEC_00030` before deleting: 0 `loan_transactions`, 0
+`loan_account_co_borrowers`, 0 `loan_restructures` (either side), but **1** `repayment_schedules`
+row - freshly created by §29e's global `migrate-repayment-schedules.ts` run just now. Deleted that
+row, then the `loan_accounts` row itself. Renamed the real restructure-target loan (`id
+c8e1291a-...`, previously `BL-SPEC_00029`) to `loanCode = 'BL-SPEC_00030'` via a direct `UPDATE` -
+safe because `LoanRestructure.newLoanAccountId` references the row by `id`, never by `loanCode`, so
+the existing restructure link needed no changes at all. Verified: querying `loan_restructures` by
+`BL-SPEC_00028` now correctly shows `BL-SPEC_00028 -> BL-SPEC_00030` (reason `"Loan Extension"`) -
+one loan, one code, no more duplicate/coincidental `BL-SPEC_00030` sitting alongside it. This closes
+the `BL-SPEC_00028` investigation's loose thread (first opened at the very start of this session) for
+the last time - the code this Mac's data uses now matches what the user confirmed is correct.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
-original repo-sync + SOA penalty breakdown work on this Mac; §9-29e (added later the same "day",
+original repo-sync + SOA penalty breakdown work on this Mac; §9-29f (added later the same "day",
 still on this Mac unless noted) cover a string of separate, unrelated feature requests that came in
 afterward. §13's investigation was superseded by a fix applied on the **Office Server PC**, not
-here - see that section's own cross-link. Everything else below (§14-§29e) is native to this Mac.
+here - see that section's own cross-link. Everything else below (§14-§29f) is native to this Mac.
 
 - All changes verified: `npx tsc --noEmit` clean on both apps after every edit throughout the whole
   log, including every feature added after the original SOA work; backend suite run multiple times
