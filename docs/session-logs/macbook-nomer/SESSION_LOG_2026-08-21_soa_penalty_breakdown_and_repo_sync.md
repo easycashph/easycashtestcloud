@@ -1674,6 +1674,45 @@ exists - the "no role by default" language in §30a's own doc comments meant no 
 was already correct behavior, not a gap). Actual click-through verification is still owed to the
 user directly trying the page.
 
+## 30e. Follow-up: Excel download companion + a real date-bug found via a user spot-check
+
+2026-08-30, same day. Added `CicExcelReportWriter` (two readable sheets, "ID - Individual" and
+"CI - Installment Contract", column headers in plain English rather than raw CSDF codes, plus an
+"Excluded" sheet when applicable) as a staff-review companion to the actual CSDF submission file -
+NOT a submission format itself. New `GET /reports/cic-monthly.xlsx`, second download button on the
+frontend page. `npx tsc --noEmit` clean both sides, both Docker containers rebuilt and reverified
+healthy.
+
+User then spot-checked a specific borrower in the live Excluded list - ALCINDOR HERMOSA ZUELA,
+loan `2470` - and asked why it showed "missing contract ID" given it was clearly a 2012-era loan.
+Investigation found the loan's `activatedAt` field reads `2023-01-24`, but its real DISBURSEMENT
+transaction is dated `2013-01-25` - a 10-year gap that's obviously wrong, not a legitimate business
+scenario (§30's own date-scoping logic trusted `activatedAt` blindly).
+
+User then pointed at a THIRD real reference dataset - `legacy/CIC /2024 DATA SUBMISSION/` - a full
+year of actual 2024 monthly submissions, including the real in-house tool used to prepare them,
+`Easycash CSDF Converter.xlsm` (sheets: `New Account IDs`, `PSN`, `Loan Accounts`,
+`Mambu ID Converter`, etc). This independently re-confirmed two things already built: (1) new
+loans' Provider Contract No is literally their own LMS-native loan code (the `New Account IDs`
+sheet lists entries like `SML-Co-Borrower_K5D1D` a `Release Date`), and (2) the 2019 cutoff is
+real - the `Loan Accounts` tracker sheet's earliest row is dated 2019-01-02. Searched all of it for
+ZUELA / loan `2470` - found nowhere, in any month's real submitted CSDF file or the tracker -
+confirming this loan was never actually in CIC's scope, consistent with it genuinely being a
+pre-2019 loan whose `activatedAt` field is simply wrong.
+
+Fix: `getCicMonthlyReportData` now resolves each loan's contract date from its earliest
+`LoanTransaction` of type `DISBURSEMENT` first (the real money-movement event), falling back to
+`activatedAt` then `createdAt` only when no disbursement transaction exists at all - used both for
+the 2019+ scoping filter and for the CI record's own Contract Start Date field. Re-verified: loan
+`2470` no longer appears anywhere in the report (neither `contracts` nor `skippedMissingSubjectNo`)
+- correctly excluded as pre-2019, not flagged as a missing-ID gap. `npx tsc --noEmit` clean, backend
+Docker rebuilt and reverified healthy.
+
+Also surfaced a real, separate data-quality issue worth a dedicated look someday (not touched this
+session, out of CIC scope): loan `2470` is `installmentCount=3` yet still `ACTIVE` 13 years after a
+2013 disbursement - almost certainly a stale/never-formally-closed record, not a real balance CIC
+or anyone else should be tracking as "current."
+
 ## Known follow-up work (CIC report, next session)
 
 - **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
