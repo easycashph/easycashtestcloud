@@ -21,6 +21,7 @@ import type { GetCicMonthlyReportUseCase } from '../../application/use-cases/Get
 import type { LoanReleaseOrigin, ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
 import type { CicCsdfReportWriter } from '../../infrastructure/CicCsdfReportWriter';
+import type { CicExcelReportWriter } from '../../infrastructure/CicExcelReportWriter';
 import {
   writeAccountsWithPastDueReportXlsx,
   writeAgingReportXlsx,
@@ -62,6 +63,7 @@ export interface ReportingControllerDeps {
   listDistinctChannelsUseCase: ListDistinctChannelsUseCase;
   getCicMonthlyReportUseCase: GetCicMonthlyReportUseCase;
   cicCsdfReportWriter: CicCsdfReportWriter;
+  cicExcelReportWriter: CicExcelReportWriter;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -493,6 +495,27 @@ export class ReportingController {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="PF017290_CSDF_${year}${monthLabel}.csv"`);
       res.status(200).send(content);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** Human-readable companion workbook for staff review/QA before trusting the actual CSDF
+   * submission file - see `CicExcelReportWriter`'s own doc comment. */
+  cicMonthlyXlsx = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const year = Number(req.query.year);
+      const month = Number(req.query.month);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+        throw new ValidationError('year and month (1-12) are required.');
+      }
+      const scope = resolveBranchScope(req);
+      const data = await this.deps.getCicMonthlyReportUseCase.execute({ year, month, branchId: resolveBranchFilter(scope) });
+      const buffer = await this.deps.cicExcelReportWriter.write(data);
+      const monthLabel = String(month).padStart(2, '0');
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="CIC Monthly Report ${year}-${monthLabel}.xlsx"`);
+      res.status(200).send(buffer);
     } catch (error) {
       next(error);
     }

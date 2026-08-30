@@ -61,6 +61,7 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/portal-accounts.xlsx', requireAuth, requirePermission('report.portal_accounts.view'), controller.portalAccountsXlsx);
   router.get('/reports/cic-monthly', requireAuth, requirePermission('report.cic_monthly.view'), controller.cicMonthly);
   router.get('/reports/cic-monthly.csv', requireAuth, requirePermission('report.cic_monthly.view'), controller.cicMonthlyCsv);
+  router.get('/reports/cic-monthly.xlsx', requireAuth, requirePermission('report.cic_monthly.view'), controller.cicMonthlyXlsx);
 
   return router;
 }

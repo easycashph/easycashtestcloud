@@ -326,6 +326,7 @@ import { ListReportTransactionsUseCase } from '@modules/reporting/application/us
 import { GetLoanReleasesReportUseCase } from '@modules/reporting/application/use-cases/GetLoanReleasesReportUseCase';
 import { GetCicMonthlyReportUseCase } from '@modules/reporting/application/use-cases/GetCicMonthlyReportUseCase';
 import { CicCsdfReportWriter } from '@modules/reporting/infrastructure/CicCsdfReportWriter';
+import { CicExcelReportWriter } from '@modules/reporting/infrastructure/CicExcelReportWriter';
 import { GetAgingReportUseCase } from '@modules/reporting/application/use-cases/GetAgingReportUseCase';
 import { GetEndingBalanceReportUseCase } from '@modules/reporting/application/use-cases/GetEndingBalanceReportUseCase';
 import { GetAccountsWithPastDueReportUseCase } from '@modules/reporting/application/use-cases/GetAccountsWithPastDueReportUseCase';
@@ -1597,6 +1598,7 @@ export function createApp(): Express {
       getPortalAccountsReportUseCase: new GetPortalAccountsReportUseCase({ reportingRepository }),
       getCicMonthlyReportUseCase: new GetCicMonthlyReportUseCase({ reportingRepository }),
       cicCsdfReportWriter: new CicCsdfReportWriter(),
+      cicExcelReportWriter: new CicExcelReportWriter(),
     },
     tokenService,
   );

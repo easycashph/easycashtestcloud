@@ -47,11 +47,13 @@ export function CicMonthlyReportPage() {
   });
   const summary = reportQuery.data;
 
-  const handleDownload = async () => {
+  const handleDownload = async (format: 'csv' | 'xlsx') => {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      await downloadFile(`/reports/cic-monthly.csv?year=${year}&month=${month}`, `PF017290_CSDF_${year}${String(month).padStart(2, '0')}.csv`);
+      const monthLabel = String(month).padStart(2, '0');
+      const fallbackName = format === 'csv' ? `PF017290_CSDF_${year}${monthLabel}.csv` : `CIC Monthly Report ${year}-${monthLabel}.xlsx`;
+      await downloadFile(`/reports/cic-monthly.${format}?year=${year}&month=${month}`, fallbackName);
     } catch (err) {
       setDownloadError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection and try again.');
     } finally {
@@ -108,10 +110,16 @@ export function CicMonthlyReportPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleDownload} disabled={isDownloading || reportQuery.isLoading} className="ml-auto">
-              <Download className="mr-2 h-4 w-4" />
-              {isDownloading ? 'Preparing…' : 'Download CSDF file'}
-            </Button>
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" onClick={() => handleDownload('xlsx')} disabled={isDownloading || reportQuery.isLoading}>
+                <Download className="mr-2 h-4 w-4" />
+                {isDownloading ? 'Preparing…' : 'Download Excel (for review)'}
+              </Button>
+              <Button onClick={() => handleDownload('csv')} disabled={isDownloading || reportQuery.isLoading}>
+                <Download className="mr-2 h-4 w-4" />
+                {isDownloading ? 'Preparing…' : 'Download CSDF file'}
+              </Button>
+            </div>
           </div>
 
           {reportQuery.isLoading ? (
