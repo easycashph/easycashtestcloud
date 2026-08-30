@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle, Check, CircleDashed, Download, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,6 +20,53 @@ const SKIP_REASON_LABEL: Record<CicMonthlyReportSummary['skippedMissingSubjectNo
   MISSING_SUBJECT_NO: 'Borrower missing permanent CIC ID',
   MISSING_CONTRACT_NO: 'Loan missing permanent CIC contract ID',
 };
+
+// One request on the backend, but it genuinely does these three things in sequence - stepping
+// through them while the request is in flight gives an honest sense of progress instead of a bare
+// spinner, without claiming a false level of granularity.
+const LOADING_STAGES = ['Fetching loans in scope', 'Resolving CIC identifiers', 'Computing balances and overdue figures'];
+
+function ReportLoadingProgress({ isDone }: { isDone: boolean }) {
+  const [stageIndex, setStageIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    if (isDone) return;
+    const interval = setInterval(() => {
+      setStageIndex((i) => Math.min(i + 1, LOADING_STAGES.length - 1));
+    }, 900);
+    return () => clearInterval(interval);
+  }, [isDone]);
+
+  const progressPercent = isDone ? 100 : ((stageIndex + 0.5) / LOADING_STAGES.length) * 100;
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-4">
+      {LOADING_STAGES.map((label, idx) => {
+        const state = isDone || idx < stageIndex ? 'done' : idx === stageIndex ? 'active' : 'pending';
+        return (
+          <div
+            key={label}
+            className={`flex items-center gap-2 text-sm ${
+              state === 'done' ? 'text-emerald-600' : state === 'active' ? 'text-foreground' : 'text-muted-foreground'
+            }`}
+          >
+            {state === 'done' ? (
+              <Check className="h-4 w-4 shrink-0" />
+            ) : state === 'active' ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+            ) : (
+              <CircleDashed className="h-4 w-4 shrink-0" />
+            )}
+            <span>{label}</span>
+          </div>
+        );
+      })}
+      <div className="h-1 overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progressPercent}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export function CicMonthlyReportPage() {
   useLogPageView('CIC Monthly Report');
@@ -123,23 +170,23 @@ export function CicMonthlyReportPage() {
           </div>
 
           {reportQuery.isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <ReportLoadingProgress isDone={false} />
           ) : summary ? (
-            <div className="flex flex-wrap gap-4 rounded-md border bg-muted/30 p-4 text-sm">
-              <div>
-                <span className="font-semibold">{summary.individualCount}</span>{' '}
-                <span className="text-muted-foreground">individual (ID) record{summary.individualCount === 1 ? '' : 's'}</span>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-md bg-muted/50 p-4">
+                <p className="text-xs text-muted-foreground">Individuals</p>
+                <p className="text-2xl font-semibold tabular-nums">{summary.individualCount}</p>
               </div>
-              <div>
-                <span className="font-semibold">{summary.contractCount}</span>{' '}
-                <span className="text-muted-foreground">contract (CI) record{summary.contractCount === 1 ? '' : 's'}</span>
+              <div className="rounded-md bg-muted/50 p-4">
+                <p className="text-xs text-muted-foreground">Contracts</p>
+                <p className="text-2xl font-semibold tabular-nums">{summary.contractCount}</p>
               </div>
-              {skipped.length > 0 && (
-                <div>
-                  <span className="font-semibold text-amber-600">{skipped.length}</span>{' '}
-                  <span className="text-muted-foreground">loan{skipped.length === 1 ? '' : 's'} excluded (see below)</span>
-                </div>
-              )}
+              <div className={`rounded-md p-4 ${skipped.length > 0 ? 'bg-amber-500/10' : 'bg-muted/50'}`}>
+                <p className={`text-xs ${skipped.length > 0 ? 'text-amber-700 dark:text-amber-500' : 'text-muted-foreground'}`}>Excluded</p>
+                <p className={`text-2xl font-semibold tabular-nums ${skipped.length > 0 ? 'text-amber-700 dark:text-amber-500' : ''}`}>
+                  {skipped.length}
+                </p>
+              </div>
             </div>
           ) : null}
         </CardContent>
