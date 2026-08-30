@@ -48,4 +48,10 @@ export interface IBorrowerRepository {
   /** Earliest `createdAt` across all Borrowers, or `null` if there are none - used to compute the
    * bulk-export date-range picker's default start date (first day of that month). */
   findEarliestCreatedAt(ctx?: TransactionContext): Promise<Date | null>;
+  /** CIC monthly report (2026-08-30, user-confirmed): assigns a fresh, permanent
+   * `cicProviderSubjectNo` to this borrower if it doesn't already have one - a no-op otherwise.
+   * Only ever called for genuinely NEW borrowers (CreateBorrowerUseCase) - never call this for a
+   * borrower migrated from legacy data, which must get its real historical value (if any) from
+   * `backfill-cic-provider-subject-no.ts` instead, never a freshly generated one. */
+  assignCicProviderSubjectNoIfMissing(borrowerId: string, ctx?: TransactionContext): Promise<void>;
 }

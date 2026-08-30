@@ -1491,6 +1491,159 @@ session): `Update Database From SDevTech.command`/`.bat` (new `[17/17]`, 16→17
 `Run Full Legacy Migration` scripts (new `[20/20]`, 19→20 steps) - runs last, after everything else,
 as a pure safety net that reports but never writes. `npx tsc --noEmit` clean.
 
+## 30. CIC (Credit Information Corporation) monthly report automation - started, Provider Subject No groundwork complete
+
+2026-08-30. User request: automate the CIC monthly submission report (RA 9510 mandated credit
+registry reporting), currently done manually in Excel every month. Scope confirmed with user:
+generate the correctly-formatted export file only (not a direct API submission - staff still
+upload it themselves via the CIC portal), starting with the ID (individual borrower) and CI
+(installment contract/loan) record types only - NE (negative events), BD (business borrower), and
+CI's guarantor/asset sub-blocks deferred until actually needed.
+
+User provided real reference material at `legacy/CIC /` (note: literal trailing space in the
+folder name - any script/command touching it must quote it, e.g.
+`"/Users/nomer/Documents/ECLC CLAUDE CODE/legacy/CIC "`), including the official submission manual,
+a field-specification Excel template, and - most valuably - actual past submissions from June and
+July 2026 (`PF017290_CSDF_*.csv`) plus the exact Google Sheet used to prepare them
+(`[<Month> 2026] Fields in Google Spreadsheet.xlsx`).
+
+**Format confirmed by reading the real files, not guessed**: the CSDF file is pipe-delimited,
+positional (no header row), one line per record, each prefixed with a record-type code (`HD` file
+header, `ID` individual, `BD` business, `CI` installment contract, `CN`/`CC`/`UT` other contract
+types, `NE` negative events, `SL` subject link). Field order for `HD`/`ID`/`CI` was verified
+field-by-field against Christopher Tojong Olis's real July record (matches `SML-REG_00378` in this
+LMS - confirmed via mobile/email/birthdate, not by any ID field, see below).
+
+**Schema gap analysis** (via Explore agent against `prisma/schema.prisma`): most ID/CI fields map
+directly to existing `Borrower`/`LoanAccount`/`RepaymentSchedule` columns. Missing, confirmed with
+user rather than guessed: **Title** (Mr/Ms) - will derive from `gender` (M→10, F→11) when the
+report is built; **PSIC/PSOC** (industry/occupation codes) - left blank in this first version, no
+coded field exists anywhere in the schema (`position`/`natureOfBusiness` are free text); **maturity
+date**, **monthly payment amount**, **outstanding balance**, **overdue count/amount/days** - none
+stored as single columns (by design, e.g. ADR-007 for balance), all must be derived from
+`RepaymentSchedule` when the actual report use case is built (not done yet).
+
+**Provider Subject No - the one real landmine found this session**: CIC's per-borrower identifier
+must stay identical across every submission forever (a changed value reads as a brand-new person to
+CIC and severs the client's credit history). Investigated whether it could be generated/derived and
+found it can't: cross-referencing the real Client Master List sheet (4,629 rows) against this LMS
+found it is NOT a clean sequence (only an early batch is contiguous; most values are large,
+non-sequential numbers) and does NOT match this system's own `Borrower.legacyId` (verified on
+Christopher Tojong Olis: LMS `legacyId` is a Mongo ObjectId, `6a62c3dcca267ce07166c027`; the sheet's
+own "Client ID" for the same person is `351606` and doesn't appear anywhere in the current SDevTech
+MongoDB dump at all - it traces to an even older, pre-SDevTech system, likely Mambu). So this ID
+must be either recovered from history (existing clients) or freshly assigned once, forever (new
+clients) - never computed on the fly.
+
+Built accordingly (user-confirmed design, `npx tsc --noEmit` clean, backend Docker rebuilt and
+verified healthy):
+- New migration `20260830035726_add_cic_provider_subject_no`: `Borrower.cicProviderSubjectNo`
+  (nullable, unique) plus a backing Postgres sequence `cic_provider_subject_no_seq` for future
+  auto-assignment.
+- `scripts/backfill-cic-provider-subject-no.ts`: one-time backfill for clients already submitted to
+  CIC before this feature existed. Reads the real July Client Master List (`exceljs`, since no ID
+  field is shared between the two systems) and matches each row to a `Borrower` by mobile number,
+  then email, then exact first+last name + birth date - each strategy only accepted when it
+  resolves to exactly ONE borrower; ambiguous/unmatched rows are reported, never guessed at. Never
+  overwrites an existing value. Result of the real `--apply` run: **3,834 matched and written**, 59
+  ambiguous (multiple borrower matches, left untouched), 732 unmatched (no borrower found in this
+  LMS - expected for very old/never-fully-migrated clients).
+- `IBorrowerRepository.assignCicProviderSubjectNoIfMissing()` / `PrismaBorrowerRepository`'s
+  implementation (`nextval('cic_provider_subject_no_seq')`, prefix `ELCS` - chosen because it never
+  appears in the historical data, so it can't collide with a real historical value) - wired into
+  `CreateBorrowerUseCase.execute()` so every genuinely NEW borrower gets a permanent value the
+  moment their profile is created. Deliberately NOT wired into the legacy migration path
+  (`migrate-legacy-data.ts`) - a migrated borrower must get its real historical value from the
+  backfill script above (if it has one), never a freshly generated one.
+
+## 30a. Same session, continued: built the actual report generator, found a second permanent-ID gap (loan-level), and verified real output field-by-field
+
+2026-08-30, same day. Built the rest of the pipeline described as "not yet built" above:
+`GetCicMonthlyReportUseCase`, `IReportingRepository.getCicMonthlyReportData` +
+`PrismaReportingRepository`'s implementation, `CicCsdfReportWriter` (renders the pipe-delimited
+HD/ID/CI file), and `GET /reports/cic-monthly` (JSON preview) / `GET /reports/cic-monthly.csv`
+(download) behind a new `report.cic_monthly.view` permission - deliberately NOT granted to any role
+by default (unlike the other 13 report permissions), since this exports a regulatory submission
+file; MIS must grant it explicitly per role/user.
+
+**Second permanent-ID gap found while verifying against the real July file**: the loan itself also
+needs a permanent CIC identifier ("Provider Contract No", e.g. `20100169`) - confirmed it does NOT
+match this system's `LoanAccount.loanCode` or `legacyId`, and does not appear anywhere in the
+current SDevTech MongoDB dump either (same root cause as the borrower-level gap in §30). User
+pointed at the exact same workbook's "Loan Accounts Details" sheet, which - like the Client Master
+List - pairs each historical `ACCOUNT ID` with its borrower's `Macro Provided ID` plus
+identifying loan details (amount, installment count, activation date).
+
+Built the identical treatment as §30's borrower-level fix:
+- Migration `20260830043416_add_cic_provider_contract_no`: `LoanAccount.cicProviderContractNo`
+  (nullable, unique) + backing sequence `cic_provider_contract_no_seq`.
+- `scripts/backfill-cic-provider-contract-no.ts`: resolves each sheet row's Borrower via the
+  already-backfilled `cicProviderSubjectNo`, then matches that borrower's loans by principal
+  amount + installment count + activation date (3-day tolerance) - accepted only when exactly one
+  loan matches. `--apply` result: **609 matched and written**, 221 rows whose borrower wasn't
+  itself matched in §30's backfill, 9 ambiguous, 474 unmatched (real gap - see follow-up below).
+- `ILoanAccountRepository.assignCicProviderContractNoIfMissing()` / Prisma implementation (prefix
+  `ELCC`, same never-collides-with-history reasoning as `ELCS`) wired into
+  `CreateLoanAccountUseCase.execute()` - every new loan gets a permanent contract number the moment
+  it's created.
+- `PrismaReportingRepository.getCicMonthlyReportData` now skips (never fabricates) any loan whose
+  borrower lacks `cicProviderSubjectNo` OR whose loan itself lacks `cicProviderContractNo` -
+  `CicMonthlyReportData.skippedMissingSubjectNo` carries a `reason` distinguishing the two so staff
+  can see exactly what's missing before trusting a generated file.
+
+**Non-obvious finding while investigating the 609 matched rows**: `cicProviderContractNo` ended up
+equal to `loanCode` for 607 of them - looked like a bug at first (script writing the wrong field)
+but turned out to be genuine: **835 of the 1,313 rows** in the real "Loan Accounts Details" sheet
+already use this LMS's own `loanCode` format directly as their CIC Account ID - i.e. for any loan
+originated after this LMS went live, staff's own CIC prep process just reuses the LMS's native
+code, no separate legacy number exists. Only the remaining ~478 (pre-LMS, SDevTech/Mambu-era loans)
+have the old numeric-style codes like `20100169`. Confirmed by direct inspection of the sheet, not
+assumed.
+
+**Verification against the real file**: generated the report for July 2026 and diffed the ID record
+against Christopher Tojong Olis's real submitted line - found and fixed 3 real bugs:
+1. Gender was passed through raw (`Borrower.gender` stores `'MALE'`/`'FEMALE'`, not CIC's `'M'`/`'F'`) - now normalized, which also fixes the derived Title code (10/11).
+2. Birth date was off by one day - `Date.getUTCDate()` on a Manila-midnight-stored instant (e.g. `1993-09-10T16:00:00Z`) reads as the previous day; `CicCsdfReportWriter.ddmmyyyy` now re-bases by the Manila UTC+8 offset before reading Y/M/D, same technique as this codebase's existing (private) `manilaWallClock` helper.
+3. The report's own reference date was wrong - the `monthEnd` value used for the DB query bound carries a `23:59:59.999` time-of-day, which the Manila-offset shift in fix #2 then rolled into the next calendar day; `referenceDate` (display-only) is now computed separately as plain UTC midnight.
+
+After those fixes, every safely-mappable ID field matched the real submission exactly (name,
+gender, DOB, mobile, email, employer). Could not verify Christopher's specific CI (loan) line
+because his 2009 loan (₱200,000/18 installments, the one in the real July file) no longer exists as
+an open account in this LMS - he has a newer 2026 loan cycle instead, correctly out of scope for
+that comparison, not a bug.
+
+Fields deliberately left blank in this version (no confirmed CIC domain-code mapping exists in this
+schema, never guessed): Civil Status code, Identification Type code, Employment/Occupation Status
+code, PSIC (industry) and PSOC (occupation) codes, Contract Type code, Purpose of Credit code (the
+last two vary per loan in the real data - 12/20/22/25 for Contract Type, 24/25/27/31/32 for
+Purpose - confirmed NOT constant, so hardcoding one value would misclassify most contracts).
+Payment Periodicity IS safely hardcoded to `'M'`, since `RepaymentPeriodUnit` currently has exactly
+one enum value (`MONTHS`).
+
+`npx tsc --noEmit` clean throughout. Backend Docker rebuilt and reverified healthy after every
+schema/code change.
+
+## Known follow-up work (CIC report, next session)
+
+- **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
+  (609/1,313 vs 3,834/4,625). Worth a closer look at why (loosen the amount/installment/date
+  tolerance? Restructured/compromised loans changing shape after their historical CIC submission?)
+  before treating loan-level coverage as complete.
+- Civil Status / Identification Type / Employment Status / PSIC / PSOC / Contract Type / Purpose of
+  Credit domain-code mappings are still unresolved - each needs either a confirmed lookup table
+  from the CIC manual (`Manual_CIC_Philippines_Submission_v.1.7.pdf`, not yet read) correlated to
+  this system's own free-text equivalents / `LoanProduct`s, or an explicit user decision to leave
+  them blank permanently. Left blank for now, not guessed.
+- NE (Negative Events) and BD (Business borrower) record types remain out of scope per the
+  original user-confirmed scoping decision in §30 - revisit only if actually needed.
+- No UI yet for staff to trigger/download the report or to review `skippedMissingSubjectNo` before
+  trusting a generated file - only the two GET endpoints exist so far
+  (`/reports/cic-monthly`, `/reports/cic-monthly.csv`), gated behind `report.cic_monthly.view`
+  (granted to no role by default - MIS must grant it explicitly).
+- Should generate the report for June 2026 too (a second real reference file is on hand,
+  `legacy/CIC /06 2026 June/`) as a second independent verification pass before trusting this for
+  an actual live monthly submission.
+
 ## Current state
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the

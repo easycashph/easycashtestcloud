@@ -324,6 +324,8 @@ import { GetLoanOriginationReportUseCase } from '@modules/reporting/application/
 import { GetCollectionReportUseCase } from '@modules/reporting/application/use-cases/GetCollectionReportUseCase';
 import { ListReportTransactionsUseCase } from '@modules/reporting/application/use-cases/ListReportTransactionsUseCase';
 import { GetLoanReleasesReportUseCase } from '@modules/reporting/application/use-cases/GetLoanReleasesReportUseCase';
+import { GetCicMonthlyReportUseCase } from '@modules/reporting/application/use-cases/GetCicMonthlyReportUseCase';
+import { CicCsdfReportWriter } from '@modules/reporting/infrastructure/CicCsdfReportWriter';
 import { GetAgingReportUseCase } from '@modules/reporting/application/use-cases/GetAgingReportUseCase';
 import { GetEndingBalanceReportUseCase } from '@modules/reporting/application/use-cases/GetEndingBalanceReportUseCase';
 import { GetAccountsWithPastDueReportUseCase } from '@modules/reporting/application/use-cases/GetAccountsWithPastDueReportUseCase';
@@ -1593,6 +1595,8 @@ export function createApp(): Express {
       listDistinctChannelsUseCase: new ListDistinctChannelsUseCase({ reportingRepository }),
       getFullyPaidAccountsReportUseCase: new GetFullyPaidAccountsReportUseCase({ reportingRepository }),
       getPortalAccountsReportUseCase: new GetPortalAccountsReportUseCase({ reportingRepository }),
+      getCicMonthlyReportUseCase: new GetCicMonthlyReportUseCase({ reportingRepository }),
+      cicCsdfReportWriter: new CicCsdfReportWriter(),
     },
     tokenService,
   );

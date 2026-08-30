@@ -1046,6 +1046,18 @@ model Borrower {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// CIC (Credit Information Corporation) monthly report - the permanent "Provider Subject No"
+  /// identifier for this borrower (2026-08-30, user-confirmed). Once CIC has this client on file
+  /// under a given value, it must never change - a different value on a later submission reads to
+  /// CIC as a brand-new person and severs their credit history. For borrowers already submitted
+  /// before this feature existed, this is backfilled from the company's historical "Client Master
+  /// List" (matched by name+contact+birthdate, since that list's own "Client ID" doesn't correspond
+  /// to any ID this system stores - see backfill-cic-provider-subject-no.ts). For every borrower
+  /// created from now on, CreateBorrowerUseCase assigns a fresh one using this system's own
+  /// "ELCS" + 9-digit sequence scheme (see cicProviderSubjectNoSeq below) - a prefix never seen in
+  /// the historical data, chosen specifically so it can't collide with a real historical value.
+  cicProviderSubjectNo String? @unique
+
   incomeDetail        BorrowerIncomeDetail?
   governmentId        BorrowerGovernmentId?
   identificationDocs  IdentificationDocument[]
@@ -1389,6 +1401,16 @@ model LoanAccount {
   legacyId  String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// CIC monthly report - the permanent "Provider Contract No" identifier for this loan (2026-08-30,
+  /// user-confirmed - same reasoning as `Borrower.cicProviderSubjectNo`'s own doc comment: once CIC
+  /// has this contract on file under a value, it must never change). For loans already submitted
+  /// before this feature existed, backfilled from the historical "Loan Accounts Details" sheet
+  /// (matched via the borrower's own `cicProviderSubjectNo` plus principal/installment
+  /// count/activation date - see backfill-cic-provider-contract-no.ts). For every loan activated
+  /// from now on, assigned fresh using this system's own "ELCC" + 9-digit sequence scheme (see
+  /// cic_provider_contract_no_seq) - a prefix never seen in the historical data.
+  cicProviderContractNo String? @unique
 
   /// ADR-048-optimistic-concurrency: optimistic concurrency control for every
   /// balance-mutating write. Every conditional update increments this and

@@ -91,6 +91,11 @@ export class CreateLoanAccountUseCase {
     });
 
     await this.deps.loanAccountRepository.save(loanAccount);
+
+    // CIC monthly report (2026-08-30, user-confirmed): every genuinely new loan gets a permanent
+    // Provider Contract No the moment it exists - see ILoanAccountRepository's own doc comment.
+    await this.deps.loanAccountRepository.assignCicProviderContractNoIfMissing(loanAccount.id);
+
     return loanAccount;
   }
 

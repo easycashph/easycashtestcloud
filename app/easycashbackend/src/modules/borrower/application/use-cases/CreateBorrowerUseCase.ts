@@ -65,6 +65,11 @@ export class CreateBorrowerUseCase {
 
     await this.deps.borrowerRepository.save(borrower);
 
+    // CIC monthly report (2026-08-30, user-confirmed): every genuinely new client gets a permanent
+    // Provider Subject No the moment their profile exists - see IBorrowerRepository's own doc
+    // comment for why this only happens here (not for legacy-migrated borrowers).
+    await this.deps.borrowerRepository.assignCicProviderSubjectNoIfMissing(borrower.id);
+
     // Phase D (2026-07-24): link the originating PortalAccount to this Borrower, if any.
     if (input.sourceApplicationId && this.deps.loanApplicationRepository && this.deps.portalAccountRepository) {
       const sourceApplication = await this.deps.loanApplicationRepository.findById(input.sourceApplicationId);

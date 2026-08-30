@@ -17,8 +17,10 @@ import type { GetDailyCollectionReportUseCase } from '../../application/use-case
 import type { GetFullyPaidAccountsReportUseCase } from '../../application/use-cases/GetFullyPaidAccountsReportUseCase';
 import type { GetPortalAccountsReportUseCase } from '../../application/use-cases/GetPortalAccountsReportUseCase';
 import type { ListDistinctChannelsUseCase } from '../../application/use-cases/ListDistinctChannelsUseCase';
+import type { GetCicMonthlyReportUseCase } from '../../application/use-cases/GetCicMonthlyReportUseCase';
 import type { LoanReleaseOrigin, ReportGranularity } from '../../application/ports/IReportingRepository';
 import type { ExcelJsLoanReleasesReportWriter } from '../../infrastructure/ExcelJsLoanReleasesReportWriter';
+import type { CicCsdfReportWriter } from '../../infrastructure/CicCsdfReportWriter';
 import {
   writeAccountsWithPastDueReportXlsx,
   writeAgingReportXlsx,
@@ -58,6 +60,8 @@ export interface ReportingControllerDeps {
   getFullyPaidAccountsReportUseCase: GetFullyPaidAccountsReportUseCase;
   getPortalAccountsReportUseCase: GetPortalAccountsReportUseCase;
   listDistinctChannelsUseCase: ListDistinctChannelsUseCase;
+  getCicMonthlyReportUseCase: GetCicMonthlyReportUseCase;
+  cicCsdfReportWriter: CicCsdfReportWriter;
 }
 
 const GRANULARITIES: ReportGranularity[] = ['DAILY', 'MONTHLY', 'YEARLY'];
@@ -446,6 +450,49 @@ export class ReportingController {
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="Portal Accounts.xlsx"');
       res.status(200).send(buffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** CIC (Credit Information Corporation) monthly submission file (2026-08-30, user-confirmed
+   * scope: ID + CI record types only). `year`/`month` required - the reporting period.
+   * `skippedMissingSubjectNo` in the JSON response lets staff see, BEFORE downloading the actual
+   * file, which borrowers were left out because they still lack a permanent
+   * `cicProviderSubjectNo` (never fabricated - see IReportingRepository's own doc comment). */
+  cicMonthly = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const year = Number(req.query.year);
+      const month = Number(req.query.month);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+        throw new ValidationError('year and month (1-12) are required.');
+      }
+      const scope = resolveBranchScope(req);
+      const data = await this.deps.getCicMonthlyReportUseCase.execute({ year, month, branchId: resolveBranchFilter(scope) });
+      res.status(200).json({
+        individualCount: data.individuals.length,
+        contractCount: data.contracts.length,
+        skippedMissingSubjectNo: data.skippedMissingSubjectNo,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cicMonthlyCsv = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const year = Number(req.query.year);
+      const month = Number(req.query.month);
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+        throw new ValidationError('year and month (1-12) are required.');
+      }
+      const scope = resolveBranchScope(req);
+      const data = await this.deps.getCicMonthlyReportUseCase.execute({ year, month, branchId: resolveBranchFilter(scope) });
+      const content = this.deps.cicCsdfReportWriter.write(data);
+      const monthLabel = String(month).padStart(2, '0');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="PF017290_CSDF_${year}${monthLabel}.csv"`);
+      res.status(200).send(content);
     } catch (error) {
       next(error);
     }

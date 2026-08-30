@@ -59,6 +59,8 @@ export function createReportingRouter(deps: ReportingControllerDeps, tokenServic
   router.get('/reports/fully-paid.xlsx', requireAuth, requirePermission('report.fully_paid.view'), controller.fullyPaidXlsx);
   router.get('/reports/portal-accounts', requireAuth, requirePermission('report.portal_accounts.view'), controller.portalAccounts);
   router.get('/reports/portal-accounts.xlsx', requireAuth, requirePermission('report.portal_accounts.view'), controller.portalAccountsXlsx);
+  router.get('/reports/cic-monthly', requireAuth, requirePermission('report.cic_monthly.view'), controller.cicMonthly);
+  router.get('/reports/cic-monthly.csv', requireAuth, requirePermission('report.cic_monthly.view'), controller.cicMonthlyCsv);
 
   return router;
 }

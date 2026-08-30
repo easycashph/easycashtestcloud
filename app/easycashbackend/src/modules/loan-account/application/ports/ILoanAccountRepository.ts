@@ -49,6 +49,12 @@ export interface ILoanAccountRepository {
    * not a high-throughput one).
    */
   findMaxLoanCodeSequenceForPrefix(prefix: string, ctx?: TransactionContext): Promise<number>;
+  /** CIC monthly report (2026-08-30, user-confirmed): assigns a fresh, permanent
+   * `cicProviderContractNo` to this loan if it doesn't already have one - a no-op otherwise. Only
+   * ever called for genuinely NEW loans (CreateLoanAccountUseCase) - never for a legacy-migrated
+   * loan, which must get its real historical value (if any) from
+   * `backfill-cic-provider-contract-no.ts` instead. */
+  assignCicProviderContractNoIfMissing(loanAccountId: string, ctx?: TransactionContext): Promise<void>;
   /**
    * Milestone 9.1 checkpoint 6 / `docs/Architecture/ADR-optimistic-
    * concurrency.md`: for an existing aggregate, throws

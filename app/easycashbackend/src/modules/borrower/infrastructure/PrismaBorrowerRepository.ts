@@ -348,4 +348,15 @@ export class PrismaBorrowerRepository implements IBorrowerRepository {
     const row = await client.borrower.findFirst({ orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
     return row?.createdAt ?? null;
   }
+
+  async assignCicProviderSubjectNoIfMissing(borrowerId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    // Prefix chosen so it can never collide with a historical value (verified against the company's
+    // Client Master List export - see cicProviderSubjectNo's schema doc comment).
+    await client.$executeRaw`
+      UPDATE "borrowers"
+      SET "cicProviderSubjectNo" = 'ELCS' || lpad(nextval('cic_provider_subject_no_seq')::text, 9, '0')
+      WHERE "id" = ${borrowerId} AND "cicProviderSubjectNo" IS NULL
+    `;
+  }
 }

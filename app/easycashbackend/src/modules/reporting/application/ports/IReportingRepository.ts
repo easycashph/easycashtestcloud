@@ -289,6 +289,92 @@ export interface PortalAccountReportRow {
   createdAt: Date;
 }
 
+/**
+ * CIC (Credit Information Corporation) monthly report (2026-08-30, user-confirmed scope: ID +
+ * CI record types only for this first version - see docs/session-logs/macbook-nomer's §30 for the
+ * full investigation). Field names/order below match the CSDF format's `ID`/`CI` record layouts,
+ * verified position-by-position against a real accepted submission
+ * (`legacy/CIC /07 2026 July/PF017290_CSDF_20260811105959.csv`) - `CicCsdfReportWriter` is what
+ * actually renders these into the pipe-delimited file.
+ *
+ * Fields intentionally left unmapped in this version (flagged, never guessed): civil status code,
+ * identification type code, employment/occupation status code, PSIC/PSOC industry/occupation
+ * codes - none of these have a confirmed CIC domain-code mapping from this system's free-text
+ * equivalents yet. `CicCsdfReportWriter` renders them as blank positions.
+ */
+export interface CicIndividualRow {
+  /** Permanent CIC identifier - `Borrower.cicProviderSubjectNo`. Every row here is guaranteed to have one (rows without it are excluded upstream, never fabricated - see `getCicMonthlyReportData`'s own doc comment). */
+  providerSubjectNo: string;
+  /** 'M' -> 10 (Mr), 'F' -> 11 (Ms) - user-confirmed 2026-08-30. Blank if gender isn't one of those two. */
+  title: '10' | '11' | '';
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  suffix: string;
+  /** Raw `Borrower.gender` passed through as-is (already 'M'/'F' in this system's data). */
+  gender: string;
+  birthDate: Date | null;
+  nationality: string;
+  mobile: string;
+  email: string;
+  employerName: string;
+}
+
+export interface CicContractRow {
+  /** The borrower's permanent identifier - links this contract back to its `ID` record. */
+  providerSubjectNo: string;
+  /** This loan's own permanent identifier (`LoanAccount.cicProviderContractNo`) - NOT the same as `loanCode`, which is this system's internal code and has no relationship to CIC's historical numbering (see `backfill-cic-provider-contract-no.ts`'s own doc comment). */
+  providerContractNo: string;
+  loanCode: string;
+  /** 'AC' (Active) or 'CL' (Closed) - from `LoanAccount.status`/`closedAt`. */
+  contractPhase: 'AC' | 'CL';
+  contractStartDate: Date;
+  /** `LoanAccount.createdAt` - the application/request date, distinct from the actual disbursement (`contractStartDate`). */
+  contractRequestDate: Date;
+  contractEndPlannedDate: Date | null;
+  /** Only set when `contractPhase` is 'CL'. */
+  contractEndActualDate: Date | null;
+  financedAmount: string;
+  installmentsNumber: number;
+  /** First unpaid installment's `principalDue + interestDue` - the recurring per-period payment amount. */
+  monthlyPaymentAmount: string;
+  firstPaymentDate: Date;
+  /** Most recent installment with a payment recorded, or null if none yet. */
+  lastPaymentDate: Date | null;
+  lastPaymentAmount: string;
+  /** Earliest still-unpaid installment's due date/amount, or null if the loan is fully paid. */
+  nextPaymentDate: Date | null;
+  nextPaymentAmount: string;
+  /** Count of installments not yet fully paid. */
+  outstandingPaymentsNumber: number;
+  /** `principalBalance + interestBalance + feesBalance + penaltyBalance`. */
+  outstandingBalance: string;
+  /** Of the outstanding installments, how many are past their due date as of the report's reference date. */
+  overduePaymentsNumber: number;
+  /** Sum of (due - paid) across those overdue installments. */
+  overduePaymentsAmount: string;
+  /** Report reference date minus the earliest overdue installment's due date, in days. 0 if none overdue. */
+  overdueDays: number;
+}
+
+export interface CicMonthlyReportFilter {
+  year: number;
+  /** 1-12. */
+  month: number;
+  branchId?: string;
+}
+
+export interface CicMonthlyReportData {
+  /** Last day of the reporting month - the CSDF `File Reference Date` / `Subject Reference Date` / `Contract Reference Date`. */
+  referenceDate: Date;
+  individuals: CicIndividualRow[];
+  contracts: CicContractRow[];
+  /** Loans excluded because their borrower is missing `cicProviderSubjectNo` OR the loan itself is
+   * missing `cicProviderContractNo` - never submitted with a fabricated ID. `reason` distinguishes
+   * the two so the caller can flag them for manual assignment before the file is trusted. */
+  skippedMissingSubjectNo: { loanCode: string; borrowerName: string; reason: 'MISSING_SUBJECT_NO' | 'MISSING_CONTRACT_NO' }[];
+}
+
 export interface IReportingRepository {
   getLoanOriginationReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<OriginationReportRow[]>;
   getCollectionReport(granularity: ReportGranularity, filter: DateRangeFilter & { branchId?: string }): Promise<CollectionReportRow[]>;
@@ -310,4 +396,5 @@ export interface IReportingRepository {
   /** Not branch-scoped - a PortalAccount has no `branchId` of its own (only gains one indirectly,
    * once linked to a Borrower), and the login itself isn't a per-branch concept. */
   getPortalAccountsReport(filter: { search?: string; status?: string }): Promise<PortalAccountReportRow[]>;
+  getCicMonthlyReportData(filter: CicMonthlyReportFilter): Promise<CicMonthlyReportData>;
 }

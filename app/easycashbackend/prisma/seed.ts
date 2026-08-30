@@ -115,6 +115,11 @@ async function main() {
     'report.daily_collection.view': 'View and download the Daily Collection report',
     'report.fully_paid.view': 'View and download the Fully Paid Accounts report',
     'report.portal_accounts.view': 'View and download the Portal Accounts report',
+    // 2026-08-30 (user request): CIC (Credit Information Corporation) monthly submission report.
+    // Deliberately NOT added to ALL_REPORT_PERMISSIONS/defaultRolePermissions below - unlike the 13
+    // reports there, this one exports a regulatory credit-registry submission file, so nobody gets
+    // it by default; MIS grants it explicitly per role/user via the Roles & Permissions screen.
+    'report.cic_monthly.view': 'View and download the CIC (Credit Information Corporation) monthly submission report',
     'user.manage': 'Manage staff user accounts and roles',
     'audit_log.read': 'View the audit log',
     'reminder_settings.manage': 'Manage SMS/email reminder settings',

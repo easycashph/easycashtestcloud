@@ -361,6 +361,17 @@ export class PrismaLoanAccountRepository implements ILoanAccountRepository {
     return max;
   }
 
+  async assignCicProviderContractNoIfMissing(loanAccountId: string, ctx?: TransactionContext): Promise<void> {
+    const client = resolveClient(ctx);
+    // Prefix chosen so it can never collide with a historical value (verified against the
+    // company's Loan Accounts Details export - see cicProviderContractNo's schema doc comment).
+    await client.$executeRaw`
+      UPDATE "loan_accounts"
+      SET "cicProviderContractNo" = 'ELCC' || lpad(nextval('cic_provider_contract_no_seq')::text, 9, '0')
+      WHERE "id" = ${loanAccountId} AND "cicProviderContractNo" IS NULL
+    `;
+  }
+
   /** Same maturity definition as `PrismaDashboardRepository.findOverdueLoanAccounts` (2026-07-12) -
    * kept in sync deliberately so the Dashboard's Loan Portfolio Health "Matured" segment and this
    * per-loan badge never disagree. See that function's own doc comment for the full rationale. */

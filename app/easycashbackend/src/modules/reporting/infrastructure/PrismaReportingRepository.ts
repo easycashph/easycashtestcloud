@@ -11,6 +11,10 @@ import type {
   AccountsWithPastDueReportRow,
   AgingReportRow,
   ChannelOption,
+  CicContractRow,
+  CicIndividualRow,
+  CicMonthlyReportData,
+  CicMonthlyReportFilter,
   CollectionHistoryReportRow,
   CollectionReportRow,
   DailyCollectionReportRow,
@@ -1180,6 +1184,141 @@ export class PrismaReportingRepository implements IReportingRepository {
         createdAt: account.createdAt,
       };
     });
+  }
+
+  async getCicMonthlyReportData(filter: CicMonthlyReportFilter): Promise<CicMonthlyReportData> {
+    const monthStart = new Date(Date.UTC(filter.year, filter.month - 1, 1));
+    const monthEnd = new Date(Date.UTC(filter.year, filter.month, 0, 23, 59, 59, 999));
+    // Plain UTC midnight (no time-of-day component) - `CicCsdfReportWriter.ddmmyyyy` re-bases every
+    // date by +8h to read Manila wall-clock fields, so a `referenceDate` carrying `23:59:59.999`
+    // would roll over into the next calendar day once shifted. `monthEnd` above is only used for
+    // the DB query bound below, never for display.
+    const referenceDate = new Date(Date.UTC(filter.year, filter.month, 0));
+
+    // Scope (2026-08-30, user-confirmed CI-only first version): every loan currently open, PLUS
+    // any loan that closed during this reporting month (CIC needs to be told about a closure once,
+    // in the period it happened, even though it won't appear in every future month's file).
+    const loans = await prisma.loanAccount.findMany({
+      where: {
+        OR: [{ status: { in: ['ACTIVE', 'ACTIVE_IN_ARREARS'] } }, { closedAt: { gte: monthStart, lte: monthEnd } }],
+        ...(filter.branchId ? { branchId: filter.branchId } : {}),
+      },
+      include: { borrower: true },
+      orderBy: { loanCode: 'asc' },
+    });
+
+    const loanIds = loans.map((loan) => loan.id);
+    const scheduleRows =
+      loanIds.length > 0
+        ? await prisma.repaymentSchedule.findMany({ where: { loanAccountId: { in: loanIds } }, orderBy: { installmentNumber: 'asc' } })
+        : [];
+    const scheduleByLoanId = groupByLoanId(scheduleRows);
+
+    const individualsBySubjectNo = new Map<string, CicIndividualRow>();
+    const contracts: CicContractRow[] = [];
+    const skippedMissingSubjectNo: { loanCode: string; borrowerName: string; reason: 'MISSING_SUBJECT_NO' | 'MISSING_CONTRACT_NO' }[] = [];
+
+    for (const loan of loans) {
+      const borrower = loan.borrower;
+      if (!borrower.cicProviderSubjectNo) {
+        skippedMissingSubjectNo.push({ loanCode: loan.loanCode, borrowerName: formatFullName(borrower), reason: 'MISSING_SUBJECT_NO' });
+        continue;
+      }
+      if (!loan.cicProviderContractNo) {
+        skippedMissingSubjectNo.push({ loanCode: loan.loanCode, borrowerName: formatFullName(borrower), reason: 'MISSING_CONTRACT_NO' });
+        continue;
+      }
+      const subjectNo = borrower.cicProviderSubjectNo;
+
+      if (!individualsBySubjectNo.has(subjectNo)) {
+        // `Borrower.gender` is free text ('MALE'/'FEMALE'/etc, not a fixed enum) - only map the two
+        // unambiguous cases, same caution as every other unconfirmed domain code in this report.
+        const genderUpper = (borrower.gender ?? '').trim().toUpperCase();
+        const genderCode = genderUpper === 'MALE' || genderUpper === 'M' ? 'M' : genderUpper === 'FEMALE' || genderUpper === 'F' ? 'F' : '';
+        individualsBySubjectNo.set(subjectNo, {
+          providerSubjectNo: subjectNo,
+          title: genderCode === 'M' ? '10' : genderCode === 'F' ? '11' : '',
+          firstName: borrower.firstName,
+          lastName: borrower.lastName,
+          middleName: borrower.middleName ?? '',
+          suffix: borrower.suffix ?? '',
+          gender: genderCode,
+          birthDate: borrower.birthDate,
+          nationality: borrower.nationality ?? '',
+          mobile: borrower.mobilePhone1 ?? borrower.mobilePhone2 ?? '',
+          email: borrower.email ?? '',
+          employerName: '', // filled below once income detail is fetched
+        });
+      }
+
+      const schedule = scheduleByLoanId.get(loan.id) ?? [];
+      const isUnpaid = (i: (typeof schedule)[number]) =>
+        Number(i.principalPaid) < Number(i.principalDue) || Number(i.interestPaid) < Number(i.interestDue);
+      const outstanding = schedule.filter(isUnpaid);
+      const overdue = outstanding.filter((i) => i.dueDate.getTime() < referenceDate.getTime());
+      const paidInstallments = schedule.filter((i) => !isUnpaid(i) && (Number(i.principalPaid) > 0 || Number(i.interestPaid) > 0));
+      const lastPaid = paidInstallments.length > 0 ? paidInstallments[paidInstallments.length - 1]! : undefined;
+      const nextDue = outstanding[0];
+      const firstInstallment = schedule[0];
+      const earliestOverdue = overdue[0];
+
+      const overdueAmount = overdue.reduce(
+        (sum, i) => sum + (Number(i.principalDue) - Number(i.principalPaid)) + (Number(i.interestDue) - Number(i.interestPaid)),
+        0,
+      );
+      const outstandingBalance =
+        Number(loan.principalBalance) + Number(loan.interestBalance) + Number(loan.feesBalance) + Number(loan.penaltyBalance);
+      const overdueDays = earliestOverdue
+        ? Math.max(0, Math.round((referenceDate.getTime() - earliestOverdue.dueDate.getTime()) / 86_400_000))
+        : 0;
+
+      contracts.push({
+        providerSubjectNo: subjectNo,
+        providerContractNo: loan.cicProviderContractNo,
+        loanCode: loan.loanCode,
+        contractPhase: loan.status.startsWith('CLOSED') ? 'CL' : 'AC',
+        contractStartDate: loan.activatedAt ?? loan.createdAt,
+        contractRequestDate: loan.createdAt,
+        contractEndPlannedDate: schedule.length > 0 ? schedule[schedule.length - 1]!.dueDate : null,
+        contractEndActualDate: loan.status.startsWith('CLOSED') ? loan.closedAt : null,
+        financedAmount: loan.principalAmount.toString(),
+        installmentsNumber: loan.installmentCount,
+        monthlyPaymentAmount: firstInstallment
+          ? (Number(firstInstallment.principalDue) + Number(firstInstallment.interestDue)).toFixed(2)
+          : '0.00',
+        firstPaymentDate: loan.firstRepaymentDate,
+        lastPaymentDate: lastPaid?.dueDate ?? null,
+        lastPaymentAmount: lastPaid ? (Number(lastPaid.principalPaid) + Number(lastPaid.interestPaid)).toFixed(2) : '0.00',
+        nextPaymentDate: nextDue?.dueDate ?? null,
+        nextPaymentAmount: nextDue ? (Number(nextDue.principalDue) + Number(nextDue.interestDue)).toFixed(2) : '0.00',
+        outstandingPaymentsNumber: outstanding.length,
+        outstandingBalance: outstandingBalance.toFixed(2),
+        overduePaymentsNumber: overdue.length,
+        overduePaymentsAmount: overdueAmount.toFixed(2),
+        overdueDays,
+      });
+    }
+
+    // Employer name (BorrowerIncomeDetail is a separate 1-to-1 table, not included above to keep
+    // the main loan query lean - same reasoning as Address's separate bulk-fetch pattern elsewhere
+    // in this file).
+    const borrowerIds = [...new Set(loans.map((l) => l.borrowerId))];
+    if (borrowerIds.length > 0) {
+      const incomeDetails = await prisma.borrowerIncomeDetail.findMany({ where: { borrowerId: { in: borrowerIds } } });
+      const employerByBorrowerId = new Map(incomeDetails.map((d) => [d.borrowerId, d.employerName ?? '']));
+      for (const loan of loans) {
+        if (!loan.borrower.cicProviderSubjectNo) continue;
+        const row = individualsBySubjectNo.get(loan.borrower.cicProviderSubjectNo);
+        if (row) row.employerName = employerByBorrowerId.get(loan.borrowerId) ?? '';
+      }
+    }
+
+    return {
+      referenceDate,
+      individuals: [...individualsBySubjectNo.values()],
+      contracts,
+      skippedMissingSubjectNo,
+    };
   }
 }
 
