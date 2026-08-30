@@ -1858,6 +1858,26 @@ level fix was needed. Verified: August 2026 report's `skippedMissingSubjectNo` (
 reason) dropped from 53 to 47 (leaves the genuinely-unmatched majority untouched, exactly as
 intended).
 
+## 30j. Follow-up: cross-checked the remaining excluded loans against every real historical submission, then assigned fresh identifiers
+
+2026-08-30, same day. After §30i resolved 6 ambiguous-match cases, 48 loans remained excluded for
+`MISSING_SUBJECT_NO`. User asked what disbursement years/months these covered (breakdown: 2019 x6,
+2020 x1, 2021 x3, 2023 x1, 2024 x18, 2025 x1, 2026 x18, spread Jan-Aug with no single standout
+month), then asked whether they could simply be included now if genuinely never submitted before.
+
+Before doing that, cross-checked all 48 against every real historical submission file actually on
+this machine (not just July 2026, which was already checked in §30a-§30i): the real June 2026 CSDF
+file, and all 12 real monthly 2024 CSDF files (`legacy/CIC /2024 DATA SUBMISSION/<month>/PF017290_CSDF_*.csv`,
+excluding `Backup`/`Dispute`/`ERROR` subfolder duplicates - one canonical file per month) - grepped
+each for every excluded borrower's mobile number. Zero matches across all 14 files/months. User
+also asked to check a Google Drive folder link directly - couldn't (no login available to this
+session); told the user to sync it locally instead if further cross-checking is wanted later.
+
+With that verification done, ran a new one-off script, `backfill-cic-new-registrations.ts`: assigns
+the same `ELCS`/`ELCC` auto-generation scheme this system already uses for brand-new
+borrowers/loans (see §30/§30g), applied retroactively to this specific, now-verified set. Result:
+**48 loans resolved, August 2026 report went from 654 to 702 contracts, 49 to 1 excluded.**
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
