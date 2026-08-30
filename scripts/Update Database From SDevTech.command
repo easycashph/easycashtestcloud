@@ -176,9 +176,18 @@ if ! (cd "$BACKEND_DIR" && npx tsx scripts/backfill-loan-restructure-compromise.
 fi
 
 echo
-echo "[16/16] Huling spot-check - tinitignan kung may loan na"
+echo "[16/17] Huling spot-check - tinitignan kung may loan na"
 echo "      kailangan pa ng manual na atensyon..."
 (cd "$BACKEND_DIR" && npx tsx scripts/check-legacy-balance-integrity.ts)
+
+# 2026-08-30 (user request, found via a real Dashboard Portfolio at Risk mismatch against
+# Office Server PC): catches loans whose balance is stale relative to their own schedule - the
+# exact bug class this session hit repeatedly when a partial/manual fix skipped the recompute step
+# above. Read-only - only reports, never writes; exit code 1 if it finds anything.
+echo
+echo "[17/17] Sanity check - tinitignan kung may loan na kailangan pang"
+echo "      i-recompute ang balance (baka may na-miss na hakbang sa itaas)..."
+(cd "$BACKEND_DIR" && npx tsx scripts/check-balance-recompute-needed.ts)
 
 echo
 echo "============================================"
@@ -190,7 +199,7 @@ echo "dito, metadata lang muna ang na-dagdag - patakbuhin pa ang"
 echo "\"Backfill SDevTech Attachments.command\" kung gusto mong makuha"
 echo "rin ang totoong files nila."
 echo
-echo "Kung may lumabas na loan(s) sa [16/16] sa itaas, i-check muna ang"
+echo "Kung may lumabas na loan(s) sa [16/17] sa itaas, i-check muna ang"
 echo "mga iyon (tingnan ang comment sa loob ng"
 echo "check-legacy-balance-integrity.ts para sa susunod na hakbang)"
 echo "bago ipalagay na kumpleto ang update."
