@@ -33,11 +33,11 @@ const APPLY = process.argv.includes('--apply');
 
 const LOAN_DETAILS_FILE = path.resolve(
   __dirname,
-  '../../../legacy/CIC /07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
+  '../../../legacy/CIC/07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
 );
 const CSV_EXPORT_FILE = path.resolve(
   __dirname,
-  '../../../legacy/CIC /07 2026 July/[Revised] [July 2026] Fields in Google Spreadsheet.xlsx',
+  '../../../legacy/CIC/07 2026 July/[Revised] [July 2026] Fields in Google Spreadsheet.xlsx',
 );
 
 interface LoanDetailRow {

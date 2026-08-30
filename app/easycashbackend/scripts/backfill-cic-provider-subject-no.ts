@@ -28,7 +28,7 @@ const APPLY = process.argv.includes('--apply');
 // July's Client Master List is the most recently maintained copy on file.
 const SOURCE_FILE = path.resolve(
   __dirname,
-  '../../../legacy/CIC /07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
+  '../../../legacy/CIC/07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
 );
 
 interface MasterListRow {
