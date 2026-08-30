@@ -80,6 +80,14 @@ const CATEGORIES: ReportCategory[] = [
         status: 'live',
         permission: 'report.portal_accounts.view',
       },
+      {
+        to: '/reports/cic-monthly',
+        label: 'CIC monthly report',
+        description: 'Credit Information Corporation submission file',
+        icon: FileSpreadsheet,
+        status: 'live',
+        permission: 'report.cic_monthly.view',
+      },
     ],
   },
   {

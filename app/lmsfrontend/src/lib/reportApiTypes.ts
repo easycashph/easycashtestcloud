@@ -201,3 +201,18 @@ export interface PortalAccountReportRow {
   emailVerifiedAt: string | null;
   createdAt: string;
 }
+
+/** 2026-08-30 (CIC monthly report): JSON preview response from GET /reports/cic-monthly - counts
+ * plus the list of loans excluded because their borrower/loan is missing its permanent CIC
+ * identifier (never fabricated - see backend's `IReportingRepository.CicMonthlyReportData` doc
+ * comment). Staff should review this list before trusting the downloaded .csv for a real
+ * submission. */
+export interface CicMonthlyReportSummary {
+  individualCount: number;
+  contractCount: number;
+  skippedMissingSubjectNo: {
+    loanCode: string;
+    borrowerName: string;
+    reason: 'MISSING_SUBJECT_NO' | 'MISSING_CONTRACT_NO';
+  }[];
+}

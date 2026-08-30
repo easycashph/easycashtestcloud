@@ -67,6 +67,7 @@ const FirstAmortizationReportPage = lazyNamed(() => import('@/pages/FirstAmortiz
 const DailyCollectionReportPage = lazyNamed(() => import('@/pages/DailyCollectionReportPage'), 'DailyCollectionReportPage');
 const FullyPaidAccountsReportPage = lazyNamed(() => import('@/pages/FullyPaidAccountsReportPage'), 'FullyPaidAccountsReportPage');
 const PortalAccountsReportPage = lazyNamed(() => import('@/pages/PortalAccountsReportPage'), 'PortalAccountsReportPage');
+const CicMonthlyReportPage = lazyNamed(() => import('@/pages/CicMonthlyReportPage'), 'CicMonthlyReportPage');
 const ReportsHubPage = lazyNamed(() => import('@/pages/ReportsHubPage'), 'ReportsHubPage');
 const SettingsPage = lazyNamed(() => import('@/pages/SettingsPage'), 'SettingsPage');
 const SystemPage = lazyNamed(() => import('@/pages/SystemPage'), 'SystemPage');
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="reports/daily-collection" element={<DailyCollectionReportPage />} />
           <Route path="reports/fully-paid" element={<FullyPaidAccountsReportPage />} />
           <Route path="reports/portal-accounts" element={<PortalAccountsReportPage />} />
+          <Route path="reports/cic-monthly" element={<CicMonthlyReportPage />} />
           <Route path="reports/reminder-logs" element={<ReminderLogsPage />} />
           <Route path="reports/esignature-logs" element={<EsignatureLogsPage />} />
           <Route path="configuration/settings" element={<SettingsPage />} />

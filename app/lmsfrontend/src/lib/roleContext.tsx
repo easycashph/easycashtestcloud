@@ -73,6 +73,7 @@ export type PermissionCode =
   | 'report.daily_collection.view'
   | 'report.fully_paid.view'
   | 'report.portal_accounts.view'
+  | 'report.cic_monthly.view'
   | 'user.manage'
   | 'audit_log.read'
   | 'reminder_settings.manage'
