@@ -1713,20 +1713,44 @@ session, out of CIC scope): loan `2470` is `installmentCount=3` yet still `ACTIV
 2013 disbursement - almost certainly a stale/never-formally-closed record, not a real balance CIC
 or anyone else should be tracking as "current."
 
+## 30f. Follow-up: found and fixed two real Mandatory-field gaps (Address, TIN/SSS)
+
+2026-08-30, same day. User asked whether PSIC/PSOC are actually required by CIC. Checked the
+manual's own field table: both marked "NM" (Non-Mandatory) - confirmed safe to leave blank. While
+verifying that, found the manual's own §3.1.1.1.2 "Mandatory fields for Individuals" summary, which
+surfaced two REAL gaps that had been silently blank the whole time:
+
+1. **Address** (Address Type, Full Address, StreetNo, City, Province) - not populated at all before. Now sourced from the borrower's first `Address` on file. Real test run: 487/488 individuals (99.8%) now have one.
+2. **At least one Identification code** (TIN preferred, otherwise SSS/GSIS) - the existing free-text `IdentificationDocument.documentType` matching (§30c) almost never landed a TIN/SSS match. Switched to the structured `BorrowerGovernmentId.tinNumber`/`.sssNumber` fields instead - far more reliable, and confirmed only ONE of TIN/SSS/GSIS is required (not both) per the manual's own wording. Real coverage: only 59/488 (12%) - a genuine data gap (most borrowers simply don't have a TIN/SSS on file in this LMS), not a bug.
+
+The earlier free-text `IdentificationDocument` matching (`cicIdentificationType`, now renamed
+`cicIdType`) stays, but scoped correctly to ONLY the separate, non-mandatory "ID N" (government
+photo ID) field group it always should have been - TIN/SSS no longer flow through it.
+
+`CicExcelReportWriter`'s review workbook updated to match (TIN/SSS/Address columns added,
+Identification Domain/Type/Number columns removed). `npx tsc --noEmit` clean, backend Docker
+rebuilt and reverified healthy.
+
 ## Known follow-up work (CIC report, next session)
 
 - **474 unmatched contract-backfill rows** - lower match rate than the borrower-level backfill
   (609/1,313 vs 3,834/4,625). Worth a closer look at why (loosen the amount/installment/date
   tolerance? Restructured/compromised loans changing shape after their historical CIC submission?)
   before treating loan-level coverage as complete.
-- Resolved in §30c: Civil Status, Occupation Status (partial - only 'Self Employed'), Identification
-  Type, Contract Type (for the 6 confirmed product prefixes), Purpose of Credit (for Personal/Salary
-  Loan contracts only). Still genuinely unmapped: PSIC/PSOC (no coded source field exists at all),
-  Contract Type/Purpose of Credit for any `LoanProduct` prefix outside the 6 confirmed
-  (`OFW`, `CM-Car`, `OTH-COMP`, `REL-REG`, `SP-Easy`, `SP-Flash`, etc - worth asking the user about
-  these specifically, several have an obvious-looking match, e.g. `CM-Car` -> Vehicle Loan '17',
-  `REL-REG` -> Mortgage/Real Estate '13', but not yet confirmed so left blank), and Occupation
-  Status for the 'Employed' (non-self-employed) case.
+- Resolved in §30c/§30f: Civil Status, Occupation Status (partial - only 'Self Employed'), ID Type
+  (government photo ID, non-mandatory), Contract Type (for the 6 confirmed product prefixes),
+  Purpose of Credit (for Personal/Salary Loan contracts only), Address (mandatory - 99.8%
+  coverage), TIN/SSS (mandatory - only 12% coverage, a real data gap, not a bug - see below).
+  PSIC/PSOC confirmed NOT required (§30f, manual marks both "NM"). Still genuinely unmapped:
+  Contract Type/Purpose of Credit for any `LoanProduct` prefix outside the 6 confirmed (`OFW`,
+  `CM-Car`, `OTH-COMP`, `REL-REG`, `SP-Easy`, `SP-Flash`, etc - several have an obvious-looking
+  match, e.g. `CM-Car` -> Vehicle Loan '17', `REL-REG` -> Mortgage/Real Estate '13', but not yet
+  confirmed so left blank), and Occupation Status for the 'Employed' (non-self-employed) case.
+- **Real, low mandatory-field coverage**: only 59/488 (12%) of individuals in a real test run have
+  a TIN or SSS number on file at all (`BorrowerGovernmentId`) - since the manual requires at least
+  one, most generated `ID` records are technically incomplete per CIC's own mandatory-field rule.
+  This is a genuine data-collection gap in this LMS, not something the report layer can fix -
+  worth raising with MIS/collections about capturing TIN/SSS more consistently at client intake.
 - NE (Negative Events) and BD (Business borrower) record types remain out of scope per the
   original user-confirmed scoping decision in §30 - revisit only if actually needed.
 - No UI yet for staff to trigger/download the report or to review `skippedMissingSubjectNo` before
