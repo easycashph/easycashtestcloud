@@ -66,14 +66,27 @@ export class CicCsdfReportWriter {
           16: person.nationality || 'PH',
           17: '1',
           18: person.civilStatusCode,
-          // "Identification N" (TIN/SSS/GSIS/Philhealth/UMID/business-registration) and "ID N"
-          // (government photo ID) are two different field groups in the CSDF layout even though
-          // both come from the same `IdentificationDocument.documentType` in this system -
-          // `identificationDomain` says which group this document actually belongs to.
-          53: person.identificationDomain === 'IDENTIFICATION' ? person.identificationTypeCode : '',
-          54: person.identificationDomain === 'IDENTIFICATION' ? person.identificationNumber : '',
-          59: person.identificationDomain === 'ID' ? person.identificationTypeCode : '',
-          60: person.identificationDomain === 'ID' ? person.identificationNumber : '',
+          // Address 1 (mandatory per the manual's own Individuals summary - Address Type,
+          // FullAddress, StreetNo, City, Province). "MI" = Individual Main Address
+          // (Residence/Permanent) - the only address type this system captures.
+          31: person.addressFullAddress ? 'MI' : '',
+          32: person.addressFullAddress,
+          33: person.addressStreetNo,
+          34: person.addressPostalCode,
+          36: person.addressBarangay,
+          37: person.addressCity,
+          38: person.addressProvince,
+          39: person.addressFullAddress ? 'PH' : '',
+          // "Identification N" (TIN=10/SSS=11, structured `BorrowerGovernmentId` fields - the
+          // manual's own mandatory "at least one of TIN/SSS/GSIS" rule) and "ID N" (government
+          // photo ID, non-mandatory, from free-text `IdentificationDocument.documentType`) are two
+          // different field groups in the CSDF layout.
+          53: person.tin ? '10' : '',
+          54: person.tin,
+          55: person.sss ? '11' : '',
+          56: person.sss,
+          59: person.idTypeCode,
+          60: person.idTypeCode ? person.idNumber : '',
           77: person.mobile ? '3' : '',
           78: person.mobile,
           79: person.email ? '7' : '',

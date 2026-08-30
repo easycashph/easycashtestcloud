@@ -322,16 +322,31 @@ export interface CicIndividualRow {
   /** CivilStatusDomain code (1=Single, 2=Married, 3=Divorced/Separated, 4=Widow) mapped from
    * `Borrower.civilStatus` free text. Blank if the stored text doesn't match a known variant. */
   civilStatusCode: string;
-  /** IdentificationTypeDomain (TIN/SSS/GSIS/Philhealth/UMID/business-registration codes) OR
-   * IDTypeDomain (Driver's License/Passport/Voter's ID/etc government photo IDs) code, mapped from
-   * the borrower's first `IdentificationDocument.documentType`. Blank if unrecognized. */
-  identificationTypeCode: string;
-  /** Which domain `identificationTypeCode` belongs to - CicCsdfReportWriter places it in the
-   * correct field group accordingly (they're two different field groups in the CSDF layout). */
-  identificationDomain: 'IDENTIFICATION' | 'ID' | '';
-  identificationNumber: string;
+  /** 2026-08-30 (mandatory-field fix): the manual's own "Mandatory fields for Individuals" summary
+   * (§3.1.1.1.2) requires at least one Identification code, TIN preferred, otherwise SSS/GSIS -
+   * sourced from `BorrowerGovernmentId.tinNumber`/`.sssNumber` (structured fields), NOT the
+   * free-text `IdentificationDocument.documentType` matching used for `idTypeCode`/`idNumber`
+   * below (that one is a DIFFERENT, non-mandatory field group - government photo IDs). */
+  tin: string;
+  sss: string;
+  /** IDTypeDomain code (Driver's License/Passport/Voter's ID/etc government photo IDs), mapped
+   * from the borrower's first `IdentificationDocument.documentType`. Non-mandatory - blank if
+   * unrecognized or absent. */
+  idTypeCode: string;
+  idNumber: string;
   /** OccupationStatusDomain code. Only 'Self Employed' maps confidently (-> 5) - `BorrowerIncomeDetail.employmentType`'s other stored value, plain 'Employed', doesn't distinguish permanent/temporary or private/government sector, so it's left blank rather than guessed. */
   occupationStatusCode: string;
+  /** 2026-08-30 (mandatory-field fix): the manual requires at least one address (Address Type,
+   * Full Address, StreetNo, City, Province) for every Individual record. Sourced from the
+   * borrower's first `Address` on file (polymorphic `ownerType`/`ownerId`, same convention as
+   * every other report's address handling in this module). Empty strings when the borrower has no
+   * address on file at all - never fabricated. */
+  addressFullAddress: string;
+  addressStreetNo: string;
+  addressPostalCode: string;
+  addressBarangay: string;
+  addressCity: string;
+  addressProvince: string;
 }
 
 export interface CicContractRow {

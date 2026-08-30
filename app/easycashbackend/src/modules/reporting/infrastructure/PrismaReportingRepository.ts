@@ -247,25 +247,12 @@ function cicOccupationStatusCode(employmentType: string | null): string {
  * `IdentificationDocument.documentType` free-text field in this system - classified into whichever
  * CIC domain it actually belongs to. Normalizes the real variants found in this system's data
  * (`Tin ID` vs `Tax Identification Number` vs `TIN`, etc). Unrecognized values are left blank. */
-function cicIdentificationType(documentType: string | null): { domain: 'IDENTIFICATION' | 'ID' | ''; code: string } {
+/** IDTypeDomain (§7.1.7, government photo IDs) - a DIFFERENT, non-mandatory field group from the
+ * TIN/SSS "Identification" fields (those come from `BorrowerGovernmentId`'s structured columns
+ * instead, see `CicIndividualRow.tin`/`.sss`'s own doc comment). Normalizes the real spelling
+ * variants found in this system's `IdentificationDocument.documentType` data. */
+function cicIdType(documentType: string | null): string {
   const v = (documentType ?? '').trim().toUpperCase();
-  const identification: Record<string, string> = {
-    TIN: '10',
-    'TIN ID': '10',
-    'TAX IDENTIFICATION NUMBER': '10',
-    SSS: '11',
-    'SSS CARD': '11',
-    'SOCIAL SECURITY SYSTEM': '11',
-    GSIS: '12',
-    PHILHEALTH: '13',
-    'PHILHEALTH CARD': '13',
-    'SENIOR CITIZEN': '14',
-    'SENIOR CITIZEN CARD': '14',
-    UMID: '15',
-    'UNIFIED MULTI-PURPOSE CARD': '15',
-  };
-  if (identification[v]) return { domain: 'IDENTIFICATION', code: identification[v] };
-
   const idType: Record<string, string> = {
     "DRIVER'S LICENSE": '10',
     'DRIVERS LICENSE': '10',
@@ -284,9 +271,7 @@ function cicIdentificationType(documentType: string | null): { domain: 'IDENTIFI
     "SEAMAN'S BOOK": '20',
     'NATIONAL ID': '32',
   };
-  if (idType[v]) return { domain: 'ID', code: idType[v] };
-
-  return { domain: '', code: '' };
+  return idType[v] ?? '';
 }
 
 /** InstallmentContractTypeDomain (CIC field-spec Excel's own "CI - Installment Contract" domain
@@ -1359,10 +1344,17 @@ export class PrismaReportingRepository implements IReportingRepository {
           email: borrower.email ?? '',
           employerName: '', // filled below once income detail is fetched
           civilStatusCode: cicCivilStatusCode(borrower.civilStatus),
-          identificationTypeCode: '', // filled below once identification docs are fetched
-          identificationDomain: '',
-          identificationNumber: '',
+          tin: '', // filled below once government IDs are fetched
+          sss: '',
+          idTypeCode: '', // filled below once identification docs are fetched
+          idNumber: '',
           occupationStatusCode: '', // filled below once income detail is fetched
+          addressFullAddress: '', // filled below once addresses are fetched
+          addressStreetNo: '',
+          addressPostalCode: '',
+          addressBarangay: '',
+          addressCity: '',
+          addressProvince: '',
         });
       }
 
@@ -1423,14 +1415,21 @@ export class PrismaReportingRepository implements IReportingRepository {
     // pattern elsewhere in this file.
     const borrowerIds = [...new Set(loans.map((l) => l.borrowerId))];
     if (borrowerIds.length > 0) {
-      const [incomeDetails, identificationDocs] = await Promise.all([
+      const [incomeDetails, identificationDocs, governmentIds, addressRows] = await Promise.all([
         prisma.borrowerIncomeDetail.findMany({ where: { borrowerId: { in: borrowerIds } } }),
         prisma.identificationDocument.findMany({ where: { borrowerId: { in: borrowerIds } } }),
+        prisma.borrowerGovernmentId.findMany({ where: { borrowerId: { in: borrowerIds } } }),
+        prisma.address.findMany({ where: { ownerType: 'BORROWER', ownerId: { in: borrowerIds } } }),
       ]);
       const incomeByBorrowerId = new Map(incomeDetails.map((d) => [d.borrowerId, d]));
+      const governmentIdByBorrowerId = new Map(governmentIds.map((g) => [g.borrowerId, g]));
       const firstIdDocByBorrowerId = new Map<string, (typeof identificationDocs)[number]>();
       for (const doc of identificationDocs) {
         if (!firstIdDocByBorrowerId.has(doc.borrowerId)) firstIdDocByBorrowerId.set(doc.borrowerId, doc);
+      }
+      const firstAddressByBorrowerId = new Map<string, (typeof addressRows)[number]>();
+      for (const address of addressRows) {
+        if (!firstAddressByBorrowerId.has(address.ownerId)) firstAddressByBorrowerId.set(address.ownerId, address);
       }
       for (const loan of loans) {
         if (!loan.borrower.cicProviderSubjectNo) continue;
@@ -1439,12 +1438,26 @@ export class PrismaReportingRepository implements IReportingRepository {
         const income = incomeByBorrowerId.get(loan.borrowerId);
         row.employerName = income?.employerName ?? '';
         row.occupationStatusCode = cicOccupationStatusCode(income?.employmentType ?? null);
+
+        const governmentId = governmentIdByBorrowerId.get(loan.borrowerId);
+        row.tin = governmentId?.tinNumber ?? '';
+        row.sss = governmentId?.sssNumber ?? '';
+
         const idDoc = firstIdDocByBorrowerId.get(loan.borrowerId);
         if (idDoc) {
-          const { domain, code } = cicIdentificationType(idDoc.documentType);
-          row.identificationDomain = domain;
-          row.identificationTypeCode = code;
-          row.identificationNumber = code ? idDoc.documentNumber : '';
+          const code = cicIdType(idDoc.documentType);
+          row.idTypeCode = code;
+          row.idNumber = code ? idDoc.documentNumber : '';
+        }
+
+        const address = firstAddressByBorrowerId.get(loan.borrowerId);
+        if (address) {
+          row.addressFullAddress = formatAddress(address);
+          row.addressStreetNo = address.street ?? address.houseUnitNumber ?? '';
+          row.addressPostalCode = address.zipCode ?? '';
+          row.addressBarangay = address.barangay ?? '';
+          row.addressCity = address.cityMunicipality ?? '';
+          row.addressProvince = address.province ?? '';
         }
       }
     }

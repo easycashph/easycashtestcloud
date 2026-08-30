@@ -15,10 +15,17 @@ const ID_COLUMNS: { header: string; width: number }[] = [
   { header: 'Email', width: 26 },
   { header: 'Employer Name', width: 26 },
   { header: 'Civil Status Code', width: 12 },
-  { header: 'Identification Domain', width: 16 },
-  { header: 'Identification Type Code', width: 14 },
-  { header: 'Identification Number', width: 20 },
+  { header: 'TIN', width: 16 },
+  { header: 'SSS', width: 16 },
+  { header: 'ID Type Code (photo ID)', width: 16 },
+  { header: 'ID Number (photo ID)', width: 20 },
   { header: 'Occupation Status Code', width: 14 },
+  { header: 'Address', width: 40 },
+  { header: 'Street No', width: 20 },
+  { header: 'Barangay', width: 18 },
+  { header: 'City', width: 18 },
+  { header: 'Province', width: 18 },
+  { header: 'Postal Code', width: 12 },
 ];
 
 const CI_COLUMNS: { header: string; width: number }[] = [
@@ -86,10 +93,17 @@ export class CicExcelReportWriter {
         person.email,
         person.employerName,
         person.civilStatusCode,
-        person.identificationDomain,
-        person.identificationTypeCode,
-        person.identificationNumber,
+        person.tin,
+        person.sss,
+        person.idTypeCode,
+        person.idNumber,
         person.occupationStatusCode,
+        person.addressFullAddress,
+        person.addressStreetNo,
+        person.addressBarangay,
+        person.addressCity,
+        person.addressProvince,
+        person.addressPostalCode,
       ]);
     }
     idSheet.getColumn(8).numFmt = 'mm/dd/yyyy';
