@@ -1955,6 +1955,33 @@ clients, correctly not found in any historical spreadsheet - same treatment as �
 
 **Final state: August 2026 CIC report - 709 contracts, 699 individuals, 0 skipped.**
 
+## 30n. Follow-up (out of CIC scope): rolled out a high-end animated loading state to every report page
+
+2026-08-30, same day, unrelated to CIC. User liked the CIC Monthly Report page's animated
+multi-stage loading progress bar (built earlier this session, mocked up first via the visualize
+tool before implementing) and asked for the same treatment across the other report pages,
+prioritizing Transaction Report first.
+
+Built a new shared `src/components/ReportLoadingProgress.tsx` (multi-stage: spinner -> checkmark
+per stage, plus a progress bar) and rolled it out to 9 more single-request reports: Accounts Past
+Due, Collection History, Collections, Daily Collection, Expected Collection, First Amortization,
+Fully Paid Accounts, Loan Releases, Loan Origination, Portal Accounts - each with stage labels
+naming what that specific report's query actually does (not a generic placeholder). Refactored the
+CIC Monthly Report page itself to use this shared component too (was a near-identical inline copy).
+
+Transaction Report got a DIFFERENT variant, `TransactionLoadingProgress` (kept local to that page,
+mocked up separately) - it genuinely fetches multiple pages via `fetchAllPages`, so a live-counting
+"N transactions loaded" display with a sliding (not percentage) progress bar is honest, real
+progress rather than simulated stages. `fetchAllPages` (`src/lib/apiClient.ts`) gained an optional
+`onProgress(loadedCount, pageNumber)` callback, additive - none of its dozen other call sites needed
+changes.
+
+Two report pages (Aging, Ending Balance) were deliberately left unchanged - both are pure
+"as-of-today snapshot, download-only" pages with no on-screen table/query at all, so there's no
+loading state analogous to the others to redesign.
+
+`npx tsc --noEmit` clean, `lmsfrontend` Docker rebuilt and reverified healthy.
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
@@ -1999,6 +2026,33 @@ clients, correctly not found in any historical spreadsheet - same treatment as �
   an actual live monthly submission.
 
 ## Current state
+
+**2026-08-30 update for Laptop Nomer / Office Server PC**: this same "day" in the log also grew a
+brand-new, substantial feature built entirely on this Mac - **§30 through §30n, the CIC (Credit
+Information Corporation) monthly report automation**. Short version: a new backend report
+(`GetCicMonthlyReportUseCase`, CSDF + Excel writers, `/reports/cic-monthly*` endpoints) plus a new
+LMS frontend page (`/reports/cic-monthly`), gated behind a new `report.cic_monthly.view` permission
+(granted to no role but MIS by default - MIS grants it explicitly per role/user via Roles &
+Permissions). Getting the August 2026 report to zero exclusions required several **database
+backfills that only exist on this Mac's local database right now** - `Borrower.cicProviderSubjectNo`
+/ `LoanAccount.cicProviderContractNo` permanent identifiers (new Prisma columns + two new backing
+sequences, migrations `20260830035726_add_cic_provider_subject_no` and
+`20260830043416_add_cic_provider_contract_no`), plus a real ledger backfill
+(`backfill-missing-disbursement-transactions.ts`, 23 loans given a missing `DISBURSEMENT`
+transaction). **Any other machine syncing this code must run the CIC backfill scripts listed in
+§30's "Known follow-up work" section below** (`backfill-cic-provider-subject-no.ts`,
+`backfill-cic-provider-contract-no.ts`, `backfill-cic-provider-contract-no-fallback.ts`,
+`backfill-cic-new-registrations.ts`) against ITS OWN database before trusting a CIC report
+generated there - these are one-time, idempotent, safe to re-run, but not yet wired into any of the
+"Sync After Pull"/"Run Full Legacy Migration" scripts (worth doing as a follow-up, not done this
+session). §30n separately rolled out the CIC page's animated loading-progress design to every other
+report page - that part is pure frontend code, no backfill needed, works identically once synced.
+
+Below this point, "Current state"/"Known follow-up work" describe the state as of the END of §29g
+(before the CIC work) - see §30's own series of subsections above for the CIC-specific state
+instead of looking for it down here.
+
+---
 
 This log now spans a very long single day (2026-08-21/22) across two machines - §1-8 were the
 original repo-sync + SOA penalty breakdown work on this Mac; §9-29g (added later the same "day",
