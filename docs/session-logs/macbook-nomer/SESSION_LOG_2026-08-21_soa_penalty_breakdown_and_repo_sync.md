@@ -1919,6 +1919,42 @@ entry at all suggests either a genuinely pending disbursement (money not release
 not CIC-reportable) or a real gap where the actual disbursement was never recorded in this LMS -
 worth confirming with whoever processes releases, not something this report can resolve on its own.
 
+## 30m. Follow-up: user confirmed all 20+ missing-disbursement loans were genuinely disbursed - backfilled the ledger, closed the loop
+
+2026-08-30, same day. User asked for the full list of ACTIVE/ACTIVE_IN_ARREARS loans lacking ANY
+`DISBURSEMENT` transaction (not just the 6 no-activity ones from §30l) - found 20, spanning
+2018-2026. User confirmed directly: every one of these was genuinely disbursed in real life, and
+asked whether they could be included now.
+
+Before writing anything, dispatched two parallel Explore agents to find the root cause and check
+whether staff have any way to notice this gap in the UI:
+- **Root cause**: `ActivateLoanUseCase.ts` (the sole activation/disbursement code path - the
+  frontend's "Disburse Loan" button IS the activate action, not two separate steps) creates the
+  `DISBURSEMENT` transaction atomically inside the same `prisma.$transaction` as the status change -
+  structurally can't produce a partial state. All 6 recent (August 2026) loans in the missing set
+  turned out to carry a real `legacyId` (confirmed via direct DB query) - they're SDevTech-migrated
+  records, not created through the live app's own flow, and fall into `migrate-legacy-data.ts`'s
+  own documented gap: only ~21% of legacy loans have a `DISBURSEMENT` transaction in the source
+  dump. Not a live regression - a known, pre-existing legacy-migration data gap.
+- **UI visibility**: no badge distinguishes "activated with a confirmed disbursement record" from
+  "activated but missing one" - `LoanStatusBadge` shows plain "Active" either way. The only way
+  staff could notice is opening the Payment History tab and seeing no DISBURSEMENT row (or "No
+  transactions recorded yet") - nothing surfaces this proactively.
+
+Built `backfill-missing-disbursement-transactions.ts`: creates the missing `DISBURSEMENT`
+`LoanTransaction` for every ACTIVE/ACTIVE_IN_ARREARS loan with `activatedAt` set but zero
+transactions, using `activatedAt` as the closest known real `entryDate`, `postedByUserId` left null
+with a comment documenting the backfill (not a live staff action). `--apply` result: **23 created**
+(20 found earlier + 3 more that surfaced once the CIC report's own scope widened - see below).
+
+This reopened the CIC report's scope for August 2026: the 6 newly-disbursed-per-record loans now
+correctly qualify as "changed this month" (real `DISBURSEMENT` transaction dated in August), which
+in turn surfaced 5 of them as newly excluded for missing a borrower/loan CIC identifier (brand new
+clients, correctly not found in any historical spreadsheet - same treatment as §30j/§30k). Ran
+`backfill-cic-new-registrations.ts` again for August 2026 to resolve those 5.
+
+**Final state: August 2026 CIC report - 709 contracts, 699 individuals, 0 skipped.**
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
