@@ -283,6 +283,7 @@ function cicContractTypeCode(productCode: string): string {
   if (v.startsWith('BL-')) return '22'; // Business Loan
   if (v.startsWith('PL-') || v.startsWith('PFL-') || v.startsWith('SML')) return '12'; // Personal Loan
   if (v.startsWith('CL-')) return '12'; // Personal Loan
+  if (v.startsWith('SP-')) return '20'; // Salary Loan - user-confirmed 2026-08-30 (SP-Easy/SP-Flash)
   return '';
 }
 

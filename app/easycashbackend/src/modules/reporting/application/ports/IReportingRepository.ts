@@ -356,9 +356,9 @@ export interface CicContractRow {
   providerContractNo: string;
   loanCode: string;
   /** InstallmentContractTypeDomain code, derived from the loan's product code prefix
-   * (user-confirmed 2026-08-30): SL- -> '20' (Salary Loan), BL- -> '22' (Business Loan),
+   * (user-confirmed 2026-08-30): SL-, SP- -> '20' (Salary Loan), BL- -> '22' (Business Loan),
    * PL-, PFL-, SML -> '12' (Personal Loan), CL- -> '12' (Personal Loan). Blank for any other
-   * product prefix (not yet confirmed). */
+   * product prefix (OFW, CM-Car, OTH-COMP, REL-REG, etc - not yet confirmed). */
   contractTypeCode: string;
   /** CreditPurposeDomain code. '32' (Loans to Individual for other purposes) when
    * `contractTypeCode` is '12' or '20' - the only code that fits an "Individual" purpose
