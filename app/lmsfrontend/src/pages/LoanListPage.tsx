@@ -12,6 +12,7 @@ import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { LoanStatusBadge } from '@/components/StatusBadge';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { sortRows, useSortState } from '@/lib/useSortableTable';
@@ -397,8 +398,8 @@ export function LoanListPage() {
               )}
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                    Loading loan accounts…
+                  <TableCell colSpan={7} className="py-8">
+                    <ReportLoadingProgress stages={['Fetching loan accounts', 'Resolving client and product details']} />
                   </TableCell>
                 </TableRow>
               )}

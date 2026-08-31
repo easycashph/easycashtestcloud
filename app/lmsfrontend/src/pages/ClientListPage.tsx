@@ -12,6 +12,7 @@ import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Badge } from '@/components/ui/badge';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { useLogPageView } from '@/lib/activityLog';
 import { useRole } from '@/lib/roleContext';
 import { sortRows, useSortState } from '@/lib/useSortableTable';
@@ -262,8 +263,8 @@ export function ClientListPage() {
               )}
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                    Loading clients…
+                  <TableCell colSpan={5} className="py-8">
+                    <ReportLoadingProgress stages={['Fetching client profiles', 'Resolving loan accounts']} />
                   </TableCell>
                 </TableRow>
               )}

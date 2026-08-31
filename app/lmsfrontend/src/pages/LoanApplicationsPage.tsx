@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { PaginationControls } from '@/components/PaginationControls';
 import { RecentActivityPanel } from '@/components/RecentActivityPanel';
+import { ReportLoadingProgress } from '@/components/ReportLoadingProgress';
 import { RoleAbbr } from '@/components/RoleAbbr';
 import { ApplicantAvatar } from '@/components/ApplicantAvatar';
 import { useLogPageView } from '@/lib/activityLog';
@@ -364,8 +365,12 @@ export function LoanApplicationsPage() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                    {applicationsQuery.isLoading ? 'Loading applications…' : 'No applications match your search/filter.'}
+                  <TableCell colSpan={6} className="py-8">
+                    {applicationsQuery.isLoading ? (
+                      <ReportLoadingProgress stages={['Fetching applications', 'Resolving statuses']} />
+                    ) : (
+                      <p className="text-center text-sm text-muted-foreground">No applications match your search/filter.</p>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
