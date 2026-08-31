@@ -19,17 +19,29 @@
  *   npx tsx scripts/backfill-cic-provider-subject-no.ts --apply      # writes matches
  */
 import 'dotenv/config';
+import fs from 'node:fs';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { prisma } from '../src/shared/database/prismaClient';
 
 const APPLY = process.argv.includes('--apply');
 
+/** 2026-08-31 (found via cross-machine sync): the local `legacy/CIC` reference folder was never
+ * committed to git (each machine has its own local copy), and different machines ended up naming
+ * it slightly differently - some with a trailing space ("CIC "), some without ("CIC"). Trying both
+ * makes this script work regardless of which convention the machine it's running on happens to
+ * use, instead of hardcoding one and silently failing to find the source file on the other. */
+function resolveLegacyCicFile(relativePathAfterCic: string): string {
+  for (const folderName of ['CIC', 'CIC ']) {
+    const candidate = path.resolve(__dirname, `../../../legacy/${folderName}`, relativePathAfterCic);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Neither exists - return the no-space variant so the resulting error message is informative.
+  return path.resolve(__dirname, '../../../legacy/CIC', relativePathAfterCic);
+}
+
 // July's Client Master List is the most recently maintained copy on file.
-const SOURCE_FILE = path.resolve(
-  __dirname,
-  '../../../legacy/CIC/07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx',
-);
+const SOURCE_FILE = resolveLegacyCicFile('07 2026 July/[July 2026] Fields in Google Spreadsheet.xlsx');
 
 interface MasterListRow {
   clientId: string;
