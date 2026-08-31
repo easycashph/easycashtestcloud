@@ -3239,3 +3239,91 @@ flagged to the user as an open item if a visual glitch turns up on first real us
 - Changelog redesign live on Office Server PC (commit `9595013`).
 - Worth a quick visual check by someone with real login access, since this session couldn't
   click through the actual rendered About page.
+
+## §68 — 2026-08-30: Pulled a large concurrent CIC reporting update, applied its migrations, rebuilt
+
+User asked to `git pull`. Pulled a substantial update authored elsewhere while this session was
+working (42 files, +2,540/-27): a brand-new **CIC (Credit Information Corporation) Monthly Report**
+module - `GetCicMonthlyReportUseCase`, `CicCsdfReportWriter`/`CicExcelReportWriter`,
+`CicMonthlyReportPage.tsx`, wired into `reportingRouter`/`ReportsHubPage` - plus two Prisma
+migrations adding permanent `cicProviderSubjectNo` (borrowers) / `cicProviderContractNo` (loan
+accounts) identifiers with backing auto-increment sequences, three CIC backfill scripts, a new
+shared `ReportLoadingProgress` component reused across most report pages, and a
+`backfill-missing-disbursement-transactions.ts` script.
+
+**Applied the two migrations** (`npx prisma migrate deploy` - both purely additive: nullable
+column + unique index + a fresh sequence each, no risk to existing data) and regenerated the
+Prisma Client, which was needed before the backend would type-check (`PrismaReportingRepository.ts`
+referenced the new fields before the client knew about them). Both frontend and backend then
+type-checked clean.
+
+**Rebuilt both containers** (`docker compose up -d --build easycashbackend lmsfrontend`) - first
+attempt failed with a transient Docker Desktop error ("frontend grpc server closed unexpectedly",
+already seen once earlier this session, unrelated to the code), succeeded on retry. Regenerated
+`build-info.json` before each attempt per the now-standard pre-rebuild step (§66); verified
+`/health` and confirmed the running commit (`503defb`) matched on both `/api/v1/build-info` and the
+frontend's `/build-info.json`.
+
+### Current state / follow-ups
+
+- CIC Monthly Report feature (authored elsewhere) is now live on Office Server PC with its
+  migrations applied and both containers rebuilt on the merged commit.
+- This session did not author or review the CIC feature's own logic/correctness - only handled
+  landing it safely on this machine (migrate, regenerate, type-check, rebuild, verify). Worth a
+  substantive review of that module on its own if it hasn't had one yet.
+- Macbook Nomer / Nomer Laptop will need the same `git pull` -> `prisma migrate deploy` -> `prisma
+  generate` -> rebuild sequence whenever someone's next on those machines, on top of the still-
+  outstanding items from §64/§66/§67.
+
+## §69 — 2026-08-30: CIC Monthly Report showing 0 Individuals/0 Contracts - permission gate, then a real data gap
+
+User asked why the CIC monthly report didn't show up at all first. Root cause: `report.cic_monthly.view`
+is a brand-new permission code from §68's pull, deliberately NOT auto-granted to any role except
+MIS (regulatory submission data - see `seed.ts`'s own doc comment) - and this machine had never run
+`prisma db seed` after the pull, so the permission row didn't exist in the DB at all yet. Ran
+`npx tsx prisma/seed.ts` (idempotent, upsert-based - does not touch any existing role's customized
+grants, only creates brand-new permission rows and auto-grants brand-new ones to MIS). Verified:
+MIS role now has `report.cic_monthly.view`; user needed to refresh/re-login to pick up the new
+permission list from `GET /auth/me`.
+
+Once visible, the report showed **0 Individuals and 0 Contracts**. Traced to
+`PrismaReportingRepository.ts` skipping any borrower/loan with a null `cicProviderSubjectNo`/
+`cicProviderContractNo` (lines ~1374/1378) - both brand-new nullable columns from §68's migrations,
+populated only by four new backfill scripts that hadn't been run on this machine yet.
+
+**Ran all four in order**, dry run then `--apply` for each:
+1. `backfill-cic-provider-subject-no.ts` - matches borrowers against the company's "Client Master
+   List" Excel by mobile/email/name+birthdate. **3,834 matched and written** (3,796 distinct
+   borrowers now have a value), 59 ambiguous (left alone), 732 unmatched (probably pre-LMS/no
+   active loan, left alone).
+2. `backfill-cic-provider-contract-no.ts` - matches loans against the same workbook's "Loan
+   Accounts Details"/CSV-export sheets, only among a borrower's own loans once (1) has run.
+   **735 matched and written**, 24 ambiguous, 332 unmatched.
+3. `backfill-cic-provider-contract-no-fallback.ts` - defaults any still-missing contract no to the
+   loan's own `loanCode` (validated pattern, no source file needed). **1,070 assigned**; 1 real
+   collision (`SL-LAZ_00004` - another loan already used that code) left for manual review.
+4. `backfill-cic-new-registrations.ts --year=2026 --month=8` - auto-generates a fresh `ELCS`/`ELCC`
+   identifier for borrowers/loans genuinely new to CIC (no prior submission history at all).
+   **59 assigned**.
+
+**Found and fixed a real bug while running these**: both spreadsheet-matching scripts (1 and 2)
+referenced `legacy/CIC /07 2026 July/...` (a stray space after "CIC") but the real folder - already
+established by the existing June 2026 folder alongside it - has no space
+(`legacy/CIC/07 2026 July/`). This silently made both scripts fail to find their source file on
+every machine except whichever one they were originally written/tested on. Fixed both paths;
+committed and pushed (`8145b1d`) - the source Excel files themselves stay untracked, as intended
+(`legacy/CIC/` is `.gitignore`d, same PII-sensitivity class as `legacy/mongodb/` etc.; verified they
+never got staged before committing).
+
+Final live count: **3,796 borrowers** and **1,805 loan accounts** now have their permanent CIC
+identifiers.
+
+### Current state / follow-ups
+
+- CIC Monthly Report is now fully populated and permission-gated correctly on Office Server PC.
+- One real collision (`SL-LAZ_00004`) and the ambiguous/unmatched rows from steps 1-2 remain
+  unresolved - low-volume, flagged by the scripts themselves for manual follow-up, not blocking.
+- Macbook Nomer / Nomer Laptop will need the exact same sequence once they've pulled: run
+  `prisma db seed`, then all four backfill scripts (their own copy of the source Excel files must
+  exist locally first, same as this machine needed today) - on top of every other still-outstanding
+  cross-machine item from §64/§66/§67/§68.
