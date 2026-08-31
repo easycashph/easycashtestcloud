@@ -1982,6 +1982,32 @@ loading state analogous to the others to redesign.
 
 `npx tsc --noEmit` clean, `lmsfrontend` Docker rebuilt and reverified healthy.
 
+## 30o. Follow-up: Office Server PC synced and cross-verified against this Mac - Laptop Nomer still pending
+
+2026-08-30, same day. User copied `legacy/CIC ` to Office Server PC via TeamViewer file transfer,
+pulled the code, rebuilt both Docker containers, and ran the 5 CIC backfill scripts there (a
+separate Claude Code session running directly on Office Server PC did this work - not this Mac).
+Office Server PC came up with 4 remaining exclusions for July 2026: the same `SL-LAZ_00004`
+(Charlyn Nastor) contract-number collision found in §30k here (a one-off manual SQL fix, not
+covered by any script, since it requires per-case investigation - given the same fix instructions
+used here), plus 3 genuinely-new borrowers (RANDY BOMBIO DELA CRUZ, BRIAN TUANO DAANTOS, JONATHAN
+TUAZON VALENZUELA) resolved via `backfill-cic-new-registrations.ts --year=2026 --month=7 --apply`.
+User confirmed Office Server PC then read 0 exclusions.
+
+Cross-checked this Mac's own July 2026 report against Office Server PC's result out of caution -
+initially differed (703/691/3 here vs 706/694/0 there) by the exact same 3 borrowers, which makes
+sense (same underlying legacy data, so the same genuinely-new-to-CIC people exist on both
+databases). Ran `backfill-cic-new-registrations.ts --year=2026 --month=7 --apply` here too - now
+both machines read identically: **706 contracts, 694 individuals, 0 excluded for July 2026.**
+
+**Laptop Nomer has not been touched at all yet** - user doesn't have it with them this session,
+deferred to "tomorrow." Next session there needs the full sequence: copy `legacy/CIC ` folder over,
+git pull, `npx prisma migrate deploy`, rebuild both Docker containers, run all 5 backfill scripts
+(subject-no, contract-no, contract-no fallback, missing-disbursement, new-registrations), then
+manually resolve the `SL-LAZ_00004`/Charlyn-Nastor-style collision(s) if any turn up (check the
+report's Excluded list for a `MISSING_CONTRACT_NO` reason specifically - that's the signal a
+collision, not a genuine gap, is present).
+
 ## Known follow-up work (CIC report, next session)
 
 - **"EASYCASH ACCOUNT" stray borrower** (`91e99a8c-90f9-43fa-9453-9de219457665`, found in §30h) -
