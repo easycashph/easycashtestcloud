@@ -3327,3 +3327,53 @@ identifiers.
   `prisma db seed`, then all four backfill scripts (their own copy of the source Excel files must
   exist locally first, same as this machine needed today) - on top of every other still-outstanding
   cross-machine item from §64/§66/§67/§68.
+
+## §70 — 2026-08-30: Resolved the 4 real July 2026 CIC exclusions
+
+Followed up on §69's remaining gaps by re-running each backfill script's `--apply` directly
+(confirmed idempotent - 0 new writes each time, matching the counts already reached) plus a new
+`backfill-missing-disbursement-transactions.ts --apply` pulled in the same §68 merge: found 17
+ACTIVE/ACTIVE_IN_ARREARS legacy loans with `activatedAt` set but zero transactions on file (more
+than the 6 the script's own doc comment described from wherever it was authored - a different
+dataset on this machine), created their missing DISBURSEMENT transaction using `activatedAt` as the
+entry date, exactly as the script documents doing for this already-user-confirmed class of gap.
+
+**Then pinned down the exact 4 records still excluded from the real July 2026 CIC file** (not the
+global "no ID at all" count from §69 - this month's actual reporting scope) via a one-off
+`tmp-*.ts` script calling `PrismaReportingRepository.getCicMonthlyReportData({year:2026,month:7})`
+directly, run then deleted same turn per this repo's convention:
+
+- `SL-LAZ_00004` (Charlyn Torres Nastor) - `MISSING_CONTRACT_NO`, the exact collision flagged in §69.
+- `SML-MAX_K2S0M` (Randy Bombio Dela Cruz), `SML-REG_00343` (Brian Tuano Daantos), `SML-REG_00380`
+  (Jonathan Tuazon Valenzuela) - all `MISSING_SUBJECT_NO`.
+
+**Charlyn's collision**: queried who currently holds `cicProviderContractNo = 'SL-LAZ_00004'` -
+confirmed it belongs to an unrelated, already-`CLOSED` legacy loan (`SL-LAZ_00004-LEGACY2`,
+borrower "Teodocio III") sharing the same base loan code by coincidence, not Charlyn. User provided
+the exact fix - assigned Charlyn's loan a fresh `ELCC`-prefixed permanent ID from the same sequence
+the schema already uses for genuine new registrations:
+```sql
+UPDATE loan_accounts
+SET "cicProviderContractNo" = 'ELCC' || lpad(nextval('cic_provider_contract_no_seq')::text, 9, '0')
+WHERE "loanCode"='SL-LAZ_00004' AND "cicProviderContractNo" IS NULL;
+```
+Result: `SL-LAZ_00004` -> `ELCC000000001`.
+
+**The other three**: user judged them genuinely new to CIC (same category as the 59 already
+resolved in §69's step 4, just for July's reporting window instead of August's) rather than a
+missed spreadsheet match - ran `backfill-cic-new-registrations.ts --year=2026 --month=7 --apply`,
+which assigned all 3 a fresh permanent identifier.
+
+Re-ran the July 2026 scoped check afterward (informally, via the same throwaway script pattern) -
+0 exclusions remain for that reporting month.
+
+### Current state / follow-ups
+
+- July 2026's CIC Monthly Report file is now clean - every individual/contract that should appear,
+  does. August 2026 was already clean as of §69.
+- No code changes this section - purely live-data fixes (backfill re-runs, one manual SQL UPDATE,
+  a throwaway diagnostic script created and deleted same turn). Nothing to commit/push for this
+  section beyond the session log itself.
+- The broader §69 gaps (global unmatched/ambiguous borrowers and loans, not scoped to any one
+  reporting month) remain open for whenever MIS wants to review them - this section only closed the
+  specific 4 blocking July's real submission file.
