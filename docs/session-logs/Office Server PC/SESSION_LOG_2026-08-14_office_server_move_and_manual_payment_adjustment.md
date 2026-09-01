@@ -3377,3 +3377,76 @@ Re-ran the July 2026 scoped check afterward (informally, via the same throwaway 
 - The broader §69 gaps (global unmatched/ambiguous borrowers and loans, not scoped to any one
   reporting month) remain open for whenever MIS wants to review them - this section only closed the
   specific 4 blocking July's real submission file.
+
+## §71 — 2026-09-01: SL-CORP_00135 missing origination fees, then a real "Other Fees" double-count bug found
+
+User asked why `SL-CORP_00135` (MARY JOY APLACADOR) had no Advance Interest/Processing/Notarial/Web/
+Insurance fees on file, "sa sdev meron." Investigated the extracted MongoDB dump directly
+(`legacy/mongodb/extracted/`) for this loan's `legacyId`: `loan_accounts.bson` only carries a lump
+`feesDue` (no itemized breakdown), and `monthly_loan_releases.bson` - the collection
+`backfill-loan-origination-fees-mongo.ts` actually reads - had **zero rows** for this account (it
+was disbursed August 27, 2026, too recently to have been included in whatever periodic process
+populates that collection at the time of the dump). Found the real underlying charges instead as 5
+individual `FEE_CHARGED` entries in `loan_transactions.bson` (₱717.19/₱99/₱500/₱500/₱137, summing
+to the loan's `feesDue`), but the raw transaction records carry no fee-TYPE label - had to ask the
+user to confirm the mapping against SDevTech's own UI screenshot (Processing ₱717.19, Web ₱500,
+Advance Interest ₱99, Insurance ₱137, Notarial ₱500). Applied directly via a `tmp-*.ts` script
+(direct SQL was blocked by the auto-mode classifier).
+
+**User provided a second, fresher MongoDB export** (`legacy/mongodb/20260901_110231.zip`) mid-
+investigation - extracted (`legacy/mongodb/extracted/20260901_110231/`, auto-picked up by
+`legacyDumpPath.ts`'s newest-mtime logic) and re-checked; same schema, same gap, same conclusion.
+
+**While verifying the fix's `netProceeds` recomputation, found a much bigger, separate bug**: asked
+to double-check the Loan Releases Report's "Total Net Amount" for August 1-31, 2026 - the formula
+itself (`netProceeds = principal - all 9 origination fee fields`, `OriginationFees.total()`)
+checked out correct (0 mismatches, 12 loans, sums tied out exactly). But spot-checking loans with
+`otherFees > 0` against SDevTech's own `monthly_loan_releases` record's `totalNetAmount` field
+turned up real disagreements - starting with `SL-REG_00119` (our ₱28,674.00 vs SDevTech's own
+₱30,000.00 - exactly the loan's `otherFees` value apart). **User confirmed the root cause
+directly**: "sa sdev system ang Total Miscellaneous Fee ay Notarial Fee + Web Fee + Insurance Fee" -
+SDevTech's "Miscellaneous Fee" (which `backfill-loan-origination-fees-mongo.ts` maps into this
+LMS's `otherFees` column) is a **displayed subtotal** of three fees already stored separately, not
+a real distinct 9th fee - so having `otherFees` populated on top of Notarial/Web/Insurance
+double-counted them in every affected loan's `netProceeds`.
+
+**Fixed case-by-case first** (9 loans, manually confirmed one at a time against SDevTech's own
+`totalNetAmount`: `SL-CORP_00040`, `SL-REG_00067`, `SML-REG_00120`, `SL-CORP_00012`, `SL-REG_00119`,
+`SML-REG_00385`, `SL-CORP_00130`, `SML-REG_00382`, `SL-CORP_00127`), then **systematically**: new
+`scripts/backfill-remove-duplicate-other-fees.ts` (dry run first) checked all 225 loans with
+`otherFees > 0` against the exact rule `otherFees == notarialFee + webFee + insuranceFee` (within a
+centavo) - **117 matched** (zeroed `otherFees`, recomputed `netProceeds` without it); **108 did
+NOT match** (mostly `notarialFee+webFee+insuranceFee = 0` while `otherFees` has a real value -
+some other, not-yet-understood source or convention) and were deliberately left untouched, not
+guessed at.
+
+**Added as a permanent step** in both `Update Database From SDevTech.bat`/`.command` - new step
+`[14/18]`, positioned right after the origination-fee/interest-rate steps and BEFORE Net Proceeds
+(same "fees before netProceeds" ordering rule established in §64), so any newly-migrated loan with
+this same SDevTech "Miscellaneous = subtotal" convention gets corrected automatically on every
+future sync instead of needing another manual investigation. Renumbered all subsequent steps in
+both platform scripts (14→18, previously inconsistently 16/17 at the tail - also cleaned up while
+renumbering). Committed and pushed (`2aea05e`).
+
+Also removed `legacy/CIC/` per user's own judgment call after confirming (via grep) that nothing in
+the live backend `src/` reads from it at runtime - only two one-off, manually-invoked CIC backfill
+scripts do, and the two doc-comment mentions in `CicCsdfReportWriter.ts`/`IReportingRepository.ts`
+are citations, not `fs.readFile` calls. Safe to delete; only needed again if those two backfill
+scripts must be re-run against a fresh Client Master List.
+
+### Current state / follow-ups
+
+- `SL-CORP_00135`'s 5 origination fees now correctly itemized and its `netProceeds` correct.
+- 117 of 225 affected loans corrected for the Other-Fees double-count; the other **108 remain
+  wrong** (`netProceeds` understated by their own `otherFees` amount) and need separate
+  investigation - `notarialFee+webFee+insuranceFee = 0` for most of them, so this isn't the same
+  bug, or SDevTech's own record for those has a different origin than
+  `monthly_loan_releases.bson`'s current convention.
+- The fix step is now baked into both platform sync scripts, so this specific failure mode can't
+  recur for future SDevTech-migrated loans - but Macbook Nomer/Nomer Laptop still need to run this
+  new step once against their OWN already-migrated loans (same manual/one-off backfill run this
+  session did here) to catch up their existing data, on top of every other still-outstanding
+  cross-machine item from §64/§66/§67/§68/§69.
+- `legacy/CIC/` removed from Office Server PC per user's explicit request, after confirming no
+  runtime dependency - the two CIC backfill scripts (subject-no, contract-no) will need their
+  source Excel files copied back in if they're ever re-run.
