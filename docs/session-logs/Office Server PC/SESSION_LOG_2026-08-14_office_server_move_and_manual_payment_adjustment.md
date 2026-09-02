@@ -3485,3 +3485,51 @@ verified. Committed and pushed (`e328f43`).
 - CIC report's Individuals section now correctly limited to genuinely-new clients only.
 - Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild - no separate
   data backfill needed for this one (it's pure report-query logic, not stored data).
+- Superseded same-day by §73 below - this section's fix (`loanCycle <= 1` guard) still over-counted;
+  read §73 for the actual final logic in production.
+
+## §73 — 2026-09-01: CIC Individuals fix corrected again - scoped to the real Loan Releases Report
+
+§72's fix (comparing loan dates + a `Borrower.loanCycle <= 1` guard) still over-counted badly: August
+2026 showed 623 Individuals, still 538 after adding the loanCycle guard - both implausibly high
+against 709 Contracts. User gave the real, precise criterion instead: cross-check against August
+2026's actual Loan Releases Report (11 loans released that month, `origins: ['ORIGINATION']`) and
+count how many of those 11 are genuinely new clients - **that** count is what belongs in the CIC
+report's Individuals section, nothing broader. Explicitly clarified: this scoping applies ONLY to
+Individuals (ID) - Contracts (CI) keep their own existing `changedThisMonth` scope untouched.
+
+Verified by hand against the 11 released loans: only **6** were genuinely new (Charilou Cortez, Mae
+Ann Aplacador, Yna Mae Repia, Mary Joy Aplacador, Danica Alayon, Noemi Alconga) - the other 5 were
+renewals, including **2 that the Loan Releases Report's own "New"/"Renew" label got wrong**
+(Nelson Malinao: 8 real loan accounts; Jennelyn Custodio: 3 - both showing `loanCycle = 0`, so the
+report's `newOrRenew: loanCycle > 1 ? 'Renew' : 'New'` field wrongly read "New" for both - a
+pre-existing, separate bug in that report, not touched here, just discovered along the way).
+
+**Rewrote the check completely** - no live counter, no cross-loan date comparisons (which also
+turned out to be unreliable: found several old migrated loans, e.g. Jimmy Godoy's and Laertes
+Teves', carrying an artificial ~Dec 2024 `DISBURSEMENT` transaction date instead of their true
+2012-2018 activation date, presumably a stale prior backfill/migration artifact - a separate
+data-quality issue flagged for later, not fixed here). New rule, matching the user's exact
+criterion: include an Individual only for a loan that (a) was actually released - disbursed - THIS
+reporting month (not merely "changed" via a payment or staying overdue on an old loan) AND (b) is
+that borrower's ONLY `LoanAccount` row in the whole database, full stop.
+
+Verified live: August 2026 -> exactly **6 Individuals**, matching the user's own manual count
+precisely; Contracts unchanged at 709. Type-checked clean, backend rebuilt, `/health` verified.
+Committed and pushed (`ad49e74`).
+
+### Current state / follow-ups
+
+- CIC report's Individuals section is now correct end-to-end for August 2026 - should generalize
+  correctly to any month, since the rule (released this month + only loan ever) doesn't depend on
+  which month is being queried.
+- Two separate, NOT-yet-fixed issues surfaced along the way, both flagged for later, neither
+  blocking today's fix:
+  1. Loan Releases Report's "New"/"Renew" label can be wrong for a `loanCycle = 0` migrated client
+     who actually has multiple real loan accounts (Nelson Malinao, Jennelyn Custodio confirmed).
+  2. A handful of old migrated loans carry an artificial ~Dec 2024 `DISBURSEMENT` transaction date
+     instead of their true historical activation date (Jimmy Godoy, Laertes Teves, Joel Miralles,
+     Samuel Campos confirmed) - affects any report reading `resolveContractStartDate`/disbursement
+     date for these specific loans, not just CIC.
+- Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild - no separate
+  data backfill needed (pure report-query logic).
