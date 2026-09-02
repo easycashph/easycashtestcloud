@@ -3570,3 +3570,61 @@ Type-checked clean, backend rebuilt, `/health` verified. Committed and pushed (`
   manual - safe to trust for a real submission (modulo the two smaller, already-logged follow-ups
   from §73 above).
 - Macbook Nomer / Nomer Laptop will pick up the filename fix on their next `git pull` + rebuild.
+- Superseded same-day by §76 below - §74's backend fix alone wasn't enough, the real filename never
+  reached the browser. Read §76 for the actual root cause and fix.
+
+## §75 — 2026-09-02: Ran "Backfill SDevTech Attachments.bat" - 188 new files pulled in
+
+User asked to check for new attachments on SDevTech not yet mirrored here. Ran the script's
+underlying commands directly (dry run first, since the `.bat`'s own Y/N prompt doesn't work through
+a non-interactive shell): `backfill-legacy-attachments.ts` then `--apply` after user confirmed.
+
+**Result**: 13 loans had new attachments on the SFTP server, 190 considered, **188 downloaded**
+successfully, 2 skipped (`file not found in remote folder` - genuinely absent on SFTP, not a bug,
+per the script's own doc comment this is expected for very recently-created records - safe to
+re-run later once SDevTech itself finishes uploading them). Read-only against the SFTP server, no
+existing data touched.
+
+### Current state / follow-ups
+
+- 188 new attachment files (IDs, payslips, signed contracts, etc.) now downloaded and linked to
+  their loan/borrower records in the LMS.
+- The 2 still-missing files (`SL-REG_00079`'s Promissory Note among them) will resolve themselves
+  next run once SDevTech has them - no action needed now.
+
+## §76 — 2026-09-02: §74's filename fix never actually reached the browser - found the real cause
+
+User reported the CSDF download still showed the old `YYYYMM`-only filename despite §74's fix being
+live in the backend (confirmed directly by grepping the running container's compiled JS - the fix
+WAS deployed). Traced it instead to the frontend: `CicMonthlyReportPage.tsx` calls
+`downloadFile()` (`apiClient.ts`), which reads the real filename from the response's
+`Content-Disposition` header and only falls back to a hardcoded name if that header is missing.
+
+**Root cause**: browsers only expose the small CORS-safelisted set of response headers to
+JavaScript by default (`Cache-Control`, `Content-Language`, `Content-Type`, `Expires`,
+`Last-Modified`, `Pragma`) - `Content-Disposition` is not on that list. Since the LMS frontend and
+backend run as separate origins, every download was a cross-origin request, so
+`res.headers.get('content-disposition')` always returned `null` in the browser even though the
+backend was sending the correct header - `downloadFile()` silently used its stale hardcoded
+fallback (`PF017290_CSDF_${year}${monthLabel}.csv`) every single time, masking §74's real fix
+entirely.
+
+**Fixed** by adding `exposedHeaders: ['Content-Disposition']` to the backend's `cors()` config
+(`app.ts`) - the one-line fix that actually resolves this. Also refreshed the frontend's fallback
+string in `CicMonthlyReportPage.tsx` to build a same-shape `YYYYMMDDhh24mmss` timestamp (was it
+were ever needed as a genuine last resort, matching §74's format instead of the old `YYYYMM` one).
+
+Type-checked both frontend and backend clean, rebuilt both containers, verified `/health` (backend)
+and `200` (frontend, port 5173). Committed and pushed (`386f72a`).
+
+### Current state / follow-ups
+
+- CIC CSDF download now genuinely produces the correct
+  `PF017290_CSDF_YYYYMMDDHHMMSS.csv` filename in the browser - user should re-verify by downloading
+  once more from the CIC Monthly Report page.
+- Worth keeping in mind for any FUTURE download endpoint added to this app: `Content-Disposition`
+  needs to be in `exposedHeaders` for the real filename to ever reach the browser, given this
+  frontend/backend cross-origin setup - easy to miss since the backend-side code alone looks
+  completely correct.
+- Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild (both
+  containers).
