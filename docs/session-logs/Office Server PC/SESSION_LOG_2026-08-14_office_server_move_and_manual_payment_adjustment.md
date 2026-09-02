@@ -3533,3 +3533,40 @@ Committed and pushed (`ad49e74`).
      date for these specific loans, not just CIC.
 - Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild - no separate
   data backfill needed (pure report-query logic).
+
+## §74 — 2026-09-01/02: Verified CSDF field layout against CIC's own manual; found and fixed the filename
+
+User asked to double-check the CIC CSDF file itself against CIC's official documentation, since a
+wrong field position or file name would get a real regulatory submission rejected outright.
+
+**Field layout verified clean.** Read CIC's own `Manual_CIC_Philippines_Submission_v.1.7.pdf` and
+the official field-position templates (`Fields in Excel version 1.6 BLank.xlsx` /
+`...with sample data December 2025.xlsx`) from `legacy/CIC/`. Checked every HD, ID, and CI field
+this codebase actually emits (`CicCsdfReportWriter.ts`) against the manual's numbered field list,
+position by position - all matched exactly, no drift. The HD row's "Version" field (hardcoded
+`v1.0` here) differs from what a real historical accepted submission on file shows
+(`v46245.4542248843` - an Excel date-serial value leaking through from whatever tool produced that
+file, clearly a bug on the OTHER machine's/timeframe's side, not a spec requirement) - user
+confirmed to leave this as-is, since `v1.0` is the actually-correct value per the manual's own
+literal instruction ("It must be 1.0").
+
+**Found and fixed a real bug in the filename.** The manual (§2.2.1) requires
+`[ProviderCode]_CSDF_[Timestamp].csv` where `[Timestamp]` = `YYYYMMDDhh24mmss` - the moment the
+file was generated, explicitly NOT the reporting year/month (that's already encoded inside the
+file's own HD/CI date fields) - and explicitly forbids two submissions ever sharing a timestamp.
+`reportingController.ts`'s `cicMonthlyCsv` was building the filename as
+`PF017290_CSDF_${year}${monthLabel}.csv` (just `YYYYMM`, 6 digits) - wrong format, and any two
+downloads of the same reporting month would collide on the exact same filename, which the manual
+explicitly disallows. Fixed to build a real `YYYYMMDDhh24mmss` timestamp from the moment of
+generation. The separate `cicMonthlyXlsx` endpoint was left untouched - confirmed it's explicitly
+documented as a human-readable internal QA companion workbook, not the actual CIC submission, so
+it isn't subject to this naming rule at all.
+
+Type-checked clean, backend rebuilt, `/health` verified. Committed and pushed (`4629f40`).
+
+### Current state / follow-ups
+
+- CSDF file's field layout and filename are both now verified correct against CIC's official
+  manual - safe to trust for a real submission (modulo the two smaller, already-logged follow-ups
+  from §73 above).
+- Macbook Nomer / Nomer Laptop will pick up the filename fix on their next `git pull` + rebuild.
