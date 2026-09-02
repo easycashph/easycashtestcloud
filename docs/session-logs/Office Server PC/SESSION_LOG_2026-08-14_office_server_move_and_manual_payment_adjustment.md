@@ -3447,6 +3447,41 @@ scripts must be re-run against a fresh Client Master List.
   new step once against their OWN already-migrated loans (same manual/one-off backfill run this
   session did here) to catch up their existing data, on top of every other still-outstanding
   cross-machine item from §64/§66/§67/§68/§69.
-- `legacy/CIC/` removed from Office Server PC per user's explicit request, after confirming no
-  runtime dependency - the two CIC backfill scripts (subject-no, contract-no) will need their
-  source Excel files copied back in if they're ever re-run.
+- `legacy/CIC/` was briefly removed from Office Server PC, then the user asked to keep it as a
+  future reference - re-copied back from Macbook Nomer (same content, including the two source
+  Excel files these backfill scripts need). No git history existed to recover it from since it's
+  gitignored (real PII) - a reminder that a "safe to delete, nothing depends on it at runtime"
+  finding is about the *app*, not about whether the user still wants the files around.
+
+## §72 — 2026-09-01: CIC report was resubmitting existing clients' Individual record every month
+
+User explained the real CIC submission rule: once a client's Provider Subject No has been
+submitted, it's permanent and reused for every future loan - a renewal loan that changes in a given
+month should still produce a Contract (CI) row, but must NOT resubmit that client's full Individual/
+ID details again. Only a client's genuinely first-ever loan should add them to the Individuals
+section.
+
+The report's existing `changedThisMonth` scoping (correct, from an earlier fix) was being applied
+to BOTH contracts and individuals identically - so a long-time client's old loan getting a routine
+payment or staying overdue kept re-adding that client to the Individuals list every month, not just
+the month they first became a client.
+
+**Fixed** in `PrismaReportingRepository.getCicMonthlyReportData` by adding an
+`isBorrowersFirstLoan()` check gating the individuals-map insert: compares the loan's own resolved
+contract start date against the borrower's EARLIEST loan overall, queried unrestricted by this
+report's normal candidate filters (status/closedAt) - an old CLOSED first loan must still count
+toward "when did this client actually start," even though it wouldn't otherwise qualify as a
+report candidate on its own. Deliberately did NOT use `Borrower.loanCycle` for this - traced it to
+a live-incrementing counter on the Borrower row (not a per-loan snapshot), so an old first loan no
+longer reads `loanCycle === 1` once the client has since renewed.
+
+Verified live: re-ran August 2026 - Individuals dropped to 623 against 709 Contracts (previously
+every one of the 709 changed contracts would have also added its borrower to Individuals,
+regardless of whether they were new that month). Type-checked clean, backend rebuilt, `/health`
+verified. Committed and pushed (`e328f43`).
+
+### Current state / follow-ups
+
+- CIC report's Individuals section now correctly limited to genuinely-new clients only.
+- Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild - no separate
+  data backfill needed for this one (it's pure report-query logic, not stored data).
