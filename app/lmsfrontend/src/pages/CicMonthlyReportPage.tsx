@@ -56,7 +56,14 @@ export function CicMonthlyReportPage() {
     setDownloadError(null);
     try {
       const monthLabel = String(month).padStart(2, '0');
-      const fallbackName = format === 'csv' ? `PF017290_CSDF_${year}${monthLabel}.csv` : `CIC Monthly Report ${year}-${monthLabel}.xlsx`;
+      // CSV fallback only matters if the backend's real Content-Disposition header (the actual
+      // required [ProviderCode]_CSDF_[YYYYMMDDhh24mmss].csv name, per CIC's own submission manual)
+      // is ever unreachable - now that `exposedHeaders` includes it (app.ts), this should always
+      // be overridden by the real header, but keep this reasonably close as a last resort.
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const csvFallback = `PF017290_CSDF_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.csv`;
+      const fallbackName = format === 'csv' ? csvFallback : `CIC Monthly Report ${year}-${monthLabel}.xlsx`;
       await downloadFile(`/reports/cic-monthly.${format}?year=${year}&month=${month}`, fallbackName);
     } catch (err) {
       setDownloadError(err instanceof ApiError ? err.message : 'Could not reach the server. Check your connection and try again.');

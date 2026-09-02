@@ -449,6 +449,13 @@ export function createApp(): Express {
             }
           : corsOrigins,
       credentials: true,
+      // 2026-09-02 (user-reported: CIC CSDF download kept using the frontend's stale hardcoded
+      // fallback filename instead of the backend's real Content-Disposition header). Browsers only
+      // expose the small CORS-safelisted response headers to JS by default (Cache-Control,
+      // Content-Language, Content-Type, Expires, Last-Modified, Pragma) - Content-Disposition isn't
+      // in that list, so `res.headers.get('content-disposition')` in `downloadFile()`
+      // (apiClient.ts) silently returned null on every cross-origin download and always fell back.
+      exposedHeaders: ['Content-Disposition'],
     }),
   );
   app.use(
