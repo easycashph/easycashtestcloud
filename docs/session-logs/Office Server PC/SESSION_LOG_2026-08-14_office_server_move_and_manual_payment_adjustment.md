@@ -3628,3 +3628,28 @@ and `200` (frontend, port 5173). Committed and pushed (`386f72a`).
   completely correct.
 - Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild (both
   containers).
+
+## §77 — 2026-09-02: CSDF file was missing its required Footer (FT) row entirely
+
+User re-checked the downloaded CSV after §76's fix and noticed no Footer row at all -
+`CicCsdfReportWriter.write()` built the HD row and every ID/CI row, then stopped; nothing ever
+appended an FT line, even though the manual (§3.1.1.1.10) is explicit: "The last row (and only the
+last row) will ALWAYS be the Footer" - CIC uses it to confirm the submission wasn't truncated in
+transit.
+
+Added the missing FT row, deriving its exact shape from a real accepted file already on file
+(`PF017290_CSDF_20260811105959.csv`) rather than guessing: same 92-field padded width as ID/CI rows
+in this writer, and "Nr. of records" (FT4) counts **every line in the file, including the HD row
+and the FT row itself** - confirmed directly, that file's own line count and its own FT4 value are
+both exactly 1315.
+
+Verified live against July 2026's real data: 710 total lines, FT's own reported count = 710, exact
+match. Type-checked clean, backend rebuilt, `/health` verified. Committed and pushed (`c3cb6af`).
+
+### Current state / follow-ups
+
+- CIC CSDF file now has all three required sections in the right shape: Header, body (ID/CI), and
+  Footer, with a footer record count verified to exactly match the real file.
+- Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild.
+- User should do one more real download from the CIC Monthly Report page to confirm the footer line
+  now appears as expected, before treating a real regulatory submission as fully ready.
