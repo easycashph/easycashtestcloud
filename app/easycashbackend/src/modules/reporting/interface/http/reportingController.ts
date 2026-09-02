@@ -491,9 +491,16 @@ export class ReportingController {
       const scope = resolveBranchScope(req);
       const data = await this.deps.getCicMonthlyReportUseCase.execute({ year, month, branchId: resolveBranchFilter(scope) });
       const content = this.deps.cicCsdfReportWriter.write(data);
-      const monthLabel = String(month).padStart(2, '0');
+      // 2026-09-02 (user-confirmed against the CIC Submission Manual §2.2.1): the filename must be
+      // [ProviderCode]_CSDF_[Timestamp].csv where [Timestamp] = YYYYMMDDhh24mmss - the moment this
+      // FILE was created/generated, not the reporting year/month it covers (that's already inside
+      // the file's own HD/CI records). CIC also requires no two submissions ever share a timestamp,
+      // which a fixed YYYYMM value could never guarantee on a second download of the same month.
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="PF017290_CSDF_${year}${monthLabel}.csv"`);
+      res.setHeader('Content-Disposition', `attachment; filename="PF017290_CSDF_${timestamp}.csv"`);
       res.status(200).send(content);
     } catch (error) {
       next(error);
