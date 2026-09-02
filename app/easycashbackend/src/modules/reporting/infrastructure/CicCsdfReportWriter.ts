@@ -12,6 +12,7 @@ const PROVIDER_CODE = 'PF017290';
 // this company's real submissions simply never populate, so this writer doesn't emit them either.
 const ID_FIELD_COUNT = 92;
 const CI_FIELD_COUNT = 92;
+const FT_FIELD_COUNT = 92;
 
 /** Stored dates are UTC instants (often midnight UTC for a "calendar date" field, e.g. birthDate) -
  * rendering with plain getUTCDate() reads a Manila-local date as the PREVIOUS day (verified: a real
@@ -134,6 +135,22 @@ export class CicCsdfReportWriter {
         }),
       );
     }
+
+    // 2026-09-02 (user-reported: no Footer row in the downloaded file): the manual (§3.1.1.1.10) is
+    // explicit that "The last row (and only the last row) will ALWAYS be the Footer" - CIC uses it
+    // to confirm the submission is complete, not truncated in transit. This writer previously
+    // stopped after the last CI row. Fixed by appending it, matching the exact convention of a real
+    // accepted file on file (`PF017290_CSDF_20260811105959.csv`): "Nr. of records" (FT4) counts
+    // every line in the file INCLUDING the HD row and the FT row itself (verified directly - that
+    // file's own line count and its own FT4 value are both 1315), not just the ID+CI body.
+    lines.push(
+      buildLine(FT_FIELD_COUNT, {
+        0: 'FT',
+        1: PROVIDER_CODE,
+        2: ddmmyyyy(data.referenceDate),
+        3: String(lines.length + 1),
+      }),
+    );
 
     return lines.join('\r\n') + '\r\n';
   }
