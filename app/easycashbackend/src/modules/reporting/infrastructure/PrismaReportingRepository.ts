@@ -1336,44 +1336,48 @@ export class PrismaReportingRepository implements IReportingRepository {
         : [];
     const scheduleByLoanId = groupByLoanId(scheduleRows);
 
-    // 2026-09-01 (user-confirmed): the CIC "Individual" (subject/ID) record should only be
-    // submitted the FIRST time a client is reported at all - once a client's Provider Subject No
-    // has been submitted, it's permanent and reused on every subsequent loan, so a renewal loan
-    // that changes this month must still appear as a Contract row but must NOT re-submit the
-    // client's full personal details. Determined by comparing THIS loan's own contract start date
-    // against the borrower's EARLIEST loan overall (any status, unrestricted by this report's
-    // month/closedAt candidate filters above - an old closed first loan must still count) - not by
-    // `Borrower.loanCycle`, which is a live-incrementing counter on the Borrower row itself (not a
-    // per-loan snapshot), so it no longer reads 1 on an old first loan once the client has renewed.
-    const borrowerIdsThisMonth = [...new Set(loans.map((loan) => loan.borrowerId))];
-    const allLoansForTheseBorrowers =
-      borrowerIdsThisMonth.length > 0
-        ? await prisma.loanAccount.findMany({
-            where: { borrowerId: { in: borrowerIdsThisMonth } },
-            select: { id: true, borrowerId: true, activatedAt: true, createdAt: true },
-          })
+    // 2026-09-01 (user-confirmed, corrected twice the same day): the CIC "Individual" (subject/ID)
+    // record should only be submitted the FIRST time a client is reported at all - once a client's
+    // Provider Subject No has been submitted, it's permanent and reused on every subsequent loan,
+    // so a renewal loan that changes this month must still appear as a Contract (CI) row but must
+    // NOT re-submit the client's full personal details. This scoping applies ONLY to Individuals -
+    // Contracts keep the existing `changedThisMonth` scope untouched (payments/overdue/closures on
+    // old loans still belong there every month, same as always).
+    //
+    // Two earlier attempts both over-counted:
+    // 1. Comparing a loan's contract start date against the borrower's earliest *LoanAccount row in
+    //    this database* - wrong for migrated clients whose earlier loan cycles were never carried
+    //    over as their own rows (only the current/latest one migrated).
+    // 2. Adding a `Borrower.loanCycle <= 1` requirement on top - still wrong, because `loanCycle`
+    //    itself is unreliable: several real multi-loan clients (Nelson Malinao: 8 real loans:
+    //    Jennelyn Custodio: 3) show `loanCycle = 0` (SDevTech's own field was blank/unset for them),
+    //    which incorrectly cleared them as "new." Confirmed directly against August 2026's real
+    //    Loan Releases Report (ORIGINATION-only, 11 loans that month): only 6 of those 11 were
+    //    genuinely new clients - the other 5 were renewals, including the two `loanCycle = 0`
+    //    false positives above.
+    //
+    // Fixed to the user's own exact criterion instead: an Individual is included only for a loan
+    // that (a) was actually RELEASED (originated/disbursed) THIS reporting month - not merely
+    // "changed" via a payment or staying overdue on an old loan - AND (b) is that borrower's ONLY
+    // `LoanAccount` row in the whole database, full stop. No live counter, no per-loan date
+    // comparison across possibly-corrupted disbursement records (found separately this session: a
+    // handful of very old migrated loans carry an artificial ~Dec 2024 disbursement date instead of
+    // their true historical one) - just "did they release exactly one loan, ever, and is this
+    // month when it happened."
+    const releasedThisMonthBorrowerIds = [
+      ...new Set(loans.filter((loan) => { const s = resolveContractStartDate(loan).getTime(); return s >= monthStart.getTime() && s <= monthEnd.getTime(); }).map((loan) => loan.borrowerId)),
+    ];
+    const totalLoanCounts =
+      releasedThisMonthBorrowerIds.length > 0
+        ? await prisma.loanAccount.groupBy({ by: ['borrowerId'], where: { borrowerId: { in: releasedThisMonthBorrowerIds } }, _count: true })
         : [];
-    const allDisbursementsForTheseBorrowers =
-      allLoansForTheseBorrowers.length > 0
-        ? await prisma.loanTransaction.findMany({
-            where: { loanAccountId: { in: allLoansForTheseBorrowers.map((l) => l.id) }, type: 'DISBURSEMENT' },
-            select: { loanAccountId: true, entryDate: true },
-            orderBy: { entryDate: 'asc' },
-          })
-        : [];
-    const earliestDisbursementByAnyLoanId = new Map<string, Date>();
-    for (const d of allDisbursementsForTheseBorrowers) {
-      if (!earliestDisbursementByAnyLoanId.has(d.loanAccountId)) earliestDisbursementByAnyLoanId.set(d.loanAccountId, d.entryDate);
-    }
-    const earliestLoanStartByBorrowerId = new Map<string, number>();
-    for (const l of allLoansForTheseBorrowers) {
-      const start = (earliestDisbursementByAnyLoanId.get(l.id) ?? l.activatedAt ?? l.createdAt).getTime();
-      const current = earliestLoanStartByBorrowerId.get(l.borrowerId);
-      if (current === undefined || start < current) earliestLoanStartByBorrowerId.set(l.borrowerId, start);
-    }
+    const totalLoanCountByBorrowerId = new Map(totalLoanCounts.map((c) => [c.borrowerId, c._count]));
     function isBorrowersFirstLoan(loan: (typeof loans)[number]): boolean {
-      const thisLoanStart = resolveContractStartDate(loan).getTime();
-      return thisLoanStart <= (earliestLoanStartByBorrowerId.get(loan.borrowerId) ?? thisLoanStart);
+      const releasedThisMonth = (() => {
+        const s = resolveContractStartDate(loan).getTime();
+        return s >= monthStart.getTime() && s <= monthEnd.getTime();
+      })();
+      return releasedThisMonth && totalLoanCountByBorrowerId.get(loan.borrowerId) === 1;
     }
 
     // 2026-08-30 (user-confirmed, major scoping correction): the real monthly submission is NOT a
