@@ -1336,6 +1336,46 @@ export class PrismaReportingRepository implements IReportingRepository {
         : [];
     const scheduleByLoanId = groupByLoanId(scheduleRows);
 
+    // 2026-09-01 (user-confirmed): the CIC "Individual" (subject/ID) record should only be
+    // submitted the FIRST time a client is reported at all - once a client's Provider Subject No
+    // has been submitted, it's permanent and reused on every subsequent loan, so a renewal loan
+    // that changes this month must still appear as a Contract row but must NOT re-submit the
+    // client's full personal details. Determined by comparing THIS loan's own contract start date
+    // against the borrower's EARLIEST loan overall (any status, unrestricted by this report's
+    // month/closedAt candidate filters above - an old closed first loan must still count) - not by
+    // `Borrower.loanCycle`, which is a live-incrementing counter on the Borrower row itself (not a
+    // per-loan snapshot), so it no longer reads 1 on an old first loan once the client has renewed.
+    const borrowerIdsThisMonth = [...new Set(loans.map((loan) => loan.borrowerId))];
+    const allLoansForTheseBorrowers =
+      borrowerIdsThisMonth.length > 0
+        ? await prisma.loanAccount.findMany({
+            where: { borrowerId: { in: borrowerIdsThisMonth } },
+            select: { id: true, borrowerId: true, activatedAt: true, createdAt: true },
+          })
+        : [];
+    const allDisbursementsForTheseBorrowers =
+      allLoansForTheseBorrowers.length > 0
+        ? await prisma.loanTransaction.findMany({
+            where: { loanAccountId: { in: allLoansForTheseBorrowers.map((l) => l.id) }, type: 'DISBURSEMENT' },
+            select: { loanAccountId: true, entryDate: true },
+            orderBy: { entryDate: 'asc' },
+          })
+        : [];
+    const earliestDisbursementByAnyLoanId = new Map<string, Date>();
+    for (const d of allDisbursementsForTheseBorrowers) {
+      if (!earliestDisbursementByAnyLoanId.has(d.loanAccountId)) earliestDisbursementByAnyLoanId.set(d.loanAccountId, d.entryDate);
+    }
+    const earliestLoanStartByBorrowerId = new Map<string, number>();
+    for (const l of allLoansForTheseBorrowers) {
+      const start = (earliestDisbursementByAnyLoanId.get(l.id) ?? l.activatedAt ?? l.createdAt).getTime();
+      const current = earliestLoanStartByBorrowerId.get(l.borrowerId);
+      if (current === undefined || start < current) earliestLoanStartByBorrowerId.set(l.borrowerId, start);
+    }
+    function isBorrowersFirstLoan(loan: (typeof loans)[number]): boolean {
+      const thisLoanStart = resolveContractStartDate(loan).getTime();
+      return thisLoanStart <= (earliestLoanStartByBorrowerId.get(loan.borrowerId) ?? thisLoanStart);
+    }
+
     // 2026-08-30 (user-confirmed, major scoping correction): the real monthly submission is NOT a
     // full-portfolio snapshot - only loans that CHANGED that month are included. User-confirmed
     // "changed" means ANY of: had a transaction that month (covers new disbursements, payments,
@@ -1381,7 +1421,7 @@ export class PrismaReportingRepository implements IReportingRepository {
       }
       const subjectNo = borrower.cicProviderSubjectNo;
 
-      if (!individualsBySubjectNo.has(subjectNo)) {
+      if (!individualsBySubjectNo.has(subjectNo) && isBorrowersFirstLoan(loan)) {
         // `Borrower.gender` is free text ('MALE'/'FEMALE'/etc, not a fixed enum) - only map the two
         // unambiguous cases, same caution as every other unconfirmed domain code in this report.
         const genderUpper = (borrower.gender ?? '').trim().toUpperCase();
