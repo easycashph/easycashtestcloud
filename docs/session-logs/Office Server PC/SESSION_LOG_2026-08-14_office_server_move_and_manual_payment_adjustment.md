@@ -3975,3 +3975,35 @@ Docker rebuild.
   a new message on a "mine" conversation that isn't the one currently open does not chime (would
   need per-conversation last-message tracking across the whole `mine` list, not just the active
   one) - not attempted this session, flagged as a possible follow-up if staff want it.
+
+## §83 — 2026-09-03: Staff chat header shows the borrower's name, not just email
+
+User asked to show the client's name instead of just their email in the "Chatting with:" line of
+an open chat conversation.
+
+**Backend** (`ChatClientInfo.ts`, shared by `GetChatConversationForStaffUseCase` and
+`GetChatConversationForMisUseCase`): added `portalAccountName`, resolved in priority order - the
+linked Borrower's own `PersonName.fullName()` if the portal account is bound to one (`borrowerId`,
+most authoritative), else the portal account's own pre-application profile fields
+(`firstName`/`middleName`/`lastName`/`suffix`, 2026-07-30), else the most recent loan application's
+`applicantName`, else `null` (a brand-new self-signup with nothing filled in yet - unchanged
+email-only fallback). Both use cases' Deps gained a new `borrowerRepository` dependency, wired
+through `app.ts`; no presenter layer exists for this endpoint (the controller returns the use
+case's result object directly), so the new field reaches the API response automatically.
+
+**Frontend** (`ChatPage.tsx`): "Chatting with:" now prints `"{name} ({email})"` when a name
+resolved, falling back to the email-only text exactly as before when it didn't - no visible change
+for a client with no name on file anywhere.
+
+Backend and frontend rebuilt, both verified healthy. Committed and pushed (`b8498d02`) so Cloudflare
+Pages' auto-deploy would pick it up, same posture as every frontend change this session per §81's
+lesson.
+
+### Current state / follow-ups
+
+- The one-conversation "Chatting with:" header now shows a resolved name where available - user to
+  confirm once Cloudflare Pages' build finishes.
+- Deliberately NOT extended to the sidebar's "My Chats" list grouping (`ChatConversation.
+  portalAccountEmail` is still the group key there) - that list type has no name field at all and
+  batch-resolving names for potentially many portal accounts across queue/mine/incoming-transfer
+  lists is a bigger change than what was asked; flagged as a possible follow-up, not attempted.
