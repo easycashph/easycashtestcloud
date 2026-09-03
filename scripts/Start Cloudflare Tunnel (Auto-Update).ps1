@@ -156,7 +156,17 @@ function Get-CloudflareErrorDetail($errRecord) {
 function Update-PagesProject($label, $projectName) {
     Write-Step "Updating VITE_API_BASE_URL on Cloudflare Pages ($label)..."
     $apiBase = "https://api.cloudflare.com/client/v4/accounts/$AccountId/pages/projects/$projectName"
-    $headers = @{ Authorization = "Bearer $ApiToken"; 'Content-Type' = 'application/json' }
+    # 2026-09-03 (user-reported: "(304) Not Modified" on the retry-deployment call): a known
+    # Windows PowerShell 5.1 / .NET WinINet quirk, not a real Cloudflare response - Invoke-RestMethod
+    # can serve a cached response (even for a POST) once this process has hit api.cloudflare.com
+    # before in the same run. These two headers disable that local cache, matching Cloudflare's own
+    # troubleshooting guidance for this exact symptom.
+    $headers = @{
+        Authorization  = "Bearer $ApiToken"
+        'Content-Type' = 'application/json'
+        'Cache-Control' = 'no-cache'
+        'Pragma'        = 'no-cache'
+    }
 
     try {
         $project = Invoke-RestMethod -Uri $apiBase -Headers $headers -Method Get
@@ -194,7 +204,11 @@ function Update-PagesProject($label, $projectName) {
             Write-Err2 "      No existing deployment found to retry from for $label. Trigger one manually from the Pages dashboard once, then re-run this script."
             return $false
         }
-        Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry" -Headers $headers -Method Post | Out-Null
+        # Cache-buster query param - a belt-and-suspenders second layer against the same WinINet
+        # 304 issue the no-cache headers above target, in case a header alone isn't enough (this
+        # specific POST call is where the user actually hit the error).
+        $cacheBuster = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        Invoke-RestMethod -Uri "$apiBase/deployments/$($latest.id)/retry?_=$cacheBuster" -Headers $headers -Method Post | Out-Null
         Write-Host '      OK - a new build has started. It usually takes 1-2 minutes.'
         return $true
     } catch {
