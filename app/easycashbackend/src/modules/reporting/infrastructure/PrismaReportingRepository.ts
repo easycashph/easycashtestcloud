@@ -695,7 +695,21 @@ export class PrismaReportingRepository implements IReportingRepository {
    * never lists a closed or zero-balance account (a report titled "ending CURRENT balance" has
    * nothing meaningful to say about a loan with no balance left). Previously including the whole
    * CLOSED_* family inflated this report to 1,788 rows against SDevTech's 1,277 - 623 of those extra
-   * LMS rows had zero Total Obligation. */
+   * LMS rows had zero Total Obligation.
+   *
+   * 2026-09-03 (user-confirmed, found via Michael Villarosa Fampulme's SML-MAX_P1F1A): Principal/
+   * Interest/Fees Balance are summed here from `RepaymentSchedule` (due - paid per installment,
+   * same source `getAgingReport` above already trusts) instead of read off `LoanAccount.
+   * principalBalance/interestBalance/feesBalance`. Those cached columns went stale for 59 migrated
+   * loans - `migrate-legacy-data.ts` wrote them once from SDevTech's account-level snapshot while
+   * `migrate-repayment-schedules.ts` separately wrote the schedule from SDevTech's schedule-level
+   * rows, and the two SDevTech sources didn't agree (confirmed on this loan: cached feesBalance
+   * 28,246.54 vs the schedule's real unpaid fee of 225,972.32, sitting unpaid on installment 6).
+   * The existing recompute-active-loan-balances-from-schedule.ts safety net only re-derives that
+   * cached column for loans flagged `legacyBalanceDataMissing`, which this loan isn't (it has an
+   * account-level snapshot, just a stale one) - so it silently fell outside that net. Deriving this
+   * report straight from the schedule sidesteps the staleness entirely without touching the cached
+   * column (out of scope here per user instruction - report-only fix, no data recompute). */
   async getEndingBalanceReport(filter: { branchId?: string }): Promise<EndingBalanceReportRow[]> {
     const loans = await prisma.loanAccount.findMany({
       where: {
@@ -711,25 +725,41 @@ export class PrismaReportingRepository implements IReportingRepository {
       where: { loanAccountId: { in: loanIds } },
       orderBy: { installmentNumber: 'desc' },
     });
+    const scheduleByLoanId = groupByLoanId(schedule);
     const maturityByLoanId = new Map<string, Date>();
     for (const installment of schedule) {
       if (!maturityByLoanId.has(installment.loanAccountId)) maturityByLoanId.set(installment.loanAccountId, installment.dueDate);
     }
 
-    return loans.map((loan) => ({
-      clientName: formatFullName(loan.borrower),
-      product: loan.loanProductVersion.loanProduct.name,
-      loanAccountId: loan.loanCode,
-      loanAmount: loan.principalAmount.toString(),
-      principalBalance: loan.principalBalance.toString(),
-      interestBalance: loan.interestBalance.toString(),
-      feesBalance: loan.feesBalance.toString(),
-      totalObligation: (Number(loan.principalBalance) + Number(loan.interestBalance) + Number(loan.feesBalance)).toFixed(2),
-      maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
-      termRate: `${loan.installmentCount} Month/s`,
-      interestRate: loan.interestRate.toString(),
-      accountState: loan.status,
-    }));
+    return loans.map((loan) => {
+      const installments = scheduleByLoanId.get(loan.id) ?? [];
+      let principalBalance = 0;
+      let interestBalance = 0;
+      let feesBalance = 0;
+      for (const installment of installments) {
+        principalBalance += Number(installment.principalDue) - Number(installment.principalPaid);
+        interestBalance += Number(installment.interestDue) - Number(installment.interestPaid);
+        feesBalance += effectiveFees(installment) - Number(installment.feesPaid);
+      }
+      principalBalance = Math.max(0, principalBalance);
+      interestBalance = Math.max(0, interestBalance);
+      feesBalance = Math.max(0, feesBalance);
+
+      return {
+        clientName: formatFullName(loan.borrower),
+        product: loan.loanProductVersion.loanProduct.name,
+        loanAccountId: loan.loanCode,
+        loanAmount: loan.principalAmount.toString(),
+        principalBalance: principalBalance.toFixed(2),
+        interestBalance: interestBalance.toFixed(2),
+        feesBalance: feesBalance.toFixed(2),
+        totalObligation: (principalBalance + interestBalance + feesBalance).toFixed(2),
+        maturityDate: toReportCalendarDate(maturityByLoanId.get(loan.id)),
+        termRate: `${loan.installmentCount} Month/s`,
+        interestRate: loan.interestRate.toString(),
+        accountState: loan.status,
+      };
+    });
   }
 
   /** As-of-today snapshot: only loans with the oldest unpaid installment currently overdue.

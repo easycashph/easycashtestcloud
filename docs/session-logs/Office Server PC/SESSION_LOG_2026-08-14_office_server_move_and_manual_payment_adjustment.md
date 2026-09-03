@@ -3653,3 +3653,95 @@ match. Type-checked clean, backend rebuilt, `/health` verified. Committed and pu
 - Macbook Nomer / Nomer Laptop will pick this up on their next `git pull` + rebuild.
 - User should do one more real download from the CIC Monthly Report page to confirm the footer line
   now appears as expected, before treating a real regulatory submission as fully ready.
+
+## §78 — 2026-09-03: "Detailed Ending Current Balance" report didn't match SDevTech - traced to stale cached balances on 59+958 migrated loans
+
+User attached SDevTech's and the LMS's own "Detailed Ending Current Balance" exports and asked why
+the totals didn't balance (SDevTech ₱67,983,579.29 vs LMS ₱68,956,420.10, diff ₱972,840.81). Per
+the user's explicit instruction, investigated loan-by-loan before touching anything or syncing.
+
+**Investigation.** Picked loan `2204` (Pedro Chua Yulo, migrated 2011) first: its `loan_transactions`
+showed 44 `PENALTY_APPLIED` postings as recent as 2026-08-18, seemingly contradicting
+`legacy/reports/Loan_Penalty_Computation_Reference.pdf`'s documented rule that a migrated loan's
+penalty should be a frozen one-time snapshot, never recalculated. Traced the actual code
+(`AddPenaltyUseCase.ts`) and found this is **not a bug** - it's a deliberate, migration-period
+feature letting MIS/Accounting staff manually key in whatever penalty SDevTech's screen shows for a
+legacy loan, and it correctly keeps `repayment_schedules.penaltyDue` and
+`loan_accounts.penaltyBalance` in sync with each other on every use. `CurrentPenaltyResolver`
+(used only for SOA/report *display*) already correctly gates live ADR-050 computation behind
+`isProspectiveLoan` (`!legacyId`) - so the "migrated = frozen" rule is intact for computation, it's
+staff manually mirroring SDevTech that's expected, ongoing behavior for now.
+
+The real bug: user directly compared `SML-MAX_P1F1A` (Michael Villarosa Fampulme)'s **live loan
+detail page top card** against its own **Repayment Schedule tab** and found Principal/Fees
+disagreeing with each other *inside the LMS itself* - Principal ₱28,712.01 vs the schedule's real
+₱16,412.01, Fees ₱28,246.54 vs the schedule's real ₱225,972.32 (a huge unpaid fee sitting on
+installment 6, marked LATE). Root cause: `migrate-legacy-data.ts` wrote
+`loan_accounts.principalBalance/feesBalance` once from SDevTech's **account-level** snapshot, while
+`migrate-repayment-schedules.ts` separately wrote `repayment_schedules` from SDevTech's
+**schedule-level** rows - and SDevTech's own two sources didn't agree with each other at migration
+time. The existing safety net (`recompute-active-loan-balances-from-schedule.ts`) only covers loans
+flagged `legacyBalanceDataMissing: true` (no account-level snapshot at all); these loans have one
+(just a stale one), so they fell outside its scope entirely, undetected until now.
+
+A read-only reconciliation query (`loan_accounts` cached balance vs `SUM(repayment_schedules
+due-paid)`) across all 1,285 migrated ACTIVE/ACTIVE_IN_ARREARS/CLOSED_RESTRUCTURED/
+CLOSED_COMPROMISED loans found **59 loans** with a Principal/Interest/Fees mismatch - the total
+diff (₱941,092.86 / ₱127,839.03 / -₱96,091.08) matched the SDevTech-vs-LMS report diff almost to
+the peso, confirming this was the entire explanation.
+
+**Fixes applied, in order:**
+
+1. **Report fix** (`PrismaReportingRepository.getEndingBalanceReport`, `PrismaReportingRepository.ts`):
+   now sums Principal/Interest/Fees Balance directly from `repayment_schedules` (same pattern
+   `getAgingReport` already used) instead of reading the stale `loan_accounts` columns - so the
+   report is correct going forward regardless of any future cache staleness. User explicitly asked
+   for this scoped to the report only, no data writes, first.
+2. **Data fix #1** (`scripts/resync-stale-migrated-loan-balances.ts`, new permanent script, dry-run
+   verified before applying): re-derived `principalBalance/interestBalance/feesBalance` (+ their
+   paid/due components) from `repayment_schedules` for all 59 mismatched migrated loans. Does not
+   touch `penaltyBalance` - kept separate deliberately (see below). Verified post-run:
+   `SML-MAX_P1F1A` now 16,412.01 / 0.00 / 225,972.32; `2204` now 50,000.00 / 0.00 / 0.00 - both
+   match their schedules exactly. Report's grand total now reads ₱67,983,579.29, an exact match to
+   SDevTech.
+3. **Penalty investigation, separately**: comparing `loan_accounts.penaltyBalance` against schedule
+   found **959 mismatched loans** (out of 1,285) - a much bigger, messier gap than principal/fees
+   (portfolio total ₱8,973,433.40 cached vs ₱10,468,417 per-schedule, several loans off by
+   ₱200k-₱380k, some cached at ₱0.00 with a large schedule figure). User made an explicit business
+   call: **penalty on migrated loans stays frozen - follow whatever the schedule (sourced from
+   SDevTech) says - until SDevTech is retired, at which point migrated loans switch to live
+   ADR-050 auto-compute** (the same switch `CurrentPenaltyResolver`'s `isProspectiveLoan` check
+   already gates). Given that decision, ran the equivalent fix:
+4. **Data fix #2** (`scripts/resync-stale-migrated-loan-penalty.ts`, new permanent script, dry-run
+   shown to user with full portfolio-level total and top-15-by-size before applying, explicit
+   go-ahead given): re-derived `penaltyBalance/penaltyDue/penaltyPaid` from `repayment_schedules`
+   for all 958 mismatched loans (one of the original 959 - loan `2204` - already matched at
+   0.00/0.00). Applied after explicit confirmation given the scale (net +₱1,494,983.59 across the
+   portfolio).
+
+Backend container rebuilt and restarted (`docker compose up -d --build easycashbackend`) after the
+report code change; `build-info.json` (both backend and lmsfrontend) reset to placeholder afterward
+per convention (frontend was not itself rebuilt this session). All temporary diagnostic scripts
+(`tmp-*.ts`) deleted after use; the two `resync-*` scripts were kept as permanent, reusable
+data-fix tooling (same convention as the existing `recompute-active-loan-balances-from-schedule.ts`).
+
+### Current state / follow-ups
+
+- The "Detailed Ending Current Balance" report and the loan detail page top card both now read
+  correct, schedule-matching figures for every migrated loan, verified against SDevTech's own
+  export to the peso.
+- **Penalty is now explicitly a frozen, SDevTech-mirrored figure for every migrated loan** - staff
+  keep it current via the existing "Add Penalty" feature (`AddPenaltyUseCase`), which already keeps
+  `repayment_schedules` and `loan_accounts.penaltyBalance` in sync on every use. Do not turn on live
+  ADR-050 auto-compute for migrated loans until the user confirms SDevTech has been retired -
+  `CurrentPenaltyResolver`'s `isProspectiveLoan` (`!legacyId`) check is the switch for that, already
+  built and correctly gated, just not yet flipped for migrated loans.
+- Two loan-code mismatches between the SDevTech and LMS exports were noted but not yet
+  investigated: `SL-LAZ_Y1T1R` (SDevTech only) and `SML-MAX_Y5X7D` (LMS only) - worth a follow-up
+  loan-by-loan check the same way §78's 59+958 were found, in case they represent a genuinely
+  different problem (e.g. a duplicate/renamed loan code) rather than a balance-staleness case.
+- Macbook Nomer / Nomer Laptop run their own independent Postgres databases - this session's data
+  fixes (the two `resync-*` scripts) only touched Office Server PC's database. Each machine will
+  need the same scripts run against its own database separately if the same staleness exists there
+  (very likely, since it stems from each machine's own past `migrate-legacy-data.ts` /
+  `migrate-repayment-schedules.ts` runs) - not just a `git pull` + rebuild.
