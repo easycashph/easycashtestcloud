@@ -4007,3 +4007,77 @@ lesson.
   portalAccountEmail` is still the group key there) - that list type has no name field at all and
   batch-resolving names for potentially many portal accounts across queue/mine/incoming-transfer
   lists is a bigger change than what was asked; flagged as a possible follow-up, not attempted.
+
+## §84 — 2026-09-03: About page Developer Team card trimmed; What's New / Portal changelogs caught up
+
+User asked to remove Jomer Biason's and Howell Hay's cards from the About page's Developer Team
+section, keeping only Nomer Perez (MIS Manager) and dropping his "Quality Assurance Engineer" note.
+Mockup-first, per this session's established workflow.
+
+Jomer Biason's card carried a `LMS_PERMANENT_CREDIT` flag from an earlier session with an explicit
+"never delete" instruction attached to it. This was surfaced to the user before acting rather than
+silently honored or silently overridden - user's answer: "Oo, tanggalin mo na rin si Jomer. Hindi
+na siya connected dito sa LMS at company" (he's no longer connected to the LMS or the company).
+Proceeded on that explicit basis.
+
+`app/lmsfrontend/src/lib/lmsVersion.ts`: removed both entries from the Dev Team roster (including
+the `LMS_PERMANENT_CREDIT` flag itself, now unused). `app/lmsfrontend/src/pages/AboutPage.tsx`:
+removed the `DEVELOPER_TEAM_DISPLAY` merge/override logic that had existed solely to work around
+keeping Jomer's card while suppressing a field - no longer needed with a plain roster.
+
+Separately, user asked whether the "What's New" (LMS) and Portal changelogs on the About page were
+being kept current, and asked for an auto-update explanation. After walking through how the
+changelog arrays are hand-maintained (no auto-generation from git), user said "i update mo ang
+changelog" - did a full catch-up pass, cross-checked against real `git log` history so no entry was
+fabricated: 9 new `LMS_CHANGELOG` entries (0.52.0-0.57.0) and 2 new `PORTAL_CHANGELOG` entries
+(0.10.1-0.10.2), one entry per real calendar release day, MINOR bumps for new capability days and
+PATCH bumps for fix-only days per the project's existing semver convention for this file.
+
+Frontend rebuilt, verified healthy, committed and pushed so Cloudflare Pages would pick it up.
+
+### Current state / follow-ups
+
+- Standing offer to proactively remind about changelog upkeep going forward was floated and
+  declined by the user ("hindi muna") - do not implement unless asked again.
+- Changelog is still hand-maintained; every future feature this session (or later ones) should keep
+  adding an entry at close-out time the same way, not batch it up again.
+
+## §85 — 2026-09-03: Notification titles now include the borrower's name, not just the Loan ID
+
+User pointed at the notification bell dropdown and asked to add the client's name alongside the
+Loan ID in notification titles ("Loan ID + neme?"), reason given: "para madali malaman kung
+sinong borrower ito" (so staff can tell who the borrower is at a glance). Mockup-first, then
+"Oo, ituloy mo na."
+
+The daily-scan notification jobs (matured loans, first-amortization-due-today, added earlier this
+session in §79) already included the borrower's name in their titles. Four write-time notification
+paths did not: `ProcessPaymentUseCase` (loan Closed/Recovered), `RestructureLoanUseCase`
+(Restructured, and the Closed it fires when restructuring closes out the old loan),
+`AdjustLoanUseCase` (Rescheduled, and its own Closed case), and `CompromiseSettleLoanUseCase`
+(Closed, for compromise-settled loans).
+
+Added a new shared helper, `app/easycashbackend/src/shared/domain/loanNotificationLabel.ts`
+(`loanNotificationLabel(loanCode, borrowerName)` → `"{code} ({Name})"` when a name is available,
+else the bare code), so all six notification sites format identically to the existing daily-scan
+ones rather than re-deriving the pattern per use case. Each of the four use cases gained an
+optional `borrowerRepository` dependency, fetched the borrower once (after the transaction commits,
+consistent with this session's write-then-notify ordering rule established in §79), and built the
+title through the shared helper. `CompromiseSettleLoanUseCase` fetches the borrower once outside its
+per-loan loop, since a compromise settlement always closes multiple loans belonging to the same
+borrower. `app.ts` wired `borrowerRepository` into all four use case instantiations.
+
+Being optional, the dependency falls back to a bare loan-code title exactly as before when absent -
+confirmed by running all three pre-existing use case test files together (48/48 passed unchanged).
+Added one new test to `ProcessPaymentUseCase.test.ts` proving the borrower name now appears in the
+title when `borrowerRepository` is provided. Backend type-checked clean (`tsc --noEmit`) and the
+full `ProcessPaymentUseCase.test.ts` suite passed (25/25).
+
+Backend rebuilt (`docker compose up -d --build easycashbackend`), verified `/health` OK. Committed
+(`ee0e2605`) and pushed so Cloudflare Pages'/the tunnel-fronted backend's deploy would pick it up,
+per the §81 lesson that the user's live LMS is the deployed stack, not localhost.
+
+### Current state / follow-ups
+
+- All six notification-emitting paths (2 daily-scan + 4 write-time) now format titles identically
+  via `loanNotificationLabel` - no known gaps left in this set.
+- No new DB migration was needed - this only changes notification title strings, not schema.
