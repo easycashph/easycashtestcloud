@@ -24,6 +24,7 @@ import { SystemAnnouncementPopup } from '@/components/SystemAnnouncementPopup';
 import { PreviewFooterNote } from '@/components/PreviewBanner';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/apiClient';
+import { playChatNotificationSound } from '@/lib/chatNotificationSound';
 import { useRole } from '@/lib/roleContext';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
@@ -34,13 +35,23 @@ import { useTheme } from '@/components/theme-provider';
  * than an error badge for a role that simply can't see the queue). */
 function useChatQueueCount(): number {
   const [count, setCount] = React.useState(0);
+  // 2026-09-03 (user request, chat notification sound): tracks the previous poll's count so a
+  // chime only fires when the queue actually GREW (a new unclaimed request arrived) - never on the
+  // very first load (which would otherwise chime for whatever was already waiting when the page
+  // opened) and never when it shrinks (someone claimed one).
+  const previousCountRef = React.useRef<number | null>(null);
   React.useEffect(() => {
     let cancelled = false;
     const poll = () => {
       apiClient
         .get<unknown[]>('/chat/queue')
         .then((queue) => {
-          if (!cancelled) setCount(queue.length);
+          if (cancelled) return;
+          setCount(queue.length);
+          if (previousCountRef.current !== null && queue.length > previousCountRef.current) {
+            playChatNotificationSound();
+          }
+          previousCountRef.current = queue.length;
         })
         .catch(() => {
           if (!cancelled) setCount(0);

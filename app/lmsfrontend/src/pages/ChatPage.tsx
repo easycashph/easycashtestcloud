@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { apiClient, downloadFile, uploadFile } from '@/lib/apiClient';
+import { playChatNotificationSound } from '@/lib/chatNotificationSound';
 import { useRole } from '@/lib/roleContext';
 
 /** How long after the last typing heartbeat we still show "typing…" (2026-08-20 user request,
@@ -309,15 +310,29 @@ export function ChatPage() {
     return () => window.clearInterval(timer);
   }, [refreshLists]);
 
+  // 2026-09-03 (user request, chat notification sound): the message count last seen for whichever
+  // conversation is currently active - null right after switching conversations, so opening one
+  // never chimes for messages that were already there. Set from every load below.
+  const lastSeenMessageCountRef = React.useRef<number | null>(null);
+
   const loadConversation = React.useCallback((id: string, viaOversight: boolean) => {
     apiClient
       .get<StaffChatView>(viaOversight ? `/chat/oversight/conversations/${id}` : `/chat/${id}`)
-      .then(setView)
+      .then((next) => {
+        const previousCount = lastSeenMessageCountRef.current;
+        const newestMessage = next.messages[next.messages.length - 1];
+        if (previousCount !== null && next.messages.length > previousCount && newestMessage?.senderType === 'PORTAL_ACCOUNT') {
+          playChatNotificationSound();
+        }
+        lastSeenMessageCountRef.current = next.messages.length;
+        setView(next);
+      })
       .catch(() => setView(null));
   }, []);
 
   React.useEffect(() => {
     if (!activeConversationId) return;
+    lastSeenMessageCountRef.current = null;
     loadConversation(activeConversationId, oversightMode);
     const timer = window.setInterval(() => loadConversation(activeConversationId, oversightMode), POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
