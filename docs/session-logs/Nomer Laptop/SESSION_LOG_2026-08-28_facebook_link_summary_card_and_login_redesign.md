@@ -1,4 +1,4 @@
-# Session Log: 2026-08-28 (Nomer Laptop) — Facebook Link summary card, high-end login page redesign
+# Session Log: 2026-08-28 (Nomer Laptop) — Facebook Link summary card, login page redesign, Drive document recovery, test account cleanup, admin Active Sessions
 
 Continues `docs/session-logs/Nomer Laptop/SESSION_LOG_2026-08-27_full_migration_and_borrower_createdAt_dedup.md`
 (§16 there covers the Facebook Link *feature* - form fields, backend threading, legacy backfill,
@@ -114,16 +114,144 @@ the pre-toggle state).
 
 Typechecked clean, rebuilt, committed and pushed (`62a7986`).
 
+## 4. Google Drive client-document recovery (3 clients found with zero attachments)
+
+User asked to check a specific Google Drive folder (the office's per-loan document archive,
+~78 subfolders) against the LMS and attach anything missing for clients that had zero attachments
+recorded. Surveyed the whole folder via the Google Drive connector (`search_files` with
+`parentId = '<folder>'`, paginated), cross-referenced every subfolder's loan code (or, absent one,
+its name) against `loan_accounts`/`borrowers`, and counted existing `attachments` rows per match -
+a plain Node script against the live DB (`match_drive_folders.js` in the scratchpad, not committed
+- one-off survey tooling, not a reusable backfill).
+
+Result: 52 of 78 folders already had 16-65 attachments each (from the existing SDevTech SFTP
+backfill) - skipped. **3 had a real DB match but zero attachments**: Nelson Roxas Malinao (a
+*newer* loan, `SML-REG_00385` - he already had an older loan, `SML-REG_00347`, with 35 attachments;
+SDevTech's own sync apparently hadn't caught up to this newer one yet), Leonides Suminguit Remolado
+Jr, and Aryll Gacu Malinao (both `Borrower` records with no loan account yet - loan-application-
+stage documents). 23 folders had no confident DB match at all (some clearly aren't client folders -
+"JULY 2026"/"JUNE 2026" month-archive folders, "SUNBRIGHT", "MANCENIDO" - left alone, not guessed
+at).
+
+**Google Drive connector session hit an authorization gap mid-task**: the background download
+agent's first attempt failed with "connection... invalidated," and reconnecting via claude.ai's
+connector settings page didn't immediately propagate to either the subagent or this session's own
+direct tool calls - needed a manual disconnect-then-reconnect (not just "Reconnect") before a
+direct `search_files` call from this session confirmed it working again.
+
+Downloaded all 56 files (22 + 16 + 18 - the "17" first quoted to the user for Aryll's folder was a
+miscount; the real listing had 18) via three parallel background agents (one per client, to avoid
+loading large base64 payloads into this session's own context - each agent decoded and wrote files
+straight to disk via PowerShell's `ConvertFrom-Json`/`[Convert]::FromBase64String`, `jq`/`python`
+being unavailable in this environment). Wrote `attach-drive-staged-documents.ts` (mirrors
+`backfill-201files-loan-attachments.ts`'s storage/DB pattern - `storageKey = <owner_type>/<ownerId>/
+<uuid><ext>`) with a small hardcoded manifest mapping each staged folder to its resolved
+Borrower/LoanAccount owner; dry-ran (confirmed correct owner resolution and file lists), then
+applied - 56 attachments created (22 `LOAN_ACCOUNT`-owned, 34 `BORROWER`-owned), verified both via
+a DB count and that the running backend container's storage volume actually has the files.
+
+**Re-surveyed the same Drive folder afterward** (user asked to double check) and found several
+folders had been renamed by staff in the meantime to add proper loan codes (e.g. "SML-SELF- Eduardo
+Velonza" -> "SML-REG_00377 Eduardo Velonza") - re-ran the match script against the fresh listing;
+all of these already had attachments from the existing SFTP sync, so nothing further to do. Zero
+new zero-attachment candidates found on the second pass.
+
+**Follow-up user question**: whether this needs to be redone after a future full re-migration.
+Answer given: the SDevTech-sourced attachments (52/78) recover automatically via the existing SFTP
+backfill; these 3 Drive-only clients would NOT (no SDevTech source for them at all) - the
+`attach-drive-staged-documents.ts` script itself would still resolve correctly post-reset (matches
+by loanCode/name, not hardcoded UUIDs), but only if the 56 staged files still exist locally, and
+they currently only live in this session's temp scratchpad (not committed - real client PII), which
+isn't guaranteed to survive. Offered to move them to a permanent, gitignored location (mirroring
+how the Mambu SQL dump is handled) - not yet done, no answer from user yet on this specific offer.
+
+## 5. Removed 6 legacy test/dummy client accounts
+
+User spotted 5 obvious test accounts in the Client List ("DEVELOPER TEST ACCOUNT", "KABORROW T
+TESTING", "TEST ACCOUNT PAYLATER", "EASYCASH TEST ACCOUNT", "JAY LLLL TEST") and asked to remove
+them; later added a 6th found independently during the same investigation ("ROXANNE EBIA
+TESTONLY"). All 6 carry a `legacyId` (SDevTech's own internal test data, migrated in like any other
+client). Checked dependencies before deleting: EASYCASH TEST ACCOUNT had 3 loan accounts (all
+`PENDING_APPROVAL`, never activated - no real disbursement/collection activity, each with a handful
+of legacy-migrated transactions/schedule rows but no genuine financial history); one had a portal
+account; one had a profile note; the rest had nothing.
+
+No existing "delete borrower" feature exists in the LMS (deliberately - real financial records need
+an audit trail, per this project's own posture), and `LoanAccount.borrower` has no cascade-delete
+(a real borrower's loan history must survive a botched request), so wrote a one-off script,
+`remove-test-client-accounts.ts` - matches by exact first/middle/last name (not hardcoded UUIDs, so
+it re-resolves correctly if re-run after a future migration), deletes bottom-up in the correct FK
+order (loan transactions/schedules -> loan accounts -> polymorphic-owner attachments/notes, which
+aren't real FKs so don't cascade -> portal accounts -> the borrower row itself; every other
+Borrower-owned table like income detail/government ID/addresses IS `onDelete: Cascade` already, so
+those clean up for free). Dry-ran first (confirmed the exact same dependency counts found
+manually), then applied in two passes (5 accounts, then Roxanne separately) inside one
+`$transaction`. Verified via a DB count that all 6 are gone.
+
+## 6. New feature: admin can view and force sign-out any staff member's active sessions
+
+User asked whether the LMS could let an admin pick a signed-in user's device and sign it out.
+Checked first whether the underlying pieces already existed: yes - Settings > Security > Active
+Sessions (built 2026-07-21) already lets a staff member view/revoke their OWN logged-in devices
+(`RefreshToken` rows, one per device/session), via `ListSessionsUseCase`/`RevokeSessionUseCase` -
+but `RevokeSessionUseCase` strictly checks `session.userId === input.userId`, i.e. self-service
+only; there was no way for anyone, even MIS, to force-sign-out someone ELSE's device.
+
+Since both existing use cases are already generic over whichever `userId` they're given (not
+hardcoded to "the caller"), the fix needed no new business logic at all - just new routes passing a
+different id. Mockup-approved first (a new "Active Sessions" section inside the existing Member
+Details dialog in Settings > Members, same visual pattern as the self-service card), then
+implemented:
+- `userController.ts`/`userRouter.ts`: two new routes, `GET /users/:id/sessions` and
+  `DELETE /users/:id/sessions/:sessionId`, reusing the exact same `ListSessionsUseCase`/
+  `RevokeSessionUseCase` instances `app.ts` already builds for the self-service `/auth/sessions`
+  routes - just wired into `userRouter` too. Gated by `user.manage`, the same permission that
+  already gates Add/Edit Member (confirmed live in the DB: MIS has it granted, matches the
+  "Administration" toggle group the user screenshotted from Roles & Permissions - no new permission
+  code needed).
+- `MemberListPage.tsx`: new `MemberActiveSessions` component, rendered inside the existing viewing-
+  user dialog only when `canManageMembers` - lists devices (browser/OS via `describeUserAgent`, IP,
+  sign-in time via `formatDateTime`, both reused from `SettingsPage.tsx`'s self-service version) with
+  a per-row "Sign out" button and a "Sign out all devices" bulk action. No `isCurrent` concept here
+  (unlike the self-service version) since the admin viewing this is never looking at their own
+  device list through this path.
+
+Backend + frontend typechecked clean, both containers rebuilt and confirmed healthy (route sanity-
+checked directly: `GET /api/v1/users/test/sessions` returns `401` with no auth, not `500`, so the
+wiring itself doesn't crash). Committed together with the two new scripts from §4/§5 (`73783ca`).
+
+**Merge note**: pushing this collided with unrelated work already on `main` from the Office Server
+PC session (a new "Require 2FA for all users" admin-enforcement feature, its own
+`security_settings` table/migration, and a `ForceTwoFactorSetupModal.tsx`) - `app.ts` was touched by
+both sessions. `git pull` auto-merged cleanly (no manual conflict resolution needed); applied the
+newly-pulled migrations locally (`npx prisma migrate deploy`, 2 new ones:
+`20260828031500_add_security_settings`, `20260828075720_add_security_settings_enforce_2fa`),
+re-typechecked both apps clean, rebuilt both containers, confirmed backend healthy, then pushed the
+merge (`a6cb9ca`).
+
 ## Current state / follow-ups for next session
 
 - Facebook Link (form fields, backend, legacy backfill, `.bat` wiring, summary card display), the
-  login page redesign, and its light/dark toggle button are all live and correct on this laptop.
-- **Office Server PC still needs**, in order: `git pull` (through `62a7986`); `npx prisma migrate
-  deploy` for `20260828021859_add_loan_application_facebook_link`; `docker compose up -d --build
-  easycashbackend lmsfrontend`; then `npx tsx scripts/backfill-legacy-borrower-facebook-links.ts
-  --apply` (one-time, additive, safe to re-run) to backfill the ~1,171 existing legacy clients'
-  Facebook links there too - going forward, `Update Database From SDevTech.bat`'s new `[6/10]` step
-  picks this up automatically for anyone who runs that script, but this first backfill on that
-  machine needs to happen once manually (or by running that `.bat` once).
-- No functional/business-logic changes in this session - purely additive fields and a visual
-  restyle. Nothing else carried over beyond what §16 of the prior day's log already listed.
+  login page redesign + its light/dark toggle, the 3-client Drive-document recovery, the 6 removed
+  test accounts, and the new admin Active Sessions feature are all live and correct on this laptop -
+  including the Office Server PC session's own 2FA-enforcement feature, pulled and applied here too.
+- **Office Server PC still needs**, in order: `git pull` (through `a6cb9ca`); `npx prisma migrate
+  deploy` for `20260828021859_add_loan_application_facebook_link` (this session's own migration -
+  the Office Server PC session's two `security_settings` migrations obviously don't need re-applying
+  there, they originated there); `docker compose up -d --build easycashbackend lmsfrontend`; then
+  `npx tsx scripts/backfill-legacy-borrower-facebook-links.ts --apply` (one-time, additive, safe to
+  re-run) to backfill the ~1,171 existing legacy clients' Facebook links there too - going forward,
+  `Update Database From SDevTech.bat`'s new `[6/10]` step picks this up automatically.
+- **§4's 3-client Drive-document recovery is NOT yet applied on the Office Server PC** (this
+  session's local DB only) - the 56 staged files currently only exist in this laptop's session-local
+  temp scratchpad, not committed anywhere (real client PII). If the Office Server PC's live database
+  also has these same 3 zero-attachment gaps, that recovery needs to be redone there from scratch
+  (re-download from Drive, since the staged files aren't portable) - not yet asked of the user.
+- **§5's 6 removed test accounts**: only removed from this laptop's local DB. If the same 6 dummy
+  accounts exist on the Office Server PC's live database too, `remove-test-client-accounts.ts` can
+  be re-run there directly (dry-run first) - matches by name, not hardcoded ids, so it's portable as-is.
+- Offered but not yet actioned: moving the 56 staged Drive documents to a permanent, gitignored
+  location instead of the temp scratchpad (mirrors how `legacy/mambu/easycash.sql` is handled) -
+  no answer from the user yet.
+- One more likely-test account spotted but explicitly left alone per user's own scoping: BHENZII
+  JEMINO TESTA (not deleted - only the 6 named accounts were removed).
