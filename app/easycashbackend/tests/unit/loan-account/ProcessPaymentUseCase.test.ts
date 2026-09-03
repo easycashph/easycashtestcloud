@@ -390,6 +390,22 @@ describe('ProcessPaymentUseCase', () => {
       const useCase = new ProcessPaymentUseCase(deps);
       await expect(useCase.execute('loan-1', Money.of('2300.00'), 'officer-1')).resolves.toBeDefined();
     });
+
+    it('includes the borrower\'s name in the notification title when borrowerRepository resolves one (2026-09-03)', async () => {
+      const deps = buildDeps();
+      const notifyStaff = vi.fn();
+      const loan = buildActiveLoan('2000.00', '300.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '2000.00', interest: '300.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+      const borrowerRepository = { findById: vi.fn().mockResolvedValue({ name: { fullName: () => 'Juan Dela Cruz' } }) };
+
+      const useCase = new ProcessPaymentUseCase({ ...deps, notificationService: { notifyStaff } as never, borrowerRepository: borrowerRepository as never });
+      await useCase.execute('loan-1', Money.of('2300.00'), 'officer-1');
+
+      expect(borrowerRepository.findById).toHaveBeenCalledWith(loan.borrowerId);
+      expect(notifyStaff).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining('Juan Dela Cruz') }));
+    });
   });
 
   describe('manual per-installment allocation (2026-07-10, Payment Recording "Manual" tab)', () => {

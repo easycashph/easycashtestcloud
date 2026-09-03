@@ -6,6 +6,8 @@ import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
+import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import { loanNotificationLabel } from '@shared/domain/loanNotificationLabel';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -32,6 +34,7 @@ export interface CompromiseSettleLoanUseCaseDeps {
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
   notificationService?: NotificationService;
+  borrowerRepository?: IBorrowerRepository;
 }
 
 export interface CompromiseSettleLoanInput {
@@ -233,11 +236,14 @@ export class CompromiseSettleLoanUseCase {
     // CLOSED* status, not a distinct event like Restructured/Rescheduled). Fired only now that the
     // unitOfWork above has committed.
     if (this.deps.notificationService) {
+      // All old loans share one borrower (enforced above) - one lookup covers every notification.
+      const borrower = await this.deps.borrowerRepository?.findById(borrowerId);
+      const borrowerName = borrower?.name.fullName();
       for (const loan of oldLoanAccounts) {
         await this.deps.notificationService.notifyStaff({
           branchId: loan.branchId,
           type: 'LOAN_CLOSED',
-          title: `Loan ${loan.loanCode} closed - compromise settlement into ${newLoanAccount.loanCode}`,
+          title: `Loan ${loanNotificationLabel(loan.loanCode, borrowerName)} closed - compromise settlement into ${newLoanAccount.loanCode}`,
           entityType: 'LoanAccount',
           entityId: loan.id,
         });

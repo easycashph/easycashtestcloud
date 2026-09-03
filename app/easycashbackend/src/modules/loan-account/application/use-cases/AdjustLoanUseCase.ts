@@ -5,6 +5,8 @@ import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
+import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
+import { loanNotificationLabel } from '@shared/domain/loanNotificationLabel';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -27,6 +29,7 @@ export interface AdjustLoanUseCaseDeps {
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
   notificationService?: NotificationService;
+  borrowerRepository?: IBorrowerRepository;
 }
 
 export interface AdjustLoanInput {
@@ -207,17 +210,19 @@ export class AdjustLoanUseCase {
     // deliberately a different event from LOAN_RESTRUCTURED) plus the generic LOAN_CLOSED, fired
     // only now that the unitOfWork above has committed.
     if (this.deps.notificationService) {
+      const borrower = await this.deps.borrowerRepository?.findById(oldLoanAccount.borrowerId);
+      const label = loanNotificationLabel(oldLoanAccount.loanCode, borrower?.name.fullName());
       await this.deps.notificationService.notifyStaff({
         branchId: oldLoanAccount.branchId,
         type: 'LOAN_RESCHEDULED',
-        title: `Loan ${oldLoanAccount.loanCode} rescheduled into ${newLoanAccount.loanCode}`,
+        title: `Loan ${label} rescheduled into ${newLoanAccount.loanCode}`,
         entityType: 'LoanAccount',
         entityId: oldLoanAccount.id,
       });
       await this.deps.notificationService.notifyStaff({
         branchId: oldLoanAccount.branchId,
         type: 'LOAN_CLOSED',
-        title: `Loan ${oldLoanAccount.loanCode} closed - rescheduled`,
+        title: `Loan ${label} closed - rescheduled`,
         entityType: 'LoanAccount',
         entityId: oldLoanAccount.id,
       });

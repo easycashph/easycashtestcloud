@@ -909,6 +909,7 @@ export function createApp(): Express {
         financialAuditLogger,
         unitOfWork,
         notificationService,
+        borrowerRepository,
       }),
       reversePaymentUseCase: new ReversePaymentUseCase({
         loanAccountRepository,
@@ -945,6 +946,7 @@ export function createApp(): Express {
         unitOfWork,
         profileActivityLogService,
         notificationService,
+        borrowerRepository,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
       // 2026-08-07 (Undo Restructure feature, user-confirmed): same local-repository-instance
@@ -972,6 +974,7 @@ export function createApp(): Express {
         unitOfWork,
         profileActivityLogService,
         notificationService,
+        borrowerRepository,
       }),
       getLoanAdjustmentUseCase: new GetLoanAdjustmentUseCase({ loanAdjustmentRepository }),
       // 2026-08-07 (Undo Adjustment feature, user-confirmed): same local-repository-instance
@@ -1000,6 +1003,7 @@ export function createApp(): Express {
         unitOfWork,
         profileActivityLogService,
         notificationService,
+        borrowerRepository,
       }),
       getLoanCompromiseSettlementUseCase: new GetLoanCompromiseSettlementUseCase({ loanCompromiseSettlementRepository }),
       idempotencyKeyStore,
