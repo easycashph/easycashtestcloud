@@ -3845,3 +3845,81 @@ Committed and pushed (`01430d8`).
   level for the whole script run, or switching the retry call to `System.Net.Http.HttpClient`
   directly instead of `Invoke-RestMethod` - not needed yet since the current fix already resolved
   the reported case.
+
+## §81 — 2026-09-03: SOA Accrued Interest formula's rate is now a manual, per-generation override (mockup-first)
+
+User asked to make the Statement of Account's Accrued Interest formula's rate editable per
+generation, instead of it always being silently pulled from the loan account's own
+`contractualInterestRate` - "patingin muna ako ng mockup" before any implementation.
+
+**Mockup pass**: published an Artifact mimicking the real Create SOA dialog's existing shadcn/ui
+styling (specifically mirroring the Penalty section's own `RECORDED`/`COMPUTED`/`MANUAL`
+radio-pill pattern, "use this" quick-fill button, and card layout - traced directly from
+`LoanDetailPage.tsx` before designing, not invented from scratch) - two radio options ("Use the
+loan's contractual rate" / "Enter a rate manually"), a manual rate input revealed on the second
+option, and a new "Rate used" column on the Accrued Interest breakdown table. User approved
+("tuloy mo na") without changes.
+
+**Verification, before implementing**: read `AccruedInterestCalculator.ts` (the automatic Loan
+Detail counterpart - confirmed NOT the file being changed, per its own doc comment it's
+deliberately separate from the SOA's formula), then `StatementOfAccountCalculator.ts` (confirmed
+already accepts `contractualRate` as a plain input parameter - no change needed there at all,
+only WHERE the caller sources that rate from), then traced it to
+`StatementOfAccountMergeDataResolver.ts:121`, hardcoded to `loanAccount.contractualInterestRate`
+with no override path - the actual target of the whole feature.
+
+**Backend implementation** (additive Prisma migration
+`20260903052238_add_soa_accrued_interest_rate_override`, nullable `accruedInterestRate` column on
+`GeneratedStatementOfAccount` - nullable both because a migrated loan may have no
+`contractualInterestRate` at all, and because every statement generated before this feature has no
+rate recorded): threaded a new optional `manualAccruedInterestRate: Percentage` end-to-end through
+`IStatementOfAccountMergeDataResolver`/`StatementOfAccountMergeDataResolver` (falls back to the
+loan's own rate when omitted - zero behavior change for anyone who never touches this),
+`GenerateStatementOfAccountUseCase`, the Zod schema (`statementOfAccountSchemas.ts`, reusing the
+shared `decimalStringSchema` rather than the file's own 2-decimal-max `decimalString`, since a rate
+needs the schema's `Decimal(6,3)` precision), the controller, the domain entity, the Prisma
+repository (both directions), and the presenter. Also added an unwired `AccruedInterestRate` merge
+data key to the .docx merge payload for forward compatibility - the actual SOA Word template has no
+`{AccruedInterestRate}` placeholder yet (confirmed against ADR-052's placeholder list), so this is a
+no-op today; printing it on the document itself would need a manual template edit, called out as a
+separate follow-up.
+
+**Frontend** (`LoanDetailPage.tsx`, Create SOA dialog): new `soaAccruedRateMode`
+(`'LOAN' | 'MANUAL'`)/`soaManualAccruedRate` state, reset to `LOAN`/the loan's own rate every time
+the dialog opens (same posture as every other SOA field reset); the live client-side preview
+(`soaPreview`) now reads the manual rate when that mode is selected, so staff see the recomputed
+Accrued Interest amount before generating, not just after; the generate-SOA API call omits
+`manualAccruedInterestRate` entirely under `LOAN` mode (so the backend's own unchanged fallback
+applies) and sends it only under `MANUAL`. New "Rate used" column added to the on-screen breakdown
+table.
+
+**Docker rebuild hit repeated buildkit failures** ("frontend grpc server closed unexpectedly") -
+survived a Docker Desktop restart still failing, resolved only after a full Windows restart of
+Office Server PC itself. Backend and lmsfrontend rebuilt clean afterward, both verified healthy.
+
+**Deployment gotcha** (user-reported: "wala akong nakikita" after everything looked done) - the
+user views the LMS at the deployed `easycash-lms.pages.dev` (Cloudflare Pages, git-integrated
+auto-deploy on push), not `localhost:5173` directly. The local Docker rebuild only ever updates the
+Office Server PC's own local container - it has no effect on the Cloudflare Pages deployment at
+all. Root cause of "hindi ko makita ang bagong feature" was simply that the code had been rebuilt
+locally but never committed/pushed to GitHub yet, so Cloudflare Pages had nothing new to build.
+Committed and pushed (`e5310c8`); Cloudflare Pages auto-built and deployed within ~1-2 minutes; user
+confirmed working live.
+
+### Current state / follow-ups
+
+- Staff can now type an Accrued Interest rate per Statement of Account generation, defaulting to
+  (and easily reset back to, via "use this") the loan's own Contractual Interest Rate - verified
+  working on the live `easycash-lms.pages.dev` deployment.
+- Every past `GeneratedStatementOfAccount` now permanently records which rate it actually used
+  (`accruedInterestRate`, null for statements generated before this feature existed) - a statement
+  stays explainable even if the loan's own rate changes later.
+- **Important operational note for future sessions**: this office's actual working LMS is the
+  Cloudflare Pages deployment, not the local Docker container directly - any frontend (or backend,
+  via the tunnel) change needs an actual `git push` before the user can see it live, not just a
+  local rebuild. Worth remembering before reporting a UI change "done."
+- Not done: the SOA .docx template has no placeholder to print the rate actually used on the
+  generated PDF itself (`AccruedInterestRate` merge key exists but is unwired) - would need a
+  manual edit to the Word template, not attempted this session.
+- Macbook Nomer / Nomer Laptop need `git pull` + `prisma migrate deploy` + backend rebuild to pick
+  up the new column and code.
