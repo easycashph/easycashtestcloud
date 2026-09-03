@@ -4081,3 +4081,37 @@ per the §81 lesson that the user's live LMS is the deployed stack, not localhos
 - All six notification-emitting paths (2 daily-scan + 4 write-time) now format titles identically
   via `loanNotificationLabel` - no known gaps left in this set.
 - No new DB migration was needed - this only changes notification title strings, not schema.
+
+## §86 — 2026-09-03: Popup toast for new notifications, not just the bell badge
+
+User asked whether the notification bell could show a small popup when a new notification arrives,
+reasoning the badge count alone is easy to miss while working elsewhere on screen. Mockup-first
+(published Artifact, mirroring the real Topbar/bell styling and the app's navy primary/Inter
+tokens from `index.css`/`tailwind.config.ts`) - approved with "Oo, ituloy mo na."
+
+New `app/lmsfrontend/src/components/NotificationToaster.tsx`, mounted once in `AppLayout` next to
+the existing `SystemAnnouncementPopup`. No new backend endpoint or dependency - it runs its own
+`useQuery(['notifications'])` with the same query key and 30s `refetchInterval` as
+`NotificationBell` (now exported as `NOTIFICATIONS_POLL_INTERVAL_MS` from `NotificationBell.tsx` so
+the two can't drift apart), which React Query dedupes into a single shared poll rather than two
+separate requests.
+
+"New" is tracked as a `Set<string>` of notification ids in a ref, not persisted - the first poll
+after mount seeds the set silently (so opening the app doesn't replay the last 20 notifications as
+a wall of toasts), and only an id that shows up in a LATER poll toasts, matching the same
+first-poll-is-silent pattern `AppLayout`'s chat-queue sound already uses. Muted notification types
+(Settings > Notifications, `readMutedTypes`) are skipped, same as the bell dropdown. Each toast
+auto-dismisses after 6s, or on click/Enter (which also marks it read and navigates via the same
+`entityLink` route logic the dropdown uses - exported from `NotificationBell.tsx` rather than
+re-derived), or via its own close button. Capped at 4 toasts visible at once.
+
+Frontend type-checked clean (`tsc --noEmit`), `lmsfrontend` rebuilt, both it and `easycashbackend`
+came back healthy. Committed and pushed (`9a5db12e`).
+
+### Current state / follow-ups
+
+- Visual-only, no sound - the mockup didn't include audio and none was requested here; the existing
+  chat notification sound (§82) is unrelated and untouched.
+- Toasts are per-browser-tab (the seen-ids `Set` lives in component state) - opening a second tab
+  will re-toast whatever's already-seen-in-tab-1-but-new-to-tab-2, which is correct behavior, not a
+  bug: each tab is its own "have I shown this yet" scope.
