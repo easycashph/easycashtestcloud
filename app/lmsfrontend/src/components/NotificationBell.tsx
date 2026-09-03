@@ -11,11 +11,17 @@ import { readMutedTypes } from '@/lib/notificationPreference';
 import type { ListNotificationsResponse, Notification } from '@/lib/notificationApiTypes';
 import { cn } from '@/lib/utils';
 
-const POLL_INTERVAL_MS = 30_000;
+/** Shared with `NotificationToaster` so both poll the same `['notifications']` query key/interval -
+ * React Query dedupes this into a single request either way, but keeping the constant and query
+ * shape in one place avoids the two components silently drifting apart. */
+export const NOTIFICATIONS_POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = NOTIFICATIONS_POLL_INTERVAL_MS;
 
 /** Where a notification's `entityType`/`entityId` links to, if anywhere - matches the routes used
- * elsewhere in the app for the same entity types (e.g. LoanApplicationDetailPage's route). */
-function entityLink(notification: Notification): string | null {
+ * elsewhere in the app for the same entity types (e.g. LoanApplicationDetailPage's route). Exported
+ * for `NotificationToaster` (2026-09-03) so the popup toast navigates identically to a dropdown
+ * click instead of re-deriving the same route logic. */
+export function entityLink(notification: Notification): string | null {
   if (!notification.entityId) return null;
   if (notification.entityType === 'LoanApplication') return `/applications/${notification.entityId}`;
   if (notification.entityType === 'LoanAccount') return `/loans/${notification.entityId}`;
