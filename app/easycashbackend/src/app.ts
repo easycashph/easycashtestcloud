@@ -1765,7 +1765,7 @@ export function createApp(): Express {
     {
       listChatQueueUseCase: new ListChatQueueUseCase({ userRepository, chatRepository }),
       listMyClaimedChatConversationsUseCase: new ListMyClaimedChatConversationsUseCase({ chatRepository }),
-      getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository }),
+      getChatConversationForStaffUseCase: new GetChatConversationForStaffUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository, borrowerRepository }),
       claimChatConversationUseCase: new ClaimChatConversationUseCase({ userRepository, chatRepository }),
       initiateChatTransferUseCase: new InitiateChatTransferUseCase({ userRepository, chatRepository }),
       completeChatTransferUseCase: new CompleteChatTransferUseCase({ userRepository, chatRepository }),
@@ -1777,7 +1777,7 @@ export function createApp(): Express {
       downloadChatAttachmentForStaffUseCase: new DownloadChatAttachmentForStaffUseCase({ userRepository, chatRepository, attachmentRepository, fileStorage }),
       listChatOversightStaffUseCase: new ListChatOversightStaffUseCase({ userRepository }),
       listChatConversationsForStaffUseCase: new ListChatConversationsForStaffUseCase({ userRepository, chatRepository }),
-      getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository }),
+      getChatConversationForMisUseCase: new GetChatConversationForMisUseCase({ userRepository, chatRepository, portalAccountRepository, loanApplicationRepository, borrowerRepository }),
       setStaffChatTypingUseCase: new SetStaffChatTypingUseCase({ chatRepository }),
       updateAgentPresenceUseCase: new UpdateAgentPresenceUseCase({ chatRepository }),
       listAgentPresenceUseCase: new ListAgentPresenceUseCase({ chatRepository }),

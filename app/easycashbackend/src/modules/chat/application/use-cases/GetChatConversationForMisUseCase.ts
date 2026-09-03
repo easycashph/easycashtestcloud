@@ -1,6 +1,7 @@
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
 import type { IPortalAccountRepository } from '@modules/client-portal/application/ports/IPortalAccountRepository';
 import type { ILoanApplicationRepository } from '@modules/loan-application/application/ports/ILoanApplicationRepository';
+import type { IBorrowerRepository } from '@modules/borrower/application/ports/IBorrowerRepository';
 import type { IChatRepository, ChatConversationRecord, ChatMessageRecord } from '../ports/IChatRepository';
 import { ChatConversationNotFoundError, ChatNotEligibleError } from '../../domain/errors/ChatErrors';
 import { buildChatClientInfo, type ChatClientInfo } from '../ChatClientInfo';
@@ -10,6 +11,7 @@ export interface GetChatConversationForMisUseCaseDeps {
   chatRepository: IChatRepository;
   portalAccountRepository: IPortalAccountRepository;
   loanApplicationRepository: ILoanApplicationRepository;
+  borrowerRepository: IBorrowerRepository;
 }
 
 export interface MisChatView {

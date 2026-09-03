@@ -106,6 +106,10 @@ interface ChatClientLoanApplication {
 
 interface ChatClientInfo {
   portalAccountEmail: string | null;
+  /** 2026-09-03 - the linked Borrower's name, the account's own pre-application profile name, or
+   * the most recent loan application's applicantName, in that priority order; null only when none
+   * of those three sources have a name at all. */
+  portalAccountName: string | null;
   loanApplications: ChatClientLoanApplication[];
 }
 
@@ -725,7 +729,10 @@ export function ChatPage() {
                 </CardTitle>
                 {view.client.portalAccountEmail && (
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Chatting with: {view.client.portalAccountEmail}
+                    Chatting with:{' '}
+                    {view.client.portalAccountName
+                      ? `${view.client.portalAccountName} (${view.client.portalAccountEmail})`
+                      : view.client.portalAccountEmail}
                     {isRecentlyActive(view.conversation.portalTypingAt, TYPING_INDICATOR_TTL_MS) && (
                       <span className="ml-2 italic text-primary">typing…</span>
                     )}
