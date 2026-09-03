@@ -16,7 +16,6 @@ import {
   LMS_COMPANY,
   LMS_DEV_TEAM_MEMBERS,
   LMS_DEVELOPER_TEAM,
-  LMS_PERMANENT_CREDIT,
   LMS_VERSION,
   PORTAL_CHANGELOG,
   PORTAL_UPDATED_ON,
@@ -24,13 +23,10 @@ import {
   type LmsChangelogEntry,
 } from '@/lib/lmsVersion';
 
-// Always includes LMS_PERMANENT_CREDIT first (2026-08-20, Jomer Biason's explicit instruction -
-// see that constant's own doc comment) - deduped by name so it doesn't double up while he's still
-// on the current roster below.
-const DEVELOPER_TEAM_DISPLAY = [
-  LMS_PERMANENT_CREDIT,
-  ...LMS_DEV_TEAM_MEMBERS.filter((m) => m.name !== LMS_PERMANENT_CREDIT.name),
-];
+// 2026-09-03 (user-confirmed): the former permanent-credit merge (Jomer Biason's 2026-08-20
+// instruction that his entry survive any roster change) was explicitly removed along with the
+// LMS_PERMANENT_CREDIT constant itself - see that removal's own doc comment in lmsVersion.ts. The
+// card now shows exactly LMS_DEV_TEAM_MEMBERS, nothing merged in.
 
 const HELPS_YOU = [
   'Originate and service loans with configurable products, interest, fees, and penalties',
@@ -136,7 +132,7 @@ export function AboutPage() {
         </CardHeader>
         <CardContent>
           <ul className="grid gap-3 sm:grid-cols-2">
-            {DEVELOPER_TEAM_DISPLAY.map((member) => (
+            {LMS_DEV_TEAM_MEMBERS.map((member) => (
               <li key={member.name} className="rounded-md border p-3">
                 <p className="text-sm font-semibold">{member.name}</p>
                 <p className="text-xs text-muted-foreground">{member.role}</p>

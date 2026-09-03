@@ -27,26 +27,15 @@ export interface LmsTeamMember {
   note?: string;
 }
 
-/** Current LMS developer team, shown on the About page. Update when the team roster changes. */
-export const LMS_DEV_TEAM_MEMBERS: LmsTeamMember[] = [
-  { name: 'Jomer Biason', role: 'MIS Assistant', note: 'Full-stack Engineer' },
-  { name: 'Nomer Perez', role: 'MIS Manager', note: 'Quality Assurance Engineer' },
-  { name: 'Howell Hay', role: 'CEO', note: 'Product Manager' },
-];
-
-/**
- * PERMANENT CREDIT (2026-08-20, Jomer Biason's explicit instruction: "gusto ko na hindi dapat ito
- * mabubura kahit mag resign na ako") - unlike `LMS_DEV_TEAM_MEMBERS` above (the *current* staff
- * roster, which is expected to change as people join/leave), this single entry is NOT tied to
- * current employment status. AboutPage.tsx always merges this into the Developer Team card even
- * if a future edit removes Jomer from the roster array above - do not delete this constant or its
- * merge logic, regardless of staffing changes.
+/** Current LMS developer team, shown on the About page. Update when the team roster changes.
+ *
+ * 2026-09-03 (user-confirmed, Nomer Perez: "Hindi na siya connected dito sa LMS at company"):
+ * Jomer Biason and Howell Hay removed - neither is still connected to the LMS or the company.
+ * This includes the removal of the former `LMS_PERMANENT_CREDIT` constant (2026-08-20, Jomer's
+ * own prior instruction that his entry should survive any future roster change/resignation) -
+ * explicitly overridden this time by the same authority that owns this roster, not an oversight.
  */
-export const LMS_PERMANENT_CREDIT: LmsTeamMember = {
-  name: 'Jomer Biason',
-  role: 'MIS Assistant',
-  note: 'Full-stack Engineer',
-};
+export const LMS_DEV_TEAM_MEMBERS: LmsTeamMember[] = [{ name: 'Nomer Perez', role: 'MIS Manager' }];
 
 /**
  * The client-facing companion site - LIVE (technically reachable) since July 29, 2026 (v0.1.0 -
