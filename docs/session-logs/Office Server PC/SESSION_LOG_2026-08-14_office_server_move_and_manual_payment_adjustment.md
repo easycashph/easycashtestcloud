@@ -3923,3 +3923,55 @@ confirmed working live.
   manual edit to the Word template, not attempted this session.
 - Macbook Nomer / Nomer Laptop need `git pull` + `prisma migrate deploy` + backend rebuild to pick
   up the new column and code.
+
+## §82 — 2026-09-03: CIC Monthly Report XLSX showed PSGC codes instead of Barangay/City/Province names; chat notification sound added
+
+Two small, unrelated items closed out the same session.
+
+**CIC report coded addresses.** User noticed the CIC Monthly Report Excel's "ID - Individual" sheet
+printing raw numbers ("042111011", "042103", "0421") in the Barangay/City/Province columns instead
+of names (screenshot). Traced `CicExcelReportWriter.ts` -> `PrismaReportingRepository.ts`, which
+reads these straight off `Address.barangay/cityMunicipality/province` - confirmed this is the
+`Address` model's own known, already-tooled-for data-quality issue: `PsgcAddressPicker.tsx`'s own
+doc comment says outright that ~68% of CP12-migrated `Address` rows have PSGC codes instead of names
+(two address-entry paths existed in the legacy system, migration copied whichever the source record
+had verbatim), and `scripts/fix-coded-addresses.ts` already exists to fix it - detects a coded field
+by exact digit-width pattern (province 4 digits, city 6, barangay 9), resolves it against the PSGC
+reference tables, and only ever fills a value it can actually resolve (never guesses). Ran dry-run
+first (507 of 3,488 addresses had at least one resolvable coded field), user confirmed, applied,
+re-ran dry-run to verify zero remain. Pure data fix - no code changed, nothing to commit. The
+`PsgcAddressPicker` component itself already prevents this for every NEW address going forward; this
+only cleaned up the historical backlog that had slipped through on Office Server PC.
+
+**Chat notification sound.** User asked for a sound when a Portal chat comes in. Traced the existing
+polling: the sidebar's `useChatQueueCount` (`AppLayout.tsx`, polls `/chat/queue` every 8s for the
+unclaimed-request badge) and `ChatPage.tsx`'s `loadConversation` (polls the open conversation's
+messages every `POLL_INTERVAL_MS` = 4s). Added `chatNotificationSound.ts` - a short two-tone chime
+synthesized with the Web Audio API (no audio asset to source/license), `AudioContext` constructed
+lazily on first call so it always sees whatever user gesture has already happened (browsers block
+autoplay before one), every failure caught and swallowed silently. Wired into both existing polls:
+the sidebar chimes when the queue count grows over its last-seen value (never on first load, never
+when it shrinks); `ChatPage` chimes when the active conversation's message count grows AND the
+newest message's `senderType` is `PORTAL_ACCOUNT` (never for the staff member's own just-sent
+message), with the "last seen" count reset to null on every conversation switch so opening one never
+chimes for messages that were already there.
+
+Both frontend-only, `lmsfrontend` rebuilt and verified healthy. Since the office actually uses the
+`easycash-lms.pages.dev` Cloudflare Pages deployment (per §81's lesson), committed and pushed
+(`a628740`) so Cloudflare Pages' git-integrated auto-deploy would pick it up - not just the local
+Docker rebuild.
+
+### Current state / follow-ups
+
+- CIC Monthly Report XLSX should now print real Barangay/City/Province names for every borrower on
+  Office Server PC - user should re-download a report to confirm.
+- Macbook Nomer / Nomer Laptop likely carry the same coded-address backlog in their own databases
+  (same CP12 migration origin) - `scripts/fix-coded-addresses.ts` (dry-run first) should be run on
+  each independently; this session's fix only touched Office Server PC's database.
+- Chat notification sound is always-on, no mute toggle - user didn't ask for one; easy to add later
+  (a per-user Settings toggle, same pattern as other preference toggles already in the app) if it
+  turns out to be too much in a busy office.
+- Sound only covers two triggers (queue growth, new message in the CURRENTLY OPEN conversation) -
+  a new message on a "mine" conversation that isn't the one currently open does not chime (would
+  need per-conversation last-message tracking across the whole `mine` list, not just the active
+  one) - not attempted this session, flagged as a possible follow-up if staff want it.
