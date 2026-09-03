@@ -83,6 +83,141 @@ export interface LmsChangelogEntry {
  */
 export const LMS_CHANGELOG: LmsChangelogEntry[] = [
   {
+    version: '0.57.0',
+    days: [
+      {
+        date: 'September 3, 2026',
+        highlights: [
+          "Notification Center redesigned: a loan being restructured, rescheduled, recovered from arrears, or closed, and a new Portal chat message, now notify staff the instant they happen instead of waiting on a poll. Only the handful of events with no real trigger to hook (past due, matured, first amortization due) still run on a scan - relaxed from every 15 minutes to once a day, since none of them need minute-level latency.",
+          "Statement of Account's Accrued Interest formula can now use a staff-typed rate for one statement instead of always the loan's own Contractual Interest Rate - every statement still permanently records which rate it actually used.",
+          'Staff chat now shows the borrower\'s real name, not just their email, in the "Chatting with" header, and gained a notification chime for a new unclaimed request or a new message in the conversation currently open.',
+          "Fixed the Detailed Ending Current Balance report, and 59 migrated loans' Principal/Interest/Fees plus 958 migrated loans' Penalty, drifting out of sync with their own repayment schedule (and with the company's other lending system) after the legacy data migration.",
+          'Fixed CIC Monthly Report addresses printing raw geographic codes instead of place names for 507 legacy client addresses.',
+          'Developer Team card on this page updated to reflect the current team.',
+        ],
+      },
+    ],
+  },
+  {
+    // PATCH - CIC report correctness fixes only, no new capability.
+    version: '0.56.3',
+    days: [
+      {
+        date: 'September 2, 2026',
+        highlights: [
+          "Fixed the CIC Monthly Report's official submission file: it was missing its required closing summary row, and its downloaded filename wasn't reaching the browser correctly.",
+          "Fixed the CIC report re-submitting a returning client's identity record on every one of their loans instead of only their first.",
+        ],
+      },
+    ],
+  },
+  {
+    // PATCH - a single correctness fix, no new capability.
+    version: '0.56.2',
+    days: [
+      {
+        date: 'September 1, 2026',
+        highlights: [
+          "Fixed a real bug where 117 loans' Net Proceeds double-counted three origination fees (Notarial, Web, Insurance) that were already included in a fourth, combined \"Other Fees\" figure.",
+        ],
+      },
+    ],
+  },
+  {
+    // PATCH - extends the previous day's loading UI and continues CIC accuracy work, no new capability.
+    version: '0.56.1',
+    days: [
+      {
+        date: 'August 31, 2026',
+        highlights: [
+          'Extended the new high-end animated loading progress to the Loan Account, Client, and Loan Application list pages.',
+          'Continued CIC Monthly Report accuracy work: resolved the last of July 2026\'s flagged exclusions and completed the disbursement-transaction backfill.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.56.0',
+    days: [
+      {
+        date: 'August 30, 2026',
+        highlights: [
+          'New CIC Monthly Report - generates the company\'s official monthly Credit Information Corporation submission (Header/Individuals/Contracts) directly from real loan data, with a staff review UI (month/year picker, live preview, CSV and Excel download).',
+          'Report pages across the platform gained a high-end animated loading progress display.',
+          'About page\'s changelog redesigned as a collapsed, expandable timeline.',
+          'New Build Info card on the About page - detects when a machine\'s deployed version has drifted from what it should be.',
+          'Backfilled 23 genuinely-disbursed legacy loans that were missing their disbursement transaction, found while building the CIC report.',
+          'New automated balance sanity-check wired into every legacy-data update script, to catch a loan\'s cached balance drifting out of sync with its own schedule going forward.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.55.0',
+    days: [
+      {
+        date: 'August 29, 2026',
+        highlights: [
+          '"Loan Adjustment" renamed to "Reschedule" throughout the platform, and its legacy-migration mapping corrected to only apply when a loan\'s principal genuinely didn\'t change.',
+          'New Compromise Settlement feature - fold one or more of a client\'s loans into a single new loan at a negotiated amount, from the Client Profile page.',
+          'Loan Releases Report now excludes restructured/rescheduled/compromised loans by default.',
+          'Profile Notes now show whether a note came from SDevTech or Mambu instead of guessing its author.',
+          'Found and corrected a duplicate-transaction bug in the monthly data-sync process, and cleaned up the loans/transactions it had affected.',
+          "Several data-sync fixes: missing Net Proceeds/origination-fee/interest-rate steps added to the routine update process, and loans already active directly in the LMS are now correctly skipped during the sync's transaction import.",
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.54.0',
+    days: [
+      {
+        date: 'August 28, 2026',
+        highlights: [
+          'Login screen redesigned with a split brand panel and a light/dark toggle.',
+          'New Facebook Link field on Clients and Loan Applications, auto-filled from the other lending system where available, and shown on the Client Profile summary card.',
+          'Admins can now view, and force sign-out, any staff member\'s active sessions.',
+          'New admin-wide "Require 2FA for all users" security enforcement.',
+          'Recovered 79 more loan attachment files from an old local archive.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.53.0',
+    days: [
+      {
+        date: 'August 27, 2026',
+        highlights: [
+          'Fixed a real data bug: every migrated client\'s "Date Created" was wrong - backfilled the correct value for 4,607 clients.',
+          'Edit Client Details gained TIN and SSS Number fields.',
+          'Contact numbers across Clients now format live as +63 XXX XXX XXXX, and Length of Stay moved next to Address on both Clients and Loan Applications.',
+          'Fixed Home Ownership options not matching the same list everywhere, and corrected gender/civil-status capitalization mismatches between Clients and Loan Applications.',
+          'Restructure dialog\'s schedule tables gained a Total row, and staff can now choose Declining Balance or Flat Rate when restructuring a Flat-interest loan.',
+          'Loan list\'s Created column can now sort across the full dataset, not just the loaded page.',
+          'Recovered 590 loan attachment files, plus a permanent address-recovery tool, from an old staff backup of the company\'s legacy Mambu system.',
+          'Fixed Edit Client Details sometimes showing a blank Birth Date and missing the +63 prefix on phone entry.',
+          'Fixed the monthly legacy-data update sometimes silently extracting an older backup instead of the newest one.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.52.0',
+    days: [
+      {
+        date: 'August 26, 2026',
+        highlights: [
+          'Attachments now show who uploaded them, and whether a document came from a legacy system or was added directly in the LMS.',
+          'Overdue-loan notifications now include the borrower\'s name, not just the loan code.',
+          'Clients list gained a Date Created column, sortable across the full dataset.',
+          'Transaction Report\'s totals footer now matches the Expected Collection Report\'s layout.',
+          'Fixed a Settings page scroll bug.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.51.0',
     days: [
       {
@@ -841,6 +976,31 @@ export const LMS_UPDATED_ON = LMS_CHANGELOG[0]!.days[0]!.date;
  * `PORTAL_VERSION`/`PORTAL_UPDATED_ON` below are derived the same way, from `PORTAL_CHANGELOG[0]`.
  */
 export const PORTAL_CHANGELOG: LmsChangelogEntry[] = [
+  {
+    // PATCH - two small MIS Post display fixes, no new capability.
+    version: '0.10.2',
+    days: [
+      {
+        date: 'August 27, 2026',
+        highlights: [
+          "Fixed some daily MIS Post images not yet showing on the homepage banner, and adjusted their crop/layout.",
+          'MIS Post banner moved below the hero section, and trust disclosures consolidated in one place.',
+        ],
+      },
+    ],
+  },
+  {
+    // PATCH - a single display fix, no new capability.
+    version: '0.10.1',
+    days: [
+      {
+        date: 'August 26, 2026',
+        highlights: [
+          'Fixed announcement images on the homepage banner sometimes displaying broken or inconsistently sized.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.10.0',
     days: [
