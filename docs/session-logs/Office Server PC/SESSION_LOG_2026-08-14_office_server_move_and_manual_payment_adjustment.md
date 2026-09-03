@@ -3804,3 +3804,44 @@ Type-checked clean throughout (note: `tsconfig.json` excludes `tests/` from `tsc
 - Macbook Nomer / Nomer Laptop need their own `git pull` + backend rebuild to pick this up - no data migration needed beyond the additive Prisma enum migration (`prisma migrate deploy` on each machine).
 - `LOAN_RECOVERED` and `CompromiseSettleLoanUseCase`'s notification firing are exercised by the live code path (same pattern proven in `LOAN_CLOSED`'s own test) but have no dedicated automated test - worth adding if this area gets touched again.
 - The daily scan's `NOTIFICATION_RESYNC_WINDOW_HOURS` (24h) anti-spam guard is now mostly redundant with the scan itself being daily - kept as a safety net for a manual re-trigger or an odd-timed restart, not the primary anti-spam mechanism it used to be when the scan ran every 15 minutes.
+
+## §80 — 2026-09-03: Cloudflare Tunnel Auto-Update script failing with a spurious "(304) Not Modified" on deployment retry
+
+User ran `scripts\Start Cloudflare Tunnel (Auto-Update).bat` (screenshot) and step [3/4] failed for
+both the LMS and Portal Cloudflare Pages projects: the `VITE_API_BASE_URL` env var update succeeded,
+but the follow-up "trigger a new deployment" POST call to Cloudflare's API failed with
+`The remote server returned an error: (304) Not Modified`, leaving both sites still pointing at the
+now-dead previous tunnel URL. Downstream effect, reported separately by the user minutes later:
+"bakit hindi ako maka log in? Could not reach the server" - `VITE_API_BASE_URL` is baked in at Vite
+build time, not read live, so until a real new deployment actually runs, the live site keeps calling
+whatever backend URL its last successful build was given - in this case, a tunnel session that no
+longer exists.
+
+**Root cause**: not a real Cloudflare API response - a known Windows PowerShell 5.1 / .NET quirk.
+`Invoke-RestMethod`'s underlying `HttpWebRequest` consults the WinINet cache by default
+(`RequestCachePolicy` = `CacheIfAvailable`), so once a PowerShell process has hit
+`api.cloudflare.com` earlier in the same run (the GET+PATCH calls that update the env var
+succeeded first), a later call to the same host - even a POST, even a different path - can get
+served a stale cached 304 instead of actually reaching the server.
+
+**Fixed** in `Update-PagesProject` (`Start Cloudflare Tunnel (Auto-Update).ps1`): added
+`Cache-Control: no-cache` and `Pragma: no-cache` to every request's headers, plus a
+timestamp-based cache-busting query parameter (`?_=<unix-ms>`) on the specific retry-deployment
+POST call that was actually failing, as a second layer. Verified PowerShell syntax with
+`PSParser.Tokenize` (no interactive PowerShell session available to actually execute it here).
+User re-ran the `.bat` file directly and confirmed both projects deployed successfully end-to-end
+with no manual "Retry deployment" click needed, then confirmed they could log into the LMS again.
+Committed and pushed (`01430d8`).
+
+### Current state / follow-ups
+
+- The Cloudflare Tunnel Auto-Update script is fixed and user-verified working end-to-end on Office
+  Server PC.
+- This script is machine-local tooling (reads `local/tunnel-autoupdate.env`, which is gitignored
+  per-machine) but the `.ps1` fix itself is a tracked, shared file - Macbook Nomer / Nomer Laptop
+  will pick up the fix on their next `git pull` if they also use this script there.
+- If this 304 pattern ever reappears despite the fix (e.g. a different call site not covered by
+  these two changes), the next escalation is disabling WinINet caching at the `ServicePointManager`
+  level for the whole script run, or switching the retry call to `System.Net.Http.HttpClient`
+  directly instead of `Invoke-RestMethod` - not needed yet since the current fix already resolved
+  the reported case.
