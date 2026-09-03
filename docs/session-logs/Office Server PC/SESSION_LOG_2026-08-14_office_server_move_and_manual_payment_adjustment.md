@@ -3759,6 +3759,11 @@ silently reintroducing it. Type-checked clean. Committed and pushed (`1ce37b3`).
   `migrate-repayment-schedules.ts` runs) - not just a `git pull` + rebuild. Once they `git pull`
   this session's `.bat` change, though, their own next SDevTech sync will self-heal it automatically
   via the new [10/20]-[11/20] steps.
+  - A step-by-step checklist (git pull, rebuild `easycashbackend`, run both `resync-*` scripts
+    dry-run then for real, verify the report + a sample loan) was written out in chat for both
+    Laptop Nomer and Macbook Nomer to follow on their own machines - not saved as a repo file,
+    since it's a one-time operational runbook for this specific catch-up, not project
+    documentation.
 - The recurrence risk itself is only *mitigated*, not eliminated: `migrate-legacy-data.ts` still
   trusts SDevTech's account-level balance snapshot over its own migrated schedule data. The more
   permanent fix discussed with the user - have `migrate-legacy-data.ts` derive principal/interest/
