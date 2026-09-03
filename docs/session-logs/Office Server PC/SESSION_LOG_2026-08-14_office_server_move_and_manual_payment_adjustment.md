@@ -4115,3 +4115,43 @@ came back healthy. Committed and pushed (`9a5db12e`).
 - Toasts are per-browser-tab (the seen-ids `Set` lives in component state) - opening a second tab
   will re-toast whatever's already-seen-in-tab-1-but-new-to-tab-2, which is correct behavior, not a
   bug: each tab is its own "have I shown this yet" scope.
+
+## §87 — 2026-09-03: Loan Releases report showed a not-yet-disbursed loan (RODGIE GATCHALIAN PASCUAL / SML-REG_00387)
+
+User asked why RODGIE GATCHALIAN PASCUAL appeared on the Loan Releases report despite his loan not
+having been disbursed yet.
+
+Investigated the borrower's 3 loans directly against the DB. `SML-REG_00387` - a migrated loan
+(`legacyId` set) - has `status = APPROVED` (never activated through the LMS's own Activate/Disburse
+action, ADR-032: "activation is disbursement") but carries a non-null `activatedAt`
+(2026-08-31) AND a full migrated transaction history (6 FEE_CHARGED + one ₱60,000.00 DISBURSEMENT,
+all inserted in one migration batch on 2026-08-29) plus a 5-installment PENDING schedule - so
+SDevTech-side data made it *look* released, but the LMS's own status field was never advanced.
+
+`PrismaReportingRepository.getLoanReleasesReport` (line ~539) filtered only on
+`activatedAt: { not: null }`, with no `status` check - so any loan carrying a stray `activatedAt`
+leaked in regardless of whether it had actually gone live. User confirmed: "hindi pa ito na
+disburse... kaya dapat ang lumalabas lang sa loan releases report ay ang mga na disbursed na loan
+lamang" (report should only ever show loans actually disbursed).
+
+**Fix**: added `status: { in: [ACTIVE, ACTIVE_IN_ARREARS, CLOSED, CLOSED_WRITTEN_OFF,
+CLOSED_RESTRUCTURED, CLOSED_ADJUSTED, CLOSED_COMPROMISED] }` to the query - the 7 statuses only
+reachable after a real activation, per `LoanAccountStatus`'s own enum (excludes PENDING_APPROVAL,
+APPROVED, CLOSED_REJECTED, and the deprecated CLOSED_UNDONE). Verified directly against the DB
+before and after: the fix newly excludes 6 loans total (not just Rodgie's) - `SML-Self_O1N9B`,
+`SL-CORP_00071`, `REL-REG_00001`, `SML-REG_00281` (all still PENDING_APPROVAL with a stray
+`activatedAt`), `SML-REG_00174` (APPROVED), and `SML-REG_00387` (Rodgie's).
+
+Backend type-checked clean, rebuilt, verified healthy. Committed and pushed (`bc1e32db`).
+
+### Current state / follow-ups
+
+- **Not yet fixed, flagged for the user**: `getLoanOriginationReport` (same file, line ~320) has the
+  identical bug - `activatedAt: { not: null }` with no `status` check - so the Loan Origination
+  report likely double-counts/misreports the same not-actually-disbursed loans as originated. Not
+  touched this pass since the user only asked about Loan Releases; needs the same yes/no before
+  changing.
+- The underlying migrated-data anomaly itself (6 loans with a stray `activatedAt`/migrated
+  transactions despite never being activated in the LMS) was NOT touched - this fix only changes
+  what the report displays. Whether those 6 loans' migrated data should be corrected (e.g. cleared
+  `activatedAt`, transactions reversed) is a separate question, not asked about yet.
