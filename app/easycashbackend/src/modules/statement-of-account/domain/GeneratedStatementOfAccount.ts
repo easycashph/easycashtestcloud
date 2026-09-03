@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Money } from '@shared/domain/Money';
+import type { Percentage } from '@shared/domain/Percentage';
 import { formatSoaNumber } from './formatSoaNumber';
 
 /** See schema.prisma's `SoaPenaltyMode` enum for what each mode means. */
@@ -18,6 +19,9 @@ export interface GeneratedStatementOfAccountProps {
   /** Required under `MANUAL`, null otherwise — see the schema's own doc comment for why. */
   penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
+  /** Null when Accrued Interest had no rate to apply (e.g. no `contractualInterestRate` on the loan
+   * and no manual override given either) - see schema.prisma's own doc comment. */
+  accruedInterestRate: Percentage | null;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
   pastDueInterest: Money;
@@ -43,6 +47,9 @@ export interface CreateGeneratedStatementOfAccountProps {
   /** Required under `MANUAL`, null otherwise — see the schema's own doc comment for why. */
   penaltyManualReason: string | null;
   accruedInterestAsOfDate: Date;
+  /** Null when Accrued Interest had no rate to apply (e.g. no `contractualInterestRate` on the loan
+   * and no manual override given either) - see schema.prisma's own doc comment. */
+  accruedInterestRate: Percentage | null;
   currentAmortizationDue: Money;
   pastDuePrincipal: Money;
   pastDueInterest: Money;
@@ -119,6 +126,10 @@ export class GeneratedStatementOfAccount {
 
   get accruedInterestAsOfDate(): Date {
     return this.props.accruedInterestAsOfDate;
+  }
+
+  get accruedInterestRate(): Percentage | null {
+    return this.props.accruedInterestRate;
   }
 
   get currentAmortizationDue(): Money {

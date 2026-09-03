@@ -12,6 +12,7 @@ export function presentGeneratedStatementOfAccount(statement: GeneratedStatement
     penaltyRecomputeAll: statement.penaltyRecomputeAll,
     penaltyManualReason: statement.penaltyManualReason,
     accruedInterestAsOfDate: statement.accruedInterestAsOfDate.toISOString().slice(0, 10),
+    accruedInterestRate: statement.accruedInterestRate?.toString() ?? null,
     currentAmortizationDue: statement.currentAmortizationDue.toString(),
     pastDuePrincipal: statement.pastDuePrincipal.toString(),
     pastDueInterest: statement.pastDueInterest.toString(),

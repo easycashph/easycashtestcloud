@@ -4,6 +4,7 @@ import type { ILoanAccountRepository } from '@modules/loan-account/application/p
 import type { LoanAccountStatus } from '@modules/loan-account/domain/LoanAccount';
 import type { IFileStorage } from '@shared/application/ports/IFileStorage';
 import type { Money } from '@shared/domain/Money';
+import type { Percentage } from '@shared/domain/Percentage';
 import { GeneratedStatementOfAccount, type SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 import { formatSoaNumber } from '../../domain/formatSoaNumber';
 import { LoanNotYetApprovedError } from '@modules/loan-document/domain/errors/LoanDocumentDomainErrors';
@@ -48,6 +49,9 @@ export interface GenerateStatementOfAccountInput {
   penaltyManualReason?: string;
   /** Manually-entered "as of" date for the Accrued Interest figure — independent of the Penalty range. */
   accruedInterestAsOfDate: Date;
+  /** 2026-09-03: optional per-generation override for the Accrued Interest formula's rate — used
+   * INSTEAD of the loan account's own `contractualInterestRate` when given. */
+  manualAccruedInterestRate?: Percentage;
   collectionFee: Money;
   otherFee: Money;
   generatedByUserId: string;
@@ -72,7 +76,7 @@ export class GenerateStatementOfAccountUseCase {
     const soaSequenceNumber = (await this.deps.generatedStatementOfAccountRepository.findMaxSoaSequenceNumber(input.loanAccountId)) + 1;
     const statementDate = new Date();
     const soaNumber = formatSoaNumber(soaSequenceNumber, statementDate);
-    const { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll } =
+    const { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll, effectiveAccruedInterestRate } =
       await this.deps.mergeDataResolver.resolve(
         input.loanAccountId,
         soaNumber,
@@ -85,6 +89,7 @@ export class GenerateStatementOfAccountUseCase {
         input.accruedInterestAsOfDate,
         input.collectionFee,
         input.otherFee,
+        input.manualAccruedInterestRate,
       );
     const totalAmountDue = figures.totalPastDue
       .add(figures.currentAmortizationDue)
@@ -107,6 +112,7 @@ export class GenerateStatementOfAccountUseCase {
       penaltyRecomputeAll: effectivePenaltyRecomputeAll,
       penaltyManualReason: input.penaltyMode === 'MANUAL' ? input.penaltyManualReason?.trim() ?? null : null,
       accruedInterestAsOfDate: input.accruedInterestAsOfDate,
+      accruedInterestRate: effectiveAccruedInterestRate ?? null,
       currentAmortizationDue: figures.currentAmortizationDue,
       pastDuePrincipal: figures.pastDuePrincipal,
       pastDueInterest: figures.pastDueInterest,

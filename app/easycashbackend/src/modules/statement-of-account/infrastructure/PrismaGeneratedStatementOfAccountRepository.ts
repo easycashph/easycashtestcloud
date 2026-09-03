@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { resolveClient } from '@shared/infrastructure/PrismaUnitOfWork';
 import type { TransactionContext } from '@shared/application/TransactionContext';
 import { Money } from '@shared/domain/Money';
+import { Percentage } from '@shared/domain/Percentage';
 import { GeneratedStatementOfAccount, type GeneratedStatementOfAccountProps } from '../domain/GeneratedStatementOfAccount';
 import { formatSoaNumber } from '../domain/formatSoaNumber';
 import type {
@@ -22,6 +23,7 @@ function toDomain(row: Row): GeneratedStatementOfAccount {
     penaltyRecomputeAll: row.penaltyRecomputeAll,
     penaltyManualReason: row.penaltyManualReason,
     accruedInterestAsOfDate: row.accruedInterestAsOfDate,
+    accruedInterestRate: row.accruedInterestRate ? Percentage.of(row.accruedInterestRate) : null,
     currentAmortizationDue: Money.of(row.currentAmortizationDue),
     pastDuePrincipal: Money.of(row.pastDuePrincipal),
     pastDueInterest: Money.of(row.pastDueInterest),
@@ -52,6 +54,7 @@ export class PrismaGeneratedStatementOfAccountRepository implements IGeneratedSt
         penaltyRecomputeAll: statement.penaltyRecomputeAll,
         penaltyManualReason: statement.penaltyManualReason,
         accruedInterestAsOfDate: statement.accruedInterestAsOfDate,
+        accruedInterestRate: statement.accruedInterestRate?.toDecimal() ?? null,
         currentAmortizationDue: statement.currentAmortizationDue.toDecimal(),
         pastDuePrincipal: statement.pastDuePrincipal.toDecimal(),
         pastDueInterest: statement.pastDueInterest.toDecimal(),

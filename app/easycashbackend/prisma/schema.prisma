@@ -2324,6 +2324,15 @@ model GeneratedStatementOfAccount {
   penaltyToDate           DateTime? @db.Date
   accruedInterestAsOfDate DateTime  @db.Date
 
+  /// 2026-09-03 (user request): the Accrued Interest formula's rate for THIS statement - staff can
+  /// override it per generation instead of always silently pulling the loan account's own
+  /// `contractualInterestRate`. Nullable for two reasons: (1) a migrated loan may have no
+  /// `contractualInterestRate` at all, in which case Accrued Interest is inapplicable and no rate
+  /// was ever used; (2) every statement generated before this feature existed has no rate recorded.
+  /// Recorded without a default, same reasoning as `penaltyMode` above - without it, a past
+  /// statement whose figure disagrees with the loan's CURRENT rate could never be explained.
+  accruedInterestRate Decimal? @db.Decimal(6, 3)
+
   /// 2026-08-21 (user-reported, SML-MAX_A3F8O): `COMPUTED` only fills installments with NO recorded
   /// penalty ("compute the MISSING ones") - for a long-defaulted migrated account whose recorded
   /// penalty is itself wrong (years of post-maturity accrual baked in - see `MANUAL`'s own doc

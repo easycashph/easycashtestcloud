@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { decimalStringSchema } from '@shared/http/decimalValidation';
 
 const decimalString = z
   .string()
@@ -23,6 +24,11 @@ export const generateStatementOfAccountSchema = z
     penaltyManualReason: z.string().trim().min(1).optional(),
     /** ISO date (YYYY-MM-DD) — independent of the Penalty range, also manually entered. */
     accruedInterestAsOfDate: z.string().date(),
+    /** 2026-09-03: optional per-generation override for the Accrued Interest formula's rate —
+     * used INSTEAD of the loan account's own `contractualInterestRate` when given. A percentage,
+     * not a Money amount, so `decimalStringSchema` (allows up to the schema's Decimal(6,3)
+     * precision) rather than the 2-decimal-max `decimalString` above. */
+    manualAccruedInterestRate: decimalStringSchema.optional(),
     collectionFee: decimalString.optional().default('0.00'),
     otherFee: decimalString.optional().default('0.00'),
   })

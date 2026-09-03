@@ -1902,6 +1902,12 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
   // date-range formula to run for every qualifying installment regardless of what's recorded.
   const [soaPenaltyRecomputeAll, setSoaPenaltyRecomputeAll] = React.useState(false);
   const [soaAccruedInterestAsOfDate, setSoaAccruedInterestAsOfDate] = React.useState(() => manilaDateInputValue(new Date()));
+  // 2026-09-03 (user request): the Accrued Interest formula's rate defaults to the loan account's
+  // own Contractual Interest Rate, same as always - staff can now override it for this one
+  // statement instead. `LOAN` sends no override at all (unchanged backend behavior);
+  // `soaManualAccruedRate` is only read/sent when `soaAccruedRateMode === 'MANUAL'`.
+  const [soaAccruedRateMode, setSoaAccruedRateMode] = React.useState<'LOAN' | 'MANUAL'>('LOAN');
+  const [soaManualAccruedRate, setSoaManualAccruedRate] = React.useState('');
   // 2026-08-21 (user request): staff enter a PERCENTAGE, not a peso amount - the actual fee is
   // derived (accrued interest amount x this percent), computed in soaPreview below rather than
   // typed in directly.
@@ -2059,7 +2065,10 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // date — Accrued Interest is only applicable once the loan itself has matured.
     const isMatured = maturityDate ? maturityDate.getTime() <= Date.now() : false;
 
-    const contractualRate = parseNum(loanQuery.data?.contractualInterestRate);
+    // 2026-09-03 (user request): staff may override this rate for this one statement instead of it
+    // always being the loan account's own Contractual Interest Rate.
+    const loanContractualRate = parseNum(loanQuery.data?.contractualInterestRate);
+    const contractualRate = soaAccruedRateMode === 'MANUAL' ? parseNum(soaManualAccruedRate) : loanContractualRate;
     let accruedInterest = 0;
     let accruedDaysLate = 0;
     if (isMatured && lastInstallment && contractualRate > 0 && totalPastDue > 0) {
@@ -2074,6 +2083,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       toDate: accruedTo,
       days: accruedDaysLate,
       accrued: accruedInterest,
+      rate: contractualRate,
     };
 
     // 2026-08-21 (user request): Collection Fee is staff-entered as a PERCENTAGE, not a peso
@@ -2104,6 +2114,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       maturityDate,
       isMatured,
       accruedInterest,
+      loanContractualRate,
       collectionFeeAmount,
       totalAmountDue,
       penaltyBreakdown,
@@ -2118,6 +2129,8 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     soaPenaltyRecomputeAll,
     soaManualPenalty,
     soaAccruedInterestAsOfDate,
+    soaAccruedRateMode,
+    soaManualAccruedRate,
     soaCollectionFeePercent,
     soaOtherFee,
   ]);
@@ -2148,7 +2161,11 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
     // To date (independent "as of" per this class's own doc comment), but "today" is still the
     // sensible starting point for it.
     setSoaAccruedInterestAsOfDate(manilaDateInputValue(now));
-  }, [soaDialogOpen, installmentsQuery.data]);
+    // 2026-09-03: reset the rate override to the loan's own rate every time the dialog opens, same
+    // "no stale state from a previous generation" posture as every other field reset above.
+    setSoaAccruedRateMode('LOAN');
+    setSoaManualAccruedRate(loanQuery.data?.contractualInterestRate ?? '');
+  }, [soaDialogOpen, installmentsQuery.data, loanQuery.data?.contractualInterestRate]);
 
   const generateStatementMutation = useMutation({
     mutationFn: () =>
@@ -2165,6 +2182,9 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             ? { manualPenaltyAmount: soaManualPenalty, penaltyManualReason: soaManualReason.trim() }
             : {}),
           accruedInterestAsOfDate: soaAccruedInterestAsOfDate,
+          // 2026-09-03 (user request): omitted entirely under LOAN mode - the backend falls back to
+          // the loan account's own Contractual Interest Rate exactly as it always has.
+          ...(soaAccruedRateMode === 'MANUAL' ? { manualAccruedInterestRate: soaManualAccruedRate } : {}),
           // 2026-08-21 (user request): staff enter a percent (soaCollectionFeePercent) - the
           // backend still stores/persists a peso amount, same as Other Fee, so we send the
           // computed figure (soaPreview.collectionFeeAmount), not the raw percent typed in.
@@ -2181,6 +2201,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
       setSoaManualPenalty('');
       setSoaManualReason('');
       setSoaPenaltyRecomputeAll(false);
+      setSoaAccruedRateMode('LOAN');
     },
     onError: (error) => {
       setSoaError(error instanceof ApiError ? error.message : 'Could not reach the server. Check your connection and try again.');
@@ -3716,7 +3737,75 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
             </div>
             <div className={cn('rounded-md bg-secondary/40 p-3', !soaPreview.isMatured && 'opacity-60')}>
               <p className="mb-2 text-sm font-medium">Accrued interest</p>
-              <Label htmlFor="soa-accrued-as-of-date">As of date</Label>
+
+              <div className="space-y-1.5">
+                <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                  <input
+                    type="radio"
+                    name="soa-accrued-rate-mode"
+                    className="mt-1"
+                    checked={soaAccruedRateMode === 'LOAN'}
+                    onChange={() => setSoaAccruedRateMode('LOAN')}
+                    disabled={!soaPreview.isMatured}
+                  />
+                  <span>
+                    <span className="block text-sm">
+                      Use the loan's contractual rate &mdash;{' '}
+                      <span className="font-medium">{formatPercentage(loanQuery.data?.contractualInterestRate)}</span>
+                    </span>
+                    <span className="block text-xs text-muted-foreground">What this loan account already has on file.</span>
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 rounded-md p-1.5 hover:bg-secondary/60">
+                  <input
+                    type="radio"
+                    name="soa-accrued-rate-mode"
+                    className="mt-1"
+                    checked={soaAccruedRateMode === 'MANUAL'}
+                    onChange={() => setSoaAccruedRateMode('MANUAL')}
+                    disabled={!soaPreview.isMatured}
+                  />
+                  <span>
+                    <span className="block text-sm">Enter a rate manually</span>
+                    <span className="block text-xs text-muted-foreground">For a negotiated or corrected rate, this statement only.</span>
+                  </span>
+                </label>
+              </div>
+
+              {soaAccruedRateMode === 'MANUAL' && (
+                <div className="mt-2 rounded-md bg-background/60 p-2">
+                  <div className="mb-2 flex items-center justify-between border-b pb-1.5 text-xs">
+                    <span className="text-muted-foreground">Loan's contractual rate</span>
+                    <span className="flex items-center gap-2">
+                      <span className="tabular-nums">{formatPercentage(loanQuery.data?.contractualInterestRate)}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setSoaManualAccruedRate(loanQuery.data?.contractualInterestRate ?? '')}
+                      >
+                        use this
+                      </Button>
+                    </span>
+                  </div>
+                  <Label htmlFor="soa-accrued-rate">Interest rate (per month, %)</Label>
+                  <Input
+                    id="soa-accrued-rate"
+                    inputMode="decimal"
+                    value={soaManualAccruedRate}
+                    onChange={(e) => setSoaManualAccruedRate(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Applies to this Statement of Account only &mdash; the loan account's own Contractual Interest Rate is not changed.
+                  </p>
+                </div>
+              )}
+
+              <Label htmlFor="soa-accrued-as-of-date" className="mt-3 block">
+                As of date
+              </Label>
               <Input
                 id="soa-accrued-as-of-date"
                 type="date"
@@ -3735,6 +3824,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           <th className="pb-1 pr-2 text-left font-normal">From</th>
                           <th className="pb-1 pr-2 text-left font-normal">To</th>
                           <th className="pb-1 pr-2 text-right font-normal">No. of days</th>
+                          <th className="pb-1 pr-2 text-right font-normal">Rate used</th>
                           <th className="pb-1 text-right font-normal">Accrued</th>
                         </tr>
                       </thead>
@@ -3743,6 +3833,7 @@ function RealLoanDetailView({ loanId }: { loanId: string }) {
                           <td className="py-1 pr-2">{formatDate(soaPreview.accruedBreakdown.fromDate)}</td>
                           <td className="py-1 pr-2">{formatDate(soaPreview.accruedBreakdown.toDate)}</td>
                           <td className="py-1 pr-2 text-right">{soaPreview.accruedBreakdown.days}</td>
+                          <td className="py-1 pr-2 text-right font-medium">{soaPreview.accruedBreakdown.rate.toFixed(2)}%</td>
                           <td className="py-1 text-right font-medium">{formatPeso(soaPreview.accruedBreakdown.accrued)}</td>
                         </tr>
                       </tbody>

@@ -8,6 +8,7 @@ import type { ILoanProductRepository } from '@modules/loan-product/application/p
 import { resolveSecMc3Coverage } from '@modules/loan-account/application/services/SecMc3CoverageResolver';
 import type { PenaltyComputationContext } from '@modules/repayment/domain/CurrentPenaltyResolver';
 import { Money } from '@shared/domain/Money';
+import type { Percentage } from '@shared/domain/Percentage';
 import { StatementOfAccountCalculator } from '../application/services/StatementOfAccountCalculator';
 import type { SoaPenaltyMode } from '../domain/GeneratedStatementOfAccount';
 import type {
@@ -71,6 +72,7 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
+    manualAccruedInterestRate: Percentage | undefined,
   ): Promise<StatementOfAccountResolveResult> {
     const loanAccount = await this.deps.loanAccountRepository.findById(loanAccountId);
     if (!loanAccount) throw new NotFoundError('LoanAccount', loanAccountId);
@@ -116,9 +118,15 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       throw new ValidationError('A penalty amount is required when the penalty mode is MANUAL.');
     }
 
+    // 2026-09-03 (user request): staff may override the Accrued Interest rate for this one
+    // statement instead of it always being silently pulled from the loan account's own
+    // `contractualInterestRate`. Falls back to that stored rate exactly as before when no override
+    // is given - existing behavior is unchanged for every staff member who never touches this.
+    const effectiveAccruedInterestRate = manualAccruedInterestRate ?? loanAccount.contractualInterestRate;
+
     const figures = StatementOfAccountCalculator.calculate({
       installments: sortedInstallments,
-      contractualRate: loanAccount.contractualInterestRate,
+      contractualRate: effectiveAccruedInterestRate,
       penaltyMode,
       penaltyFromDate,
       penaltyToDate,
@@ -197,6 +205,12 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       // 2026-08-06 (user-confirmed): same rule as PenaltyFromDate/PenaltyToDate above - a date next
       // to a ₱0.00 accrued interest read as if interest accrued over that period when it didn't.
       AccruedInterestAsOfDate: figures.accruedInterest.isZero() ? '' : formatDate(accruedInterestAsOfDate),
+      // 2026-09-03: not wired into the current .docx template (no `{AccruedInterestRate}`
+      // placeholder exists yet - see ADR-052) - added defensively so the rate this statement
+      // actually used is available the moment the template is updated to print it. docxtemplater
+      // silently ignores merge keys the template doesn't reference, so this is a no-op until then.
+      AccruedInterestRate:
+        figures.accruedInterest.isZero() || !effectiveAccruedInterestRate ? '' : `${effectiveAccruedInterestRate.toString()}%`,
       CollectionFee: formatMoney(collectionFee),
       OtherFee: formatMoney(otherFee),
       TotalAmountDue: formatMoney(totalAmountDue),
@@ -210,6 +224,6 @@ export class StatementOfAccountMergeDataResolver implements IStatementOfAccountM
       })),
     };
 
-    return { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll };
+    return { mergeData, figures, effectivePenaltyFromDate, effectivePenaltyToDate, effectivePenaltyRecomputeAll, effectiveAccruedInterestRate };
   }
 }

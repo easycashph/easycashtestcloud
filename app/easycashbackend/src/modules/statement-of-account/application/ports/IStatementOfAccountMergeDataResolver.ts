@@ -1,4 +1,5 @@
 import type { Money } from '@shared/domain/Money';
+import type { Percentage } from '@shared/domain/Percentage';
 import type { StatementOfAccountFigures } from '../services/StatementOfAccountCalculator';
 import type { SoaPenaltyMode } from '../../domain/GeneratedStatementOfAccount';
 
@@ -16,6 +17,13 @@ export interface StatementOfAccountResolveResult {
   effectivePenaltyToDate: Date | null;
   /** Echoed back for persistence, same reason as the two dates above. Always `false` outside `COMPUTED`. */
   effectivePenaltyRecomputeAll: boolean;
+  /**
+   * 2026-09-03: the rate the Accrued Interest formula actually used — `manualAccruedInterestRate`
+   * when the caller supplied one, otherwise the loan's own `contractualInterestRate` (which may
+   * itself be absent). Echoed back for persistence, same reasoning as the penalty fields above —
+   * a past statement must stay explainable even if the loan's rate later changes.
+   */
+  effectiveAccruedInterestRate: Percentage | undefined;
 }
 
 export interface IStatementOfAccountMergeDataResolver {
@@ -34,5 +42,8 @@ export interface IStatementOfAccountMergeDataResolver {
     accruedInterestAsOfDate: Date,
     collectionFee: Money,
     otherFee: Money,
+    /** 2026-09-03: optional per-generation override for the Accrued Interest formula's rate —
+     * when given, used INSTEAD of the loan account's own `contractualInterestRate`. */
+    manualAccruedInterestRate: Percentage | undefined,
   ): Promise<StatementOfAccountResolveResult>;
 }

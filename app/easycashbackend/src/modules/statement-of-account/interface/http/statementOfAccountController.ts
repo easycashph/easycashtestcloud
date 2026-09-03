@@ -5,6 +5,7 @@ import { withIdempotency } from '@shared/http/idempotency';
 import { NotFoundError } from '@shared/errors/DomainError';
 import type { IIdempotencyKeyStore } from '@shared/application/ports/IIdempotencyKeyStore';
 import { Money } from '@shared/domain/Money';
+import { Percentage } from '@shared/domain/Percentage';
 import type { GetLoanAccountUseCase } from '@modules/loan-account/application/use-cases/GetLoanAccountUseCase';
 import type { GenerateStatementOfAccountUseCase } from '../../application/use-cases/GenerateStatementOfAccountUseCase';
 import type { ListStatementsOfAccountUseCase } from '../../application/use-cases/ListStatementsOfAccountUseCase';
@@ -43,6 +44,7 @@ export class StatementOfAccountController {
           manualPenaltyAmount: body.manualPenaltyAmount ? Money.of(body.manualPenaltyAmount) : undefined,
           penaltyManualReason: body.penaltyManualReason,
           accruedInterestAsOfDate: new Date(`${body.accruedInterestAsOfDate}T00:00:00.000Z`),
+          manualAccruedInterestRate: body.manualAccruedInterestRate ? Percentage.of(body.manualAccruedInterestRate) : undefined,
           collectionFee: Money.of(body.collectionFee),
           otherFee: Money.of(body.otherFee),
           generatedByUserId: currentUser.sub,
