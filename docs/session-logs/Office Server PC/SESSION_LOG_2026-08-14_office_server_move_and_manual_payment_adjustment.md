@@ -3725,6 +3725,18 @@ per convention (frontend was not itself rebuilt this session). All temporary dia
 (`tmp-*.ts`) deleted after use; the two `resync-*` scripts were kept as permanent, reusable
 data-fix tooling (same convention as the existing `recompute-active-loan-balances-from-schedule.ts`).
 
+**Recurrence risk, found while answering the user's own question ("posible bang maulit?")**:
+`migrate-legacy-data.ts` blindly resyncs `loan_accounts`' balance fields back to SDevTech's
+account-level snapshot on *every* re-run, for any loan that isn't "locked" (locked = has at least
+one native, non-legacy `loan_transactions` row). Checked: only 42 of 1,285 migrated loans are
+locked - the other 1,243, including nearly all of today's 59+958, remain exposed to the exact same
+staleness reappearing on the next SDevTech sync, until `migrate-legacy-data.ts` itself is changed
+to stop trusting that snapshot. Mitigated (not fully fixed) by adding both `resync-*` scripts as
+new steps **[10/20]** and **[11/20]** in `scripts/Update Database From SDevTech.bat` (renumbered
+1-20 throughout, was 1-18), directly after the existing `recompute-active-loan-balances-from-
+schedule.ts` step - so every future SDevTech sync self-heals this class of staleness instead of
+silently reintroducing it. Type-checked clean. Committed and pushed (`1ce37b3`).
+
 ### Current state / follow-ups
 
 - The "Detailed Ending Current Balance" report and the loan detail page top card both now read
@@ -3744,4 +3756,11 @@ data-fix tooling (same convention as the existing `recompute-active-loan-balance
   fixes (the two `resync-*` scripts) only touched Office Server PC's database. Each machine will
   need the same scripts run against its own database separately if the same staleness exists there
   (very likely, since it stems from each machine's own past `migrate-legacy-data.ts` /
-  `migrate-repayment-schedules.ts` runs) - not just a `git pull` + rebuild.
+  `migrate-repayment-schedules.ts` runs) - not just a `git pull` + rebuild. Once they `git pull`
+  this session's `.bat` change, though, their own next SDevTech sync will self-heal it automatically
+  via the new [10/20]-[11/20] steps.
+- The recurrence risk itself is only *mitigated*, not eliminated: `migrate-legacy-data.ts` still
+  trusts SDevTech's account-level balance snapshot over its own migrated schedule data. The more
+  permanent fix discussed with the user - have `migrate-legacy-data.ts` derive principal/interest/
+  fees/penalty from the migrated schedule instead of copying SDevTech's account-level fields at all
+  - was intentionally deferred, not implemented, this session.
