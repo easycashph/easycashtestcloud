@@ -5,6 +5,7 @@ import { AmortizationScheduleGenerator } from '@shared/domain/calculation/Amorti
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -30,6 +31,7 @@ export interface CompromiseSettleLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 export interface CompromiseSettleLoanInput {
@@ -221,6 +223,23 @@ export class CompromiseSettleLoanUseCase {
             newLoanAccountId: newLoanAccount.id,
             newLoanCode: newLoanAccount.loanCode,
           }),
+        });
+      }
+    }
+
+    // Notification Center (2026-09-03, event-driven redesign) - LOAN_CLOSED only, one per old loan
+    // folded into this settlement (no separate LOAN_COMPROMISED type exists - see the
+    // NotificationType enum's own doc comment: compromise is one of the four ways a loan reaches a
+    // CLOSED* status, not a distinct event like Restructured/Rescheduled). Fired only now that the
+    // unitOfWork above has committed.
+    if (this.deps.notificationService) {
+      for (const loan of oldLoanAccounts) {
+        await this.deps.notificationService.notifyStaff({
+          branchId: loan.branchId,
+          type: 'LOAN_CLOSED',
+          title: `Loan ${loan.loanCode} closed - compromise settlement into ${newLoanAccount.loanCode}`,
+          entityType: 'LoanAccount',
+          entityId: loan.id,
         });
       }
     }

@@ -1,7 +1,12 @@
 import type { Notification as PrismaNotificationRow } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@shared/database/prismaClient';
-import type { FindManyNotificationsOptions, INotificationRepository } from '../application/ports/INotificationRepository';
+import { overdueCutoff } from '@shared/utils/dueDateGrace';
+import type {
+  FindManyNotificationsOptions,
+  INotificationRepository,
+  LoanAccountNotificationTarget,
+} from '../application/ports/INotificationRepository';
 import { Notification, type NotificationType } from '../domain/Notification';
 
 function toDomain(row: PrismaNotificationRow): Notification {
@@ -82,8 +87,8 @@ export class PrismaNotificationRepository implements INotificationRepository {
    * owed, matching `RepaymentInstallment.status`'s own `LATE` definition. Deliberately not shared
    * code with the dashboard module (that function is module-private) - a ~15-line raw query
    * duplicated here is a smaller cost than a cross-module coupling for one query. */
-  async findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]> {
-    return prisma.$queryRaw<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]>(Prisma.sql`
+  async findOverdueLoanAccounts(asOf: Date): Promise<LoanAccountNotificationTarget[]> {
+    return prisma.$queryRaw<LoanAccountNotificationTarget[]>(Prisma.sql`
       SELECT DISTINCT la.id, la."branchId", la."loanCode", (b."firstName" || ' ' || b."lastName") AS "borrowerName"
       FROM repayment_schedules rs
       JOIN loan_accounts la ON la.id = rs."loanAccountId"
@@ -91,6 +96,55 @@ export class PrismaNotificationRepository implements INotificationRepository {
       WHERE rs."dueDate" < ${asOf}
         AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
             < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
+        AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
+    `);
+  }
+
+  /** Same live "matured" definition as `PrismaLoanAccountRepository.findMaturedLoanAccountIds`
+   * (per-loan-id filter version, used by `isMatured` on the Loan Account API) - scan-ALL here
+   * instead, for the daily LOAN_MATURED notification job. A loan is matured when it has at least
+   * one overdue+unpaid installment AND its own maturity date (the last installment's dueDate) has
+   * itself already fully elapsed, both through the same `overdueCutoff()` grace-through-the-
+   * full-calendar-day rule. Deliberately duplicated, not shared, same reasoning as
+   * `findOverdueLoanAccounts` above's own doc comment. */
+  async findMaturedLoanAccounts(asOf: Date): Promise<LoanAccountNotificationTarget[]> {
+    const cutoff = overdueCutoff(asOf);
+    return prisma.$queryRaw<LoanAccountNotificationTarget[]>(Prisma.sql`
+      WITH overdue AS (
+        SELECT DISTINCT rs."loanAccountId" AS id
+        FROM repayment_schedules rs
+        JOIN loan_accounts la ON la.id = rs."loanAccountId"
+        WHERE rs."dueDate" < ${cutoff}
+          AND (rs."principalPaid" + rs."interestPaid" + rs."feesPaid" + rs."penaltyPaid")
+              < (rs."principalDue" + rs."interestDue" + rs."feesDue" + rs."penaltyDue")
+          AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
+      ),
+      maturity AS (
+        SELECT "loanAccountId" AS id, MAX("dueDate") AS maturity_date
+        FROM repayment_schedules
+        GROUP BY "loanAccountId"
+      )
+      SELECT DISTINCT la.id, la."branchId", la."loanCode", (b."firstName" || ' ' || b."lastName") AS "borrowerName"
+      FROM overdue
+      JOIN maturity ON maturity.id = overdue.id
+      JOIN loan_accounts la ON la.id = overdue.id
+      JOIN borrowers b ON b.id = la."borrowerId"
+      WHERE maturity.maturity_date < ${cutoff}
+    `);
+  }
+
+  /** Installment #1 of an ACTIVE/ACTIVE_IN_ARREARS loan whose `dueDate` falls within
+   * [dayStart, dayEnd) - same "always installment #1, optionally date-filtered on its own due
+   * date" definition `getFirstAmortizationReport` already uses, narrowed to exactly today's Asia/
+   * Manila calendar day for the daily LOAN_FIRST_AMORTIZATION_DUE_TODAY notification job. */
+  async findFirstAmortizationDueTodayLoanAccounts(dayStart: Date, dayEnd: Date): Promise<LoanAccountNotificationTarget[]> {
+    return prisma.$queryRaw<LoanAccountNotificationTarget[]>(Prisma.sql`
+      SELECT la.id, la."branchId", la."loanCode", (b."firstName" || ' ' || b."lastName") AS "borrowerName"
+      FROM repayment_schedules rs
+      JOIN loan_accounts la ON la.id = rs."loanAccountId"
+      JOIN borrowers b ON b.id = la."borrowerId"
+      WHERE rs."installmentNumber" = 1
+        AND rs."dueDate" >= ${dayStart} AND rs."dueDate" < ${dayEnd}
         AND la.status IN ('ACTIVE', 'ACTIVE_IN_ARREARS')
     `);
   }

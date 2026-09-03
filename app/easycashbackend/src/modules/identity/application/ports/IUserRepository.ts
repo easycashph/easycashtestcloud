@@ -80,4 +80,10 @@ export interface IUserRepository {
    * 2026-07-17 for the Notification Center's recipient resolution (e.g. "notify every MIS/Loan
    * Operation Manager/CRM at this application's branch"). */
   findByRolesAndBranch(roleNames: string[], branchId: string): Promise<UserRecord[]>;
+  /** ACTIVE users holding any of `roleNames`, across EVERY branch - not scoped to one branch's
+   * loans/applications, unlike `findByRolesAndBranch` above. Added 2026-09-03 for notification
+   * types that aren't naturally tied to a single branch (e.g. Portal chat, which has no branchId
+   * of its own at all - see `ChatConversationRecord`). Each returned user's own `branchId` is used
+   * to satisfy `Notification.branchId`'s required FK when the notification is created for them. */
+  findByRoles(roleNames: string[]): Promise<UserRecord[]>;
 }

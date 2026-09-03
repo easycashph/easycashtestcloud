@@ -352,6 +352,46 @@ describe('ProcessPaymentUseCase', () => {
     });
   });
 
+  describe('Notification Center (2026-09-03, event-driven redesign)', () => {
+    it('notifies staff LOAN_CLOSED when a payment fully pays off the loan, only after the unitOfWork commits', async () => {
+      const deps = buildDeps();
+      const notifyStaff = vi.fn();
+      const loan = buildActiveLoan('2000.00', '300.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '2000.00', interest: '300.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      // Assert notifyStaff hasn't fired yet by the time the unitOfWork body itself runs -
+      // the notification must only happen once that transaction has actually committed.
+      deps.unitOfWork.run.mockImplementationOnce(async (work: (ctx: TransactionContext) => Promise<unknown>) => {
+        const result = await work(mockCtx);
+        expect(notifyStaff).not.toHaveBeenCalled();
+        return result;
+      });
+
+      const useCase = new ProcessPaymentUseCase({ ...deps, notificationService: { notifyStaff } as never });
+      const result = await useCase.execute('loan-1', Money.of('2300.00'), 'officer-1');
+
+      expect(result.loanAccount.status).toBe('CLOSED');
+      expect(notifyStaff).toHaveBeenCalledTimes(1);
+      expect(notifyStaff).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'LOAN_CLOSED', branchId: 'branch-1', entityType: 'LoanAccount', entityId: loan.id }),
+      );
+    });
+
+    it('does not notify when no notificationService is provided (optional dep)', async () => {
+      const deps = buildDeps();
+      const loan = buildActiveLoan('2000.00', '300.00');
+      deps.loanAccountRepository.findById.mockResolvedValue(loan);
+      const inst1 = buildInstallment(1, '2026-08-15', { principal: '2000.00', interest: '300.00' });
+      deps.repaymentInstallmentRepository.findByLoanAccountId.mockResolvedValue([inst1]);
+
+      const useCase = new ProcessPaymentUseCase(deps);
+      await expect(useCase.execute('loan-1', Money.of('2300.00'), 'officer-1')).resolves.toBeDefined();
+    });
+  });
+
   describe('manual per-installment allocation (2026-07-10, Payment Recording "Manual" tab)', () => {
     it('applies an exact staff-entered split instead of the automatic waterfall', async () => {
       const deps = buildDeps();

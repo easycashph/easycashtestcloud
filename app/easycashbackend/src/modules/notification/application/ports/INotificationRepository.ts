@@ -8,6 +8,13 @@ export interface FindManyNotificationsOptions {
   unreadOnly?: boolean;
 }
 
+export interface LoanAccountNotificationTarget {
+  id: string;
+  branchId: string;
+  loanCode: string;
+  borrowerName: string;
+}
+
 export interface INotificationRepository {
   create(notification: Notification): Promise<void>;
   findById(id: string): Promise<Notification | null>;
@@ -15,13 +22,21 @@ export interface INotificationRepository {
   countUnread(recipientUserId: string): Promise<number>;
   markRead(id: string): Promise<void>;
   markAllRead(recipientUserId: string): Promise<void>;
-  /** Anti-spam guard for the LOAN_OVERDUE sync (see NotificationService.syncOverdueNotifications) -
-   * true if a notification of this type/entity was already created within the given window, so the
-   * sync doesn't recreate one on every page load while a loan stays overdue. */
+  /** Anti-spam guard for every daily-scan notification type (LOAN_OVERDUE, LOAN_MATURED,
+   * LOAN_FIRST_AMORTIZATION_DUE_TODAY - see NotificationService's sync* methods) - true if a
+   * notification of this type/entity was already created within the given window, so a daily
+   * re-scan doesn't recreate one for a loan that's still in the same state. */
   existsRecent(type: string, entityId: string, sinceCreatedAt: Date): Promise<boolean>;
   /** Every loan account currently overdue (same live due-date-based definition as the Dashboard's
    * `overdueAccounts` figure - `PrismaDashboardRepository.findOverdueLoanAccounts`), used only by
    * `NotificationService.syncOverdueNotifications`. Lives here rather than a separate port since
    * it exists purely to feed notification creation, not as a general-purpose loan account query. */
-  findOverdueLoanAccounts(asOf: Date): Promise<{ id: string; branchId: string; loanCode: string; borrowerName: string }[]>;
+  findOverdueLoanAccounts(asOf: Date): Promise<LoanAccountNotificationTarget[]>;
+  /** Every loan account currently matured (same live definition as
+   * `PrismaLoanAccountRepository.findMaturedLoanAccountIds`/the `isMatured` API flag), used only by
+   * `NotificationService.syncMaturedNotifications`. */
+  findMaturedLoanAccounts(asOf: Date): Promise<LoanAccountNotificationTarget[]>;
+  /** Every loan account whose installment #1 is due within [dayStart, dayEnd) - used only by
+   * `NotificationService.syncFirstAmortizationDueNotifications`. */
+  findFirstAmortizationDueTodayLoanAccounts(dayStart: Date, dayEnd: Date): Promise<LoanAccountNotificationTarget[]>;
 }

@@ -19,7 +19,7 @@ export class ListNotificationsUseCase {
   async execute(input: ListNotificationsInput): Promise<ListNotificationsResult> {
     // 2026-07-17: used to run NotificationService.syncOverdueNotifications() here as a lazy
     // substitute for a real scheduler - replaced by an actual periodic job (see
-    // `OverdueNotificationScheduler.ts`, started from `server.ts`), so this no longer needs to run
+    // `NotificationScanScheduler.ts`, started from `server.ts`), so this no longer needs to run
     // the overdue scan on every single bell poll (previously every 30s per connected user).
     const [items, unreadCount] = await Promise.all([
       this.deps.notificationRepository.findMany({

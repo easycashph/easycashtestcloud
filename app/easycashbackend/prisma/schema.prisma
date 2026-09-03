@@ -2393,13 +2393,51 @@ enum NotificationType {
   /// 2026-08-24 (MIS bulk document export, user request): fired when a BulkExportJob finishes
   /// (COMPLETED or FAILED) - entityType 'BulkExportJob'/entityId points back at the job.
   BULK_EXPORT_READY
+  /// 2026-09-03 (event-driven notification redesign, user request): the six new events below join
+  /// LOAN_OVERDUE as the full set a bell notification can fire for a LoanAccount (or, for
+  /// PORTAL_CHAT_MESSAGE, a PortalChatThread). LOAN_OVERDUE and LOAN_MATURED/
+  /// LOAN_FIRST_AMORTIZATION_DUE_TODAY are daily-scan-detected (no stored status transition exists
+  /// for any of the three - see NotificationScanScheduler.ts); the rest fire write-time, as a
+  /// direct side effect of the use case that causes them.
+  /// Live-computed daily: same "full scheduled term over, still unpaid" definition as
+  /// `ListMaturedLoanAccountIdsUseCase`/`findMaturedLoanAccountIds`.
+  LOAN_MATURED
+  /// Live-computed daily: installment #1 of an ACTIVE/ACTIVE_IN_ARREARS loan's `dueDate` falls
+  /// today - same definition `getFirstAmortizationReport` already uses.
+  LOAN_FIRST_AMORTIZATION_DUE_TODAY
+  /// Write-time, from `RestructureLoanUseCase` - the OLD loan closed CLOSED_RESTRUCTURED (balance
+  /// carried forward to a brand-new LoanAccount). Distinct from LOAN_RESCHEDULED below - these are
+  /// two different LMS features with two different UI buttons ("Restructure" vs "Reschedule"),
+  /// never the same event despite the superficially similar names.
+  LOAN_RESTRUCTURED
+  /// Write-time, from `AdjustLoanUseCase` - the OLD loan closed CLOSED_ADJUSTED (due-date-only
+  /// correction, zero balance/principal change, UI-labeled "Reschedule" - see StatusBadge.tsx's
+  /// CLOSED_ADJUSTED entry). Distinct from LOAN_RESTRUCTURED above.
+  LOAN_RESCHEDULED
+  /// Write-time, from `ProcessPaymentUseCase` - fires at the exact same moment the use case already
+  /// calls `LoanAccount.markCurrent()` (ACTIVE_IN_ARREARS -> ACTIVE because no installment remains
+  /// LATE after this payment). Not a new detection - piggybacks on that existing, already-live
+  /// 2026-08-13 recovery transition.
+  LOAN_RECOVERED
+  /// Write-time - fired by all four ways a loan reaches a CLOSED* status: `ProcessPaymentUseCase`
+  /// (close(), full payoff), `RestructureLoanUseCase` (restructureClose()),
+  /// `AdjustLoanUseCase` (adjustClose()), `CompromiseSettleLoanUseCase` (compromiseClose()). One
+  /// shared notification type regardless of which of the four closure reasons applies - the title
+  /// text distinguishes them (see NotificationService's `notifyLoanClosed` doc comment).
+  LOAN_CLOSED
+  /// Write-time, from `SendPortalChatMessageUseCase` - a borrower sent a message on the Client
+  /// Portal's chat. entityType 'ChatConversation'/entityId points back at the conversation (see
+  /// the ChatConversation model above).
+  PORTAL_CHAT_MESSAGE
 }
 
 /// Notification Center (2026-07-17 user request). Distinct from AuditLog (which is a write/
 /// page-view trail, MIS-only) - these are user-visible "things needing your attention," created as
-/// a side effect of real domain events (LoanApplication submitted/tagged-pre-approval/decided) or,
-/// for LOAN_OVERDUE, by a real periodic scheduler (see OverdueNotificationScheduler.ts, started
-/// from server.ts). entityType/entityId link back to the source record, same pattern as AuditLog.
+/// a side effect of real domain events (most types fire write-time, straight from the use case that
+/// causes them) or, for the three live-computed types with no stored status transition to hook
+/// (LOAN_OVERDUE, LOAN_MATURED, LOAN_FIRST_AMORTIZATION_DUE_TODAY), by a daily periodic scan (see
+/// NotificationScanScheduler.ts, started from server.ts). entityType/entityId link back to the
+/// source record, same pattern as AuditLog.
 model Notification {
   id              String           @id @default(uuid())
   recipientUserId String

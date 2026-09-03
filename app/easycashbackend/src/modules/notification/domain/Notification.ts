@@ -5,7 +5,14 @@ export type NotificationType =
   | 'APPLICATION_PRE_APPROVAL_READY'
   | 'APPLICATION_DECIDED'
   | 'LOAN_OVERDUE'
-  | 'BULK_EXPORT_READY';
+  | 'BULK_EXPORT_READY'
+  | 'LOAN_MATURED'
+  | 'LOAN_FIRST_AMORTIZATION_DUE_TODAY'
+  | 'LOAN_RESTRUCTURED'
+  | 'LOAN_RESCHEDULED'
+  | 'LOAN_RECOVERED'
+  | 'LOAN_CLOSED'
+  | 'PORTAL_CHAT_MESSAGE';
 
 export interface NotificationProps {
   id: string;

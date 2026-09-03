@@ -11,6 +11,7 @@ import { InvalidPaymentAllocationInputError } from '@shared/domain/calculation/e
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import type { IPaymentAllocationRepository } from '@modules/ledger/application/ports/IPaymentAllocationRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -32,6 +33,7 @@ export interface ProcessPaymentUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 export interface AppliedAllocation {
@@ -320,14 +322,26 @@ export class ProcessPaymentUseCase {
     // This payment may have fully settled the loan - auto-close it rather than leaving a
     // zero-balance loan sitting ACTIVE/ACTIVE_IN_ARREARS indefinitely (only those two statuses
     // can transition to CLOSED; see ALLOWED_TRANSITIONS in LoanAccount.ts).
+    // Captured now, notified only after the unitOfWork below actually commits - a Notification
+    // Center message must never fire for a state change that didn't really get persisted (see
+    // NotificationService.ts's own "after their primary write succeeds" convention).
+    let lifecycleNotification: { type: 'LOAN_CLOSED' | 'LOAN_RECOVERED'; title: string } | null = null;
+
     if ((loanAccount.status === 'ACTIVE' || loanAccount.status === 'ACTIVE_IN_ARREARS') && loanAccount.isFullyPaid) {
       loanAccount.close();
+      // Notification Center (2026-09-03, event-driven redesign): LOAN_CLOSED covers all four ways
+      // a loan reaches a CLOSED* status - this is the "fully paid off" one. See
+      // RestructureLoanUseCase/AdjustLoanUseCase/CompromiseSettleLoanUseCase for the other three.
+      lifecycleNotification = { type: 'LOAN_CLOSED', title: `Loan ${loanAccount.loanCode} closed - fully paid` };
     } else if (loanAccount.status === 'ACTIVE_IN_ARREARS' && !allInstallments.some((i) => i.status === 'LATE')) {
       // 2026-08-13 (user-reported): this payment may have caught the loan up without fully
       // settling it - same "recompute after applying this payment" moment as the close check
       // above, just the other allowed ACTIVE_IN_ARREARS transition (see
       // LoanAccount.markCurrent()'s doc comment for why nothing did this before).
       loanAccount.markCurrent();
+      // Notification Center (2026-09-03, event-driven redesign): LOAN_RECOVERED - piggybacks on
+      // this exact, already-live markCurrent() transition rather than a new detection mechanism.
+      lifecycleNotification = { type: 'LOAN_RECOVERED', title: `Loan ${loanAccount.loanCode} is current again - no more late installments` };
     }
 
     const appliedAmount = paymentAmount.subtract(remainder);
@@ -388,6 +402,18 @@ export class ProcessPaymentUseCase {
         ctx,
       );
     });
+
+    // Notification Center (2026-09-03, event-driven redesign) - fired only now, after the
+    // unitOfWork above has actually committed the close()/markCurrent() transition.
+    if (lifecycleNotification && this.deps.notificationService) {
+      await this.deps.notificationService.notifyStaff({
+        branchId: loanAccount.branchId,
+        type: lifecycleNotification.type,
+        title: lifecycleNotification.title,
+        entityType: 'LoanAccount',
+        entityId: loanAccount.id,
+      });
+    }
 
     // ADR-050: Log activity for profile timeline
     if (this.deps.profileActivityLogService) {

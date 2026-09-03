@@ -4,6 +4,7 @@ import { AmortizationScheduleGenerator } from '@shared/domain/calculation/Amorti
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -25,6 +26,7 @@ export interface AdjustLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 export interface AdjustLoanInput {
@@ -197,6 +199,27 @@ export class AdjustLoanUseCase {
         profileId: oldLoanAccount.id,
         userId: input.adjustedByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated('ACTIVE', 'CLOSED_ADJUSTED', input.reason, { newLoanAccountId: newLoanAccount.id, newLoanCode: newLoanAccount.loanCode }),
+      });
+    }
+
+    // Notification Center (2026-09-03, event-driven redesign) - LOAN_RESCHEDULED (UI-labeled
+    // "Reschedule" - see StatusBadge.tsx's CLOSED_ADJUSTED entry; a due-date-only correction,
+    // deliberately a different event from LOAN_RESTRUCTURED) plus the generic LOAN_CLOSED, fired
+    // only now that the unitOfWork above has committed.
+    if (this.deps.notificationService) {
+      await this.deps.notificationService.notifyStaff({
+        branchId: oldLoanAccount.branchId,
+        type: 'LOAN_RESCHEDULED',
+        title: `Loan ${oldLoanAccount.loanCode} rescheduled into ${newLoanAccount.loanCode}`,
+        entityType: 'LoanAccount',
+        entityId: oldLoanAccount.id,
+      });
+      await this.deps.notificationService.notifyStaff({
+        branchId: oldLoanAccount.branchId,
+        type: 'LOAN_CLOSED',
+        title: `Loan ${oldLoanAccount.loanCode} closed - rescheduled`,
+        entityType: 'LoanAccount',
+        entityId: oldLoanAccount.id,
       });
     }
 

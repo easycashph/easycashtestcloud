@@ -908,6 +908,7 @@ export function createApp(): Express {
         paymentAllocationRepository,
         financialAuditLogger,
         unitOfWork,
+        notificationService,
       }),
       reversePaymentUseCase: new ReversePaymentUseCase({
         loanAccountRepository,
@@ -943,6 +944,7 @@ export function createApp(): Express {
         financialAuditLogger,
         unitOfWork,
         profileActivityLogService,
+        notificationService,
       }),
       getLoanRestructureUseCase: new GetLoanRestructureUseCase({ loanRestructureRepository }),
       // 2026-08-07 (Undo Restructure feature, user-confirmed): same local-repository-instance
@@ -969,6 +971,7 @@ export function createApp(): Express {
         financialAuditLogger,
         unitOfWork,
         profileActivityLogService,
+        notificationService,
       }),
       getLoanAdjustmentUseCase: new GetLoanAdjustmentUseCase({ loanAdjustmentRepository }),
       // 2026-08-07 (Undo Adjustment feature, user-confirmed): same local-repository-instance
@@ -996,6 +999,7 @@ export function createApp(): Express {
         financialAuditLogger,
         unitOfWork,
         profileActivityLogService,
+        notificationService,
       }),
       getLoanCompromiseSettlementUseCase: new GetLoanCompromiseSettlementUseCase({ loanCompromiseSettlementRepository }),
       idempotencyKeyStore,
@@ -1744,7 +1748,11 @@ export function createApp(): Express {
       startOrResumePortalChatUseCase: new StartOrResumePortalChatUseCase({ chatRepository }),
       getActivePortalChatUseCase: new GetActivePortalChatUseCase({ chatRepository }),
       getPortalChatUseCase: new GetPortalChatUseCase({ chatRepository }),
-      sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({ chatRepository, uploadAttachmentUseCase: portalUploadAttachmentUseCase }),
+      sendPortalChatMessageUseCase: new SendPortalChatMessageUseCase({
+        chatRepository,
+        uploadAttachmentUseCase: portalUploadAttachmentUseCase,
+        notificationService,
+      }),
       downloadPortalChatAttachmentUseCase: new DownloadPortalChatAttachmentUseCase({ chatRepository, attachmentRepository, fileStorage }),
       setPortalChatTypingUseCase: new SetPortalChatTypingUseCase({ chatRepository }),
       submitChatRatingUseCase: new SubmitChatRatingUseCase({ chatRepository }),

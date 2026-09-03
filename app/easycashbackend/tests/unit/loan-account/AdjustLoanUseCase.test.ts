@@ -289,4 +289,24 @@ describe('AdjustLoanUseCase', () => {
     expect(deps.loanAdjustmentRepository.create).toHaveBeenCalledWith(expect.anything(), mockCtx);
     expect(deps.financialAuditLogger.log).toHaveBeenCalledWith(expect.anything(), mockCtx);
   });
+
+  it('notifies staff LOAN_RESCHEDULED and LOAN_CLOSED (2026-09-03, event-driven redesign)', async () => {
+    const deps = buildDeps();
+    const loan = buildActiveLoan();
+    primeHappyPath(deps, loan);
+    const notifyStaff = vi.fn();
+
+    const useCase = new AdjustLoanUseCase({ ...deps, notificationService: { notifyStaff } as never });
+    const { newLoanAccount } = await useCase.execute({
+      oldLoanAccountId: loan.id,
+      firstRepaymentDate: NEW_FIRST_REPAYMENT_DATE,
+      adjustedByUserId: 'staff-1',
+    });
+
+    expect(notifyStaff).toHaveBeenCalledTimes(2);
+    const types = notifyStaff.mock.calls.map((c) => c[0].type);
+    expect(types).toEqual(['LOAN_RESCHEDULED', 'LOAN_CLOSED']);
+    expect(notifyStaff.mock.calls.every((c) => c[0].entityId === loan.id && c[0].branchId === 'branch-1')).toBe(true);
+    expect(notifyStaff.mock.calls[0][0].title).toContain(newLoanAccount.loanCode);
+  });
 });

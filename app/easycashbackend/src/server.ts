@@ -10,7 +10,7 @@ import { SendPaymentReminderEmailUseCase } from '@modules/email-reminder/applica
 import { PrismaEmailReminderRepository } from '@modules/email-reminder/infrastructure/PrismaEmailReminderRepository';
 import { NodemailerEmailGateway } from '@modules/email-reminder/infrastructure/NodemailerEmailGateway';
 import { PrismaReminderSettingsRepository } from '@modules/reminder-settings/infrastructure/PrismaReminderSettingsRepository';
-import { startOverdueNotificationScheduler } from '@modules/notification/infrastructure/OverdueNotificationScheduler';
+import { startNotificationScanScheduler } from '@modules/notification/infrastructure/NotificationScanScheduler';
 import type { NotificationService } from '@modules/notification/application/NotificationService';
 import { startFinanceNewsScheduler } from '@modules/finance-news/infrastructure/financeNewsScheduler';
 import { FetchExternalFinanceNewsUseCase, RssParserAdapter, type FeedSource } from '@modules/finance-news/application/use-cases/FetchExternalFinanceNewsUseCase';
@@ -62,7 +62,7 @@ startEmailReminderScheduler({
   cronExpression: env.EMAIL_REMINDER_CRON,
 });
 
-const stopOverdueNotificationScheduler = startOverdueNotificationScheduler(
+const stopNotificationScanScheduler = startNotificationScanScheduler(
   app.locals.notificationService as NotificationService,
 );
 
@@ -103,7 +103,7 @@ startBulkExportCleanupScheduler({
 
 function shutdown(signal: string) {
   logger.info(`Received ${signal}, shutting down gracefully.`);
-  stopOverdueNotificationScheduler();
+  stopNotificationScanScheduler();
   server.close(() => process.exit(0));
 }
 

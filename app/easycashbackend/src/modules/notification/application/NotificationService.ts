@@ -4,7 +4,8 @@
  * into other modules' use cases and called as a side effect after their primary write succeeds.
  */
 import type { IUserRepository } from '@modules/identity/application/ports/IUserRepository';
-import type { INotificationRepository } from './ports/INotificationRepository';
+import { manilaDayRange } from '@shared/domain/manilaTime';
+import type { INotificationRepository, LoanAccountNotificationTarget } from './ports/INotificationRepository';
 import { Notification, type NotificationType } from '../domain/Notification';
 
 export interface NotifyRolesInput {
@@ -30,13 +31,21 @@ export interface NotifyUserInput {
   entityId?: string;
 }
 
-/** LOAN_OVERDUE notifications go to these roles - the ones with a real collections/lending
- * responsibility, matching who already sees the Dashboard's Overdue Accounts figure and the Due &
- * Overdue (Payment Reminders) worklist most directly. */
-const OVERDUE_NOTIFICATION_ROLES = ['MIS', 'Loan Operation Manager', 'Collection Officer'];
+export type NotifyStaffInput = Omit<NotifyRolesInput, 'roleNames'>;
 
-/** Anti-spam window for the LOAN_OVERDUE sync - see `syncOverdueNotifications` doc comment. */
-const OVERDUE_RESYNC_WINDOW_HOURS = 24;
+/** 2026-09-03 (event-driven notification redesign, user-confirmed): the standard recipient set for
+ * every loan-lifecycle and portal-chat notification this service sends - one shared role set,
+ * not customized per event type. Originally scoped to LOAN_OVERDUE alone (the roles with a real
+ * collections/lending responsibility, matching who already sees the Dashboard's Overdue Accounts
+ * figure and the Due & Overdue worklist), now reused for every event below. */
+const NOTIFICATION_STAFF_ROLES = ['MIS', 'Loan Operation Manager', 'Collection Officer'];
+
+/** Anti-spam window shared by every daily-scan sync method below - see `syncLoanAccountEvent`'s own
+ * doc comment. Was LOAN_OVERDUE-only when the scan ran every 15 minutes; now that the whole scan is
+ * itself daily (2026-09-03 redesign - see `NotificationScanScheduler.ts`), this is mostly a safety
+ * net against the job running more than once in a day (a manual trigger, a backend restart at an
+ * odd time) rather than the primary anti-spam mechanism it used to be. */
+const NOTIFICATION_RESYNC_WINDOW_HOURS = 24;
 
 export class NotificationService {
   constructor(
@@ -64,6 +73,18 @@ export class NotificationService {
     );
   }
 
+  /**
+   * Branch-scoped notification to `NOTIFICATION_STAFF_ROLES` (MIS/Loan Operation Manager/
+   * Collection Officer) - the one shared recipient set every loan-lifecycle event in this
+   * redesign uses (2026-09-03, user-confirmed: "hindi na kailangang iba-iba per event type").
+   * Callers never need to know or import the actual role list - it's encapsulated here as the
+   * single source of truth, same reasoning `notifyPortalChatMessage` applies for its own
+   * (cross-branch) recipient resolution.
+   */
+  async notifyStaff(input: NotifyStaffInput): Promise<void> {
+    await this.notifyRoles({ ...input, roleNames: NOTIFICATION_STAFF_ROLES });
+  }
+
   async notifyUser(input: NotifyUserInput): Promise<void> {
     await this.deps.notificationRepository.create(
       Notification.create({
@@ -79,36 +100,121 @@ export class NotificationService {
   }
 
   /**
-   * LOAN_OVERDUE sync - scans every currently-overdue loan account (same live definition as the
-   * Dashboard's `overdueAccounts` figure) and creates one LOAN_OVERDUE notification per account
-   * for MIS/Loan Operation Manager/Collection Officer at that account's branch, skipping any
-   * account that already got one in the last 24h so staying overdue doesn't spam a fresh
-   * notification on every run.
-   *
-   * 2026-07-17: called on a real periodic timer (`OverdueNotificationScheduler.ts`, started from
-   * `server.ts`, every `OVERDUE_SYNC_INTERVAL_MS`) - not tied to user activity. Previously ran as
-   * a lazy substitute inside `ListNotificationsUseCase.execute` (once per bell poll, every 30s per
-   * connected user) because no scheduler existed in this codebase; replaced once one did, both for
-   * genuine real-time-ness (independent of whether anyone happens to have the app open) and to
-   * stop re-running the overdue scan on every single poll.
+   * PORTAL_CHAT_MESSAGE - a borrower sent a message on the Client Portal's chat widget
+   * (`SendPortalChatMessageUseCase`). Unlike every other event this service handles,
+   * `ChatConversation` carries no `branchId` of its own (it's not scoped to one branch's loans -
+   * see `ChatConversationRecord`), so this can't reuse `notifyRoles`' single-branchId shape.
+   * Notifies `NOTIFICATION_STAFF_ROLES` across EVERY branch instead (`findByRoles`), stamping each
+   * created `Notification` with that RECIPIENT's own branchId - satisfies the required FK without
+   * pretending the conversation itself belongs to any one branch.
    */
-  async syncOverdueNotifications(): Promise<void> {
-    const overdueAccounts = await this.deps.notificationRepository.findOverdueLoanAccounts(new Date());
-    const resyncCutoff = new Date(Date.now() - OVERDUE_RESYNC_WINDOW_HOURS * 60 * 60 * 1000);
+  async notifyPortalChatMessage(input: { conversationId: string; portalAccountEmail: string | null }): Promise<void> {
+    const recipients = await this.deps.userRepository.findByRoles(NOTIFICATION_STAFF_ROLES);
+    await Promise.all(
+      recipients.map((user) =>
+        this.deps.notificationRepository.create(
+          Notification.create({
+            recipientUserId: user.id,
+            type: 'PORTAL_CHAT_MESSAGE',
+            title: `New Portal chat message from ${input.portalAccountEmail ?? 'a client'}`,
+            body: 'A borrower sent a message in the Portal chat.',
+            entityType: 'ChatConversation',
+            entityId: input.conversationId,
+            branchId: user.branchId,
+          }),
+        ),
+      ),
+    );
+  }
 
-    for (const account of overdueAccounts) {
-      const alreadyNotifiedRecently = await this.deps.notificationRepository.existsRecent('LOAN_OVERDUE', account.id, resyncCutoff);
+  /**
+   * Shared by every daily-scan sync method: creates one notification per account in `accounts`,
+   * skipping any that already got this exact type within the anti-spam window so a loan sitting in
+   * the same state day after day doesn't get a fresh notification on every scan.
+   */
+  private async syncLoanAccountEvent(
+    accounts: LoanAccountNotificationTarget[],
+    type: NotificationType,
+    title: (account: LoanAccountNotificationTarget) => string,
+    body: string,
+  ): Promise<void> {
+    const resyncCutoff = new Date(Date.now() - NOTIFICATION_RESYNC_WINDOW_HOURS * 60 * 60 * 1000);
+
+    for (const account of accounts) {
+      const alreadyNotifiedRecently = await this.deps.notificationRepository.existsRecent(type, account.id, resyncCutoff);
       if (alreadyNotifiedRecently) continue;
 
-      await this.notifyRoles({
-        roleNames: OVERDUE_NOTIFICATION_ROLES,
+      await this.notifyStaff({
         branchId: account.branchId,
-        type: 'LOAN_OVERDUE',
-        title: `Loan ${account.loanCode} (${account.borrowerName}) is overdue`,
-        body: 'At least one installment is past due and not fully paid.',
+        type,
+        title: title(account),
+        body,
         entityType: 'LoanAccount',
         entityId: account.id,
       });
     }
+  }
+
+  /**
+   * LOAN_OVERDUE sync - scans every currently-overdue loan account (same live definition as the
+   * Dashboard's `overdueAccounts` figure) and creates one LOAN_OVERDUE notification per account
+   * for MIS/Loan Operation Manager/Collection Officer at that account's branch.
+   *
+   * 2026-07-17: originally called on a real periodic timer every 15 minutes
+   * (`OverdueNotificationScheduler.ts`). 2026-09-03 (event-driven redesign, user-confirmed): "Past
+   * Due" has no stored status transition to hook - it's computed live from `repayment_schedules`,
+   * same as LOAN_MATURED/LOAN_FIRST_AMORTIZATION_DUE_TODAY below - so a genuinely instant,
+   * write-time notification isn't possible for any of these three. Cadence relaxed from every 15
+   * minutes to once daily instead (`NotificationScanScheduler.ts`, `runDailyScan()` below) - a
+   * reasonable middle ground given none of these three events need minute-level latency.
+   */
+  async syncOverdueNotifications(): Promise<void> {
+    const overdueAccounts = await this.deps.notificationRepository.findOverdueLoanAccounts(new Date());
+    await this.syncLoanAccountEvent(
+      overdueAccounts,
+      'LOAN_OVERDUE',
+      (a) => `Loan ${a.loanCode} (${a.borrowerName}) is overdue`,
+      'At least one installment is past due and not fully paid.',
+    );
+  }
+
+  /**
+   * LOAN_MATURED sync (2026-09-03, event-driven redesign) - same live "matured" definition as the
+   * `isMatured` API flag (`ListMaturedLoanAccountIdsUseCase`/`findMaturedLoanAccountIds`): full
+   * scheduled term over, still unpaid. No stored status transition exists for this either - see
+   * `syncOverdueNotifications`'s own doc comment for why this runs on the same daily scan.
+   */
+  async syncMaturedNotifications(): Promise<void> {
+    const maturedAccounts = await this.deps.notificationRepository.findMaturedLoanAccounts(new Date());
+    await this.syncLoanAccountEvent(
+      maturedAccounts,
+      'LOAN_MATURED',
+      (a) => `Loan ${a.loanCode} (${a.borrowerName}) has matured`,
+      'The full scheduled term is over and the loan is still unpaid.',
+    );
+  }
+
+  /**
+   * LOAN_FIRST_AMORTIZATION_DUE_TODAY sync (2026-09-03, event-driven redesign) - same "always
+   * installment #1, optionally date-filtered on its own due date" definition
+   * `getFirstAmortizationReport` already uses, narrowed to today's Asia/Manila calendar day.
+   */
+  async syncFirstAmortizationDueNotifications(): Promise<void> {
+    const { start, end } = manilaDayRange(new Date());
+    const dueTodayAccounts = await this.deps.notificationRepository.findFirstAmortizationDueTodayLoanAccounts(start, end);
+    await this.syncLoanAccountEvent(
+      dueTodayAccounts,
+      'LOAN_FIRST_AMORTIZATION_DUE_TODAY',
+      (a) => `Loan ${a.loanCode} (${a.borrowerName})'s first amortization is due today`,
+      "This loan's first installment is due today.",
+    );
+  }
+
+  /** Entry point for `NotificationScanScheduler.ts`'s once-daily tick - runs all three live-
+   * computed, no-stored-transition scans in sequence. */
+  async runDailyScan(): Promise<void> {
+    await this.syncOverdueNotifications();
+    await this.syncMaturedNotifications();
+    await this.syncFirstAmortizationDueNotifications();
   }
 }

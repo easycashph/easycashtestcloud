@@ -6,6 +6,7 @@ import { AmortizationScheduleGenerator } from '@shared/domain/calculation/Amorti
 import type { IUnitOfWork } from '@shared/application/ports/IUnitOfWork';
 import type { IFinancialAuditLogger } from '@shared/application/ports/IFinancialAuditLogger';
 import { ProfileActivityLogService } from '@modules/profile-activity/application/ProfileActivityLogService';
+import type { NotificationService } from '@modules/notification/application/NotificationService';
 import type { ILoanProductRepository } from '@modules/loan-product/application/ports/ILoanProductRepository';
 import type { ILoanTransactionRepository } from '@modules/ledger/application/ports/ILoanTransactionRepository';
 import { LoanTransaction } from '@modules/ledger/domain/LoanTransaction';
@@ -34,6 +35,7 @@ export interface RestructureLoanUseCaseDeps {
   financialAuditLogger: IFinancialAuditLogger;
   unitOfWork: IUnitOfWork;
   profileActivityLogService?: ProfileActivityLogService;
+  notificationService?: NotificationService;
 }
 
 export interface RestructureLoanInput {
@@ -308,6 +310,28 @@ export class RestructureLoanUseCase {
         profileId: oldLoanAccount.id,
         userId: input.restructuredByUserId,
         ...ProfileActivityLogService.actions.decisionUpdated('ACTIVE', 'CLOSED_RESTRUCTURED', input.reason, { newLoanAccountId: newLoanAccount.id, newLoanCode: newLoanAccount.loanCode }),
+      });
+    }
+
+    // Notification Center (2026-09-03, event-driven redesign) - two distinct events for one
+    // restructure action, fired only now that the unitOfWork above has committed: LOAN_RESTRUCTURED
+    // (the restructure workflow itself - old loan's balance carried into the new one) and the
+    // generic LOAN_CLOSED (old loan reached a CLOSED* status) - see the NotificationType enum's own
+    // doc comment for why these stay separate from LOAN_RESCHEDULED (a different LMS feature).
+    if (this.deps.notificationService) {
+      await this.deps.notificationService.notifyStaff({
+        branchId: oldLoanAccount.branchId,
+        type: 'LOAN_RESTRUCTURED',
+        title: `Loan ${oldLoanAccount.loanCode} restructured into ${newLoanAccount.loanCode}`,
+        entityType: 'LoanAccount',
+        entityId: oldLoanAccount.id,
+      });
+      await this.deps.notificationService.notifyStaff({
+        branchId: oldLoanAccount.branchId,
+        type: 'LOAN_CLOSED',
+        title: `Loan ${oldLoanAccount.loanCode} closed - restructured`,
+        entityType: 'LoanAccount',
+        entityId: oldLoanAccount.id,
       });
     }
 
