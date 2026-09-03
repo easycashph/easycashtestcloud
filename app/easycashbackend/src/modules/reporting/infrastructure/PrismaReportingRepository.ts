@@ -539,6 +539,15 @@ export class PrismaReportingRepository implements IReportingRepository {
     const allLoans = await prisma.loanAccount.findMany({
       where: {
         activatedAt: { not: null, ...entryDateFilter(filter) },
+        // 2026-09-03 (user-reported: RODGIE GATCHALIAN PASCUAL / SML-REG_00387) - `activatedAt`
+        // alone isn't proof a loan was actually disbursed. A handful of migrated loans carry a
+        // non-null `activatedAt` (and even a migrated DISBURSEMENT transaction) while `status` is
+        // still APPROVED - never activated through the LMS's own Activate/Disburse action
+        // (ADR-032: "activation is disbursement"), and per the user, not actually released in
+        // reality either. Only statuses reachable AFTER a real activation count as a release.
+        status: {
+          in: ['ACTIVE', 'ACTIVE_IN_ARREARS', 'CLOSED', 'CLOSED_WRITTEN_OFF', 'CLOSED_RESTRUCTURED', 'CLOSED_ADJUSTED', 'CLOSED_COMPROMISED'],
+        },
         ...(filter.branchId ? { branchId: filter.branchId } : {}),
       },
       include: {
