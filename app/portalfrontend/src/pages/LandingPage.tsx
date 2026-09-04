@@ -24,7 +24,6 @@ import { LoanCalculatorWidget } from '@/components/LoanCalculatorWidget';
 import { ImageWithFallback } from '@/components/ImageWithFallback';
 import { MobileApplyBar } from '@/components/MobileApplyBar';
 import { NewsFlashTicker } from '@/components/NewsFlashTicker';
-import { MisPostBanner } from '@/components/MisPostBanner';
 import { LanguageToggle } from '@/components/LanguageToggle';
 import { SiteFooter } from '@/components/SiteFooter';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -390,11 +389,6 @@ export function LandingPage() {
             the hero (and its own Apply button) has scrolled out of view. */}
         <div ref={heroEndRef} aria-hidden="true" />
       </section>
-
-      {/* 2026-08-27 (user request, "mas mukhang malinis"): moved below the hero instead of sitting
-          above it - the ad-style banner competed with the hero for the very first thing a visitor
-          sees, before the site's own branding/CTA had a chance to land. */}
-      <MisPostBanner />
 
       {/* Mission */}
       <section className="py-16 sm:py-20">
