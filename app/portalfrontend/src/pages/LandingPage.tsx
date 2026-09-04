@@ -12,6 +12,7 @@ import {
   Quote,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   UserPlus,
   FileEdit,
   BadgeCheck,
@@ -490,30 +491,46 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How it works (2026-09-04, "high-end, advance sophisticated design" request, mockup-
+          approved): steps moved off a bare numbered-circle-on-a-line layout into individual cards
+          with a floating number badge and a gradient connecting rail, matching the elevated-card
+          language the Ways-to-Pay section below already established. */}
       <section id="how-it-works" className="py-20 sm:py-24">
         <div className="container">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              {t.landing.howItWorksEyebrow}
+            </span>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">{t.landing.howItWorksTitle}</h2>
           </Reveal>
           <motion.div
             initial="hidden"
             whileInView="show"
             viewport={{ once: true, margin: '-80px' }}
             variants={stagger}
-            className="relative mt-14 grid gap-10 sm:grid-cols-3"
+            className="relative mt-16 grid gap-8 sm:grid-cols-3"
           >
-            <div className="pointer-events-none absolute left-0 right-0 top-5 hidden h-px bg-border sm:block" />
+            <div
+              className="pointer-events-none absolute top-[1.375rem] hidden h-px sm:block sm:left-[16.67%] sm:right-[16.67%]"
+              style={{ background: 'linear-gradient(to right, hsl(var(--primary)), hsl(var(--primary) / 0.15))' }}
+            />
             {t.landing.steps.map((step, index) => {
               const Icon = STEP_ICONS[index];
               return (
-                <motion.div key={step.title} variants={fadeUp} className="relative text-center">
-                  <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                <motion.div
+                  key={step.title}
+                  variants={fadeUp}
+                  className="group relative rounded-2xl border border-border bg-card p-6 pt-9 text-center shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="absolute -top-5 left-1/2 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full bg-primary text-sm font-extrabold text-primary-foreground shadow-lg ring-4 ring-background">
                     {index + 1}
                   </div>
-                  <Icon className="mx-auto mt-4 h-6 w-6 text-primary" />
-                  <h3 className="mt-3 text-base font-semibold">{step.title}</h3>
-                  <p className="mt-1.5 text-sm text-muted-foreground">{step.body}</p>
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-4 text-base font-bold tracking-tight">{step.title}</h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
                 </motion.div>
               );
             })}
@@ -521,26 +538,36 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Features - upgraded alongside How it works above: elevated cards with a stronger icon
+          treatment and a faint numeral watermark, instead of a bare icon+text row. */}
       <section className="border-t border-border bg-secondary/30 py-20 sm:py-24">
         <motion.div
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: '-80px' }}
           variants={stagger}
-          className="container grid gap-8 sm:grid-cols-3"
+          className="container grid gap-6 sm:grid-cols-3"
         >
           {t.landing.features.map((feature, index) => {
             const Icon = FEATURE_ICONS[index];
             return (
-              <motion.div key={feature.title} variants={fadeUp} className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <motion.div
+                key={feature.title}
+                variants={fadeUp}
+                className="group relative overflow-hidden rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-1 hover:shadow-lg"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute right-5 top-5 text-4xl font-extrabold leading-none text-primary/[0.08] tabular-nums"
+                >
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/[0.06]" />
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md">
                   <Icon className="h-5 w-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-semibold">{feature.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{feature.body}</p>
-                </div>
+                <h3 className="relative mt-4 text-base font-bold tracking-tight">{feature.title}</h3>
+                <p className="relative mt-1.5 text-sm leading-relaxed text-muted-foreground">{feature.body}</p>
               </motion.div>
             );
           })}
