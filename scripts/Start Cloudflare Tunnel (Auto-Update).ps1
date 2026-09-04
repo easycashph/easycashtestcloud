@@ -29,6 +29,23 @@ function Wait-Or-Exit($msg) {
 
 $ErrorActionPreference = 'Stop'
 
+# 2026-09-04 (recurrence of the 2026-09-03 "(304) Not Modified" bug - this time on the SECOND
+# Invoke-RestMethod call in the run, Portal, right after LMS's identical call succeeded): the
+# per-request no-cache headers + cache-buster query param added to Update-PagesProject below were
+# not sufficient on their own - WinINet's cache is process-wide, and Invoke-RestMethod has no
+# per-call way to set System.Net.WebRequest's CachePolicy, so a header hint can still be
+# overridden by whatever the shared HttpWebRequest cache layer decided on an earlier call in the
+# same process. Setting the DEFAULT cache policy for the whole process (documented fix for this
+# exact PowerShell 5.1 symptom) is the more reliable layer - every Invoke-RestMethod call below
+# inherits it, not just the one that happened to hit the bug last time.
+Add-Type -TypeDefinition @"
+using System.Net.Cache;
+public class NoCachePolicy : RequestCachePolicy {
+    public NoCachePolicy() : base(RequestCacheLevel.NoCacheNoStore) {}
+}
+"@
+[System.Net.WebRequest]::DefaultCachePolicy = New-Object NoCachePolicy
+
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ConfigPath = Join-Path $RepoRoot 'local\tunnel-autoupdate.env'
 $CloudflaredExe = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
