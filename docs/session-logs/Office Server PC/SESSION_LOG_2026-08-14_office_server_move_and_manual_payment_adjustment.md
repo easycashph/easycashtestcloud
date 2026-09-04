@@ -4504,3 +4504,45 @@ the fix takes effect without needing to wait for tomorrow's scan. Committed and 
   `notifications` table and will still show in a staff member's dropdown/history. Not asked to
   purge these; flag if the user wants a one-off cleanup script for the historical noise.
   <br>Sample loan for reference if a cleanup script is ever wanted: `00080c95-120d-4adf-bded-6a19dbd5022d`.
+
+## §96 — 2026-09-04: "How it works" / "Features" landing sections redesigned
+
+User asked for a "high-end, advance sophisticated design" for the landing page's How-it-works
+step flow and Features row, mockup-first (Artifact, same emerald/Plus Jakarta Sans identity as
+§94's footer mockup). Approved: "tuloy mo na, i-apply mo na."
+
+Implemented in `LandingPage.tsx` - same copy/icons/data as before (`t.landing.steps`/
+`t.landing.features`, `STEP_ICONS`/`FEATURE_ICONS` untouched), only the presentation changed:
+- **How it works**: each step is now its own `rounded-2xl border bg-card` card (was a bare
+  icon+text column) with a floating numbered badge overlapping the card's top edge and a
+  gradient connecting rail behind the three cards (was a flat `bg-border` line). Added a small
+  "Simple by design" eyebrow pill above the heading - new `howItWorksEyebrow` translation key
+  (EN/TL).
+- **Features**: same card treatment - icon now sits in a solid `bg-primary` square with a shadow
+  (was a plain `bg-primary/10` circle), plus a faint `01`/`02`/`03` numeral watermark and a soft
+  corner glow. Both sections gained a `hover:-translate-y-1 hover:shadow-lg` lift, matching this
+  page's existing `Reveal`/`stagger`/`fadeUp` scroll-in animation conventions.
+- Caught and fixed a self-introduced double-border: first draft changed the Features section from
+  `border-t` to `border-y`, which would have doubled up against the Ways-to-Pay section's own
+  `border-t` immediately below it (same `bg-secondary/30` background) - reverted to `border-t`
+  only before committing.
+
+Type-checked clean, rebuilt, verified via DOM checks in the Browser pane (3 step cards + 4
+`rounded-full` badges - 1 eyebrow pill + 3 number badges -, exact eyebrow/heading text; 3 feature
+cards with the `01`/`02`/`03` watermarks all present) - same screenshot-after-scroll capture glitch
+as §94 recurred, so this pass relied on DOM verification again rather than pixel screenshots.
+Committed and pushed (`294492f8`); deploy was still polling in the background as this entry was
+written.
+
+### Current state / follow-ups
+
+- **Verify `294492f8` is actually live** - was still polling. Same caution as §93/§94: check
+  before assuming success, and remember the production domain (`easycash-portal.pages.dev`) can
+  lag the actual successful deployment by a couple minutes even after the API reports
+  `deploy|success` (§93's CDN edge-cache finding) - a cache-busting query string or the
+  deployment's own per-build `https://<hash>.easycash-portal.pages.dev` URL bypasses that lag if
+  the production domain still looks stale.
+- The Browser pane's screenshot-after-scroll issue (first noted in §94) is now confirmed to recur
+  across separate page loads/sessions within this same conversation - worth raising with the user
+  or trying a fresh Browser pane tab if a real pixel-level visual check is ever needed instead of
+  DOM verification.
