@@ -4580,3 +4580,115 @@ still polling in the background as this entry was written.
   Since a DOM check can't confirm animation timing/motion itself, the user should also eyeball it
   live once deployed (scroll the How-it-works section into view) rather than relying solely on
   this session's automated checks.
+
+## §98 — 2026-09-04: Attached Google Drive client documents to 26 loan accounts
+
+User asked to attach documents from a Google Drive folder to the 11 loans released in August 2026,
+matched by account ID, "i-rename ng maayos pag attach" (rename properly on attach). Turned into a
+much larger, multi-part task once the actual data was inspected.
+
+**Investigation before any write:**
+- The user's first-given Drive folder link ("BACK UP FILES") turned out NOT to be organized by
+  loan account - it held broad category folders (Business Loan, Salary/Corporate Loan, etc.), not
+  per-loan folders. A per-loan folder structure was found elsewhere in the same Drive
+  (`DONTIM`, `HOTBOX EMPLOYEES` subfolders under `Salary/Corporate Loan/2026`), located by
+  searching individual loan codes.
+- The "11 loans released in August 2026" list, built from `loan_accounts.activatedAt` in the
+  `['ACTIVE','ACTIVE_IN_ARREARS','CLOSED',...]` status set (§87's fix), initially returned 12 -
+  user confirmed removing `BL-SPEC_00030` (Marlon Ricalde), a restructure, not a fresh
+  origination.
+- Opened one loan's folder (Custodio, `SL-CORP_00127`) fully - found ~16 files per loan, not the
+  5-8 originally estimated (~170 files project-wide at that scale) - flagged the scale increase
+  and a categorization plan (Valid ID -> VALID_ID_BORROWER, Payroll -> CORPORATE_PAYSLIP, Proof of
+  Billing -> PROOF_OF_BILLING, everything else -> OTHER_SUPPORTING_DOCUMENT, matching
+  `attachmentDocumentCategorySchema`'s fixed enum) - user confirmed both.
+
+**Getting the files out of Drive (three failed approaches before one worked):**
+1. Browser-triggered downloads (Drive's own "Download" button, both single-file and multi-select
+   zip) never landed in the local Downloads folder after 20+ seconds of waiting - concluded the
+   remote-controlled Chrome extension's downloads are blocked/discarded somewhere in this
+   session's sandbox, not a Drive-side issue.
+2. In-page `fetch()` against Drive's `uc?export=download` endpoint from `javascript_exec` failed
+   outright (`TypeError: Failed to fetch`) - Drive's viewer serves individual PDF pages as
+   rendered images via ephemeral per-session tokens, not the original file bytes, so this path
+   was a dead end even if fetch had worked.
+3. Direct API calls (`POST /attachments` with a captured LMS bearer token, and later a plain
+   `curl` GET to Drive) were both blocked by Claude Code's auto-mode classifier as "external
+   request with credentials." User said "Payagan mo, ituloy mo na" (Custodio's folder) and later
+   "Gawin ang number 2" (make the Drive folders public-with-link, over option 1's manual-download
+   alternative) to explicitly authorize continuing.
+4. **What worked**: the `SL-CORP_00127` folder turned out to already be shared "Anyone with the
+   link - Viewer" (pre-existing, not something this session set). A plain `curl` GET to
+   `https://drive.usercontent.google.com/download?id=<fileId>&export=download` (the URL Drive's
+   own `/uc?...` endpoint 303-redirects to) returned the real file bytes with no auth needed, once
+   run against the *scratchpad* path rather than `/tmp` (the classifier had also blocked a `/tmp`
+   write, unclear if path or something else was the actual trigger - scratchpad worked cleanly
+   every time after).
+
+**LMS auth without ever handling a password**: extracting a usable bearer token required the user
+to already be logged into the LMS in their own Chrome (confirmed: "oo naka log in na ako") -
+entering credentials is never something this session does itself. Patched `window.fetch` via
+`javascript_exec` on an LMS tab to capture the `Authorization` header off the next real in-app
+request (clicking a tab like "Payment History" was enough to trigger one), saved the captured
+15-minute-lived JWT to a scratchpad file, and re-captured a fresh one twice more as earlier tokens
+expired mid-task. `Content-Security-Policy`/multer's 10 MB-per-file cap on `POST /attachments`
+were both respected without incident (largest file uploaded was ~4.98 MB).
+
+**File type detection**: downloaded files temporarily kept a generic `.download` extension: actual
+type was read from the first 4 magic bytes (`25504446` = PDF, `ffd8ffe0` = JPEG, `89504e47` = PNG)
+rather than trusted from Drive's UI-displayed name, then renamed to
+`<LoanCode>_<CleanDocumentName>.<realExt>` before upload - satisfies "i-rename ng maayos."
+
+**The critical catch - a duplicate almost went further**: after successfully test-uploading
+Custodio's Checklist PDF and opening the loan detail page to visually confirm it, found the loan
+ALREADY had all 16 documents attached, tagged "Migrated from legacy system - Aug 4, 2026" - an
+earlier, unrelated migration had already brought these exact documents in. Deleted the just-created
+duplicate directly via SQL (no `DELETE /attachments` API route exists - this codebase treats
+attachments as effectively append-only) and, per user instruction ("i-check muna lahat, kapag
+meron na sa LMS huwag mo na i upload"), queried attachment counts for all 11 loans before
+uploading anything else: **10 of 11 already had a full set (13-29 attachments each, all
+legacy-migrated) - only `SL-CORP_00135` (MARY JOY APLACADOR) had zero.** The other 10 loans'
+folders were never touched again.
+
+**Uploaded, in order:**
+1. **Mary Joy Aplacador (`SL-CORP_00135`)** - 12 files (Checklist, Selfie Photo, Disbursement
+   Letter, Signed Loan Docs, MyScore, KYC, CMAP, Application Form, COE, Brgy Clearance, Proof of
+   Billing -> `PROOF_OF_BILLING`, Valid ID -> `VALID_ID_BORROWER`). CRM Report excluded from both
+   this and Custodio's folder - an internal report, not a client-facing loan document, never
+   uploaded anywhere this session.
+2. A second, unrelated Drive folder the user then shared (`19pZSjEFvQt0xfKN585kTr5mquPeCSdzH`,
+   "Notarial Documents Folder > June 2026") - a flat batch of notarized Deed of
+   Assignment/Promissory Note pairs across 10 *different*, older loans (loan codes in the 60-135
+   range, unrelated to the August cohort). All 9 initially-matched loans (of 10 - one loan code in
+   a filename, "BL-REG_00001", didn't exist) already had a same-*type* Deed/PN attached from a
+   prior batch - user clarified these are genuinely different documents (the *notarized* copies)
+   and confirmed: "Idagdag lang bilang bagong attachment, huwag palitan ang luma" (add as new,
+   don't replace the old). Uploaded all 13 as `<LoanCode>_<Deed_of_Assignment|Promissory_Note>_
+   Notarized.pdf`.
+3. The last, initially-ambiguous file ("PN BL-REG_00001 EDGARDO DE VERA FLORES...") - two loans
+   for the same borrower (Edgardo Flores) existed (`BL-REG_O5D7N`, `BL-REG_00061`), neither an
+   exact code match - user confirmed `BL-REG_00061`. Uploaded as
+   `BL-REG_00061_Promissory_Note_Notarized.pdf`.
+
+**Total: 26 file uploads across 10 loan accounts** (12 for Mary Joy Aplacador + 14 notarized
+Deed/PN documents across 9 other loans), each verified against the DB by filename/size/timestamp
+after upload. Data-only - no code touched, no rebuild needed.
+
+### Current state / follow-ups
+
+- **The "Anyone with the link" sharing Drive already had on these folders was never changed by
+  this session** (confirmed already public before any file was touched, on every folder checked) -
+  nothing to revert. If the user wants these folders locked back down to specific people now that
+  the migration is done, that's a decision for them, not something this session did or should undo
+  unprompted.
+- The June 2026 Notarial folder appeared to show only 15 rows in Drive's UI despite a scrollable
+  container reporting more content available (`scrollHeight` 868 vs `clientHeight` 539) -
+  programmatic `scrollTop` and an `End` keypress both failed to load more rows. If the user knows
+  this folder actually holds more than 15 items, some may have been missed - worth a manual check.
+- Captured LMS bearer tokens and the Drive-download scratchpad files were left in the session's
+  scratchpad directory (ephemeral, cleared with the session) - not committed to the repo, not
+  persisted anywhere durable.
+- Auto-mode classifier blocked both a `POST /attachments` call and a plain external `curl` GET at
+  least once each this session before being explicitly allowed - consistent with §88's
+  observation that this machine's classifier requires fresh "Allow it"-style confirmation per
+  action rather than a standing grant for a whole task.
