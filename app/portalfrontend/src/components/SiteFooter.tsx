@@ -57,11 +57,6 @@ export function SiteFooter() {
             <li>GLOBE: {COMPANY.contact.mobileGlobe}</li>
             <li>{COMPANY.contact.businessHours}</li>
             <li>
-              <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="hover:text-foreground">
-                {COMPANY.contact.dpoEmail}
-              </a>
-            </li>
-            <li>
               <Link to="/contact" className="hover:text-foreground">
                 {t.footer.contactPageLink}
               </Link>

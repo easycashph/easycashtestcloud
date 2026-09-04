@@ -52,8 +52,8 @@ export function ContactPage() {
             <Mail className="h-5 w-5 text-primary" />
             <h2 className="mt-3 text-sm font-semibold">{t.contact.emailHeading}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="hover:text-foreground">
-                {COMPANY.contact.dpoEmail}
+              <a href={`mailto:${COMPANY.contact.email}`} className="hover:text-foreground">
+                {COMPANY.contact.email}
               </a>
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t.contact.emailNote}</p>

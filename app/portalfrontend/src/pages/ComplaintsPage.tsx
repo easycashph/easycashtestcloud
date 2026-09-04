@@ -22,7 +22,7 @@ import { useLanguage } from '@/lib/i18n/LanguageContext';
  */
 export function ComplaintsPage() {
   const { t } = useLanguage();
-  const [privacyBefore, privacyRest] = t.complaints.privacyBody.split('{dpoEmail}');
+  const [privacyBefore, privacyRest] = t.complaints.privacyBody.split('{feedbackEmail}');
   const [privacyMiddle, privacyAfter] = privacyRest.split('{privacyLink}');
 
   return (
@@ -47,8 +47,8 @@ export function ComplaintsPage() {
               <Mail className="h-5 w-5 text-primary" />
               <h3 className="mt-3 text-sm font-semibold">{t.complaints.inWriting}</h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="hover:text-foreground">
-                  {COMPANY.contact.dpoEmail}
+                <a href={`mailto:${COMPANY.contact.feedbackEmail}`} className="hover:text-foreground">
+                  {COMPANY.contact.feedbackEmail}
                 </a>
               </p>
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
@@ -76,10 +76,10 @@ export function ComplaintsPage() {
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {privacyBefore}
             <a
-              href={`mailto:${COMPANY.contact.dpoEmail}`}
+              href={`mailto:${COMPANY.contact.feedbackEmail}`}
               className="font-semibold text-primary hover:underline"
             >
-              {COMPANY.contact.dpoEmail}
+              {COMPANY.contact.feedbackEmail}
             </a>
             {privacyMiddle}
             <Link to="/privacy-policy" className="font-semibold text-primary hover:underline">

@@ -38,8 +38,14 @@ export const COMPANY = {
     landline: '(02) 5 310-3708',
     mobileSmart: '0947 595 6151',
     mobileGlobe: '0927 784 7091',
-    /** Data Protection Officer, as required by RA 10173 (Data Privacy Act of 2012). */
-    dpoEmail: 'dataprivacyofficer@easycash.ph',
+    /** 2026-09-04 (business owner request): general public-facing contact email, replacing the
+     * previous dedicated DPO mailbox. Used everywhere a single "here's how to email us" address is
+     * shown (Contact Us page, official-channels list, error-page fallback). */
+    email: 'loans@easycash.ph',
+    /** 2026-09-04 (business owner request): the Complaints page's email address - "In writing"
+     * submissions and the data-privacy-concern section both point here now that there is no
+     * separately-staffed DPO mailbox. */
+    feedbackEmail: 'feedback@easycash.ph',
     /** Confirmed by the business owner 2026-08-06 - see ContactPage.tsx's own doc comment on why
      * this was previously deliberately omitted (unconfirmed data). */
     businessHours: 'Monday to Friday, 8:00 AM to 5:00 PM',
@@ -94,5 +100,5 @@ export const OFFICIAL_CHANNELS = [
   { label: 'Landline', value: COMPANY.contact.landline },
   { label: 'Smart', value: COMPANY.contact.mobileSmart },
   { label: 'Globe', value: COMPANY.contact.mobileGlobe },
-  { label: 'Data Privacy Officer', value: COMPANY.contact.dpoEmail },
+  { label: 'Email', value: COMPANY.contact.email },
 ] as const;

@@ -64,8 +64,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
             If this keeps happening, contact us at {COMPANY.contact.landline} or{' '}
-            <a href={`mailto:${COMPANY.contact.dpoEmail}`} className="underline hover:text-foreground">
-              {COMPANY.contact.dpoEmail}
+            <a href={`mailto:${COMPANY.contact.email}`} className="underline hover:text-foreground">
+              {COMPANY.contact.email}
             </a>
             .
           </p>
